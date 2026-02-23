@@ -3,8 +3,6 @@ import type {
   CustosFixosUpdateBody,
   CustosVariaveisCreateBody,
   CustosVariaveisUpdateBody,
-  ReceitaBrutaCreateBody,
-  ReceitaBrutaUpdateBody,
 } from "../domain/dreTypes.js";
 import type { Request, Response } from "express";
 import {
@@ -19,14 +17,9 @@ import {
   getCustosVariaveis,
   updateCustoVariavel,
 } from "../services/dreCustosVariaveisService.js";
-import {
-  createReceitaBruta,
-  deleteReceitaBruta,
-  getReceitaBruta,
-  updateReceitaBruta,
-} from "../services/dreReceitaBrutaService.js";
 
 import { Router } from "express";
+import { getReceitaBruta } from "../services/dreReceitaBrutaService.js";
 
 export const dreRoutes = Router();
 
@@ -211,7 +204,6 @@ dreRoutes.delete("/reports/dre/custos-fixos/:id", async (req, res) => {
   }
 });
 
-// Receita bruta: 3 categorias (dinheiro, tpa, apps), campo taxa
 dreRoutes.get("/reports/dre/receita-bruta", async (req, res) => {
   try {
     const period = yearMonthGuard(req, res);
@@ -221,74 +213,6 @@ dreRoutes.get("/reports/dre/receita-bruta", async (req, res) => {
   } catch (e: unknown) {
     const message =
       e instanceof Error ? e.message : "Erro ao obter receita bruta";
-    res.status(500).json({ error: message });
-  }
-});
-
-dreRoutes.post("/reports/dre/receita-bruta", async (req, res) => {
-  try {
-    const period = yearMonthGuard(req, res);
-    if (!period) return;
-    const body = req.body as ReceitaBrutaCreateBody;
-    if (
-      !body ||
-      typeof body.section !== "string" ||
-      !["dinheiro", "tpa", "apps"].includes(body.section)
-    ) {
-      res
-        .status(400)
-        .json({
-          error: "Body deve incluir section: 'dinheiro', 'tpa' ou 'apps'",
-        });
-      return;
-    }
-    const item = await createReceitaBruta(period.year, period.month, body);
-    res.status(201).json(item);
-  } catch (e: unknown) {
-    const message =
-      e instanceof Error ? e.message : "Erro ao criar receita bruta";
-    res.status(500).json({ error: message });
-  }
-});
-
-dreRoutes.put("/reports/dre/receita-bruta/:id", async (req, res) => {
-  try {
-    const period = yearMonthGuard(req, res);
-    if (!period) return;
-    const id = req.params.id;
-    if (!id) {
-      res.status(400).json({ error: "Parâmetro :id obrigatório" });
-      return;
-    }
-    const body = req.body as ReceitaBrutaUpdateBody;
-    const item = await updateReceitaBruta(
-      id,
-      period.year,
-      period.month,
-      body ?? {}
-    );
-    res.json(item);
-  } catch (e: unknown) {
-    const message =
-      e instanceof Error ? e.message : "Erro ao atualizar receita bruta";
-    res.status(500).json({ error: message });
-  }
-});
-
-dreRoutes.delete("/reports/dre/receita-bruta/:id", async (req, res) => {
-  try {
-    const period = yearMonthGuard(req, res);
-    if (!period) return;
-    const id = req.params.id;
-    if (!id) {
-      res.status(400).json({ error: "Parâmetro :id obrigatório" });
-      return;
-    }
-    await deleteReceitaBruta(id, period.year, period.month);
-    res.status(204).send();
-  } catch (e: unknown) {
-    const message =
-      e instanceof Error ? e.message : "Erro ao excluir receita bruta";
     res.status(500).json({ error: message });
   }
 });

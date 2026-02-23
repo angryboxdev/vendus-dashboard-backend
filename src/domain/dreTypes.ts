@@ -46,7 +46,6 @@ export type ReceitaBrutaItem = {
   descricao: string;
   valor: number;
   taxa: number;
-  observacao: string;
 };
 
 export type ReceitaBrutaPayload = {
@@ -61,7 +60,6 @@ export type ReceitaBrutaItemBody = {
   descricao: string;
   valor: number;
   taxa: number;
-  observacao: string;
 };
 
 export type ReceitaBrutaCreateBody = ReceitaBrutaItemBody & {
