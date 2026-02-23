@@ -15,4 +15,7 @@ export const ENV = {
 
   PER_PAGE_DEFAULT: Number(process.env.VENDUS_PER_PAGE || 50),
   CONCURRENCY: Number(process.env.VENDUS_CONCURRENCY || 6),
+
+  SUPABASE_URL: process.env.SUPABASE_URL ?? "",
+  SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY ?? "",
 };

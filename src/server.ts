@@ -1,6 +1,7 @@
 import { ENV } from "./config/env.js";
 import cors from "cors";
 import { documentsRoutes } from "./routes/documentsRoutes.js";
+import { dreRoutes } from "./routes/dreRoutes.js";
 import express from "express";
 import { reportsRoutes } from "./routes/reportsRoutes.js";
 
@@ -13,6 +14,7 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 app.use("/api", documentsRoutes);
 app.use("/api", reportsRoutes);
+app.use("/api", dreRoutes);
 
 app.listen(ENV.PORT, () => {
   console.log(`Backend running on http://localhost:${ENV.PORT}`);
