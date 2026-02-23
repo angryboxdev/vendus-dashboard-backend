@@ -1,0 +1,295 @@
+{
+  "version": 1,
+  "currency": "EUR",
+  "tolerance": 0.02,
+  "products": [
+    {
+      "key": "Tomate & Pesto (Individual)",
+      "match": { "by": "title", "value": "Tomate & Pesto (Individual)" },
+      "category": "pizza",
+      "prices": { "restaurant": [8.9, 9.9], "delivery": [12.9, 13.9] }
+    },
+    {
+      "key": "Tomate & Pesto (Grande)",
+      "match": { "by": "title", "value": "Tomate & Pesto (Grande)" },
+      "category": "pizza",
+      "prices": { "restaurant": [16.9, 18.5], "delivery": [21.9, 23.5] }
+    },
+    {
+      "key": "Creamy Garlic (Individual)",
+      "match": { "by": "title", "value": "Creamy Garlic (Individual)" },
+      "category": "pizza",
+      "prices": { "restaurant": [8.9, 9.9], "delivery": [12.9, 13.9] }
+    },
+    {
+      "key": "Creamy Garlic (Grande)",
+      "match": { "by": "title", "value": "Creamy Garlic (Grande)" },
+      "category": "pizza",
+      "prices": { "restaurant": [16.9, 18.5], "delivery": [21.9, 23.5] }
+    },
+    {
+      "key": "Truffle Shrooms (Individual)",
+      "match": { "by": "title", "value": "Truffle Shrooms (Individual)" },
+      "category": "pizza",
+      "prices": { "restaurant": [8.9, 9.9], "delivery": [12.9, 13.9] }
+    },
+    {
+      "key": "Truffle Shrooms (Grande)",
+      "match": { "by": "title", "value": "Truffle Shrooms (Grande)" },
+      "category": "pizza",
+      "prices": { "restaurant": [16.9, 18.5], "delivery": [21.9, 23.5] }
+    },
+    {
+      "key": "Tuna & Mayo (Individual)",
+      "match": { "by": "title", "value": "Tuna & Mayo (Individual)" },
+      "category": "pizza",
+      "prices": { "restaurant": [8.9, 9.9], "delivery": [12.9, 13.9] }
+    },
+    {
+      "key": "Tuna & Mayo (Grande)",
+      "match": { "by": "title", "value": "Tuna & Mayo (Grande)" },
+      "category": "pizza",
+      "prices": { "restaurant": [16.9, 18.5], "delivery": [21.9, 23.5] }
+    },
+    {
+      "key": "Honey Peperoni (Individual)",
+      "match": { "by": "title", "value": "Honey Peperoni (Individual)" },
+      "category": "pizza",
+      "prices": { "restaurant": [10.9, 11.9], "delivery": [14.9, 15.9] }
+    },
+    {
+      "key": "Honey Peperoni (Grande)",
+      "match": { "by": "title", "value": "Honey Peperoni (Grande)" },
+      "category": "pizza",
+      "prices": { "restaurant": [19.9, 21.5], "delivery": [24.9, 25.9] }
+    },
+    {
+      "key": "4 Formaggios+ (Individual)",
+      "match": { "by": "title", "value": "4 Formaggios+ (Individual)" },
+      "category": "pizza",
+      "prices": { "restaurant": [10.9, 11.9], "delivery": [14.9, 15.9] }
+    },
+    {
+      "key": "4 Formaggios+ (Grande)",
+      "match": { "by": "title", "value": "4 Formaggios+ (Grande)" },
+      "category": "pizza",
+      "prices": { "restaurant": [19.9, 21.5], "delivery": [24.9, 25.9] }
+    },
+    {
+      "key": "Chicken & Cheese (Individual)",
+      "match": { "by": "title", "value": "Chicken & Cheese (Individual)" },
+      "category": "pizza",
+      "prices": { "restaurant": [10.9, 11.9], "delivery": [14.9, 15.9] }
+    },
+    {
+      "key": "Chicken & Cheese (Grande)",
+      "match": { "by": "title", "value": "Chicken & Cheese (Grande)" },
+      "category": "pizza",
+      "prices": { "restaurant": [19.9, 21.5], "delivery": [24.9, 25.9] }
+    },
+    {
+      "key": "Sweet Smoked Shrimp (Individual)",
+      "match": { "by": "title", "value": "Sweet Smoked Shrimp (Individual)" },
+      "category": "pizza",
+      "prices": { "restaurant": [10.9, 11.9], "delivery": [14.9, 15.9] }
+    },
+    {
+      "key": "Sweet Smoked Shrimp (Grande)",
+      "match": { "by": "title", "value": "Sweet Smoked Shrimp (Grande)" },
+      "category": "pizza",
+      "prices": { "restaurant": [19.9, 21.5], "delivery": [24.9, 25.9] }
+    },
+    {
+      "key": "Agua Solan Cabras 33cl",
+      "match": { "by": "title", "value": "Agua Solan Cabras 33cl" },
+      "category": "bebida_nao_alcoolica",
+      "prices": { "restaurant": 1.5, "delivery": 2.0 }
+    },
+    {
+      "key": "Agua Solan Cabras Com Gás 33cl",
+      "match": { "by": "title", "value": "Agua Solan Cabras Com Gás 33cl" },
+      "category": "bebida_nao_alcoolica",
+      "prices": { "restaurant": 3.0, "delivery": 3.5 }
+    },
+    {
+      "key": "Coca Cola 33cl",
+      "match": { "by": "title", "value": "Coca Cola 33cl" },
+      "category": "bebida_nao_alcoolica",
+      "prices": { "restaurant": 2.5, "delivery": 2.5 }
+    },
+    {
+      "key": "Coca Cola Zero 33cl",
+      "match": { "by": "title", "value": "Coca Cola Zero 33cl" },
+      "category": "bebida_nao_alcoolica",
+      "prices": { "restaurant": 2.5, "delivery": 2.5 }
+    },
+    {
+      "key": "Ice Tea Lipton 33cl",
+      "match": { "by": "title", "value": "Ice Tea Lipton 33cl" },
+      "category": "bebida_nao_alcoolica",
+      "prices": { "restaurant": 2.5, "delivery": 2.5 }
+    },
+    {
+      "key": "Seven Up 33cl",
+      "match": { "by": "title", "value": "Seven Up 33cl" },
+      "category": "bebida_nao_alcoolica",
+      "prices": { "restaurant": 2.5, "delivery": 2.5 }
+    },
+    {
+      "key": "Guaraná Antartica 33cl",
+      "match": { "by": "title", "value": "Guaraná Antartica 33cl" },
+      "category": "bebida_nao_alcoolica",
+      "prices": { "restaurant": 2.5, "delivery": 2.5 }
+    },
+    {
+      "key": "Ice Tea Lipton limão 33cl",
+      "match": { "by": "title", "value": "Ice Tea Lipton limão 33cl" },
+      "category": "bebida_nao_alcoolica",
+      "prices": { "restaurant": 2.5, "delivery": 2.5 }
+    },
+    {
+      "key": "Ice Tea Lipton pêssego 33cl",
+      "match": { "by": "title", "value": "Ice Tea Lipton pêssego 33cl" },
+      "category": "bebida_nao_alcoolica",
+      "prices": { "restaurant": 2.5, "delivery": 2.5 }
+    },
+    {
+      "key": "Seven Up limão zero 33cl",
+      "match": { "by": "title", "value": "Seven Up limão zero 33cl" },
+      "category": "bebida_nao_alcoolica",
+      "prices": { "restaurant": 2.5, "delivery": 2.5 }
+    },
+    {
+      "key": "Agua Solan Cabras 50cl",
+      "match": { "by": "title", "value": "Agua Solan Cabras 50cl" },
+      "category": "bebida_nao_alcoolica",
+      "prices": { "restaurant": 2.2, "delivery": 3.0 }
+    },
+    {
+      "key": "San Miguel Mini 25cl",
+      "match": { "by": "title", "value": "San Miguel Mini 25cl" },
+      "category": "bebida_alcoolica",
+      "prices": { "restaurant": 2.5, "delivery": 2.5 }
+    },
+    {
+      "key": "San Miguel Radler 20cl",
+      "match": { "by": "title", "value": "San Miguel Radler 20cl" },
+      "category": "bebida_alcoolica",
+      "prices": { "restaurant": 2.2, "delivery": null }
+    },
+    {
+      "key": "San Miguel Radler 40cl",
+      "match": { "by": "title", "value": "San Miguel Radler 40cl" },
+      "category": "bebida_alcoolica",
+      "prices": { "restaurant": [4.25,4.5], "delivery": null }
+    },
+    {
+      "key": "Maestra Dunkel 20cl",
+      "match": { "by": "title", "value": "Maestra Dunkel 20cl" },
+      "category": "bebida_alcoolica",
+      "prices": { "restaurant": 2.2, "delivery": null }
+    },
+    {
+      "key": "Maestra Dunkel 40cl",
+      "match": { "by": "title", "value": "Maestra Dunkel 40cl" },
+      "category": "bebida_alcoolica",
+      "prices": { "restaurant": 4.5, "delivery": null }
+    },
+    {
+      "key": "Sangria Sarango 20cl",
+      "match": { "by": "title", "value": "Sangria Sarango 20cl" },
+      "category": "bebida_alcoolica",
+      "prices": { "restaurant": 2.5, "delivery": null }
+    },
+    {
+      "key": "Sangria Sarango 40cl",
+      "match": { "by": "title", "value": "Sangria Sarango 40cl" },
+      "category": "bebida_alcoolica",
+      "prices": { "restaurant": 5.0, "delivery": null }
+    },
+    {
+      "key": "San Miguel Fresca 33cl",
+      "match": { "by": "title", "value": "San Miguel Fresca 33cl" },
+      "category": "bebida_alcoolica",
+      "prices": { "restaurant": 3.0, "delivery": 3.25 }
+    },
+    {
+      "key": "San Miguel Especial 20cl",
+      "match": { "by": "title", "value": "San Miguel Especial 20cl" },
+      "category": "bebida_alcoolica",
+      "prices": { "restaurant": 2.0, "delivery": null }
+    },
+    {
+      "key": "San Miguel Especial 40cl",
+      "match": { "by": "title", "value": "San Miguel Especial 40cl" },
+      "category": "bebida_alcoolica",
+      "prices": { "restaurant": 4.2, "delivery": null }
+    },
+    {
+      "key": "Embalagem takeaway",
+      "match": { "by": "title", "value": "Embalagem takeaway" },
+      "category": "sacos",
+      "prices": { "restaurant": 1 }
+    },
+    {
+      "key": "Taxa de saco BOLT",
+      "match": { "by": "title", "value": "Taxa de saco BOLT" },
+      "category": "sacos",
+      "prices": { "delivery": 0.37 }
+    },
+    {
+      "key": "Saco Bolt",
+      "match": { "by": "title", "value": "Saco Bolt" },
+      "category": "sacos",
+      "prices": { "restaurant": null, "delivery": 0.1 }
+    },
+    {
+      "key": "Brigadeiro (Individual)",
+      "match": { "by": "title", "value": "Brigadeiro (Individual)" },
+      "category": "pizza",
+      "prices": { "restaurant": [7.9, 8.9], "delivery": [10.9, 11.9] }
+    },
+    {
+      "key": "Brigadeiro (Grande)",
+      "match": { "by": "title", "value": "Brigadeiro (Grande)" },
+      "category": "pizza",
+      "prices": { "restaurant": [13.9, 14.9], "delivery": [17.9] }
+    },
+    {
+      "key": "Cookies and Cream (Individual)",
+      "match": { "by": "title", "value": "Cookies and Cream (Individual)" },
+      "category": "pizza",
+      "prices": { "restaurant": [7.9, 8.9], "delivery": [10.9, 11.9] }
+    },
+    {
+      "key": "Cookies and Cream (Grande)",
+      "match": { "by": "title", "value": "Cookies and Cream (Grande)" },
+      "category": "pizza",
+      "prices": { "restaurant": [13.9, 14.9], "delivery": [17.9] }
+    },
+    {
+      "key": "Doce de Leite e Banana (Individual)",
+      "match": { "by": "title", "value": "Doce de Leite e Banana (Individual)" },
+      "category": "pizza",
+      "prices": { "restaurant": [7.9, 8.9], "delivery": [10.9, 11.9] }
+    },
+    {
+      "key": "Doce de Leite e Banana (Grande)",
+      "match": { "by": "title", "value": "Doce de Leite e Banana (Grande)" },
+      "category": "pizza",
+      "prices": { "restaurant": [13.9, 14.9], "delivery": [17.9] }
+    },
+    {
+      "key": "Focaccia L",
+      "match": { "by": "title", "value": "Focaccia L" },
+      "category": "outros",
+      "prices": { "restaurant": 6.0, "delivery": null }
+    },
+    {
+      "key": "Chaveiro Angry Box",
+      "match": { "by": "title", "value": "Chaveiro Angry Box" },
+      "category": "outros",
+      "prices": { "restaurant": 2.0, "delivery": null }
+    }
+  ]
+}
