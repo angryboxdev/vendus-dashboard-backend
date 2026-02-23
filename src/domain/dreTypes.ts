@@ -52,6 +52,7 @@ export type ReceitaBrutaPayload = {
   dinheiro: ReceitaBrutaItem[];
   tpa: ReceitaBrutaItem[];
   apps: ReceitaBrutaItem[];
+  tax_amount: number;
 };
 
 export type DRE_CategoriaReceitaBruta = "dinheiro" | "tpa" | "apps";

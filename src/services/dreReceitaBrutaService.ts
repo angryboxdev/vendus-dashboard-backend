@@ -121,5 +121,7 @@ export async function getReceitaBruta(
     }
   }
 
-  return { dinheiro, tpa, apps };
+  const tax_amount = Number(response.totals?.tax_amount) ?? 0;
+
+  return { dinheiro, tpa, apps, tax_amount };
 }
