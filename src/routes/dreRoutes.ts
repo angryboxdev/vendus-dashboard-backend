@@ -1,16 +1,30 @@
-import { Router } from "express";
+import type {
+  CustosFixosCreateBody,
+  CustosFixosUpdateBody,
+  CustosVariaveisCreateBody,
+  CustosVariaveisUpdateBody,
+} from "../domain/dreTypes.js";
 import type { Request, Response } from "express";
+import {
+  createCustoFixo,
+  deleteCustoFixo,
+  getCustosFixos,
+  updateCustoFixo,
+} from "../services/dreCustosFixosService.js";
 import {
   createCustoVariavel,
   deleteCustoVariavel,
   getCustosVariaveis,
   updateCustoVariavel,
 } from "../services/dreCustosVariaveisService.js";
-import type { CustosVariaveisCreateBody, CustosVariaveisUpdateBody } from "../domain/dreTypes.js";
+
+import { Router } from "express";
 
 export const dreRoutes = Router();
 
-function toQueryRecord(q: Request["query"]): Record<string, string | undefined> {
+function toQueryRecord(
+  q: Request["query"]
+): Record<string, string | undefined> {
   const out: Record<string, string | undefined> = {};
   for (const [k, v] of Object.entries(q ?? {})) {
     out[k] = Array.isArray(v) ? (v[0] as string) : (v as string);
@@ -18,7 +32,9 @@ function toQueryRecord(q: Request["query"]): Record<string, string | undefined> 
   return out;
 }
 
-function parseYearMonth(query: Record<string, string | undefined>): { year: number; month: number } | null {
+function parseYearMonth(
+  query: Record<string, string | undefined>
+): { year: number; month: number } | null {
   const year = Number(query.year);
   const month = Number(query.month);
   if (!Number.isInteger(year) || year < 2000 || year > 2100) return null;
@@ -26,7 +42,10 @@ function parseYearMonth(query: Record<string, string | undefined>): { year: numb
   return { year, month };
 }
 
-function yearMonthGuard(req: Request, res: Response): { year: number; month: number } | undefined {
+function yearMonthGuard(
+  req: Request,
+  res: Response
+): { year: number; month: number } | undefined {
   const parsed = parseYearMonth(toQueryRecord(req.query));
   if (!parsed) {
     res.status(400).json({
@@ -44,7 +63,8 @@ dreRoutes.get("/reports/dre/custos-variaveis", async (req, res) => {
     const payload = await getCustosVariaveis(period.year, period.month);
     res.json(payload);
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : "Erro ao obter custos variáveis";
+    const message =
+      e instanceof Error ? e.message : "Erro ao obter custos variáveis";
     res.status(500).json({ error: message });
   }
 });
@@ -54,14 +74,21 @@ dreRoutes.post("/reports/dre/custos-variaveis", async (req, res) => {
     const period = yearMonthGuard(req, res);
     if (!period) return;
     const body = req.body as CustosVariaveisCreateBody;
-    if (!body || typeof body.section !== "string" || !["producao", "venda"].includes(body.section)) {
-      res.status(400).json({ error: "Body deve incluir section: 'producao' ou 'venda'" });
+    if (
+      !body ||
+      typeof body.section !== "string" ||
+      !["producao", "venda"].includes(body.section)
+    ) {
+      res
+        .status(400)
+        .json({ error: "Body deve incluir section: 'producao' ou 'venda'" });
       return;
     }
     const item = await createCustoVariavel(period.year, period.month, body);
     res.status(201).json(item);
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : "Erro ao criar custo variável";
+    const message =
+      e instanceof Error ? e.message : "Erro ao criar custo variável";
     res.status(500).json({ error: message });
   }
 });
@@ -76,10 +103,16 @@ dreRoutes.put("/reports/dre/custos-variaveis/:id", async (req, res) => {
       return;
     }
     const body = req.body as CustosVariaveisUpdateBody;
-    const item = await updateCustoVariavel(id, period.year, period.month, body ?? {});
+    const item = await updateCustoVariavel(
+      id,
+      period.year,
+      period.month,
+      body ?? {}
+    );
     res.json(item);
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : "Erro ao atualizar custo variável";
+    const message =
+      e instanceof Error ? e.message : "Erro ao atualizar custo variável";
     res.status(500).json({ error: message });
   }
 });
@@ -96,7 +129,76 @@ dreRoutes.delete("/reports/dre/custos-variaveis/:id", async (req, res) => {
     await deleteCustoVariavel(id, period.year, period.month);
     res.status(204).send();
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : "Erro ao excluir custo variável";
+    const message =
+      e instanceof Error ? e.message : "Erro ao excluir custo variável";
+    res.status(500).json({ error: message });
+  }
+});
+
+dreRoutes.get("/reports/dre/custos-fixos", async (req, res) => {
+  try {
+    const period = yearMonthGuard(req, res);
+    if (!period) return;
+    const list = await getCustosFixos(period.year, period.month);
+    res.json(list);
+  } catch (e: unknown) {
+    const message =
+      e instanceof Error ? e.message : "Erro ao obter custos fixos";
+    res.status(500).json({ error: message });
+  }
+});
+
+dreRoutes.post("/reports/dre/custos-fixos", async (req, res) => {
+  try {
+    const period = yearMonthGuard(req, res);
+    if (!period) return;
+    const body = req.body as CustosFixosCreateBody;
+    const item = await createCustoFixo(period.year, period.month, body ?? {});
+    res.status(201).json(item);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Erro ao criar custo fixo";
+    res.status(500).json({ error: message });
+  }
+});
+
+dreRoutes.put("/reports/dre/custos-fixos/:id", async (req, res) => {
+  try {
+    const period = yearMonthGuard(req, res);
+    if (!period) return;
+    const id = req.params.id;
+    if (!id) {
+      res.status(400).json({ error: "Parâmetro :id obrigatório" });
+      return;
+    }
+    const body = req.body as CustosFixosUpdateBody;
+    const item = await updateCustoFixo(
+      id,
+      period.year,
+      period.month,
+      body ?? {}
+    );
+    res.json(item);
+  } catch (e: unknown) {
+    const message =
+      e instanceof Error ? e.message : "Erro ao atualizar custo fixo";
+    res.status(500).json({ error: message });
+  }
+});
+
+dreRoutes.delete("/reports/dre/custos-fixos/:id", async (req, res) => {
+  try {
+    const period = yearMonthGuard(req, res);
+    if (!period) return;
+    const id = req.params.id;
+    if (!id) {
+      res.status(400).json({ error: "Parâmetro :id obrigatório" });
+      return;
+    }
+    await deleteCustoFixo(id, period.year, period.month);
+    res.status(204).send();
+  } catch (e: unknown) {
+    const message =
+      e instanceof Error ? e.message : "Erro ao excluir custo fixo";
     res.status(500).json({ error: message });
   }
 });
