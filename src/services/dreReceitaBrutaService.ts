@@ -61,17 +61,13 @@ function toItem(
   section: DRE_CategoriaReceitaBruta,
   valorBruto: number
 ): ReceitaBrutaItem {
+  const id = `${category}-${section}`;
   const descricao = CATEGORY_LABELS[category];
-  const taxaPct = SECTION_TAXA[section];
   const valor = Math.round(valorBruto * 100) / 100;
-  const taxa = Math.round(valorBruto * (taxaPct / 100) * 100) / 100;
+  const taxa =
+    Math.round(valorBruto * (SECTION_TAXA[section] / 100) * 100) / 100;
 
-  return {
-    id: `${category}-${section}`,
-    descricao,
-    valor,
-    taxa,
-  };
+  return { id, descricao, valor, taxa };
 }
 
 /**
