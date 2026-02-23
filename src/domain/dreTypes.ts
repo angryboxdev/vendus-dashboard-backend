@@ -39,3 +39,33 @@ export type CustosFixoItem = {
 
 export type CustosFixosCreateBody = CustosVariaveisItemBody;
 export type CustosFixosUpdateBody = CustosVariaveisItemBody & { id?: string };
+
+// Receita bruta: 3 categorias (dinheiro, tpa, apps), campo taxa em vez de valorSemIva
+export type ReceitaBrutaItem = {
+  id: string;
+  descricao: string;
+  valor: number;
+  taxa: number;
+  observacao: string;
+};
+
+export type ReceitaBrutaPayload = {
+  dinheiro: ReceitaBrutaItem[];
+  tpa: ReceitaBrutaItem[];
+  apps: ReceitaBrutaItem[];
+};
+
+export type DRE_CategoriaReceitaBruta = "dinheiro" | "tpa" | "apps";
+
+export type ReceitaBrutaItemBody = {
+  descricao: string;
+  valor: number;
+  taxa: number;
+  observacao: string;
+};
+
+export type ReceitaBrutaCreateBody = ReceitaBrutaItemBody & {
+  section: DRE_CategoriaReceitaBruta;
+};
+
+export type ReceitaBrutaUpdateBody = ReceitaBrutaItemBody & { id?: string };
