@@ -68,3 +68,25 @@ export type ReceitaBrutaCreateBody = ReceitaBrutaItemBody & {
 };
 
 export type ReceitaBrutaUpdateBody = ReceitaBrutaItemBody & { id?: string };
+
+/** KPIs do DRE (monthly summary + custos variáveis/fixos) */
+export type DREKpisPayload = {
+  /** Nº de vendas loja (by_channel.restaurant.totals.documents_count) */
+  vendas_loja: number;
+  /** Nº de vendas apps (by_channel.delivery.totals.documents_count) */
+  vendas_apps: number;
+  /** Nº de vendas totais (totals.documents_count) */
+  vendas_totais: number;
+  /** Ticket médio bruto = totals.gross / vendas_totais */
+  ticket_medio_bruto: number;
+  /** Ticket médio líquido = totals.net / vendas_totais */
+  ticket_medio_liquido: number;
+  /** Receita % Loja = receita loja / receita total (0..1) */
+  receita_pct_loja: number;
+  /** Receita % Apps = receita apps / receita total (0..1) */
+  receita_pct_apps: number;
+  /** CMV % = Custos Variáveis Produção / receita líquida (totals.net) */
+  cmv_pct: number;
+  /** Custo Fixo % = Custos Fixos Totais / receita líquida */
+  custo_fixo_pct: number;
+};

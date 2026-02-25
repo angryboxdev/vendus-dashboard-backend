@@ -19,6 +19,7 @@ import {
 } from "../services/dreCustosVariaveisService.js";
 
 import { Router } from "express";
+import { getDreKpis } from "../services/dreKpisService.js";
 import { getReceitaBruta } from "../services/dreReceitaBrutaService.js";
 
 export const dreRoutes = Router();
@@ -213,6 +214,19 @@ dreRoutes.get("/reports/dre/receita-bruta", async (req, res) => {
   } catch (e: unknown) {
     const message =
       e instanceof Error ? e.message : "Erro ao obter receita bruta";
+    res.status(500).json({ error: message });
+  }
+});
+
+dreRoutes.get("/reports/dre/kpis", async (req, res) => {
+  try {
+    const period = yearMonthGuard(req, res);
+    if (!period) return;
+    const payload = await getDreKpis(period.year, period.month);
+    res.json(payload);
+  } catch (e: unknown) {
+    const message =
+      e instanceof Error ? e.message : "Erro ao obter KPIs";
     res.status(500).json({ error: message });
   }
 });
