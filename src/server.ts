@@ -3,6 +3,7 @@ import cors from "cors";
 import { documentsRoutes } from "./routes/documentsRoutes.js";
 import { dreRoutes } from "./routes/dreRoutes.js";
 import express from "express";
+import { pizzaRoutes } from "./routes/pizzaRoutes.js";
 import { reportsRoutes } from "./routes/reportsRoutes.js";
 import { stockRoutes } from "./routes/stockRoutes.js";
 
@@ -17,6 +18,7 @@ app.use("/api", documentsRoutes);
 app.use("/api", reportsRoutes);
 app.use("/api", dreRoutes);
 app.use("/api", stockRoutes);
+app.use("/api", pizzaRoutes);
 
 app.listen(ENV.PORT, () => {
   console.log(`Backend running on http://localhost:${ENV.PORT}`);
