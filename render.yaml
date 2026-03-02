@@ -1,0 +1,25 @@
+# Render Blueprint - Staging (tier gratuito)
+# Ver: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: vendus-dashboard-api-staging
+    runtime: node
+    region: frankfurt
+
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+
+    envVars:
+      - key: NODE_ENV
+        value: staging
+      - key: VENDUS_BASE_URL
+        sync: false
+      - key: VENDUS_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+
+    # Opcional: health check
+    healthCheckPath: /api/health
