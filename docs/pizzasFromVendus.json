@@ -1,0 +1,1891 @@
+[
+  {
+      "reference": "VHON15-2508128",
+      "title": "Honey Peperoni (Grande)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 125,
+      "amounts": {
+          "gross_total": 3026.7,
+          "net_total": 2678.51,
+          "tax_total": 348.19,
+          "avg_gross_unit": 24.2136,
+          "avg_net_unit": 21.42808
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 37,
+              "gross_total": 755.5,
+              "net_total": 668.59
+          },
+          "delivery": {
+              "qty": 88,
+              "gross_total": 2271.2,
+              "net_total": 2009.92
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 2271.2
+          },
+          {
+              "method": "Multibanco",
+              "amount": 694.2
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 61.3
+          }
+      ]
+  },
+  {
+      "reference": "VHON14-25081298",
+      "title": "Honey Peperoni (Individual)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 171,
+      "amounts": {
+          "gross_total": 2281.9,
+          "net_total": 2019.55,
+          "tax_total": 262.35,
+          "avg_gross_unit": 13.344444444444445,
+          "avg_net_unit": 11.810233918128654
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 95,
+              "gross_total": 1078.5,
+              "net_total": 954.63
+          },
+          "delivery": {
+              "qty": 76,
+              "gross_total": 1203.4,
+              "net_total": 1064.92
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 1203.4
+          },
+          {
+              "method": "Multibanco",
+              "amount": 942.7
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 135.8
+          }
+      ]
+  },
+  {
+      "reference": "VCHI20-25081268",
+      "title": "Chicken & Cheese (Individual)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 66,
+      "amounts": {
+          "gross_total": 851.4,
+          "net_total": 753.54,
+          "tax_total": 97.86,
+          "avg_gross_unit": 12.9,
+          "avg_net_unit": 11.417272727272726
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 42,
+              "gross_total": 474.8,
+              "net_total": 420.27
+          },
+          "delivery": {
+              "qty": 24,
+              "gross_total": 376.6,
+              "net_total": 333.27
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 407.4
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 376.6
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 67.4
+          }
+      ]
+  },
+  {
+      "reference": "VTOM6-25081229",
+      "title": "Tomate & Pesto (Individual)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 69,
+      "amounts": {
+          "gross_total": 752.1,
+          "net_total": 665.65,
+          "tax_total": 86.45,
+          "avg_gross_unit": 10.9,
+          "avg_net_unit": 9.647101449275363
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 45,
+              "gross_total": 420.5,
+              "net_total": 372.21
+          },
+          "delivery": {
+              "qty": 24,
+              "gross_total": 331.6,
+              "net_total": 293.44
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 375
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 331.6
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 45.5
+          }
+      ]
+  },
+  {
+      "reference": "VTRU10-25081238",
+      "title": "Truffle Shrooms (Individual)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 70,
+      "amounts": {
+          "gross_total": 746,
+          "net_total": 660.26,
+          "tax_total": 85.74,
+          "avg_gross_unit": 10.657142857142857,
+          "avg_net_unit": 9.432285714285713
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 49,
+              "gross_total": 456.1,
+              "net_total": 403.72
+          },
+          "delivery": {
+              "qty": 21,
+              "gross_total": 289.9,
+              "net_total": 256.54
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 399.7
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 289.9
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 56.4
+          }
+      ]
+  },
+  {
+      "reference": "VCRE8-25081218",
+      "title": "Creamy Garlic (Individual)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 59,
+      "amounts": {
+          "gross_total": 663.1,
+          "net_total": 586.86,
+          "tax_total": 76.24,
+          "avg_gross_unit": 11.238983050847459,
+          "avg_net_unit": 9.946779661016949
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 34,
+              "gross_total": 319.6,
+              "net_total": 282.88
+          },
+          "delivery": {
+              "qty": 25,
+              "gross_total": 343.5,
+              "net_total": 303.98
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 343.5
+          },
+          {
+              "method": "Multibanco",
+              "amount": 273.1
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 46.5
+          }
+      ]
+  },
+  {
+      "reference": "VCRE9-25081234",
+      "title": "Creamy Garlic (Grande)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 27,
+      "amounts": {
+          "gross_total": 563.5,
+          "net_total": 498.74,
+          "tax_total": 64.76,
+          "avg_gross_unit": 20.87037037037037,
+          "avg_net_unit": 18.471851851851852
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 11,
+              "gross_total": 190.7,
+              "net_total": 168.78
+          },
+          "delivery": {
+              "qty": 16,
+              "gross_total": 372.8,
+              "net_total": 329.96
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 372.8
+          },
+          {
+              "method": "Multibanco",
+              "amount": 156.9
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 33.8
+          }
+      ]
+  },
+  {
+      "reference": "VCHI21-25081277",
+      "title": "Chicken & Cheese (Grande)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 23,
+      "amounts": {
+          "gross_total": 555.5,
+          "net_total": 491.61,
+          "tax_total": 63.89,
+          "avg_gross_unit": 24.152173913043477,
+          "avg_net_unit": 21.374347826086957
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 7,
+              "gross_total": 144.1,
+              "net_total": 127.53
+          },
+          "delivery": {
+              "qty": 16,
+              "gross_total": 411.4,
+              "net_total": 364.08
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 411.4
+          },
+          {
+              "method": "Multibanco",
+              "amount": 124.2
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 19.9
+          }
+      ]
+  },
+  {
+      "reference": "VTOM7-25081256",
+      "title": "Tomate & Pesto (Grande)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 24,
+      "amounts": {
+          "gross_total": 507.8,
+          "net_total": 449.45,
+          "tax_total": 58.35,
+          "avg_gross_unit": 21.158333333333335,
+          "avg_net_unit": 18.727083333333333
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 9,
+              "gross_total": 155.3,
+              "net_total": 137.45
+          },
+          "delivery": {
+              "qty": 15,
+              "gross_total": 352.5,
+              "net_total": 312
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 352.5
+          },
+          {
+              "method": "Multibanco",
+              "amount": 155.3
+          }
+      ]
+  },
+  {
+      "reference": "VSWE16-25081279",
+      "title": "Sweet Smoked Shrimp (Individual)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 35,
+      "amounts": {
+          "gross_total": 434.5,
+          "net_total": 384.57,
+          "tax_total": 49.93,
+          "avg_gross_unit": 12.414285714285715,
+          "avg_net_unit": 10.987714285714285
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 26,
+              "gross_total": 292.4,
+              "net_total": 258.82
+          },
+          "delivery": {
+              "qty": 9,
+              "gross_total": 142.1,
+              "net_total": 125.75
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 269.6
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 142.1
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 22.8
+          }
+      ]
+  },
+  {
+      "reference": "V4-F18-25081244",
+      "title": "4 Formaggios+ (Individual)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 27,
+      "amounts": {
+          "gross_total": 358.3,
+          "net_total": 317.11,
+          "tax_total": 41.19,
+          "avg_gross_unit": 13.27037037037037,
+          "avg_net_unit": 11.744814814814815
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 15,
+              "gross_total": 168.5,
+              "net_total": 149.15
+          },
+          "delivery": {
+              "qty": 12,
+              "gross_total": 189.8,
+              "net_total": 167.96
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 189.8
+          },
+          {
+              "method": "Multibanco",
+              "amount": 168.5
+          }
+      ]
+  },
+  {
+      "reference": "VTRU11-25081254",
+      "title": "Truffle Shrooms (Grande)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 15,
+      "amounts": {
+          "gross_total": 327.7,
+          "net_total": 290.05,
+          "tax_total": 37.65,
+          "avg_gross_unit": 21.846666666666668,
+          "avg_net_unit": 19.336666666666666
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 4,
+              "gross_total": 69.2,
+              "net_total": 61.25
+          },
+          "delivery": {
+              "qty": 11,
+              "gross_total": 258.5,
+              "net_total": 228.8
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 258.5
+          },
+          {
+              "method": "Multibanco",
+              "amount": 69.2
+          }
+      ]
+  },
+  {
+      "reference": "VCOC37-25081719",
+      "title": "Coca Cola Zero 33cl",
+      "category": "bebida_nao_alcoolica",
+      "tax_rate": 13,
+      "qty": 116,
+      "amounts": {
+          "gross_total": 290,
+          "net_total": 256.38,
+          "tax_total": 33.62,
+          "avg_gross_unit": 2.5,
+          "avg_net_unit": 2.2101724137931034
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 91,
+              "gross_total": 227.5,
+              "net_total": 201.13
+          },
+          "delivery": {
+              "qty": 25,
+              "gross_total": 62.5,
+              "net_total": 55.25
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 207.5
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 62.5
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 20
+          }
+      ]
+  },
+  {
+      "reference": "V4-F19-25081252",
+      "title": "4 Formaggios+ (Grande)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 9,
+      "amounts": {
+          "gross_total": 222.7,
+          "net_total": 197.08,
+          "tax_total": 25.62,
+          "avg_gross_unit": 24.744444444444444,
+          "avg_net_unit": 21.89777777777778
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 2,
+              "gross_total": 41.4,
+              "net_total": 36.64
+          },
+          "delivery": {
+              "qty": 7,
+              "gross_total": 181.3,
+              "net_total": 160.44
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 181.3
+          },
+          {
+              "method": "Multibanco",
+              "amount": 21.5
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 19.9
+          }
+      ]
+  },
+  {
+      "reference": "VTUN12-25081229",
+      "title": "Tuna & Mayo (Individual)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 16,
+      "amounts": {
+          "gross_total": 192.4,
+          "net_total": 170.28,
+          "tax_total": 22.12,
+          "avg_gross_unit": 12.025,
+          "avg_net_unit": 10.6425
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 6,
+              "gross_total": 54.4,
+              "net_total": 48.16
+          },
+          "delivery": {
+              "qty": 10,
+              "gross_total": 138,
+              "net_total": 122.12
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 138
+          },
+          {
+              "method": "Multibanco",
+              "amount": 54.4
+          }
+      ]
+  },
+  {
+      "reference": "VAGU36-25081758",
+      "title": "Coca Cola 33cl",
+      "category": "bebida_nao_alcoolica",
+      "tax_rate": 13,
+      "qty": 54,
+      "amounts": {
+          "gross_total": 135,
+          "net_total": 119.34,
+          "tax_total": 15.66,
+          "avg_gross_unit": 2.5,
+          "avg_net_unit": 2.21
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 46,
+              "gross_total": 115,
+              "net_total": 101.66
+          },
+          "delivery": {
+              "qty": 8,
+              "gross_total": 20,
+              "net_total": 17.68
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 95
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 20
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 20
+          }
+      ]
+  },
+  {
+      "reference": "VCOO24-25081235",
+      "title": "Cookies and Cream (Individual)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 14,
+      "amounts": {
+          "gross_total": 130.6,
+          "net_total": 115.58,
+          "tax_total": 15.02,
+          "avg_gross_unit": 9.328571428571427,
+          "avg_net_unit": 8.255714285714285
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 11,
+              "gross_total": 94.9,
+              "net_total": 83.99
+          },
+          "delivery": {
+              "qty": 3,
+              "gross_total": 35.7,
+              "net_total": 31.59
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 78.1
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 35.7
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 16.8
+          }
+      ]
+  },
+  {
+      "reference": "VBRI22-2508120",
+      "title": "Brigadeiro (Individual)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 13,
+      "amounts": {
+          "gross_total": 121.7,
+          "net_total": 107.72,
+          "tax_total": 13.98,
+          "avg_gross_unit": 9.361538461538462,
+          "avg_net_unit": 8.286153846153846
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 9,
+              "gross_total": 76.1,
+              "net_total": 67.36
+          },
+          "delivery": {
+              "qty": 4,
+              "gross_total": 45.6,
+              "net_total": 40.36
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 67.2
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 45.6
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 8.9
+          }
+      ]
+  },
+  {
+      "reference": "VTUN13-25081252",
+      "title": "Tuna & Mayo (Grande)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 4,
+      "amounts": {
+          "gross_total": 80.8,
+          "net_total": 71.52,
+          "tax_total": 9.28,
+          "avg_gross_unit": 20.2,
+          "avg_net_unit": 17.88
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 2,
+              "gross_total": 33.8,
+              "net_total": 29.92
+          },
+          "delivery": {
+              "qty": 2,
+              "gross_total": 47,
+              "net_total": 41.6
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 47
+          },
+          {
+              "method": "Multibanco",
+              "amount": 16.9
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 16.9
+          }
+      ]
+  },
+  {
+      "reference": "VSAN34-25081754",
+      "title": "Agua Solan Cabras 33cl",
+      "category": "bebida_nao_alcoolica",
+      "tax_rate": 6,
+      "qty": 51,
+      "amounts": {
+          "gross_total": 80,
+          "net_total": 75.65,
+          "tax_total": 4.35,
+          "avg_gross_unit": 1.5686274509803921,
+          "avg_net_unit": 1.4833333333333334
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 46,
+              "gross_total": 70,
+              "net_total": 66.21
+          },
+          "delivery": {
+              "qty": 5,
+              "gross_total": 10,
+              "net_total": 9.44
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 61
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 10
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 9
+          }
+      ]
+  },
+  {
+      "reference": "VSWE17-25081265",
+      "title": "Sweet Smoked Shrimp (Grande)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 3,
+      "amounts": {
+          "gross_total": 71.7,
+          "net_total": 63.45,
+          "tax_total": 8.25,
+          "avg_gross_unit": 23.900000000000002,
+          "avg_net_unit": 21.150000000000002
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 1,
+              "gross_total": 19.9,
+              "net_total": 17.61
+          },
+          "delivery": {
+              "qty": 2,
+              "gross_total": 51.8,
+              "net_total": 45.84
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 51.8
+          },
+          {
+              "method": "Multibanco",
+              "amount": 19.9
+          }
+      ]
+  },
+  {
+      "reference": "VCOC40-25081749",
+      "title": "Guaraná Antartica 33cl",
+      "category": "bebida_nao_alcoolica",
+      "tax_rate": 23,
+      "qty": 25,
+      "amounts": {
+          "gross_total": 62.5,
+          "net_total": 50.77,
+          "tax_total": 11.73,
+          "avg_gross_unit": 2.5,
+          "avg_net_unit": 2.0308
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 19,
+              "gross_total": 47.5,
+              "net_total": 38.58
+          },
+          "delivery": {
+              "qty": 6,
+              "gross_total": 15,
+              "net_total": 12.19
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 42.5
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 15
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 5
+          }
+      ]
+  },
+  {
+      "reference": "VSAN25-2508175",
+      "title": "San Miguel Especial 40cl",
+      "category": "bebida_alcoolica",
+      "tax_rate": 23,
+      "qty": 13,
+      "amounts": {
+          "gross_total": 54.26206896551724,
+          "net_total": 44.069893467900194,
+          "tax_total": 10.192175497617045,
+          "avg_gross_unit": 4.174005305039787,
+          "avg_net_unit": 3.389991805223092
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 13,
+              "gross_total": 54.26206896551724,
+              "net_total": 44.069893467900194
+          },
+          "delivery": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 41.662068965517236
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 12.6
+          }
+      ]
+  },
+  {
+      "reference": "VSAN29-25081723",
+      "title": "San Miguel Radler 40cl",
+      "category": "bebida_alcoolica",
+      "tax_rate": 23,
+      "qty": 12,
+      "amounts": {
+          "gross_total": 53.75,
+          "net_total": 43.72,
+          "tax_total": 10.03,
+          "avg_gross_unit": 4.479166666666667,
+          "avg_net_unit": 3.643333333333333
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 12,
+              "gross_total": 53.75,
+              "net_total": 43.72
+          },
+          "delivery": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 27
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 26.75
+          }
+      ]
+  },
+  {
+      "reference": "VICE75-25101851",
+      "title": "Ice Tea Lipton pêssego 33cl  ",
+      "category": "bebida_nao_alcoolica",
+      "tax_rate": 23,
+      "qty": 21,
+      "amounts": {
+          "gross_total": 52.5,
+          "net_total": 42.64,
+          "tax_total": 9.86,
+          "avg_gross_unit": 2.5,
+          "avg_net_unit": 2.0304761904761905
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 18,
+              "gross_total": 45,
+              "net_total": 36.55
+          },
+          "delivery": {
+              "qty": 3,
+              "gross_total": 7.5,
+              "net_total": 6.09
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 37.5
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 7.5
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 7.5
+          }
+      ]
+  },
+  {
+      "reference": "VEMB41-25082421",
+      "title": "Embalagem takeaway",
+      "category": "sacos",
+      "tax_rate": 13,
+      "qty": 51,
+      "amounts": {
+          "gross_total": 51,
+          "net_total": 44.95,
+          "tax_total": 6.05,
+          "avg_gross_unit": 1,
+          "avg_net_unit": 0.8813725490196079
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 51,
+              "gross_total": 51,
+              "net_total": 44.95
+          },
+          "delivery": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 43
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 8
+          }
+      ]
+  },
+  {
+      "reference": "VSAN32-25081741",
+      "title": "San Miguel Fresca 33cl",
+      "category": "bebida_alcoolica",
+      "tax_rate": 23,
+      "qty": 15,
+      "amounts": {
+          "gross_total": 45.5,
+          "net_total": 37,
+          "tax_total": 8.5,
+          "avg_gross_unit": 3.033333333333333,
+          "avg_net_unit": 2.466666666666667
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 13,
+              "gross_total": 39,
+              "net_total": 31.72
+          },
+          "delivery": {
+              "qty": 2,
+              "gross_total": 6.5,
+              "net_total": 5.28
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 36
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 6.5
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 3
+          }
+      ]
+  },
+  {
+      "reference": "VMAE27-25081779",
+      "title": "Maestra Dunkel 40cl",
+      "category": "bebida_alcoolica",
+      "tax_rate": 23,
+      "qty": 10,
+      "amounts": {
+          "gross_total": 44.637931034482754,
+          "net_total": 36.304171572750214,
+          "tax_total": 8.333759461732548,
+          "avg_gross_unit": 4.463793103448276,
+          "avg_net_unit": 3.6304171572750215
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 10,
+              "gross_total": 44.637931034482754,
+              "net_total": 36.304171572750214
+          },
+          "delivery": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 44.637931034482754
+          }
+      ]
+  },
+  {
+      "reference": "VICE74-25101858",
+      "title": "Ice Tea Lipton limão 33cl ",
+      "category": "bebida_nao_alcoolica",
+      "tax_rate": 23,
+      "qty": 17,
+      "amounts": {
+          "gross_total": 42.5,
+          "net_total": 34.51,
+          "tax_total": 7.99,
+          "avg_gross_unit": 2.5,
+          "avg_net_unit": 2.03
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 14,
+              "gross_total": 35,
+              "net_total": 28.42
+          },
+          "delivery": {
+              "qty": 3,
+              "gross_total": 7.5,
+              "net_total": 6.09
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 32.5
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 7.5
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 2.5
+          }
+      ]
+  },
+  {
+      "reference": "VAGU35-25081767",
+      "title": "Agua Solan Cabras Com Gás 33cl",
+      "category": "bebida_nao_alcoolica",
+      "tax_rate": 13,
+      "qty": 13,
+      "amounts": {
+          "gross_total": 40.5,
+          "net_total": 35.79,
+          "tax_total": 4.71,
+          "avg_gross_unit": 3.1153846153846154,
+          "avg_net_unit": 2.753076923076923
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 10,
+              "gross_total": 30,
+              "net_total": 26.5
+          },
+          "delivery": {
+              "qty": 3,
+              "gross_total": 10.5,
+              "net_total": 9.29
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 27
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 10.5
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 3
+          }
+      ]
+  },
+  {
+      "reference": "VSAN33-2508172",
+      "title": "San Miguel Mini 25cl",
+      "category": "bebida_alcoolica",
+      "tax_rate": 23,
+      "qty": 16,
+      "amounts": {
+          "gross_total": 40,
+          "net_total": 32.51,
+          "tax_total": 7.49,
+          "avg_gross_unit": 2.5,
+          "avg_net_unit": 2.031875
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 9,
+              "gross_total": 22.5,
+              "net_total": 18.28
+          },
+          "delivery": {
+              "qty": 7,
+              "gross_total": 17.5,
+              "net_total": 14.23
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 17.5
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 17.5
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 5
+          }
+      ]
+  },
+  {
+      "reference": "VSAN24-25081711",
+      "title": "San Miguel Especial 20cl",
+      "category": "bebida_alcoolica",
+      "tax_rate": 23,
+      "qty": 18,
+      "amounts": {
+          "gross_total": 36,
+          "net_total": 29.29,
+          "tax_total": 6.71,
+          "avg_gross_unit": 2,
+          "avg_net_unit": 1.6272222222222221
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 18,
+              "gross_total": 36,
+              "net_total": 29.29
+          },
+          "delivery": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 36
+          }
+      ]
+  },
+  {
+      "reference": "VCOO25-25081271",
+      "title": "Cookies and Cream (Grande)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 2,
+      "amounts": {
+          "gross_total": 31.8,
+          "net_total": 28.14,
+          "tax_total": 3.66,
+          "avg_gross_unit": 15.9,
+          "avg_net_unit": 14.07
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 1,
+              "gross_total": 13.9,
+              "net_total": 12.3
+          },
+          "delivery": {
+              "qty": 1,
+              "gross_total": 17.9,
+              "net_total": 15.84
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 17.9
+          },
+          {
+              "method": "Multibanco",
+              "amount": 13.9
+          }
+      ]
+  },
+  {
+      "reference": "VSAN31-25081718",
+      "title": "Sangria Sarango 40cl",
+      "category": "bebida_alcoolica",
+      "tax_rate": 23,
+      "qty": 6,
+      "amounts": {
+          "gross_total": 30,
+          "net_total": 24.41,
+          "tax_total": 5.59,
+          "avg_gross_unit": 5,
+          "avg_net_unit": 4.068333333333333
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 6,
+              "gross_total": 30,
+              "net_total": 24.41
+          },
+          "delivery": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 30
+          }
+      ]
+  },
+  {
+      "reference": "VFOC77-25101988",
+      "title": "Focaccia L",
+      "category": "outros",
+      "tax_rate": 13,
+      "qty": 4,
+      "amounts": {
+          "gross_total": 24,
+          "net_total": 21.24,
+          "tax_total": 2.76,
+          "avg_gross_unit": 6,
+          "avg_net_unit": 5.31
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 4,
+              "gross_total": 24,
+              "net_total": 21.24
+          },
+          "delivery": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 24
+          }
+      ]
+  },
+  {
+      "reference": "VDOC26-25081264",
+      "title": "Doce de Leite e Banana (Individual)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 3,
+      "amounts": {
+          "gross_total": 23.7,
+          "net_total": 20.97,
+          "tax_total": 2.73,
+          "avg_gross_unit": 7.8999999999999995,
+          "avg_net_unit": 6.989999999999999
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 3,
+              "gross_total": 23.7,
+              "net_total": 20.97
+          },
+          "delivery": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 23.7
+          }
+      ]
+  },
+  {
+      "reference": "VBRI23-25081291",
+      "title": "Brigadeiro (Grande)",
+      "category": "pizza",
+      "tax_rate": 13,
+      "qty": 1,
+      "amounts": {
+          "gross_total": 17.9,
+          "net_total": 15.84,
+          "tax_total": 2.06,
+          "avg_gross_unit": 17.9,
+          "avg_net_unit": 15.84
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "delivery": {
+              "qty": 1,
+              "gross_total": 17.9,
+              "net_total": 15.84
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 17.9
+          }
+      ]
+  },
+  {
+      "reference": "VSAN28-25081792",
+      "title": "San Miguel Radler 20cl",
+      "category": "bebida_alcoolica",
+      "tax_rate": 23,
+      "qty": 8,
+      "amounts": {
+          "gross_total": 17.6,
+          "net_total": 14.32,
+          "tax_total": 3.28,
+          "avg_gross_unit": 2.2,
+          "avg_net_unit": 1.79
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 8,
+              "gross_total": 17.6,
+              "net_total": 14.32
+          },
+          "delivery": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 17.6
+          }
+      ]
+  },
+  {
+      "reference": "VSEV77-25101862",
+      "title": "Seven Up limão zero 33cl",
+      "category": "bebida_nao_alcoolica",
+      "tax_rate": 23,
+      "qty": 7,
+      "amounts": {
+          "gross_total": 17.5,
+          "net_total": 14.21,
+          "tax_total": 3.29,
+          "avg_gross_unit": 2.5,
+          "avg_net_unit": 2.0300000000000002
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 6,
+              "gross_total": 15,
+              "net_total": 12.18
+          },
+          "delivery": {
+              "qty": 1,
+              "gross_total": 2.5,
+              "net_total": 2.03
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 15
+          },
+          {
+              "method": "Transferência Bancária",
+              "amount": 2.5
+          }
+      ]
+  },
+  {
+      "reference": "VSAN30-25081721",
+      "title": "Sangria Sarango 20cl",
+      "category": "bebida_alcoolica",
+      "tax_rate": 23,
+      "qty": 6,
+      "amounts": {
+          "gross_total": 14,
+          "net_total": 11.379512195121952,
+          "tax_total": 2.620487804878049,
+          "avg_gross_unit": 2.3333333333333335,
+          "avg_net_unit": 1.8965853658536587
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 6,
+              "gross_total": 14,
+              "net_total": 11.379512195121952
+          },
+          "delivery": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 9
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 5
+          }
+      ]
+  },
+  {
+      "reference": "VSAN26-25081748",
+      "title": "Maestra Dunkel 20cl",
+      "category": "bebida_alcoolica",
+      "tax_rate": 23,
+      "qty": 4,
+      "amounts": {
+          "gross_total": 8.8,
+          "net_total": 7.16,
+          "tax_total": 1.64,
+          "avg_gross_unit": 2.2,
+          "avg_net_unit": 1.79
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 4,
+              "gross_total": 8.8,
+              "net_total": 7.16
+          },
+          "delivery": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 6.6
+          },
+          {
+              "method": "Dinheiro",
+              "amount": 2.2
+          }
+      ]
+  },
+  {
+      "reference": "VAGU89-25112295",
+      "title": "Agua Solan Cabras 50cl",
+      "category": "bebida_nao_alcoolica",
+      "tax_rate": 6,
+      "qty": 3,
+      "amounts": {
+          "gross_total": 6.6,
+          "net_total": 6.23,
+          "tax_total": 0.37,
+          "avg_gross_unit": 2.1999999999999997,
+          "avg_net_unit": 2.0766666666666667
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 3,
+              "gross_total": 6.6,
+              "net_total": 6.23
+          },
+          "delivery": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Dinheiro",
+              "amount": 6.6
+          }
+      ]
+  },
+  {
+      "reference": "VTAX73-25090785",
+      "title": "Taxa de saco BOLT",
+      "category": "sacos",
+      "tax_rate": 13,
+      "qty": 16,
+      "amounts": {
+          "gross_total": 5.92,
+          "net_total": 5.28,
+          "tax_total": 0.64,
+          "avg_gross_unit": 0.37,
+          "avg_net_unit": 0.33
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "delivery": {
+              "qty": 16,
+              "gross_total": 5.92,
+              "net_total": 5.28
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 5.92
+          }
+      ]
+  },
+  {
+      "reference": "VCHA87-25112037",
+      "title": "Chaveiro Angry Box",
+      "category": "outros",
+      "tax_rate": 13,
+      "qty": 1,
+      "amounts": {
+          "gross_total": 2,
+          "net_total": 1.77,
+          "tax_total": 0.23,
+          "avg_gross_unit": 2,
+          "avg_net_unit": 1.77
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 1,
+              "gross_total": 2,
+              "net_total": 1.77
+          },
+          "delivery": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Multibanco",
+              "amount": 2
+          }
+      ]
+  },
+  {
+      "reference": "VSAC88-25112046",
+      "title": "Saco Bolt",
+      "category": "sacos",
+      "tax_rate": 13,
+      "qty": 7,
+      "amounts": {
+          "gross_total": 0.7,
+          "net_total": 0.63,
+          "tax_total": 0.07,
+          "avg_gross_unit": 0.09999999999999999,
+          "avg_net_unit": 0.09
+      },
+      "channels": {
+          "restaurant": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          },
+          "delivery": {
+              "qty": 7,
+              "gross_total": 0.7,
+              "net_total": 0.63
+          },
+          "unknown": {
+              "qty": 0,
+              "gross_total": 0,
+              "net_total": 0
+          }
+      },
+      "payment_methods": [
+          {
+              "method": "Transferência Bancária",
+              "amount": 0.7
+          }
+      ]
+  }
+]

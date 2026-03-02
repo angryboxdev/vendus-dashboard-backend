@@ -6,6 +6,7 @@ import type {
   StockItemCreateBody,
   StockItemUpdateBody,
   StockMovementCreateBody,
+  StockMovementUpdateBody,
   StockItemType,
 } from "../domain/stockTypes.js";
 import {
@@ -26,7 +27,9 @@ import {
 } from "../services/stockItemService.js";
 import {
   createStockMovement,
+  getStockMovementById,
   listStockMovementsByItem,
+  updateStockMovement,
   validateMovementType,
 } from "../services/stockMovementService.js";
 
@@ -239,6 +242,41 @@ stockRoutes.post("/stock/movements", async (req, res) => {
     res.status(201).json(movement);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao criar movimentação";
+    res.status(500).json({ error: message });
+  }
+});
+
+stockRoutes.put("/stock/movements/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!id) {
+      res.status(400).json({ error: "id da movimentação é obrigatório" });
+      return;
+    }
+    const body = req.body as StockMovementUpdateBody;
+    const movement = await updateStockMovement(id, body ?? {});
+    res.json(movement);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Erro ao atualizar movimentação";
+    res.status(500).json({ error: message });
+  }
+});
+
+stockRoutes.get("/stock/movements/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!id) {
+      res.status(400).json({ error: "id é obrigatório" });
+      return;
+    }
+    const movement = await getStockMovementById(id);
+    if (!movement) {
+      res.status(404).json({ error: "Movimentação não encontrada" });
+      return;
+    }
+    res.json(movement);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Erro ao obter movimentação";
     res.status(500).json({ error: message });
   }
 });

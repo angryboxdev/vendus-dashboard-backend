@@ -1,0 +1,26 @@
+[
+  {
+    "match_by": "title",
+    "match_value": "Honey Peperoni (Grande)",
+    "pizza_name": "Honey Peperoni",
+    "size": "large"
+  },
+  {
+    "match_by": "title",
+    "match_value": "Honey Peperoni (Individual)",
+    "pizza_name": "Honey Peperoni",
+    "size": "small"
+  },
+  {
+    "match_by": "title",
+    "match_value": "Creamy Garlic (Grande)",
+    "pizza_name": "Creamy Garlic",
+    "size": "large"
+  },
+  {
+    "match_by": "title",
+    "match_value": "Creamy Garlic (Individual)",
+    "pizza_name": "Creamy Garlic",
+    "size": "small"
+  }
+]

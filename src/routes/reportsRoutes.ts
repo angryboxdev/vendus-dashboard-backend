@@ -2,6 +2,10 @@ import { ENV } from "../config/env.js";
 import { Router } from "express";
 import { buildMonthlySummary } from "../services/monthlySummaryService.js";
 import { fetchAllDocuments } from "../services/documentsService.js";
+import {
+  getIngredientConsumption,
+  getDefaultPeriod,
+} from "../services/ingredientConsumptionService.js";
 
 export const reportsRoutes = Router();
 
@@ -34,5 +38,25 @@ reportsRoutes.get("/reports/monthly-summary", async (req, res) => {
     res.json(response);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+/**
+ * Painel: consumo de ingredientes no período (pizzas via receitas + mapeamento Vendus).
+ * GET /api/reports/ingredient-consumption?since=YYYY-MM-DD&until=YYYY-MM-DD
+ * Se since/until omitidos, usa ontem.
+ */
+reportsRoutes.get("/reports/ingredient-consumption", async (req, res) => {
+  try {
+    const { since, until } = req.query as Record<string, string | undefined>;
+    const defaultPeriod = getDefaultPeriod();
+    const sinceParam = since ?? defaultPeriod.since;
+    const untilParam = until ?? defaultPeriod.until;
+
+    const response = await getIngredientConsumption(sinceParam, untilParam);
+    res.json(response);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Erro ao obter consumo de ingredientes";
+    res.status(500).json({ error: message });
   }
 });

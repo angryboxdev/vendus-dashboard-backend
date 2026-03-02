@@ -40,7 +40,7 @@ export type StockItem = {
   current_quantity?: number;
   /** Calculado: média ponderada das compras (opcional) */
   average_cost_per_base_unit?: number | null;
-}; 
+};
 
 export type StockMovement = {
   id: string;
@@ -50,6 +50,7 @@ export type StockMovement = {
   unit_cost_per_base_unit: number | null;
   reason: string | null;
   reference: string | null;
+  movement_date: string;
   created_at: string;
   created_by: string | null;
 };
@@ -90,5 +91,15 @@ export type StockMovementCreateBody = {
   unit_cost_per_base_unit?: number | null;
   reason?: string | null;
   reference?: string | null;
+  /** Data em que a movimentação ocorreu (ISO 8601); por defeito = agora */
+  movement_date?: string | null;
   created_by?: string | null;
+};
+
+export type StockMovementUpdateBody = {
+  movement_date?: string | null;
+  quantity?: number;
+  unit_cost_per_base_unit?: number | null;
+  reason?: string | null;
+  reference?: string | null;
 };

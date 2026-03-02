@@ -357,3 +357,16 @@ interface PizzaRecipeItem {
 | POST   | `/api/pizzas/:pizzaId/recipes/:recipeId/items`         | Criar item                                 |
 | PUT    | `/api/pizzas/:pizzaId/recipes/:recipeId/items/:itemId` | Atualizar item                             |
 | DELETE | `/api/pizzas/:pizzaId/recipes/:recipeId/items/:itemId` | Eliminar item                              |
+
+---
+
+## Painel – Consumo de ingredientes
+
+**GET** `/api/reports/ingredient-consumption?since=YYYY-MM-DD&until=YYYY-MM-DD`
+
+- **Query (opcional)**: `since`, `until` (inclusivo). Se omitidos, o backend usa **ontem**.
+- **Resposta 200**:
+  - `period`: `{ since, until, timezone? }`
+  - `consumption`: `[{ stock_item_id, name, base_unit, quantity_consumed }]` (ordenado por quantidade desc)
+  - `matched_products`: lista de produtos Vendus que deram match com pizza (title, reference, pizza_id, size, qty_sold)
+  - `debug`: `{ products_total, products_matched, took_ms }`
