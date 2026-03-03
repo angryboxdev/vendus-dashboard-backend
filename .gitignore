@@ -5,3 +5,6 @@ dist/
 .env.*.local
 *.log
 .DS_Store
+
+# Projeto usa npm; ignorar lockfile do Yarn
+yarn.lock
