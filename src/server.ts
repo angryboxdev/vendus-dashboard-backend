@@ -9,7 +9,18 @@ import { stockRoutes } from "./routes/stockRoutes.js";
 
 const app = express();
 
-app.use(cors());
+// CORS: permitir frontend Vercel (produção + previews *.vercel.app) e localhost
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, cb) => {
+    const allowed =
+      !origin ||
+      origin === "http://localhost:5173" ||
+      origin === "http://localhost:3000" ||
+      /\.vercel\.app$/.test(origin);
+    cb(null, allowed);
+  },
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
