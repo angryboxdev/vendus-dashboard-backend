@@ -43,7 +43,7 @@ Se o teu repositório tiver o ficheiro `render.yaml` na raiz:
 
 1. No Render: **New → Blueprint**.
 2. Liga o repo; o Render lê o `render.yaml` e cria o serviço.
-3. No dashboard do serviço, em **Environment**, preenche os valores das variáveis que estão com `sync: false` (VENDUS_*, SUPABASE_*).
+3. No dashboard do serviço, em **Environment**, preenche os valores das variáveis que estão com `sync: false` (VENDUS*\*, SUPABASE*\*).
 
 ## Domínio próprio (opcional)
 
@@ -51,13 +51,13 @@ No Render, em **Settings → Custom Domain** podes adicionar um domínio teu (ex
 
 ## Variáveis de ambiente – resumo
 
-| Variável           | Obrigatória | Descrição                          |
-|--------------------|------------|------------------------------------|
-| `VENDUS_BASE_URL`  | Sim        | Base URL da API Vendus             |
-| `VENDUS_API_KEY`   | Sim        | API key Vendus                     |
-| `SUPABASE_URL`     | Sim*       | URL do projeto Supabase            |
-| `SUPABASE_ANON_KEY`| Sim*       | Anon key Supabase                  |
-| `PORT`             | Não        | Definido pelo Render               |
+| Variável            | Obrigatória | Descrição               |
+| ------------------- | ----------- | ----------------------- |
+| `VENDUS_BASE_URL`   | Sim         | Base URL da API Vendus  |
+| `VENDUS_API_KEY`    | Sim         | API key Vendus          |
+| `SUPABASE_URL`      | Sim\*       | URL do projeto Supabase |
+| `SUPABASE_ANON_KEY` | Sim\*       | Anon key Supabase       |
+| `PORT`              | Não         | Definido pelo Render    |
 
 \* Necessárias para endpoints que usam Supabase (pizzas, stock, relatórios, etc.). Sem elas, apenas rotas que não usam BD podem funcionar.
 
@@ -65,8 +65,30 @@ No Render, em **Settings → Custom Domain** podes adicionar um domínio teu (ex
 
 A API usa `cors()` sem restrição de origem. Para staging está ok. Para produção, convém restringir `origin` no código (ex: lista de domínios permitidos).
 
+## Erro de auth nas chamadas ao Vendus (não é CORS)
+
+Se **DRE e Stock** funcionam mas **outras rotas dão erro de autenticação**, são as que chamam a **API Vendus** (documentos, listagens do Vendus, etc.). O browser só fala com o teu backend; quem chama o Vendus é o servidor (ex.: Render). O problema está na **configuração da API Vendus** ou nas **variáveis de ambiente no Render**.
+
+O que verificar:
+
+1. **Variáveis no Render**  
+   No serviço: **Environment** → confirma que existem e estão corretos:
+   - `VENDUS_BASE_URL` (ex: `https://app.vendus.pt` ou o URL da API que usas em local)
+   - `VENDUS_API_KEY` (a mesma chave que funciona no `.env` em local, ou uma chave que tenha permissão para ser usada em servidor)
+
+2. **Restrições da chave na plataforma Vendus**  
+   Se na conta Vendus a API key tiver restrições (ex.: só determinados IPs ou “apenas ambiente de teste”), o IP do Render pode estar bloqueado.
+   - Cria uma nova API key na área da Vendus **sem restrições de IP** (ou adiciona os IPs do Render, se a Vendus permitir).
+   - Usa essa chave em `VENDUS_API_KEY` no Render e faz redeploy.
+
+3. **Confirmar que a chave é a mesma**  
+   Se em local usas uma chave e no Render outra (ou uma antiga), o Vendus pode devolver 401/403. Garante que `VENDUS_API_KEY` no Render é a chave correta e que não tem espaços ou quebras de linha a mais ao colar.
+
+Depois de alterar env vars no Render, é preciso **redeploy** (Manual Deploy ou novo commit) para o serviço carregar os novos valores.
+
 ## Troubleshooting
 
 - **502 Bad Gateway:** O serviço pode estar a acordar (espera ~1 min e volta a tentar).
 - **Build falha:** Confirma que `npm run build` corre localmente (`npm run build`).
 - **Erro "Missing env var":** Verifica que todas as variáveis obrigatórias estão definidas no Render (Environment).
+- **Erro de auth ao chamar Vendus:** Ver secção acima (“Erro de auth nas chamadas ao Vendus”).

@@ -19,6 +19,7 @@ import {
 } from "../services/dreCustosVariaveisService.js";
 
 import { Router } from "express";
+import { isSupabaseConfigured } from "../infra/supabaseClient.js";
 import { getDreKpis } from "../services/dreKpisService.js";
 import { getReceitaBruta } from "../services/dreReceitaBrutaService.js";
 
@@ -142,6 +143,19 @@ dreRoutes.get("/reports/dre/custos-fixos", async (req, res) => {
     const period = yearMonthGuard(req, res);
     if (!period) return;
     const list = await getCustosFixos(period.year, period.month);
+    const debug = toQueryRecord(req.query).debug;
+    if (debug === "1" && list.length === 0) {
+      res.json({
+        data: list,
+        _debug: {
+          year: period.year,
+          month: period.month,
+          supabaseConfigured: isSupabaseConfigured(),
+          hint: "Seed has data for year=2026, month 2-12. Check query params and Supabase env.",
+        },
+      });
+      return;
+    }
     res.json(list);
   } catch (e: unknown) {
     const message =

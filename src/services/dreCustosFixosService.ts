@@ -1,9 +1,9 @@
-import { getSupabase, isSupabaseConfigured } from "../infra/supabaseClient.js";
 import type {
   CustosFixoItem,
   CustosFixosCreateBody,
   CustosFixosUpdateBody,
 } from "../domain/dreTypes.js";
+import { getSupabase, isSupabaseConfigured } from "../infra/supabaseClient.js";
 
 type Row = {
   id: string;
@@ -27,9 +27,14 @@ function rowToItem(row: Row): CustosFixoItem {
 
 export async function getCustosFixos(
   year: number,
-  month: number
+  month: number,
 ): Promise<CustosFixoItem[]> {
   if (!isSupabaseConfigured()) {
+    if (process.env.NODE_ENV !== "test") {
+      console.warn(
+        "[DRE custos fixos] Supabase not configured (SUPABASE_URL / SUPABASE_ANON_KEY). Returning empty array.",
+      );
+    }
     return [];
   }
   const supabase = getSupabase();
@@ -49,12 +54,19 @@ export async function getCustosFixos(
   }
 
   const rows = (data ?? []) as Row[];
+  if (rows.length === 0 && process.env.NODE_ENV !== "test") {
+    console.warn(
+      `[DRE custos fixos] 0 rows for year=${year} month=${month}. Seed data is year=2026, months 2-12. Check Supabase env and query params.`,
+    );
+  }
   return rows.map(rowToItem);
 }
 
 function requireSupabase(): NonNullable<ReturnType<typeof getSupabase>> {
   if (!isSupabaseConfigured()) {
-    throw new Error("DRE não configurado: defina SUPABASE_URL e SUPABASE_ANON_KEY");
+    throw new Error(
+      "DRE não configurado: defina SUPABASE_URL e SUPABASE_ANON_KEY",
+    );
   }
   const supabase = getSupabase();
   if (!supabase) {
@@ -66,7 +78,7 @@ function requireSupabase(): NonNullable<ReturnType<typeof getSupabase>> {
 export async function createCustoFixo(
   year: number,
   month: number,
-  body: CustosFixosCreateBody
+  body: CustosFixosCreateBody,
 ): Promise<CustosFixoItem> {
   const supabase = requireSupabase();
   const { data, error } = await supabase
@@ -92,7 +104,7 @@ export async function updateCustoFixo(
   id: string,
   year: number,
   month: number,
-  body: CustosFixosUpdateBody
+  body: CustosFixosUpdateBody,
 ): Promise<CustosFixoItem> {
   const supabase = requireSupabase();
   const { data, error } = await supabase
@@ -122,7 +134,7 @@ export async function updateCustoFixo(
 export async function deleteCustoFixo(
   id: string,
   year: number,
-  month: number
+  month: number,
 ): Promise<void> {
   const supabase = requireSupabase();
   const { error } = await supabase

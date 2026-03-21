@@ -1,6 +1,21 @@
 import { getSupabase, isSupabaseConfigured } from "../infra/supabaseClient.js";
 import type { PizzaSize } from "../domain/pizzaTypes.js";
 
+/** Erro do Supabase ao ler mapeamento (rede/URL); não é a API Vendus. */
+function formatMappingSupabaseError(error: { message: string; cause?: unknown }): string {
+  const cause =
+    error.cause instanceof Error
+      ? error.cause.message
+      : error.cause != null
+        ? String(error.cause)
+        : "";
+  const hint =
+    error.message.includes("fetch failed") || cause.includes("ECONNREFUSED")
+      ? " Verifica SUPABASE_URL, rede/VPN e se o projeto Supabase está ativo."
+      : "";
+  return `Supabase (tabela vendus_product_mapping): ${error.message}${cause ? ` (${cause})` : ""}.${hint}`;
+}
+
 export type VendusMappingRow = {
   target_type: "pizza" | "stock";
   pizza_id: string | null;
@@ -32,7 +47,7 @@ export async function getVendusMapping(
     .eq("match_by", matchBy)
     .eq("match_value", matchValue)
     .maybeSingle();
-  if (error) throw new Error(`Vendus mapping: ${error.message}`);
+  if (error) throw new Error(formatMappingSupabaseError(error));
   if (!data) return null;
   const row = data as {
     target_type: string;
@@ -61,7 +76,7 @@ export async function getPizzaMappingsMap(): Promise<
     .eq("target_type", "pizza")
     .not("pizza_id", "is", null)
     .not("pizza_size", "is", null);
-  if (error) throw new Error(`Vendus mapping: ${error.message}`);
+  if (error) throw new Error(formatMappingSupabaseError(error));
   const rows = (data ?? []) as Array<{
     match_by: string;
     match_value: string;
@@ -92,7 +107,7 @@ export async function getAllConsumptionMappingsMap(): Promise<
   const { data, error } = await supabase
     .from("vendus_product_mapping")
     .select("match_by, match_value, target_type, pizza_id, pizza_size, stock_item_id");
-  if (error) throw new Error(`Vendus mapping: ${error.message}`);
+  if (error) throw new Error(formatMappingSupabaseError(error));
   const rows = (data ?? []) as Array<{
     match_by: string;
     match_value: string;
