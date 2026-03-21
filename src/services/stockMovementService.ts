@@ -11,7 +11,8 @@ type Row = {
   item_id: string;
   type: string;
   quantity: number;
-  unit_cost_per_base_unit: number | null;
+  unit_cost_per_base_unit_with_vat: number | null;
+  unit_cost_per_base_unit_without_vat: number | null;
   reason: string | null;
   reference: string | null;
   movement_date: string;
@@ -20,7 +21,7 @@ type Row = {
 };
 
 const COLS =
-  "id, item_id, type, quantity, unit_cost_per_base_unit, reason, reference, movement_date, created_at, created_by";
+  "id, item_id, type, quantity, unit_cost_per_base_unit_with_vat, unit_cost_per_base_unit_without_vat, reason, reference, movement_date, created_at, created_by";
 
 function rowToMovement(row: Row): StockMovement {
   return {
@@ -28,9 +29,13 @@ function rowToMovement(row: Row): StockMovement {
     item_id: row.item_id,
     type: row.type as StockMovementType,
     quantity: Number(row.quantity),
-    unit_cost_per_base_unit:
-      row.unit_cost_per_base_unit != null
-        ? Number(row.unit_cost_per_base_unit)
+    unit_cost_per_base_unit_with_vat:
+      row.unit_cost_per_base_unit_with_vat != null
+        ? Number(row.unit_cost_per_base_unit_with_vat)
+        : null,
+    unit_cost_per_base_unit_without_vat:
+      row.unit_cost_per_base_unit_without_vat != null
+        ? Number(row.unit_cost_per_base_unit_without_vat)
         : null,
     reason: row.reason ?? null,
     reference: row.reference ?? null,
@@ -84,14 +89,27 @@ export async function createStockMovement(
   const quantity = Number(body.quantity);
   if (!Number.isFinite(quantity)) throw new Error("quantity inválido");
   const movementDate = parseMovementDate(body.movement_date);
+  const costWith =
+    body.unit_cost_per_base_unit_with_vat != null
+      ? Number(body.unit_cost_per_base_unit_with_vat)
+      : null;
+  const costWithout =
+    body.unit_cost_per_base_unit_without_vat != null
+      ? Number(body.unit_cost_per_base_unit_without_vat)
+      : null;
+  if (costWith != null && (costWith < 0 || !Number.isFinite(costWith)))
+    throw new Error("unit_cost_per_base_unit_with_vat inválido");
+  if (
+    costWithout != null &&
+    (costWithout < 0 || !Number.isFinite(costWithout))
+  )
+    throw new Error("unit_cost_per_base_unit_without_vat inválido");
   const payload: Record<string, unknown> = {
     item_id: body.item_id,
     type: body.type,
     quantity,
-    unit_cost_per_base_unit:
-      body.unit_cost_per_base_unit != null
-        ? Number(body.unit_cost_per_base_unit)
-        : null,
+    unit_cost_per_base_unit_with_vat: costWith,
+    unit_cost_per_base_unit_without_vat: costWithout,
     reason: (body.reason ?? "").trim() || null,
     reference: (body.reference ?? "").trim() || null,
     created_by: (body.created_by ?? "").trim() || null,
@@ -153,11 +171,28 @@ export async function updateStockMovement(
     if (!Number.isFinite(q)) throw new Error("quantity inválido");
     updates.quantity = q;
   }
-  if (body.unit_cost_per_base_unit !== undefined)
-    updates.unit_cost_per_base_unit =
-      body.unit_cost_per_base_unit == null
-        ? null
-        : Number(body.unit_cost_per_base_unit);
+  if (body.unit_cost_per_base_unit_with_vat !== undefined) {
+    const v = body.unit_cost_per_base_unit_with_vat;
+    updates.unit_cost_per_base_unit_with_vat =
+      v == null ? null : Number(v);
+    if (
+      updates.unit_cost_per_base_unit_with_vat != null &&
+      (Number(updates.unit_cost_per_base_unit_with_vat) < 0 ||
+        !Number.isFinite(Number(updates.unit_cost_per_base_unit_with_vat)))
+    )
+      throw new Error("unit_cost_per_base_unit_with_vat inválido");
+  }
+  if (body.unit_cost_per_base_unit_without_vat !== undefined) {
+    const v = body.unit_cost_per_base_unit_without_vat;
+    updates.unit_cost_per_base_unit_without_vat =
+      v == null ? null : Number(v);
+    if (
+      updates.unit_cost_per_base_unit_without_vat != null &&
+      (Number(updates.unit_cost_per_base_unit_without_vat) < 0 ||
+        !Number.isFinite(Number(updates.unit_cost_per_base_unit_without_vat)))
+    )
+      throw new Error("unit_cost_per_base_unit_without_vat inválido");
+  }
   if (body.reason !== undefined)
     updates.reason = (body.reason ?? "").trim() || null;
   if (body.reference !== undefined)

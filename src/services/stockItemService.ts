@@ -15,6 +15,8 @@ type Row = {
   type: string;
   is_sellable: boolean;
   sale_price: number | null;
+  purchase_reference_unit_cost_with_vat: number | null;
+  purchase_reference_unit_cost_without_vat: number | null;
   min_stock: number;
   base_unit: string;
   is_active: boolean;
@@ -26,13 +28,25 @@ type MovementRow = {
   item_id: string;
   quantity: number;
   type: string;
-  unit_cost_per_base_unit: number | null;
+  unit_cost_per_base_unit_with_vat: number | null;
+  unit_cost_per_base_unit_without_vat: number | null;
+  movement_date: string;
+  created_at: string;
 };
+
+type LastFromMovement = {
+  withVat: number | null;
+  withoutVat: number | null;
+};
+
+function roundCost(n: number): number {
+  return Math.round(n * 1000000) / 1000000;
+}
 
 function rowToItem(
   row: Row,
   current_quantity?: number,
-  average_cost?: number | null
+  lastEffective?: LastFromMovement
 ): StockItem {
   const item: StockItem = {
     id: row.id,
@@ -42,6 +56,14 @@ function rowToItem(
     type: row.type as StockItem["type"],
     is_sellable: Boolean(row.is_sellable),
     sale_price: row.sale_price != null ? Number(row.sale_price) : null,
+    purchase_reference_unit_cost_with_vat:
+      row.purchase_reference_unit_cost_with_vat != null
+        ? Number(row.purchase_reference_unit_cost_with_vat)
+        : null,
+    purchase_reference_unit_cost_without_vat:
+      row.purchase_reference_unit_cost_without_vat != null
+        ? Number(row.purchase_reference_unit_cost_without_vat)
+        : null,
     min_stock: Number(row.min_stock ?? 0),
     base_unit: row.base_unit as StockItem["base_unit"],
     is_active: Boolean(row.is_active),
@@ -50,11 +72,13 @@ function rowToItem(
   if (row.updated_at !== undefined) item.updated_at = row.updated_at;
   if (current_quantity !== undefined)
     item.current_quantity = Math.round(current_quantity * 1000) / 1000;
-  if (average_cost !== undefined) {
-    item.average_cost_per_base_unit =
-      average_cost == null
+  if (lastEffective !== undefined) {
+    item.last_purchase_unit_cost_with_vat =
+      lastEffective.withVat == null ? null : roundCost(lastEffective.withVat);
+    item.last_purchase_unit_cost_without_vat =
+      lastEffective.withoutVat == null
         ? null
-        : Math.round(average_cost * 1000000) / 1000000;
+        : roundCost(lastEffective.withoutVat);
   }
   return item;
 }
@@ -86,54 +110,116 @@ export function validateBaseUnit(u: string): u is StockBaseUnit {
   return BASE_UNITS.includes(u as StockBaseUnit);
 }
 
-/** Calcula quantidade atual e custo médio (média ponderada de compras) por item a partir de movimentos */
-async function getQuantitiesAndCosts(
+/** undefined = omitir; null = limpar na BD */
+function parseOptionalUnitCost(
+  value: unknown,
+  fieldLabel: string
+): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) throw new Error(`${fieldLabel} inválido`);
+  if (n < 0) throw new Error(`${fieldLabel} não pode ser negativo`);
+  return n;
+}
+
+const ITEM_SELECT =
+  "id, name, sku, category_id, type, is_sellable, sale_price, purchase_reference_unit_cost_with_vat, purchase_reference_unit_cost_without_vat, min_stock, base_unit, is_active, created_at, updated_at";
+
+/** Última linha purchase com pelo menos um custo; devolve os dois valores dessa linha (podem ser null). */
+async function getQuantitiesAndLastPurchaseFromMovements(
   supabase: NonNullable<ReturnType<typeof getSupabase>>,
   itemIds: string[]
-): Promise<Map<string, { quantity: number; avgCost: number | null }>> {
+): Promise<
+  Map<string, { quantity: number; lastFromMovement: LastFromMovement }>
+> {
   if (!itemIds.length) return new Map();
   const { data: movements, error } = await supabase
     .from("stock_movements")
-    .select("item_id, quantity, type, unit_cost_per_base_unit")
+    .select(
+      "item_id, quantity, type, unit_cost_per_base_unit_with_vat, unit_cost_per_base_unit_without_vat, movement_date, created_at"
+    )
     .in("item_id", itemIds);
   if (error) throw new Error(`Stock movements: ${error.message}`);
   const rows = (movements ?? []) as MovementRow[];
   const byItem = new Map<
     string,
-    { quantity: number; avgCost: number | null }
+    {
+      quantity: number;
+      bestKey: string;
+      lastWith: number | null;
+      lastWithout: number | null;
+    }
   >();
   for (const id of itemIds) {
-    byItem.set(id, { quantity: 0, avgCost: null });
+    byItem.set(id, {
+      quantity: 0,
+      bestKey: "",
+      lastWith: null,
+      lastWithout: null,
+    });
   }
   for (const m of rows) {
     const cur = byItem.get(m.item_id)!;
     cur.quantity += Number(m.quantity);
   }
-  // Custo médio ponderado: só compras (purchase), avg = sum(qty*cost)/sum(qty)
-  const purchaseByItem = new Map<
-    string,
-    { sumQty: number; sumQtyCost: number }
-  >();
   for (const m of rows) {
-    if (m.type !== "purchase" || m.unit_cost_per_base_unit == null) continue;
+    if (m.type !== "purchase") continue;
     const qty = Number(m.quantity);
-    const cost = Number(m.unit_cost_per_base_unit);
     if (qty <= 0) continue;
-    let p = purchaseByItem.get(m.item_id);
-    if (!p) {
-      p = { sumQty: 0, sumQtyCost: 0 };
-      purchaseByItem.set(m.item_id, p);
+    const w =
+      m.unit_cost_per_base_unit_with_vat != null
+        ? Number(m.unit_cost_per_base_unit_with_vat)
+        : null;
+    const wo =
+      m.unit_cost_per_base_unit_without_vat != null
+        ? Number(m.unit_cost_per_base_unit_without_vat)
+        : null;
+    if (
+      (w == null || !Number.isFinite(w)) &&
+      (wo == null || !Number.isFinite(wo))
+    )
+      continue;
+    const cur = byItem.get(m.item_id)!;
+    const key = `${m.movement_date}\t${m.created_at}`;
+    if (key > cur.bestKey) {
+      cur.bestKey = key;
+      cur.lastWith = w != null && Number.isFinite(w) ? w : null;
+      cur.lastWithout = wo != null && Number.isFinite(wo) ? wo : null;
     }
-    p.sumQty += qty;
-    p.sumQtyCost += qty * cost;
   }
-  for (const [id, p] of purchaseByItem) {
-    const cur = byItem.get(id);
-    if (cur && p.sumQty > 0) {
-      cur.avgCost = p.sumQtyCost / p.sumQty;
-    }
+  const out = new Map<
+    string,
+    { quantity: number; lastFromMovement: LastFromMovement }
+  >();
+  for (const [id, v] of byItem) {
+    out.set(id, {
+      quantity: v.quantity,
+      lastFromMovement: { withVat: v.lastWith, withoutVat: v.lastWithout },
+    });
   }
-  return byItem;
+  return out;
+}
+
+/** Por cada componente: última compra se existir; senão referência no item. */
+function effectiveLastPurchaseCosts(
+  row: Row,
+  lastM: LastFromMovement
+): LastFromMovement {
+  return {
+    withVat:
+      lastM.withVat != null && Number.isFinite(lastM.withVat)
+        ? lastM.withVat
+        : row.purchase_reference_unit_cost_with_vat != null
+          ? Number(row.purchase_reference_unit_cost_with_vat)
+          : null,
+    withoutVat:
+      lastM.withoutVat != null && Number.isFinite(lastM.withoutVat)
+        ? lastM.withoutVat
+        : row.purchase_reference_unit_cost_without_vat != null
+          ? Number(row.purchase_reference_unit_cost_without_vat)
+          : null,
+  };
 }
 
 export async function listStockItems(filters?: {
@@ -146,9 +232,7 @@ export async function listStockItems(filters?: {
   if (!supabase) return [];
   let q = supabase
     .from("stock_items")
-    .select(
-      "id, name, sku, category_id, type, is_sellable, sale_price, min_stock, base_unit, is_active, created_at, updated_at"
-    )
+    .select(ITEM_SELECT)
     .order("name", { ascending: true });
   if (filters?.category_id) q = q.eq("category_id", filters.category_id);
   if (filters?.type) q = q.eq("type", filters.type);
@@ -158,13 +242,20 @@ export async function listStockItems(filters?: {
   if (error) throw new Error(`Stock items: ${error.message}`);
   const rows = (data ?? []) as Row[];
   const itemIds = rows.map((r) => r.id);
-  const qtyMap = await getQuantitiesAndCosts(supabase, itemIds);
+  const qtyMap = await getQuantitiesAndLastPurchaseFromMovements(
+    supabase,
+    itemIds
+  );
   return rows.map((r) => {
-    const { quantity, avgCost } = qtyMap.get(r.id) ?? {
+    const { quantity, lastFromMovement } = qtyMap.get(r.id) ?? {
       quantity: 0,
-      avgCost: null,
+      lastFromMovement: { withVat: null, withoutVat: null },
     };
-    return rowToItem(r, quantity, avgCost);
+    return rowToItem(
+      r,
+      quantity,
+      effectiveLastPurchaseCosts(r, lastFromMovement)
+    );
   });
 }
 
@@ -172,19 +263,23 @@ export async function getStockItem(id: string): Promise<StockItem | null> {
   const supabase = requireSupabase();
   const { data, error } = await supabase
     .from("stock_items")
-    .select(
-      "id, name, sku, category_id, type, is_sellable, sale_price, min_stock, base_unit, is_active, created_at, updated_at"
-    )
+    .select(ITEM_SELECT)
     .eq("id", id)
     .single();
   if (error || !data) return null;
   const row = data as Row;
-  const qtyMap = await getQuantitiesAndCosts(supabase, [row.id]);
-  const { quantity, avgCost } = qtyMap.get(row.id) ?? {
+  const qtyMap = await getQuantitiesAndLastPurchaseFromMovements(supabase, [
+    row.id,
+  ]);
+  const { quantity, lastFromMovement } = qtyMap.get(row.id) ?? {
     quantity: 0,
-    avgCost: null,
+    lastFromMovement: { withVat: null, withoutVat: null },
   };
-  return rowToItem(row, quantity, avgCost);
+  return rowToItem(
+    row,
+    quantity,
+    effectiveLastPurchaseCosts(row, lastFromMovement)
+  );
 }
 
 export async function createStockItem(
@@ -200,6 +295,20 @@ export async function createStockItem(
     throw new Error(`base_unit inválido: ${body.base_unit}`);
   const is_sellable = Boolean(body.is_sellable);
   const sale_price = body.sale_price != null ? Number(body.sale_price) : null;
+  const refWith =
+    body.purchase_reference_unit_cost_with_vat !== undefined
+      ? parseOptionalUnitCost(
+          body.purchase_reference_unit_cost_with_vat,
+          "purchase_reference_unit_cost_with_vat"
+        )
+      : null;
+  const refWithout =
+    body.purchase_reference_unit_cost_without_vat !== undefined
+      ? parseOptionalUnitCost(
+          body.purchase_reference_unit_cost_without_vat,
+          "purchase_reference_unit_cost_without_vat"
+        )
+      : null;
   const payload = {
     name,
     sku: (body.sku ?? "").trim() || null,
@@ -207,6 +316,8 @@ export async function createStockItem(
     type: body.type,
     is_sellable,
     sale_price: is_sellable ? sale_price : null,
+    purchase_reference_unit_cost_with_vat: refWith ?? null,
+    purchase_reference_unit_cost_without_vat: refWithout ?? null,
     min_stock: Number(body.min_stock) ?? 0,
     base_unit: body.base_unit,
     is_active: body.is_active !== false,
@@ -215,12 +326,15 @@ export async function createStockItem(
   const { data, error } = await supabase
     .from("stock_items")
     .insert(payload)
-    .select(
-      "id, name, sku, category_id, type, is_sellable, sale_price, min_stock, base_unit, is_active, created_at, updated_at"
-    )
+    .select(ITEM_SELECT)
     .single();
   if (error) throw new Error(`Criar item: ${error.message}`);
-  return rowToItem(data as Row, 0, null);
+  const created = data as Row;
+  return rowToItem(
+    created,
+    0,
+    effectiveLastPurchaseCosts(created, { withVat: null, withoutVat: null })
+  );
 }
 
 export async function updateStockItem(
@@ -248,8 +362,20 @@ export async function updateStockItem(
       body.is_sellable === false
         ? null
         : body.sale_price != null
-        ? Number(body.sale_price)
-        : null;
+          ? Number(body.sale_price)
+          : null;
+  }
+  if (body.purchase_reference_unit_cost_with_vat !== undefined) {
+    updates.purchase_reference_unit_cost_with_vat = parseOptionalUnitCost(
+      body.purchase_reference_unit_cost_with_vat,
+      "purchase_reference_unit_cost_with_vat"
+    ) as number | null;
+  }
+  if (body.purchase_reference_unit_cost_without_vat !== undefined) {
+    updates.purchase_reference_unit_cost_without_vat = parseOptionalUnitCost(
+      body.purchase_reference_unit_cost_without_vat,
+      "purchase_reference_unit_cost_without_vat"
+    ) as number | null;
   }
   if (body.min_stock !== undefined)
     updates.min_stock = Number(body.min_stock) ?? 0;
@@ -259,18 +385,23 @@ export async function updateStockItem(
     .from("stock_items")
     .update(updates)
     .eq("id", id)
-    .select(
-      "id, name, sku, category_id, type, is_sellable, sale_price, min_stock, base_unit, is_active, created_at, updated_at"
-    )
+    .select(ITEM_SELECT)
     .single();
   if (error) throw new Error(`Atualizar item: ${error.message}`);
   if (!data) throw new Error("Item não encontrado");
-  const qtyMap = await getQuantitiesAndCosts(supabase, [id]);
-  const { quantity, avgCost } = qtyMap.get(id) ?? {
+  const qtyMap = await getQuantitiesAndLastPurchaseFromMovements(supabase, [
+    id,
+  ]);
+  const row = data as Row;
+  const { quantity, lastFromMovement } = qtyMap.get(id) ?? {
     quantity: 0,
-    avgCost: null,
+    lastFromMovement: { withVat: null, withoutVat: null },
   };
-  return rowToItem(data as Row, quantity, avgCost);
+  return rowToItem(
+    row,
+    quantity,
+    effectiveLastPurchaseCosts(row, lastFromMovement)
+  );
 }
 
 export async function deleteStockItem(id: string): Promise<void> {
