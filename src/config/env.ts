@@ -18,4 +18,17 @@ export const ENV = {
 
   SUPABASE_URL: process.env.SUPABASE_URL ?? "",
   SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY ?? "",
+
+  /** Se true, agenda job de consumo diário no próprio processo do servidor (ver DAILY_CONSUMPTION_CRON_SCHEDULE). */
+  ENABLE_DAILY_CONSUMPTION_CRON:
+    process.env.ENABLE_DAILY_CONSUMPTION_CRON === "true",
+  /** Expressão cron (5 campos), timezone Europe/Lisbon. Por omissão: 11:45 todos os dias. */
+  DAILY_CONSUMPTION_CRON_SCHEDULE:
+    process.env.DAILY_CONSUMPTION_CRON_SCHEDULE ?? "45 11 * * *",
+
+  /**
+   * Segredo para POST /api/internal/cron/daily-vendus-consumption (Bearer).
+   * Se vazio, a rota não é registada.
+   */
+  CRON_SECRET: process.env.CRON_SECRET ?? "",
 };

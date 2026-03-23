@@ -7,6 +7,12 @@ import { fetchAllDocuments } from "./documentsService.js";
 import { getAllConsumptionMappingsMap } from "./vendusMappingService.js";
 import { listPizzaRecipeItems } from "./pizzaRecipeItemService.js";
 import { listPizzaRecipes } from "./pizzaRecipeService.js";
+import { DateTime } from "luxon";
+import {
+  lisbonDayEndUtcIso,
+  lisbonDayStartUtcIso,
+  REPORT_TIMEZONE,
+} from "../utils/lisbonDayInstants.js";
 
 export type IngredientConsumptionEntry = {
   stock_item_id: string;
@@ -26,6 +32,17 @@ export type StockAdditionEntry = {
   category_id: string;
   category_name: string;
   quantity_added: number;
+};
+
+/** Saldo à meia-noite em Lisboa do primeiro dia do período (antes de qualquer movimento nesse dia civil). */
+export type StockOpeningEntry = {
+  stock_item_id: string;
+  name: string;
+  base_unit: string;
+  type: StockItemType;
+  category_id: string;
+  category_name: string;
+  quantity_at_period_start: number;
 };
 
 export type MatchedProductEntry = {
@@ -51,6 +68,8 @@ export type IngredientConsumptionResponse = {
   period: { since: string; until: string; timezone?: string };
   consumption: IngredientConsumptionEntry[];
   additions: StockAdditionEntry[];
+  /** Saldo no início do dia civil `since` em Lisboa (movimentos com movement_date < meia-noite Lisboa em `since`); só itens em consumption ∪ additions. */
+  opening_stock: StockOpeningEntry[];
   matched_products?: MatchedProductEntry[];
   debug?: {
     products_total: number;
@@ -71,8 +90,8 @@ async function getStockAdditionsForPeriod(
   const supabase = getSupabase();
   if (!supabase) return entries;
 
-  const sinceTs = `${since}T00:00:00.000Z`;
-  const untilTs = `${until}T23:59:59.999Z`;
+  const sinceTs = lisbonDayStartUtcIso(since);
+  const untilTs = lisbonDayEndUtcIso(until);
 
   const { data: movements, error: movError } = await supabase
     .from("stock_movements")
@@ -137,15 +156,99 @@ async function getStockAdditionsForPeriod(
   return entries;
 }
 
-/** Retorna since/until para "ontem" (YYYY-MM-DD) em Portugal. */
+type StockRowWithCategory = {
+  id: string;
+  name: string;
+  base_unit: string;
+  type: string;
+  category_id: string;
+  stock_categories: { name: string } | { name: string }[] | null;
+};
+
+function categoryNameFromRow(
+  r: StockRowWithCategory
+): { category_name: string } & StockRowWithCategory {
+  const category_name = Array.isArray(r.stock_categories)
+    ? r.stock_categories[0]?.name ?? ""
+    : r.stock_categories?.name ?? "";
+  return { ...r, category_name };
+}
+
+/** Soma de quantity por item com movement_date estritamente antes da meia-noite Lisboa do dia `since`. */
+async function getOpeningStockAtPeriodStart(
+  since: string,
+  itemIds: string[]
+): Promise<StockOpeningEntry[]> {
+  const entries: StockOpeningEntry[] = [];
+  if (!itemIds.length || !isSupabaseConfigured()) return entries;
+  const supabase = getSupabase();
+  if (!supabase) return entries;
+
+  const sinceTs = lisbonDayStartUtcIso(since);
+
+  const { data: movements, error: movError } = await supabase
+    .from("stock_movements")
+    .select("item_id, quantity")
+    .in("item_id", itemIds)
+    .lt("movement_date", sinceTs);
+
+  if (movError) return entries;
+
+  const byItemId = new Map<string, number>();
+  for (const id of itemIds) byItemId.set(id, 0);
+  for (const m of (movements ?? []) as Array<{ item_id: string; quantity: number }>) {
+    const qty = byItemId.get(m.item_id) ?? 0;
+    byItemId.set(m.item_id, qty + Number(m.quantity));
+  }
+
+  const { data: rows, error: itemsError } = await supabase
+    .from("stock_items")
+    .select("id, name, base_unit, type, category_id, stock_categories(name)")
+    .in("id", itemIds);
+
+  if (itemsError || !rows?.length) return entries;
+
+  const byId = new Map(
+    (rows as StockRowWithCategory[]).map((r) => {
+      const x = categoryNameFromRow(r);
+      return [r.id, x] as const;
+    })
+  );
+
+  for (const id of itemIds) {
+    const row = byId.get(id);
+    const name = row?.name ?? id;
+    const base_unit = row?.base_unit ?? "g";
+    const type = (row?.type ?? "other") as StockItemType;
+    const category_id = row?.category_id ?? "";
+    const category_name = row?.category_name ?? "";
+    entries.push({
+      stock_item_id: id,
+      name,
+      base_unit,
+      type,
+      category_id,
+      category_name,
+      quantity_at_period_start:
+        Math.round((byItemId.get(id) ?? 0) * 1000) / 1000,
+    });
+  }
+
+  entries.sort((a, b) =>
+    a.name.localeCompare(b.name, "pt", { sensitivity: "base" })
+  );
+  return entries;
+}
+
+/** Retorna since/until para "ontem" (YYYY-MM-DD) no calendário de Lisboa (independente do TZ do servidor). */
 export function getDefaultPeriod(): { since: string; until: string } {
-  const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const y = yesterday.getFullYear();
-  const m = String(yesterday.getMonth() + 1).padStart(2, "0");
-  const d = String(yesterday.getDate()).padStart(2, "0");
-  const day = `${y}-${m}-${d}`;
+  const yesterday = DateTime.now()
+    .setZone(REPORT_TIMEZONE)
+    .minus({ days: 1 });
+  const day = yesterday.toISODate();
+  if (!day) {
+    throw new Error("Não foi possível calcular o período por omissão");
+  }
   return { since: day, until: day };
 }
 
@@ -296,16 +399,25 @@ export async function getIngredientConsumption(
 
   const additionsEntries = await getStockAdditionsForPeriod(since, until);
 
+  const openingItemIds = new Set<string>();
+  for (const c of consumptionEntries) openingItemIds.add(c.stock_item_id);
+  for (const a of additionsEntries) openingItemIds.add(a.stock_item_id);
+  const openingEntries = await getOpeningStockAtPeriodStart(
+    since,
+    Array.from(openingItemIds)
+  );
+
   const tookMs = Date.now() - startedAt;
 
   return {
     period: {
       since: response.period?.since ?? since,
       until: response.period?.until ?? until,
-      timezone: "Europe/Lisbon",
+      timezone: REPORT_TIMEZONE,
     },
     consumption: consumptionEntries,
     additions: additionsEntries,
+    opening_stock: openingEntries,
     matched_products: matchedProducts,
     debug: {
       products_total: products.length,

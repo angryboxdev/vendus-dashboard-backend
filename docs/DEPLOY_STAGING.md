@@ -45,6 +45,8 @@ Se o teu repositório tiver o ficheiro `render.yaml` na raiz:
 2. Liga o repo; o Render lê o `render.yaml` e cria o serviço.
 3. No dashboard do serviço, em **Environment**, preenche os valores das variáveis que estão com `sync: false` (VENDUS*\*, SUPABASE*\*).
 
+O `render.yaml` pode incluir também um **Cron Job** (`vendus-daily-vendus-consumption`) que debita stock diariamente — ver `docs/CRON_DAILY_STOCK.md`. Cron Jobs no Render **não** usam o plano gratuito (usa `starter` no blueprint). Após um push, faz **Manual Sync** no Blueprint se o Render não criar o cron automaticamente.
+
 ## Domínio próprio (opcional)
 
 No Render, em **Settings → Custom Domain** podes adicionar um domínio teu (ex: `api-staging.seudominio.com`) e apontar o CNAME. O SSL é gerido pelo Render. No plano gratuito isto funciona.

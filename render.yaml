@@ -1,5 +1,8 @@
-# Render Blueprint - Staging (tier gratuito)
+# Render Blueprint - Staging
 # Ver: https://render.com/docs/blueprint-spec
+#
+# Nota: Cron Jobs no Render não usam plano "free" — o serviço cron abaixo fica em
+# "starter" (ou define plan: starter explicitamente). O Web Service pode continuar free.
 services:
   - type: web
     name: vendus-dashboard-api-staging
@@ -23,3 +26,26 @@ services:
 
     # Opcional: health check
     healthCheckPath: /api/health
+
+  # Consumo diário Vendus → movimentos de stock (docs/CRON_DAILY_STOCK.md)
+  # Schedule em UTC: 11:45 UTC = 11:45 Lisboa no horário de inverno (UTC+0).
+  # No horário de verão (UTC+1), 11:45 Lisboa = 10:45 UTC → ajusta para "45 10 * * *" ou usa dois jobs.
+  - type: cron
+    name: vendus-daily-vendus-consumption
+    runtime: node
+    region: frankfurt
+    plan: starter
+    schedule: "45 11 * * *"
+    buildCommand: npm ci && npm run build
+    startCommand: npm run cron:daily-vendus-consumption
+    envVars:
+      - key: NODE_ENV
+        value: staging
+      - key: VENDUS_BASE_URL
+        sync: false
+      - key: VENDUS_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false

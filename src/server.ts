@@ -3,9 +3,11 @@ import cors from "cors";
 import { documentsRoutes } from "./routes/documentsRoutes.js";
 import { dreRoutes } from "./routes/dreRoutes.js";
 import express from "express";
+import { internalCronRoutes } from "./routes/internalCronRoutes.js";
 import { pizzaRoutes } from "./routes/pizzaRoutes.js";
 import { reportsRoutes } from "./routes/reportsRoutes.js";
 import { stockRoutes } from "./routes/stockRoutes.js";
+import { runDailyVendusConsumptionJob } from "./services/dailyVendusConsumptionJobService.js";
 
 const app = express();
 
@@ -31,6 +33,31 @@ app.use("/api", dreRoutes);
 app.use("/api", stockRoutes);
 app.use("/api", pizzaRoutes);
 
+if (ENV.CRON_SECRET) {
+  app.use("/api", internalCronRoutes);
+}
+
 app.listen(ENV.PORT, () => {
   console.log(`Backend running on http://localhost:${ENV.PORT}`);
 });
+
+if (ENV.ENABLE_DAILY_CONSUMPTION_CRON) {
+  void import("node-cron").then(({ default: cron }) => {
+    cron.schedule(
+      ENV.DAILY_CONSUMPTION_CRON_SCHEDULE,
+      () => {
+        void runDailyVendusConsumptionJob({})
+          .then((r) => {
+            console.log("[cron] daily-vendus-consumption ok", r);
+          })
+          .catch((e) => {
+            console.error("[cron] daily-vendus-consumption failed", e);
+          });
+      },
+      { timezone: "Europe/Lisbon" }
+    );
+    console.log(
+      `[cron] daily-vendus-consumption scheduled: ${ENV.DAILY_CONSUMPTION_CRON_SCHEDULE} (Europe/Lisbon)`
+    );
+  });
+}
