@@ -175,6 +175,37 @@ export type Debug = {
   };
 };
 
+/**
+ * Produto consumido num registo de autoconsumo (referência + nome + quantidade).
+ * Presente em cada elemento de `VendusSelfConsumptionSummary.records[].products` após enriquecimento.
+ */
+export type VendusSelfConsumptionProductLine = {
+  reference: string;
+  title: string;
+  qty: number;
+};
+
+/** Dados brutos do endpoint Vendus GET /selfconsumption/ (autoconsumo). */
+export type VendusSelfConsumptionSummary = {
+  date_start: string;
+  date_end: string;
+  store_id: number | null;
+  total_spending: number | null;
+  records_count: number;
+  /**
+   * Registos com `products` normalizados (`reference`, `title`, `qty`).
+   * Quando a listagem vem sem produtos, o backend chama GET `/selfconsumption/{id}/` para os preencher.
+   */
+  records: unknown[];
+  pages_fetched: number;
+  /** Quantidade de pedidos de detalhe feitos à API (IDs únicos que precisavam de enriquecimento). */
+  details_fetched?: number;
+  /** True se existiam mais registos sem produtos do que o limite `SELFCONSUMPTION_MAX_DETAIL_FETCHES`. */
+  details_fetch_truncated?: boolean;
+  /** Se a chamada à API falhou (rede, 401, etc.). */
+  error?: string;
+};
+
 export type MonthlySummaryResponse = {
   period: { since: string; until: string; timezone: string };
   source: {
@@ -213,5 +244,7 @@ export type MonthlySummaryResponse = {
   products_overall: ProductAgg[];
   /** Breakdown by payment method (e.g. "Transferência Bancária") for the period */
   payment_methods: PaymentMethodSummary[];
+  /** Autoconsumo interno (Vendus API selfconsumption) no mesmo período `since`/`until`. */
+  vendus_selfconsumption?: VendusSelfConsumptionSummary;
   debug: Debug;
 };

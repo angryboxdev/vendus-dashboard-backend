@@ -9,7 +9,11 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "cron:daily-vendus-consumption": "node dist/jobs/runDailyVendusConsumption.js",
-    "cron:daily-vendus-consumption:dev": "tsx src/jobs/runDailyVendusConsumption.ts"
+    "cron:daily-vendus-consumption:dev": "tsx src/jobs/runDailyVendusConsumption.ts",
+    "stock:adjust-from-lines": "node dist/jobs/runStockAdjustmentFromLines.js",
+    "stock:adjust-from-lines:dev": "tsx src/jobs/runStockAdjustmentFromLines.ts",
+    "stock:adjust-excluded-sales": "node dist/jobs/runStockAdjustmentFromLines.js",
+    "stock:adjust-excluded-sales:dev": "tsx src/jobs/runStockAdjustmentFromLines.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",

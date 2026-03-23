@@ -16,10 +16,11 @@ Mostra **quais itens de stock e quanto** foram consumidos num período: pizzas (
 
 ### Query (opcional)
 
-| Parâmetro | Tipo   | Descrição |
-|-----------|--------|-----------|
-| `since`   | string | Início do período, inclusivo. Formato **YYYY-MM-DD**. |
-| `until`   | string | Fim do período, inclusivo. Formato **YYYY-MM-DD**. |
+| Parâmetro   | Tipo   | Descrição |
+|-------------|--------|-----------|
+| `since`     | string | Início do período, inclusivo. Formato **YYYY-MM-DD**. |
+| `until`     | string | Fim do período, inclusivo. Formato **YYYY-MM-DD**. |
+| `store_id`  | number | Opcional. Filtra **autoconsumo** Vendus (`GET /selfconsumption/?store_id=`) para essa loja. Documentos de venda continuam globais ao período. |
 
 - Se **não** enviares `since` nem `until`, o backend usa **ontem** (um único dia).
 - Podes enviar sempre o intervalo no frontend (ex.: seletor de datas) e usar "ontem" como valor inicial.
@@ -42,21 +43,39 @@ interface StockAdditionEntry {
   quantity_added: number;   // soma das entradas (quantity > 0) em stock_movements no período
 }
 
+interface StockOpeningEntry {
+  stock_item_id: string;
+  name: string;
+  base_unit: string;
+  type: StockItemType;
+  category_id: string;
+  category_name: string;
+  quantity_at_period_start: number;
+}
+
 interface IngredientConsumptionResponse {
   period: {
     since: string;   // "YYYY-MM-DD"
     until: string;   // "YYYY-MM-DD"
     timezone?: string;  // ex. "Europe/Lisbon"
   };
+  /** Consumo a partir de vendas (FS), receitas e mapeamentos. */
   consumption: IngredientConsumptionEntry[];
+  /** Consumo a partir de autoconsumo Vendus (separado de vendas); mesma forma que `consumption`. */
+  consumption_selfconsumption: IngredientConsumptionEntry[];
   additions: StockAdditionEntry[];   // adições de stock no período (compras, ajustes positivos, etc.)
+  opening_stock: StockOpeningEntry[];
   matched_products?: MatchedProductEntry[];
+  /** Dados brutos do autoconsumo no período (registos, total_spending, etc.). */
+  vendus_selfconsumption?: VendusSelfConsumptionSummary;
   debug?: {
     products_total: number;
     products_matched: number;
     products_unmatched: number;
     unmatched_products: UnmatchedProductEntry[];
     took_ms: number;
+    selfconsumption_lines_extracted?: number;
+    selfconsumption_mapping_skipped?: string[];
   };
 }
 
@@ -90,7 +109,9 @@ interface UnmatchedProductEntry {
 }
 ```
 
-- **`consumption`**: todos os itens de stock com `quantity_consumed > 0` (pizzas via receitas + bebidas/outros via mapeamento), ordenados por quantidade (maior primeiro). Inclui `type` e `category_name` para filtrar/agrupar na UI.
+- **`consumption`**: todos os itens de stock com `quantity_consumed > 0` a partir de **vendas** (pizzas via receitas + bebidas/outros via mapeamento), ordenados por quantidade (maior primeiro). Inclui `type` e `category_name` para filtrar/agrupar na UI.
+- **`consumption_selfconsumption`**: consumo estimado pelos mesmos mapeamentos/receitas, mas a partir dos produtos registados em **autoconsumo** Vendus no período. Não está somado em `consumption` — trata como série à parte (ex.: desperdício, refeições de equipa).
+- **`vendus_selfconsumption`**: metadados e `records` devolvidos pela API Vendus (ver `docs/VENDUS_SELFCONSUMPTION.md`).
 - **`additions`**: adições de stock no mesmo período (movimentos com quantidade positiva em `stock_movements`: compras, ajustes, etc.), agregados por item. Mesma estrutura que `consumption` mas com `quantity_added`. Ordenado por quantidade (maior primeiro). Permite comparar “o que saiu” (consumption) com “o que entrou” (additions) no período.
 - **`matched_products`**: todos os produtos Vendus que deram match (pizzas, bebidas, sacos, outros). Cada entrada tem `match_type` ("pizza" ou "stock"), `category` (categoria Vendus) e, consoante o tipo, `pizza_id`+`size` ou `stock_item_id`+`stock_item_name`.
 - **`debug.unmatched_products`**: produtos Vendus **sem match** no mapeamento (não entraram no consumo). Útil para ver o que falta mapear.

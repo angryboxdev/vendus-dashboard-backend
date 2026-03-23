@@ -4,13 +4,12 @@ Todos os dias (por omissão **01:30**, fuso **Europe/Lisbon** no servidor com `n
 
 1. Considera o dia alvo **`since = until = ontem`** (calendário de Lisboa) — ou seja, à **01:30 de hoje** debita o consumo do **dia civil completo anterior** (ex.: madrugada de 6→7 debita o dia 5). Podes forçar outra data com `TARGET_DATE` ou `target_date` no body HTTP.
 2. **Apaga** movimentos anteriores deste job para esse mesmo dia (idempotência — podes reexecutar sem duplicar saídas).
-3. Calcula o consumo como em `GET /api/reports/ingredient-consumption` (Vendus + receitas + mapeamentos).
-4. **Insere** em `stock_movements` uma linha por item com:
+3. Calcula o consumo como em `GET /api/reports/ingredient-consumption`: **vendas** (documentos FS) **e** **autoconsumo** Vendus (`/selfconsumption/`), ambos com as mesmas receitas/mapeamentos.
+4. **Insere** em `stock_movements` linhas com quantidade **negativa** (saída na `base_unit` do item):
    - `type` = `consumption`
-   - `quantity` = **negativa** (saída na `base_unit` do item)
-   - `reason` = `CRON_VENDUS:YYYY-MM-DD`
+   - `reason` = `CRON_VENDUS:YYYY-MM-DD` (comum — o delete apaga vendas + autoconsumo desse dia)
    - `created_by` = `cron-ingredient-consumption`
-   - `reference` = `vendus-sales:YYYY-MM-DD`
+   - `reference` = **`vendus-sales:YYYY-MM-DD`** por item debitado só por vendas, ou **`vendus-selfconsumption:YYYY-MM-DD`** por item debitado só por autoconsumo (se um item tem os dois, há **duas linhas** — somam no saldo e mantêm auditoria).
    - `movement_date` = fim do dia civil em Lisboa (UTC), alinhado aos relatórios
 
 O stock atual continua a ser **`SUM(quantity)`** por item; não há coluna separada de saldo.
@@ -94,4 +93,5 @@ DAILY_CONSUMPTION_CRON_SCHEDULE=30 1 * * *
 
 - Itens sem consumo no dia não geram linha (nada a debitar).
 - Reexecução no **mesmo** `target_date` substitui as linhas deste cron para esse dia (não acumula duplicado).
-- O consumo depende da **mesma lógica** que o painel (mapeamentos, receitas, documentos Vendus no intervalo).
+- O consumo depende da **mesma lógica** que o painel (mapeamentos, receitas, documentos Vendus **e** autoconsumo no intervalo).
+- O JSON de resultado do job inclui `movements_inserted_sales`, `movements_inserted_selfconsumption` e `skipped_zero_selfconsumption` para monitorização.

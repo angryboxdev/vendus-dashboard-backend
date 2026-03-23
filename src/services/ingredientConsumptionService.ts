@@ -4,6 +4,9 @@ import { ENV } from "../config/env.js";
 import type { StockItemType } from "../domain/stockTypes.js";
 import { buildMonthlySummary } from "./monthlySummaryService.js";
 import { fetchAllDocuments } from "./documentsService.js";
+import { extractProductLinesFromSelfConsumptionRecords } from "./selfconsumptionService.js";
+import { computeConsumptionForProductLinesLenient } from "./stockAdjustmentFromLinesService.js";
+import type { VendusSelfConsumptionSummary } from "../domain/types.js";
 import { getAllConsumptionMappingsMap } from "./vendusMappingService.js";
 import { listPizzaRecipeItems } from "./pizzaRecipeItemService.js";
 import { listPizzaRecipes } from "./pizzaRecipeService.js";
@@ -66,17 +69,27 @@ export type UnmatchedProductEntry = {
 
 export type IngredientConsumptionResponse = {
   period: { since: string; until: string; timezone?: string };
+  /** Consumo estimado a partir de vendas (FS), receitas e mapeamentos. */
   consumption: IngredientConsumptionEntry[];
+  /**
+   * Consumo estimado a partir de autoconsumo Vendus (GET /selfconsumption/), mesmas regras de mapeamento.
+   * Separado de `consumption` para não misturar com vendas (pode ser `[]`).
+   */
+  consumption_selfconsumption: IngredientConsumptionEntry[];
   additions: StockAdditionEntry[];
-  /** Saldo no início do dia civil `since` em Lisboa (movimentos com movement_date < meia-noite Lisboa em `since`); só itens em consumption ∪ additions. */
+  /** Saldo no início do dia civil `since` em Lisboa (movimentos com movement_date < meia-noite Lisboa em `since`); só itens em consumption ∪ additions ∪ consumption_selfconsumption. */
   opening_stock: StockOpeningEntry[];
   matched_products?: MatchedProductEntry[];
+  /** Payload bruto + metadados do autoconsumo no período (quando disponível; alinhado com monthly-summary). */
+  vendus_selfconsumption?: VendusSelfConsumptionSummary;
   debug?: {
     products_total: number;
     products_matched: number;
     products_unmatched: number;
     unmatched_products: UnmatchedProductEntry[];
     took_ms: number;
+    selfconsumption_lines_extracted?: number;
+    selfconsumption_mapping_skipped?: string[];
   };
 };
 
@@ -240,6 +253,76 @@ async function getOpeningStockAtPeriodStart(
   return entries;
 }
 
+type StockItemRowWithCategory = {
+  id: string;
+  name: string;
+  base_unit: string;
+  type: string;
+  category_id: string;
+  category_name: string;
+};
+
+/** Constrói entradas de consumo a partir de quantidades por stock_item_id (reutilizado vendas vs autoconsumo). */
+async function buildConsumptionEntriesFromStockMap(
+  consumptionByStockId: Map<string, number>
+): Promise<{
+  entries: IngredientConsumptionEntry[];
+  byId: Map<string, StockItemRowWithCategory>;
+}> {
+  const entries: IngredientConsumptionEntry[] = [];
+  const byId = new Map<string, StockItemRowWithCategory>();
+  const stockIds = Array.from(consumptionByStockId.keys());
+  if (stockIds.length === 0 || !isSupabaseConfigured()) {
+    return { entries, byId };
+  }
+  const supabase = getSupabase();
+  if (!supabase) return { entries, byId };
+
+  const { data: rows, error } = await supabase
+    .from("stock_items")
+    .select("id, name, base_unit, type, category_id, stock_categories(name)")
+    .in("id", stockIds);
+  if (error || !rows?.length) return { entries, byId };
+
+  for (const r of rows as Array<{
+    id: string;
+    name: string;
+    base_unit: string;
+    type: string;
+    category_id: string;
+    stock_categories: { name: string } | { name: string }[] | null;
+  }>) {
+    const categoryName = Array.isArray(r.stock_categories)
+      ? r.stock_categories[0]?.name ?? ""
+      : r.stock_categories?.name ?? "";
+    byId.set(r.id, {
+      ...r,
+      category_name: categoryName,
+    });
+  }
+
+  for (const id of stockIds) {
+    const row = byId.get(id);
+    const name = row?.name ?? id;
+    const base_unit = row?.base_unit ?? "g";
+    const type = (row?.type ?? "other") as StockItemType;
+    const category_id = row?.category_id ?? "";
+    const category_name = row?.category_name ?? "";
+    entries.push({
+      stock_item_id: id,
+      name,
+      base_unit,
+      type,
+      category_id,
+      category_name,
+      quantity_consumed:
+        Math.round((consumptionByStockId.get(id) ?? 0) * 1000) / 1000,
+    });
+  }
+  entries.sort((a, b) => b.quantity_consumed - a.quantity_consumed);
+  return { entries, byId };
+}
+
 /** Retorna since/until para "ontem" (YYYY-MM-DD) no calendário de Lisboa (independente do TZ do servidor). */
 export function getDefaultPeriod(): { since: string; until: string } {
   const yesterday = DateTime.now()
@@ -252,9 +335,15 @@ export function getDefaultPeriod(): { since: string; until: string } {
   return { since: day, until: day };
 }
 
+export type GetIngredientConsumptionOptions = {
+  /** Filtra autoconsumo Vendus por loja (GET /selfconsumption/?store_id=). */
+  vendus_store_id?: number;
+};
+
 export async function getIngredientConsumption(
   since: string,
-  until: string
+  until: string,
+  options?: GetIngredientConsumptionOptions
 ): Promise<IngredientConsumptionResponse> {
   const startedAt = Date.now();
 
@@ -265,6 +354,9 @@ export async function getIngredientConsumption(
     perPage: ENV.PER_PAGE_DEFAULT,
     concurrency: ENV.CONCURRENCY,
     fetchAllDocuments,
+    ...(options?.vendus_store_id != null
+      ? { vendus_selfconsumption_store_id: options.vendus_store_id }
+      : {}),
   });
 
   const products = response.products_overall ?? [];
@@ -331,76 +423,29 @@ export async function getIngredientConsumption(
     }
   }
 
-  const stockIds = Array.from(consumptionByStockId.keys());
-  const consumptionEntries: IngredientConsumptionEntry[] = [];
-
-  if (stockIds.length > 0 && isSupabaseConfigured()) {
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data: rows, error } = await supabase
-        .from("stock_items")
-        .select(
-          "id, name, base_unit, type, category_id, stock_categories(name)"
-        )
-        .in("id", stockIds);
-      if (!error && rows?.length) {
-        const byId = new Map(
-          (
-            rows as Array<{
-              id: string;
-              name: string;
-              base_unit: string;
-              type: string;
-              category_id: string;
-              stock_categories: { name: string } | { name: string }[] | null;
-            }>
-          ).map((r) => {
-            const categoryName = Array.isArray(r.stock_categories)
-              ? r.stock_categories[0]?.name ?? ""
-              : r.stock_categories?.name ?? "";
-            return [
-              r.id,
-              {
-                ...r,
-                category_name: categoryName,
-              },
-            ] as const;
-          })
-        );
-        for (const id of stockIds) {
-          const row = byId.get(id);
-          const name = row?.name ?? id;
-          const base_unit = row?.base_unit ?? "g";
-          const type = (row?.type ?? "other") as StockItemType;
-          const category_id = row?.category_id ?? "";
-          const category_name = row?.category_name ?? "";
-          consumptionEntries.push({
-            stock_item_id: id,
-            name,
-            base_unit,
-            type,
-            category_id,
-            category_name,
-            quantity_consumed:
-              Math.round(consumptionByStockId.get(id)! * 1000) / 1000,
-          });
-        }
-        for (const m of matchedProducts) {
-          if (m.match_type === "stock" && m.stock_item_id) {
-            const row = byId.get(m.stock_item_id);
-            m.stock_item_name = row?.name ?? m.stock_item_id;
-          }
-        }
-      }
+  const { entries: consumptionEntries, byId } =
+    await buildConsumptionEntriesFromStockMap(consumptionByStockId);
+  for (const m of matchedProducts) {
+    if (m.match_type === "stock" && m.stock_item_id) {
+      const row = byId.get(m.stock_item_id);
+      m.stock_item_name = row?.name ?? m.stock_item_id;
     }
   }
 
-  consumptionEntries.sort((a, b) => b.quantity_consumed - a.quantity_consumed);
+  const vsc = response.vendus_selfconsumption;
+  const selfLines = extractProductLinesFromSelfConsumptionRecords(
+    vsc?.records ?? []
+  );
+  const { map: selfConsumptionMap, skipped: selfconsumption_skipped } =
+    await computeConsumptionForProductLinesLenient(selfLines);
+  const { entries: consumption_selfconsumption } =
+    await buildConsumptionEntriesFromStockMap(selfConsumptionMap);
 
   const additionsEntries = await getStockAdditionsForPeriod(since, until);
 
   const openingItemIds = new Set<string>();
   for (const c of consumptionEntries) openingItemIds.add(c.stock_item_id);
+  for (const c of consumption_selfconsumption) openingItemIds.add(c.stock_item_id);
   for (const a of additionsEntries) openingItemIds.add(a.stock_item_id);
   const openingEntries = await getOpeningStockAtPeriodStart(
     since,
@@ -416,15 +461,21 @@ export async function getIngredientConsumption(
       timezone: REPORT_TIMEZONE,
     },
     consumption: consumptionEntries,
+    consumption_selfconsumption,
     additions: additionsEntries,
     opening_stock: openingEntries,
     matched_products: matchedProducts,
+    ...(vsc !== undefined ? { vendus_selfconsumption: vsc } : {}),
     debug: {
       products_total: products.length,
       products_matched: products.length - unmatchedProducts.length,
       products_unmatched: unmatchedProducts.length,
       unmatched_products: unmatchedProducts,
       took_ms: tookMs,
+      selfconsumption_lines_extracted: selfLines.length,
+      ...(selfconsumption_skipped.length > 0
+        ? { selfconsumption_mapping_skipped: selfconsumption_skipped }
+        : {}),
     },
   };
 }

@@ -1,0 +1,217 @@
+[
+  {
+    "referencia": "V4-F19-25081252",
+    "nome": "4 Formaggios+ (Grande)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "V4-F18-25081244",
+    "nome": "4 Formaggios+ (Individual)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VAGU84-26020384",
+    "nome": "Água das Pedras 25cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VAGU85-26020390",
+    "nome": "Água das Pedras Limão 25cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VSAN34-25081754",
+    "nome": "Água Solan Cabras 33cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VAGU35-25081767",
+    "nome": "Água Solan Cabras Com Gás 33cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VBRI23-25081291",
+    "nome": "Brigadeiro (Grande)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VBRI22-2508120",
+    "nome": "Brigadeiro (Individual)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VCHI21-25081277",
+    "nome": "Chicken & Cheese (Grande)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VCHI20-25081268",
+    "nome": "Chicken & Cheese (Individual)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VAGU36-25081758",
+    "nome": "Coca Cola 33cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VCOC37-25081719",
+    "nome": "Coca Cola Zero 33cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VCOO25-25081271",
+    "nome": "Cookies and Cream (Grande)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VCOO24-25081235",
+    "nome": "Cookies and Cream (Individual)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VCRE9-25081234",
+    "nome": "Creamy Garlic (Grande)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VCRE8-25081218",
+    "nome": "Creamy Garlic (Individual)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VDOC26-25081264",
+    "nome": "Doce de Leite e Banana (Individual)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VEMB41-25082421",
+    "nome": "Embalagem takeaway",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VFOC77-25101988",
+    "nome": "Focaccia L (Grande)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VCOC40-25081749",
+    "nome": "Guaraná Antartica 33cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VHON15-2508128",
+    "nome": "Honey Peperoni (Grande)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VHON14-25081298",
+    "nome": "Honey Peperoni (Individual)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VICE74-25101858",
+    "nome": "Ice Tea Lipton limão 33cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VICE75-25101851",
+    "nome": "Ice Tea Lipton pêssego 33cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VSAN26-25081748",
+    "nome": "Maestra Dunkel 20cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VMAE27-25081779",
+    "nome": "Maestra Dunkel 40cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VSAN24-25081711",
+    "nome": "San Miguel Especial 20cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VSAN25-2508175",
+    "nome": "San Miguel Especial 40cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VSAN32-25081741",
+    "nome": "San Miguel Fresca 33cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VSAN33-2508172",
+    "nome": "San Miguel Mini 25cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VSAN28-25081792",
+    "nome": "San Miguel Radler 20cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VSAN29-25081723",
+    "nome": "San Miguel Radler 40cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VSAN30-25081721",
+    "nome": "Sangria Sarango 20cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VSAN31-25081718",
+    "nome": "Sangria Sarango 40cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VSEV77-25101862",
+    "nome": "Seven Up limão zero 33cl",
+    "target_type": "stock"
+  },
+  {
+    "referencia": "VSWE17-25081265",
+    "nome": "Sweet Smoked Shrimp (Grande)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VSWE16-25081279",
+    "nome": "Sweet Smoked Shrimp (Individual)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VTOM7-25081256",
+    "nome": "Tomate & Pesto (Grande)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VTOM6-25081229",
+    "nome": "Tomate & Pesto (Individual)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VTRU11-25081254",
+    "nome": "Truffle Shrooms (Grande)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VTRU10-25081238",
+    "nome": "Truffle Shrooms (Individual)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VTUN13-25081252",
+    "nome": "Tuna & Mayo (Grande)",
+    "target_type": "pizza"
+  },
+  {
+    "referencia": "VTUN12-25081229",
+    "nome": "Tuna & Mayo (Individual)",
+    "target_type": "pizza"
+  }
+]

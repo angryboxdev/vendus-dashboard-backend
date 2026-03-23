@@ -15,6 +15,13 @@ export const ENV = {
 
   PER_PAGE_DEFAULT: Number(process.env.VENDUS_PER_PAGE || 50),
   CONCURRENCY: Number(process.env.VENDUS_CONCURRENCY || 6),
+  /**
+   * Máximo de GET /selfconsumption/{id}/ por pedido (listagem vem muitas vezes sem `products`).
+   * IDs únicos acima disto ficam sem enriquecer; vê `details_fetch_truncated` na resposta.
+   */
+  SELFCONSUMPTION_MAX_DETAIL_FETCHES: Number(
+    process.env.VENDUS_SELFCONSUMPTION_MAX_DETAIL_FETCHES || 800
+  ),
 
   SUPABASE_URL: process.env.SUPABASE_URL ?? "",
   SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY ?? "",

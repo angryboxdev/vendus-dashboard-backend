@@ -5,6 +5,7 @@ import type {
   PaymentMethodEntry,
   VendusDetailedDocument,
   VendusDocument,
+  VendusSelfConsumptionSummary,
 } from "../domain/types.js";
 import {
   addTaxBreakdown,
@@ -25,6 +26,7 @@ import {
   buildMonthlySummaryResponse,
   type BuildResponseParams,
 } from "./monthlySummary/monthlySummaryResponseBuilder.js";
+import { fetchSelfConsumptionSummarySafe } from "./selfconsumptionService.js";
 
 export type MonthlySummaryParams = {
   since: string;
@@ -38,6 +40,8 @@ export type MonthlySummaryParams = {
     type: string,
     per_page: number
   ) => Promise<{ documents: VendusDocument[]; pagesFetched: number }>;
+  /** Filtra GET /selfconsumption/ por loja (opcional). */
+  vendus_selfconsumption_store_id?: number;
 };
 
 export class MonthlySummaryBuilder {
@@ -47,6 +51,7 @@ export class MonthlySummaryBuilder {
   private detailedDocs: VendusDetailedDocument[] = [];
   private documentsFetchedCount = 0;
   private pagesFetched = 0;
+  private vendusSelfConsumption: VendusSelfConsumptionSummary | undefined;
   private readonly startedAt: number;
 
   constructor(params: MonthlySummaryParams) {
@@ -57,6 +62,13 @@ export class MonthlySummaryBuilder {
 
   async build(): Promise<MonthlySummaryResponse> {
     await this.fetchAndFilterDocuments();
+    this.vendusSelfConsumption = await fetchSelfConsumptionSummarySafe({
+      date_start: this.params.since,
+      date_end: this.params.until,
+      ...(this.params.vendus_selfconsumption_store_id != null
+        ? { store_id: this.params.vendus_selfconsumption_store_id }
+        : {}),
+    });
     this.processAllDocuments();
     return this.buildResponse();
   }
@@ -396,6 +408,9 @@ export class MonthlySummaryBuilder {
       startedAt: this.startedAt,
       unknownItemsCount: this.state.unknownItems.length,
       unknownItemsSample: this.state.unknownItems,
+      ...(this.vendusSelfConsumption !== undefined
+        ? { vendusSelfConsumption: this.vendusSelfConsumption }
+        : {}),
     };
     return buildMonthlySummaryResponse(this.state, params);
   }

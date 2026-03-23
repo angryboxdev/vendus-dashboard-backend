@@ -21,10 +21,22 @@ reportsRoutes.get("/reports/monthly-summary", async (req, res) => {
       type = "FS,NC",
       per_page = String(ENV.PER_PAGE_DEFAULT),
       concurrency = String(ENV.CONCURRENCY),
-    } = req.query as Record<string, string>;
+      store_id: storeIdParam,
+    } = req.query as Record<string, string | undefined>;
 
     const perPage = Number(per_page);
     const conc = Number(concurrency);
+    const vendus_selfconsumption_store_id =
+      storeIdParam != null && storeIdParam !== ""
+        ? Number(storeIdParam)
+        : undefined;
+    if (
+      vendus_selfconsumption_store_id != null &&
+      !Number.isFinite(vendus_selfconsumption_store_id)
+    ) {
+      res.status(400).json({ error: "store_id inválido" });
+      return;
+    }
 
     const response = await buildMonthlySummary({
       since,
@@ -33,6 +45,9 @@ reportsRoutes.get("/reports/monthly-summary", async (req, res) => {
       perPage,
       concurrency: conc,
       fetchAllDocuments,
+      ...(vendus_selfconsumption_store_id != null
+        ? { vendus_selfconsumption_store_id }
+        : {}),
     });
 
     res.json(response);
@@ -48,12 +63,25 @@ reportsRoutes.get("/reports/monthly-summary", async (req, res) => {
  */
 reportsRoutes.get("/reports/ingredient-consumption", async (req, res) => {
   try {
-    const { since, until } = req.query as Record<string, string | undefined>;
+    const { since, until, store_id: storeIdParam } = req.query as Record<
+      string,
+      string | undefined
+    >;
     const defaultPeriod = getDefaultPeriod();
     const sinceParam = since ?? defaultPeriod.since;
     const untilParam = until ?? defaultPeriod.until;
+    const vendus_store_id =
+      storeIdParam != null && storeIdParam !== ""
+        ? Number(storeIdParam)
+        : undefined;
+    if (vendus_store_id != null && !Number.isFinite(vendus_store_id)) {
+      res.status(400).json({ error: "store_id inválido" });
+      return;
+    }
 
-    const response = await getIngredientConsumption(sinceParam, untilParam);
+    const response = await getIngredientConsumption(sinceParam, untilParam, {
+      ...(vendus_store_id != null ? { vendus_store_id } : {}),
+    });
     res.json(response);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao obter consumo de ingredientes";

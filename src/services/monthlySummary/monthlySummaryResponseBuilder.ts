@@ -4,6 +4,7 @@ import type {
   Channel,
   MonthlySummaryResponse,
   PaymentMethodEntry,
+  VendusSelfConsumptionSummary,
 } from "../../domain/types.js";
 
 import { CATEGORIES_ORDER } from "../../config/constants.js";
@@ -23,6 +24,7 @@ export type BuildResponseParams = {
   startedAt: number;
   unknownItemsCount: number;
   unknownItemsSample: MonthlySummaryState["unknownItems"];
+  vendusSelfConsumption?: VendusSelfConsumptionSummary;
 };
 
 function mapToPaymentMethods(map: Map<string, number>): PaymentMethodEntry[] {
@@ -59,6 +61,7 @@ export function buildMonthlySummaryResponse(
     startedAt,
     unknownItemsCount,
     unknownItemsSample,
+    vendusSelfConsumption,
   } = params;
 
   const byCategoryOverall: MonthlySummaryResponse["by_category_overall"] =
@@ -193,6 +196,9 @@ export function buildMonthlySummaryResponse(
         amount: fromCents(amount),
       }))
       .sort((a, b) => b.amount - a.amount),
+    ...(vendusSelfConsumption !== undefined
+      ? { vendus_selfconsumption: vendusSelfConsumption }
+      : {}),
     debug: {
       took_ms: Date.now() - startedAt,
       pages_fetched: pagesFetched,
