@@ -1,8 +1,8 @@
 # Cron: consumo diário → movimentos de stock
 
-Todos os dias (por omissão **11:45**, fuso **Europe/Lisbon**), o job:
+Todos os dias (por omissão **01:30**, fuso **Europe/Lisbon** no servidor com `node-cron`), o job:
 
-1. Considera o dia alvo **`since = until = ontem`** (calendário de Lisboa), exceto se passares `TARGET_DATE` ou `target_date` no body HTTP.
+1. Considera o dia alvo **`since = until = ontem`** (calendário de Lisboa) — ou seja, à **01:30 de hoje** debita o consumo do **dia civil completo anterior** (ex.: madrugada de 6→7 debita o dia 5). Podes forçar outra data com `TARGET_DATE` ou `target_date` no body HTTP.
 2. **Apaga** movimentos anteriores deste job para esse mesmo dia (idempotência — podes reexecutar sem duplicar saídas).
 3. Calcula o consumo como em `GET /api/reports/ingredient-consumption` (Vendus + receitas + mapeamentos).
 4. **Insere** em `stock_movements` uma linha por item com:
@@ -44,7 +44,7 @@ O repositório inclui um serviço **`type: cron`** (`vendus-daily-vendus-consump
 1. Faz **push** do código e no Render abre o **Blueprint** / **Sync** para criar ou atualizar serviços.
 2. No serviço cron, em **Environment**, confirma as mesmas variáveis `VENDUS_*` e `SUPABASE_*` que a API (o Render pede valores `sync: false` na primeira vez).
 3. **Cron no Render não é plano gratuito** — o `render.yaml` usa `plan: starter` para esse job. O Web Service pode continuar em free.
-4. O **schedule** no Blueprint está em **UTC** (`45 11 * * *` = 11:45 UTC). Em Portugal no **inverno** (UTC+0) coincide com 11:45 Lisboa; no **verão** (UTC+1), ajusta o schedule para `45 10 * * *` se quiseres manter 11:45 em Lisboa.
+4. O **schedule** no Blueprint está em **UTC** (`30 1 * * *` = 01:30 UTC). Em Portugal no **inverno** (UTC+0) isso é **01:30 Lisboa**. No **verão** (UTC+1), para manter **01:30 Lisboa** altera no dashboard para **`30 0 * * *`** (00:30 UTC) ou ajusta em março/outubro.
 
 **crontab** noutro servidor: define `TZ=Europe/Lisbon` ou a hora UTC equivalente.
 
@@ -56,11 +56,11 @@ O repositório inclui um serviço **`type: cron`** (`vendus-daily-vendus-consump
 
 ```env
 ENABLE_DAILY_CONSUMPTION_CRON=true
-DAILY_CONSUMPTION_CRON_SCHEDULE=45 11 * * *
+DAILY_CONSUMPTION_CRON_SCHEDULE=30 1 * * *
 ```
 
 - `DAILY_CONSUMPTION_CRON_SCHEDULE`: 5 campos (minuto hora dia mês dia-da-semana), timezone fixo **`Europe/Lisbon`**.
-- Por omissão já é **11:45** todos os dias.
+- Por omissão já é **01:30** todos os dias (debita o dia anterior).
 
 ---
 

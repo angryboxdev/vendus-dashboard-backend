@@ -22,9 +22,9 @@ export const ENV = {
   /** Se true, agenda job de consumo diário no próprio processo do servidor (ver DAILY_CONSUMPTION_CRON_SCHEDULE). */
   ENABLE_DAILY_CONSUMPTION_CRON:
     process.env.ENABLE_DAILY_CONSUMPTION_CRON === "true",
-  /** Expressão cron (5 campos), timezone Europe/Lisbon. Por omissão: 11:45 todos os dias. */
+  /** Expressão cron (5 campos), timezone Europe/Lisbon. Por omissão: 01:30 — debita o dia civil anterior. */
   DAILY_CONSUMPTION_CRON_SCHEDULE:
-    process.env.DAILY_CONSUMPTION_CRON_SCHEDULE ?? "45 11 * * *",
+    process.env.DAILY_CONSUMPTION_CRON_SCHEDULE ?? "30 1 * * *",
 
   /**
    * Segredo para POST /api/internal/cron/daily-vendus-consumption (Bearer).

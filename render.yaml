@@ -28,14 +28,15 @@ services:
     healthCheckPath: /api/health
 
   # Consumo diário Vendus → movimentos de stock (docs/CRON_DAILY_STOCK.md)
-  # Schedule em UTC: 11:45 UTC = 11:45 Lisboa no horário de inverno (UTC+0).
-  # No horário de verão (UTC+1), 11:45 Lisboa = 10:45 UTC → ajusta para "45 10 * * *" ou usa dois jobs.
+  # Debita sempre o DIA ANTERIOR (calendário Lisboa), às 01:30 locais — ver nota UTC abaixo.
+  # Render usa UTC: 01:30 Lisboa = 01:30 UTC no inverno (UTC+0) → "30 1 * * *".
+  # No verão (UTC+1), 01:30 Lisboa = 00:30 UTC → troca manual para "30 0 * * *" ou ajusta no dashboard.
   - type: cron
     name: vendus-daily-vendus-consumption
     runtime: node
     region: frankfurt
     plan: starter
-    schedule: "45 11 * * *"
+    schedule: "30 1 * * *"
     buildCommand: npm ci && npm run build
     startCommand: npm run cron:daily-vendus-consumption
     envVars:
