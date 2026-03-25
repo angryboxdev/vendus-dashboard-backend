@@ -16,11 +16,11 @@ Mostra **quais itens de stock e quanto** foram consumidos num período: pizzas (
 
 ### Query (opcional)
 
-| Parâmetro   | Tipo   | Descrição |
-|-------------|--------|-----------|
-| `since`     | string | Início do período, inclusivo. Formato **YYYY-MM-DD**. |
-| `until`     | string | Fim do período, inclusivo. Formato **YYYY-MM-DD**. |
-| `store_id`  | number | Opcional. Filtra **autoconsumo** Vendus (`GET /selfconsumption/?store_id=`) para essa loja. Documentos de venda continuam globais ao período. |
+| Parâmetro  | Tipo   | Descrição                                                                                                                                     |
+| ---------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `since`    | string | Início do período, inclusivo. Formato **YYYY-MM-DD**.                                                                                         |
+| `until`    | string | Fim do período, inclusivo. Formato **YYYY-MM-DD**.                                                                                            |
+| `store_id` | number | Opcional. Filtra **autoconsumo** Vendus (`GET /selfconsumption/?store_id=`) para essa loja. Documentos de venda continuam globais ao período. |
 
 - Se **não** enviares `since` nem `until`, o backend usa **ontem** (um único dia).
 - Podes enviar sempre o intervalo no frontend (ex.: seletor de datas) e usar "ontem" como valor inicial.
@@ -40,7 +40,7 @@ interface StockAdditionEntry {
   type: StockItemType;
   category_id: string;
   category_name: string;
-  quantity_added: number;   // soma das entradas (quantity > 0) em stock_movements no período
+  quantity_added: number; // soma das entradas (quantity > 0) em stock_movements no período
 }
 
 interface StockOpeningEntry {
@@ -55,15 +55,15 @@ interface StockOpeningEntry {
 
 interface IngredientConsumptionResponse {
   period: {
-    since: string;   // "YYYY-MM-DD"
-    until: string;   // "YYYY-MM-DD"
-    timezone?: string;  // ex. "Europe/Lisbon"
+    since: string; // "YYYY-MM-DD"
+    until: string; // "YYYY-MM-DD"
+    timezone?: string; // ex. "Europe/Lisbon"
   };
   /** Consumo a partir de vendas (FS), receitas e mapeamentos. */
   consumption: IngredientConsumptionEntry[];
   /** Consumo a partir de autoconsumo Vendus (separado de vendas); mesma forma que `consumption`. */
   consumption_selfconsumption: IngredientConsumptionEntry[];
-  additions: StockAdditionEntry[];   // adições de stock no período (compras, ajustes positivos, etc.)
+  additions: StockAdditionEntry[]; // adições de stock no período (compras, ajustes positivos, etc.)
   opening_stock: StockOpeningEntry[];
   matched_products?: MatchedProductEntry[];
   /** Dados brutos do autoconsumo no período (registos, total_spending, etc.). */
@@ -82,29 +82,29 @@ interface IngredientConsumptionResponse {
 interface IngredientConsumptionEntry {
   stock_item_id: string;
   name: string;
-  base_unit: string;      // ex. "g", "cl"
-  type: StockItemType;    // "ingredient" | "beverage" | "packaging" | "cleaning" | "other"
+  base_unit: string; // ex. "g", "cl"
+  type: StockItemType; // "ingredient" | "beverage" | "packaging" | "cleaning" | "other"
   category_id: string;
-  category_name: string;  // nome da categoria em stock_categories
+  category_name: string; // nome da categoria em stock_categories
   quantity_consumed: number;
 }
 
 interface MatchedProductEntry {
   title: string;
   reference: string;
-  category: string;   // Vendus: pizza | bebida_alcoolica | bebida_nao_alcoolica | sacos | outros
+  category: string; // Vendus: pizza | bebida_alcoolica | bebida_nao_alcoolica | sacos | outros
   qty_sold: number;
   match_type: "pizza" | "stock";
-  pizza_id?: string;  // quando match_type === "pizza"
+  pizza_id?: string; // quando match_type === "pizza"
   size?: "small" | "large";
-  stock_item_id?: string;   // quando match_type === "stock"
+  stock_item_id?: string; // quando match_type === "stock"
   stock_item_name?: string;
 }
 
 interface UnmatchedProductEntry {
-  title: string;   // título no Vendus
+  title: string; // título no Vendus
   reference: string;
-  category: string;  // categoria Vendus (pizza, bebida_alcoolica, etc.)
+  category: string; // categoria Vendus (pizza, bebida_alcoolica, etc.)
   qty: number;
 }
 ```
@@ -127,23 +127,76 @@ interface UnmatchedProductEntry {
     "timezone": "Europe/Lisbon"
   },
   "consumption": [
-    { "stock_item_id": "uuid-1", "name": "Farinha Caputo Saccorosso", "base_unit": "g", "type": "ingredient", "category_id": "uuid-cat1", "category_name": "Ingredientes", "quantity_consumed": 12500 },
-    { "stock_item_id": "uuid-2", "name": "Coca Cola Zero 33cl", "base_unit": "cl", "type": "beverage", "category_id": "uuid-cat2", "category_name": "Bebidas", "quantity_consumed": 330 }
+    {
+      "stock_item_id": "uuid-1",
+      "name": "Farinha Caputo Saccorosso",
+      "base_unit": "g",
+      "type": "ingredient",
+      "category_id": "uuid-cat1",
+      "category_name": "Ingredientes",
+      "quantity_consumed": 12500
+    },
+    {
+      "stock_item_id": "uuid-2",
+      "name": "Coca Cola Zero 33cl",
+      "base_unit": "cl",
+      "type": "beverage",
+      "category_id": "uuid-cat2",
+      "category_name": "Bebidas",
+      "quantity_consumed": 330
+    }
   ],
   "additions": [
-    { "stock_item_id": "uuid-1", "name": "Farinha Caputo Saccorosso", "base_unit": "g", "type": "ingredient", "category_id": "uuid-cat1", "category_name": "Ingredientes", "quantity_added": 50000 },
-    { "stock_item_id": "uuid-2", "name": "Coca Cola Zero 33cl", "base_unit": "cl", "type": "beverage", "category_id": "uuid-cat2", "category_name": "Bebidas", "quantity_added": 1200 }
+    {
+      "stock_item_id": "uuid-1",
+      "name": "Farinha Caputo Saccorosso",
+      "base_unit": "g",
+      "type": "ingredient",
+      "category_id": "uuid-cat1",
+      "category_name": "Ingredientes",
+      "quantity_added": 50000
+    },
+    {
+      "stock_item_id": "uuid-2",
+      "name": "Coca Cola Zero 33cl",
+      "base_unit": "cl",
+      "type": "beverage",
+      "category_id": "uuid-cat2",
+      "category_name": "Bebidas",
+      "quantity_added": 1200
+    }
   ],
   "matched_products": [
-    { "title": "Honey Peperoni (Grande)", "reference": "VHON15-2508128", "category": "pizza", "qty_sold": 10, "match_type": "pizza", "pizza_id": "uuid-p", "size": "large" },
-    { "title": "Coca Cola Zero 33cl", "reference": "VCOC37-25081719", "category": "bebida_nao_alcoolica", "qty_sold": 25, "match_type": "stock", "stock_item_id": "uuid-s", "stock_item_name": "Coca Cola Zero 33cl" }
+    {
+      "title": "Honey Peperoni (Grande)",
+      "reference": "VHON15-2508128",
+      "category": "pizza",
+      "qty_sold": 10,
+      "match_type": "pizza",
+      "pizza_id": "uuid-p",
+      "size": "large"
+    },
+    {
+      "title": "Coca Cola Zero 33cl",
+      "reference": "VCOC37-25081719",
+      "category": "bebida_nao_alcoolica",
+      "qty_sold": 25,
+      "match_type": "stock",
+      "stock_item_id": "uuid-s",
+      "stock_item_name": "Coca Cola Zero 33cl"
+    }
   ],
   "debug": {
     "products_total": 45,
     "products_matched": 42,
     "products_unmatched": 3,
     "unmatched_products": [
-      { "title": "Produto X", "reference": "REF-X", "category": "outros", "qty": 2 }
+      {
+        "title": "Produto X",
+        "reference": "REF-X",
+        "category": "outros",
+        "qty": 2
+      }
     ],
     "took_ms": 1200
   }
@@ -166,8 +219,62 @@ interface UnmatchedProductEntry {
 
 ---
 
+## 2. Histórico de movimentos de stock (paginado)
+
+**GET** `/api/stock/movements`
+
+### Query
+
+| Parâmetro     | Descrição                                                                                |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| `page`        | Página (≥ 1). Default: `1`.                                                              |
+| `page_size`   | Linhas por página (1–100). Default: `20`.                                                |
+| `item_id`     | Opcional: UUID do item.                                                                  |
+| `category_id` | Opcional: UUID da categoria (`stock_categories`).                                        |
+| `type`        | Opcional: `purchase` \| `consumption` \| `sale` \| `loss` \| `adjustment` \| `transfer`. |
+| `date_from`   | Opcional: início (YYYY-MM-DD, dia civil **Lisboa**).                                     |
+| `date_to`     | Opcional: fim (YYYY-MM-DD, Lisboa).                                                      |
+
+Ordenação: `movement_date` desc, depois `created_at` desc.
+
+### Resposta 200
+
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "item_id": "uuid",
+      "item_name": "string",
+      "item_sku": "string | null",
+      "item_base_unit": "g",
+      "category_id": "uuid",
+      "category_name": "string",
+      "type": "consumption",
+      "quantity": -1.5,
+      "unit_cost_per_base_unit_with_vat": null,
+      "unit_cost_per_base_unit_without_vat": null,
+      "reason": "string | null",
+      "reference": "string | null",
+      "movement_date": "ISO 8601",
+      "created_at": "ISO 8601",
+      "created_by": "string | null"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "page_size": 20,
+    "total": 123,
+    "total_pages": 7
+  }
+}
+```
+
+---
+
 ## Resumo
 
-| Método | Path | Descrição |
-|--------|------|-----------|
-| GET | `/api/reports/ingredient-consumption` | Consumo de ingredientes no período (query: `since`, `until`; default: ontem) |
+| Método | Path                                  | Descrição                                                                    |
+| ------ | ------------------------------------- | ---------------------------------------------------------------------------- |
+| GET    | `/api/reports/ingredient-consumption` | Consumo de ingredientes no período (query: `since`, `until`; default: ontem) |
+| GET    | `/api/stock/movements`                | Histórico global de movimentos (paginação + item + categoria)                |

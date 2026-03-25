@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import type {
+  ListStockMovementsQuery,
   StockCategoryCreateBody,
   StockCategoryUpdateBody,
   StockItemCreateBody,
@@ -29,6 +30,7 @@ import {
   createStockMovement,
   getStockMovementById,
   listStockMovementsByItem,
+  listStockMovementsPaginated,
   updateStockMovement,
   validateMovementType,
 } from "../services/stockMovementService.js";
@@ -224,7 +226,55 @@ stockRoutes.delete("/stock/items/:id", async (req, res) => {
   }
 });
 
-// ---------- Movements (apenas criar; listar por item opcional) ----------
+// ---------- Movements ----------
+/**
+ * Histórico global com paginação (antes de GET /stock/movements/:id).
+ * GET /stock/movements?page=1&page_size=20&item_id=&category_id=&type=&date_from=&date_to=
+ */
+stockRoutes.get("/stock/movements", async (req, res) => {
+  try {
+    const q = toQueryRecord(req.query);
+    const page = q.page != null ? Number(q.page) : undefined;
+    const page_size = q.page_size != null ? Number(q.page_size) : undefined;
+    if (page != null && (!Number.isFinite(page) || page < 1)) {
+      res.status(400).json({ error: "page inválido (>= 1)" });
+      return;
+    }
+    if (
+      page_size != null &&
+      (!Number.isFinite(page_size) || page_size < 1 || page_size > 100)
+    ) {
+      res.status(400).json({ error: "page_size inválido (1–100)" });
+      return;
+    }
+    if (q.type != null && q.type !== "" && !validateMovementType(q.type)) {
+      res.status(400).json({
+        error:
+          "type inválido (purchase, consumption, sale, loss, adjustment, transfer)",
+      });
+      return;
+    }
+
+    const filters: ListStockMovementsQuery = {
+      ...(page != null ? { page } : {}),
+      ...(page_size != null ? { page_size } : {}),
+      ...(q.item_id ? { item_id: q.item_id } : {}),
+      ...(q.category_id ? { category_id: q.category_id } : {}),
+      ...(q.type && validateMovementType(q.type) ? { type: q.type } : {}),
+      ...(q.date_from ? { date_from: q.date_from } : {}),
+      ...(q.date_to ? { date_to: q.date_to } : {}),
+    };
+
+    const payload = await listStockMovementsPaginated(filters);
+    res.json(payload);
+  } catch (e: unknown) {
+    const message =
+      e instanceof Error ? e.message : "Erro ao listar histórico de movimentos";
+    const status = /inválido/i.test(message) ? 400 : 500;
+    res.status(status).json({ error: message });
+  }
+});
+
 stockRoutes.post("/stock/movements", async (req, res) => {
   try {
     const body = req.body as StockMovementCreateBody;

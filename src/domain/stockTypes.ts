@@ -98,6 +98,48 @@ export type StockMovement = {
   created_by: string | null;
 };
 
+/** Linha do histórico global de movimentos (GET /stock/movements) com item + categoria. */
+export type StockMovementHistoryRow = {
+  id: string;
+  item_id: string;
+  item_name: string;
+  item_sku: string | null;
+  item_base_unit: string;
+  category_id: string;
+  category_name: string;
+  type: StockMovementType;
+  quantity: number;
+  unit_cost_per_base_unit_with_vat: number | null;
+  unit_cost_per_base_unit_without_vat: number | null;
+  reason: string | null;
+  reference: string | null;
+  movement_date: string;
+  created_at: string;
+  created_by: string | null;
+};
+
+export type StockMovementsPaginatedResponse = {
+  data: StockMovementHistoryRow[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total: number;
+    total_pages: number;
+  };
+};
+
+export type ListStockMovementsQuery = {
+  page?: number;
+  page_size?: number;
+  item_id?: string;
+  category_id?: string;
+  type?: StockMovementType;
+  /** YYYY-MM-DD (Lisboa): início do dia civil */
+  date_from?: string;
+  /** YYYY-MM-DD (Lisboa): fim do dia civil */
+  date_to?: string;
+};
+
 export type StockCategoryCreateBody = { name: string };
 export type StockCategoryUpdateBody = { name: string };
 

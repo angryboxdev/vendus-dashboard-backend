@@ -1,10 +1,17 @@
 import type {
+  ListStockMovementsQuery,
   StockMovement,
   StockMovementCreateBody,
+  StockMovementHistoryRow,
   StockMovementType,
   StockMovementUpdateBody,
+  StockMovementsPaginatedResponse,
 } from "../domain/stockTypes.js";
 import { getSupabase, isSupabaseConfigured } from "../infra/supabaseClient.js";
+import {
+  lisbonDayEndUtcIso,
+  lisbonDayStartUtcIso,
+} from "../utils/lisbonDayInstants.js";
 
 type Row = {
   id: string;
@@ -122,6 +129,183 @@ export async function createStockMovement(
     .single();
   if (error) throw new Error(`Criar movimentação: ${error.message}`);
   return rowToMovement(data as Row);
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseDateYmdOrThrow(label: string, value: string): void {
+  if (!ISO_DATE.test(value)) {
+    throw new Error(`${label} inválido (use YYYY-MM-DD): ${value}`);
+  }
+  lisbonDayStartUtcIso(value);
+}
+
+function categoryFromEmbedded(
+  si: Record<string, unknown> | null | undefined
+): { category_id: string; category_name: string } {
+  if (!si) return { category_id: "", category_name: "" };
+  const categoryId = String(si.category_id ?? "");
+  const sc = si.stock_categories;
+  if (Array.isArray(sc) && sc[0] && typeof sc[0] === "object") {
+    const o = sc[0] as Record<string, unknown>;
+    return {
+      category_id: String(o.id ?? categoryId),
+      category_name: String(o.name ?? ""),
+    };
+  }
+  if (sc && typeof sc === "object") {
+    const o = sc as Record<string, unknown>;
+    return {
+      category_id: String(o.id ?? categoryId),
+      category_name: String(o.name ?? ""),
+    };
+  }
+  return { category_id: categoryId, category_name: "" };
+}
+
+function rowToHistoryRow(row: unknown): StockMovementHistoryRow {
+  const r = row as Record<string, unknown>;
+  const si = r.stock_items as Record<string, unknown> | null | undefined;
+  const { category_id, category_name } = categoryFromEmbedded(si ?? null);
+  return {
+    id: String(r.id),
+    item_id: String(r.item_id),
+    item_name: String(si?.name ?? ""),
+    item_sku: si?.sku != null ? String(si.sku) : null,
+    item_base_unit: String(si?.base_unit ?? ""),
+    category_id,
+    category_name,
+    type: r.type as StockMovementType,
+    quantity: Number(r.quantity),
+    unit_cost_per_base_unit_with_vat:
+      r.unit_cost_per_base_unit_with_vat != null
+        ? Number(r.unit_cost_per_base_unit_with_vat)
+        : null,
+    unit_cost_per_base_unit_without_vat:
+      r.unit_cost_per_base_unit_without_vat != null
+        ? Number(r.unit_cost_per_base_unit_without_vat)
+        : null,
+    reason: r.reason != null ? String(r.reason) : null,
+    reference: r.reference != null ? String(r.reference) : null,
+    movement_date: String(r.movement_date),
+    created_at: String(r.created_at),
+    created_by: r.created_by != null ? String(r.created_by) : null,
+  };
+}
+
+const MOVEMENT_HISTORY_SELECT = `
+  id,
+  item_id,
+  type,
+  quantity,
+  unit_cost_per_base_unit_with_vat,
+  unit_cost_per_base_unit_without_vat,
+  reason,
+  reference,
+  movement_date,
+  created_at,
+  created_by,
+  stock_items (
+    name,
+    sku,
+    base_unit,
+    category_id,
+    stock_categories ( id, name )
+  )
+`;
+
+/**
+ * Histórico global de movimentos com paginação, item e categoria.
+ */
+export async function listStockMovementsPaginated(
+  query: ListStockMovementsQuery
+): Promise<StockMovementsPaginatedResponse> {
+  if (!isSupabaseConfigured()) {
+    return {
+      data: [],
+      pagination: {
+        page: 1,
+        page_size: 20,
+        total: 0,
+        total_pages: 0,
+      },
+    };
+  }
+  const supabase = getSupabase();
+  if (!supabase) {
+    return {
+      data: [],
+      pagination: {
+        page: 1,
+        page_size: 20,
+        total: 0,
+        total_pages: 0,
+      },
+    };
+  }
+
+  const page = Math.max(1, Math.floor(query.page ?? 1));
+  const pageSize = Math.min(Math.max(1, Math.floor(query.page_size ?? 20)), 100);
+  const rangeFrom = (page - 1) * pageSize;
+  const rangeTo = rangeFrom + pageSize - 1;
+
+  if (query.date_from) parseDateYmdOrThrow("date_from", query.date_from);
+  if (query.date_to) parseDateYmdOrThrow("date_to", query.date_to);
+
+  let categoryItemIds: string[] | undefined;
+  if (query.category_id) {
+    const { data: catRows, error: catErr } = await supabase
+      .from("stock_items")
+      .select("id")
+      .eq("category_id", query.category_id);
+    if (catErr) throw new Error(`Stock items (categoria): ${catErr.message}`);
+    categoryItemIds = (catRows ?? []).map((r: { id: string }) => r.id);
+    if (categoryItemIds.length === 0) {
+      return {
+        data: [],
+        pagination: { page, page_size: pageSize, total: 0, total_pages: 0 },
+      };
+    }
+  }
+
+  let qb = supabase
+    .from("stock_movements")
+    .select(MOVEMENT_HISTORY_SELECT, { count: "exact" })
+    .order("movement_date", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (categoryItemIds) {
+    qb = qb.in("item_id", categoryItemIds);
+  }
+  if (query.item_id) {
+    qb = qb.eq("item_id", query.item_id);
+  }
+  if (query.type) {
+    qb = qb.eq("type", query.type);
+  }
+  if (query.date_from) {
+    qb = qb.gte("movement_date", lisbonDayStartUtcIso(query.date_from));
+  }
+  if (query.date_to) {
+    qb = qb.lte("movement_date", lisbonDayEndUtcIso(query.date_to));
+  }
+
+  const { data, error, count } = await qb.range(rangeFrom, rangeTo);
+
+  if (error) throw new Error(`Histórico de movimentos: ${error.message}`);
+
+  const total = count ?? 0;
+  const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
+
+  return {
+    data: ((data ?? []) as unknown[]).map(rowToHistoryRow),
+    pagination: {
+      page,
+      page_size: pageSize,
+      total,
+      total_pages: totalPages,
+    },
+  };
 }
 
 export async function listStockMovementsByItem(
