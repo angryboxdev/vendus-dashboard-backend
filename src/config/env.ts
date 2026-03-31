@@ -38,4 +38,9 @@ export const ENV = {
    * Se vazio, a rota não é registada.
    */
   CRON_SECRET: process.env.CRON_SECRET ?? "",
+
+  /** OpenAI: importação de faturas de fornecedor (extração estruturada). */
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
+  OPENAI_MODEL_TEXT: process.env.OPENAI_MODEL_TEXT ?? "gpt-4o-mini",
+  OPENAI_MODEL_VISION: process.env.OPENAI_MODEL_VISION ?? "gpt-4o",
 };

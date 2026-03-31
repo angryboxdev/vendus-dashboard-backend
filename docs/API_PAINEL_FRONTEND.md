@@ -278,3 +278,6 @@ Ordenação: `movement_date` desc, depois `created_at` desc.
 | ------ | ------------------------------------- | ---------------------------------------------------------------------------- |
 | GET    | `/api/reports/ingredient-consumption` | Consumo de ingredientes no período (query: `since`, `until`; default: ontem) |
 | GET    | `/api/stock/movements`                | Histórico global de movimentos (paginação + item + categoria)                |
+| POST   | `/api/stock/invoice-imports`          | Upload fatura fornecedor (`multipart` campo `file`); ver `SUPPLIER_INVOICE_IMPORT.md` |
+| GET    | `/api/stock/invoice-imports/:id`      | Detalhe importação + linhas (preview)                                       |
+| POST   | `/api/stock/invoice-imports/:id/confirm` | Confirmar e aplicar compras no stock                                     |

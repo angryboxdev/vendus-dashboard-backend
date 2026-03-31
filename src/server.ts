@@ -7,6 +7,7 @@ import { internalCronRoutes } from "./routes/internalCronRoutes.js";
 import { pizzaRoutes } from "./routes/pizzaRoutes.js";
 import { reportsRoutes } from "./routes/reportsRoutes.js";
 import { stockRoutes } from "./routes/stockRoutes.js";
+import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
 import { runDailyVendusConsumptionJob } from "./services/dailyVendusConsumptionJobService.js";
 
 const app = express();
@@ -31,6 +32,7 @@ app.use("/api", documentsRoutes);
 app.use("/api", reportsRoutes);
 app.use("/api", dreRoutes);
 app.use("/api", stockRoutes);
+app.use("/api", supplierInvoiceImportRoutes);
 app.use("/api", pizzaRoutes);
 
 if (ENV.CRON_SECRET) {
