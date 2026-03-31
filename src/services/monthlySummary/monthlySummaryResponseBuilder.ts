@@ -1,9 +1,7 @@
 import type {
   AggTotals,
-  Category,
   Channel,
   MonthlySummaryResponse,
-  PaymentMethodEntry,
   VendusSelfConsumptionSummary,
 } from "../../domain/types.js";
 
@@ -11,7 +9,8 @@ import { CATEGORIES_ORDER } from "../../config/constants.js";
 import type { MonthlySummaryState } from "./monthlySummaryState.js";
 import { createTotals } from "../../domain/aggregation.js";
 import { fromCents } from "../../utils/numbers.js";
-import { priceMap } from "../../domain/priceMap.js";
+import { priceMapConfig } from "../../domain/priceMap.js";
+import { getCatalogSize } from "../../infra/vendusProductsCatalog.js";
 
 export type BuildResponseParams = {
   since: string;
@@ -26,13 +25,6 @@ export type BuildResponseParams = {
   unknownItemsSample: MonthlySummaryState["unknownItems"];
   vendusSelfConsumption?: VendusSelfConsumptionSummary;
 };
-
-function mapToPaymentMethods(map: Map<string, number>): PaymentMethodEntry[] {
-  return Array.from(map.entries())
-    .map(([method, amount]) => ({ method, amount: fromCents(amount) }))
-    .filter((e) => e.amount > 0)
-    .sort((a, b) => b.amount - a.amount);
-}
 
 function totalsToEuros(t: AggTotals): AggTotals {
   return {
@@ -78,9 +70,6 @@ export function buildMonthlySummaryResponse(
     }
     byCategoryOverall[category] = {
       totals: totalsToEuros(byCategoryOverallTotals),
-      payment_methods: mapToPaymentMethods(
-        state.byCategoryOverallPaymentMaps.get(category)!
-      ),
     };
   }
 
@@ -112,9 +101,6 @@ export function buildMonthlySummaryResponse(
           net_total: fromCents(p.channels.unknown.net_total),
         },
       },
-      payment_methods: [...p.payment_methods]
-        .map((x) => ({ ...x, amount: fromCents(x.amount) }))
-        .sort((a, b) => b.amount - a.amount),
     }))
     .sort((a, b) => b.amounts.gross_total - a.amounts.gross_total);
 
@@ -128,15 +114,9 @@ export function buildMonthlySummaryResponse(
             state.byChannel[channel].byCategory[cat].totals
           ),
           products: state.byChannel[channel].byCategory[cat].products,
-          payment_methods: mapToPaymentMethods(
-            state.byChannel[channel].byCategory[cat].paymentMethodsMap
-          ),
         },
       ])
     ) as MonthlySummaryResponse["by_channel"]["restaurant"]["byCategory"],
-    payment_methods: mapToPaymentMethods(
-      state.byChannel[channel].paymentMethodsMap
-    ),
   });
 
   return {
@@ -176,26 +156,13 @@ export function buildMonthlySummaryResponse(
                 state.byChannel.unknown.byCategory[cat].totals
               ),
               products: state.byChannel.unknown.byCategory[cat].products,
-              payment_methods: mapToPaymentMethods(
-                state.byChannel.unknown.byCategory[cat].paymentMethodsMap
-              ),
             },
           ])
         ) as MonthlySummaryResponse["by_channel"]["unknown"]["by_category"],
-        payment_methods: mapToPaymentMethods(
-          state.byChannel.unknown.paymentMethodsMap
-        ),
       },
     },
     by_category_overall: byCategoryOverall,
     products_overall: productsOverall,
-    payment_methods: Array.from(state.paymentMethodMap.entries())
-      .map(([method, { amount, docIds }]) => ({
-        method,
-        documents_count: docIds.size,
-        amount: fromCents(amount),
-      }))
-      .sort((a, b) => b.amount - a.amount),
     ...(vendusSelfConsumption !== undefined
       ? { vendus_selfconsumption: vendusSelfConsumption }
       : {}),
@@ -216,9 +183,9 @@ export function buildMonthlySummaryResponse(
         gross_total: u.gross_total,
       })),
       price_map: {
-        version: priceMap.version,
-        tolerance: priceMap.tolerance,
-        mapped_products_count: priceMap.products.length,
+        version: priceMapConfig.version,
+        tolerance: priceMapConfig.tolerance,
+        mapped_products_count: getCatalogSize(),
       },
     },
   };

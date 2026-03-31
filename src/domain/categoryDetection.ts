@@ -1,15 +1,15 @@
 import type { Category } from "./types.js";
-import { findInPriceMap } from "./priceMap.js";
+import { getCategoryFromCatalog } from "./priceMap.js";
 import { normalize } from "../utils/normalize.js";
 
 /**
  * Categoria:
- * 1) se existir category no mapping, usa
- * 2) fallback por heurística do title (mantém seu comportamento atual)
+ * 1) se o produto estiver no catálogo Vendus, usa o mapeamento de category_id
+ * 2) fallback por heurística do title
  */
 export function detectCategoryFromMapOrTitle(item: any): Category {
-  const pm = findInPriceMap(item);
-  if (pm?.category) return pm.category;
+  const fromCatalog = getCategoryFromCatalog(item);
+  if (fromCatalog) return fromCatalog;
 
   const t = normalize(item?.title || "");
 

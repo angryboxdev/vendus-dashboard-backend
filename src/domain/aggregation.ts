@@ -65,6 +65,5 @@ export function createProductAgg(
       delivery: { qty: 0, gross_total: 0, net_total: 0 },
       unknown: { qty: 0, gross_total: 0, net_total: 0 },
     },
-    payment_methods: [],
   };
 }

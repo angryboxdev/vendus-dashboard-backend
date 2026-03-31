@@ -2,7 +2,6 @@ import type {
   Category,
   Channel,
   MonthlySummaryResponse,
-  PaymentMethodEntry,
   VendusDetailedDocument,
   VendusDocument,
   VendusSelfConsumptionSummary,
@@ -27,6 +26,7 @@ import {
   type BuildResponseParams,
 } from "./monthlySummary/monthlySummaryResponseBuilder.js";
 import { fetchSelfConsumptionSummarySafe } from "./selfconsumptionService.js";
+import { loadProductCatalog } from "../infra/vendusProductsCatalog.js";
 
 export type MonthlySummaryParams = {
   since: string;
@@ -61,6 +61,7 @@ export class MonthlySummaryBuilder {
   }
 
   async build(): Promise<MonthlySummaryResponse> {
+    await loadProductCatalog();
     await this.fetchAndFilterDocuments();
     this.vendusSelfConsumption = await fetchSelfConsumptionSummarySafe({
       date_start: this.params.since,
@@ -121,14 +122,11 @@ export class MonthlySummaryBuilder {
 
     this.accumulateDocTotals(doc, docGross, docNet);
     this.accumulateTaxBreakdown(doc);
-    this.accumulateTopLevelPaymentMethods(doc);
 
-    const paymentMethods = this.getDocPaymentMethods(doc);
     const items = Array.isArray(doc?.items) ? doc.items : [];
-
     for (const item of items) {
       if (isFreeItem(doc, item)) continue;
-      this.processItem(doc, item, paymentMethods);
+      this.processItem(doc, item);
     }
   }
 
@@ -155,35 +153,9 @@ export class MonthlySummaryBuilder {
     }
   }
 
-  private accumulateTopLevelPaymentMethods(doc: VendusDetailedDocument): void {
-    if (!Array.isArray(doc?.payments)) return;
-    for (const payment of doc.payments) {
-      const method = String(payment?.title ?? "Outros").trim() || "Outros";
-      const amount = toCents(payment?.amount);
-      let entry = this.state.paymentMethodMap.get(method);
-      if (!entry) {
-        entry = { amount: 0, docIds: new Set() };
-        this.state.paymentMethodMap.set(method, entry);
-      }
-      entry.amount += amount;
-      entry.docIds.add(doc.id);
-    }
-  }
-
-  private getDocPaymentMethods(
-    doc: VendusDetailedDocument
-  ): Array<{ method: string; amount: number }> {
-    if (!Array.isArray(doc?.payments)) return [];
-    return doc.payments.map((p) => ({
-      method: String(p?.title ?? "Outros").trim() || "Outros",
-      amount: toCents(p?.amount),
-    }));
-  }
-
   private processItem(
     doc: VendusDetailedDocument,
-    item: VendusDetailedDocument["items"][number],
-    paymentMethods: Array<{ method: string; amount: number }>
+    item: VendusDetailedDocument["items"][number]
   ): void {
     const quantity = Number(item?.qty || 0);
     const title = String(item?.title ?? "");
@@ -208,50 +180,16 @@ export class MonthlySummaryBuilder {
     }
 
     const channel = detectChannel(doc);
-    this.maybePushUnknownItem(
-      doc,
-      item,
-      channel,
-      title,
-      reference,
-      quantity,
-      grossTotal
-    );
+    this.maybePushUnknownItem(doc, item, channel, title, reference, quantity, grossTotal);
     this.accumulateChannelTotals(channel, grossTotal, netTotal, quantity);
-      this.state.totals.units_count += quantity;
-      this.state.totals.items_count += 1;
+    this.state.totals.units_count += quantity;
+    this.state.totals.items_count += 1;
 
     const category = detectCategoryFromMapOrTitle(item);
-    this.accumulateCategoryTotals(
-      channel,
-      category,
-      grossTotal,
-      netTotal,
-      quantity
-    );
-    this.accumulatePaymentMethodsByChannelAndCategory(
-      channel,
-      category,
-      paymentMethods,
-      grossTotal
-    );
+    this.accumulateCategoryTotals(channel, category, grossTotal, netTotal, quantity);
 
-    const productAgg = this.getOrCreateProductAgg(
-      reference,
-      title,
-      category,
-      taxRate
-    );
-    this.updateProductAgg(
-      doc,
-      productAgg,
-      channel,
-      category,
-      paymentMethods,
-      grossTotal,
-      netTotal,
-      quantity
-    );
+    const productAgg = this.getOrCreateProductAgg(reference, title, category, taxRate);
+    this.updateProductAgg(productAgg, channel, grossTotal, netTotal, quantity);
   }
 
   private maybePushUnknownItem(
@@ -304,40 +242,6 @@ export class MonthlySummaryBuilder {
     );
   }
 
-  private addToPaymentMap(
-    map: Map<string, number>,
-    method: string,
-    amount: number
-  ): void {
-    map.set(method, (map.get(method) ?? 0) + amount);
-  }
-
-  private accumulatePaymentMethodsByChannelAndCategory(
-    channel: Channel,
-    category: Category,
-    paymentMethods: Array<{ method: string; amount: number }>,
-    grossTotal: number
-  ): void {
-    if (paymentMethods.length !== 1) return;
-    const pm = paymentMethods[0];
-    const method = pm?.method ?? "";
-    this.addToPaymentMap(
-      this.state.byChannel[channel].paymentMethodsMap,
-      method,
-      grossTotal
-    );
-    this.addToPaymentMap(
-      this.state.byChannel[channel].byCategory[category].paymentMethodsMap,
-      method,
-      grossTotal
-    );
-    this.addToPaymentMap(
-      this.state.byCategoryOverallPaymentMaps.get(category)!,
-      method,
-      grossTotal
-    );
-  }
-
   private getOrCreateProductAgg(
     reference: string,
     title: string,
@@ -352,33 +256,13 @@ export class MonthlySummaryBuilder {
     return p;
   }
 
-  private addPaymentMethodAmount(
-    entries: PaymentMethodEntry[],
-    method: string,
-    amount: number
-  ): void {
-    const e = entries.find((x) => x.method === method);
-    if (e) e.amount += amount;
-    else entries.push({ method, amount });
-  }
-
   private updateProductAgg(
-    doc: VendusDetailedDocument,
     p: ReturnType<typeof createProductAgg>,
     channel: Channel,
-    category: Category,
-    paymentMethods: Array<{ method: string; amount: number }>,
     grossTotal: number,
     netTotal: number,
     quantity: number
   ): void {
-    if (paymentMethods.length === 1) {
-      this.addPaymentMethodAmount(
-        p.payment_methods,
-        paymentMethods[0]?.method ?? "",
-        grossTotal
-      );
-    }
     p.qty += quantity;
     p.amounts.gross_total += grossTotal;
     p.amounts.net_total += netTotal;
@@ -387,7 +271,7 @@ export class MonthlySummaryBuilder {
     p.channels[channel].gross_total += grossTotal;
     p.channels[channel].net_total += netTotal;
 
-    const list = this.state.byChannel[channel].byCategory[category].products;
+    const list = this.state.byChannel[channel].byCategory[p.category].products;
     if (!list.some((x) => x.reference === p.reference)) list.push(p);
 
     p.amounts.avg_gross_unit =

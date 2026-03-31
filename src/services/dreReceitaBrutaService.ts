@@ -23,18 +23,6 @@ function getMonthBounds(
   return { since, until };
 }
 
-/** Mapeamento: método de pagamento Vendus → section DRE (dinheiro | tpa | apps) */
-const PAYMENT_METHOD_SECTION: Record<string, DRE_CategoriaReceitaBruta> = {
-  Dinheiro: "dinheiro",
-  Multibanco: "tpa",
-  "Transferência Bancária": "apps",
-};
-const DEFAULT_SECTION: DRE_CategoriaReceitaBruta = "apps";
-
-function sectionForPaymentMethod(method: string): DRE_CategoriaReceitaBruta {
-  return PAYMENT_METHOD_SECTION[method] ?? DEFAULT_SECTION;
-}
-
 /** Label por categoria de produto para a descrição do item */
 const CATEGORY_LABELS: Record<Category, string> = {
   pizza: "Pizzas",
@@ -71,8 +59,9 @@ function toItem(
 }
 
 /**
- * Receita bruta a partir do Vendus (by_category_overall + payment_methods).
- * Sem persistência; não há create/update/delete.
+ * Receita bruta a partir do Vendus (by_channel).
+ * Restaurant → dinheiro (0% taxa), Delivery → apps (30% taxa).
+ * TPA deixou de existir: tudo é registado como dinheiro no POS.
  */
 export async function getReceitaBruta(
   year: number,
@@ -89,35 +78,21 @@ export async function getReceitaBruta(
     fetchAllDocuments,
   });
 
-  const byCategory = response.by_category_overall;
   const dinheiro: ReceitaBrutaItem[] = [];
   const tpa: ReceitaBrutaItem[] = [];
   const apps: ReceitaBrutaItem[] = [];
 
   for (const category of CATEGORIES_ORDER) {
-    const entry = byCategory[category];
-    if (!entry?.payment_methods?.length) continue;
+    const restaurantGross =
+      response.by_channel.restaurant.byCategory[category]?.totals?.gross ?? 0;
+    const deliveryGross =
+      response.by_channel.delivery.byCategory[category]?.totals?.gross ?? 0;
 
-    const amountsBySection: Record<DRE_CategoriaReceitaBruta, number> = {
-      dinheiro: 0,
-      tpa: 0,
-      apps: 0,
-    };
-
-    for (const pm of entry.payment_methods) {
-      const section = sectionForPaymentMethod(pm.method ?? "");
-      const amount = Number(pm.amount) || 0;
-      amountsBySection[section] += amount;
+    if (restaurantGross > 0) {
+      dinheiro.push(toItem(category, "dinheiro", restaurantGross));
     }
-
-    if (amountsBySection.dinheiro > 0) {
-      dinheiro.push(toItem(category, "dinheiro", amountsBySection.dinheiro));
-    }
-    if (amountsBySection.tpa > 0) {
-      tpa.push(toItem(category, "tpa", amountsBySection.tpa));
-    }
-    if (amountsBySection.apps > 0) {
-      apps.push(toItem(category, "apps", amountsBySection.apps));
+    if (deliveryGross > 0) {
+      apps.push(toItem(category, "apps", deliveryGross));
     }
   }
 

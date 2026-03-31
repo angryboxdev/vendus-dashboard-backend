@@ -37,7 +37,7 @@ export type VendusDetailedDocument = {
   discounts: { total: string };
   payments: Array<{
     id: number;
-    title: "Transferência Bancária" | "Dinheiro" | "Multibanco";
+    title: string;
     amount: string;
   }>;
   client: { name: string; fiscal_id: string };
@@ -80,23 +80,6 @@ export type Category =
   | "sacos"
   | "outros";
 
-export type PriceMapProduct = {
-  key: string;
-  match: { by: "reference" | "title"; value: string };
-  title?: string;
-  category?: Category;
-  prices: {
-    restaurant: number | number[] | null;
-    delivery: number | number[] | null;
-  };
-};
-
-export type PriceMap = {
-  version: number;
-  currency: "EUR";
-  tolerance: number;
-  products: PriceMapProduct[];
-};
 
 export type AggTotals = {
   gross: number;
@@ -105,17 +88,6 @@ export type AggTotals = {
   units_count: number;
   documents_count: number;
   items_count: number;
-};
-
-/** Payment method breakdown entry (amount per method) */
-export type PaymentMethodEntry = {
-  method: string;
-  amount: number;
-};
-
-/** Top-level payment method with document count */
-export type PaymentMethodSummary = PaymentMethodEntry & {
-  documents_count: number;
 };
 
 export type ProductAgg = {
@@ -136,7 +108,6 @@ export type ProductAgg = {
     delivery: { qty: number; gross_total: number; net_total: number };
     unknown: { qty: number; gross_total: number; net_total: number };
   };
-  payment_methods: PaymentMethodEntry[];
 };
 
 export type ChannelReport = {
@@ -146,10 +117,8 @@ export type ChannelReport = {
     {
       totals: AggTotals;
       products: ProductAgg[];
-      payment_methods: PaymentMethodEntry[];
     }
   >;
-  payment_methods: PaymentMethodEntry[];
 };
 
 export type Debug = {
@@ -234,16 +203,10 @@ export type MonthlySummaryResponse = {
       totals: AggTotals;
       notes: string;
       by_category: ChannelReport["byCategory"];
-      payment_methods: PaymentMethodEntry[];
     };
   };
-  by_category_overall: Record<
-    Category,
-    { totals: AggTotals; payment_methods: PaymentMethodEntry[] }
-  >;
+  by_category_overall: Record<Category, { totals: AggTotals }>;
   products_overall: ProductAgg[];
-  /** Breakdown by payment method (e.g. "Transferência Bancária") for the period */
-  payment_methods: PaymentMethodSummary[];
   /** Autoconsumo interno (Vendus API selfconsumption) no mesmo período `since`/`until`. */
   vendus_selfconsumption?: VendusSelfConsumptionSummary;
   debug: Debug;
