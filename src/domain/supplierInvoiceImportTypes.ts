@@ -90,8 +90,10 @@ export type ConfirmSupplierInvoiceImportBody = {
     line_id: string;
     stock_item_id?: string | null;
     ignored?: boolean;
-    /** Quantidade em unidades de stock (pode diferir da fatura por conversão de embalagem). */
+    /** Quantidade em unidades de stock definida pelo utilizador. */
     quantity?: number;
+    /** Unidade de stock (ex.: "g", "ml", "un"). Guardada no mapping para próximas faturas. */
+    stock_unit?: string | null;
     /** Preço unitário com IVA (gross). Se fornecido, sobrepõe o valor extraído. */
     unit_price?: number;
     /** Taxa de IVA em percentagem (ex.: 23 para 23%). Se fornecido, sobrepõe o valor extraído. */

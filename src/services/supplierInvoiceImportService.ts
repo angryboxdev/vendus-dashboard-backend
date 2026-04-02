@@ -132,18 +132,19 @@ async function findMappedStockItem(
   supabase: NonNullable<ReturnType<typeof getSupabase>>,
   supplierNormalized: string,
   descriptionNormalized: string
-): Promise<{ id: string; quantity_per_invoice_unit: number } | null> {
+): Promise<{ id: string; stock_quantity: number | null; stock_unit: string | null } | null> {
   const { data, error } = await supabase
     .from("supplier_article_mappings")
-    .select("stock_item_id, quantity_per_invoice_unit")
+    .select("stock_item_id, stock_quantity, stock_unit")
     .eq("supplier_normalized", supplierNormalized)
     .contains("supplier_article_description_normalized", [descriptionNormalized])
     .maybeSingle();
   if (error || !data) return null;
-  const row = data as { stock_item_id: string; quantity_per_invoice_unit: number };
+  const row = data as { stock_item_id: string; stock_quantity: number | null; stock_unit: string | null };
   return {
     id: row.stock_item_id,
-    quantity_per_invoice_unit: Number(row.quantity_per_invoice_unit) || 1,
+    stock_quantity: row.stock_quantity != null ? Number(row.stock_quantity) : null,
+    stock_unit: row.stock_unit ?? null,
   };
 }
 
@@ -153,19 +154,21 @@ async function upsertSupplierArticleMappings(
   lines: Array<{
     supplier_article_code: string | null;
     description: string;
+    /** Unidade conforme vem na fatura (ex.: "KG"). */
+    unit: string | null;
     stock_item_id: string | null;
+    /** Quantidade em unidades de stock (o que o utilizador definiu). */
     quantity: number;
+    /** Quantidade original na fatura (antes de qualquer conversão). */
     original_invoice_quantity: number;
+    /** Unidade de stock definida pelo utilizador (ex.: "g"). */
+    stock_unit?: string | null;
   }>
 ): Promise<void> {
   const eligible = lines.filter((l) => l.description && l.stock_item_id);
   if (!eligible.length) return;
 
   for (const l of eligible) {
-    const factor =
-      l.original_invoice_quantity > 0
-        ? Math.round((l.quantity / l.original_invoice_quantity) * 10000) / 10000
-        : 1;
     const descNorm = normalizeKeyPart(l.description);
 
     const { data: existing } = await supabase
@@ -175,6 +178,15 @@ async function upsertSupplierArticleMappings(
       .eq("stock_item_id", l.stock_item_id!)
       .maybeSingle();
 
+    const mappingData = {
+      supplier_article_code: l.supplier_article_code ?? null,
+      supplier_article_description: l.description,
+      invoice_quantity: l.original_invoice_quantity,
+      invoice_unit: l.unit ?? null,
+      stock_quantity: l.quantity,
+      stock_unit: l.stock_unit ?? null,
+    };
+
     if (existing) {
       const row = existing as { id: string; supplier_article_description_normalized: string[] };
       const descs: string[] = row.supplier_article_description_normalized ?? [];
@@ -182,10 +194,8 @@ async function upsertSupplierArticleMappings(
       await supabase
         .from("supplier_article_mappings")
         .update({
+          ...mappingData,
           supplier_article_description_normalized: updatedDescs,
-          supplier_article_code: l.supplier_article_code ?? null,
-          supplier_article_description: l.description,
-          quantity_per_invoice_unit: factor,
           updated_at: new Date().toISOString(),
         })
         .eq("id", row.id);
@@ -193,12 +203,9 @@ async function upsertSupplierArticleMappings(
       await supabase
         .from("supplier_article_mappings")
         .insert({
+          ...mappingData,
           supplier_normalized: supplierNormalized,
-          supplier_article_code: l.supplier_article_code ?? null,
-          supplier_article_description: l.description,
           supplier_article_description_normalized: [descNorm],
-          stock_item_id: l.stock_item_id!,
-          quantity_per_invoice_unit: factor,
         });
     }
   }
@@ -296,16 +303,17 @@ export async function createSupplierInvoiceImport(options: {
           stockItemId = mapped.id;
           lineStatus = "matched";
           confidence = 1;
-          if (mapped.quantity_per_invoice_unit !== 1) {
-            const f = mapped.quantity_per_invoice_unit;
-            quantity = Math.round(line.quantity * f * 1000) / 1000;
-            // Divide unit prices so they reflect cost-per-stock-unit, not cost-per-invoice-unit.
-            // Line totals are unchanged (total paid doesn't change).
+          // Direct mapping: use the stored stock quantity and unit directly.
+          // Unit prices are recalculated proportionally so cost-per-stock-unit is correct.
+          if (mapped.stock_quantity != null && mapped.stock_quantity !== rawInvoiceQuantity) {
+            const f = rawInvoiceQuantity > 0 ? mapped.stock_quantity / rawInvoiceQuantity : 1;
+            quantity = mapped.stock_quantity;
             if (line.unit_price_gross != null)
               line.unit_price_gross = Math.round((line.unit_price_gross / f) * 10000) / 10000;
             if (line.unit_price_net != null)
               line.unit_price_net = Math.round((line.unit_price_net / f) * 10000) / 10000;
           }
+          if (mapped.stock_unit != null) line.unit = mapped.stock_unit;
         }
       }
 
@@ -588,12 +596,24 @@ export async function confirmSupplierInvoiceImport(
   // invoice quantity (e.g. user changes 1 PC → 10 un ⇒ factor = 10).
   const supplierNormForMapping = fresh.supplier_name ? normalizeKeyPart(fresh.supplier_name) : null;
   if (supplierNormForMapping) {
+    // Build a lookup for stock_unit overrides provided by the user in this confirmation
+    const stockUnitByLineId = new Map(
+      (body.lines ?? [])
+        .filter((adj) => adj.stock_unit !== undefined)
+        .map((adj) => [adj.line_id, adj.stock_unit ?? null])
+    );
+
     await upsertSupplierArticleMappings(
       supabase,
       supplierNormForMapping,
       activeLines.map((l) => ({
-        ...l,
+        supplier_article_code: l.supplier_article_code,
+        description: l.description,
+        unit: l.unit,
+        stock_item_id: l.stock_item_id,
+        quantity: l.quantity,
         original_invoice_quantity: rawInvoiceQtyById.get(l.id) ?? l.raw_invoice_quantity,
+        stock_unit: stockUnitByLineId.has(l.id) ? (stockUnitByLineId.get(l.id) ?? null) : l.unit,
       }))
     );
   }
