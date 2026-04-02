@@ -3,6 +3,7 @@ import type {
   ConfirmSupplierInvoiceImportBody,
   ConfirmSupplierInvoiceImportResult,
   SupplierInvoiceImportSummaryDto,
+  UpdateSupplierInvoiceImportBody,
 } from "../domain/supplierInvoiceImportTypes.js";
 import {
   invoiceImportMovementReference,
@@ -408,6 +409,73 @@ async function deleteMovementsForImport(
     .eq("created_by", SUPPLIER_INVOICE_IMPORT_CREATED_BY)
     .eq("reference", ref);
   if (error) throw new Error(`Remover movimentos anteriores: ${error.message}`);
+}
+
+export async function updateSupplierInvoiceImport(
+  importId: string,
+  body: UpdateSupplierInvoiceImportBody
+): Promise<SupplierInvoiceImportSummaryDto> {
+  const supabase = requireSupabase();
+  const imp = await getSupplierInvoiceImport(importId);
+  if (imp.status !== "ready_for_review") {
+    throw new Error(
+      `Importação não pode ser editada (estado: ${imp.status})`
+    );
+  }
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+  if ("supplier_name" in body) {
+    const v = body.supplier_name ?? null;
+    updates.supplier_name = v;
+    updates.supplier_normalized = v ? normalizeKeyPart(v) : null;
+  }
+  if ("invoice_number" in body) updates.invoice_number = body.invoice_number ?? null;
+  if ("invoice_date" in body) {
+    const d = body.invoice_date ?? null;
+    if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      throw new Error("invoice_date deve estar no formato YYYY-MM-DD");
+    }
+    updates.invoice_date = d;
+  }
+  if ("currency" in body && body.currency) updates.currency = body.currency;
+  if ("subtotal" in body) updates.subtotal = body.subtotal ?? null;
+  if ("tax_total" in body) updates.tax_total = body.tax_total ?? null;
+  if ("total" in body) updates.total = body.total ?? null;
+
+  // Recalculate business_key and duplicate detection if identity fields changed
+  const supplierName = ("supplier_name" in body ? (body.supplier_name ?? null) : imp.supplier_name);
+  const invoiceNumber = ("invoice_number" in body ? (body.invoice_number ?? null) : imp.invoice_number);
+  const invoiceDate = ("invoice_date" in body ? (body.invoice_date ?? null) : imp.invoice_date);
+  const bk = businessKey(supplierName, invoiceNumber, invoiceDate);
+  updates.business_key = bk;
+
+  let duplicateWarning = false;
+  let duplicateOfId: string | null = null;
+  if (bk) {
+    const { data: dup } = await supabase
+      .from("supplier_invoice_imports")
+      .select("id")
+      .eq("business_key", bk)
+      .eq("status", "confirmed")
+      .neq("id", importId)
+      .limit(1)
+      .maybeSingle();
+    if (dup) {
+      duplicateWarning = true;
+      duplicateOfId = (dup as { id: string }).id;
+    }
+  }
+  updates.duplicate_warning = duplicateWarning;
+  updates.duplicate_of_import_id = duplicateOfId;
+
+  const { error } = await supabase
+    .from("supplier_invoice_imports")
+    .update(updates)
+    .eq("id", importId);
+  if (error) throw new Error(`Atualizar cabeçalho: ${error.message}`);
+
+  return getSupplierInvoiceImport(importId);
 }
 
 export async function confirmSupplierInvoiceImport(

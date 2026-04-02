@@ -60,6 +60,17 @@ export type SupplierInvoiceImportSummaryDto = {
   confirmed_at: string | null;
 };
 
+export type UpdateSupplierInvoiceImportBody = {
+  supplier_name?: string | null;
+  invoice_number?: string | null;
+  /** Formato YYYY-MM-DD. */
+  invoice_date?: string | null;
+  currency?: string;
+  subtotal?: number | null;
+  tax_total?: number | null;
+  total?: number | null;
+};
+
 export type ConfirmSupplierInvoiceImportBody = {
   /** Se true, substitui movimentos de import(s) anterior(es) com a mesma chave de negócio. */
   override_duplicate?: boolean;
