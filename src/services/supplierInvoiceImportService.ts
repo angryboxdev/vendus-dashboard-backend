@@ -53,13 +53,15 @@ function sanitizeFileName(name: string): string {
 }
 
 function mapLineRow(r: Record<string, unknown>): SupplierInvoiceImportSummaryDto["lines"][0] {
+  const qty = Number(r.quantity);
   return {
     id: String(r.id),
     line_index: Number(r.line_index),
     description: String(r.description),
     supplier_article_code:
       r.supplier_article_code != null ? String(r.supplier_article_code) : null,
-    quantity: Number(r.quantity),
+    quantity: qty,
+    raw_invoice_quantity: r.raw_invoice_quantity != null ? Number(r.raw_invoice_quantity) : qty,
     unit: r.unit != null ? String(r.unit) : null,
     unit_price_net: r.unit_price_net != null ? Number(r.unit_price_net) : null,
     unit_price_gross: r.unit_price_gross != null ? Number(r.unit_price_gross) : null,
@@ -284,6 +286,7 @@ export async function createSupplierInvoiceImport(options: {
       let lineStatus: "matched" | "needs_review" | "ignored" = "needs_review";
       let confidence: number | null = null;
       // May differ from line.quantity when a unit conversion factor is stored
+      const rawInvoiceQuantity = line.quantity; // always the quantity as-is on the invoice
       let quantity = line.quantity;
 
       // 1. Look up persisted supplier→stock mapping by normalized description
@@ -321,6 +324,7 @@ export async function createSupplierInvoiceImport(options: {
         description: line.description,
         supplier_article_code: line.supplier_article_code ?? null,
         quantity,
+        raw_invoice_quantity: rawInvoiceQuantity,
         unit: line.unit ?? null,
         unit_price_net: line.unit_price_net ?? null,
         unit_price_gross: line.unit_price_gross ?? null,
@@ -496,9 +500,13 @@ export async function confirmSupplierInvoiceImport(
     );
   }
 
-  // Capture invoice quantities BEFORE user adjustments so we can compute the
-  // conversion factor (confirmed_qty / invoice_qty) when saving the mapping.
-  const originalQtyById = new Map(imp.lines.map((l) => [l.id, l.quantity]));
+  // raw_invoice_quantity: quantity as it appears on the invoice (before factor conversion).
+  // Used to compute quantity_per_invoice_unit = confirmed_stock_qty / raw_invoice_qty,
+  // preventing the factor from being reset to 1 on subsequent imports.
+  const rawInvoiceQtyById = new Map(imp.lines.map((l) => [l.id, l.raw_invoice_quantity]));
+  // stored quantity: already-converted stock quantity stored in the line.
+  // Used for price auto-divide and line-total recomputation.
+  const storedQtyById = new Map(imp.lines.map((l) => [l.id, l.quantity]));
 
   if (body.lines?.length) {
     for (const adj of body.lines) {
@@ -527,9 +535,9 @@ export async function confirmSupplierInvoiceImport(
       } else {
         // No explicit price override — if the user changed quantity (pack conversion),
         // auto-divide the extracted unit prices so they reflect cost-per-stock-unit.
-        const origQty = originalQtyById.get(adj.line_id);
-        if (adj.quantity != null && origQty != null && origQty > 0 && adj.quantity !== origQty) {
-          const factor = adj.quantity / origQty;
+        const prevQty = storedQtyById.get(adj.line_id);
+        if (adj.quantity != null && prevQty != null && prevQty > 0 && adj.quantity !== prevQty) {
+          const factor = adj.quantity / prevQty;
           const origLine = imp.lines.find((l) => l.id === adj.line_id);
           if (origLine?.unit_price_gross != null) {
             updates.unit_price_gross = Math.round((origLine.unit_price_gross / factor) * 10000) / 10000;
@@ -541,7 +549,7 @@ export async function confirmSupplierInvoiceImport(
       }
 
       // Recompute line totals when we have price + quantity
-      const qty = adj.quantity ?? originalQtyById.get(adj.line_id);
+      const qty = adj.quantity ?? storedQtyById.get(adj.line_id);
       if (grossU != null && qty != null && qty > 0) {
         updates.line_total_gross = Math.round(grossU * qty * 100) / 100;
         if (vatRate != null) {
@@ -585,7 +593,7 @@ export async function confirmSupplierInvoiceImport(
       supplierNormForMapping,
       activeLines.map((l) => ({
         ...l,
-        original_invoice_quantity: originalQtyById.get(l.id) ?? l.quantity,
+        original_invoice_quantity: rawInvoiceQtyById.get(l.id) ?? l.raw_invoice_quantity,
       }))
     );
   }

@@ -21,7 +21,13 @@ export type SupplierInvoiceImportLineDto = {
   description: string;
   /** Código de artigo na fatura do fornecedor (ex.: 019000). */
   supplier_article_code: string | null;
+  /** Quantidade convertida para unidades de stock (após aplicar o factor do mapping). */
   quantity: number;
+  /**
+   * Quantidade tal como consta na fatura (antes do factor de conversão).
+   * Igual a `quantity` quando não há mapping com factor != 1.
+   */
+  raw_invoice_quantity: number;
   unit: string | null;
   unit_price_net: number | null;
   unit_price_gross: number | null;
