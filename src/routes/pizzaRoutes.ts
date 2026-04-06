@@ -334,8 +334,10 @@ pizzaRoutes.post("/pizzas/:pizzaId/recipes/:recipeId/items", async (req, res) =>
       return;
     }
     const body = req.body as Omit<PizzaRecipeItemCreateBody, "recipe_id">;
-    if (!body?.stock_item_id) {
-      res.status(400).json({ error: "stock_item_id é obrigatório" });
+    const hasStock = !!body?.stock_item_id;
+    const hasPrep = !!body?.preparation_id;
+    if (hasStock === hasPrep) {
+      res.status(400).json({ error: "Forneça exatamente um de stock_item_id ou preparation_id" });
       return;
     }
     if (!body?.size || !validatePizzaSize(body.size)) {

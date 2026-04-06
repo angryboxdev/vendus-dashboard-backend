@@ -10,7 +10,8 @@ import { validatePizzaSize } from "./pizzaPriceService.js";
 type Row = {
   id: string;
   recipe_id: string;
-  stock_item_id: string;
+  stock_item_id: string | null;
+  preparation_id: string | null;
   size: string;
   quantity: number;
   waste_factor: number | null;
@@ -22,7 +23,8 @@ function rowToItem(row: Row): PizzaRecipeItem {
   const r: PizzaRecipeItem = {
     id: row.id,
     recipe_id: row.recipe_id,
-    stock_item_id: row.stock_item_id,
+    stock_item_id: row.stock_item_id ?? null,
+    preparation_id: row.preparation_id ?? null,
     size: row.size as PizzaSize,
     quantity: Number(row.quantity),
     waste_factor: row.waste_factor != null ? Number(row.waste_factor) : null,
@@ -41,13 +43,15 @@ function requireSupabase(): NonNullable<ReturnType<typeof getSupabase>> {
   return supabase;
 }
 
+const SELECT_COLS = "id, recipe_id, stock_item_id, preparation_id, size, quantity, waste_factor, is_optional, created_at";
+
 export async function listPizzaRecipeItems(recipeId: string): Promise<PizzaRecipeItem[]> {
   if (!isSupabaseConfigured()) return [];
   const supabase = getSupabase();
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("pizza_recipe_items")
-    .select("id, recipe_id, stock_item_id, size, quantity, waste_factor, is_optional, created_at")
+    .select(SELECT_COLS)
     .eq("recipe_id", recipeId)
     .order("size", { ascending: true })
     .order("created_at", { ascending: true });
@@ -59,7 +63,7 @@ export async function getPizzaRecipeItem(id: string): Promise<PizzaRecipeItem | 
   const supabase = requireSupabase();
   const { data, error } = await supabase
     .from("pizza_recipe_items")
-    .select("id, recipe_id, stock_item_id, size, quantity, waste_factor, is_optional, created_at")
+    .select(SELECT_COLS)
     .eq("id", id)
     .single();
   if (error || !data) return null;
@@ -69,22 +73,30 @@ export async function getPizzaRecipeItem(id: string): Promise<PizzaRecipeItem | 
 export async function createPizzaRecipeItem(body: PizzaRecipeItemCreateBody): Promise<PizzaRecipeItem> {
   const supabase = requireSupabase();
   if (!body.recipe_id) throw new Error("recipe_id é obrigatório");
-  if (!body.stock_item_id) throw new Error("stock_item_id é obrigatório");
   if (!validatePizzaSize(body.size)) throw new Error(`size inválido: ${body.size}`);
   const quantity = Number(body.quantity);
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error("quantity deve ser positivo");
-  const payload = {
+
+  const hasStock = !!body.stock_item_id;
+  const hasPrep = !!body.preparation_id;
+  if (hasStock === hasPrep) {
+    throw new Error("Exatamente um de stock_item_id ou preparation_id deve ser fornecido");
+  }
+
+  const payload: Record<string, unknown> = {
     recipe_id: body.recipe_id,
-    stock_item_id: body.stock_item_id,
     size: body.size,
     quantity,
     waste_factor: body.waste_factor != null ? Number(body.waste_factor) : null,
     is_optional: body.is_optional === true,
+    stock_item_id: body.stock_item_id ?? null,
+    preparation_id: body.preparation_id ?? null,
   };
+
   const { data, error } = await supabase
     .from("pizza_recipe_items")
     .insert(payload)
-    .select("id, recipe_id, stock_item_id, size, quantity, waste_factor, is_optional, created_at")
+    .select(SELECT_COLS)
     .single();
   if (error) throw new Error(`Criar item receita: ${error.message}`);
   return rowToItem(data as Row);
@@ -109,7 +121,7 @@ export async function updatePizzaRecipeItem(id: string, body: PizzaRecipeItemUpd
     .from("pizza_recipe_items")
     .update(updates)
     .eq("id", id)
-    .select("id, recipe_id, stock_item_id, size, quantity, waste_factor, is_optional, created_at")
+    .select(SELECT_COLS)
     .single();
   if (error) throw new Error(`Atualizar item receita: ${error.message}`);
   if (!data) throw new Error("Item não encontrado");

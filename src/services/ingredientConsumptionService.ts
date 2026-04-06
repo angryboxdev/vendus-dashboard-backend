@@ -10,6 +10,7 @@ import type { VendusSelfConsumptionSummary } from "../domain/types.js";
 import { getAllConsumptionMappingsMap } from "./vendusMappingService.js";
 import { listPizzaRecipeItems } from "./pizzaRecipeItemService.js";
 import { listPizzaRecipes } from "./pizzaRecipeService.js";
+import { getPreparationWithItems } from "./preparationService.js";
 import { DateTime } from "luxon";
 import {
   lisbonDayEndUtcIso,
@@ -393,10 +394,28 @@ export async function getIngredientConsumption(
       const itemsForSize = items.filter((i) => i.size === mapping.pizza_size);
 
       for (const item of itemsForSize) {
-        const qty =
-          (consumptionByStockId.get(item.stock_item_id) ?? 0) +
-          item.quantity * product.qty;
-        consumptionByStockId.set(item.stock_item_id, qty);
+        if (item.stock_item_id) {
+          // Ingrediente direto
+          const qty =
+            (consumptionByStockId.get(item.stock_item_id) ?? 0) +
+            item.quantity * product.qty;
+          consumptionByStockId.set(item.stock_item_id, qty);
+        } else if (item.preparation_id) {
+          const preparation = await getPreparationWithItems(item.preparation_id);
+          if (!preparation) continue;
+          const factor = preparation.use_as_unit
+            ? item.quantity
+            : preparation.yield_qty > 0
+              ? item.quantity / preparation.yield_qty
+              : 0;
+          if (factor === 0) continue;
+          for (const pi of preparation.items) {
+            const qty =
+              (consumptionByStockId.get(pi.stock_item_id) ?? 0) +
+              pi.quantity * factor * product.qty;
+            consumptionByStockId.set(pi.stock_item_id, qty);
+          }
+        }
       }
 
       matchedProducts.push({

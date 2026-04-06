@@ -14,6 +14,7 @@ import {
 } from "./vendusMappingService.js";
 import { listPizzaRecipeItems } from "./pizzaRecipeItemService.js";
 import { listPizzaRecipes } from "./pizzaRecipeService.js";
+import { getPreparationWithItems } from "./preparationService.js";
 
 /** Identifica movimentos criados por este fluxo (filtro para desfazer / relatórios). */
 export const STOCK_ADJUSTMENT_FROM_LINES_CREATED_BY = "stock-adjustment-from-lines";
@@ -115,8 +116,23 @@ export async function computeConsumptionForProductLines(
       const items = await listPizzaRecipeItems(activeRecipe.id);
       const itemsForSize = items.filter((i) => i.size === mapping.pizza_size);
       for (const item of itemsForSize) {
-        const add = (consumptionByStockId.get(item.stock_item_id) ?? 0) + item.quantity * q;
-        consumptionByStockId.set(item.stock_item_id, add);
+        if (item.stock_item_id) {
+          const add = (consumptionByStockId.get(item.stock_item_id) ?? 0) + item.quantity * q;
+          consumptionByStockId.set(item.stock_item_id, add);
+        } else if (item.preparation_id) {
+          const preparation = await getPreparationWithItems(item.preparation_id);
+          if (!preparation) continue;
+          const factor = preparation.use_as_unit
+            ? item.quantity
+            : preparation.yield_qty > 0
+              ? item.quantity / preparation.yield_qty
+              : 0;
+          if (factor === 0) continue;
+          for (const pi of preparation.items) {
+            const add = (consumptionByStockId.get(pi.stock_item_id) ?? 0) + pi.quantity * factor * q;
+            consumptionByStockId.set(pi.stock_item_id, add);
+          }
+        }
       }
     } else {
       const add =
@@ -154,9 +170,23 @@ export async function computeConsumptionForProductLinesLenient(
         const items = await listPizzaRecipeItems(activeRecipe.id);
         const itemsForSize = items.filter((i) => i.size === mapping.pizza_size);
         for (const item of itemsForSize) {
-          const add =
-            (consumptionByStockId.get(item.stock_item_id) ?? 0) + item.quantity * q;
-          consumptionByStockId.set(item.stock_item_id, add);
+          if (item.stock_item_id) {
+            const add = (consumptionByStockId.get(item.stock_item_id) ?? 0) + item.quantity * q;
+            consumptionByStockId.set(item.stock_item_id, add);
+          } else if (item.preparation_id) {
+            const preparation = await getPreparationWithItems(item.preparation_id);
+            if (!preparation) continue;
+            const factor = preparation.use_as_unit
+              ? item.quantity
+              : preparation.yield_qty > 0
+                ? item.quantity / preparation.yield_qty
+                : 0;
+            if (factor === 0) continue;
+            for (const pi of preparation.items) {
+              const add = (consumptionByStockId.get(pi.stock_item_id) ?? 0) + pi.quantity * factor * q;
+              consumptionByStockId.set(pi.stock_item_id, add);
+            }
+          }
         }
       } else {
         const add =

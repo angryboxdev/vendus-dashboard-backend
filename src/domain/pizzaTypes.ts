@@ -36,7 +36,8 @@ export type PizzaRecipe = {
 export type PizzaRecipeItem = {
   id: string;
   recipe_id: string;
-  stock_item_id: string;
+  stock_item_id: string | null;
+  preparation_id: string | null;
   size: PizzaSize;
   quantity: number;
   waste_factor: number | null;
@@ -76,7 +77,9 @@ export type PizzaRecipeUpdateBody = {
 
 export type PizzaRecipeItemCreateBody = {
   recipe_id: string;
-  stock_item_id: string;
+  /** Exatamente um de stock_item_id ou preparation_id deve ser fornecido. */
+  stock_item_id?: string | null;
+  preparation_id?: string | null;
   size: PizzaSize;
   quantity: number;
   waste_factor?: number | null;

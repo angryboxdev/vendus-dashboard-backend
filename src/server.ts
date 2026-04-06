@@ -5,6 +5,7 @@ import { dreRoutes } from "./routes/dreRoutes.js";
 import express from "express";
 import { internalCronRoutes } from "./routes/internalCronRoutes.js";
 import { pizzaRoutes } from "./routes/pizzaRoutes.js";
+import { preparationRoutes } from "./routes/preparationRoutes.js";
 import { reportsRoutes } from "./routes/reportsRoutes.js";
 import { stockRoutes } from "./routes/stockRoutes.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
@@ -34,6 +35,7 @@ app.use("/api", dreRoutes);
 app.use("/api", stockRoutes);
 app.use("/api", supplierInvoiceImportRoutes);
 app.use("/api", pizzaRoutes);
+app.use("/api", preparationRoutes);
 
 if (ENV.CRON_SECRET) {
   app.use("/api", internalCronRoutes);
