@@ -5,6 +5,7 @@ import {
 } from "../utils/lisbonDayInstants.js";
 import { DateTime } from "luxon";
 import { getIngredientConsumption } from "./ingredientConsumptionService.js";
+import { computeConsumablesForDay } from "./consumableConsumptionService.js";
 
 /** Identifica movimentos criados por este job (não misturar com consumos manuais). */
 export const CRON_CONSUMPTION_CREATED_BY = "cron-ingredient-consumption";
@@ -18,13 +19,14 @@ export type DailyConsumptionJobResult = {
   target_date: string;
   dry_run: boolean;
   deleted_rows: number;
-  /** Total de linhas inseridas (vendas + autoconsumo). */
+  /** Total de linhas inseridas (vendas + autoconsumo + consumíveis). */
   movements_inserted: number;
   movements_inserted_sales: number;
   movements_inserted_selfconsumption: number;
+  movements_inserted_consumables: number;
   skipped_zero_consumption: number;
   skipped_zero_selfconsumption: number;
-  /** Soma das quantidades absolutas retiradas (base_unit por item), vendas + autoconsumo. */
+  /** Soma das quantidades absolutas retiradas (base_unit por item), vendas + autoconsumo + consumíveis. */
   total_quantity_removed: number;
 };
 
@@ -113,7 +115,7 @@ export async function runDailyVendusConsumptionJob(options?: {
 
   function toMovementRows(
     entries: Array<{ stock_item_id: string; quantity_consumed: number }>,
-    referencePrefix: "vendus-sales" | "vendus-selfconsumption"
+    referencePrefix: string
   ): ConsumptionRow[] {
     return entries
       .filter((c) => c.quantity_consumed > 0)
@@ -138,7 +140,15 @@ export async function runDailyVendusConsumptionJob(options?: {
     report.consumption_selfconsumption,
     "vendus-selfconsumption"
   );
-  const rows = [...salesRows, ...selfRows];
+
+  // Consumíveis (pratos, caixas, sacos, guardanapos) — calculados por pedido
+  const consumablesMap = await computeConsumablesForDay(target_date);
+  const consumableEntries = Array.from(consumablesMap.entries()).map(
+    ([stock_item_id, quantity_consumed]) => ({ stock_item_id, quantity_consumed })
+  );
+  const consumableRows = toMovementRows(consumableEntries, "vendus-consumables");
+
+  const rows = [...salesRows, ...selfRows, ...consumableRows];
 
   const skipped_zero_consumption = report.consumption.filter(
     (c) => c.quantity_consumed <= 0
@@ -155,6 +165,7 @@ export async function runDailyVendusConsumptionJob(options?: {
 
   const movements_inserted_sales = salesRows.length;
   const movements_inserted_selfconsumption = selfRows.length;
+  const movements_inserted_consumables = consumableRows.length;
 
   if (dryRun) {
     return {
@@ -164,6 +175,7 @@ export async function runDailyVendusConsumptionJob(options?: {
       movements_inserted: rows.length,
       movements_inserted_sales,
       movements_inserted_selfconsumption,
+      movements_inserted_consumables,
       skipped_zero_consumption,
       skipped_zero_selfconsumption,
       total_quantity_removed,
@@ -178,6 +190,7 @@ export async function runDailyVendusConsumptionJob(options?: {
       movements_inserted: 0,
       movements_inserted_sales: 0,
       movements_inserted_selfconsumption: 0,
+      movements_inserted_consumables: 0,
       skipped_zero_consumption,
       skipped_zero_selfconsumption,
       total_quantity_removed: 0,
@@ -199,6 +212,7 @@ export async function runDailyVendusConsumptionJob(options?: {
     movements_inserted: rows.length,
     movements_inserted_sales,
     movements_inserted_selfconsumption,
+    movements_inserted_consumables,
     skipped_zero_consumption,
     skipped_zero_selfconsumption,
     total_quantity_removed,
