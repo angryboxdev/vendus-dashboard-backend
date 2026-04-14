@@ -25,6 +25,8 @@ export const ENV = {
 
   SUPABASE_URL: process.env.SUPABASE_URL ?? "",
   SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY ?? "",
+  /** Service role: necessário para o módulo RH (tabelas com RLS sem policies anon). */
+  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
 
   /** Se true, agenda job de consumo diário no próprio processo do servidor (ver DAILY_CONSUMPTION_CRON_SCHEDULE). */
   ENABLE_DAILY_CONSUMPTION_CRON:
@@ -43,4 +45,10 @@ export const ENV = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
   OPENAI_MODEL_TEXT: process.env.OPENAI_MODEL_TEXT ?? "gpt-4o-mini",
   OPENAI_MODEL_VISION: process.env.OPENAI_MODEL_VISION ?? "gpt-4o",
+
+  /**
+   * Segredo HMAC para o kiosk de ponto (QR diário + hash do PIN).
+   * Se vazio, os endpoints de kiosk retornam 503.
+   */
+  HR_KIOSK_HMAC_SECRET: process.env.HR_KIOSK_HMAC_SECRET ?? "",
 };

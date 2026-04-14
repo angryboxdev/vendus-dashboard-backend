@@ -8,6 +8,8 @@ import { pizzaRoutes } from "./routes/pizzaRoutes.js";
 import { preparationRoutes } from "./routes/preparationRoutes.js";
 import { reportsRoutes } from "./routes/reportsRoutes.js";
 import { stockRoutes } from "./routes/stockRoutes.js";
+import { hrRoutes } from "./routes/hrRoutes.js";
+import { hrKioskRoutes } from "./routes/hrKioskRoutes.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
 import { runDailyVendusConsumptionJob } from "./services/dailyVendusConsumptionJobService.js";
 
@@ -36,6 +38,8 @@ app.use("/api", stockRoutes);
 app.use("/api", supplierInvoiceImportRoutes);
 app.use("/api", pizzaRoutes);
 app.use("/api", preparationRoutes);
+app.use("/api/hr", hrRoutes);
+app.use("/api/hr", hrKioskRoutes);
 
 if (ENV.CRON_SECRET) {
   app.use("/api", internalCronRoutes);
