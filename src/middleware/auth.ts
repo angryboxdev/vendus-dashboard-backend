@@ -3,10 +3,17 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { ENV } from "../config/env.js";
 import { getSupabaseServiceRole } from "../infra/supabaseClient.js";
 
-// Supabase JWKS — suporta tanto HS256 (legacy) como ES256 (ECC P-256)
-const JWKS = createRemoteJWKSet(
-  new URL(`${ENV.SUPABASE_URL}/auth/v1/.well-known/jwks.json`),
-);
+// Supabase JWKS — lazy para não crashar se SUPABASE_URL não estiver definido
+let _jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+function getJWKS() {
+  if (!_jwks) {
+    if (!ENV.SUPABASE_URL) throw new Error("SUPABASE_URL não está definido");
+    _jwks = createRemoteJWKSet(
+      new URL(`${ENV.SUPABASE_URL}/auth/v1/.well-known/jwks.json`),
+    );
+  }
+  return _jwks;
+}
 
 export type AppRole = "admin" | "manager" | "hr_viewer";
 
@@ -48,7 +55,7 @@ async function extractAuth(req: Request): Promise<AuthPayload | null> {
   if (!header?.startsWith("Bearer ")) return null;
   const token = header.slice(7);
   try {
-    const { payload } = await jwtVerify(token, JWKS);
+    const { payload } = await jwtVerify(token, getJWKS());
     const sub = payload.sub as string;
     const email = payload["email"] as string;
 
