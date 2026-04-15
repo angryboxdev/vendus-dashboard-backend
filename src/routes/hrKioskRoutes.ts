@@ -5,13 +5,15 @@ import {
   kioskScanBodySchema,
   setKioskPinBodySchema,
 } from "../domain/hrTypes.js";
-import { setKioskPin } from "../services/hrEmployeeService.js";
+import { getEmployee, setKioskPin } from "../services/hrEmployeeService.js";
+import { requireAuth, requireMinRole } from "../middleware/auth.js";
 import {
   KioskError,
   getTodayKioskToken,
   kioskScan,
 } from "../services/hrKioskService.js";
 import { hashPin } from "../utils/kiosk.js";
+import { logAudit } from "../services/hrAuditService.js";
 
 export const hrKioskRoutes = Router();
 
@@ -88,6 +90,14 @@ hrKioskRoutes.post("/kiosk/scan", async (req: Request, res: Response) => {
     }
     const result = await kioskScan(parsed.data);
     res.json(result);
+    void logAudit({
+      entityType: "attendance",
+      entityId: result.employee.id,
+      action: result.action === "check_in" ? "kiosk_checkin" : "kiosk_checkout",
+      description: `${result.action === "check_in" ? "Entrada" : "Saída"} via kiosk registada às ${result.time} (${result.employee.fullName})`,
+      employeeId: result.employee.id,
+      payloadAfter: { action: result.action, time: result.time, shift: result.shift },
+    });
   } catch (e: unknown) {
     if (e instanceof KioskError) {
       jsonError(res, e.status, e.message);
@@ -103,6 +113,8 @@ hrKioskRoutes.post("/kiosk/scan", async (req: Request, res: Response) => {
 
 hrKioskRoutes.patch(
   "/employees/:id/kiosk-pin",
+  requireAuth,
+  requireMinRole("admin"),
   async (req: Request, res: Response) => {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -119,9 +131,15 @@ hrKioskRoutes.patch(
         jsonError(res, 503, "Kiosk não configurado no servidor");
         return;
       }
+      const existingEmployee = await getEmployee(id);
       const pinHash = hashPin(ENV.HR_KIOSK_HMAC_SECRET, parsed.data.pin);
       const updated = await setKioskPin(id, pinHash);
       res.json(updated);
+      void logAudit({
+        entityType: "employee", entityId: id, action: "pin_set",
+        description: `PIN de kiosk de "${updated.fullName}" ${existingEmployee?.hasKioskPin ? "atualizado" : "definido"}`,
+        employeeId: id,
+      });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Erro ao definir PIN";
       const status = message.includes("não encontrado")

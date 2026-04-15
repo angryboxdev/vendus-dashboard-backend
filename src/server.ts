@@ -10,8 +10,11 @@ import { reportsRoutes } from "./routes/reportsRoutes.js";
 import { stockRoutes } from "./routes/stockRoutes.js";
 import { hrRoutes } from "./routes/hrRoutes.js";
 import { hrKioskRoutes } from "./routes/hrKioskRoutes.js";
+import { hrAuditRoutes } from "./routes/hrAuditRoutes.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
 import { runDailyVendusConsumptionJob } from "./services/dailyVendusConsumptionJobService.js";
+import { populateAuth, requireAuth, requireMinRole } from "./middleware/auth.js";
+import { authRoutes } from "./routes/authRoutes.js";
 
 const app = express();
 
@@ -31,15 +34,32 @@ app.use(express.json());
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
-app.use("/api", documentsRoutes);
-app.use("/api", reportsRoutes);
-app.use("/api", dreRoutes);
-app.use("/api", stockRoutes);
-app.use("/api", supplierInvoiceImportRoutes);
-app.use("/api", pizzaRoutes);
-app.use("/api", preparationRoutes);
-app.use("/api/hr", hrRoutes);
+// populateAuth runs for ALL routes (populates req.auth from Bearer token if present)
+app.use(populateAuth);
+
+// Kiosk routes registered BEFORE global requireAuth:
+// GET /kiosk/daily-token and POST /kiosk/scan are public
+// PATCH /employees/:id/kiosk-pin has inline requireAuth inside the handler
 app.use("/api/hr", hrKioskRoutes);
+
+// All routes below this line require authentication
+app.use(requireAuth);
+
+// Admin-only: user management
+app.use("/api/auth", requireMinRole("admin"), authRoutes);
+
+// Manager+: financial, stock, documents, reports, pizza, preparations
+app.use("/api", requireMinRole("manager"), documentsRoutes);
+app.use("/api", requireMinRole("manager"), reportsRoutes);
+app.use("/api", requireMinRole("manager"), dreRoutes);
+app.use("/api", requireMinRole("manager"), stockRoutes);
+app.use("/api", requireMinRole("manager"), supplierInvoiceImportRoutes);
+app.use("/api", requireMinRole("manager"), pizzaRoutes);
+app.use("/api", requireMinRole("manager"), preparationRoutes);
+
+// HR routes: GETs allow hr_viewer; write handlers have inline requireMinRole("manager")
+app.use("/api/hr", hrRoutes);
+app.use("/api/hr", hrAuditRoutes);
 
 if (ENV.CRON_SECRET) {
   app.use("/api", internalCronRoutes);

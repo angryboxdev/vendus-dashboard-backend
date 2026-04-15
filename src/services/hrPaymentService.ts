@@ -82,6 +82,18 @@ export async function listPaymentsForEmployee(
   return ((data ?? []) as Row[]).map(rowToPayment);
 }
 
+export async function getPaymentById(id: string): Promise<HrEmployeePayment | null> {
+  const supabase = requireHr();
+  const { data, error } = await supabase
+    .from("hr_employee_payments")
+    .select("id, employee_id, payment_date, amount, payment_type, notes, created_at, updated_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(`RH pagamento: ${error.message}`);
+  if (!data) return null;
+  return rowToPayment(data as Row);
+}
+
 export async function createPayment(
   employeeId: string,
   body: PaymentCreateBody,

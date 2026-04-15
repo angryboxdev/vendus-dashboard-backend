@@ -51,4 +51,7 @@ export const ENV = {
    * Se vazio, os endpoints de kiosk retornam 503.
    */
   HR_KIOSK_HMAC_SECRET: process.env.HR_KIOSK_HMAC_SECRET ?? "",
+
+  /** JWT secret legado (HS256). Já não obrigatório — verificação usa JWKS. */
+  SUPABASE_JWT_SECRET: process.env.SUPABASE_JWT_SECRET ?? "",
 };
