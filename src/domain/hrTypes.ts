@@ -45,13 +45,13 @@ export type HrEmployee = {
   updatedAt: string;
 };
 
-/** Conferência planeado vs realizado (sem linha na BD = pendente no UI). */
+/** Conferência planeado vs realizado (sem linha na BD = pendente no UI).
+ *  Ausências (férias, baixa, faltas justificadas/injustificadas) são
+ *  geridas exclusivamente via hr_leave_requests. */
 export type ShiftAttendanceStatus =
   | "worked_as_planned"
   | "late"
   | "left_early"
-  | "absent_justified"
-  | "absent_unjustified"
   | "cancelled";
 
 export type RegistrationSource = "dashboard" | "employee_qr" | "import";
@@ -63,7 +63,6 @@ export type HrShiftAttendance = {
   actualStartTime: string | null;
   actualEndTime: string | null;
   lateMinutes: number | null;
-  absenceReason: string | null;
   notes: string | null;
   registrationSource: RegistrationSource;
   registeredByEmployeeId: string | null;
@@ -232,14 +231,11 @@ export const shiftAttendanceUpsertBodySchema = z
       "worked_as_planned",
       "late",
       "left_early",
-      "absent_justified",
-      "absent_unjustified",
       "cancelled",
     ]),
     actualStartTime: timeHmSchema.optional().nullable(),
     actualEndTime: timeHmSchema.optional().nullable(),
     lateMinutes: z.number().int().min(0).optional().nullable(),
-    absenceReason: z.string().optional().nullable(),
     notes: z.string().optional().nullable(),
     registrationSource: z
       .enum(["dashboard", "employee_qr", "import"])
@@ -269,17 +265,6 @@ export const shiftAttendanceUpsertBodySchema = z
           "actualStartTime deve ser anterior a actualEndTime (mesmo dia civil)",
         path: ["actualEndTime"],
       });
-    }
-    if (body.status === "absent_justified") {
-      const reason = body.absenceReason?.trim() ?? "";
-      if (reason.length < 1) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message:
-            "absenceReason é obrigatório quando status é absent_justified",
-          path: ["absenceReason"],
-        });
-      }
     }
   });
 

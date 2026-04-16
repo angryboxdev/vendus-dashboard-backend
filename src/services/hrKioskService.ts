@@ -121,7 +121,6 @@ export async function kioskScan(body: KioskScanBody): Promise<KioskScanResult> {
         actual_start_time: normalizeTimeForPg(currentHm),
         actual_end_time: null,
         late_minutes: lateMinutes > 0 ? lateMinutes : null,
-        absence_reason: null,
         notes: null,
         registration_source: "employee_qr",
         registered_by_employee_id: employee.id,

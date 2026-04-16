@@ -14,7 +14,6 @@ type AttendanceRow = {
   actual_start_time: string | null;
   actual_end_time: string | null;
   late_minutes: number | null;
-  absence_reason: string | null;
   notes: string | null;
   registration_source: string;
   registered_by_employee_id: string | null;
@@ -36,7 +35,6 @@ function rowToAttendance(row: AttendanceRow): HrShiftAttendance {
       ? formatHrTimeForApi(row.actual_end_time)
       : null,
     lateMinutes: row.late_minutes,
-    absenceReason: row.absence_reason,
     notes: row.notes,
     registrationSource:
       src === "employee_qr" || src === "import" ? src : "dashboard",
@@ -60,7 +58,7 @@ function requireHr() {
 }
 
 const attendanceSelect =
-  "id, work_shift_id, status, actual_start_time, actual_end_time, late_minutes, absence_reason, notes, registration_source, registered_by_employee_id, registered_at, updated_at";
+  "id, work_shift_id, status, actual_start_time, actual_end_time, late_minutes, notes, registration_source, registered_by_employee_id, registered_at, updated_at";
 
 /** Carrega conferências para vários turnos (uma query). */
 export async function getAttendanceByShiftIds(
@@ -137,8 +135,6 @@ export async function upsertShiftAttendance(
         ? normalizeTimeForPg(body.actualEndTime)
         : null,
     late_minutes: body.lateMinutes ?? null,
-    absence_reason:
-      body.absenceReason != null ? body.absenceReason.trim() || null : null,
     notes: body.notes != null ? body.notes.trim() || null : null,
     registration_source: body.registrationSource ?? "dashboard",
     registered_by_employee_id: body.registeredByEmployeeId ?? null,

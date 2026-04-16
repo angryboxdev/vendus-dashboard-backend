@@ -11,6 +11,7 @@ import { stockRoutes } from "./routes/stockRoutes.js";
 import { hrRoutes } from "./routes/hrRoutes.js";
 import { hrKioskRoutes } from "./routes/hrKioskRoutes.js";
 import { hrAuditRoutes } from "./routes/hrAuditRoutes.js";
+import { hrLeaveRoutes } from "./routes/hrLeaveRoutes.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
 import { runDailyVendusConsumptionJob } from "./services/dailyVendusConsumptionJobService.js";
 import { populateAuth, requireAuth, requireMinRole } from "./middleware/auth.js";
@@ -60,6 +61,7 @@ app.use("/api", requireMinRole("manager"), preparationRoutes);
 // HR routes: GETs allow hr_viewer; write handlers have inline requireMinRole("manager")
 app.use("/api/hr", hrRoutes);
 app.use("/api/hr", hrAuditRoutes);
+app.use("/api/hr", hrLeaveRoutes);
 
 if (ENV.CRON_SECRET) {
   app.use("/api", internalCronRoutes);
