@@ -26,6 +26,23 @@ const CONSUMABLE_IDS = {
   GUARDANAPO_ZIGZAG:   "47483e1f-216f-4bdc-bc93-5c850e19a8fe",
 } as const;
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
+export type ConsumableDebugRow = {
+  doc_number: string;
+  doc_id: number;
+  channel: "restaurant" | "delivery" | "unknown";
+  small: number;
+  large: number;
+  prato: number;
+  caixa_l: number;
+  caixa_s: number;
+  sacola: number;
+  guardanapo: number;
+  /** "autoconsumo" para registos de autoconsumo */
+  source: "fs" | "autoconsumo";
+};
+
 // ── Internal helpers ────────────────────────────────────────────────────────
 
 type Totals = {
@@ -54,31 +71,56 @@ function countPizzaSizes(items: VendusDetailedDocument["items"]): { small: numbe
   return { small, large };
 }
 
-/** Fórmulas restaurante: pratos + guardanapo zigzag. */
-function applyRestaurantFormulas(small: number, large: number, t: Totals): void {
-  t.prato += large + Math.ceil(small / 2);
-  t.guardanapo_zigzag += large * 4 + small * 2;
+/** Fórmulas restaurante: pratos + guardanapo zigzag. Devolve os deltas aplicados. */
+function applyRestaurantFormulas(
+  small: number,
+  large: number,
+  t: Totals,
+): { prato: number; guardanapo: number } {
+  const prato = large + Math.ceil(small / 2);
+  const guardanapo = large * 4 + small * 2;
+  t.prato += prato;
+  t.guardanapo_zigzag += guardanapo;
+  return { prato, guardanapo };
 }
 
-/** Fórmulas delivery: caixas + sacos + guardanapo delivery. */
-function applyDeliveryFormulas(small: number, large: number, t: Totals): void {
+/** Fórmulas delivery: caixas + sacos + guardanapo delivery. Devolve os deltas aplicados. */
+function applyDeliveryFormulas(
+  small: number,
+  large: number,
+  t: Totals,
+): { caixa_l: number; caixa_s: number; sacola: number; guardanapo: number } {
   const caixa_l = large + Math.floor(small / 2);
   const caixa_s = small % 2;
   const sacola = caixa_l > 0 ? Math.ceil(caixa_l / 2) : (caixa_s > 0 ? 1 : 0);
+  const guardanapo = large * 4 + small * 2;
   t.caixa_l += caixa_l;
   t.caixa_s += caixa_s;
   t.sacola += sacola;
-  t.guardanapo_delivery += large * 4 + small * 2;
+  t.guardanapo_delivery += guardanapo;
+  return { caixa_l, caixa_s, sacola, guardanapo };
 }
 
 // ── Main export ─────────────────────────────────────────────────────────────
 
+export type ComputeConsumablesResult = {
+  map: Map<string, number>;
+  totals: Totals;
+  /** Só preenchido quando `debug: true`. */
+  debug_rows?: ConsumableDebugRow[];
+};
+
 /**
  * Calcula consumíveis para um dia civil (YYYY-MM-DD).
- * Devolve Map<stock_item_id, quantidade> com totais > 0 apenas.
+ * Com `debug: true` devolve também uma linha por documento com o canal e quantidades calculadas.
  */
-export async function computeConsumablesForDay(date: string): Promise<Map<string, number>> {
+export async function computeConsumablesForDay(
+  date: string,
+  options?: { debug?: boolean },
+): Promise<ComputeConsumablesResult> {
   const totals = emptyTotals();
+  const debugRows: ConsumableDebugRow[] = [];
+  const wantDebug = options?.debug === true;
 
   // ── 1. Documentos de venda (FS) ──────────────────────────────────────────
   const { documents } = await fetchAllDocuments(date, date, "FS,NC", ENV.PER_PAGE_DEFAULT);
@@ -104,19 +146,67 @@ export async function computeConsumablesForDay(date: string): Promise<Map<string
 
   for (const doc of detailedDocs) {
     const { small, large } = countPizzaSizes(doc.items ?? []);
-    if (small === 0 && large === 0) continue;
-
     const channel = detectChannel(doc);
+
+    if (small === 0 && large === 0) {
+      if (wantDebug) {
+        debugRows.push({
+          doc_number: doc.number,
+          doc_id: doc.id,
+          channel,
+          small: 0,
+          large: 0,
+          prato: 0,
+          caixa_l: 0,
+          caixa_s: 0,
+          sacola: 0,
+          guardanapo: 0,
+          source: "fs",
+        });
+      }
+      continue;
+    }
+
     if (channel === "restaurant") {
-      applyRestaurantFormulas(small, large, totals);
+      const delta = applyRestaurantFormulas(small, large, totals);
+      if (wantDebug) {
+        debugRows.push({
+          doc_number: doc.number,
+          doc_id: doc.id,
+          channel,
+          small,
+          large,
+          prato: delta.prato,
+          caixa_l: 0,
+          caixa_s: 0,
+          sacola: 0,
+          guardanapo: delta.guardanapo,
+          source: "fs",
+        });
+      }
     } else {
-      // "delivery" ou "unknown" → delivery (mesmo comportamento do detectChannel)
-      applyDeliveryFormulas(small, large, totals);
+      const delta = applyDeliveryFormulas(small, large, totals);
+      if (wantDebug) {
+        debugRows.push({
+          doc_number: doc.number,
+          doc_id: doc.id,
+          channel,
+          small,
+          large,
+          prato: 0,
+          caixa_l: delta.caixa_l,
+          caixa_s: delta.caixa_s,
+          sacola: delta.sacola,
+          guardanapo: delta.guardanapo,
+          source: "fs",
+        });
+      }
     }
   }
 
   // ── 2. Autoconsumo → restaurante ─────────────────────────────────────────
   const vsc = await fetchSelfConsumptionSummarySafe({ date_start: date, date_end: date });
+  let scIndex = 0;
   for (const record of vsc.records) {
     if (!record || typeof record !== "object") continue;
     const products = (record as Record<string, unknown>).products;
@@ -134,10 +224,27 @@ export async function computeConsumablesForDay(date: string): Promise<Map<string
       else if (title.includes("(grande)")) large += qty;
     }
     if (small === 0 && large === 0) continue;
-    applyRestaurantFormulas(small, large, totals);
+
+    const delta = applyRestaurantFormulas(small, large, totals);
+    if (wantDebug) {
+      debugRows.push({
+        doc_number: `autoconsumo-${scIndex}`,
+        doc_id: -1,
+        channel: "restaurant",
+        small,
+        large,
+        prato: delta.prato,
+        caixa_l: 0,
+        caixa_s: 0,
+        sacola: 0,
+        guardanapo: delta.guardanapo,
+        source: "autoconsumo",
+      });
+    }
+    scIndex++;
   }
 
-  // ── 3. Resultado (omite zeros) ───────────────────────────────────────────
+  // ── 3. Resultado ─────────────────────────────────────────────────────────
   const map = new Map<string, number>();
   if (totals.prato > 0)               map.set(CONSUMABLE_IDS.PRATO, totals.prato);
   if (totals.caixa_l > 0)             map.set(CONSUMABLE_IDS.CAIXA_L, totals.caixa_l);
@@ -145,5 +252,10 @@ export async function computeConsumablesForDay(date: string): Promise<Map<string
   if (totals.sacola > 0)              map.set(CONSUMABLE_IDS.SACOLA, totals.sacola);
   if (totals.guardanapo_delivery > 0) map.set(CONSUMABLE_IDS.GUARDANAPO_DELIVERY, totals.guardanapo_delivery);
   if (totals.guardanapo_zigzag > 0)   map.set(CONSUMABLE_IDS.GUARDANAPO_ZIGZAG, totals.guardanapo_zigzag);
-  return map;
+
+  return {
+    map,
+    totals,
+    ...(wantDebug ? { debug_rows: debugRows } : {}),
+  };
 }

@@ -5,7 +5,10 @@ import {
 } from "../utils/lisbonDayInstants.js";
 import { DateTime } from "luxon";
 import { getIngredientConsumption } from "./ingredientConsumptionService.js";
-import { computeConsumablesForDay } from "./consumableConsumptionService.js";
+import {
+  computeConsumablesForDay,
+  type ConsumableDebugRow,
+} from "./consumableConsumptionService.js";
 
 /** Identifica movimentos criados por este job (não misturar com consumos manuais). */
 export const CRON_CONSUMPTION_CREATED_BY = "cron-ingredient-consumption";
@@ -28,6 +31,8 @@ export type DailyConsumptionJobResult = {
   skipped_zero_selfconsumption: number;
   /** Soma das quantidades absolutas retiradas (base_unit por item), vendas + autoconsumo + consumíveis. */
   total_quantity_removed: number;
+  /** Só presente quando `debug: true`. Detalhe por documento dos consumíveis calculados. */
+  consumables_debug?: ConsumableDebugRow[];
 };
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -66,8 +71,11 @@ export async function runDailyVendusConsumptionJob(options?: {
   /** Omite = ontem em Lisboa. */
   targetDate?: string;
   dryRun?: boolean;
+  /** Inclui detalhe por documento dos consumíveis no resultado. Implica dry_run. */
+  debug?: boolean;
 }): Promise<DailyConsumptionJobResult> {
-  const dryRun = options?.dryRun === true;
+  const debug = options?.debug === true;
+  const dryRun = options?.dryRun === true || debug;
   const target_date =
     options?.targetDate?.trim() || getYesterdayLisbonYmd();
   assertValidTargetDate(target_date);
@@ -142,8 +150,8 @@ export async function runDailyVendusConsumptionJob(options?: {
   );
 
   // Consumíveis (pratos, caixas, sacos, guardanapos) — calculados por pedido
-  const consumablesMap = await computeConsumablesForDay(target_date);
-  const consumableEntries = Array.from(consumablesMap.entries()).map(
+  const consumablesResult = await computeConsumablesForDay(target_date, { debug });
+  const consumableEntries = Array.from(consumablesResult.map.entries()).map(
     ([stock_item_id, quantity_consumed]) => ({ stock_item_id, quantity_consumed })
   );
   const consumableRows = toMovementRows(consumableEntries, "vendus-consumables");
@@ -179,6 +187,7 @@ export async function runDailyVendusConsumptionJob(options?: {
       skipped_zero_consumption,
       skipped_zero_selfconsumption,
       total_quantity_removed,
+      ...(debug ? { consumables_debug: consumablesResult.debug_rows ?? [] } : {}),
     };
   }
 
