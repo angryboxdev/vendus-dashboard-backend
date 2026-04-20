@@ -24,15 +24,6 @@ type Row = {
   updated_at?: string;
 };
 
-type MovementRow = {
-  item_id: string;
-  quantity: number;
-  type: string;
-  unit_cost_per_base_unit_with_vat: number | null;
-  unit_cost_per_base_unit_without_vat: number | null;
-  movement_date: string;
-  created_at: string;
-};
 
 type LastFromMovement = {
   withVat: number | null;
@@ -134,68 +125,34 @@ async function getQuantitiesAndLastPurchaseFromMovements(
   Map<string, { quantity: number; lastFromMovement: LastFromMovement }>
 > {
   if (!itemIds.length) return new Map();
-  const { data: movements, error } = await supabase
-    .from("stock_movements")
-    .select(
-      "item_id, quantity, type, unit_cost_per_base_unit_with_vat, unit_cost_per_base_unit_without_vat, movement_date, created_at"
-    )
-    .in("item_id", itemIds);
-  if (error) throw new Error(`Stock movements: ${error.message}`);
-  const rows = (movements ?? []) as MovementRow[];
-  const byItem = new Map<
-    string,
-    {
-      quantity: number;
-      bestKey: string;
-      lastWith: number | null;
-      lastWithout: number | null;
-    }
-  >();
-  for (const id of itemIds) {
-    byItem.set(id, {
-      quantity: 0,
-      bestKey: "",
-      lastWith: null,
-      lastWithout: null,
-    });
-  }
-  for (const m of rows) {
-    const cur = byItem.get(m.item_id)!;
-    cur.quantity += Number(m.quantity);
-  }
-  for (const m of rows) {
-    if (m.type !== "purchase") continue;
-    const qty = Number(m.quantity);
-    if (qty <= 0) continue;
-    const w =
-      m.unit_cost_per_base_unit_with_vat != null
-        ? Number(m.unit_cost_per_base_unit_with_vat)
-        : null;
-    const wo =
-      m.unit_cost_per_base_unit_without_vat != null
-        ? Number(m.unit_cost_per_base_unit_without_vat)
-        : null;
-    if (
-      (w == null || !Number.isFinite(w)) &&
-      (wo == null || !Number.isFinite(wo))
-    )
-      continue;
-    const cur = byItem.get(m.item_id)!;
-    const key = `${m.movement_date}\t${m.created_at}`;
-    if (key > cur.bestKey) {
-      cur.bestKey = key;
-      cur.lastWith = w != null && Number.isFinite(w) ? w : null;
-      cur.lastWithout = wo != null && Number.isFinite(wo) ? wo : null;
-    }
-  }
+
+  type RpcRow = {
+    item_id: string;
+    total_quantity: number;
+    last_purchase_with_vat: number | null;
+    last_purchase_without_vat: number | null;
+  };
+
+  const { data, error } = await supabase
+    .rpc("get_stock_quantities_with_last_purchase", { p_item_ids: itemIds });
+  if (error) throw new Error(`Stock quantities RPC: ${error.message}`);
+
   const out = new Map<
     string,
     { quantity: number; lastFromMovement: LastFromMovement }
   >();
-  for (const [id, v] of byItem) {
+  for (const id of itemIds) {
     out.set(id, {
-      quantity: v.quantity,
-      lastFromMovement: { withVat: v.lastWith, withoutVat: v.lastWithout },
+      quantity: 0,
+      lastFromMovement: { withVat: null, withoutVat: null },
+    });
+  }
+  for (const row of (data ?? []) as RpcRow[]) {
+    const w = row.last_purchase_with_vat != null ? Number(row.last_purchase_with_vat) : null;
+    const wo = row.last_purchase_without_vat != null ? Number(row.last_purchase_without_vat) : null;
+    out.set(row.item_id, {
+      quantity: Number(row.total_quantity),
+      lastFromMovement: { withVat: w, withoutVat: wo },
     });
   }
   return out;

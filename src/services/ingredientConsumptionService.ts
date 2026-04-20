@@ -112,7 +112,8 @@ async function getStockAdditionsForPeriod(
     .select("item_id, quantity")
     .gt("quantity", 0)
     .gte("movement_date", sinceTs)
-    .lte("movement_date", untilTs);
+    .lte("movement_date", untilTs)
+    .limit(100000);
 
   if (movError || !movements?.length) return entries;
 
@@ -204,7 +205,8 @@ async function getOpeningStockAtPeriodStart(
     .from("stock_movements")
     .select("item_id, quantity")
     .in("item_id", itemIds)
-    .lt("movement_date", sinceTs);
+    .lt("movement_date", sinceTs)
+    .limit(100000);
 
   if (movError) return entries;
 
