@@ -13,10 +13,16 @@ type Row = {
   payment_date: string;
   amount: string | number;
   payment_type: string;
+  salary_period_year: number | null;
+  salary_period_month: number | null;
+  is_paid: boolean;
   notes: string | null;
   created_at: string;
   updated_at: string;
 };
+
+const PAYMENT_SELECT =
+  "id, employee_id, payment_date, amount, payment_type, salary_period_year, salary_period_month, is_paid, notes, created_at, updated_at";
 
 function rowToPayment(row: Row): HrEmployeePayment {
   return {
@@ -25,6 +31,9 @@ function rowToPayment(row: Row): HrEmployeePayment {
     paymentDate: row.payment_date,
     amount: Number(row.amount),
     paymentType: row.payment_type as HrEmployeePayment["paymentType"],
+    salaryPeriodYear: row.salary_period_year,
+    salaryPeriodMonth: row.salary_period_month,
+    isPaid: row.is_paid,
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -56,9 +65,7 @@ export async function listPaymentsForEmployee(
   const supabase = requireHr();
   let q = supabase
     .from("hr_employee_payments")
-    .select(
-      "id, employee_id, payment_date, amount, payment_type, notes, created_at, updated_at",
-    )
+    .select(PAYMENT_SELECT)
     .eq("employee_id", employeeId)
     .order("payment_date", { ascending: false });
 
@@ -68,9 +75,14 @@ export async function listPaymentsForEmployee(
       { zone: REPORT_TIMEZONE },
     ).startOf("day");
     const end = start.endOf("month");
-    q = q
-      .gte("payment_date", start.toISODate()!)
-      .lte("payment_date", end.toISODate()!);
+    const startIso = start.toISODate()!;
+    const endIso = end.toISODate()!;
+    // Rows with a salary period: filter by salary_period_year/month.
+    // Rows without a salary period: filter by payment_date range.
+    q = q.or(
+      `and(salary_period_year.eq.${filters.year},salary_period_month.eq.${filters.month}),` +
+      `and(salary_period_year.is.null,payment_date.gte.${startIso},payment_date.lte.${endIso})`,
+    );
   } else if (filters.from != null && filters.to != null) {
     q = q.gte("payment_date", filters.from).lte("payment_date", filters.to);
   }
@@ -86,7 +98,7 @@ export async function getPaymentById(id: string): Promise<HrEmployeePayment | nu
   const supabase = requireHr();
   const { data, error } = await supabase
     .from("hr_employee_payments")
-    .select("id, employee_id, payment_date, amount, payment_type, notes, created_at, updated_at")
+    .select(PAYMENT_SELECT)
     .eq("id", id)
     .maybeSingle();
   if (error) throw new Error(`RH pagamento: ${error.message}`);
@@ -105,6 +117,9 @@ export async function createPayment(
     payment_date: body.paymentDate,
     amount: body.amount,
     payment_type: body.paymentType,
+    salary_period_year: body.salaryPeriodYear ?? null,
+    salary_period_month: body.salaryPeriodMonth ?? null,
+    is_paid: body.isPaid ?? false,
     notes: body.notes?.trim() || null,
     updated_at: now,
   };
@@ -112,9 +127,7 @@ export async function createPayment(
   const { data, error } = await supabase
     .from("hr_employee_payments")
     .insert(insert)
-    .select(
-      "id, employee_id, payment_date, amount, payment_type, notes, created_at, updated_at",
-    )
+    .select(PAYMENT_SELECT)
     .single();
 
   if (error) {
@@ -135,14 +148,15 @@ export async function updatePayment(
   if (body.amount !== undefined) patch.amount = body.amount;
   if (body.paymentType !== undefined) patch.payment_type = body.paymentType;
   if (body.notes !== undefined) patch.notes = body.notes?.trim() || null;
+  if ("salaryPeriodYear" in body) patch.salary_period_year = body.salaryPeriodYear ?? null;
+  if ("salaryPeriodMonth" in body) patch.salary_period_month = body.salaryPeriodMonth ?? null;
+  if (body.isPaid !== undefined) patch.is_paid = body.isPaid;
 
   const { data, error } = await supabase
     .from("hr_employee_payments")
     .update(patch)
     .eq("id", id)
-    .select(
-      "id, employee_id, payment_date, amount, payment_type, notes, created_at, updated_at",
-    )
+    .select(PAYMENT_SELECT)
     .single();
 
   if (error) {

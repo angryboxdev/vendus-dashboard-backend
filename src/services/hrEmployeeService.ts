@@ -24,13 +24,16 @@ type Row = {
   status: string;
   hired_at: string | null;
   ended_at: string | null;
+  base_salary: string | number | null;
+  salary_type: string;
+  hourly_rate: string | number | null;
   kiosk_pin_hash: string | null;
   created_at: string;
   updated_at: string;
 };
 
 const EMPLOYEE_SELECT =
-  "id, full_name, email, phone, role_or_notes, employment_type, job_role, weekly_schedule, status, hired_at, ended_at, kiosk_pin_hash, created_at, updated_at";
+  "id, full_name, email, phone, role_or_notes, employment_type, job_role, weekly_schedule, status, hired_at, ended_at, base_salary, salary_type, hourly_rate, kiosk_pin_hash, created_at, updated_at";
 
 function weeklyScheduleFromDb(raw: unknown): WeeklySchedule | null {
   if (raw == null) return null;
@@ -61,6 +64,9 @@ function rowToEmployee(row: Row): HrEmployee {
     status: row.status as EmployeeStatus,
     hiredAt: row.hired_at,
     endedAt: row.ended_at,
+    baseSalary: row.base_salary != null ? Number(row.base_salary) : null,
+    salaryType: row.salary_type === "hourly" ? "hourly" : "fixed",
+    hourlyRate: row.hourly_rate != null ? Number(row.hourly_rate) : null,
     hasKioskPin: row.kiosk_pin_hash !== null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -149,6 +155,9 @@ export async function createEmployee(
     status: body.status ?? "active",
     hired_at: body.hiredAt ?? null,
     ended_at: body.endedAt ?? null,
+    base_salary: body.baseSalary ?? null,
+    salary_type: body.salaryType ?? "fixed",
+    hourly_rate: body.hourlyRate ?? null,
     updated_at: now,
   };
 
@@ -198,6 +207,9 @@ export async function updateEmployee(
   if (body.status !== undefined) patch.status = body.status;
   if (body.hiredAt !== undefined) patch.hired_at = body.hiredAt;
   if (body.endedAt !== undefined) patch.ended_at = body.endedAt;
+  if ("baseSalary" in body) patch.base_salary = body.baseSalary ?? null;
+  if (body.salaryType !== undefined) patch.salary_type = body.salaryType;
+  if ("hourlyRate" in body) patch.hourly_rate = body.hourlyRate ?? null;
 
   const { data, error } = await supabase
     .from("hr_employees")

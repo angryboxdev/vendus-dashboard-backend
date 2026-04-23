@@ -3,7 +3,7 @@ import type { WeeklySchedule } from "../domain/hrTypes.js";
 
 // ---------- types ----------
 
-export type LeaveType = "vacation" | "sick_leave" | "justified" | "unjustified";
+export type LeaveType = "vacation" | "sick_leave" | "justified" | "unjustified" | "compensatory";
 
 export interface HrPublicHoliday {
   id: string;

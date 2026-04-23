@@ -26,7 +26,7 @@ function jsonError(res: Response, status: number, msg: string) {
   res.status(status).json({ error: msg });
 }
 
-const leaveTypeSchema = z.enum(["vacation", "sick_leave", "justified", "unjustified"]);
+const leaveTypeSchema = z.enum(["vacation", "sick_leave", "justified", "unjustified", "compensatory"]);
 
 const createLeaveSchema = z.object({
   type: leaveTypeSchema,

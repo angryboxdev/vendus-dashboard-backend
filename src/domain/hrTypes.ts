@@ -39,6 +39,12 @@ export type HrEmployee = {
   status: EmployeeStatus;
   hiredAt: string | null;
   endedAt: string | null;
+  /** Salário base mensal em EUR. Null se não definido. */
+  baseSalary: number | null;
+  /** "fixed" = salário mensal fixo; "hourly" = pago à hora. */
+  salaryType: "fixed" | "hourly";
+  /** Valor por hora em EUR (só usado quando salaryType = "hourly"). */
+  hourlyRate: number | null;
   /** True se o funcionário tem um PIN de kiosk configurado. */
   hasKioskPin: boolean;
   createdAt: string;
@@ -92,6 +98,9 @@ export type HrEmployeePayment = {
   paymentDate: string;
   amount: number;
   paymentType: PaymentType;
+  salaryPeriodYear: number | null;
+  salaryPeriodMonth: number | null;
+  isPaid: boolean;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -199,6 +208,9 @@ export const employeeCreateBodySchema = z.object({
   status: z.enum(["active", "inactive"]).optional(),
   hiredAt: z.string().datetime().optional().nullable(),
   endedAt: z.string().datetime().optional().nullable(),
+  baseSalary: z.number().min(0).optional().nullable(),
+  salaryType: z.enum(["fixed", "hourly"]).optional(),
+  hourlyRate: z.number().min(0).optional().nullable(),
 });
 
 export const employeeUpdateBodySchema = employeeCreateBodySchema.partial();
@@ -311,6 +323,9 @@ export const paymentCreateBodySchema = z.object({
   amount: z.number().finite(),
   paymentType: z.enum(["salary", "bonus", "deduction", "other"]),
   notes: z.string().optional().nullable(),
+  salaryPeriodYear: z.number().int().min(2000).max(2100).optional().nullable(),
+  salaryPeriodMonth: z.number().int().min(1).max(12).optional().nullable(),
+  isPaid: z.boolean().optional(),
 });
 
 export const paymentUpdateBodySchema = paymentCreateBodySchema.partial();
