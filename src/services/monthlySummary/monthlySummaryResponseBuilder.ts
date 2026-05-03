@@ -60,7 +60,7 @@ export function buildMonthlySummaryResponse(
     {} as MonthlySummaryResponse["by_category_overall"];
   for (const category of CATEGORIES_ORDER) {
     const byCategoryOverallTotals = createTotals();
-    for (const channel of ["restaurant", "delivery", "unknown"] as Channel[]) {
+    for (const channel of ["restaurant", "delivery", "take_away", "unknown"] as Channel[]) {
       const ct = state.byChannel[channel].byCategory[category].totals;
       byCategoryOverallTotals.gross += ct.gross;
       byCategoryOverallTotals.net += ct.net;
@@ -94,6 +94,11 @@ export function buildMonthlySummaryResponse(
           ...p.channels.delivery,
           gross_total: fromCents(p.channels.delivery.gross_total),
           net_total: fromCents(p.channels.delivery.net_total),
+        },
+        take_away: {
+          ...p.channels.take_away,
+          gross_total: fromCents(p.channels.take_away.gross_total),
+          net_total: fromCents(p.channels.take_away.net_total),
         },
         unknown: {
           ...p.channels.unknown,

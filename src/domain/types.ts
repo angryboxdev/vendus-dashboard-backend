@@ -106,6 +106,7 @@ export type ProductAgg = {
   channels: {
     restaurant: { qty: number; gross_total: number; net_total: number };
     delivery: { qty: number; gross_total: number; net_total: number };
+    take_away: { qty: number; gross_total: number; net_total: number };
     unknown: { qty: number; gross_total: number; net_total: number };
   };
 };

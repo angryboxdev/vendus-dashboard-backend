@@ -61,6 +61,7 @@ export function createByChannelState(): ByChannelState {
   return {
     restaurant: createChannelSlot(),
     delivery: createChannelSlot(),
+    take_away: createChannelSlot(),
     unknown: createChannelSlot(),
   };
 }

@@ -31,7 +31,7 @@ const CONSUMABLE_IDS = {
 export type ConsumableDebugRow = {
   doc_number: string;
   doc_id: number;
-  channel: "restaurant" | "delivery" | "unknown";
+  channel: "restaurant" | "delivery" | "take_away" | "unknown";
   small: number;
   large: number;
   prato: number;

@@ -63,6 +63,7 @@ export function createProductAgg(
     channels: {
       restaurant: { qty: 0, gross_total: 0, net_total: 0 },
       delivery: { qty: 0, gross_total: 0, net_total: 0 },
+      take_away: { qty: 0, gross_total: 0, net_total: 0 },
       unknown: { qty: 0, gross_total: 0, net_total: 0 },
     },
   };
