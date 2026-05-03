@@ -43,17 +43,48 @@ type Catalog = {
 const TTL_MS = 10 * 60 * 1000; // 10 minutes
 let catalog: Catalog | null = null;
 
+const PRODUCTS_PER_PAGE = 100;
+
+async function fetchAllProducts(): Promise<VendusApiProduct[]> {
+  const all: VendusApiProduct[] = [];
+  let page = 1;
+
+  while (true) {
+    const payload = await vendusGet(
+      `/products/?per_page=${PRODUCTS_PER_PAGE}&page=${page}`
+    );
+
+    let items: VendusApiProduct[];
+    if (Array.isArray(payload)) {
+      items = payload as VendusApiProduct[];
+    } else if (payload && typeof payload === "object") {
+      const p = payload as Record<string, unknown>;
+      items = (Array.isArray(p.data) ? p.data : []) as VendusApiProduct[];
+    } else {
+      break;
+    }
+
+    all.push(...items);
+    if (items.length < PRODUCTS_PER_PAGE) break;
+    page += 1;
+    if (page > 50) break; // fail-safe
+  }
+
+  return all;
+}
+
 export async function loadProductCatalog(): Promise<void> {
   if (catalog && Date.now() - catalog.loadedAt < TTL_MS) return;
 
-  const products = await vendusGet<VendusApiProduct[]>("/products/");
+  const products = await fetchAllProducts();
 
   const byReference = new Map<string, CatalogEntry>();
   const byNormalizedTitle = new Map<string, CatalogEntry>();
 
   for (const p of products) {
-    const restEntry = p.prices.find((pg) => pg.id === REST_GROUP_ID);
-    const delivEntry = p.prices.find((pg) => pg.id === DELIV_GROUP_ID);
+    const prices = Array.isArray(p.prices) ? p.prices : [];
+    const restEntry = prices.find((pg) => Number(pg.id) === REST_GROUP_ID);
+    const delivEntry = prices.find((pg) => Number(pg.id) === DELIV_GROUP_ID);
 
     const entry: CatalogEntry = {
       reference: p.reference,

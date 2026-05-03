@@ -21,16 +21,17 @@ function detectChannelFromItem(item: VendusDocumentItem): Channel {
   return "unknown"; // same price in both channels, or no match
 }
 
-export function detectChannel(document: VendusDetailedDocument): Channel {
-  const items = document.items ?? [];
+function hasTakeAwayPackaging(items: VendusDetailedDocument["items"]): boolean {
+  return items.some((item) =>
+    String(item?.title ?? "").toLowerCase().includes("embalagem")
+  );
+}
 
+function detectChannelByPrice(items: VendusDetailedDocument["items"]): Channel {
   // 1. Pizza items first — almost always present in delivery and always have different prices
   const pizzaItems = items.filter((item) => {
     const info = findProductInfo(item);
     if (!info) return false;
-    // A pizza item has a delivery price distinct from restaurant — use catalog category
-    // but we can't call getCategoryFromCatalog here without import cycle risk.
-    // Instead, rely on the title heuristic: "(Individual)" or "(Grande)"
     const title = String(item?.title ?? "").toLowerCase();
     return title.includes("(individual)") || title.includes("(grande)");
   });
@@ -48,6 +49,17 @@ export function detectChannel(document: VendusDetailedDocument): Channel {
     if (ch !== "unknown") return ch;
   }
 
-  // 3. All items ambiguous (same price in both channels) → delivery
-  return "delivery";
+  return "unknown";
+}
+
+export function detectChannel(document: VendusDetailedDocument): Channel {
+  const items = document.items ?? [];
+  const priceChannel = detectChannelByPrice(items);
+
+  // Restaurant order with delivery packaging → take away
+  if (priceChannel === "restaurant" && hasTakeAwayPackaging(items)) {
+    return "take_away";
+  }
+
+  return priceChannel;
 }

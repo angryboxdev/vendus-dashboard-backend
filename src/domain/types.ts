@@ -1,4 +1,4 @@
-export type Channel = "restaurant" | "delivery" | "unknown";
+export type Channel = "restaurant" | "delivery" | "take_away" | "unknown";
 
 export type VendusDocument = {
   id: number;

@@ -107,14 +107,16 @@ export function asPriceList(
 /** Se gross_unit não vier, tenta inferir por gross_total / qty */
 export function getUnitGross(item: any): number {
   const qty = Number(item?.qty || 0) || 0;
-  const grossUnit = Number(
-    String(item?.amounts?.gross_unit || "0").replace(",", ".")
-  );
+
+  // A API Vendus pode devolver `amounts` como array ou como objeto direto
+  const amounts = Array.isArray(item?.amounts)
+    ? item.amounts[0]
+    : item?.amounts;
+
+  const grossUnit = Number(String(amounts?.gross_unit || "0").replace(",", "."));
   if (grossUnit > 0) return grossUnit;
 
-  const grossTotal = Number(
-    String(item?.amounts?.gross_total || "0").replace(",", ".")
-  );
+  const grossTotal = Number(String(amounts?.gross_total || "0").replace(",", "."));
   if (qty > 0 && grossTotal > 0) return grossTotal / qty;
 
   return 0;
