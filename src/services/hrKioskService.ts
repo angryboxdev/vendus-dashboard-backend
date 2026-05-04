@@ -64,47 +64,59 @@ export async function kioskScan(body: KioskScanBody): Promise<KioskScanResult> {
 
   // 4. Encontrar turno de hoje para este funcionário
   const supabase = requireHr();
-  const { data: shiftData, error: shiftError } = await supabase
+  const { data: shiftsData, error: shiftError } = await supabase
     .from("hr_work_shifts")
     .select("id, start_time, end_time")
     .eq("employee_id", employee.id)
     .eq("work_date", todayYmd)
-    .order("start_time", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .order("start_time", { ascending: true });
 
   if (shiftError) {
     throw new KioskError(`Erro ao obter turno: ${shiftError.message}`, 500);
   }
-  if (!shiftData) {
+  if (!shiftsData || shiftsData.length === 0) {
     throw new KioskError("Não tens turno agendado para hoje", 404);
   }
-
-  const shift = shiftData as { id: string; start_time: string; end_time: string };
-  const shiftId = shift.id;
-  const shiftStartHm = formatHrTimeForApi(shift.start_time);
-  const shiftEndHm = formatHrTimeForApi(shift.end_time);
 
   // 5. Hora actual em Lisboa
   const nowLisbon = DateTime.now().setZone(REPORT_TIMEZONE);
   const currentHm = nowLisbon.toFormat("HH:mm");
 
-  // 6. Verificar conferência existente
-  const { data: attData, error: attError } = await supabase
-    .from("hr_shift_attendance")
-    .select("id, actual_start_time, actual_end_time")
-    .eq("work_shift_id", shiftId)
-    .maybeSingle();
+  // 6. Para cada turno (por ordem), verificar conferência — usar o primeiro incompleto
+  type ShiftRow = { id: string; start_time: string; end_time: string };
+  type AttRow = { id: string; actual_start_time: string | null; actual_end_time: string | null } | null;
 
-  if (attError) {
-    throw new KioskError(`Erro ao verificar conferência: ${attError.message}`, 500);
+  let shift: ShiftRow | null = null;
+  let att: AttRow = null;
+
+  for (const s of shiftsData as ShiftRow[]) {
+    const { data: attData, error: attError } = await supabase
+      .from("hr_shift_attendance")
+      .select("id, actual_start_time, actual_end_time")
+      .eq("work_shift_id", s.id)
+      .maybeSingle();
+
+    if (attError) {
+      throw new KioskError(`Erro ao verificar conferência: ${attError.message}`, 500);
+    }
+
+    const a = attData as AttRow;
+    // Turno sem registo → pronto para check-in
+    // Turno com entrada mas sem saída → pronto para check-out
+    if (!a || (a.actual_start_time && !a.actual_end_time)) {
+      shift = s;
+      att = a;
+      break;
+    }
   }
 
-  const att = attData as {
-    id: string;
-    actual_start_time: string | null;
-    actual_end_time: string | null;
-  } | null;
+  if (!shift) {
+    throw new KioskError("Registo do dia já completo", 409);
+  }
+
+  const shiftId = shift.id;
+  const shiftStartHm = formatHrTimeForApi(shift.start_time);
+  const shiftEndHm = formatHrTimeForApi(shift.end_time);
 
   const nowIso = nowLisbon.toUTC().toISO()!;
 
