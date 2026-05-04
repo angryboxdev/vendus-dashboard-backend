@@ -15,6 +15,9 @@
     "stock:adjust-excluded-sales": "node dist/jobs/runStockAdjustmentFromLines.js",
     "stock:adjust-excluded-sales:dev": "tsx src/jobs/runStockAdjustmentFromLines.ts"
   },
+  "overrides": {
+    "pdfjs-dist": "5.6.205"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
     "cors": "^2.8.6",
@@ -26,6 +29,7 @@
     "node-cron": "^3.0.3",
     "openai": "^6.33.0",
     "pdf-parse": "^2.4.5",
+    "pdf-to-img": "^6.0.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

@@ -4,6 +4,7 @@ import { ENV } from "../config/env.js";
  */
 import OpenAI from "openai";
 import { PDFParse } from "pdf-parse";
+import { pdf as pdfToImg } from "pdf-to-img";
 import { z } from "zod";
 
 function parseLocaleNumber(v: unknown): number | null {
@@ -485,6 +486,50 @@ async function extractFromImageBase64(
   return result;
 }
 
+/** Converte todas as páginas de um PDF digitalizado em PNG base64. */
+async function pdfToPageImages(buffer: Buffer): Promise<string[]> {
+  const pages: string[] = [];
+  for await (const pageBuffer of await pdfToImg(buffer, { scale: 2 })) {
+    pages.push((pageBuffer as Buffer).toString("base64"));
+  }
+  return pages;
+}
+
+/** Processa PDF digitalizado convertendo páginas em imagens e enviando ao vision API. */
+async function extractFromScannedPdf(buffer: Buffer): Promise<InvoiceExtractResult> {
+  const pages = await pdfToPageImages(buffer);
+  if (pages.length === 0) {
+    throw new Error("Não foi possível converter o PDF em imagem. Tenta enviar como JPG/PNG.");
+  }
+
+  const openai = requireOpenAI();
+  const imageContent: OpenAI.Chat.ChatCompletionContentPart[] = pages.map((b64) => ({
+    type: "image_url" as const,
+    image_url: { url: `data:image/png;base64,${b64}`, detail: "high" as const },
+  }));
+  imageContent.push({ type: "text", text: "Extrai os dados desta fatura para o JSON descrito." });
+
+  const completion = await openai.chat.completions.create({
+    model: ENV.OPENAI_MODEL_VISION,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: imageContent },
+    ],
+    temperature: 0.1,
+  });
+
+  const raw = completion.choices[0]?.message?.content;
+  if (!raw) throw new Error("OpenAI não devolveu conteúdo");
+  const result = parseAndNormalizeExtract(raw);
+
+  if (result.lines.length === 0) {
+    throw new Error("Não foi possível extrair linhas do PDF digitalizado. Tenta uma foto mais nítida.");
+  }
+
+  return result;
+}
+
 /** Extrai texto de um PDF (buffer). */
 export async function extractPdfText(buffer: Buffer): Promise<string> {
   const parser = new PDFParse({ data: buffer });
@@ -510,9 +555,8 @@ export async function extractInvoiceWithOpenAI(options: {
   if (lower === "application/pdf" || lower.endsWith("/pdf")) {
     const text = await extractPdfText(buffer);
     if (text.length < 40) {
-      throw new Error(
-        "PDF sem texto legível (possível digitalização). Envia a fatura como imagem (JPG/PNG) ou um PDF com texto selecionável.",
-      );
+      // PDF digitalizado — converte páginas em imagens e processa via vision
+      return extractFromScannedPdf(buffer);
     }
     return extractFromText(text);
   }
