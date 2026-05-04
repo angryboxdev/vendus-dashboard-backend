@@ -99,6 +99,18 @@ export async function getShiftEmployeeId(
   return (data as { employee_id: string }).employee_id;
 }
 
+/** Remove a conferência de um turno (volta ao estado "sem conferência"). */
+export async function deleteShiftAttendance(shiftId: string): Promise<void> {
+  const supabase = requireHr();
+  const { error } = await supabase
+    .from("hr_shift_attendance")
+    .delete()
+    .eq("work_shift_id", shiftId);
+  if (error) {
+    throw new Error(`RH apagar conferência: ${error.message}`);
+  }
+}
+
 /**
  * Cria ou substitui a conferência do turno (corpo completo).
  * `registration_source=employee_qr`: se `registeredByEmployeeId` for enviado, deve coincidir com o funcionário do turno.

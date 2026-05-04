@@ -27,7 +27,7 @@ import {
   listPaymentsForEmployee,
   updatePayment,
 } from "../services/hrPaymentService.js";
-import { upsertShiftAttendance } from "../services/hrShiftAttendanceService.js";
+import { deleteShiftAttendance, upsertShiftAttendance } from "../services/hrShiftAttendanceService.js";
 import {
   createShift,
   deleteShift,
@@ -263,6 +263,29 @@ hrRoutes.patch("/shifts/:id/attendance", requireMinRole("manager"), async (req, 
           ? 400
           : 500;
     res.status(status).json({ error: message });
+  }
+});
+
+hrRoutes.delete("/shifts/:id/attendance", requireMinRole("manager"), async (req, res) => {
+  try {
+    const id = req.params["id"] as string;
+    if (!id) { jsonError(res, 400, "id obrigatório"); return; }
+    const existing = await getWorkShiftById(id);
+    if (!existing) { jsonError(res, 404, "Turno não encontrado"); return; }
+    if (!existing.attendance) { jsonError(res, 404, "Este turno não tem conferência registada"); return; }
+    await deleteShiftAttendance(id);
+    void logAudit({
+      entityType: "attendance", entityId: id,
+      action: "attendance_deleted",
+      description: `Conferência apagada (${existing.workDate})`,
+      employeeId: existing.employeeId,
+      payloadBefore: existing.attendance,
+      payloadAfter: null,
+    });
+    res.json({ ...existing, attendance: null });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Erro ao apagar conferência";
+    res.status(500).json({ error: message });
   }
 });
 
