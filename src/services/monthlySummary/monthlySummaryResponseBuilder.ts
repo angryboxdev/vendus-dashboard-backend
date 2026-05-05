@@ -150,6 +150,7 @@ export function buildMonthlySummaryResponse(
     by_channel: {
       restaurant: buildChannelEntry("restaurant"),
       delivery: buildChannelEntry("delivery"),
+      take_away: buildChannelEntry("take_away"),
       unknown: {
         totals: totalsToEuros(state.byChannel.unknown.totals),
         notes: "itens não mapeados por preço ou preço fora da tolerância",

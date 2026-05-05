@@ -200,6 +200,7 @@ export type MonthlySummaryResponse = {
   by_channel: {
     restaurant: ChannelReport;
     delivery: ChannelReport;
+    take_away: ChannelReport;
     unknown: {
       totals: AggTotals;
       notes: string;
