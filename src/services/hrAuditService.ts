@@ -16,6 +16,7 @@ export type AuditAction =
   | "attendance_registered"
   | "attendance_updated"
   | "attendance_deleted"
+  | "contract_changed"
   | "schedule_updated"
   | "pin_set"
   | "kiosk_checkin"

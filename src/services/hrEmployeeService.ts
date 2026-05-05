@@ -274,6 +274,32 @@ export async function findActiveEmployeeByPinHash(
   return rowToEmployee(data as Row);
 }
 
+export type ExpiringContract = HrEmployee & { daysRemaining: number };
+
+/** Funcionários ativos com contrato a terminar nos próximos `withinDays` dias. */
+export async function listExpiringContracts(
+  withinDays = 30,
+): Promise<ExpiringContract[]> {
+  const supabase = requireHr();
+  const now = new Date();
+  const future = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
+  const { data, error } = await supabase
+    .from("hr_employees")
+    .select(EMPLOYEE_SELECT)
+    .eq("status", "active")
+    .not("ended_at", "is", null)
+    .gte("ended_at", now.toISOString())
+    .lte("ended_at", future.toISOString())
+    .order("ended_at", { ascending: true });
+  if (error) throw new Error(`RH contratos a expirar: ${error.message}`);
+  return ((data ?? []) as Row[]).map((row) => {
+    const emp = rowToEmployee(row);
+    const endMs = new Date(row.ended_at!).getTime();
+    const daysRemaining = Math.ceil((endMs - now.getTime()) / (1000 * 60 * 60 * 24));
+    return { ...emp, daysRemaining };
+  });
+}
+
 /** Soft delete: marca inativo e data de fim. */
 export async function softDeleteEmployee(id: string): Promise<HrEmployee> {
   const existing = await getEmployee(id);

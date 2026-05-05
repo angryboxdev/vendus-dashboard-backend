@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
+import multer from "multer";
 import { requireMinRole } from "../middleware/auth.js";
 import {
   employeeCreateBodySchema,
@@ -17,6 +18,7 @@ import {
   createEmployee,
   getEmployee,
   listEmployees,
+  listExpiringContracts,
   softDeleteEmployee,
   updateEmployee,
 } from "../services/hrEmployeeService.js";
@@ -36,6 +38,13 @@ import {
   updateShift,
 } from "../services/hrShiftService.js";
 import { logAudit } from "../services/hrAuditService.js";
+import {
+  deleteDocument,
+  getDocumentSignedUrl,
+  listDocuments,
+  uploadDocument,
+  type DocumentType,
+} from "../services/hrDocumentService.js";
 
 export const hrRoutes = Router();
 
@@ -96,6 +105,17 @@ hrRoutes.post("/employees", requireMinRole("manager"), async (req, res) => {
   }
 });
 
+hrRoutes.get("/employees/expiring-contracts", requireMinRole("manager"), async (req, res) => {
+  try {
+    const withinDays = req.query["days"] != null ? Number(req.query["days"]) : 30;
+    const list = await listExpiringContracts(Number.isFinite(withinDays) ? withinDays : 30);
+    res.json(list);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Erro ao listar contratos";
+    res.status(500).json({ error: message });
+  }
+});
+
 hrRoutes.get("/employees/:id", async (req, res) => {
   try {
     const id = req.params["id"] as string;
@@ -133,6 +153,16 @@ hrRoutes.patch("/employees/:id", requireMinRole("manager"), async (req, res) => 
     const isStatusChange =
       before !== null && parsed.data.status !== undefined && parsed.data.status !== before.status;
 
+    const contractFields = ["baseSalary", "hourlyRate", "salaryType", "employmentType", "hiredAt", "endedAt", "jobRole"] as const;
+    type ContractSnapshot = { baseSalary: number | null; hourlyRate: number | null; salaryType: string; employmentType: string; hiredAt: string | null; endedAt: string | null; jobRole: string };
+    const toContractSnapshot = (e: typeof updated): ContractSnapshot => ({
+      baseSalary: e.baseSalary, hourlyRate: e.hourlyRate, salaryType: e.salaryType,
+      employmentType: e.employmentType, hiredAt: e.hiredAt, endedAt: e.endedAt, jobRole: e.jobRole,
+    });
+    const contractChanged = before !== null && contractFields.some(
+      (f) => JSON.stringify(before[f]) !== JSON.stringify(updated[f])
+    );
+
     if (isScheduleOnly) {
       void logAudit({
         entityType: "employee", entityId: id, action: "schedule_updated",
@@ -146,6 +176,15 @@ hrRoutes.patch("/employees/:id", requireMinRole("manager"), async (req, res) => 
         employeeId: id, payloadBefore: before, payloadAfter: updated,
       });
     } else {
+      if (contractChanged && before !== null) {
+        void logAudit({
+          entityType: "employee", entityId: id, action: "contract_changed",
+          description: `Dados contratuais de "${updated.fullName}" alterados`,
+          employeeId: id,
+          payloadBefore: toContractSnapshot(before),
+          payloadAfter: toContractSnapshot(updated),
+        });
+      }
       void logAudit({
         entityType: "employee", entityId: id, action: "updated",
         description: `Perfil de "${updated.fullName}" atualizado`,
@@ -453,5 +492,73 @@ hrRoutes.delete("/payments/:id", requireMinRole("manager"), async (req, res) => 
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao eliminar pagamento";
     res.status(500).json({ error: message });
+  }
+});
+
+// ---------- Documents ----------
+
+const docUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+
+const VALID_DOC_TYPES = new Set(["contract", "id_card", "nif", "iban", "other"]);
+
+hrRoutes.get("/employees/:id/documents", requireMinRole("manager"), async (req, res) => {
+  try {
+    const id = req.params["id"] as string;
+    if (!id) { jsonError(res, 400, "id obrigatório"); return; }
+    const docs = await listDocuments(id);
+    res.json(docs);
+  } catch (e: unknown) {
+    res.status(500).json({ error: e instanceof Error ? e.message : "Erro ao listar documentos" });
+  }
+});
+
+hrRoutes.post("/employees/:id/documents", requireMinRole("manager"), docUpload.single("file"), async (req, res) => {
+  try {
+    const id = req.params["id"] as string;
+    if (!id) { jsonError(res, 400, "id obrigatório"); return; }
+    const file = req.file;
+    if (!file?.buffer) { jsonError(res, 400, "Ficheiro em falta (field: file)"); return; }
+    const documentType = req.body?.document_type as string;
+    if (!documentType || !VALID_DOC_TYPES.has(documentType)) {
+      jsonError(res, 400, `document_type inválido. Use: ${[...VALID_DOC_TYPES].join(", ")}`);
+      return;
+    }
+    const doc = await uploadDocument({
+      employeeId: id,
+      documentType: documentType as DocumentType,
+      fileName: file.originalname || "document",
+      buffer: file.buffer,
+      mimeType: file.mimetype || "application/octet-stream",
+    });
+    res.status(201).json(doc);
+  } catch (e: unknown) {
+    res.status(500).json({ error: e instanceof Error ? e.message : "Erro ao fazer upload" });
+  }
+});
+
+hrRoutes.get("/employees/:id/documents/:docId/download-url", requireMinRole("manager"), async (req, res) => {
+  try {
+    const docId = req.params["docId"] as string;
+    if (!docId) { jsonError(res, 400, "docId obrigatório"); return; }
+    // fetch doc to get storagePath
+    const docs = await listDocuments(req.params["id"] as string);
+    const doc = docs.find((d) => d.id === docId);
+    if (!doc) { jsonError(res, 404, "Documento não encontrado"); return; }
+    const url = await getDocumentSignedUrl(doc.storagePath);
+    res.json({ url });
+  } catch (e: unknown) {
+    res.status(500).json({ error: e instanceof Error ? e.message : "Erro ao gerar URL" });
+  }
+});
+
+hrRoutes.delete("/employees/:id/documents/:docId", requireMinRole("manager"), async (req, res) => {
+  try {
+    const docId = req.params["docId"] as string;
+    if (!docId) { jsonError(res, 400, "docId obrigatório"); return; }
+    await deleteDocument(docId);
+    res.status(204).send();
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Erro ao apagar documento";
+    res.status(msg.includes("não encontrado") ? 404 : 500).json({ error: msg });
   }
 });
