@@ -112,15 +112,37 @@ export function buildMonthlySummaryResponse(
   const buildChannelEntry = (channel: Channel) => ({
     totals: totalsToEuros(state.byChannel[channel].totals),
     byCategory: Object.fromEntries(
-      CATEGORIES_ORDER.map((cat) => [
-        cat,
-        {
-          totals: totalsToEuros(
-            state.byChannel[channel].byCategory[cat].totals
-          ),
-          products: state.byChannel[channel].byCategory[cat].products,
-        },
-      ])
+      CATEGORIES_ORDER.map((cat) => {
+        const slot = state.byChannel[channel].byCategory[cat];
+        return [
+          cat,
+          {
+            totals: totalsToEuros(slot.totals),
+            products: slot.products
+              .map((p) => {
+                const ch = p.channels[channel];
+                return {
+                  reference: p.reference,
+                  title: p.title,
+                  category: p.category,
+                  tax_rate: p.tax_rate,
+                  qty: ch.qty,
+                  amounts: {
+                    gross_total: fromCents(ch.gross_total),
+                    net_total: fromCents(ch.net_total),
+                    tax_total: fromCents(ch.gross_total - ch.net_total),
+                    avg_gross_unit:
+                      ch.qty > 0 ? fromCents(ch.gross_total) / ch.qty : 0,
+                    avg_net_unit:
+                      ch.qty > 0 ? fromCents(ch.net_total) / ch.qty : 0,
+                  },
+                };
+              })
+              .filter((p) => p.qty > 0)
+              .sort((a, b) => b.amounts.gross_total - a.amounts.gross_total),
+          },
+        ];
+      })
     ) as MonthlySummaryResponse["by_channel"]["restaurant"]["byCategory"],
   });
 
@@ -155,15 +177,37 @@ export function buildMonthlySummaryResponse(
         totals: totalsToEuros(state.byChannel.unknown.totals),
         notes: "itens não mapeados por preço ou preço fora da tolerância",
         by_category: Object.fromEntries(
-          CATEGORIES_ORDER.map((cat) => [
-            cat,
-            {
-              totals: totalsToEuros(
-                state.byChannel.unknown.byCategory[cat].totals
-              ),
-              products: state.byChannel.unknown.byCategory[cat].products,
-            },
-          ])
+          CATEGORIES_ORDER.map((cat) => {
+            const slot = state.byChannel.unknown.byCategory[cat];
+            return [
+              cat,
+              {
+                totals: totalsToEuros(slot.totals),
+                products: slot.products
+                  .map((p) => {
+                    const ch = p.channels.unknown;
+                    return {
+                      reference: p.reference,
+                      title: p.title,
+                      category: p.category,
+                      tax_rate: p.tax_rate,
+                      qty: ch.qty,
+                      amounts: {
+                        gross_total: fromCents(ch.gross_total),
+                        net_total: fromCents(ch.net_total),
+                        tax_total: fromCents(ch.gross_total - ch.net_total),
+                        avg_gross_unit:
+                          ch.qty > 0 ? fromCents(ch.gross_total) / ch.qty : 0,
+                        avg_net_unit:
+                          ch.qty > 0 ? fromCents(ch.net_total) / ch.qty : 0,
+                      },
+                    };
+                  })
+                  .filter((p) => p.qty > 0)
+                  .sort((a, b) => b.amounts.gross_total - a.amounts.gross_total),
+              },
+            ];
+          })
         ) as MonthlySummaryResponse["by_channel"]["unknown"]["by_category"],
       },
     },
