@@ -42,6 +42,19 @@ function daysInMonthCount(year: number, month: number): number {
   return DateTime.fromObject({ year, month, day: 1 }, { zone: LISBON }).daysInMonth ?? 30;
 }
 
+/** Peso de um dia: 2 para sábado/domingo, 1 para dias de semana. */
+function dayWeight(year: number, month: number, day: number): number {
+  const weekday = DateTime.fromObject({ year, month, day }, { zone: LISBON }).weekday;
+  return weekday >= 6 ? 2 : 1;
+}
+
+/** Soma de pesos dos dias fromDay..toDay (inclusive) de um dado mês. */
+function weightedDays(year: number, month: number, fromDay: number, toDay: number): number {
+  let w = 0;
+  for (let d = fromDay; d <= toDay; d++) w += dayWeight(year, month, d);
+  return w;
+}
+
 function monthFirstLast(year: number, month: number): { from: string; to: string } {
   const start = DateTime.fromObject({ year, month, day: 1 }, { zone: LISBON });
   return {
@@ -223,7 +236,13 @@ export async function buildAnalyticsCurrent(params: {
   const monthGrossCents = sumGrossCents(monthDocs);
   const monthCount = countFsDocs(monthDocs);
   const dailyAvgCents = daysElapsed > 0 ? Math.round(monthGrossCents / daysElapsed) : 0;
-  const expectedGrossCents = dailyAvgCents * daysInMonth;
+
+  // Projeção ponderada: sáb/dom valem 2×, seg–sex valem 1×
+  // rate = acumulado ÷ peso_decorrido; projeção = rate × peso_total_mês
+  const weightElapsed = daysElapsed > 0 ? weightedDays(year, month, 1, daysElapsed) : 0;
+  const weightTotal = weightedDays(year, month, 1, daysInMonth);
+  const weightedRate = weightElapsed > 0 ? monthGrossCents / weightElapsed : 0;
+  const expectedGrossCents = Math.round(weightedRate * weightTotal);
   const pctOfExpected = expectedGrossCents > 0 ? (monthGrossCents / expectedGrossCents) * 100 : 0;
   const avgTicketCents = monthCount > 0 ? Math.round(monthGrossCents / monthCount) : 0;
 
