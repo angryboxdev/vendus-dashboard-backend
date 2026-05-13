@@ -47,6 +47,12 @@ export type HrEmployee = {
   hourlyRate: number | null;
   /** True se o funcionário tem um PIN de kiosk configurado. */
   hasKioskPin: boolean;
+  /** NIF português (9 dígitos). Null se não definido. */
+  nif: string | null;
+  /** IBAN para pagamentos. Null se não definido. */
+  iban: string | null;
+  /** Morada completa. Null se não definida. */
+  address: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -211,6 +217,9 @@ export const employeeCreateBodySchema = z.object({
   baseSalary: z.number().min(0).optional().nullable(),
   salaryType: z.enum(["fixed", "hourly"]).optional(),
   hourlyRate: z.number().min(0).optional().nullable(),
+  nif: z.string().optional().nullable(),
+  iban: z.string().optional().nullable(),
+  address: z.string().optional().nullable(),
 });
 
 export const employeeUpdateBodySchema = employeeCreateBodySchema.partial();

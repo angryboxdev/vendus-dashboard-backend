@@ -28,12 +28,15 @@ type Row = {
   salary_type: string;
   hourly_rate: string | number | null;
   kiosk_pin_hash: string | null;
+  nif: string | null;
+  iban: string | null;
+  address: string | null;
   created_at: string;
   updated_at: string;
 };
 
 const EMPLOYEE_SELECT =
-  "id, full_name, email, phone, role_or_notes, employment_type, job_role, weekly_schedule, status, hired_at, ended_at, base_salary, salary_type, hourly_rate, kiosk_pin_hash, created_at, updated_at";
+  "id, full_name, email, phone, role_or_notes, employment_type, job_role, weekly_schedule, status, hired_at, ended_at, base_salary, salary_type, hourly_rate, kiosk_pin_hash, nif, iban, address, created_at, updated_at";
 
 function weeklyScheduleFromDb(raw: unknown): WeeklySchedule | null {
   if (raw == null) return null;
@@ -68,6 +71,9 @@ function rowToEmployee(row: Row): HrEmployee {
     salaryType: row.salary_type === "hourly" ? "hourly" : "fixed",
     hourlyRate: row.hourly_rate != null ? Number(row.hourly_rate) : null,
     hasKioskPin: row.kiosk_pin_hash !== null,
+    nif: row.nif,
+    iban: row.iban,
+    address: row.address,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -158,6 +164,9 @@ export async function createEmployee(
     base_salary: body.baseSalary ?? null,
     salary_type: body.salaryType ?? "fixed",
     hourly_rate: body.hourlyRate ?? null,
+    nif: body.nif?.trim() || null,
+    iban: body.iban?.trim() || null,
+    address: body.address?.trim() || null,
     updated_at: now,
   };
 
@@ -210,6 +219,9 @@ export async function updateEmployee(
   if ("baseSalary" in body) patch.base_salary = body.baseSalary ?? null;
   if (body.salaryType !== undefined) patch.salary_type = body.salaryType;
   if ("hourlyRate" in body) patch.hourly_rate = body.hourlyRate ?? null;
+  if ("nif" in body) patch.nif = body.nif?.trim() || null;
+  if ("iban" in body) patch.iban = body.iban?.trim() || null;
+  if ("address" in body) patch.address = body.address?.trim() || null;
 
   const { data, error } = await supabase
     .from("hr_employees")
