@@ -54,4 +54,10 @@ export const ENV = {
 
   /** JWT secret legado (HS256). Já não obrigatório — verificação usa JWKS. */
   SUPABASE_JWT_SECRET: process.env.SUPABASE_JWT_SECRET ?? "",
+
+  /**
+   * Ano a partir do qual se calcula o histórico total de faturação.
+   * Default: 2021.
+   */
+  ANALYTICS_HISTORY_START_YEAR: Number(process.env.ANALYTICS_HISTORY_START_YEAR ?? 2025),
 };

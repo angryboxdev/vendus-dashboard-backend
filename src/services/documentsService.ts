@@ -14,9 +14,16 @@ export async function fetchAllDocuments(
   let page = 1;
 
   while (true) {
-    const payload = await vendusGet(
-      `/documents/?since=${since}&until=${until}&type=${type}&per_page=${per_page}&page=${page}`
-    );
+    let payload: any;
+    try {
+      payload = await vendusGet(
+        `/documents/?since=${since}&until=${until}&type=${type}&per_page=${per_page}&page=${page}`
+      );
+    } catch (e: unknown) {
+      // Vendus devolve 404 A001 "No data" quando não há documentos no período — tratar como lista vazia
+      if (e instanceof Error && e.message.includes("A001")) break;
+      throw e;
+    }
 
     let items: any[] = [];
 

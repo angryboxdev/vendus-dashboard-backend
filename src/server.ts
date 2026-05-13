@@ -14,6 +14,7 @@ import { hrAuditRoutes } from "./routes/hrAuditRoutes.js";
 import { hrLeaveRoutes } from "./routes/hrLeaveRoutes.js";
 import { cashClosingPublicRoutes, cashClosingRoutes } from "./routes/cashClosingRoutes.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
+import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { runDailyVendusConsumptionJob } from "./services/dailyVendusConsumptionJobService.js";
 import { populateAuth, requireAuth, requireMinRole } from "./middleware/auth.js";
 import { authRoutes } from "./routes/authRoutes.js";
@@ -53,7 +54,8 @@ app.use(requireAuth);
 // Admin-only: user management
 app.use("/api/auth", requireMinRole("admin"), authRoutes);
 
-// Manager+: financial, stock, documents, reports, pizza, preparations
+// Manager+: financial, stock, documents, reports, pizza, preparations, analytics
+app.use("/api", requireMinRole("manager"), analyticsRoutes);
 app.use("/api", requireMinRole("manager"), documentsRoutes);
 app.use("/api", requireMinRole("manager"), reportsRoutes);
 app.use("/api", requireMinRole("manager"), dreRoutes);
