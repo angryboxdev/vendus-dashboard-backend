@@ -31,12 +31,18 @@ type Row = {
   nif: string | null;
   iban: string | null;
   address: string | null;
+  birth_date: string | null;
+  social_security_number: string | null;
+  id_card_number: string | null;
+  nationality: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
   created_at: string;
   updated_at: string;
 };
 
 const EMPLOYEE_SELECT =
-  "id, full_name, email, phone, role_or_notes, employment_type, job_role, weekly_schedule, status, hired_at, ended_at, base_salary, salary_type, hourly_rate, kiosk_pin_hash, nif, iban, address, created_at, updated_at";
+  "id, full_name, email, phone, role_or_notes, employment_type, job_role, weekly_schedule, status, hired_at, ended_at, base_salary, salary_type, hourly_rate, kiosk_pin_hash, nif, iban, address, birth_date, social_security_number, id_card_number, nationality, emergency_contact_name, emergency_contact_phone, created_at, updated_at";
 
 function weeklyScheduleFromDb(raw: unknown): WeeklySchedule | null {
   if (raw == null) return null;
@@ -74,6 +80,12 @@ function rowToEmployee(row: Row): HrEmployee {
     nif: row.nif,
     iban: row.iban,
     address: row.address,
+    birthDate: row.birth_date,
+    socialSecurityNumber: row.social_security_number,
+    idCardNumber: row.id_card_number,
+    nationality: row.nationality,
+    emergencyContactName: row.emergency_contact_name,
+    emergencyContactPhone: row.emergency_contact_phone,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -167,6 +179,12 @@ export async function createEmployee(
     nif: body.nif?.trim() || null,
     iban: body.iban?.trim() || null,
     address: body.address?.trim() || null,
+    birth_date: body.birthDate ?? null,
+    social_security_number: body.socialSecurityNumber?.trim() || null,
+    id_card_number: body.idCardNumber?.trim() || null,
+    nationality: body.nationality?.trim() || null,
+    emergency_contact_name: body.emergencyContactName?.trim() || null,
+    emergency_contact_phone: body.emergencyContactPhone?.trim() || null,
     updated_at: now,
   };
 
@@ -222,6 +240,12 @@ export async function updateEmployee(
   if ("nif" in body) patch.nif = body.nif?.trim() || null;
   if ("iban" in body) patch.iban = body.iban?.trim() || null;
   if ("address" in body) patch.address = body.address?.trim() || null;
+  if ("birthDate" in body) patch.birth_date = body.birthDate ?? null;
+  if ("socialSecurityNumber" in body) patch.social_security_number = body.socialSecurityNumber?.trim() || null;
+  if ("idCardNumber" in body) patch.id_card_number = body.idCardNumber?.trim() || null;
+  if ("nationality" in body) patch.nationality = body.nationality?.trim() || null;
+  if ("emergencyContactName" in body) patch.emergency_contact_name = body.emergencyContactName?.trim() || null;
+  if ("emergencyContactPhone" in body) patch.emergency_contact_phone = body.emergencyContactPhone?.trim() || null;
 
   const { data, error } = await supabase
     .from("hr_employees")

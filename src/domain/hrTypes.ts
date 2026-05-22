@@ -53,6 +53,18 @@ export type HrEmployee = {
   iban: string | null;
   /** Morada completa. Null se não definida. */
   address: string | null;
+  /** Data de nascimento (YYYY-MM-DD). Null se não definida. */
+  birthDate: string | null;
+  /** Número de Segurança Social. Null se não definido. */
+  socialSecurityNumber: string | null;
+  /** Número de Cartão de Cidadão / BI. Null se não definido. */
+  idCardNumber: string | null;
+  /** Nacionalidade. Null se não definida. */
+  nationality: string | null;
+  /** Nome do contacto de emergência. Null se não definido. */
+  emergencyContactName: string | null;
+  /** Telemóvel do contacto de emergência. Null se não definido. */
+  emergencyContactPhone: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -220,6 +232,12 @@ export const employeeCreateBodySchema = z.object({
   nif: z.string().optional().nullable(),
   iban: z.string().optional().nullable(),
   address: z.string().optional().nullable(),
+  birthDate: z.string().optional().nullable(),
+  socialSecurityNumber: z.string().optional().nullable(),
+  idCardNumber: z.string().optional().nullable(),
+  nationality: z.string().optional().nullable(),
+  emergencyContactName: z.string().optional().nullable(),
+  emergencyContactPhone: z.string().optional().nullable(),
 });
 
 export const employeeUpdateBodySchema = employeeCreateBodySchema.partial();
