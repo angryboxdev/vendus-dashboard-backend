@@ -15,6 +15,7 @@ import { hrLeaveRoutes } from "./routes/hrLeaveRoutes.js";
 import { cashClosingPublicRoutes, cashClosingRoutes } from "./routes/cashClosingRoutes.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
+import { crmRoutes } from "./routes/crmRoutes.js";
 import { runDailyVendusConsumptionJob } from "./services/dailyVendusConsumptionJobService.js";
 import { populateAuth, requireAuth, requireMinRole } from "./middleware/auth.js";
 import { authRoutes } from "./routes/authRoutes.js";
@@ -68,6 +69,9 @@ app.use("/api", requireMinRole("manager"), preparationRoutes);
 app.use("/api/hr", hrRoutes);
 app.use("/api/hr", hrAuditRoutes);
 app.use("/api/hr", hrLeaveRoutes);
+
+// CRM: acessível a managers+
+app.use("/api", requireMinRole("manager"), crmRoutes);
 
 // Cash closing manager routes (authenticated)
 app.use("/api", requireMinRole("manager"), cashClosingRoutes);
