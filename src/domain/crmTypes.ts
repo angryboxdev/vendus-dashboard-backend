@@ -66,7 +66,7 @@ export type CrmOrder = {
   id: string;
   customerId: string;
   orderDate: string;   // YYYY-MM-DD
-  totalValue: number;
+  amount: number;
   status: CrmOrderStatus;
   notes: string | null;
   createdAt: string;
@@ -200,7 +200,7 @@ export type CustomerUpdateBody = Partial<CustomerCreateBody> & {
 
 export const orderCreateBodySchema = z.object({
   orderDate:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  totalValue:  z.number().min(0),
+  amount:      z.number().min(0),
   status:      crmOrderStatusSchema.optional().default("concluído"),
   notes:       z.string().optional().nullable(),
 });

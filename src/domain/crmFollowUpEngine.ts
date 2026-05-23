@@ -108,7 +108,7 @@ export function calculateNextFollowUp(
       return seg03FollowUp(lastOrderDate, contacts, params);
 
     case "SEG-04":
-      return seg04FollowUp(lastOrderDate, contacts, params, completedOrders.length, orders.reduce((s, o) => s + (o.status === "concluído" ? o.totalValue : 0), 0));
+      return seg04FollowUp(lastOrderDate, contacts, params, completedOrders.length, orders.reduce((s, o) => s + (o.status === "concluído" ? o.amount : 0), 0));
 
     case "SEG-05":
       return seg05FollowUp(
@@ -116,7 +116,7 @@ export function calculateNextFollowUp(
         contacts,
         params,
         completedOrders.length,
-        orders.reduce((s, o) => s + (o.status === "concluído" ? o.totalValue : 0), 0)
+        orders.reduce((s, o) => s + (o.status === "concluído" ? o.amount : 0), 0)
       );
 
     case "SEG-06":

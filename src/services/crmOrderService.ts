@@ -22,7 +22,7 @@ function rowToOrder(row: Row): CrmOrder {
     id: row.id,
     customerId: row.customer_id,
     orderDate: row.order_date,
-    totalValue: Number(row.total_value),
+    amount: Number(row.total_value),
     status: row.status as CrmOrderStatus,
     notes: row.notes,
     createdAt: row.created_at,
@@ -50,7 +50,7 @@ export async function createOrder(customerId: string, body: OrderCreateBody): Pr
     .insert({
       customer_id: customerId,
       order_date: body.orderDate,
-      total_value: body.totalValue,
+      total_value: body.amount,
       status: body.status ?? "concluído",
       notes: body.notes ?? null,
     })
@@ -64,13 +64,13 @@ export async function createOrder(customerId: string, body: OrderCreateBody): Pr
 /** Atualiza estado ou notas de um pedido */
 export async function updateOrder(
   orderId: string,
-  patch: Partial<Pick<CrmOrder, "status" | "notes" | "totalValue" | "orderDate">>
+  patch: Partial<Pick<CrmOrder, "status" | "notes" | "amount" | "orderDate">>
 ): Promise<CrmOrder> {
   const db = getDb();
   const dbPatch: Record<string, unknown> = {};
   if (patch.status !== undefined) dbPatch.status = patch.status;
   if (patch.notes !== undefined) dbPatch.notes = patch.notes;
-  if (patch.totalValue !== undefined) dbPatch.total_value = patch.totalValue;
+  if (patch.amount !== undefined) dbPatch.total_value = patch.amount;
   if (patch.orderDate !== undefined) dbPatch.order_date = patch.orderDate;
 
   const { data, error } = await db
@@ -101,7 +101,7 @@ export async function getOrderSummary(customerId: string): Promise<{
   const sorted = [...completed].sort((a, b) => a.orderDate.localeCompare(b.orderDate));
   return {
     orderCount: completed.length,
-    ltv: completed.reduce((s, o) => s + o.totalValue, 0),
+    ltv: completed.reduce((s, o) => s + o.amount, 0),
     firstOrderDate: sorted[0]?.orderDate ?? null,
     lastOrderDate: sorted[sorted.length - 1]?.orderDate ?? null,
   };
