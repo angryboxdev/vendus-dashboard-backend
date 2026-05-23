@@ -36,6 +36,26 @@ function lastScriptDate(contacts: CrmContact[], code: string): string | null {
   return sent.length > 0 ? (sent[sent.length - 1] ?? null) : null;
 }
 
+/** Data do último contacto enviado (qualquer script) */
+function lastSentDate(contacts: CrmContact[]): string | null {
+  const sent = contacts
+    .filter((c) => c.direction === "Enviado")
+    .map((c) => c.contactedAt.slice(0, 10))
+    .sort();
+  return sent.length > 0 ? (sent[sent.length - 1] ?? null) : null;
+}
+
+/**
+ * Passo considerado feito se o script foi enviado
+ * OU se houve qualquer contacto enviado na data prevista ou depois.
+ * Permite que um script diferente do sugerido cubra o passo.
+ */
+function stepDone(contacts: CrmContact[], code: string, dueDateStr: string): boolean {
+  if (hasScript(contacts, code)) return true;
+  const last = lastSentDate(contacts);
+  return last !== null && last >= dueDateStr;
+}
+
 /** Monta o resultado do follow-up */
 function followUp(
   date: string,
@@ -123,26 +143,20 @@ function seg01FollowUp(
   const daysSince = daysBetween(firstOrderDate, t);
 
   // 1. 2.1.1 — não enviado ainda
-  if (!hasScript(contacts, "2.1.1") && !hasScript(contacts, "CEN-06b")) {
+  if (!stepDone(contacts, "2.1.1", firstOrderDate) && !hasScript(contacts, "CEN-06b")) {
     return followUp(firstOrderDate, "2.1.1", "Agradecimento D+0 do 1º pedido");
   }
 
   // 2. 2.1.2 — não enviado, D+3
-  if (!hasScript(contacts, "2.1.2") && daysSince <= params.seg01Days212) {
-    return followUp(
-      addDays(firstOrderDate, params.seg01Days212),
-      "2.1.2",
-      "Follow-up Instagram D+3"
-    );
+  const due212 = addDays(firstOrderDate, params.seg01Days212);
+  if (!stepDone(contacts, "2.1.2", due212) && daysSince <= params.seg01Days212) {
+    return followUp(due212, "2.1.2", "Follow-up Instagram D+3");
   }
 
   // 3. 2.1.3 — não enviado, D+10
-  if (!hasScript(contacts, "2.1.3") && daysSince <= params.seg01Days213) {
-    return followUp(
-      addDays(firstOrderDate, params.seg01Days213),
-      "2.1.3",
-      "Oferta 2ª compra D+10"
-    );
+  const due213 = addDays(firstOrderDate, params.seg01Days213);
+  if (!stepDone(contacts, "2.1.3", due213) && daysSince <= params.seg01Days213) {
+    return followUp(due213, "2.1.3", "Oferta 2ª compra D+10");
   }
 
   // 4. D+15 — transição para SEG-02
@@ -166,21 +180,15 @@ function seg02FollowUp(
   const daysSince = daysBetween(firstOrderDate, t);
 
   // 1. 2.2.1 — D+18
-  if (!hasScript(contacts, "2.2.1")) {
-    return followUp(
-      addDays(firstOrderDate, params.seg02Days221),
-      "2.2.1",
-      "Investigação ausência D+18"
-    );
+  const due221 = addDays(firstOrderDate, params.seg02Days221);
+  if (!stepDone(contacts, "2.2.1", due221)) {
+    return followUp(due221, "2.2.1", "Investigação ausência D+18");
   }
 
-  // 2. 2.2.2 — D+25 (ou D+7 após tag ausência_justificada / só_não_pedi)
-  if (!hasScript(contacts, "2.2.2") && daysSince <= params.seg02Days222) {
-    return followUp(
-      addDays(firstOrderDate, params.seg02Days222),
-      "2.2.2",
-      "Empurrão final 20% off D+25"
-    );
+  // 2. 2.2.2 — D+25
+  const due222 = addDays(firstOrderDate, params.seg02Days222);
+  if (!stepDone(contacts, "2.2.2", due222) && daysSince <= params.seg02Days222) {
+    return followUp(due222, "2.2.2", "Empurrão final 20% off D+25");
   }
 
   // 3. D+31 — transição para SEG-05
@@ -201,17 +209,14 @@ function seg03FollowUp(
   if (!lastOrderDate) return null;
 
   // 2.3.1 pós-pedido — enviado em D+1
-  if (!hasScript(contacts, "2.3.1")) {
-    return followUp(
-      addDays(lastOrderDate, 1),
-      "2.3.1",
-      "Pós-pedido orgânico D+1"
-    );
+  const due231 = addDays(lastOrderDate, 1);
+  if (!stepDone(contacts, "2.3.1", due231)) {
+    return followUp(due231, "2.3.1", "Pós-pedido orgânico D+1");
   }
 
-  // 2.3.2 cíclico a cada N dias desde o último enviado
+  // 2.3.2 cíclico — base = último envio de qualquer script (ou último pedido)
   const last232 = lastScriptDate(contacts, "2.3.2");
-  const baseDate = last232 ?? lastOrderDate;
+  const baseDate = last232 ?? lastSentDate(contacts) ?? lastOrderDate;
   const nextDate = addDays(baseDate, params.seg03CycleDays);
 
   return followUp(nextDate, "2.3.2", `Novidade/conteúdo cíclico a cada ${params.seg03CycleDays} dias`);
@@ -232,18 +237,18 @@ function seg04FollowUp(
   const daysSinceLast = daysBetween(lastOrderDate, t);
 
   // 2.4.1 — reconhecimento de upgrade VIP (disparo único)
-  if (!hasScript(contacts, "2.4.1")) {
+  if (!stepDone(contacts, "2.4.1", t)) {
     return followUp(t, "2.4.1", "Reconhecimento de upgrade para VIP");
   }
 
   // CEN-09 — queda de frequência (25+ dias sem pedir)
-  if (daysSinceLast >= params.seg04RiskDays && !hasScript(contacts, "CEN-09")) {
+  if (daysSinceLast >= params.seg04RiskDays && !stepDone(contacts, "CEN-09", t)) {
     return followUp(t, "CEN-09", `Queda de frequência — ${daysSinceLast} dias sem pedir`);
   }
 
-  // 2.4.5 check-in periódico
+  // 2.4.5 check-in periódico — base = último envio de qualquer script
   const last245 = lastScriptDate(contacts, "2.4.5");
-  const baseDate = last245 ?? lastOrderDate;
+  const baseDate = last245 ?? lastSentDate(contacts) ?? lastOrderDate;
   const nextDate = addDays(baseDate, params.seg04CheckinDays);
 
   // Se já passou o prazo → hoje
@@ -267,37 +272,25 @@ function seg05FollowUp(
 
   if (cameFromVip) {
     // 2.5.1-VIP — D+50
-    if (!hasScript(contacts, "2.5.1-VIP")) {
-      return followUp(
-        addDays(lastOrderDate, params.seg05Days251Vip),
-        "2.5.1-VIP",
-        "Curiosidade genuína VIP D+50"
-      );
+    const due251Vip = addDays(lastOrderDate, params.seg05Days251Vip);
+    if (!stepDone(contacts, "2.5.1-VIP", due251Vip)) {
+      return followUp(due251Vip, "2.5.1-VIP", "Curiosidade genuína VIP D+50");
     }
     // 2.5.2 — D+58
-    if (!hasScript(contacts, "2.5.2")) {
-      return followUp(
-        addDays(lastOrderDate, params.seg05Days252Vip),
-        "2.5.2",
-        "Oferta de retorno 25% off D+58 (VIP)"
-      );
+    const due252Vip = addDays(lastOrderDate, params.seg05Days252Vip);
+    if (!stepDone(contacts, "2.5.2", due252Vip)) {
+      return followUp(due252Vip, "2.5.2", "Oferta de retorno 25% off D+58 (VIP)");
     }
   } else {
     // 2.5.1 — D+35
-    if (!hasScript(contacts, "2.5.1")) {
-      return followUp(
-        addDays(lastOrderDate, params.seg05Days251),
-        "2.5.1",
-        "Curiosidade genuína D+35"
-      );
+    const due251 = addDays(lastOrderDate, params.seg05Days251);
+    if (!stepDone(contacts, "2.5.1", due251)) {
+      return followUp(due251, "2.5.1", "Curiosidade genuína D+35");
     }
     // 2.5.2 — D+50
-    if (!hasScript(contacts, "2.5.2")) {
-      return followUp(
-        addDays(lastOrderDate, params.seg05Days252Rec),
-        "2.5.2",
-        "Oferta de retorno 25% off D+50"
-      );
+    const due252 = addDays(lastOrderDate, params.seg05Days252Rec);
+    if (!stepDone(contacts, "2.5.2", due252)) {
+      return followUp(due252, "2.5.2", "Oferta de retorno 25% off D+50");
     }
   }
 
@@ -322,12 +315,9 @@ function seg06FollowUp(
   const daysSinceLast = daysBetween(lastOrderDate, t);
 
   // 2.6.1 win-back — D+65 (disparo único)
-  if (!hasScript(contacts, "2.6.1") && daysSinceLast <= params.seg06SleepDays) {
-    return followUp(
-      addDays(lastOrderDate, params.seg06Days261),
-      "2.6.1",
-      "Win-back final 40% off D+65"
-    );
+  const due261 = addDays(lastOrderDate, params.seg06Days261);
+  if (!stepDone(contacts, "2.6.1", due261) && daysSinceLast <= params.seg06SleepDays) {
+    return followUp(due261, "2.6.1", "Win-back final 40% off D+65");
   }
 
   // > 79 dias → dormir contacto (marcar Inativo Definitivo)
@@ -353,23 +343,19 @@ function seg07FollowUp(
   const firstScript = seg07Path === "B" ? "2.7.1" : "2.7.0";
   const hasFirst = hasScript(contacts, firstScript);
 
-  if (!hasFirst && daysSinceReg <= params.seg07DaysFirst + 1) {
+  const dueFirst = addDays(registeredAt, params.seg07DaysFirst);
+  if (!stepDone(contacts, firstScript, dueFirst) && daysSinceReg <= params.seg07DaysFirst + 1) {
     return followUp(
-      addDays(registeredAt, params.seg07DaysFirst),
+      dueFirst,
       firstScript,
-      seg07Path === "B"
-        ? "Carrinho abandonado — investigar D+1"
-        : "Boas-vindas D+1"
+      seg07Path === "B" ? "Carrinho abandonado — investigar D+1" : "Boas-vindas D+1"
     );
   }
 
   // 2.7.2 oferta de 1º pedido — D+7
-  if (!hasScript(contacts, "2.7.2") && daysSinceReg <= params.seg07Days272) {
-    return followUp(
-      addDays(registeredAt, params.seg07Days272),
-      "2.7.2",
-      "Oferta 1º pedido 20% off D+7"
-    );
+  const due272 = addDays(registeredAt, params.seg07Days272);
+  if (!stepDone(contacts, "2.7.2", due272) && daysSinceReg <= params.seg07Days272) {
+    return followUp(due272, "2.7.2", "Oferta 1º pedido 20% off D+7");
   }
 
   // D+21 sem conversão → Inativo Definitivo
