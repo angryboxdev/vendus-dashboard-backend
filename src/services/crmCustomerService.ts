@@ -36,13 +36,14 @@ type Row = {
   inactive: boolean;
   referred_by: string | null;
   seg07_path: string | null;
+  manual_followup_date: string | null;
   registered_at: string;
   created_at: string;
   updated_at: string;
 };
 
 const SELECT =
-  "id, first_name, last_name, email, phone, preferred_channel, birthday, how_found, opt_in, notes, inactive, referred_by, seg07_path, registered_at, created_at, updated_at";
+  "id, first_name, last_name, email, phone, preferred_channel, birthday, how_found, opt_in, notes, inactive, referred_by, seg07_path, manual_followup_date, registered_at, created_at, updated_at";
 
 function rowToCustomer(row: Row): CrmCustomer {
   return {
@@ -59,6 +60,7 @@ function rowToCustomer(row: Row): CrmCustomer {
     inactive: row.inactive,
     referredBy: row.referred_by,
     seg07Path: (row.seg07_path as CrmSeg07Path) ?? null,
+    manualFollowupDate: row.manual_followup_date ?? null,
     registeredAt: row.registered_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -113,13 +115,43 @@ export async function enrichCustomer(customer: CrmCustomer): Promise<CrmCustomer
     params
   );
 
-  const nextFollowUp = calculateNextFollowUp(
+  let nextFollowUp = calculateNextFollowUp(
     customer,
     segment,
     orders,
     contacts,
     params
   );
+
+  // Se o utilizador definiu uma data manual, sobrepõe a data calculada
+  if (customer.manualFollowupDate && nextFollowUp) {
+    const t = new Date().toISOString().slice(0, 10);
+    const daysUntil = Math.round(
+      (new Date(customer.manualFollowupDate + "T12:00:00Z").getTime() -
+        new Date(t + "T12:00:00Z").getTime()) / 86400000
+    );
+    nextFollowUp = {
+      ...nextFollowUp,
+      date: customer.manualFollowupDate,
+      isOverdue: daysUntil < 0,
+      daysUntil,
+      reason: nextFollowUp.reason + " (data manual)",
+    };
+  } else if (customer.manualFollowupDate && !nextFollowUp) {
+    // Mesmo sem follow-up calculado, a data manual cria um
+    const t = new Date().toISOString().slice(0, 10);
+    const daysUntil = Math.round(
+      (new Date(customer.manualFollowupDate + "T12:00:00Z").getTime() -
+        new Date(t + "T12:00:00Z").getTime()) / 86400000
+    );
+    nextFollowUp = {
+      date: customer.manualFollowupDate,
+      scriptCode: "manual",
+      reason: "Follow-up manual",
+      isOverdue: daysUntil < 0,
+      daysUntil,
+    };
+  }
 
   return {
     ...customer,
@@ -246,9 +278,10 @@ export async function updateCustomer(
   if (body.howFound         !== undefined) patch.how_found         = body.howFound ?? null;
   if (body.optIn            !== undefined) patch.opt_in            = body.optIn;
   if (body.notes            !== undefined) patch.notes             = body.notes ?? null;
-  if (body.inactive         !== undefined) patch.inactive          = body.inactive;
-  if (body.referredBy       !== undefined) patch.referred_by       = body.referredBy ?? null;
-  if (body.seg07Path        !== undefined) patch.seg07_path        = body.seg07Path ?? null;
+  if (body.inactive              !== undefined) patch.inactive             = body.inactive;
+  if (body.referredBy            !== undefined) patch.referred_by          = body.referredBy ?? null;
+  if (body.seg07Path             !== undefined) patch.seg07_path           = body.seg07Path ?? null;
+  if (body.manualFollowupDate    !== undefined) patch.manual_followup_date = body.manualFollowupDate ?? null;
 
   const { data, error } = await db
     .from("crm_customers")

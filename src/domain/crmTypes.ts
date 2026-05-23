@@ -44,6 +44,7 @@ export type CrmCustomer = {
   referredBy: string | null;
   seg07Path: CrmSeg07Path | null;
   registeredAt: string;      // YYYY-MM-DD
+  manualFollowupDate: string | null; // YYYY-MM-DD — override manual da data de follow-up
   createdAt: string;
   updatedAt: string;
 };
@@ -191,7 +192,11 @@ export const customerCreateBodySchema = z.object({
 });
 
 export type CustomerCreateBody = z.infer<typeof customerCreateBodySchema>;
-export type CustomerUpdateBody = Partial<CustomerCreateBody> & { inactive?: boolean; optIn?: CrmOptIn };
+export type CustomerUpdateBody = Partial<CustomerCreateBody> & {
+  inactive?: boolean;
+  optIn?: CrmOptIn;
+  manualFollowupDate?: string | null;
+};
 
 export const orderCreateBodySchema = z.object({
   orderDate:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
