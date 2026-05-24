@@ -25,6 +25,8 @@ type Row = {
   response: string | null;
   notes: string | null;
   segment_at_time: string | null;
+  tags_added: string[];
+  tags_removed: string[];
   created_at: string;
 };
 
@@ -40,12 +42,14 @@ function rowToContact(row: Row): CrmContact {
     response: (row.response as CrmContactResponse) ?? null,
     notes: row.notes,
     segmentAtTime: row.segment_at_time,
+    tagsAdded: row.tags_added ?? [],
+    tagsRemoved: row.tags_removed ?? [],
     createdAt: row.created_at,
   };
 }
 
 const SELECT =
-  "id, customer_id, contacted_at, channel, script_code, direction, status, response, notes, segment_at_time, created_at";
+  "id, customer_id, contacted_at, channel, script_code, direction, status, response, notes, segment_at_time, tags_added, tags_removed, created_at";
 
 /** Lista contactos de um cliente (mais recentes primeiro) */
 export async function listContactsByCustomer(customerId: string): Promise<CrmContact[]> {
@@ -100,15 +104,17 @@ export async function createContact(body: ContactCreateBody): Promise<CrmContact
   const { data, error } = await db
     .from("crm_contacts")
     .insert({
-      customer_id:    body.customerId,
-      contacted_at:   contactedAt,
-      channel:        body.channel ?? null,
-      script_code:    body.scriptCode ?? null,
-      direction:      body.direction ?? "Enviado",
-      status:         body.status ?? null,
-      response:       body.response ?? null,
-      notes:          body.notes ?? null,
-      segment_at_time:body.segmentAtTime ?? null,
+      customer_id:     body.customerId,
+      contacted_at:    contactedAt,
+      channel:         body.channel ?? null,
+      script_code:     body.scriptCode ?? null,
+      direction:       body.direction ?? "Enviado",
+      status:          body.status ?? null,
+      response:        body.response ?? null,
+      notes:           body.notes ?? null,
+      segment_at_time: body.segmentAtTime ?? null,
+      tags_added:      body.tagsToAdd ?? [],
+      tags_removed:    body.tagsToRemove ?? [],
     })
     .select(SELECT)
     .single();

@@ -83,6 +83,8 @@ export type CrmContact = {
   response: CrmContactResponse | null;
   notes: string | null;
   segmentAtTime: string | null;
+  tagsAdded: string[];
+  tagsRemoved: string[];
   createdAt: string;
 };
 
