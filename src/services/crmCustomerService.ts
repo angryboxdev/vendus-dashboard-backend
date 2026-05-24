@@ -123,6 +123,19 @@ export async function enrichCustomer(customer: CrmCustomer): Promise<CrmCustomer
     params
   );
 
+  // Reclamação tem prioridade máxima — sobrepõe qualquer follow-up calculado
+  const hasComplaintTag = tags.includes("reclamou");
+  const sentCen01a = contacts.some((c) => c.scriptCode === "CEN-01a" && c.direction === "Enviado");
+  if (hasComplaintTag && !sentCen01a) {
+    nextFollowUp = {
+      date: today,
+      scriptCode: "CEN-01a",
+      reason: "Reclamação registada — responder urgentemente",
+      isOverdue: false,
+      daysUntil: 0,
+    };
+  }
+
   // Se o utilizador definiu uma data manual, sobrepõe a data calculada
   if (customer.manualFollowupDate && nextFollowUp) {
     const t = new Date().toISOString().slice(0, 10);
