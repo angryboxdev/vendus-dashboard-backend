@@ -15,7 +15,7 @@ documentsRoutes.get("/documents", async (req, res) => {
       until = "2026-01-31",
       per_page = String(ENV.PER_PAGE_DEFAULT),
       page = "1",
-      type = "FS",
+      type = "FS,FT",
     } = req.query as Record<string, string>;
 
     const data = await vendusGet(

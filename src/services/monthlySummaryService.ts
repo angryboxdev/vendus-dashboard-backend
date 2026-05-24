@@ -93,12 +93,12 @@ export class MonthlySummaryBuilder {
     );
     const ncFsNumbers = detailedNc.flatMap((doc) =>
       (doc.related_docs ?? [])
-        .filter((d) => d.type === "FS")
+        .filter((d) => d.type === "FS" || d.type === "FT")
         .map((d) => d.number)
     );
 
     this.fsDocuments = documents
-      .filter((d) => d.type === "FS")
+      .filter((d) => d.type === "FS" || d.type === "FT")
       .filter((d) => !ncFsNumbers.includes(d.number));
 
     this.detailedDocs = await mapLimit(this.fsDocuments, concurrency, (doc) =>

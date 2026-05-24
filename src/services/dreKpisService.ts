@@ -33,7 +33,7 @@ export async function getDreKpis(
     buildMonthlySummary({
       since,
       until,
-      type: "FS,NC",
+      type: "FS,FT,NC",
       perPage: ENV.PER_PAGE_DEFAULT,
       concurrency: ENV.CONCURRENCY,
       fetchAllDocuments,

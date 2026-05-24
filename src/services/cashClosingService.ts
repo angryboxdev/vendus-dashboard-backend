@@ -141,22 +141,22 @@ export async function verifyPin(pin: string): Promise<VerifyPinResult> {
  * anulados por NC (via related_docs) e exclui-os antes de somar.
  */
 export async function getVendusTotal(date: string): Promise<number> {
-  const { documents } = await fetchAllDocuments(date, date, "FS,NC", 100);
+  const { documents } = await fetchAllDocuments(date, date, "FS,FT,NC", 100);
 
-  // Determina os números FS cancelados por notas de crédito
+  // Determina os números FS/FT cancelados por notas de crédito
   const ncDocs = documents.filter((d) => (d as { type?: string }).type === "NC");
   const cancelledFsNumbers = new Set<string>();
   for (const nc of ncDocs) {
     const detail = await vendusGet<VendusDetailedDocument>(`/documents/${nc.id}/`);
     for (const related of detail.related_docs ?? []) {
-      if (related.type === "FS") cancelledFsNumbers.add(related.number);
+      if (related.type === "FS" || related.type === "FT") cancelledFsNumbers.add(related.number);
     }
   }
 
-  // Soma apenas FS não cancelados
+  // Soma apenas FS/FT não cancelados
   const fsDocs = documents.filter(
     (d) =>
-      (d as { type?: string }).type === "FS" &&
+      ((d as { type?: string }).type === "FS" || (d as { type?: string }).type === "FT") &&
       !cancelledFsNumbers.has(d.number),
   );
   let total = 0;

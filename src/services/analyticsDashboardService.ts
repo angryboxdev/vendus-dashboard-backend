@@ -29,12 +29,12 @@ function sumGrossCents(docs: VendusDocument[]): number {
 }
 
 function countFsDocs(docs: VendusDocument[]): number {
-  return docs.filter((d) => d.type === "FS").length;
+  return docs.filter((d) => d.type === "FS" || d.type === "FT").length;
 }
 
-/** Fetch único paginado FS+NC — sem fetches de detalhe. */
+/** Fetch único paginado FS+FT+NC — sem fetches de detalhe. */
 async function fetchDocs(since: string, until: string): Promise<VendusDocument[]> {
-  const { documents } = await fetchAllDocuments(since, until, "FS,NC", PER_PAGE);
+  const { documents } = await fetchAllDocuments(since, until, "FS,FT,NC", PER_PAGE);
   return documents as VendusDocument[];
 }
 
@@ -256,7 +256,7 @@ export async function buildAnalyticsCurrent(params: {
   const weekdayMap = new Map<number, WeekdayAcc>();
   for (let w = 1; w <= 7; w++) weekdayMap.set(w, { grossCents: 0, docsCount: 0, dates: new Set() });
   for (const doc of monthDocs) {
-    if (doc.type !== "FS") continue;
+    if (doc.type !== "FS" && doc.type !== "FT") continue;
     const w = DateTime.fromISO(doc.date, { zone: LISBON }).weekday;
     const e = weekdayMap.get(w)!;
     e.grossCents += toCents(doc.amount_gross);

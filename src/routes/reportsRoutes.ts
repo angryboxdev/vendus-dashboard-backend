@@ -18,7 +18,7 @@ reportsRoutes.get("/reports/monthly-summary", async (req, res) => {
     const {
       since = "2026-01-01",
       until = "2026-01-31",
-      type = "FS,NC",
+      type = "FS,FT,NC",
       per_page = String(ENV.PER_PAGE_DEFAULT),
       concurrency = String(ENV.CONCURRENCY),
       store_id: storeIdParam,

@@ -123,21 +123,21 @@ export async function computeConsumablesForDay(
   const wantDebug = options?.debug === true;
 
   // ── 1. Documentos de venda (FS) ──────────────────────────────────────────
-  const { documents } = await fetchAllDocuments(date, date, "FS,NC", ENV.PER_PAGE_DEFAULT);
+  const { documents } = await fetchAllDocuments(date, date, "FS,FT,NC", ENV.PER_PAGE_DEFAULT);
 
-  // Filtrar FS que foram anulados por NC (igual ao MonthlySummaryBuilder)
+  // Filtrar FS/FT que foram anulados por NC (igual ao MonthlySummaryBuilder)
   const ncDocs = documents.filter((d) => d.type === "NC");
   const detailedNc = await mapLimit(ncDocs, ENV.CONCURRENCY, (d) =>
     vendusGet<VendusDetailedDocument>(`/documents/${d.id}/`)
   );
   const ncFsNumbers = detailedNc.flatMap((doc) =>
     (doc.related_docs ?? [])
-      .filter((d) => d.type === "FS")
+      .filter((d) => d.type === "FS" || d.type === "FT")
       .map((d) => d.number)
   );
 
   const fsDocs = documents
-    .filter((d) => d.type === "FS")
+    .filter((d) => d.type === "FS" || d.type === "FT")
     .filter((d) => !ncFsNumbers.includes(d.number));
 
   const detailedDocs = await mapLimit(fsDocs, ENV.CONCURRENCY, (d) =>
