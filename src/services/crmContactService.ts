@@ -95,7 +95,7 @@ export async function listContacts(filters: {
   offset?: number;
 }): Promise<CrmContact[]> {
   const db = getDb();
-  let q = db.from("crm_contacts").select(SELECT_BASE);
+  let q = db.from("crm_contacts").select(SELECT);
 
   if (filters.customerId) q = q.eq("customer_id", filters.customerId);
   if (filters.scriptCode) q = q.eq("script_code", filters.scriptCode);
@@ -109,9 +109,7 @@ export async function listContacts(filters: {
 
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  return ((data as (Row | Omit<Row, "tags_added" | "tags_removed">)[]) ?? []).map((r) =>
-    rowToContact({ tags_added: [], tags_removed: [], ...r } as Row)
-  );
+  return ((data as Row[]) ?? []).map(rowToContact);
 }
 
 /** Regista um contacto e aplica tags ao cliente (se indicadas) */
