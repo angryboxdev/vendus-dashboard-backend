@@ -47,13 +47,13 @@ function lastSentDate(contacts: CrmContact[]): string | null {
 
 /**
  * Passo considerado feito se o script foi enviado
- * OU se houve qualquer contacto enviado na data prevista ou depois.
- * Permite que um script diferente do sugerido cubra o passo.
+ * OU se houve qualquer contacto enviado DEPOIS da data prevista (estritamente).
+ * Envia no próprio dia do vencimento não conta — apenas avança se enviaste algo APÓS essa data.
  */
 function stepDone(contacts: CrmContact[], code: string, dueDateStr: string): boolean {
   if (hasScript(contacts, code)) return true;
   const last = lastSentDate(contacts);
-  return last !== null && last >= dueDateStr;
+  return last !== null && last > dueDateStr;
 }
 
 /** Monta o resultado do follow-up */
@@ -153,9 +153,9 @@ function seg01FollowUp(
     return followUp(due212, "2.1.2", "Follow-up Instagram D+3");
   }
 
-  // 3. 2.1.3 — não enviado, D+10
+  // 3. 2.1.3 — não enviado (sem limite superior — enviado sempre antes da transição D+15)
   const due213 = addDays(firstOrderDate, params.seg01Days213);
-  if (!stepDone(contacts, "2.1.3", due213) && daysSince <= params.seg01Days213) {
+  if (!stepDone(contacts, "2.1.3", due213)) {
     return followUp(due213, "2.1.3", "Oferta 2ª compra D+10");
   }
 
