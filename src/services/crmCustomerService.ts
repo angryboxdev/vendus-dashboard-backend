@@ -89,7 +89,7 @@ export async function enrichCustomer(customer: CrmCustomer): Promise<CrmCustomer
     loadParams(),
     getOrderSummary(customer.id),
     listOrders(customer.id),
-    listContactsByCustomer(customer.id),
+    listContactsByCustomer(customer.id).catch(() => []),
     getDb()
       .from("crm_customer_tags")
       .select("tag_name")

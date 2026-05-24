@@ -48,20 +48,39 @@ function rowToContact(row: Row): CrmContact {
   };
 }
 
+// tags_added e tags_removed requerem migration 054; incluídas aqui após aplicação
 const SELECT =
   "id, customer_id, contacted_at, channel, script_code, direction, status, response, notes, segment_at_time, tags_added, tags_removed, created_at";
+
+const SELECT_BASE =
+  "id, customer_id, contacted_at, channel, script_code, direction, status, response, notes, segment_at_time, created_at";
 
 /** Lista contactos de um cliente (mais recentes primeiro) */
 export async function listContactsByCustomer(customerId: string): Promise<CrmContact[]> {
   const db = getDb();
-  const { data, error } = await db
+
+  // Tentar com colunas de tags (requer migration 054); fallback sem elas
+  const full = await db
     .from("crm_contacts")
     .select(SELECT)
     .eq("customer_id", customerId)
     .order("contacted_at", { ascending: false });
 
-  if (error) throw new Error(error.message);
-  return ((data as Row[]) ?? []).map(rowToContact);
+  if (!full.error) {
+    return ((full.data as Row[]) ?? []).map(rowToContact);
+  }
+
+  // Fallback: sem colunas tags_added/tags_removed (migration ainda não aplicada)
+  const base = await db
+    .from("crm_contacts")
+    .select(SELECT_BASE)
+    .eq("customer_id", customerId)
+    .order("contacted_at", { ascending: false });
+
+  if (base.error) throw new Error(base.error.message);
+  return ((base.data as Omit<Row, "tags_added" | "tags_removed">[]) ?? []).map((r) =>
+    rowToContact({ ...r, tags_added: [], tags_removed: [] })
+  );
 }
 
 /** Lista global de contactos com filtros opcionais */
@@ -76,7 +95,7 @@ export async function listContacts(filters: {
   offset?: number;
 }): Promise<CrmContact[]> {
   const db = getDb();
-  let q = db.from("crm_contacts").select(SELECT);
+  let q = db.from("crm_contacts").select(SELECT_BASE);
 
   if (filters.customerId) q = q.eq("customer_id", filters.customerId);
   if (filters.scriptCode) q = q.eq("script_code", filters.scriptCode);
@@ -90,7 +109,9 @@ export async function listContacts(filters: {
 
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  return ((data as Row[]) ?? []).map(rowToContact);
+  return ((data as (Row | Omit<Row, "tags_added" | "tags_removed">)[]) ?? []).map((r) =>
+    rowToContact({ tags_added: [], tags_removed: [], ...r } as Row)
+  );
 }
 
 /** Regista um contacto e aplica tags ao cliente (se indicadas) */
@@ -101,23 +122,30 @@ export async function createContact(body: ContactCreateBody): Promise<CrmContact
   const rawAt = body.contactedAt ?? new Date().toISOString();
   const contactedAt = rawAt.includes("T") ? rawAt : rawAt + "T10:00:00+01:00";
 
-  const { data, error } = await db
-    .from("crm_contacts")
-    .insert({
-      customer_id:     body.customerId,
-      contacted_at:    contactedAt,
-      channel:         body.channel ?? null,
-      script_code:     body.scriptCode ?? null,
-      direction:       body.direction ?? "Enviado",
-      status:          body.status ?? null,
-      response:        body.response ?? null,
-      notes:           body.notes ?? null,
-      segment_at_time: body.segmentAtTime ?? null,
-      tags_added:      body.tagsToAdd ?? [],
-      tags_removed:    body.tagsToRemove ?? [],
-    })
-    .select(SELECT)
-    .single();
+  const insertPayload: Record<string, unknown> = {
+    customer_id:     body.customerId,
+    contacted_at:    contactedAt,
+    channel:         body.channel ?? null,
+    script_code:     body.scriptCode ?? null,
+    direction:       body.direction ?? "Enviado",
+    status:          body.status ?? null,
+    response:        body.response ?? null,
+    notes:           body.notes ?? null,
+    segment_at_time: body.segmentAtTime ?? null,
+  };
+
+  // Tentar com colunas de tags; se falhar (migration não aplicada), repetir sem elas
+  let result = await db.from("crm_contacts").insert({
+    ...insertPayload,
+    tags_added:  body.tagsToAdd ?? [],
+    tags_removed: body.tagsToRemove ?? [],
+  }).select(SELECT).single();
+
+  if (result.error) {
+    result = await db.from("crm_contacts").insert(insertPayload).select(SELECT_BASE).single();
+  }
+
+  const { data, error } = result;
 
   if (error) throw new Error(error.message);
 
