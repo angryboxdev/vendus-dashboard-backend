@@ -125,8 +125,10 @@ export async function enrichCustomer(customer: CrmCustomer): Promise<CrmCustomer
 
   // Reclamação tem prioridade máxima — sobrepõe qualquer follow-up calculado
   const hasComplaintTag = tags.includes("reclamou");
-  const sentCen01a = contacts.some((c) => c.scriptCode === "CEN-01a" && c.direction === "Enviado");
-  if (hasComplaintTag && !sentCen01a) {
+  const sentCen01 = contacts.some(
+    (c) => c.direction === "Enviado" && (c.scriptCode ?? "").startsWith("CEN-01")
+  );
+  if (hasComplaintTag && !sentCen01) {
     nextFollowUp = {
       date: today,
       scriptCode: "CEN-01a",
