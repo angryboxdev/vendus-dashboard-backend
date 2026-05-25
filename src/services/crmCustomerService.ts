@@ -153,6 +153,21 @@ export async function enrichCustomer(customer: CrmCustomer): Promise<CrmCustomer
     };
   }
 
+  // Feedback neutro — avançar para 2.1.2 no mesmo dia
+  const hasNeutralTag = tags.includes("feedback_neutro");
+  const sent212 = contacts.some(
+    (c) => c.direction === "Enviado" && c.scriptCode === "2.1.2"
+  );
+  if (hasNeutralTag && !sent212 && !hasComplaintTag && !hasPraiseTag) {
+    nextFollowUp = {
+      date: today,
+      scriptCode: "2.1.2",
+      reason: "Feedback neutro — enviar 2.1.2 hoje",
+      isOverdue: false,
+      daysUntil: 0,
+    };
+  }
+
   // Se o utilizador definiu uma data manual, sobrepõe a data calculada
   if (customer.manualFollowupDate && nextFollowUp) {
     const t = new Date().toISOString().slice(0, 10);
