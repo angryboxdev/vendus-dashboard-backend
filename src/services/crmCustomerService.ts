@@ -138,6 +138,21 @@ export async function enrichCustomer(customer: CrmCustomer): Promise<CrmCustomer
     };
   }
 
+  // Elogio — pedir referência/testemunho (CEN-05), segunda prioridade
+  const hasPraiseTag = tags.includes("elogiou");
+  const sentCen05 = contacts.some(
+    (c) => c.direction === "Enviado" && (c.scriptCode ?? "").startsWith("CEN-05")
+  );
+  if (hasPraiseTag && !sentCen05 && !hasComplaintTag) {
+    nextFollowUp = {
+      date: today,
+      scriptCode: "CEN-05",
+      reason: "Elogio registado — pedir referência ou testemunho",
+      isOverdue: false,
+      daysUntil: 0,
+    };
+  }
+
   // Se o utilizador definiu uma data manual, sobrepõe a data calculada
   if (customer.manualFollowupDate && nextFollowUp) {
     const t = new Date().toISOString().slice(0, 10);
