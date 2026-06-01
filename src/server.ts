@@ -16,6 +16,7 @@ import { cashClosingPublicRoutes, cashClosingRoutes } from "./routes/cashClosing
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { crmRoutes } from "./routes/crmRoutes.js";
+import { uberEatsRoutes } from "./routes/uberEatsRoutes.js";
 import { runDailyVendusConsumptionJob } from "./services/dailyVendusConsumptionJobService.js";
 import { populateAuth, requireAuth, requireMinRole } from "./middleware/auth.js";
 import { authRoutes } from "./routes/authRoutes.js";
@@ -34,6 +35,10 @@ const corsOptions: cors.CorsOptions = {
   },
 };
 app.use(cors(corsOptions));
+
+// Uber Eats webhook usa raw body para verificação HMAC — deve ficar ANTES de express.json()
+app.use("/api/uber-eats", uberEatsRoutes);
+
 app.use(express.json());
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));

@@ -60,4 +60,27 @@ export const ENV = {
    * Default: 2021.
    */
   ANALYTICS_HISTORY_START_YEAR: Number(process.env.ANALYTICS_HISTORY_START_YEAR ?? 2025),
+
+  // ─── Uber Eats Integration ──────────────────────────────────────────────────
+  /** OAuth2 client_id da app Uber Developer Portal */
+  UBER_EATS_CLIENT_ID: process.env.UBER_EATS_CLIENT_ID ?? "",
+  /** OAuth2 client_secret da app Uber Developer Portal */
+  UBER_EATS_CLIENT_SECRET: process.env.UBER_EATS_CLIENT_SECRET ?? "",
+  /**
+   * Signing secret do webhook (Uber Eats → App Settings → Webhook → Signing Key).
+   * Usado para verificar X-Uber-Signature. Se vazio, verificação desativada (dev only).
+   */
+  UBER_EATS_WEBHOOK_CLIENT_SECRET: process.env.UBER_EATS_WEBHOOK_CLIENT_SECRET ?? "",
+  /** UUID da loja Uber Eats (visível no Uber Eats Manager → URL da loja) */
+  UBER_EATS_STORE_UUID: process.env.UBER_EATS_STORE_UUID ?? "",
+  /**
+   * register_id Vendus onde as FT Uber Eats são criadas.
+   * Ver Vendus → Configurações → Registos.
+   */
+  UBER_EATS_VENDUS_REGISTER_ID: Number(process.env.UBER_EATS_VENDUS_REGISTER_ID ?? 0),
+  /**
+   * store_id Vendus.
+   * Ver Vendus → Configurações → Lojas.
+   */
+  UBER_EATS_VENDUS_STORE_ID: Number(process.env.UBER_EATS_VENDUS_STORE_ID ?? 0),
 };

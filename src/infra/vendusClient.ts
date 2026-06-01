@@ -52,3 +52,28 @@ export async function vendusGetBasic<T>(
 
   return res.json() as T;
 }
+
+/**
+ * POST autenticado com HTTP Basic Auth (mesmo esquema do vendusGetBasic).
+ */
+export async function vendusPost<T>(path: string, body: unknown): Promise<T> {
+  const urlObj = new URL(`${ENV.BASE_URL}${path}`);
+  const basic = Buffer.from(`${ENV.API_KEY}:`, "utf8").toString("base64");
+
+  const res = await fetch(urlObj.toString(), {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Vendus error ${res.status}: ${text}`);
+  }
+
+  return res.json() as T;
+}
