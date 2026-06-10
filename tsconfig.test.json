@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Sobrescreve para CommonJS: ts-jest não precisa de ESM e evita a
+    // obrigatoriedade de extensões .js nos imports de módulos internos.
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "verbatimModuleSyntax": false,
+    "types": ["jest", "node"]
+  }
+}
