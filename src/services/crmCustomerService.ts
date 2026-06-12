@@ -232,9 +232,15 @@ export async function listCustomers(filters: {
   if (filters.optIn)   q = q.eq("opt_in", filters.optIn);
   if (filters.channel) q = q.eq("preferred_channel", filters.channel);
   if (filters.search) {
-    q = q.or(
-      `first_name.ilike.%${filters.search}%,last_name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`
-    );
+    const s = filters.search.trim();
+    const parts = s.split(/\s+/).filter(Boolean);
+    const baseClauses = `first_name.ilike.%${s}%,last_name.ilike.%${s}%,email.ilike.%${s}%,phone.ilike.%${s}%,id.ilike.%${s}%`;
+    // Se o termo tiver pelo menos 2 palavras, adiciona cláusula nome+sobrenome
+    const fullNameClause =
+      parts.length >= 2
+        ? `,and(first_name.ilike.%${parts[0]}%,last_name.ilike.%${parts.slice(1).join(" ")}%)`
+        : "";
+    q = q.or(baseClauses + fullNameClause);
   }
 
   // Filtro por tag: via subquery
