@@ -60,4 +60,11 @@ export const ENV = {
    * Default: 2021.
    */
   ANALYTICS_HISTORY_START_YEAR: Number(process.env.ANALYTICS_HISTORY_START_YEAR ?? 2025),
+
+  /**
+   * ID do caixa registador Vendus usado nos fechos de caixa.
+   * Fallback para UBER_EATS_VENDUS_REGISTER_ID (mesmo registo).
+   */
+  VENDUS_REGISTER_ID:
+    process.env.VENDUS_REGISTER_ID ?? process.env.UBER_EATS_VENDUS_REGISTER_ID ?? "",
 };

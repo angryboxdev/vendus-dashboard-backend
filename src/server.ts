@@ -12,7 +12,7 @@ import { hrRoutes } from "./routes/hrRoutes.js";
 import { hrKioskRoutes } from "./routes/hrKioskRoutes.js";
 import { hrAuditRoutes } from "./routes/hrAuditRoutes.js";
 import { hrLeaveRoutes } from "./routes/hrLeaveRoutes.js";
-import { cashClosingPublicRoutes, cashClosingRoutes } from "./routes/cashClosingRoutes.js";
+import { createCashClosingsModule } from "./modules/cash-closings/cash-closings.module.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { crmRoutes } from "./routes/crmRoutes.js";
@@ -46,8 +46,11 @@ app.use(populateAuth);
 // PATCH /employees/:id/kiosk-pin has inline requireAuth inside the handler
 app.use("/api/hr", hrKioskRoutes);
 
+// Cash closing module (hexagonal)
+const cashClosingsModule = createCashClosingsModule();
+
 // Cash closing public routes (PIN verify + submit) — no auth required
-app.use("/api", cashClosingPublicRoutes);
+app.use("/api", cashClosingsModule.publicRouter);
 
 // All routes below this line require authentication
 app.use(requireAuth);
@@ -74,7 +77,7 @@ app.use("/api/hr", hrLeaveRoutes);
 app.use("/api", requireMinRole("manager"), crmRoutes);
 
 // Cash closing manager routes (authenticated)
-app.use("/api", requireMinRole("manager"), cashClosingRoutes);
+app.use("/api", requireMinRole("manager"), cashClosingsModule.managedRouter);
 
 if (ENV.CRON_SECRET) {
   app.use("/api", internalCronRoutes);
