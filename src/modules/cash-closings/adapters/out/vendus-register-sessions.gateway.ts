@@ -1,4 +1,5 @@
 import type { VendusRegisterSessionsGatewayPort } from "../../domain/ports/out/vendus-register-sessions-gateway.port.js";
+import type { RegisterSession } from "../../domain/entities/register-session.js";
 import { vendusGetBasic } from "../../../../infra/vendusClient.js";
 import { fetchAllDocuments } from "../../../../services/documentsService.js";
 import { buildSessions, type VendusMovement, type DocEntry } from "./session-builder.js";
