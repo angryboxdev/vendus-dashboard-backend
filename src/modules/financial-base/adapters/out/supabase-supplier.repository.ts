@@ -1,0 +1,92 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { Supplier, type SupplierStatus } from "../../domain/entities/supplier.js";
+import type {
+  SupplierFilter,
+  SupplierRepositoryPort,
+} from "../../domain/ports/out/supplier-repository.port.js";
+
+function toEntity(row: Record<string, unknown>): Supplier {
+  return Supplier.reconstitute({
+    id: row.id as string,
+    name: row.name as string,
+    nif: (row.nif as string | null) ?? null,
+    email: (row.email as string | null) ?? null,
+    phone: (row.phone as string | null) ?? null,
+    address: (row.address as string | null) ?? null,
+    iban: (row.iban as string | null) ?? null,
+    defaultCostCenterId: (row.default_cost_center_id as string | null) ?? null,
+    paymentTermsDays: row.payment_terms_days != null ? Number(row.payment_terms_days) : null,
+    notes: (row.notes as string | null) ?? null,
+    status: row.status as SupplierStatus,
+    createdAt: new Date(row.created_at as string),
+    updatedAt: new Date(row.updated_at as string),
+  });
+}
+
+export class SupabaseSupplierRepository implements SupplierRepositoryPort {
+  constructor(private readonly supabase: SupabaseClient) {}
+
+  async save(supplier: Supplier): Promise<void> {
+    const { error } = await this.supabase.from("suppliers").insert({
+      id: supplier.id,
+      name: supplier.name,
+      nif: supplier.nif,
+      email: supplier.email,
+      phone: supplier.phone,
+      address: supplier.address,
+      iban: supplier.iban,
+      default_cost_center_id: supplier.defaultCostCenterId,
+      payment_terms_days: supplier.paymentTermsDays,
+      notes: supplier.notes,
+      status: supplier.status,
+      created_at: supplier.createdAt.toISOString(),
+      updated_at: supplier.updatedAt.toISOString(),
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  async findById(id: string): Promise<Supplier | null> {
+    const { data, error } = await this.supabase
+      .from("suppliers")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    return toEntity(data as Record<string, unknown>);
+  }
+
+  async findAll(filter?: SupplierFilter): Promise<Supplier[]> {
+    let q = this.supabase
+      .from("suppliers")
+      .select("*")
+      .order("name", { ascending: true });
+
+    if (filter?.status) q = q.eq("status", filter.status);
+    if (filter?.search) q = q.ilike("name", `%${filter.search}%`);
+
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+  }
+
+  async update(supplier: Supplier): Promise<void> {
+    const { error } = await this.supabase
+      .from("suppliers")
+      .update({
+        name: supplier.name,
+        nif: supplier.nif,
+        email: supplier.email,
+        phone: supplier.phone,
+        address: supplier.address,
+        iban: supplier.iban,
+        default_cost_center_id: supplier.defaultCostCenterId,
+        payment_terms_days: supplier.paymentTermsDays,
+        notes: supplier.notes,
+        status: supplier.status,
+        updated_at: supplier.updatedAt.toISOString(),
+      })
+      .eq("id", supplier.id);
+    if (error) throw new Error(error.message);
+  }
+}

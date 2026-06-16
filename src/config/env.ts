@@ -65,6 +65,8 @@ export const ENV = {
    * ID do caixa registador Vendus usado nos fechos de caixa.
    * Fallback para UBER_EATS_VENDUS_REGISTER_ID (mesmo registo).
    */
-  VENDUS_REGISTER_ID:
-    process.env.VENDUS_REGISTER_ID ?? process.env.UBER_EATS_VENDUS_REGISTER_ID ?? "",
+  VENDUS_REGISTER_ID: must(
+    process.env.VENDUS_REGISTER_ID ?? process.env.UBER_EATS_VENDUS_REGISTER_ID,
+    "VENDUS_REGISTER_ID (ou UBER_EATS_VENDUS_REGISTER_ID)",
+  ),
 };

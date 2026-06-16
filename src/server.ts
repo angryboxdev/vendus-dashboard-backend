@@ -13,6 +13,8 @@ import { hrKioskRoutes } from "./routes/hrKioskRoutes.js";
 import { hrAuditRoutes } from "./routes/hrAuditRoutes.js";
 import { hrLeaveRoutes } from "./routes/hrLeaveRoutes.js";
 import { createCashClosingsModule } from "./modules/cash-closings/cash-closings.module.js";
+import { createFinancialBaseModule } from "./modules/financial-base/financial-base.module.js";
+import { createInvoicesModule } from "./modules/invoices/invoices.module.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { crmRoutes } from "./routes/crmRoutes.js";
@@ -75,6 +77,14 @@ app.use("/api/hr", hrLeaveRoutes);
 
 // CRM: acessível a managers+
 app.use("/api", requireMinRole("manager"), crmRoutes);
+
+// Financial base module (hexagonal)
+const financialBaseModule = createFinancialBaseModule();
+app.use("/api", requireMinRole("manager"), financialBaseModule.router);
+
+// Invoices module (hexagonal)
+const invoicesModule = createInvoicesModule();
+app.use("/api", requireMinRole("manager"), invoicesModule.router);
 
 // Cash closing manager routes (authenticated)
 app.use("/api", requireMinRole("manager"), cashClosingsModule.managedRouter);

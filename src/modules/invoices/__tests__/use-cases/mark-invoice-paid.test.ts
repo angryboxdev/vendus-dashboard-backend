@@ -1,0 +1,52 @@
+import { MarkInvoicePaidUseCase } from "../../application/use-cases/mark-invoice-paid.use-case.js";
+import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
+import { Invoice } from "../../domain/entities/invoice.js";
+import { InvoiceNotFoundError } from "../../domain/errors.js";
+
+const makeInvoice = () =>
+  Invoice.create({
+    supplierName: "EDP",
+    invoiceNumber: "EDP-001",
+    invoiceDate: new Date("2026-06-01"),
+    subtotalWithoutVat: 85000,
+    totalVat: 5100,
+    totalWithVat: 90100,
+  });
+
+describe("MarkInvoicePaidUseCase", () => {
+  let invoiceRepo: FakeInvoiceRepository;
+  let useCase: MarkInvoicePaidUseCase;
+
+  beforeEach(() => {
+    invoiceRepo = new FakeInvoiceRepository();
+    useCase = new MarkInvoicePaidUseCase(invoiceRepo);
+  });
+
+  it("marks invoice as paid with provided date", async () => {
+    const inv = makeInvoice();
+    await invoiceRepo.save(inv);
+
+    const dto = await useCase.execute({ id: inv.id, paidAt: "2026-06-15" });
+    expect(dto.status).toBe("paid");
+    expect(dto.paidAt).toBe("2026-06-15");
+  });
+
+  it("defaults paidAt to today when not provided", async () => {
+    const inv = makeInvoice();
+    await invoiceRepo.save(inv);
+
+    const dto = await useCase.execute({ id: inv.id });
+    expect(dto.status).toBe("paid");
+    expect(dto.paidAt).not.toBeNull();
+  });
+
+  it("throws InvoiceNotFoundError if invoice does not exist", async () => {
+    await expect(useCase.execute({ id: "nonexistent" })).rejects.toThrow(InvoiceNotFoundError);
+  });
+
+  it("throws if invoice is cancelled", async () => {
+    const inv = makeInvoice().cancel();
+    await invoiceRepo.save(inv);
+    await expect(useCase.execute({ id: inv.id })).rejects.toThrow();
+  });
+});
