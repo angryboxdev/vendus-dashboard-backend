@@ -1,6 +1,6 @@
 # Sistema Financeiro Integrado — Plano de Desenvolvimento
 
-> Status: Em planeamento
+> Status: Em progresso — sessões 1A, 1B, 2A, 2B concluídas; próxima: 3A
 > Inicio: 2026-06-16
 > Ultima atualização: 2026-06-16
 
@@ -86,7 +86,7 @@ importador manual, a implementar no futuro como troca de um output port.
 ---
 
 ### Módulo 1 — `financial-base`
-**Status:** A fazer
+**Status:** ✅ Concluído (sessões 1A + 1B)
 **Páginas:** Centros de Custo, Fornecedores
 
 #### O que os mockups mostram
@@ -165,12 +165,12 @@ suppliers    (id uuid PK, name text, nif text, email text, phone text,
 
 #### Sessões
 - [x] **Sessão 1A — Backend:** domain → ports → use cases → testes (fakes) → adapters Supabase → controller → module → README
-- [ ] **Sessão 1B — Frontend:** listagem CC (tabela + KPIs + sidebar resumo) + ficha CC + CRUD fornecedores
+- [x] **Sessão 1B — Frontend:** listagem CC (tabela + KPIs + sidebar resumo) + ficha CC + CRUD fornecedores
 
 ---
 
 ### Módulo 2 — `invoices`
-**Status:** A fazer
+**Status:** ✅ Concluído (sessões 2A + 2B)
 **Depende de:** `financial-base` (lê fornecedores e centros de custo)
 **Página:** Faturas
 
@@ -268,8 +268,8 @@ classification_rules (id uuid PK, supplier_id uuid FK,
 ```
 
 #### Sessões
-- [ ] **Sessão 2A — Backend:** domain → ports → use cases → testes → adapters → controller → module → README
-- [ ] **Sessão 2B — Frontend:** listagem faturas + upload manual + ficha com classificação por linha
+- [x] **Sessão 2A — Backend:** domain → ports → use cases → testes → adapters → controller → module → README
+- [x] **Sessão 2B — Frontend:** listagem faturas + upload manual + ficha com classificação por linha
 
 ---
 
@@ -665,8 +665,10 @@ financial-reports ←───────────────────�
 
 ---
 
-## Próximos passos imediatos (Sessão 1A)
+## Próximos passos imediatos (Sessão 3A)
 
-Implementar `financial-base` backend seguindo a ordem do CLAUDE.md:
+Implementar `cobrar-e-pagar` backend seguindo a ordem do CLAUDE.md:
 `domain/entities/` → `domain/ports/` → `application/use-cases/` →
-`__tests__/` → `adapters/out/` → `adapters/in/` → `financial-base.module.ts` → `README.md`
+`__tests__/` → `adapters/out/` → `adapters/in/` → `cobrar-e-pagar.module.ts` → `README.md`
+
+Ver especificação completa na secção "Módulo 3 — cobrar-e-pagar" acima.
