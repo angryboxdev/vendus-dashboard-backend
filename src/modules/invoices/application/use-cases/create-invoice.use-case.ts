@@ -7,12 +7,14 @@ import type {
 } from "../../domain/ports/in/invoice.ports.js";
 import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
 import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
+import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry-write.port.js";
 import { toInvoiceDTO } from "./shared.js";
 
 export class CreateInvoiceUseCase implements CreateInvoicePort {
   constructor(
     private readonly invoiceRepo: InvoiceRepositoryPort,
     private readonly lineRepo: InvoiceLineRepositoryPort,
+    private readonly payableWrite: PayableEntryWritePort,
   ) {}
 
   async execute(command: CreateInvoiceCommand): Promise<InvoiceDTO> {
@@ -52,6 +54,18 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     await this.invoiceRepo.save(invoice);
     if (lines.length > 0) {
       await this.lineRepo.saveAll(lines);
+    }
+
+    // Auto-criar conta a pagar quando a fatura tem data de vencimento
+    if (invoice.dueDate) {
+      await this.payableWrite.createForInvoice({
+        invoiceId: invoice.id,
+        supplierId: invoice.supplierId,
+        supplierName: invoice.supplierName,
+        invoiceNumber: invoice.invoiceNumber,
+        dueDate: invoice.dueDate,
+        amount: invoice.totalWithVat,
+      });
     }
 
     return toInvoiceDTO(invoice, lines);

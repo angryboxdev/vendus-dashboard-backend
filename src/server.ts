@@ -15,6 +15,7 @@ import { hrLeaveRoutes } from "./routes/hrLeaveRoutes.js";
 import { createCashClosingsModule } from "./modules/cash-closings/cash-closings.module.js";
 import { createFinancialBaseModule } from "./modules/financial-base/financial-base.module.js";
 import { createInvoicesModule } from "./modules/invoices/invoices.module.js";
+import { createPayableEntriesModule } from "./modules/payable-entries/payable-entries.module.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { crmRoutes } from "./routes/crmRoutes.js";
@@ -85,6 +86,10 @@ app.use("/api", requireMinRole("manager"), financialBaseModule.router);
 // Invoices module (hexagonal)
 const invoicesModule = createInvoicesModule();
 app.use("/api", requireMinRole("manager"), invoicesModule.router);
+
+// Payable entries module (hexagonal)
+const payableEntriesModule = createPayableEntriesModule();
+app.use("/api", requireMinRole("manager"), payableEntriesModule.router);
 
 // Cash closing manager routes (authenticated)
 app.use("/api", requireMinRole("manager"), cashClosingsModule.managedRouter);

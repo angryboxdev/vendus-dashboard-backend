@@ -1,5 +1,6 @@
 import { SetInvoiceStatusUseCase } from "../../application/use-cases/set-invoice-status.use-case.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
+import { FakePayableEntryWrite } from "../fakes/fake-payable-entry-write.js";
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceNotFoundError } from "../../domain/errors.js";
 
@@ -15,11 +16,13 @@ const makeInvoice = () =>
 
 describe("SetInvoiceStatusUseCase", () => {
   let repo: FakeInvoiceRepository;
+  let payableWrite: FakePayableEntryWrite;
   let useCase: SetInvoiceStatusUseCase;
 
   beforeEach(() => {
     repo = new FakeInvoiceRepository();
-    useCase = new SetInvoiceStatusUseCase(repo);
+    payableWrite = new FakePayableEntryWrite();
+    useCase = new SetInvoiceStatusUseCase(repo, payableWrite);
   });
 
   it("muda estado para overdue", async () => {
@@ -60,5 +63,33 @@ describe("SetInvoiceStatusUseCase", () => {
     await expect(
       useCase.execute({ id: "nao-existe", status: "overdue" }),
     ).rejects.toThrow(InvoiceNotFoundError);
+  });
+
+  it("cancels the linked payable entry when status is set to cancelled", async () => {
+    const inv = makeInvoice();
+    await repo.save(inv);
+
+    await useCase.execute({ id: inv.id, status: "cancelled" });
+    expect(payableWrite.cancelled).toContain(inv.id);
+  });
+
+  it("marks the linked payable entry as paid when status is set to paid", async () => {
+    const inv = makeInvoice();
+    await repo.save(inv);
+
+    await useCase.execute({ id: inv.id, status: "paid" });
+    expect(payableWrite.markedPaid).toHaveLength(1);
+    expect(payableWrite.markedPaid[0]!.invoiceId).toBe(inv.id);
+  });
+
+  it("does not touch payable entry for non-synced statuses (overdue, review)", async () => {
+    const inv = makeInvoice();
+    await repo.save(inv);
+
+    await useCase.execute({ id: inv.id, status: "overdue" });
+    await useCase.execute({ id: inv.id, status: "review" });
+
+    expect(payableWrite.cancelled).toHaveLength(0);
+    expect(payableWrite.markedPaid).toHaveLength(0);
   });
 });

@@ -1,16 +1,19 @@
 import { CreateInvoiceUseCase } from "../../application/use-cases/create-invoice.use-case.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
+import { FakePayableEntryWrite } from "../fakes/fake-payable-entry-write.js";
 
 describe("CreateInvoiceUseCase", () => {
   let invoiceRepo: FakeInvoiceRepository;
   let lineRepo: FakeInvoiceLineRepository;
+  let payableWrite: FakePayableEntryWrite;
   let useCase: CreateInvoiceUseCase;
 
   beforeEach(() => {
     invoiceRepo = new FakeInvoiceRepository();
     lineRepo = new FakeInvoiceLineRepository();
-    useCase = new CreateInvoiceUseCase(invoiceRepo, lineRepo);
+    payableWrite = new FakePayableEntryWrite();
+    useCase = new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite);
   });
 
   it("creates and persists invoice with pending status", async () => {
@@ -81,5 +84,33 @@ describe("CreateInvoiceUseCase", () => {
       totalWithVat: 12300,
     });
     expect(dto.invoiceDate).toBe("2026-05-15");
+  });
+
+  it("auto-creates payable entry when invoice has dueDate", async () => {
+    const dto = await useCase.execute({
+      supplierName: "EDP",
+      invoiceNumber: "EDP-001",
+      invoiceDate: "2026-07-01",
+      dueDate: "2026-07-31",
+      subtotalWithoutVat: 85000,
+      totalVat: 5100,
+      totalWithVat: 90100,
+    });
+    expect(payableWrite.created).toHaveLength(1);
+    expect(payableWrite.created[0]!.invoiceId).toBe(dto.id);
+    expect(payableWrite.created[0]!.amount).toBe(90100);
+    expect(payableWrite.created[0]!.dueDate).toEqual(new Date("2026-07-31"));
+  });
+
+  it("does NOT create payable entry when invoice has no dueDate", async () => {
+    await useCase.execute({
+      supplierName: "EDP",
+      invoiceNumber: "EDP-002",
+      invoiceDate: "2026-07-01",
+      subtotalWithoutVat: 85000,
+      totalVat: 5100,
+      totalWithVat: 90100,
+    });
+    expect(payableWrite.created).toHaveLength(0);
   });
 });

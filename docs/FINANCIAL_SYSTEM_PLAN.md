@@ -274,7 +274,7 @@ classification_rules (id uuid PK, supplier_id uuid FK,
 ---
 
 ### Módulo 3 — `cobrar-e-pagar`
-**Status:** A fazer
+**Status:** ✅ Concluído (sessão 3A — backend `payable-entries`)
 **Depende de:** `invoices` (lê faturas), `financial-base` (cc + fornecedores)
 **Página:** Cobrar e Pagar
 
@@ -330,8 +330,8 @@ payable_entries (id uuid PK, invoice_id uuid FK nullable,
 ```
 
 #### Sessões
-- [ ] **Sessão 3A — Backend:** domain → ports → use cases → testes → adapters → controller → module → README
-- [ ] **Sessão 3B — Frontend:** listagem + calendário + KPIs + marcar pago
+- [x] **Sessão 3A — Backend:** domain → ports → use cases → testes → adapters → controller → module → README
+- [x] **Sessão 3B — Frontend:** listagem + calendário + KPIs + marcar pago
 
 ---
 
@@ -651,8 +651,8 @@ financial-reports ←───────────────────�
 | 1B | 2026-06-16 | financial-base | Frontend: listagem CC + fornecedores + fichas | Concluído |
 | 2A | 2026-06-16 | invoices | Backend: Invoice + InvoiceLine | Concluído |
 | 2B | 2026-06-16 | invoices | Frontend: listagem + ficha + classificação por linha | Concluído |
-| 3A | — | cobrar-e-pagar | Backend: PayableEntry | A fazer |
-| 3B | — | cobrar-e-pagar | Frontend: listagem + calendário | A fazer |
+| 3A | 2026-06-17 | cobrar-e-pagar | Backend: PayableEntry | Concluído |
+| 3B | 2026-06-17 | cobrar-e-pagar | Frontend: listagem + calendário | Concluído |
 | 4A | — | bank-statements | Backend: import CSV/XLS + movements + conciliação | A fazer |
 | 4B | — | bank-statements | Frontend: upload + movimentos + painel conciliação | A fazer |
 | 5A | — | stock-valuation | Backend: stock entries + custo médio | A fazer |

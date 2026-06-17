@@ -3,6 +3,7 @@ import { getSupabaseServiceRole } from "../../infra/supabaseClient.js";
 import { SupabaseInvoiceRepository } from "./adapters/out/supabase-invoice.repository.js";
 import { SupabaseInvoiceLineRepository } from "./adapters/out/supabase-invoice-line.repository.js";
 import { SupabaseClassificationRuleRepository } from "./adapters/out/supabase-classification-rule.repository.js";
+import { SupabasePayableEntryWriteAdapter } from "./adapters/out/supabase-payable-entry-write.adapter.js";
 import { CreateInvoiceUseCase } from "./application/use-cases/create-invoice.use-case.js";
 import { UpdateInvoiceUseCase } from "./application/use-cases/update-invoice.use-case.js";
 import { MarkInvoicePaidUseCase } from "./application/use-cases/mark-invoice-paid.use-case.js";
@@ -26,12 +27,13 @@ export function createInvoicesModule(supabase?: SupabaseClient): InvoicesModule 
   const invoiceRepo = new SupabaseInvoiceRepository(client);
   const lineRepo = new SupabaseInvoiceLineRepository(client);
   const ruleRepo = new SupabaseClassificationRuleRepository(client);
+  const payableWrite = new SupabasePayableEntryWriteAdapter(client);
 
   const router = createInvoiceRouter({
-    createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo),
+    createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite),
     updateInvoice: new UpdateInvoiceUseCase(invoiceRepo),
-    markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo),
-    setInvoiceStatus: new SetInvoiceStatusUseCase(invoiceRepo),
+    markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite),
+    setInvoiceStatus: new SetInvoiceStatusUseCase(invoiceRepo, payableWrite),
     classifyInvoiceLine: new ClassifyInvoiceLineUseCase(invoiceRepo, lineRepo, ruleRepo),
     listInvoices: new ListInvoicesUseCase(invoiceRepo),
     getInvoice: new GetInvoiceUseCase(invoiceRepo, lineRepo),

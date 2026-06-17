@@ -1,5 +1,6 @@
 import { MarkInvoicePaidUseCase } from "../../application/use-cases/mark-invoice-paid.use-case.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
+import { FakePayableEntryWrite } from "../fakes/fake-payable-entry-write.js";
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceNotFoundError } from "../../domain/errors.js";
 
@@ -15,11 +16,13 @@ const makeInvoice = () =>
 
 describe("MarkInvoicePaidUseCase", () => {
   let invoiceRepo: FakeInvoiceRepository;
+  let payableWrite: FakePayableEntryWrite;
   let useCase: MarkInvoicePaidUseCase;
 
   beforeEach(() => {
     invoiceRepo = new FakeInvoiceRepository();
-    useCase = new MarkInvoicePaidUseCase(invoiceRepo);
+    payableWrite = new FakePayableEntryWrite();
+    useCase = new MarkInvoicePaidUseCase(invoiceRepo, payableWrite);
   });
 
   it("marks invoice as paid with provided date", async () => {
@@ -48,5 +51,14 @@ describe("MarkInvoicePaidUseCase", () => {
     const inv = makeInvoice().cancel();
     await invoiceRepo.save(inv);
     await expect(useCase.execute({ id: inv.id })).rejects.toThrow();
+  });
+
+  it("syncs the linked payable entry as paid", async () => {
+    const inv = makeInvoice();
+    await invoiceRepo.save(inv);
+    await useCase.execute({ id: inv.id, paidAt: "2026-07-05" });
+    expect(payableWrite.markedPaid).toHaveLength(1);
+    expect(payableWrite.markedPaid[0]!.invoiceId).toBe(inv.id);
+    expect(payableWrite.markedPaid[0]!.paidAt).toEqual(new Date("2026-07-05"));
   });
 });

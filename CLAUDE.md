@@ -138,9 +138,35 @@ formato:
 > Status: ativo | em refactor | legado
 > Última atualização: <data>
 
-## Propósito
+---
 
-O que resolve (2-3 frases). O que é e o que NÃO é responsabilidade dele.
+## O que é e para que serve (perspectiva de negócio)
+
+Contexto do problema real — quem usa, em que momento, porquê existe.
+
+**O problema que resolve:**
+A dor concreta sem este módulo (1-3 frases).
+
+**O fluxo do ponto de vista do negócio:**
+
+```
+Ator A                              Ator B
+──────────────────────              ──────────────────────
+1. Faz X
+2. Confirma Y                   →   3. Vê Z
+                                    4. Aprova ou rejeita
+```
+
+**Conceitos-chave para o negócio:**
+
+- **Termo A** — definição em linguagem não-técnica.
+- **Termo B** — definição em linguagem não-técnica.
+
+---
+
+## Propósito técnico
+
+O que resolve tecnicamente (2-3 frases). O que é e o que NÃO é responsabilidade dele.
 
 ## Conceitos do domínio
 
