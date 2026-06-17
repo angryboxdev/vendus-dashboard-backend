@@ -15,14 +15,14 @@ export class UpdatePayableEntryUseCase implements UpdatePayableEntryPort {
     if (!entry) throw new PayableEntryNotFoundError(command.id);
 
     const updated = entry.update({
-      supplierName: command.supplierName,
-      description: command.description,
-      costCenterId: command.costCenterId,
-      category: command.category,
-      amount: command.amount,
-      dueDate: command.dueDate ? new Date(command.dueDate) : undefined,
-      recurrence: command.recurrence,
-      notes: command.notes,
+      ...(command.supplierName !== undefined && { supplierName: command.supplierName }),
+      ...(command.description !== undefined && { description: command.description }),
+      ...(command.costCenterId !== undefined && { costCenterId: command.costCenterId }),
+      ...(command.category !== undefined && { category: command.category }),
+      ...(command.amount !== undefined && { amount: command.amount }),
+      ...(command.dueDate !== undefined && { dueDate: new Date(command.dueDate) }),
+      ...(command.recurrence !== undefined && { recurrence: command.recurrence }),
+      ...(command.notes !== undefined && { notes: command.notes }),
     });
 
     await this.repo.update(updated);

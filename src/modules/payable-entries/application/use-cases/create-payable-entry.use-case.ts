@@ -12,15 +12,15 @@ export class CreatePayableEntryUseCase implements CreatePayableEntryPort {
 
   async execute(command: CreatePayableEntryCommand): Promise<PayableEntryDTO> {
     const entry = PayableEntry.create({
-      supplierId: command.supplierId,
+      ...(command.supplierId !== undefined && { supplierId: command.supplierId }),
       supplierName: command.supplierName,
       description: command.description,
-      costCenterId: command.costCenterId,
-      category: command.category,
+      ...(command.costCenterId !== undefined && { costCenterId: command.costCenterId }),
+      ...(command.category !== undefined && { category: command.category }),
       amount: command.amount,
       dueDate: new Date(command.dueDate),
-      recurrence: command.recurrence,
-      notes: command.notes,
+      ...(command.recurrence !== undefined && { recurrence: command.recurrence }),
+      ...(command.notes !== undefined && { notes: command.notes }),
     });
     await this.repo.save(entry);
     return toDTO(entry);

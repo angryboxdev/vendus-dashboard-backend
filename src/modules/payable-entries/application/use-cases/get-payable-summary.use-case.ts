@@ -14,11 +14,11 @@ export class GetPayableSummaryUseCase implements GetPayableSummaryPort {
 
   async execute(filter?: ListPayableEntriesFilter): Promise<PayableSummaryDTO> {
     const entries = await this.repo.findAll({
-      supplierId: filter?.supplierId,
-      costCenterId: filter?.costCenterId,
-      status: filter?.status as PayableStatus | undefined,
-      from: filter?.from ? new Date(filter.from) : undefined,
-      to: filter?.to ? new Date(filter.to) : undefined,
+      ...(filter?.supplierId !== undefined && { supplierId: filter.supplierId }),
+      ...(filter?.costCenterId !== undefined && { costCenterId: filter.costCenterId }),
+      ...(filter?.status !== undefined && { status: filter.status as PayableStatus }),
+      ...(filter?.from !== undefined && { from: new Date(filter.from) }),
+      ...(filter?.to !== undefined && { to: new Date(filter.to) }),
     });
     return this.summaryService.computeSummary(entries, new Date());
   }
