@@ -60,6 +60,35 @@ describe("CreateInvoiceUseCase", () => {
     expect(dto.lines![0]!.invoiceId).toBe(dto.id);
   });
 
+  it("creates invoice with lines including costCenterCategoryId", async () => {
+    const dto = await useCase.execute({
+      supplierName: "Makro",
+      invoiceNumber: "MKR-002",
+      invoiceDate: "2026-06-01",
+      subtotalWithoutVat: 50000,
+      totalVat: 3000,
+      totalWithVat: 53000,
+      lines: [
+        {
+          description: "Farinha T55",
+          type: "stock_purchase",
+          costCenterCategoryId: "cat-cmv",
+          category: "Ingredientes",
+          quantity: 50,
+          unitCostWithoutVat: 1000,
+          vatRate: 6,
+          vatAmount: 3000,
+          totalWithVat: 53000,
+        },
+      ],
+    });
+
+    expect(dto.lines).toHaveLength(1);
+    expect(dto.lines![0]!.costCenterCategoryId).toBe("cat-cmv");
+    expect(dto.lines![0]!.category).toBe("Ingredientes");
+    expect(dto.lines![0]!.type).toBe("stock_purchase");
+  });
+
   it("persists supplierId when provided", async () => {
     const dto = await useCase.execute({
       supplierId: "supplier-abc",

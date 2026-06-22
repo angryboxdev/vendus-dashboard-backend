@@ -33,6 +33,7 @@ export class ClassifyInvoiceLineUseCase implements ClassifyInvoiceLinePort {
       if (existing) {
         const updated = existing.update({
           defaultCostCenterId: command.classify.costCenterId ?? existing.defaultCostCenterId,
+          defaultCostCenterCategoryId: command.classify.costCenterCategoryId ?? existing.defaultCostCenterCategoryId,
           defaultLineType: command.classify.type ?? existing.defaultLineType,
           defaultCategory: command.classify.category ?? existing.defaultCategory,
           confidenceBoost: Math.min(existing.confidenceBoost + 10, 100),
@@ -44,6 +45,7 @@ export class ClassifyInvoiceLineUseCase implements ClassifyInvoiceLinePort {
           confidenceBoost: 10,
         };
         if (command.classify.costCenterId !== undefined) ruleProps.defaultCostCenterId = command.classify.costCenterId;
+        if (command.classify.costCenterCategoryId !== undefined) ruleProps.defaultCostCenterCategoryId = command.classify.costCenterCategoryId;
         if (command.classify.type !== undefined) ruleProps.defaultLineType = command.classify.type;
         if (command.classify.category !== undefined) ruleProps.defaultCategory = command.classify.category;
         const rule = ClassificationRule.create(ruleProps);

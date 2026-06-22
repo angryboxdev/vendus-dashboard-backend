@@ -16,6 +16,7 @@ export class SuggestLineClassificationUseCase implements SuggestLineClassificati
 
     return {
       costCenterId: rule.defaultCostCenterId,
+      costCenterCategoryId: rule.defaultCostCenterCategoryId,
       lineType: rule.defaultLineType,
       category: rule.defaultCategory,
       confidenceScore,

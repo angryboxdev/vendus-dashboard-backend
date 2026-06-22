@@ -18,7 +18,8 @@ describe("Supplier", () => {
       expect(s.nif).toBeNull();
       expect(s.email).toBeNull();
       expect(s.iban).toBeNull();
-      expect(s.defaultCostCenterId).toBeNull();
+      expect(s.defaultCostCenterGroupId).toBeNull();
+      expect(s.defaultCostCenterCategoryId).toBeNull();
     });
   });
 
@@ -49,6 +50,13 @@ describe("Supplier", () => {
       const s = Supplier.create({ name: "Fornecedor" });
       s.deactivate();
       expect(s.status).toBe("active");
+    });
+
+    it("activa um fornecedor inactivo", () => {
+      const s = Supplier.create({ name: "Fornecedor" }).deactivate();
+      const activated = s.activate();
+      expect(activated.status).toBe("active");
+      expect(s.status).toBe("inactive");
     });
   });
 });

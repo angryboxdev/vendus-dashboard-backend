@@ -1,14 +1,22 @@
 import type { Router } from "express";
 import { getSupabaseServiceRole } from "../../infra/supabaseClient.js";
 
-import { SupabaseCostCenterRepository } from "./adapters/out/supabase-cost-center.repository.js";
+import { SupabaseCostCenterGroupRepository } from "./adapters/out/supabase-cost-center-group.repository.js";
+import { SupabaseCostCenterCategoryRepository } from "./adapters/out/supabase-cost-center-category.repository.js";
 import { SupabaseSupplierRepository } from "./adapters/out/supabase-supplier.repository.js";
 
-import { CreateCostCenterUseCase } from "./application/use-cases/create-cost-center.use-case.js";
-import { UpdateCostCenterUseCase } from "./application/use-cases/update-cost-center.use-case.js";
-import { ToggleCostCenterStatusUseCase } from "./application/use-cases/toggle-cost-center-status.use-case.js";
-import { ListCostCentersUseCase } from "./application/use-cases/list-cost-centers.use-case.js";
-import { GetCostCenterUseCase } from "./application/use-cases/get-cost-center.use-case.js";
+import { ListCostCenterGroupsUseCase } from "./application/use-cases/list-cost-center-groups.use-case.js";
+import { GetCostCenterGroupUseCase } from "./application/use-cases/get-cost-center-group.use-case.js";
+import { CreateCostCenterGroupUseCase } from "./application/use-cases/create-cost-center-group.use-case.js";
+import { UpdateCostCenterGroupUseCase } from "./application/use-cases/update-cost-center-group.use-case.js";
+import { ToggleCostCenterGroupStatusUseCase } from "./application/use-cases/toggle-cost-center-group-status.use-case.js";
+
+import { ListCostCenterCategoriesUseCase } from "./application/use-cases/list-cost-center-categories.use-case.js";
+import { GetCostCenterCategoryUseCase } from "./application/use-cases/get-cost-center-category.use-case.js";
+import { CreateCostCenterCategoryUseCase } from "./application/use-cases/create-cost-center-category.use-case.js";
+import { UpdateCostCenterCategoryUseCase } from "./application/use-cases/update-cost-center-category.use-case.js";
+import { ToggleCostCenterCategoryStatusUseCase } from "./application/use-cases/toggle-cost-center-category-status.use-case.js";
+import { SeedDefaultCostCentersUseCase } from "./application/use-cases/seed-default-cost-centers.use-case.js";
 
 import { CreateSupplierUseCase } from "./application/use-cases/create-supplier.use-case.js";
 import { UpdateSupplierUseCase } from "./application/use-cases/update-supplier.use-case.js";
@@ -29,15 +37,32 @@ export function createFinancialBaseModule(): { router: Router } {
   if (!supabase) throw new Error("Supabase service role não configurado");
 
   // Adapters de saída
-  const costCenterRepository = new SupabaseCostCenterRepository(supabase);
+  const groupRepository = new SupabaseCostCenterGroupRepository(supabase);
+  const categoryRepository = new SupabaseCostCenterCategoryRepository(supabase);
   const supplierRepository = new SupabaseSupplierRepository(supabase);
 
-  // Use cases — centros de custo
-  const createCostCenter = new CreateCostCenterUseCase(costCenterRepository);
-  const updateCostCenter = new UpdateCostCenterUseCase(costCenterRepository);
-  const toggleCostCenterStatus = new ToggleCostCenterStatusUseCase(costCenterRepository);
-  const listCostCenters = new ListCostCentersUseCase(costCenterRepository);
-  const getCostCenter = new GetCostCenterUseCase(costCenterRepository);
+  // Use cases — grupos de centros de custo
+  const listCostCenterGroups = new ListCostCenterGroupsUseCase(groupRepository);
+  const getCostCenterGroup = new GetCostCenterGroupUseCase(groupRepository);
+  const createCostCenterGroup = new CreateCostCenterGroupUseCase(groupRepository);
+  const updateCostCenterGroup = new UpdateCostCenterGroupUseCase(groupRepository);
+  const toggleCostCenterGroupStatus = new ToggleCostCenterGroupStatusUseCase(groupRepository);
+
+  // Use cases — subcategorias de centros de custo
+  const listCostCenterCategories = new ListCostCenterCategoriesUseCase(categoryRepository);
+  const getCostCenterCategory = new GetCostCenterCategoryUseCase(categoryRepository);
+  const createCostCenterCategory = new CreateCostCenterCategoryUseCase(
+    groupRepository,
+    categoryRepository,
+  );
+  const updateCostCenterCategory = new UpdateCostCenterCategoryUseCase(categoryRepository);
+  const toggleCostCenterCategoryStatus = new ToggleCostCenterCategoryStatusUseCase(
+    categoryRepository,
+  );
+  const seedDefaultCostCenters = new SeedDefaultCostCentersUseCase(
+    groupRepository,
+    categoryRepository,
+  );
 
   // Use cases — fornecedores
   const createSupplier = new CreateSupplierUseCase(supplierRepository);
@@ -48,11 +73,17 @@ export function createFinancialBaseModule(): { router: Router } {
 
   // Adapter de entrada (HTTP)
   const controller = new FinancialBaseController(
-    createCostCenter,
-    updateCostCenter,
-    toggleCostCenterStatus,
-    listCostCenters,
-    getCostCenter,
+    listCostCenterGroups,
+    getCostCenterGroup,
+    createCostCenterGroup,
+    updateCostCenterGroup,
+    toggleCostCenterGroupStatus,
+    listCostCenterCategories,
+    getCostCenterCategory,
+    createCostCenterCategory,
+    updateCostCenterCategory,
+    toggleCostCenterCategoryStatus,
+    seedDefaultCostCenters,
     createSupplier,
     updateSupplier,
     toggleSupplierStatus,

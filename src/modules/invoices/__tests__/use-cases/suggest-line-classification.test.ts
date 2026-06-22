@@ -68,4 +68,15 @@ describe("SuggestLineClassificationUseCase", () => {
     const result = await useCase.execute("supplier-4");
     expect(result!.category).toBe("Ingredientes");
   });
+
+  it("retorna costCenterCategoryId quando definido na regra", async () => {
+    const rule = ClassificationRule.create({
+      supplierId: "supplier-5",
+      defaultCostCenterCategoryId: "cat-cmv",
+    });
+    await ruleRepo.save(rule);
+
+    const result = await useCase.execute("supplier-5");
+    expect(result!.costCenterCategoryId).toBe("cat-cmv");
+  });
 });

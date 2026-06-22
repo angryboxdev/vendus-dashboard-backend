@@ -10,6 +10,7 @@ function toEntity(row: Record<string, unknown>): InvoiceLine {
     description: row.description as string,
     type: row.type as InvoiceLineType,
     costCenterId: (row.cost_center_id as string | null) ?? null,
+    costCenterCategoryId: (row.cost_center_category_id as string | null) ?? null,
     category: (row.category as string | null) ?? null,
     subcategory: (row.subcategory as string | null) ?? null,
     stockItemId: (row.stock_item_id as string | null) ?? null,
@@ -35,6 +36,7 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
       description: l.description,
       type: l.type,
       cost_center_id: l.costCenterId,
+      cost_center_category_id: l.costCenterCategoryId,
       category: l.category,
       subcategory: l.subcategory,
       stock_item_id: l.stockItemId,
@@ -49,6 +51,15 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
     }));
     const { error } = await this.supabase.from("invoice_lines").insert(rows);
     if (error) throw new Error(error.message);
+  }
+
+  async findAll(): Promise<InvoiceLine[]> {
+    const { data, error } = await this.supabase
+      .from("invoice_lines")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
   }
 
   async findByInvoiceId(invoiceId: string): Promise<InvoiceLine[]> {
@@ -68,6 +79,7 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
         description: line.description,
         type: line.type,
         cost_center_id: line.costCenterId,
+        cost_center_category_id: line.costCenterCategoryId,
         category: line.category,
         subcategory: line.subcategory,
         stock_item_id: line.stockItemId,

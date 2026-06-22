@@ -15,8 +15,14 @@ describe("InvoiceLine entity", () => {
     const line = InvoiceLine.create(base);
     expect(line.type).toBe("other");
     expect(line.costCenterId).toBeNull();
+    expect(line.costCenterCategoryId).toBeNull();
     expect(line.stockEntryId).toBeNull();
     expect(line.id).toBeDefined();
+  });
+
+  it("persists costCenterCategoryId when provided", () => {
+    const line = InvoiceLine.create({ ...base, costCenterCategoryId: "cat-cmv" });
+    expect(line.costCenterCategoryId).toBe("cat-cmv");
   });
 
   it("trims description", () => {
@@ -37,6 +43,19 @@ describe("InvoiceLine entity", () => {
     // immutability
     expect(line.type).toBe("other");
     expect(line.costCenterId).toBeNull();
+  });
+
+  it("classify sets costCenterCategoryId", () => {
+    const line = InvoiceLine.create(base);
+    const classified = line.classify({ costCenterCategoryId: "cat-cmv" });
+    expect(classified.costCenterCategoryId).toBe("cat-cmv");
+    expect(line.costCenterCategoryId).toBeNull();
+  });
+
+  it("classify allows clearing costCenterCategoryId with null", () => {
+    const line = InvoiceLine.create({ ...base, costCenterCategoryId: "cat-cmv" });
+    const cleared = line.classify({ costCenterCategoryId: null });
+    expect(cleared.costCenterCategoryId).toBeNull();
   });
 
   it("classify preserves unspecified fields", () => {

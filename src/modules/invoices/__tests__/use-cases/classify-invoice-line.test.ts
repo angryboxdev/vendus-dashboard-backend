@@ -51,6 +51,26 @@ describe("ClassifyInvoiceLineUseCase", () => {
     expect(dto.costCenterId).toBe("cc-ope");
   });
 
+  it("classifies line with costCenterCategoryId", async () => {
+    const dto = await useCase.execute({
+      invoiceId: inv.id,
+      lineId: line.id,
+      classify: { costCenterCategoryId: "cat-cmv" },
+    });
+    expect(dto.costCenterCategoryId).toBe("cat-cmv");
+  });
+
+  it("saves costCenterCategoryId in rule when saveAsRule is true", async () => {
+    await useCase.execute({
+      invoiceId: inv.id,
+      lineId: line.id,
+      classify: { costCenterCategoryId: "cat-cmv" },
+      saveAsRule: true,
+    });
+    const rule = await ruleRepo.findBySupplierId("supplier-1");
+    expect(rule!.defaultCostCenterCategoryId).toBe("cat-cmv");
+  });
+
   it("creates classification rule when saveAsRule is true", async () => {
     await useCase.execute({
       invoiceId: inv.id,

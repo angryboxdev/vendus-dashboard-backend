@@ -1,35 +1,46 @@
 import { Router } from "express";
 import {
-  CostCenterNotFoundError,
-  CostCenterCodeAlreadyExistsError,
+  CostCenterGroupNotFoundError,
+  CostCenterGroupCodeAlreadyExistsError,
+  CostCenterCategoryNotFoundError,
+  CostCenterCategoryCodeAlreadyExistsError,
+  InvalidFinancialTypeError,
   SupplierNotFoundError,
 } from "../../domain/errors.js";
-import {
-  COST_CENTER_CATEGORIES,
-  type CostCenterCategory,
-} from "../../domain/entities/cost-center.js";
-import type { CostCenterFilter } from "../../domain/ports/out/cost-center-repository.port.js";
-import type { SupplierFilter } from "../../domain/ports/out/supplier-repository.port.js";
-import type { CreateCostCenterPort } from "../../domain/ports/in/cost-center.ports.js";
-import type { UpdateCostCenterPort } from "../../domain/ports/in/cost-center.ports.js";
-import type { ToggleCostCenterStatusPort } from "../../domain/ports/in/cost-center.ports.js";
-import type { ListCostCentersPort } from "../../domain/ports/in/cost-center.ports.js";
-import type { GetCostCenterPort } from "../../domain/ports/in/cost-center.ports.js";
+import { FINANCIAL_TYPES, type FinancialType } from "../../domain/entities/cost-center-category.js";
+import type { ListCostCenterGroupsPort } from "../../domain/ports/in/cost-center-group.ports.js";
+import type { GetCostCenterGroupPort } from "../../domain/ports/in/cost-center-group.ports.js";
+import type { CreateCostCenterGroupPort } from "../../domain/ports/in/cost-center-group.ports.js";
+import type { UpdateCostCenterGroupPort } from "../../domain/ports/in/cost-center-group.ports.js";
+import type { ToggleCostCenterGroupStatusPort } from "../../domain/ports/in/cost-center-group.ports.js";
+import type { ListCostCenterCategoriesPort } from "../../domain/ports/in/cost-center-category.ports.js";
+import type { GetCostCenterCategoryPort } from "../../domain/ports/in/cost-center-category.ports.js";
+import type { CreateCostCenterCategoryPort } from "../../domain/ports/in/cost-center-category.ports.js";
+import type { UpdateCostCenterCategoryPort } from "../../domain/ports/in/cost-center-category.ports.js";
+import type { ToggleCostCenterCategoryStatusPort } from "../../domain/ports/in/cost-center-category.ports.js";
+import type { SeedDefaultCostCentersPort } from "../../domain/ports/in/cost-center-category.ports.js";
 import type { CreateSupplierPort } from "../../domain/ports/in/supplier.ports.js";
 import type { UpdateSupplierPort } from "../../domain/ports/in/supplier.ports.js";
 import type { ToggleSupplierStatusPort } from "../../domain/ports/in/supplier.ports.js";
 import type { ListSuppliersPort } from "../../domain/ports/in/supplier.ports.js";
 import type { GetSupplierPort } from "../../domain/ports/in/supplier.ports.js";
+import type { SupplierFilter } from "../../domain/ports/out/supplier-repository.port.js";
 
 export class FinancialBaseController {
   readonly router: Router;
 
   constructor(
-    private readonly createCostCenter: CreateCostCenterPort,
-    private readonly updateCostCenter: UpdateCostCenterPort,
-    private readonly toggleCostCenterStatus: ToggleCostCenterStatusPort,
-    private readonly listCostCenters: ListCostCentersPort,
-    private readonly getCostCenter: GetCostCenterPort,
+    private readonly listCostCenterGroups: ListCostCenterGroupsPort,
+    private readonly getCostCenterGroup: GetCostCenterGroupPort,
+    private readonly createCostCenterGroup: CreateCostCenterGroupPort,
+    private readonly updateCostCenterGroup: UpdateCostCenterGroupPort,
+    private readonly toggleCostCenterGroupStatus: ToggleCostCenterGroupStatusPort,
+    private readonly listCostCenterCategories: ListCostCenterCategoriesPort,
+    private readonly getCostCenterCategory: GetCostCenterCategoryPort,
+    private readonly createCostCenterCategory: CreateCostCenterCategoryPort,
+    private readonly updateCostCenterCategory: UpdateCostCenterCategoryPort,
+    private readonly toggleCostCenterCategoryStatus: ToggleCostCenterCategoryStatusPort,
+    private readonly seedDefaultCostCenters: SeedDefaultCostCentersPort,
     private readonly createSupplier: CreateSupplierPort,
     private readonly updateSupplier: UpdateSupplierPort,
     private readonly toggleSupplierStatus: ToggleSupplierStatusPort,
@@ -41,19 +52,19 @@ export class FinancialBaseController {
   }
 
   private registerRoutes(): void {
-    // ── Cost Centers ────────────────────────────────────────────────────────
+    // ── Cost Center Groups ───────────────────────────────────────────────────
 
     /**
-     * GET /financial-base/cost-centers
-     * Query: category?, status?
+     * GET /financial-base/cost-center-groups
+     * Query: isActive? (boolean)
      */
-    this.router.get("/financial-base/cost-centers", async (req, res) => {
+    this.router.get("/financial-base/cost-center-groups", async (req, res) => {
       try {
-        const { category, status } = req.query as Record<string, string | undefined>;
-        const filter: Parameters<typeof this.listCostCenters.execute>[0] = {};
-        if (category) filter.category = category;
-        if (status === "active" || status === "inactive") filter.status = status;
-        const results = await this.listCostCenters.execute(filter);
+        const { isActive } = req.query as Record<string, string | undefined>;
+        const command: Parameters<typeof this.listCostCenterGroups.execute>[0] = {};
+        if (isActive === "true") command.isActive = true;
+        else if (isActive === "false") command.isActive = false;
+        const results = await this.listCostCenterGroups.execute(command);
         res.json(results);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
@@ -61,22 +72,22 @@ export class FinancialBaseController {
     });
 
     /**
-     * GET /financial-base/cost-centers/categories
-     * Lista as categorias válidas (útil para selects no frontend).
+     * GET /financial-base/cost-center-groups/financial-types
+     * Lista os tipos financeiros válidos (útil para selects no frontend).
      */
-    this.router.get("/financial-base/cost-centers/categories", (_req, res) => {
-      res.json(COST_CENTER_CATEGORIES);
+    this.router.get("/financial-base/cost-center-groups/financial-types", (_req, res) => {
+      res.json(FINANCIAL_TYPES);
     });
 
     /**
-     * GET /financial-base/cost-centers/:id
+     * GET /financial-base/cost-center-groups/:id
      */
-    this.router.get("/financial-base/cost-centers/:id", async (req, res) => {
+    this.router.get("/financial-base/cost-center-groups/:id", async (req, res) => {
       try {
-        const result = await this.getCostCenter.execute({ id: req.params["id"] as string });
+        const result = await this.getCostCenterGroup.execute({ id: req.params["id"] as string });
         res.json(result);
       } catch (e) {
-        if (e instanceof CostCenterNotFoundError) {
+        if (e instanceof CostCenterGroupNotFoundError) {
           res.status(404).json({ error: e.message });
           return;
         }
@@ -85,10 +96,10 @@ export class FinancialBaseController {
     });
 
     /**
-     * POST /financial-base/cost-centers
-     * Body: { code, name, category, subcategory?, description?, responsibleName? }
+     * POST /financial-base/cost-center-groups
+     * Body: { code, name, description?, sortOrder? }
      */
-    this.router.post("/financial-base/cost-centers", async (req, res) => {
+    this.router.post("/financial-base/cost-center-groups", async (req, res) => {
       try {
         const body = req.body as Record<string, unknown>;
         if (typeof body.code !== "string" || body.code.trim().length === 0) {
@@ -99,21 +110,15 @@ export class FinancialBaseController {
           res.status(400).json({ error: "name é obrigatório" });
           return;
         }
-        if (!COST_CENTER_CATEGORIES.includes(body.category as never)) {
-          res.status(400).json({ error: "category inválida" });
-          return;
-        }
-        const result = await this.createCostCenter.execute({
+        const result = await this.createCostCenterGroup.execute({
           code: body.code as string,
           name: body.name as string,
-          category: body.category as CostCenterCategory,
-          subcategory: (body.subcategory as string | null | undefined) ?? null,
           description: (body.description as string | null | undefined) ?? null,
-          responsibleName: (body.responsibleName as string | null | undefined) ?? null,
+          sortOrder: body.sortOrder != null ? Number(body.sortOrder) : 0,
         });
         res.status(201).json(result);
       } catch (e) {
-        if (e instanceof CostCenterCodeAlreadyExistsError) {
+        if (e instanceof CostCenterGroupCodeAlreadyExistsError) {
           res.status(409).json({ error: e.message });
           return;
         }
@@ -122,25 +127,23 @@ export class FinancialBaseController {
     });
 
     /**
-     * PATCH /financial-base/cost-centers/:id
-     * Body: { name?, category?, subcategory?, description?, responsibleName? }
+     * PATCH /financial-base/cost-center-groups/:id
+     * Body: { name?, description?, sortOrder? }
      */
-    this.router.patch("/financial-base/cost-centers/:id", async (req, res) => {
+    this.router.patch("/financial-base/cost-center-groups/:id", async (req, res) => {
       try {
         const body = req.body as Record<string, unknown>;
-        const data: Parameters<typeof this.updateCostCenter.execute>[0]["data"] = {};
+        const data: Parameters<typeof this.updateCostCenterGroup.execute>[0]["data"] = {};
         if (body.name !== undefined) data.name = body.name as string;
-        if (body.category !== undefined) data.category = body.category as CostCenterCategory;
-        if ("subcategory" in body) data.subcategory = (body.subcategory as string | null) ?? null;
         if ("description" in body) data.description = (body.description as string | null) ?? null;
-        if ("responsibleName" in body) data.responsibleName = (body.responsibleName as string | null) ?? null;
-        const result = await this.updateCostCenter.execute({
+        if (body.sortOrder !== undefined) data.sortOrder = Number(body.sortOrder);
+        const result = await this.updateCostCenterGroup.execute({
           id: req.params["id"] as string,
           data,
         });
         res.json(result);
       } catch (e) {
-        if (e instanceof CostCenterNotFoundError) {
+        if (e instanceof CostCenterGroupNotFoundError) {
           res.status(404).json({ error: e.message });
           return;
         }
@@ -149,26 +152,204 @@ export class FinancialBaseController {
     });
 
     /**
-     * PATCH /financial-base/cost-centers/:id/status
-     * Body: { status: "active" | "inactive" }
+     * PATCH /financial-base/cost-center-groups/:id/status
+     * Body: { isActive: boolean }
      */
-    this.router.patch("/financial-base/cost-centers/:id/status", async (req, res) => {
+    this.router.patch("/financial-base/cost-center-groups/:id/status", async (req, res) => {
       try {
-        const body = req.body as { status?: unknown };
-        if (body.status !== "active" && body.status !== "inactive") {
-          res.status(400).json({ error: "status deve ser 'active' ou 'inactive'" });
+        const body = req.body as { isActive?: unknown };
+        if (typeof body.isActive !== "boolean") {
+          res.status(400).json({ error: "isActive deve ser booleano" });
           return;
         }
-        const result = await this.toggleCostCenterStatus.execute({
+        const result = await this.toggleCostCenterGroupStatus.execute({
           id: req.params["id"] as string,
-          status: body.status,
+          isActive: body.isActive,
         });
         res.json(result);
       } catch (e) {
-        if (e instanceof CostCenterNotFoundError) {
+        if (e instanceof CostCenterGroupNotFoundError) {
           res.status(404).json({ error: e.message });
           return;
         }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    // ── Cost Center Categories ───────────────────────────────────────────────
+
+    /**
+     * GET /financial-base/cost-center-categories
+     * Query: groupId?, isActive?
+     */
+    this.router.get("/financial-base/cost-center-categories", async (req, res) => {
+      try {
+        const { groupId, isActive } = req.query as Record<string, string | undefined>;
+        const command: Parameters<typeof this.listCostCenterCategories.execute>[0] = {};
+        if (groupId) command.groupId = groupId;
+        if (isActive === "true") command.isActive = true;
+        else if (isActive === "false") command.isActive = false;
+        const results = await this.listCostCenterCategories.execute(command);
+        res.json(results);
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * GET /financial-base/cost-center-categories/:id
+     */
+    this.router.get("/financial-base/cost-center-categories/:id", async (req, res) => {
+      try {
+        const result = await this.getCostCenterCategory.execute({
+          id: req.params["id"] as string,
+        });
+        res.json(result);
+      } catch (e) {
+        if (e instanceof CostCenterCategoryNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * POST /financial-base/cost-center-categories
+     * Body: { groupId, code, name, financialType, affectsDre, affectsCashflow,
+     *         affectsProfitability, requiresChannel?, requiresAllocation?, description? }
+     */
+    this.router.post("/financial-base/cost-center-categories", async (req, res) => {
+      try {
+        const body = req.body as Record<string, unknown>;
+        if (typeof body.groupId !== "string" || body.groupId.trim().length === 0) {
+          res.status(400).json({ error: "groupId é obrigatório" });
+          return;
+        }
+        if (typeof body.code !== "string" || body.code.trim().length === 0) {
+          res.status(400).json({ error: "code é obrigatório" });
+          return;
+        }
+        if (typeof body.name !== "string" || body.name.trim().length === 0) {
+          res.status(400).json({ error: "name é obrigatório" });
+          return;
+        }
+        if (!FINANCIAL_TYPES.includes(body.financialType as FinancialType)) {
+          res.status(400).json({ error: "financialType inválido" });
+          return;
+        }
+        if (typeof body.affectsDre !== "boolean") {
+          res.status(400).json({ error: "affectsDre é obrigatório (boolean)" });
+          return;
+        }
+        if (typeof body.affectsCashflow !== "boolean") {
+          res.status(400).json({ error: "affectsCashflow é obrigatório (boolean)" });
+          return;
+        }
+        if (typeof body.affectsProfitability !== "boolean") {
+          res.status(400).json({ error: "affectsProfitability é obrigatório (boolean)" });
+          return;
+        }
+        const result = await this.createCostCenterCategory.execute({
+          groupId: body.groupId as string,
+          code: body.code as string,
+          name: body.name as string,
+          financialType: body.financialType as FinancialType,
+          affectsDre: body.affectsDre as boolean,
+          affectsCashflow: body.affectsCashflow as boolean,
+          affectsProfitability: body.affectsProfitability as boolean,
+          requiresChannel: (body.requiresChannel as boolean | undefined) ?? false,
+          requiresAllocation: (body.requiresAllocation as boolean | undefined) ?? false,
+          description: (body.description as string | null | undefined) ?? null,
+        });
+        res.status(201).json(result);
+      } catch (e) {
+        if (e instanceof CostCenterCategoryCodeAlreadyExistsError) {
+          res.status(409).json({ error: e.message });
+          return;
+        }
+        if (e instanceof CostCenterGroupNotFoundError) {
+          res.status(422).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * PATCH /financial-base/cost-center-categories/:id
+     * Body: campos opcionais editáveis
+     */
+    this.router.patch("/financial-base/cost-center-categories/:id", async (req, res) => {
+      try {
+        const body = req.body as Record<string, unknown>;
+        if (body.financialType !== undefined && !FINANCIAL_TYPES.includes(body.financialType as FinancialType)) {
+          res.status(400).json({ error: "financialType inválido" });
+          return;
+        }
+        const data: Parameters<typeof this.updateCostCenterCategory.execute>[0]["data"] = {};
+        if (body.name !== undefined) data.name = body.name as string;
+        if (body.financialType !== undefined) data.financialType = body.financialType as FinancialType;
+        if (body.affectsDre !== undefined) data.affectsDre = body.affectsDre as boolean;
+        if (body.affectsCashflow !== undefined) data.affectsCashflow = body.affectsCashflow as boolean;
+        if (body.affectsProfitability !== undefined)
+          data.affectsProfitability = body.affectsProfitability as boolean;
+        if (body.requiresChannel !== undefined) data.requiresChannel = body.requiresChannel as boolean;
+        if (body.requiresAllocation !== undefined)
+          data.requiresAllocation = body.requiresAllocation as boolean;
+        if ("description" in body) data.description = (body.description as string | null) ?? null;
+        const result = await this.updateCostCenterCategory.execute({
+          id: req.params["id"] as string,
+          data,
+        });
+        res.json(result);
+      } catch (e) {
+        if (e instanceof CostCenterCategoryNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        if (e instanceof InvalidFinancialTypeError) {
+          res.status(400).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * PATCH /financial-base/cost-center-categories/:id/status
+     * Body: { isActive: boolean }
+     */
+    this.router.patch("/financial-base/cost-center-categories/:id/status", async (req, res) => {
+      try {
+        const body = req.body as { isActive?: unknown };
+        if (typeof body.isActive !== "boolean") {
+          res.status(400).json({ error: "isActive deve ser booleano" });
+          return;
+        }
+        const result = await this.toggleCostCenterCategoryStatus.execute({
+          id: req.params["id"] as string,
+          isActive: body.isActive,
+        });
+        res.json(result);
+      } catch (e) {
+        if (e instanceof CostCenterCategoryNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * POST /financial-base/cost-centers/seed
+     * Popula os 7 grupos e 28 subcategorias padrão (idempotente).
+     */
+    this.router.post("/financial-base/cost-centers/seed", async (_req, res) => {
+      try {
+        const result = await this.seedDefaultCostCenters.execute();
+        res.json(result);
+      } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
       }
     });
@@ -182,7 +363,7 @@ export class FinancialBaseController {
     this.router.get("/financial-base/suppliers", async (req, res) => {
       try {
         const { status, search } = req.query as Record<string, string | undefined>;
-        const filter: Parameters<typeof this.listSuppliers.execute>[0] = {};
+        const filter: SupplierFilter = {};
         if (status === "active" || status === "inactive") filter.status = status;
         if (search) filter.search = search;
         const results = await this.listSuppliers.execute(filter);
@@ -210,7 +391,9 @@ export class FinancialBaseController {
 
     /**
      * POST /financial-base/suppliers
-     * Body: { name, nif?, email?, phone?, address?, iban?, defaultCostCenterId?, paymentTermsDays?, notes? }
+     * Body: { name, nif?, email?, phone?, address?, iban?,
+     *         defaultCostCenterGroupId?, defaultCostCenterCategoryId?,
+     *         paymentTermsDays?, notes? }
      */
     this.router.post("/financial-base/suppliers", async (req, res) => {
       try {
@@ -226,7 +409,10 @@ export class FinancialBaseController {
           phone: (body.phone as string | null | undefined) ?? null,
           address: (body.address as string | null | undefined) ?? null,
           iban: (body.iban as string | null | undefined) ?? null,
-          defaultCostCenterId: (body.defaultCostCenterId as string | null | undefined) ?? null,
+          defaultCostCenterGroupId:
+            (body.defaultCostCenterGroupId as string | null | undefined) ?? null,
+          defaultCostCenterCategoryId:
+            (body.defaultCostCenterCategoryId as string | null | undefined) ?? null,
           paymentTermsDays:
             body.paymentTermsDays != null ? Number(body.paymentTermsDays) : null,
           notes: (body.notes as string | null | undefined) ?? null,
@@ -251,10 +437,15 @@ export class FinancialBaseController {
         if ("phone" in body) data.phone = (body.phone as string | null) ?? null;
         if ("address" in body) data.address = (body.address as string | null) ?? null;
         if ("iban" in body) data.iban = (body.iban as string | null) ?? null;
-        if ("defaultCostCenterId" in body)
-          data.defaultCostCenterId = (body.defaultCostCenterId as string | null) ?? null;
+        if ("defaultCostCenterGroupId" in body)
+          data.defaultCostCenterGroupId =
+            (body.defaultCostCenterGroupId as string | null) ?? null;
+        if ("defaultCostCenterCategoryId" in body)
+          data.defaultCostCenterCategoryId =
+            (body.defaultCostCenterCategoryId as string | null) ?? null;
         if ("paymentTermsDays" in body)
-          data.paymentTermsDays = body.paymentTermsDays != null ? Number(body.paymentTermsDays) : null;
+          data.paymentTermsDays =
+            body.paymentTermsDays != null ? Number(body.paymentTermsDays) : null;
         if ("notes" in body) data.notes = (body.notes as string | null) ?? null;
         const result = await this.updateSupplier.execute({
           id: req.params["id"] as string,

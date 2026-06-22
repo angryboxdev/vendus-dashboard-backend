@@ -18,7 +18,8 @@ export class CreateSupplierUseCase implements CreateSupplierPort {
       phone: command.phone ?? null,
       address: command.address ?? null,
       iban: command.iban ?? null,
-      defaultCostCenterId: command.defaultCostCenterId ?? null,
+      defaultCostCenterGroupId: command.defaultCostCenterGroupId ?? null,
+      defaultCostCenterCategoryId: command.defaultCostCenterCategoryId ?? null,
       paymentTermsDays: command.paymentTermsDays ?? null,
       notes: command.notes ?? null,
     });

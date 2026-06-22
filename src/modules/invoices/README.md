@@ -1,7 +1,7 @@
 # Módulo: invoices
 
 > Status: ativo
-> Última atualização: 2026-06-16
+> Última atualização: 2026-06-22
 
 ## O que é e para que serve (perspectiva de negócio)
 
@@ -61,8 +61,8 @@ Gestão de faturas de fornecedores: criação, atualização, ciclo de vida (pen
 ## Conceitos do domínio
 
 - **Invoice** — fatura de compra com cabeçalho (fornecedor, valores, datas, estado). Imutável; `markPaid`, `cancel`, `setStatus` devolvem nova instância.
-- **InvoiceLine** — linha de detalhe de uma fatura. Tem tipo (`InvoiceLineType`), centro de custo e categoria opcionais. `classify()` devolve nova instância.
-- **ClassificationRule** — regra determinística por `supplierId`: sugere centro de custo e tipo de linha para novas faturas desse fornecedor. `confidenceBoost` aumenta 10 pontos a cada confirmação manual (máx 100).
+- **InvoiceLine** — linha de detalhe de uma fatura. Tem tipo (`InvoiceLineType`), `costCenterId` (legado), `costCenterCategoryId` (novo, referência a `cost_center_categories`), e categoria livre opcionais. `classify()` devolve nova instância.
+- **ClassificationRule** — regra determinística por `supplierId`: sugere `costCenterId` (legado), `costCenterCategoryId` (novo) e tipo de linha para novas faturas desse fornecedor. `confidenceBoost` aumenta a cada confirmação manual (máx 100).
 - **InvoiceStatus**: `pending | paid | overdue | partial | cancelled | review`
 - **InvoiceLineType**: `stock_purchase | operational_expense | fixed_cost | variable_cost | tax | bank_fee | salary | internal_transfer | service | mixed | other`
 - Todos os valores monetários em **cêntimos** (inteiros).
@@ -71,21 +71,24 @@ Gestão de faturas de fornecedores: criação, atualização, ciclo de vida (pen
 
 ### Entrada (use cases)
 
-- `CreateInvoiceUseCase` — cria fatura com linhas opcionais; persiste em `invoices` + `invoice_lines`.
+- `CreateInvoiceUseCase` — cria fatura com linhas opcionais; persiste em `invoices` + `invoice_lines`; se `dueDate` fornecido cria automaticamente entrada em `payable_entries` via `PayableEntryWritePort`.
 - `UpdateInvoiceUseCase` — actualiza campos do cabeçalho (não altera linhas nem estado).
-- `MarkInvoicePaidUseCase` — transita para `paid`, define `paidAt` (default: hoje); lança erro se cancelada.
-- `SetInvoiceStatusUseCase` — força transição de estado arbitrária (uso administrativo).
+- `MarkInvoicePaidUseCase` — transita para `paid`, define `paidAt` (default: hoje); sincroniza `payable_entries` via `PayableEntryWritePort`; lança erro se cancelada.
+- `SetInvoiceStatusUseCase` — força transição de estado arbitrária; sincroniza cancelamento em `payable_entries` se `status === "cancelled"`.
+- `AddInvoiceLineUseCase` — adiciona uma linha a uma fatura existente; lança `InvoiceNotFoundError` se a fatura não existir.
 - `ClassifyInvoiceLineUseCase` — classifica uma linha; opcionalmente cria/actualiza `ClassificationRule`.
 - `SuggestLineClassificationUseCase` — devolve sugestão para o fornecedor (score 0.5–1.0).
 - `ListInvoicesUseCase` — filtra por fornecedor, centro de custo, estado, intervalo de datas.
+- `ListInvoiceLinesUseCase` — devolve todas as linhas de todas as faturas (usado para analytics por CC).
 - `GetInvoiceUseCase` — devolve fatura com linhas incluídas.
 - `DeleteInvoiceUseCase` — remove fatura e respectivas linhas.
 
 ### Saída (dependências do domínio)
 
 - `InvoiceRepositoryPort` — CRUD de faturas + `findAll(filter?)`.
-- `InvoiceLineRepositoryPort` — `saveAll`, `findByInvoiceId`, `updateLine`, `deleteByInvoiceId`.
+- `InvoiceLineRepositoryPort` — `saveAll`, `save`, `findByInvoiceId`, `findAll`, `updateLine`, `deleteByInvoiceId`.
 - `ClassificationRuleRepositoryPort` — `findBySupplierId`, `save`, `update`.
+- `PayableEntryWritePort` — declarado neste módulo; permite criar/marcar-pago/cancelar entradas em `payable_entries` sem importar código do módulo `payable-entries`.
 
 ## Adapters
 
@@ -98,29 +101,34 @@ Gestão de faturas de fornecedores: criação, atualização, ciclo de vida (pen
 - `SupabaseInvoiceRepository` → tabela `invoices`.
 - `SupabaseInvoiceLineRepository` → tabela `invoice_lines`.
 - `SupabaseClassificationRuleRepository` → tabela `classification_rules`.
+- `SupabasePayableEntryWriteAdapter` → implementa `PayableEntryWritePort` escrevendo directamente na tabela `payable_entries`.
 
 ## Endpoints
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
+| GET | `/api/invoices/lines` | Todas as linhas de todas as faturas (para analytics por CC) |
 | GET | `/api/invoices` | Lista faturas (query: `supplierId`, `costCenterId`, `status`, `from`, `to`) |
+| GET | `/api/invoices/suggest-classification/:supplierId` | Sugestão de classificação para o fornecedor |
 | GET | `/api/invoices/:id` | Detalhe com linhas |
 | POST | `/api/invoices` | Criar fatura (com linhas opcionais) |
 | PATCH | `/api/invoices/:id` | Actualizar cabeçalho |
 | PATCH | `/api/invoices/:id/paid` | Marcar como paga (`{ paidAt?: "YYYY-MM-DD" }`) |
 | PATCH | `/api/invoices/:id/status` | Forçar estado (`{ status }`) |
 | DELETE | `/api/invoices/:id` | Eliminar fatura e linhas |
+| POST | `/api/invoices/:invoiceId/lines` | Adicionar linha a fatura existente |
 | PATCH | `/api/invoices/:invoiceId/lines/:lineId/classify` | Classificar linha (`{ classify, saveAsRule? }`) |
-| GET | `/api/invoices/suggest-classification/:supplierId` | Sugestão de classificação |
 
 Todos os endpoints requerem `requireMinRole("manager")`.
 
 ## Decisões de design
 
 - **Sem OCR / ML**: classificação é determinística, baseada em regras manuais acumuladas.
-- **`costCenterId` fica nas linhas, não no cabeçalho**: uma fatura pode ter linhas distribuídas por vários centros de custo. O filtro por `costCenterId` na listagem usa subquery em `invoice_lines`.
+- **`costCenterId`/`costCenterCategoryId` ficam nas linhas, não no cabeçalho**: uma fatura pode ter linhas distribuídas por vários centros de custo. O filtro por `costCenterId` na listagem usa subquery em `invoice_lines`.
+- **Dois campos de CC por linha (`costCenterId` legado + `costCenterCategoryId` novo)**: a migração gradual mantém `cost_center_id` por compatibilidade com dados existentes. O campo novo `cost_center_category_id` referencia a hierarquia Grupo+Subcategoria do `financial-base`.
 - **Valores em cêntimos**: evita aritmética de vírgula flutuante.
 - **Regras de classificação por fornecedor**: modelo simples e auditável; `confidenceBoost` cresce com confirmações manuais (máx 100), score final = `0.5 + (boost/100) * 0.5`.
+- **Sincronização invoice ↔ payable via `PayableEntryWritePort`**: o módulo `invoices` declara o port de saída; o adapter concreto acede directamente à tabela `payable_entries` sem importar código do módulo `payable-entries`.
 
 ## SQL — tabelas Supabase
 
@@ -146,34 +154,36 @@ create table invoices (
 
 -- Linhas de fatura
 create table invoice_lines (
-  id                    uuid primary key,
-  invoice_id            uuid not null references invoices(id) on delete cascade,
-  description           text not null,
-  type                  text not null default 'other',
-  cost_center_id        uuid references cost_centers(id) on delete set null,
-  category              text,
-  subcategory           text,
-  stock_item_id         uuid,
-  quantity              numeric not null,
-  unit                  text,
-  unit_cost_without_vat bigint not null,
-  vat_rate              numeric not null,
-  vat_amount            bigint not null,
-  total_with_vat        bigint not null,
-  stock_entry_id        uuid,
-  created_at            timestamptz not null default now()
+  id                         uuid primary key,
+  invoice_id                 uuid not null references invoices(id) on delete cascade,
+  description                text not null,
+  type                       text not null default 'other',
+  cost_center_id             uuid references cost_centers(id) on delete set null,         -- legado
+  cost_center_category_id    uuid references cost_center_categories(id) on delete set null, -- novo (migração 057)
+  category                   text,
+  subcategory                text,
+  stock_item_id              uuid,
+  quantity                   numeric not null,
+  unit                       text,
+  unit_cost_without_vat      bigint not null,
+  vat_rate                   numeric not null,
+  vat_amount                 bigint not null,
+  total_with_vat             bigint not null,
+  stock_entry_id             uuid,
+  created_at                 timestamptz not null default now()
 );
 
 -- Regras de classificação automática
 create table classification_rules (
-  id                      uuid primary key,
-  supplier_id             uuid not null unique references suppliers(id) on delete cascade,
-  default_cost_center_id  uuid references cost_centers(id) on delete set null,
-  default_line_type       text,
-  default_category        text,
-  confidence_boost        integer not null default 0,
-  created_at              timestamptz not null default now(),
-  updated_at              timestamptz not null default now()
+  id                               uuid primary key,
+  supplier_id                      uuid not null unique references suppliers(id) on delete cascade,
+  default_cost_center_id           uuid references cost_centers(id) on delete set null,         -- legado
+  default_cost_center_category_id  uuid references cost_center_categories(id) on delete set null, -- novo (migração 057)
+  default_line_type                text,
+  default_category                 text,
+  confidence_boost                 integer not null default 0,
+  created_at                       timestamptz not null default now(),
+  updated_at                       timestamptz not null default now()
 );
 
 create index on invoice_lines(invoice_id);
@@ -192,3 +202,5 @@ create index on invoices(status);
 
 - `stock_item_id` e `stock_entry_id` nas linhas estão preparados para o módulo `stock-valuation` (Sessão 5).
 - Sem validação de `invoiceNumber` único por fornecedor — pode ser adicionada como regra de domínio futura.
+- `cost_center_id` (legado) ainda existe nas tabelas `invoice_lines` e `classification_rules`. Quando a tab "Aplicação em Faturas" for implementada no frontend, o campo poderá ser removido — após confirmar que nenhum dado activo depende dele.
+- `ListInvoiceLinesUseCase` devolve todas as linhas sem paginação — aceitável enquanto o volume for pequeno. Se crescer muito, adicionar filtros de intervalo de datas.

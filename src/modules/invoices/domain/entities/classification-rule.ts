@@ -4,6 +4,7 @@ interface ClassificationRuleProps {
   id: string;
   supplierId: string;
   defaultCostCenterId: string | null;
+  defaultCostCenterCategoryId: string | null;
   defaultLineType: InvoiceLineType | null;
   defaultCategory: string | null;
   confidenceBoost: number;
@@ -13,6 +14,7 @@ interface ClassificationRuleProps {
 
 export interface UpdateClassificationRuleData {
   defaultCostCenterId?: string | null;
+  defaultCostCenterCategoryId?: string | null;
   defaultLineType?: InvoiceLineType | null;
   defaultCategory?: string | null;
   confidenceBoost?: number;
@@ -22,6 +24,7 @@ export class ClassificationRule {
   readonly id: string;
   readonly supplierId: string;
   readonly defaultCostCenterId: string | null;
+  readonly defaultCostCenterCategoryId: string | null;
   readonly defaultLineType: InvoiceLineType | null;
   readonly defaultCategory: string | null;
   readonly confidenceBoost: number;
@@ -32,6 +35,7 @@ export class ClassificationRule {
     this.id = props.id;
     this.supplierId = props.supplierId;
     this.defaultCostCenterId = props.defaultCostCenterId;
+    this.defaultCostCenterCategoryId = props.defaultCostCenterCategoryId;
     this.defaultLineType = props.defaultLineType;
     this.defaultCategory = props.defaultCategory;
     this.confidenceBoost = props.confidenceBoost;
@@ -42,6 +46,7 @@ export class ClassificationRule {
   static create(props: {
     supplierId: string;
     defaultCostCenterId?: string | null;
+    defaultCostCenterCategoryId?: string | null;
     defaultLineType?: InvoiceLineType | null;
     defaultCategory?: string | null;
     confidenceBoost?: number;
@@ -51,6 +56,7 @@ export class ClassificationRule {
       id: crypto.randomUUID(),
       supplierId: props.supplierId,
       defaultCostCenterId: props.defaultCostCenterId ?? null,
+      defaultCostCenterCategoryId: props.defaultCostCenterCategoryId ?? null,
       defaultLineType: props.defaultLineType ?? null,
       defaultCategory: props.defaultCategory ?? null,
       confidenceBoost: props.confidenceBoost ?? 0,
@@ -68,6 +74,7 @@ export class ClassificationRule {
       id: this.id,
       supplierId: this.supplierId,
       defaultCostCenterId: this.defaultCostCenterId,
+      defaultCostCenterCategoryId: this.defaultCostCenterCategoryId,
       defaultLineType: this.defaultLineType,
       defaultCategory: this.defaultCategory,
       confidenceBoost: this.confidenceBoost,
@@ -75,6 +82,7 @@ export class ClassificationRule {
       updatedAt: new Date(),
     };
     if (data.defaultCostCenterId !== undefined) p.defaultCostCenterId = data.defaultCostCenterId;
+    if (data.defaultCostCenterCategoryId !== undefined) p.defaultCostCenterCategoryId = data.defaultCostCenterCategoryId;
     if (data.defaultLineType !== undefined) p.defaultLineType = data.defaultLineType;
     if (data.defaultCategory !== undefined) p.defaultCategory = data.defaultCategory;
     if (data.confidenceBoost !== undefined) p.confidenceBoost = data.confidenceBoost;

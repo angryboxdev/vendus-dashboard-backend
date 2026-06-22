@@ -44,6 +44,7 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
       };
       if (lc.type !== undefined) lineProps.type = lc.type;
       if (lc.costCenterId !== undefined) lineProps.costCenterId = lc.costCenterId;
+      if (lc.costCenterCategoryId !== undefined) lineProps.costCenterCategoryId = lc.costCenterCategoryId;
       if (lc.category !== undefined) lineProps.category = lc.category;
       if (lc.subcategory !== undefined) lineProps.subcategory = lc.subcategory;
       if (lc.stockItemId !== undefined) lineProps.stockItemId = lc.stockItemId;

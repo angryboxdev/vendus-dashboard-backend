@@ -8,6 +8,7 @@ function toEntity(row: Record<string, unknown>): ClassificationRule {
     id: row.id as string,
     supplierId: row.supplier_id as string,
     defaultCostCenterId: (row.default_cost_center_id as string | null) ?? null,
+    defaultCostCenterCategoryId: (row.default_cost_center_category_id as string | null) ?? null,
     defaultLineType: (row.default_line_type as InvoiceLineType | null) ?? null,
     defaultCategory: (row.default_category as string | null) ?? null,
     confidenceBoost: row.confidence_boost as number,
@@ -35,6 +36,7 @@ export class SupabaseClassificationRuleRepository implements ClassificationRuleR
       id: rule.id,
       supplier_id: rule.supplierId,
       default_cost_center_id: rule.defaultCostCenterId,
+      default_cost_center_category_id: rule.defaultCostCenterCategoryId,
       default_line_type: rule.defaultLineType,
       default_category: rule.defaultCategory,
       confidence_boost: rule.confidenceBoost,
@@ -49,6 +51,7 @@ export class SupabaseClassificationRuleRepository implements ClassificationRuleR
       .from("classification_rules")
       .update({
         default_cost_center_id: rule.defaultCostCenterId,
+        default_cost_center_category_id: rule.defaultCostCenterCategoryId,
         default_line_type: rule.defaultLineType,
         default_category: rule.defaultCategory,
         confidence_boost: rule.confidenceBoost,

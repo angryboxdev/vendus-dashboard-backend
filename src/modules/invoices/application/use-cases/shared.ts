@@ -38,6 +38,7 @@ export function toInvoiceLineDTO(line: InvoiceLine): InvoiceLineDTO {
     description: line.description,
     type: line.type,
     costCenterId: line.costCenterId,
+    costCenterCategoryId: line.costCenterCategoryId,
     category: line.category,
     subcategory: line.subcategory,
     stockItemId: line.stockItemId,

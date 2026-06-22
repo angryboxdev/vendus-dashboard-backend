@@ -9,6 +9,7 @@ export interface InvoiceLineDTO {
   description: string;
   type: InvoiceLineType;
   costCenterId: string | null;
+  costCenterCategoryId: string | null;
   category: string | null;
   subcategory: string | null;
   stockItemId: string | null;
@@ -47,6 +48,7 @@ export interface CreateInvoiceLineCommand {
   description: string;
   type?: InvoiceLineType;
   costCenterId?: string | null;
+  costCenterCategoryId?: string | null;
   category?: string | null;
   subcategory?: string | null;
   stockItemId?: string | null;
@@ -113,6 +115,7 @@ export interface ListInvoicesFilter {
 
 export interface SuggestClassificationResult {
   costCenterId: string | null;
+  costCenterCategoryId: string | null;
   lineType: InvoiceLineType | null;
   category: string | null;
   confidenceScore: number; // 0.0 – 1.0
@@ -136,12 +139,34 @@ export interface SetInvoiceStatusPort {
   execute(command: SetInvoiceStatusCommand): Promise<InvoiceDTO>;
 }
 
+export interface AddInvoiceLineCommand {
+  invoiceId: string;
+  description: string;
+  type?: InvoiceLineType;
+  costCenterCategoryId?: string | null;
+  category?: string | null;
+  quantity: number;
+  unit?: string | null;
+  unitCostWithoutVat: number;
+  vatRate: number;
+  vatAmount: number;
+  totalWithVat: number;
+}
+
+export interface AddInvoiceLinePort {
+  execute(command: AddInvoiceLineCommand): Promise<InvoiceLineDTO>;
+}
+
 export interface ClassifyInvoiceLinePort {
   execute(command: ClassifyInvoiceLineCommand): Promise<InvoiceLineDTO>;
 }
 
 export interface ListInvoicesPort {
   execute(filter?: ListInvoicesFilter): Promise<InvoiceDTO[]>;
+}
+
+export interface ListInvoiceLinesPort {
+  execute(): Promise<InvoiceLineDTO[]>;
 }
 
 export interface GetInvoicePort {

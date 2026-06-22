@@ -9,7 +9,8 @@ export interface SupplierDTO {
   phone: string | null;
   address: string | null;
   iban: string | null;
-  defaultCostCenterId: string | null;
+  defaultCostCenterGroupId: string | null;
+  defaultCostCenterCategoryId: string | null;
   paymentTermsDays: number | null;
   notes: string | null;
   status: SupplierStatus;
@@ -25,7 +26,8 @@ export interface CreateSupplierCommand {
   phone?: string | null;
   address?: string | null;
   iban?: string | null;
-  defaultCostCenterId?: string | null;
+  defaultCostCenterGroupId?: string | null;
+  defaultCostCenterCategoryId?: string | null;
   paymentTermsDays?: number | null;
   notes?: string | null;
 }

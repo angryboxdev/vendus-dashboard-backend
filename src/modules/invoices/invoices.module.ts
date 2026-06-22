@@ -8,9 +8,11 @@ import { CreateInvoiceUseCase } from "./application/use-cases/create-invoice.use
 import { UpdateInvoiceUseCase } from "./application/use-cases/update-invoice.use-case.js";
 import { MarkInvoicePaidUseCase } from "./application/use-cases/mark-invoice-paid.use-case.js";
 import { SetInvoiceStatusUseCase } from "./application/use-cases/set-invoice-status.use-case.js";
+import { AddInvoiceLineUseCase } from "./application/use-cases/add-invoice-line.use-case.js";
 import { ClassifyInvoiceLineUseCase } from "./application/use-cases/classify-invoice-line.use-case.js";
 import { SuggestLineClassificationUseCase } from "./application/use-cases/suggest-line-classification.use-case.js";
 import { ListInvoicesUseCase } from "./application/use-cases/list-invoices.use-case.js";
+import { ListInvoiceLinesUseCase } from "./application/use-cases/list-invoice-lines.use-case.js";
 import { GetInvoiceUseCase } from "./application/use-cases/get-invoice.use-case.js";
 import { DeleteInvoiceUseCase } from "./application/use-cases/delete-invoice.use-case.js";
 import { createInvoiceRouter } from "./adapters/in/invoice.controller.js";
@@ -34,8 +36,10 @@ export function createInvoicesModule(supabase?: SupabaseClient): InvoicesModule 
     updateInvoice: new UpdateInvoiceUseCase(invoiceRepo),
     markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite),
     setInvoiceStatus: new SetInvoiceStatusUseCase(invoiceRepo, payableWrite),
+    addInvoiceLine: new AddInvoiceLineUseCase(invoiceRepo, lineRepo),
     classifyInvoiceLine: new ClassifyInvoiceLineUseCase(invoiceRepo, lineRepo, ruleRepo),
     listInvoices: new ListInvoicesUseCase(invoiceRepo),
+    listInvoiceLines: new ListInvoiceLinesUseCase(lineRepo),
     getInvoice: new GetInvoiceUseCase(invoiceRepo, lineRepo),
     deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),

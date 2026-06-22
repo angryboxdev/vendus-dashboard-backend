@@ -6,6 +6,7 @@ interface InvoiceLineProps {
   description: string;
   type: InvoiceLineType;
   costCenterId: string | null;
+  costCenterCategoryId: string | null;
   category: string | null;
   subcategory: string | null;
   stockItemId: string | null;
@@ -22,6 +23,7 @@ interface InvoiceLineProps {
 export interface ClassifyLineData {
   type?: InvoiceLineType;
   costCenterId?: string | null;
+  costCenterCategoryId?: string | null;
   category?: string | null;
   subcategory?: string | null;
   stockItemId?: string | null;
@@ -33,6 +35,7 @@ export class InvoiceLine {
   readonly description: string;
   readonly type: InvoiceLineType;
   readonly costCenterId: string | null;
+  readonly costCenterCategoryId: string | null;
   readonly category: string | null;
   readonly subcategory: string | null;
   readonly stockItemId: string | null;
@@ -51,6 +54,7 @@ export class InvoiceLine {
     this.description = props.description;
     this.type = props.type;
     this.costCenterId = props.costCenterId;
+    this.costCenterCategoryId = props.costCenterCategoryId;
     this.category = props.category;
     this.subcategory = props.subcategory;
     this.stockItemId = props.stockItemId;
@@ -69,6 +73,7 @@ export class InvoiceLine {
     description: string;
     type?: InvoiceLineType;
     costCenterId?: string | null;
+    costCenterCategoryId?: string | null;
     category?: string | null;
     subcategory?: string | null;
     stockItemId?: string | null;
@@ -85,6 +90,7 @@ export class InvoiceLine {
       description: props.description.trim(),
       type: props.type ?? "other",
       costCenterId: props.costCenterId ?? null,
+      costCenterCategoryId: props.costCenterCategoryId ?? null,
       category: props.category ?? null,
       subcategory: props.subcategory ?? null,
       stockItemId: props.stockItemId ?? null,
@@ -107,6 +113,7 @@ export class InvoiceLine {
     const p = this.toProps();
     if (data.type !== undefined) p.type = data.type;
     if (data.costCenterId !== undefined) p.costCenterId = data.costCenterId;
+    if (data.costCenterCategoryId !== undefined) p.costCenterCategoryId = data.costCenterCategoryId;
     if (data.category !== undefined) p.category = data.category;
     if (data.subcategory !== undefined) p.subcategory = data.subcategory;
     if (data.stockItemId !== undefined) p.stockItemId = data.stockItemId;
@@ -124,6 +131,7 @@ export class InvoiceLine {
       description: this.description,
       type: this.type,
       costCenterId: this.costCenterId,
+      costCenterCategoryId: this.costCenterCategoryId,
       category: this.category,
       subcategory: this.subcategory,
       stockItemId: this.stockItemId,

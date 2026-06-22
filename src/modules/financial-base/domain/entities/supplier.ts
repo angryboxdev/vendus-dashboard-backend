@@ -8,7 +8,8 @@ interface SupplierProps {
   phone: string | null;
   address: string | null;
   iban: string | null;
-  defaultCostCenterId: string | null;
+  defaultCostCenterGroupId: string | null;
+  defaultCostCenterCategoryId: string | null;
   paymentTermsDays: number | null;
   notes: string | null;
   status: SupplierStatus;
@@ -23,7 +24,8 @@ export interface UpdateSupplierData {
   phone?: string | null;
   address?: string | null;
   iban?: string | null;
-  defaultCostCenterId?: string | null;
+  defaultCostCenterGroupId?: string | null;
+  defaultCostCenterCategoryId?: string | null;
   paymentTermsDays?: number | null;
   notes?: string | null;
 }
@@ -36,7 +38,8 @@ export class Supplier {
   readonly phone: string | null;
   readonly address: string | null;
   readonly iban: string | null;
-  readonly defaultCostCenterId: string | null;
+  readonly defaultCostCenterGroupId: string | null;
+  readonly defaultCostCenterCategoryId: string | null;
   readonly paymentTermsDays: number | null;
   readonly notes: string | null;
   readonly status: SupplierStatus;
@@ -51,7 +54,8 @@ export class Supplier {
     this.phone = props.phone;
     this.address = props.address;
     this.iban = props.iban;
-    this.defaultCostCenterId = props.defaultCostCenterId;
+    this.defaultCostCenterGroupId = props.defaultCostCenterGroupId;
+    this.defaultCostCenterCategoryId = props.defaultCostCenterCategoryId;
     this.paymentTermsDays = props.paymentTermsDays;
     this.notes = props.notes;
     this.status = props.status;
@@ -66,7 +70,8 @@ export class Supplier {
     phone?: string | null;
     address?: string | null;
     iban?: string | null;
-    defaultCostCenterId?: string | null;
+    defaultCostCenterGroupId?: string | null;
+    defaultCostCenterCategoryId?: string | null;
     paymentTermsDays?: number | null;
     notes?: string | null;
   }): Supplier {
@@ -79,7 +84,8 @@ export class Supplier {
       phone: props.phone ?? null,
       address: props.address ?? null,
       iban: props.iban ?? null,
-      defaultCostCenterId: props.defaultCostCenterId ?? null,
+      defaultCostCenterGroupId: props.defaultCostCenterGroupId ?? null,
+      defaultCostCenterCategoryId: props.defaultCostCenterCategoryId ?? null,
       paymentTermsDays: props.paymentTermsDays ?? null,
       notes: props.notes ?? null,
       status: "active",
@@ -101,10 +107,14 @@ export class Supplier {
       phone: data.phone !== undefined ? data.phone : this.phone,
       address: data.address !== undefined ? data.address : this.address,
       iban: data.iban !== undefined ? data.iban : this.iban,
-      defaultCostCenterId:
-        data.defaultCostCenterId !== undefined
-          ? data.defaultCostCenterId
-          : this.defaultCostCenterId,
+      defaultCostCenterGroupId:
+        data.defaultCostCenterGroupId !== undefined
+          ? data.defaultCostCenterGroupId
+          : this.defaultCostCenterGroupId,
+      defaultCostCenterCategoryId:
+        data.defaultCostCenterCategoryId !== undefined
+          ? data.defaultCostCenterCategoryId
+          : this.defaultCostCenterCategoryId,
       paymentTermsDays:
         data.paymentTermsDays !== undefined ? data.paymentTermsDays : this.paymentTermsDays,
       notes: data.notes !== undefined ? data.notes : this.notes,
@@ -131,7 +141,8 @@ export class Supplier {
       phone: this.phone,
       address: this.address,
       iban: this.iban,
-      defaultCostCenterId: this.defaultCostCenterId,
+      defaultCostCenterGroupId: this.defaultCostCenterGroupId,
+      defaultCostCenterCategoryId: this.defaultCostCenterCategoryId,
       paymentTermsDays: this.paymentTermsDays,
       notes: this.notes,
       status: this.status,
