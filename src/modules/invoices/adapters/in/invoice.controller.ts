@@ -1,7 +1,23 @@
 import { Router } from "express";
-import type { CreateInvoicePort, UpdateInvoicePort, MarkInvoicePaidPort, SetInvoiceStatusPort, AddInvoiceLinePort, ClassifyInvoiceLinePort, ListInvoicesPort, ListInvoiceLinesPort, GetInvoicePort, DeleteInvoicePort, SuggestLineClassificationPort } from "../../domain/ports/in/invoice.ports.js";
+import multer from "multer";
+import type {
+  CreateInvoicePort,
+  UpdateInvoicePort,
+  MarkInvoicePaidPort,
+  SetInvoiceStatusPort,
+  AddInvoiceLinePort,
+  ClassifyInvoiceLinePort,
+  ListInvoicesPort,
+  ListInvoiceLinesPort,
+  GetInvoicePort,
+  DeleteInvoicePort,
+  SuggestLineClassificationPort,
+  ImportInvoicePort,
+  ConfirmImportedInvoicePort,
+  GetInvoiceAlertsPort,
+} from "../../domain/ports/in/invoice.ports.js";
 import type { InvoiceStatus, InvoiceLineType } from "../../domain/entities/invoice.js";
-import { InvoiceNotFoundError, InvoiceLineNotFoundError, InvoiceAlreadyCancelledError } from "../../domain/errors.js";
+import { InvoiceNotFoundError, InvoiceLineNotFoundError, InvoiceAlreadyCancelledError, DuplicateInvoiceError } from "../../domain/errors.js";
 
 interface InvoicePorts {
   createInvoice: CreateInvoicePort;
@@ -15,6 +31,9 @@ interface InvoicePorts {
   getInvoice: GetInvoicePort;
   deleteInvoice: DeleteInvoicePort;
   suggestLineClassification: SuggestLineClassificationPort;
+  importInvoice: ImportInvoicePort;
+  confirmImportedInvoice: ConfirmImportedInvoicePort;
+  getInvoiceAlerts: GetInvoiceAlertsPort;
 }
 
 function handleError(res: import("express").Response, err: unknown): void {
@@ -22,7 +41,7 @@ function handleError(res: import("express").Response, err: unknown): void {
     res.status(404).json({ error: (err as Error).message });
     return;
   }
-  if (err instanceof InvoiceAlreadyCancelledError) {
+  if (err instanceof InvoiceAlreadyCancelledError || err instanceof DuplicateInvoiceError) {
     res.status(409).json({ error: (err as Error).message });
     return;
   }
@@ -32,6 +51,19 @@ function handleError(res: import("express").Response, err: unknown): void {
   }
   res.status(500).json({ error: "Internal server error" });
 }
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["application/pdf", "image/jpeg", "image/png"];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Tipo de ficheiro não suportado. Use PDF, JPG ou PNG."));
+    }
+  },
+});
 
 export function createInvoiceRouter(ports: InvoicePorts): Router {
   const router = Router();
@@ -177,6 +209,47 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
     try {
       const result = await ports.suggestLineClassification.execute(req.params.supplierId);
       res.json(result ?? null);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // GET /invoices/alerts
+  router.get("/invoices/alerts", async (_req, res) => {
+    try {
+      const alerts = await ports.getInvoiceAlerts.execute();
+      res.json(alerts);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // POST /invoices/import — multipart upload (field: "file")
+  router.post("/invoices/import", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ error: "No file uploaded. Use multipart field 'file'." });
+        return;
+      }
+      const result = await ports.importInvoice.execute({
+        fileBuffer: req.file.buffer,
+        filename: req.file.originalname,
+        mimeType: req.file.mimetype,
+      });
+      res.status(201).json(result);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // POST /invoices/:id/confirm
+  router.post("/invoices/:id/confirm", async (req, res) => {
+    try {
+      const invoice = await ports.confirmImportedInvoice.execute({
+        ...(req.body as object),
+        id: req.params.id,
+      });
+      res.json(invoice);
     } catch (err) {
       handleError(res, err);
     }

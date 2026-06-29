@@ -18,6 +18,7 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     const data: UpdateInvoiceData = {};
     if (command.supplierId !== undefined) data.supplierId = command.supplierId;
     if (command.supplierName !== undefined) data.supplierName = command.supplierName;
+    if (command.supplierNifSnapshot !== undefined) data.supplierNifSnapshot = command.supplierNifSnapshot;
     if (command.invoiceNumber !== undefined) data.invoiceNumber = command.invoiceNumber;
     if (command.invoiceDate !== undefined) data.invoiceDate = new Date(command.invoiceDate);
     if (command.dueDate !== undefined) data.dueDate = command.dueDate ? new Date(command.dueDate) : null;
@@ -26,6 +27,12 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     if (command.totalWithVat !== undefined) data.totalWithVat = command.totalWithVat;
     if (command.notes !== undefined) data.notes = command.notes;
     if (command.attachmentUrl !== undefined) data.attachmentUrl = command.attachmentUrl;
+    if (command.costCenterGroupId !== undefined) data.costCenterGroupId = command.costCenterGroupId;
+    if (command.financialType !== undefined) data.financialType = command.financialType;
+    if (command.affectsDre !== undefined) data.affectsDre = command.affectsDre;
+    if (command.affectsCashflow !== undefined) data.affectsCashflow = command.affectsCashflow;
+    if (command.affectsProfitability !== undefined) data.affectsProfitability = command.affectsProfitability;
+    if (command.currency !== undefined) data.currency = command.currency;
 
     const updated = existing.update(data);
     await this.invoiceRepo.update(updated);

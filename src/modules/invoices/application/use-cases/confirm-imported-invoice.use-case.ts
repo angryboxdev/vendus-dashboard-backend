@@ -1,0 +1,104 @@
+import { InvoiceLine } from "../../domain/entities/invoice-line.js";
+import type {
+  ConfirmImportedInvoicePort,
+  ConfirmImportedInvoiceCommand,
+  InvoiceDTO,
+} from "../../domain/ports/in/invoice.ports.js";
+import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
+import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
+import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry-write.port.js";
+import { InvoiceNotFoundError, DuplicateInvoiceError } from "../../domain/errors.js";
+import { toInvoiceDTO } from "./shared.js";
+
+export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort {
+  constructor(
+    private readonly invoiceRepo: InvoiceRepositoryPort,
+    private readonly lineRepo: InvoiceLineRepositoryPort,
+    private readonly payableWrite: PayableEntryWritePort,
+  ) {}
+
+  async execute(command: ConfirmImportedInvoiceCommand): Promise<InvoiceDTO> {
+    const existing = await this.invoiceRepo.findById(command.id);
+    if (!existing) throw new InvoiceNotFoundError(command.id);
+
+    if (existing.status !== "draft_ai" && existing.status !== "pending_review") {
+      throw new Error(
+        `Cannot confirm invoice with status "${existing.status}". Expected draft_ai or pending_review.`,
+      );
+    }
+
+    // Apply user corrections and transition to pending
+    const confirmData: Parameters<typeof existing.confirmImport>[0] = {};
+    if (command.supplierId !== undefined) confirmData.supplierId = command.supplierId;
+    if (command.supplierName !== undefined) confirmData.supplierName = command.supplierName;
+    if (command.supplierNifSnapshot !== undefined) confirmData.supplierNifSnapshot = command.supplierNifSnapshot;
+    if (command.invoiceNumber !== undefined) confirmData.invoiceNumber = command.invoiceNumber;
+    if (command.invoiceDate !== undefined) confirmData.invoiceDate = new Date(command.invoiceDate);
+    if (command.dueDate !== undefined) confirmData.dueDate = command.dueDate ? new Date(command.dueDate) : null;
+    if (command.subtotalWithoutVat !== undefined) confirmData.subtotalWithoutVat = command.subtotalWithoutVat;
+    if (command.totalVat !== undefined) confirmData.totalVat = command.totalVat;
+    if (command.totalWithVat !== undefined) confirmData.totalWithVat = command.totalWithVat;
+    if (command.notes !== undefined) confirmData.notes = command.notes;
+    if (command.costCenterGroupId !== undefined) confirmData.costCenterGroupId = command.costCenterGroupId;
+    if (command.financialType !== undefined) confirmData.financialType = command.financialType;
+    if (command.affectsDre !== undefined) confirmData.affectsDre = command.affectsDre;
+    if (command.affectsCashflow !== undefined) confirmData.affectsCashflow = command.affectsCashflow;
+    if (command.affectsProfitability !== undefined) confirmData.affectsProfitability = command.affectsProfitability;
+    if (command.currency !== undefined) confirmData.currency = command.currency;
+
+    let confirmed = existing.confirmImport(confirmData);
+    if (command.markAsPaid) {
+      const paidAt = command.paidAt ? new Date(command.paidAt) : (confirmed.invoiceDate ?? new Date());
+      confirmed = confirmed.markPaid(paidAt);
+    }
+
+    // Duplicate check by NIF + invoice number — hard block, exclude this invoice itself
+    if (confirmed.supplierNifSnapshot && confirmed.invoiceNumber) {
+      const duplicate = await this.invoiceRepo.findDuplicateByNif(confirmed.invoiceNumber, confirmed.supplierNifSnapshot, confirmed.id);
+      if (duplicate) throw new DuplicateInvoiceError(confirmed.invoiceNumber, confirmed.supplierName);
+    }
+
+    await this.invoiceRepo.update(confirmed);
+
+    // Save optional lines
+    const lines: InvoiceLine[] = (command.lines ?? []).map((lc) => {
+      const lineProps: Parameters<typeof InvoiceLine.create>[0] = {
+        invoiceId: confirmed.id,
+        description: lc.description,
+        quantity: lc.quantity,
+        unitCostWithoutVat: lc.unitCostWithoutVat,
+        vatRate: lc.vatRate,
+        vatAmount: lc.vatAmount,
+        totalWithVat: lc.totalWithVat,
+      };
+      if (lc.type !== undefined) lineProps.type = lc.type;
+      if (lc.costCenterId !== undefined) lineProps.costCenterId = lc.costCenterId;
+      if (lc.costCenterCategoryId !== undefined) lineProps.costCenterCategoryId = lc.costCenterCategoryId;
+      if (lc.category !== undefined) lineProps.category = lc.category;
+      if (lc.subcategory !== undefined) lineProps.subcategory = lc.subcategory;
+      if (lc.unit !== undefined) lineProps.unit = lc.unit;
+      if (lc.affectsDre !== undefined) lineProps.affectsDre = lc.affectsDre;
+      if (lc.affectsCashflow !== undefined) lineProps.affectsCashflow = lc.affectsCashflow;
+      if (lc.affectsProfitability !== undefined) lineProps.affectsProfitability = lc.affectsProfitability;
+      return InvoiceLine.create(lineProps);
+    });
+
+    if (lines.length > 0) {
+      await this.lineRepo.saveAll(lines);
+    }
+
+    // Create payable entry if explicitly requested and due date is set
+    if (command.saveAsPayable && confirmed.dueDate) {
+      await this.payableWrite.createForInvoice({
+        invoiceId: confirmed.id,
+        supplierId: confirmed.supplierId,
+        supplierName: confirmed.supplierName,
+        invoiceNumber: confirmed.invoiceNumber,
+        dueDate: confirmed.dueDate,
+        amount: confirmed.totalWithVat,
+      });
+    }
+
+    return toInvoiceDTO(confirmed, lines);
+  }
+}

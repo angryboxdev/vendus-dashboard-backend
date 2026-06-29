@@ -17,6 +17,9 @@ interface InvoiceLineProps {
   vatAmount: number;
   totalWithVat: number;
   stockEntryId: string | null;
+  affectsDre: boolean;
+  affectsCashflow: boolean;
+  affectsProfitability: boolean;
   createdAt: Date;
 }
 
@@ -46,6 +49,9 @@ export class InvoiceLine {
   readonly vatAmount: number;
   readonly totalWithVat: number;
   readonly stockEntryId: string | null;
+  readonly affectsDre: boolean;
+  readonly affectsCashflow: boolean;
+  readonly affectsProfitability: boolean;
   readonly createdAt: Date;
 
   private constructor(props: InvoiceLineProps) {
@@ -65,6 +71,9 @@ export class InvoiceLine {
     this.vatAmount = props.vatAmount;
     this.totalWithVat = props.totalWithVat;
     this.stockEntryId = props.stockEntryId;
+    this.affectsDre = props.affectsDre;
+    this.affectsCashflow = props.affectsCashflow;
+    this.affectsProfitability = props.affectsProfitability;
     this.createdAt = props.createdAt;
   }
 
@@ -83,6 +92,9 @@ export class InvoiceLine {
     vatRate: number;
     vatAmount: number;
     totalWithVat: number;
+    affectsDre?: boolean;
+    affectsCashflow?: boolean;
+    affectsProfitability?: boolean;
   }): InvoiceLine {
     return new InvoiceLine({
       id: crypto.randomUUID(),
@@ -101,6 +113,9 @@ export class InvoiceLine {
       vatAmount: props.vatAmount,
       totalWithVat: props.totalWithVat,
       stockEntryId: null,
+      affectsDre: props.affectsDre ?? true,
+      affectsCashflow: props.affectsCashflow ?? true,
+      affectsProfitability: props.affectsProfitability ?? false,
       createdAt: new Date(),
     });
   }
@@ -142,6 +157,9 @@ export class InvoiceLine {
       vatAmount: this.vatAmount,
       totalWithVat: this.totalWithVat,
       stockEntryId: this.stockEntryId,
+      affectsDre: this.affectsDre,
+      affectsCashflow: this.affectsCashflow,
+      affectsProfitability: this.affectsProfitability,
       createdAt: this.createdAt,
     };
   }

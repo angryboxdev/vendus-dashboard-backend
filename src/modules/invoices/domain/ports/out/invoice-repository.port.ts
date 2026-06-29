@@ -14,4 +14,8 @@ export interface InvoiceRepositoryPort {
   findAll(filter?: InvoiceFilter): Promise<Invoice[]>;
   update(invoice: Invoice): Promise<void>;
   delete(id: string): Promise<void>;
+  /** Returns an existing (non-cancelled) invoice with the same number and supplier, or null. excludeId skips that invoice (used when updating). */
+  findDuplicate(invoiceNumber: string, supplierId: string, excludeId?: string): Promise<Invoice | null>;
+  /** Returns an existing (non-cancelled) invoice with the same number and supplier NIF, or null. Used for import/confirm flows where NIF is more reliable than supplierId. */
+  findDuplicateByNif(invoiceNumber: string, supplierNif: string, excludeId?: string): Promise<Invoice | null>;
 }

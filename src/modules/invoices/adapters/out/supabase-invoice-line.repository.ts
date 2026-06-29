@@ -21,6 +21,9 @@ function toEntity(row: Record<string, unknown>): InvoiceLine {
     vatAmount: row.vat_amount as number,
     totalWithVat: row.total_with_vat as number,
     stockEntryId: (row.stock_entry_id as string | null) ?? null,
+    affectsDre: (row.affects_dre as boolean | null) ?? true,
+    affectsCashflow: (row.affects_cashflow as boolean | null) ?? true,
+    affectsProfitability: (row.affects_profitability as boolean | null) ?? false,
     createdAt: new Date(row.created_at as string),
   });
 }
@@ -47,6 +50,9 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
       vat_amount: l.vatAmount,
       total_with_vat: l.totalWithVat,
       stock_entry_id: l.stockEntryId,
+      affects_dre: l.affectsDre,
+      affects_cashflow: l.affectsCashflow,
+      affects_profitability: l.affectsProfitability,
       created_at: l.createdAt.toISOString(),
     }));
     const { error } = await this.supabase.from("invoice_lines").insert(rows);
@@ -90,6 +96,9 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
         vat_amount: line.vatAmount,
         total_with_vat: line.totalWithVat,
         stock_entry_id: line.stockEntryId,
+        affects_dre: line.affectsDre,
+        affects_cashflow: line.affectsCashflow,
+        affects_profitability: line.affectsProfitability,
       })
       .eq("id", line.id);
     if (error) throw new Error(error.message);

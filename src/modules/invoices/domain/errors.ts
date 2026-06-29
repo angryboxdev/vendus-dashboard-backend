@@ -18,3 +18,10 @@ export class InvoiceAlreadyCancelledError extends Error {
     this.name = "InvoiceAlreadyCancelledError";
   }
 }
+
+export class DuplicateInvoiceError extends Error {
+  constructor(invoiceNumber: string, supplierName: string) {
+    super(`Já existe uma fatura "${invoiceNumber}" para o fornecedor "${supplierName}"`);
+    this.name = "DuplicateInvoiceError";
+  }
+}

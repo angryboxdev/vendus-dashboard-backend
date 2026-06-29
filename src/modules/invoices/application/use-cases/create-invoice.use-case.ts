@@ -9,6 +9,7 @@ import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repos
 import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
 import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry-write.port.js";
 import { toInvoiceDTO } from "./shared.js";
+import { DuplicateInvoiceError } from "../../domain/errors.js";
 
 export class CreateInvoiceUseCase implements CreateInvoicePort {
   constructor(
@@ -31,6 +32,12 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     if (command.notes !== undefined) invoiceProps.notes = command.notes;
     if (command.attachmentUrl !== undefined) invoiceProps.attachmentUrl = command.attachmentUrl;
     const invoice = Invoice.create(invoiceProps);
+
+    // Duplicate check — only when supplier is known
+    if (invoice.supplierId) {
+      const existing = await this.invoiceRepo.findDuplicate(invoice.invoiceNumber, invoice.supplierId);
+      if (existing) throw new DuplicateInvoiceError(invoice.invoiceNumber, invoice.supplierName);
+    }
 
     const lines = (command.lines ?? []).map((lc) => {
       const lineProps: Parameters<typeof InvoiceLine.create>[0] = {

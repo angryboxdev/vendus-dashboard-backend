@@ -68,6 +68,42 @@ describe("UpdateInvoiceUseCase", () => {
     expect(saved!.supplierName).toBe("NOS");
   });
 
+  it("actualiza supplierNifSnapshot", async () => {
+    const inv = makeInvoice();
+    await repo.save(inv);
+
+    const dto = await useCase.execute({ id: inv.id, supplierNifSnapshot: "500123456" });
+    expect(dto.supplierNifSnapshot).toBe("500123456");
+  });
+
+  it("actualiza costCenterGroupId e financialType", async () => {
+    const inv = makeInvoice();
+    await repo.save(inv);
+
+    const dto = await useCase.execute({
+      id: inv.id,
+      costCenterGroupId: "grp-ops",
+      financialType: "fixed_opex",
+    });
+    expect(dto.costCenterGroupId).toBe("grp-ops");
+    expect(dto.financialType).toBe("fixed_opex");
+  });
+
+  it("actualiza flags financeiras (affectsDre, affectsCashflow, affectsProfitability)", async () => {
+    const inv = makeInvoice();
+    await repo.save(inv);
+
+    const dto = await useCase.execute({
+      id: inv.id,
+      affectsDre: false,
+      affectsCashflow: false,
+      affectsProfitability: false,
+    });
+    expect(dto.affectsDre).toBe(false);
+    expect(dto.affectsCashflow).toBe(false);
+    expect(dto.affectsProfitability).toBe(false);
+  });
+
   it("lança InvoiceNotFoundError para id inexistente", async () => {
     await expect(
       useCase.execute({ id: "nao-existe", supplierName: "X" }),

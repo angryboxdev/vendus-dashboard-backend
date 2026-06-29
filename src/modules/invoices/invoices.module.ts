@@ -4,6 +4,9 @@ import { SupabaseInvoiceRepository } from "./adapters/out/supabase-invoice.repos
 import { SupabaseInvoiceLineRepository } from "./adapters/out/supabase-invoice-line.repository.js";
 import { SupabaseClassificationRuleRepository } from "./adapters/out/supabase-classification-rule.repository.js";
 import { SupabasePayableEntryWriteAdapter } from "./adapters/out/supabase-payable-entry-write.adapter.js";
+import { SupabaseDocumentStorageAdapter } from "./adapters/out/supabase-document-storage.adapter.js";
+import { SupabaseSupplierLookupAdapter } from "./adapters/out/supabase-supplier-lookup.adapter.js";
+import { OpenAiExtractionAdapter } from "./adapters/out/openai-extraction.adapter.js";
 import { CreateInvoiceUseCase } from "./application/use-cases/create-invoice.use-case.js";
 import { UpdateInvoiceUseCase } from "./application/use-cases/update-invoice.use-case.js";
 import { MarkInvoicePaidUseCase } from "./application/use-cases/mark-invoice-paid.use-case.js";
@@ -15,6 +18,9 @@ import { ListInvoicesUseCase } from "./application/use-cases/list-invoices.use-c
 import { ListInvoiceLinesUseCase } from "./application/use-cases/list-invoice-lines.use-case.js";
 import { GetInvoiceUseCase } from "./application/use-cases/get-invoice.use-case.js";
 import { DeleteInvoiceUseCase } from "./application/use-cases/delete-invoice.use-case.js";
+import { ImportInvoiceUseCase } from "./application/use-cases/import-invoice.use-case.js";
+import { ConfirmImportedInvoiceUseCase } from "./application/use-cases/confirm-imported-invoice.use-case.js";
+import { GetInvoiceAlertsUseCase } from "./application/use-cases/get-invoice-alerts.use-case.js";
 import { createInvoiceRouter } from "./adapters/in/invoice.controller.js";
 import type { Router } from "express";
 
@@ -26,10 +32,16 @@ export function createInvoicesModule(supabase?: SupabaseClient): InvoicesModule 
   const client = supabase ?? getSupabaseServiceRole();
   if (!client) throw new Error("Supabase service role não configurado");
 
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  if (!openaiApiKey) throw new Error("OPENAI_API_KEY não configurado");
+
   const invoiceRepo = new SupabaseInvoiceRepository(client);
   const lineRepo = new SupabaseInvoiceLineRepository(client);
   const ruleRepo = new SupabaseClassificationRuleRepository(client);
   const payableWrite = new SupabasePayableEntryWriteAdapter(client);
+  const storage = new SupabaseDocumentStorageAdapter(client);
+  const supplierLookup = new SupabaseSupplierLookupAdapter(client);
+  const aiExtraction = new OpenAiExtractionAdapter(openaiApiKey);
 
   const router = createInvoiceRouter({
     createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite),
@@ -41,8 +53,11 @@ export function createInvoicesModule(supabase?: SupabaseClient): InvoicesModule 
     listInvoices: new ListInvoicesUseCase(invoiceRepo),
     listInvoiceLines: new ListInvoiceLinesUseCase(lineRepo),
     getInvoice: new GetInvoiceUseCase(invoiceRepo, lineRepo),
-    deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo),
+    deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),
+    importInvoice: new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup),
+    confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite),
+    getInvoiceAlerts: new GetInvoiceAlertsUseCase(invoiceRepo),
   });
 
   return { router };

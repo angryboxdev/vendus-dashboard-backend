@@ -34,4 +34,24 @@ export class FakeInvoiceRepository implements InvoiceRepositoryPort {
   async delete(id: string): Promise<void> {
     this.store.delete(id);
   }
+
+  async findDuplicate(invoiceNumber: string, supplierId: string, excludeId?: string): Promise<Invoice | null> {
+    for (const inv of this.store.values()) {
+      if (inv.invoiceNumber === invoiceNumber && inv.supplierId === supplierId && inv.status !== "cancelled") {
+        if (excludeId && inv.id === excludeId) continue;
+        return inv;
+      }
+    }
+    return null;
+  }
+
+  async findDuplicateByNif(invoiceNumber: string, supplierNif: string, excludeId?: string): Promise<Invoice | null> {
+    for (const inv of this.store.values()) {
+      if (inv.invoiceNumber === invoiceNumber && inv.supplierNifSnapshot === supplierNif && inv.status !== "cancelled") {
+        if (excludeId && inv.id === excludeId) continue;
+        return inv;
+      }
+    }
+    return null;
+  }
 }

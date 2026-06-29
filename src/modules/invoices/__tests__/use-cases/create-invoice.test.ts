@@ -1,4 +1,5 @@
 import { CreateInvoiceUseCase } from "../../application/use-cases/create-invoice.use-case.js";
+import { DuplicateInvoiceError } from "../../domain/errors.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
 import { FakePayableEntryWrite } from "../fakes/fake-payable-entry-write.js";
@@ -141,5 +142,33 @@ describe("CreateInvoiceUseCase", () => {
       totalWithVat: 90100,
     });
     expect(payableWrite.created).toHaveLength(0);
+  });
+
+  it("lança DuplicateInvoiceError quando já existe fatura com mesmo número e fornecedor", async () => {
+    const cmd = {
+      supplierId: "sup-1",
+      supplierName: "Makro",
+      invoiceNumber: "MKR-001",
+      invoiceDate: "2026-06-01",
+      subtotalWithoutVat: 100000,
+      totalVat: 23000,
+      totalWithVat: 123000,
+    };
+    await useCase.execute(cmd);
+    await expect(useCase.execute(cmd)).rejects.toThrow(DuplicateInvoiceError);
+  });
+
+  it("não lança erro de duplicado quando supplierId não está definido", async () => {
+    const cmd = {
+      supplierName: "Makro",
+      invoiceNumber: "MKR-001",
+      invoiceDate: "2026-06-01",
+      subtotalWithoutVat: 100000,
+      totalVat: 23000,
+      totalWithVat: 123000,
+    };
+    await useCase.execute(cmd);
+    // Second call without supplierId must succeed (no duplicate check)
+    await expect(useCase.execute(cmd)).resolves.toBeDefined();
   });
 });
