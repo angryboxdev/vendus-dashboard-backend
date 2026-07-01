@@ -103,21 +103,6 @@ describe("AddInvoiceLineUseCase", () => {
     expect(dto.costCenterCategoryId).toBeNull();
   });
 
-  it("persists category (free text) when provided", async () => {
-    const dto = await useCase.execute({
-      invoiceId: invoice.id,
-      description: "Especiarias",
-      category: "Ingredientes secos",
-      quantity: 5,
-      unitCostWithoutVat: 300,
-      vatRate: 6,
-      vatAmount: 90,
-      totalWithVat: 1590,
-    });
-
-    expect(dto.category).toBe("Ingredientes secos");
-  });
-
   it("persists unit when provided", async () => {
     const dto = await useCase.execute({
       invoiceId: invoice.id,

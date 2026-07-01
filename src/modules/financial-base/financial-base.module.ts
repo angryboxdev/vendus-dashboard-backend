@@ -1,5 +1,6 @@
 import type { Router } from "express";
 import { getSupabaseServiceRole } from "../../infra/supabaseClient.js";
+import type { CreateSupplierPort } from "./domain/ports/in/supplier.ports.js";
 
 import { SupabaseCostCenterGroupRepository } from "./adapters/out/supabase-cost-center-group.repository.js";
 import { SupabaseCostCenterCategoryRepository } from "./adapters/out/supabase-cost-center-category.repository.js";
@@ -32,7 +33,7 @@ import { FinancialBaseController } from "./adapters/in/financial-base.controller
  * Único lugar que conhece as implementações concretas dos adapters.
  * Use cases e domínio apenas conhecem interfaces (ports).
  */
-export function createFinancialBaseModule(): { router: Router } {
+export function createFinancialBaseModule(): { router: Router; createSupplier: CreateSupplierPort } {
   const supabase = getSupabaseServiceRole();
   if (!supabase) throw new Error("Supabase service role não configurado");
 
@@ -91,5 +92,5 @@ export function createFinancialBaseModule(): { router: Router } {
     getSupplier,
   );
 
-  return { router: controller.router };
+  return { router: controller.router, createSupplier };
 }

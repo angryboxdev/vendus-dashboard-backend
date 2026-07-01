@@ -41,17 +41,16 @@ describe("ClassifyInvoiceLineUseCase", () => {
     await lineRepo.saveAll([line]);
   });
 
-  it("classifies line with type and costCenterId", async () => {
+  it("classifica a linha com tipo", async () => {
     const dto = await useCase.execute({
       invoiceId: inv.id,
       lineId: line.id,
-      classify: { type: "stock_purchase", costCenterId: "cc-ope" },
+      classify: { type: "stock_purchase" },
     });
     expect(dto.type).toBe("stock_purchase");
-    expect(dto.costCenterId).toBe("cc-ope");
   });
 
-  it("classifies line with costCenterCategoryId", async () => {
+  it("classifica a linha com costCenterCategoryId", async () => {
     const dto = await useCase.execute({
       invoiceId: inv.id,
       lineId: line.id,
@@ -60,7 +59,17 @@ describe("ClassifyInvoiceLineUseCase", () => {
     expect(dto.costCenterCategoryId).toBe("cat-cmv");
   });
 
-  it("saves costCenterCategoryId in rule when saveAsRule is true", async () => {
+  it("classifica com tipo e costCenterCategoryId em conjunto", async () => {
+    const dto = await useCase.execute({
+      invoiceId: inv.id,
+      lineId: line.id,
+      classify: { type: "stock_purchase", costCenterCategoryId: "cat-cmv" },
+    });
+    expect(dto.type).toBe("stock_purchase");
+    expect(dto.costCenterCategoryId).toBe("cat-cmv");
+  });
+
+  it("guarda regra com costCenterCategoryId quando saveAsRule=true", async () => {
     await useCase.execute({
       invoiceId: inv.id,
       lineId: line.id,
@@ -71,21 +80,20 @@ describe("ClassifyInvoiceLineUseCase", () => {
     expect(rule!.defaultCostCenterCategoryId).toBe("cat-cmv");
   });
 
-  it("creates classification rule when saveAsRule is true", async () => {
+  it("cria regra de classificação com tipo quando saveAsRule=true", async () => {
     await useCase.execute({
       invoiceId: inv.id,
       lineId: line.id,
-      classify: { type: "stock_purchase", costCenterId: "cc-ope" },
+      classify: { type: "stock_purchase" },
       saveAsRule: true,
     });
     const rule = await ruleRepo.findBySupplierId("supplier-1");
     expect(rule).not.toBeNull();
     expect(rule!.defaultLineType).toBe("stock_purchase");
-    expect(rule!.defaultCostCenterId).toBe("cc-ope");
     expect(rule!.confidenceBoost).toBe(10);
   });
 
-  it("increments confidenceBoost when rule already exists", async () => {
+  it("incrementa confidenceBoost quando regra já existe", async () => {
     await useCase.execute({
       invoiceId: inv.id,
       lineId: line.id,
@@ -102,13 +110,13 @@ describe("ClassifyInvoiceLineUseCase", () => {
     expect(rule!.confidenceBoost).toBe(20);
   });
 
-  it("throws InvoiceNotFoundError if invoice missing", async () => {
+  it("throws InvoiceNotFoundError se fatura não existe", async () => {
     await expect(
       useCase.execute({ invoiceId: "no", lineId: line.id, classify: {} }),
     ).rejects.toThrow(InvoiceNotFoundError);
   });
 
-  it("throws InvoiceLineNotFoundError if line missing", async () => {
+  it("throws InvoiceLineNotFoundError se linha não existe", async () => {
     await expect(
       useCase.execute({ invoiceId: inv.id, lineId: "no", classify: {} }),
     ).rejects.toThrow(InvoiceLineNotFoundError);

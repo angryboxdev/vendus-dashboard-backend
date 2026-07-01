@@ -14,7 +14,6 @@ describe("InvoiceLine entity", () => {
   it("creates with default type 'other' and null cc", () => {
     const line = InvoiceLine.create(base);
     expect(line.type).toBe("other");
-    expect(line.costCenterId).toBeNull();
     expect(line.costCenterCategoryId).toBeNull();
     expect(line.stockEntryId).toBeNull();
     expect(line.id).toBeDefined();
@@ -30,19 +29,12 @@ describe("InvoiceLine entity", () => {
     expect(line.description).toBe("Farinha T55");
   });
 
-  it("classify returns new instance with updated fields", () => {
+  it("classify sets type and returns new immutable instance", () => {
     const line = InvoiceLine.create(base);
-    const classified = line.classify({
-      type: "stock_purchase",
-      costCenterId: "cc-ope",
-      category: "Ingredientes",
-    });
+    const classified = line.classify({ type: "stock_purchase" });
     expect(classified.type).toBe("stock_purchase");
-    expect(classified.costCenterId).toBe("cc-ope");
-    expect(classified.category).toBe("Ingredientes");
     // immutability
     expect(line.type).toBe("other");
-    expect(line.costCenterId).toBeNull();
   });
 
   it("classify sets costCenterCategoryId", () => {
@@ -59,16 +51,10 @@ describe("InvoiceLine entity", () => {
   });
 
   it("classify preserves unspecified fields", () => {
-    const line = InvoiceLine.create({ ...base, costCenterId: "cc-existing" });
+    const line = InvoiceLine.create({ ...base, costCenterCategoryId: "cat-existing" });
     const classified = line.classify({ type: "fixed_cost" });
     expect(classified.type).toBe("fixed_cost");
-    expect(classified.costCenterId).toBe("cc-existing");
-  });
-
-  it("classify allows clearing nullable fields with null", () => {
-    const line = InvoiceLine.create({ ...base, costCenterId: "cc-1" });
-    const cleared = line.classify({ costCenterId: null });
-    expect(cleared.costCenterId).toBeNull();
+    expect(classified.costCenterCategoryId).toBe("cat-existing");
   });
 
   it("setStockEntry returns new instance with stockEntryId", () => {

@@ -9,6 +9,29 @@ const base = {
   totalWithVat: 123000,
 };
 
+const baseReconstitute = {
+  supplierId: null,
+  supplierNifSnapshot: null,
+  dueDate: null,
+  paidAt: null,
+  isDirectDebit: false,
+  directDebitDate: null,
+  status: "pending" as const,
+  notes: null,
+  attachmentUrl: null,
+  source: "manual" as const,
+  aiExtractionStatus: null,
+  aiConfidence: null,
+  requiresReview: false,
+  costCenterGroupId: null,
+  costCenterCategoryId: null,
+  financialType: null,
+  affectsDre: true,
+  affectsCashflow: true,
+  affectsProfitability: false,
+  currency: "EUR",
+};
+
 describe("Invoice entity", () => {
   it("creates with pending status and null paidAt", () => {
     const inv = Invoice.create(base);
@@ -70,23 +93,96 @@ describe("Invoice entity", () => {
     const original = Invoice.create(base);
     const copy = Invoice.reconstitute({
       id: original.id,
-      supplierId: null,
       supplierName: original.supplierName,
       invoiceNumber: original.invoiceNumber,
       invoiceDate: original.invoiceDate,
-      dueDate: null,
-      paidAt: null,
       subtotalWithoutVat: original.subtotalWithoutVat,
       totalVat: original.totalVat,
       totalWithVat: original.totalWithVat,
-      status: original.status,
-      notes: null,
-      attachmentUrl: null,
       createdAt: original.createdAt,
       updatedAt: original.updatedAt,
+      ...baseReconstitute,
     });
     expect(copy.id).toBe(original.id);
     expect(copy.supplierName).toBe(original.supplierName);
     expect(copy.createdAt).toEqual(original.createdAt);
+    expect(copy.costCenterCategoryId).toBeNull();
+    expect(copy.isDirectDebit).toBe(false);
+    expect(copy.directDebitDate).toBeNull();
+  });
+
+  it("update accepts costCenterCategoryId", () => {
+    const inv = Invoice.create(base);
+    const updated = inv.update({ costCenterCategoryId: "cat-cmv" });
+    expect(updated.costCenterCategoryId).toBe("cat-cmv");
+    expect(inv.costCenterCategoryId).toBeNull();
+  });
+
+  // ── Direct Debit ──────────────────────────────────────────────────────────
+
+  it("create() defaults isDirectDebit to false and directDebitDate to null", () => {
+    const inv = Invoice.create(base);
+    expect(inv.isDirectDebit).toBe(false);
+    expect(inv.directDebitDate).toBeNull();
+  });
+
+  it("create() persists isDirectDebit and directDebitDate when provided", () => {
+    const debitDate = new Date("2026-08-01");
+    const inv = Invoice.create({ ...base, isDirectDebit: true, directDebitDate: debitDate });
+    expect(inv.isDirectDebit).toBe(true);
+    expect(inv.directDebitDate).toEqual(debitDate);
+  });
+
+  it("createFromImport() always starts with isDirectDebit=false and directDebitDate=null", () => {
+    const inv = Invoice.createFromImport({
+      supplierName: "EDP",
+      invoiceNumber: "EDP-001",
+      invoiceDate: new Date("2026-06-01"),
+      subtotalWithoutVat: 85000,
+      totalVat: 5100,
+      totalWithVat: 90100,
+      source: "pdf_import",
+      aiConfidence: 0.9,
+      requiresReview: false,
+    });
+    expect(inv.isDirectDebit).toBe(false);
+    expect(inv.directDebitDate).toBeNull();
+  });
+
+  it("update() changes isDirectDebit and directDebitDate", () => {
+    const inv = Invoice.create(base);
+    const debitDate = new Date("2026-09-15");
+    const updated = inv.update({ isDirectDebit: true, directDebitDate: debitDate });
+    expect(updated.isDirectDebit).toBe(true);
+    expect(updated.directDebitDate).toEqual(debitDate);
+    // immutability
+    expect(inv.isDirectDebit).toBe(false);
+  });
+
+  it("update() clears directDebitDate when set to null", () => {
+    const debitDate = new Date("2026-09-15");
+    const inv = Invoice.create({ ...base, isDirectDebit: true, directDebitDate: debitDate });
+    const updated = inv.update({ isDirectDebit: false, directDebitDate: null });
+    expect(updated.isDirectDebit).toBe(false);
+    expect(updated.directDebitDate).toBeNull();
+  });
+
+  it("confirmImport() propagates isDirectDebit and directDebitDate", () => {
+    const inv = Invoice.createFromImport({
+      supplierName: "EDP",
+      invoiceNumber: "EDP-001",
+      invoiceDate: new Date("2026-06-01"),
+      subtotalWithoutVat: 85000,
+      totalVat: 5100,
+      totalWithVat: 90100,
+      source: "pdf_import",
+      aiConfidence: 0.9,
+      requiresReview: false,
+    });
+    const debitDate = new Date("2026-08-10");
+    const confirmed = inv.confirmImport({ isDirectDebit: true, directDebitDate: debitDate });
+    expect(confirmed.isDirectDebit).toBe(true);
+    expect(confirmed.directDebitDate).toEqual(debitDate);
+    expect(confirmed.status).toBe("pending");
   });
 });

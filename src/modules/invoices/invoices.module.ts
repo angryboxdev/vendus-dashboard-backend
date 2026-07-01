@@ -6,6 +6,7 @@ import { SupabaseClassificationRuleRepository } from "./adapters/out/supabase-cl
 import { SupabasePayableEntryWriteAdapter } from "./adapters/out/supabase-payable-entry-write.adapter.js";
 import { SupabaseDocumentStorageAdapter } from "./adapters/out/supabase-document-storage.adapter.js";
 import { SupabaseSupplierLookupAdapter } from "./adapters/out/supabase-supplier-lookup.adapter.js";
+import { FinancialBaseSupplierCreateAdapter } from "./adapters/out/financial-base-supplier-create.adapter.js";
 import { OpenAiExtractionAdapter } from "./adapters/out/openai-extraction.adapter.js";
 import { CreateInvoiceUseCase } from "./application/use-cases/create-invoice.use-case.js";
 import { UpdateInvoiceUseCase } from "./application/use-cases/update-invoice.use-case.js";
@@ -21,14 +22,21 @@ import { DeleteInvoiceUseCase } from "./application/use-cases/delete-invoice.use
 import { ImportInvoiceUseCase } from "./application/use-cases/import-invoice.use-case.js";
 import { ConfirmImportedInvoiceUseCase } from "./application/use-cases/confirm-imported-invoice.use-case.js";
 import { GetInvoiceAlertsUseCase } from "./application/use-cases/get-invoice-alerts.use-case.js";
+import { ProcessDirectDebitsUseCase } from "./application/use-cases/process-direct-debits.use-case.js";
 import { createInvoiceRouter } from "./adapters/in/invoice.controller.js";
+import type { CreateSupplierPort } from "../financial-base/domain/ports/in/supplier.ports.js";
+import type { ProcessDirectDebitsPort } from "./domain/ports/in/invoice.ports.js";
 import type { Router } from "express";
 
 export interface InvoicesModule {
   router: Router;
+  processDirectDebits: ProcessDirectDebitsPort;
 }
 
-export function createInvoicesModule(supabase?: SupabaseClient): InvoicesModule {
+export function createInvoicesModule(
+  createSupplierPort: CreateSupplierPort,
+  supabase?: SupabaseClient,
+): InvoicesModule {
   const client = supabase ?? getSupabaseServiceRole();
   if (!client) throw new Error("Supabase service role não configurado");
 
@@ -41,11 +49,14 @@ export function createInvoicesModule(supabase?: SupabaseClient): InvoicesModule 
   const payableWrite = new SupabasePayableEntryWriteAdapter(client);
   const storage = new SupabaseDocumentStorageAdapter(client);
   const supplierLookup = new SupabaseSupplierLookupAdapter(client);
+  const supplierCreate = new FinancialBaseSupplierCreateAdapter(createSupplierPort);
   const aiExtraction = new OpenAiExtractionAdapter(openaiApiKey);
+
+  const processDirectDebits = new ProcessDirectDebitsUseCase(invoiceRepo, payableWrite);
 
   const router = createInvoiceRouter({
     createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite),
-    updateInvoice: new UpdateInvoiceUseCase(invoiceRepo),
+    updateInvoice: new UpdateInvoiceUseCase(invoiceRepo, lineRepo),
     markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite),
     setInvoiceStatus: new SetInvoiceStatusUseCase(invoiceRepo, payableWrite),
     addInvoiceLine: new AddInvoiceLineUseCase(invoiceRepo, lineRepo),
@@ -56,9 +67,10 @@ export function createInvoicesModule(supabase?: SupabaseClient): InvoicesModule 
     deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),
     importInvoice: new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup),
-    confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite),
+    confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate),
     getInvoiceAlerts: new GetInvoiceAlertsUseCase(invoiceRepo),
+    processDirectDebits,
   });
 
-  return { router };
+  return { router, processDirectDebits };
 }

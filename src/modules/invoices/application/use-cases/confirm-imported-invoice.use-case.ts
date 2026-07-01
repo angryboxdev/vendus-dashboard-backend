@@ -7,6 +7,7 @@ import type {
 import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
 import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
 import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry-write.port.js";
+import type { SupplierCreatePort } from "../../domain/ports/out/supplier-create.port.js";
 import { InvoiceNotFoundError, DuplicateInvoiceError } from "../../domain/errors.js";
 import { toInvoiceDTO } from "./shared.js";
 
@@ -15,6 +16,7 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     private readonly invoiceRepo: InvoiceRepositoryPort,
     private readonly lineRepo: InvoiceLineRepositoryPort,
     private readonly payableWrite: PayableEntryWritePort,
+    private readonly supplierCreate: SupplierCreatePort,
   ) {}
 
   async execute(command: ConfirmImportedInvoiceCommand): Promise<InvoiceDTO> {
@@ -27,19 +29,31 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       );
     }
 
+    // Criar fornecedor novo se solicitado (tem precedência sobre supplierId)
+    let resolvedSupplierId = command.supplierId;
+    let resolvedSupplierName = command.supplierName;
+    if (command.newSupplier) {
+      const created = await this.supplierCreate.create(command.newSupplier);
+      resolvedSupplierId = created.id;
+      resolvedSupplierName = resolvedSupplierName ?? created.name;
+    }
+
     // Apply user corrections and transition to pending
     const confirmData: Parameters<typeof existing.confirmImport>[0] = {};
-    if (command.supplierId !== undefined) confirmData.supplierId = command.supplierId;
-    if (command.supplierName !== undefined) confirmData.supplierName = command.supplierName;
+    if (resolvedSupplierId !== undefined) confirmData.supplierId = resolvedSupplierId;
+    if (resolvedSupplierName !== undefined) confirmData.supplierName = resolvedSupplierName;
     if (command.supplierNifSnapshot !== undefined) confirmData.supplierNifSnapshot = command.supplierNifSnapshot;
     if (command.invoiceNumber !== undefined) confirmData.invoiceNumber = command.invoiceNumber;
     if (command.invoiceDate !== undefined) confirmData.invoiceDate = new Date(command.invoiceDate);
     if (command.dueDate !== undefined) confirmData.dueDate = command.dueDate ? new Date(command.dueDate) : null;
+    if (command.isDirectDebit !== undefined) confirmData.isDirectDebit = command.isDirectDebit;
+    if (command.directDebitDate !== undefined) confirmData.directDebitDate = command.directDebitDate ? new Date(command.directDebitDate) : null;
     if (command.subtotalWithoutVat !== undefined) confirmData.subtotalWithoutVat = command.subtotalWithoutVat;
     if (command.totalVat !== undefined) confirmData.totalVat = command.totalVat;
     if (command.totalWithVat !== undefined) confirmData.totalWithVat = command.totalWithVat;
     if (command.notes !== undefined) confirmData.notes = command.notes;
     if (command.costCenterGroupId !== undefined) confirmData.costCenterGroupId = command.costCenterGroupId;
+    if (command.costCenterCategoryId !== undefined) confirmData.costCenterCategoryId = command.costCenterCategoryId;
     if (command.financialType !== undefined) confirmData.financialType = command.financialType;
     if (command.affectsDre !== undefined) confirmData.affectsDre = command.affectsDre;
     if (command.affectsCashflow !== undefined) confirmData.affectsCashflow = command.affectsCashflow;
@@ -72,10 +86,7 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
         totalWithVat: lc.totalWithVat,
       };
       if (lc.type !== undefined) lineProps.type = lc.type;
-      if (lc.costCenterId !== undefined) lineProps.costCenterId = lc.costCenterId;
       if (lc.costCenterCategoryId !== undefined) lineProps.costCenterCategoryId = lc.costCenterCategoryId;
-      if (lc.category !== undefined) lineProps.category = lc.category;
-      if (lc.subcategory !== undefined) lineProps.subcategory = lc.subcategory;
       if (lc.unit !== undefined) lineProps.unit = lc.unit;
       if (lc.affectsDre !== undefined) lineProps.affectsDre = lc.affectsDre;
       if (lc.affectsCashflow !== undefined) lineProps.affectsCashflow = lc.affectsCashflow;
@@ -85,6 +96,11 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
 
     if (lines.length > 0) {
       await this.lineRepo.saveAll(lines);
+    }
+
+    // Propagar costCenterCategoryId da fatura para todas as linhas existentes
+    if (confirmed.costCenterCategoryId !== null) {
+      await this.lineRepo.updateCostCenterCategoryForInvoice(confirmed.id, confirmed.costCenterCategoryId);
     }
 
     // Create payable entry if explicitly requested and due date is set

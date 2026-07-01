@@ -16,6 +16,7 @@ export class FakeInvoiceRepository implements InvoiceRepositoryPort {
     let result = [...this.store.values()];
     if (filter?.supplierId) result = result.filter((i) => i.supplierId === filter.supplierId);
     if (filter?.status) result = result.filter((i) => i.status === filter.status);
+    if (filter?.isDirectDebit !== undefined) result = result.filter((i) => i.isDirectDebit === filter.isDirectDebit);
     if (filter?.from) {
       const from = filter.from;
       result = result.filter((i) => i.invoiceDate >= from);
@@ -53,5 +54,18 @@ export class FakeInvoiceRepository implements InvoiceRepositoryPort {
       }
     }
     return null;
+  }
+
+  async findPendingDirectDebits(): Promise<Invoice[]> {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    return [...this.store.values()].filter(
+      (inv) =>
+        inv.isDirectDebit &&
+        inv.directDebitDate !== null &&
+        inv.directDebitDate <= today &&
+        inv.status !== "paid" &&
+        inv.status !== "cancelled",
+    );
   }
 }

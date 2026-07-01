@@ -73,11 +73,12 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
 
     // 5. Apply supplier defaults if found
     const costCenterGroupId = supplierMatch?.defaultCostCenterGroupId ?? null;
+    const costCenterCategoryId = supplierMatch?.defaultCostCenterCategoryId ?? null;
     const financialType = supplierMatch?.defaultFinancialType ?? null;
 
-    // 6. Create draft invoice
+    // 6. Create draft invoice (supplier defaults embedded at creation time)
     const source = command.mimeType === "application/pdf" ? "pdf_import" : "image_import";
-    const invoice = Invoice.createFromImport({
+    const finalInvoice = Invoice.createFromImport({
       supplierId: supplierMatch?.id ?? null,
       supplierName: extraction.supplierName ?? "Fornecedor desconhecido",
       supplierNifSnapshot: extraction.supplierNif ?? null,
@@ -91,14 +92,11 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       attachmentUrl: fileUrl,
       aiConfidence: extraction.confidence,
       requiresReview,
+      costCenterGroupId,
+      costCenterCategoryId,
+      financialType,
       currency: extraction.currency ?? "EUR",
     });
-
-    // Apply supplier defaults directly to the draft
-    let finalInvoice = invoice;
-    if (costCenterGroupId || financialType) {
-      finalInvoice = invoice.update({ costCenterGroupId, financialType });
-    }
 
     await this.invoiceRepo.save(finalInvoice);
 

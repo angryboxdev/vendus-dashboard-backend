@@ -43,6 +43,8 @@ interface InvoiceProps {
   invoiceDate: Date;
   dueDate: Date | null;
   paidAt: Date | null;
+  isDirectDebit: boolean;
+  directDebitDate: Date | null;
   subtotalWithoutVat: number;
   totalVat: number;
   totalWithVat: number;
@@ -54,6 +56,7 @@ interface InvoiceProps {
   aiConfidence: number | null;
   requiresReview: boolean;
   costCenterGroupId: string | null;
+  costCenterCategoryId: string | null;
   financialType: string | null;
   affectsDre: boolean;
   affectsCashflow: boolean;
@@ -70,12 +73,15 @@ export interface UpdateInvoiceData {
   invoiceNumber?: string;
   invoiceDate?: Date;
   dueDate?: Date | null;
+  isDirectDebit?: boolean;
+  directDebitDate?: Date | null;
   subtotalWithoutVat?: number;
   totalVat?: number;
   totalWithVat?: number;
   notes?: string | null;
   attachmentUrl?: string | null;
   costCenterGroupId?: string | null;
+  costCenterCategoryId?: string | null;
   financialType?: string | null;
   affectsDre?: boolean;
   affectsCashflow?: boolean;
@@ -90,11 +96,14 @@ export interface ConfirmImportData {
   invoiceNumber?: string;
   invoiceDate?: Date;
   dueDate?: Date | null;
+  isDirectDebit?: boolean;
+  directDebitDate?: Date | null;
   subtotalWithoutVat?: number;
   totalVat?: number;
   totalWithVat?: number;
   notes?: string | null;
   costCenterGroupId?: string | null;
+  costCenterCategoryId?: string | null;
   financialType?: string | null;
   affectsDre?: boolean;
   affectsCashflow?: boolean;
@@ -111,6 +120,8 @@ export class Invoice {
   readonly invoiceDate: Date;
   readonly dueDate: Date | null;
   readonly paidAt: Date | null;
+  readonly isDirectDebit: boolean;
+  readonly directDebitDate: Date | null;
   readonly subtotalWithoutVat: number;
   readonly totalVat: number;
   readonly totalWithVat: number;
@@ -122,6 +133,7 @@ export class Invoice {
   readonly aiConfidence: number | null;
   readonly requiresReview: boolean;
   readonly costCenterGroupId: string | null;
+  readonly costCenterCategoryId: string | null;
   readonly financialType: string | null;
   readonly affectsDre: boolean;
   readonly affectsCashflow: boolean;
@@ -139,6 +151,8 @@ export class Invoice {
     this.invoiceDate = props.invoiceDate;
     this.dueDate = props.dueDate;
     this.paidAt = props.paidAt;
+    this.isDirectDebit = props.isDirectDebit;
+    this.directDebitDate = props.directDebitDate;
     this.subtotalWithoutVat = props.subtotalWithoutVat;
     this.totalVat = props.totalVat;
     this.totalWithVat = props.totalWithVat;
@@ -150,6 +164,7 @@ export class Invoice {
     this.aiConfidence = props.aiConfidence;
     this.requiresReview = props.requiresReview;
     this.costCenterGroupId = props.costCenterGroupId;
+    this.costCenterCategoryId = props.costCenterCategoryId;
     this.financialType = props.financialType;
     this.affectsDre = props.affectsDre;
     this.affectsCashflow = props.affectsCashflow;
@@ -167,12 +182,15 @@ export class Invoice {
     invoiceNumber: string;
     invoiceDate: Date;
     dueDate?: Date | null;
+    isDirectDebit?: boolean;
+    directDebitDate?: Date | null;
     subtotalWithoutVat: number;
     totalVat: number;
     totalWithVat: number;
     notes?: string | null;
     attachmentUrl?: string | null;
     costCenterGroupId?: string | null;
+    costCenterCategoryId?: string | null;
     financialType?: string | null;
     affectsDre?: boolean;
     affectsCashflow?: boolean;
@@ -189,6 +207,8 @@ export class Invoice {
       invoiceDate: props.invoiceDate,
       dueDate: props.dueDate ?? null,
       paidAt: null,
+      isDirectDebit: props.isDirectDebit ?? false,
+      directDebitDate: props.directDebitDate ?? null,
       subtotalWithoutVat: props.subtotalWithoutVat,
       totalVat: props.totalVat,
       totalWithVat: props.totalWithVat,
@@ -200,6 +220,7 @@ export class Invoice {
       aiConfidence: null,
       requiresReview: false,
       costCenterGroupId: props.costCenterGroupId ?? null,
+      costCenterCategoryId: props.costCenterCategoryId ?? null,
       financialType: props.financialType ?? null,
       affectsDre: props.affectsDre ?? true,
       affectsCashflow: props.affectsCashflow ?? true,
@@ -224,6 +245,9 @@ export class Invoice {
     attachmentUrl?: string | null;
     aiConfidence: number;
     requiresReview: boolean;
+    costCenterGroupId?: string | null;
+    costCenterCategoryId?: string | null;
+    financialType?: string | null;
     currency?: string;
   }): Invoice {
     const now = new Date();
@@ -236,6 +260,8 @@ export class Invoice {
       invoiceDate: props.invoiceDate,
       dueDate: props.dueDate ?? null,
       paidAt: null,
+      isDirectDebit: false,
+      directDebitDate: null,
       subtotalWithoutVat: props.subtotalWithoutVat,
       totalVat: props.totalVat,
       totalWithVat: props.totalWithVat,
@@ -246,8 +272,9 @@ export class Invoice {
       aiExtractionStatus: "done",
       aiConfidence: props.aiConfidence,
       requiresReview: props.requiresReview,
-      costCenterGroupId: null,
-      financialType: null,
+      costCenterGroupId: props.costCenterGroupId ?? null,
+      costCenterCategoryId: props.costCenterCategoryId ?? null,
+      financialType: props.financialType ?? null,
       affectsDre: true,
       affectsCashflow: true,
       affectsProfitability: false,
@@ -271,12 +298,15 @@ export class Invoice {
     if (data.invoiceNumber !== undefined) p.invoiceNumber = data.invoiceNumber.trim();
     if (data.invoiceDate !== undefined) p.invoiceDate = data.invoiceDate;
     if (data.dueDate !== undefined) p.dueDate = data.dueDate;
+    if (data.isDirectDebit !== undefined) p.isDirectDebit = data.isDirectDebit;
+    if (data.directDebitDate !== undefined) p.directDebitDate = data.directDebitDate;
     if (data.subtotalWithoutVat !== undefined) p.subtotalWithoutVat = data.subtotalWithoutVat;
     if (data.totalVat !== undefined) p.totalVat = data.totalVat;
     if (data.totalWithVat !== undefined) p.totalWithVat = data.totalWithVat;
     if (data.notes !== undefined) p.notes = data.notes;
     if (data.attachmentUrl !== undefined) p.attachmentUrl = data.attachmentUrl;
     if (data.costCenterGroupId !== undefined) p.costCenterGroupId = data.costCenterGroupId;
+    if (data.costCenterCategoryId !== undefined) p.costCenterCategoryId = data.costCenterCategoryId;
     if (data.financialType !== undefined) p.financialType = data.financialType;
     if (data.affectsDre !== undefined) p.affectsDre = data.affectsDre;
     if (data.affectsCashflow !== undefined) p.affectsCashflow = data.affectsCashflow;
@@ -294,11 +324,14 @@ export class Invoice {
     if (data.invoiceNumber !== undefined) p.invoiceNumber = data.invoiceNumber.trim();
     if (data.invoiceDate !== undefined) p.invoiceDate = data.invoiceDate;
     if (data.dueDate !== undefined) p.dueDate = data.dueDate;
+    if (data.isDirectDebit !== undefined) p.isDirectDebit = data.isDirectDebit;
+    if (data.directDebitDate !== undefined) p.directDebitDate = data.directDebitDate;
     if (data.subtotalWithoutVat !== undefined) p.subtotalWithoutVat = data.subtotalWithoutVat;
     if (data.totalVat !== undefined) p.totalVat = data.totalVat;
     if (data.totalWithVat !== undefined) p.totalWithVat = data.totalWithVat;
     if (data.notes !== undefined) p.notes = data.notes;
     if (data.costCenterGroupId !== undefined) p.costCenterGroupId = data.costCenterGroupId;
+    if (data.costCenterCategoryId !== undefined) p.costCenterCategoryId = data.costCenterCategoryId;
     if (data.financialType !== undefined) p.financialType = data.financialType;
     if (data.affectsDre !== undefined) p.affectsDre = data.affectsDre;
     if (data.affectsCashflow !== undefined) p.affectsCashflow = data.affectsCashflow;
@@ -340,6 +373,8 @@ export class Invoice {
       invoiceDate: this.invoiceDate,
       dueDate: this.dueDate,
       paidAt: this.paidAt,
+      isDirectDebit: this.isDirectDebit,
+      directDebitDate: this.directDebitDate,
       subtotalWithoutVat: this.subtotalWithoutVat,
       totalVat: this.totalVat,
       totalWithVat: this.totalWithVat,
@@ -351,6 +386,7 @@ export class Invoice {
       aiConfidence: this.aiConfidence,
       requiresReview: this.requiresReview,
       costCenterGroupId: this.costCenterGroupId,
+      costCenterCategoryId: this.costCenterCategoryId,
       financialType: this.financialType,
       affectsDre: this.affectsDre,
       affectsCashflow: this.affectsCashflow,

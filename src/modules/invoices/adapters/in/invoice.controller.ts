@@ -15,6 +15,7 @@ import type {
   ImportInvoicePort,
   ConfirmImportedInvoicePort,
   GetInvoiceAlertsPort,
+  ProcessDirectDebitsPort,
 } from "../../domain/ports/in/invoice.ports.js";
 import type { InvoiceStatus, InvoiceLineType } from "../../domain/entities/invoice.js";
 import { InvoiceNotFoundError, InvoiceLineNotFoundError, InvoiceAlreadyCancelledError, DuplicateInvoiceError } from "../../domain/errors.js";
@@ -34,6 +35,7 @@ interface InvoicePorts {
   importInvoice: ImportInvoicePort;
   confirmImportedInvoice: ConfirmImportedInvoicePort;
   getInvoiceAlerts: GetInvoiceAlertsPort;
+  processDirectDebits: ProcessDirectDebitsPort;
 }
 
 function handleError(res: import("express").Response, err: unknown): void {
@@ -81,13 +83,14 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   // GET /invoices
   router.get("/invoices", async (req, res) => {
     try {
-      const { supplierId, costCenterId, status, from, to } = req.query as Record<string, string | undefined>;
+      const { supplierId, costCenterId, status, from, to, isDirectDebit } = req.query as Record<string, string | undefined>;
       const filter: Parameters<typeof ports.listInvoices.execute>[0] = {};
       if (supplierId !== undefined) filter.supplierId = supplierId;
       if (costCenterId !== undefined) filter.costCenterId = costCenterId;
       if (status !== undefined) filter.status = status as InvoiceStatus;
       if (from !== undefined) filter.from = from;
       if (to !== undefined) filter.to = to;
+      if (isDirectDebit !== undefined) filter.isDirectDebit = isDirectDebit === "true";
       const invoices = await ports.listInvoices.execute(filter);
       res.json(invoices);
     } catch (err) {
@@ -188,7 +191,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   router.patch("/invoices/:invoiceId/lines/:lineId/classify", async (req, res) => {
     try {
       const { classify, saveAsRule } = req.body as {
-        classify: { type?: InvoiceLineType; costCenterId?: string | null; costCenterCategoryId?: string | null; category?: string | null; subcategory?: string | null };
+        classify: { type?: InvoiceLineType; costCenterCategoryId?: string | null; stockItemId?: string | null };
         saveAsRule?: boolean;
       };
       const classifyCmd: Parameters<typeof ports.classifyInvoiceLine.execute>[0] = {
@@ -250,6 +253,16 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
         id: req.params.id,
       });
       res.json(invoice);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // POST /invoices/process-direct-debits — processa débitos diretos vencidos
+  router.post("/invoices/process-direct-debits", async (_req, res) => {
+    try {
+      const result = await ports.processDirectDebits.execute();
+      res.json(result);
     } catch (err) {
       handleError(res, err);
     }

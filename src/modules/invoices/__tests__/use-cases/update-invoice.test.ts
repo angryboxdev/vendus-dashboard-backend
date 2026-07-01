@@ -1,6 +1,8 @@
 import { UpdateInvoiceUseCase } from "../../application/use-cases/update-invoice.use-case.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
+import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
 import { Invoice } from "../../domain/entities/invoice.js";
+import { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import { InvoiceNotFoundError } from "../../domain/errors.js";
 
 const makeInvoice = () =>
@@ -15,11 +17,13 @@ const makeInvoice = () =>
 
 describe("UpdateInvoiceUseCase", () => {
   let repo: FakeInvoiceRepository;
+  let lineRepo: FakeInvoiceLineRepository;
   let useCase: UpdateInvoiceUseCase;
 
   beforeEach(() => {
     repo = new FakeInvoiceRepository();
-    useCase = new UpdateInvoiceUseCase(repo);
+    lineRepo = new FakeInvoiceLineRepository();
+    useCase = new UpdateInvoiceUseCase(repo, lineRepo);
   });
 
   it("actualiza o nome do fornecedor", async () => {
@@ -108,5 +112,122 @@ describe("UpdateInvoiceUseCase", () => {
     await expect(
       useCase.execute({ id: "nao-existe", supplierName: "X" }),
     ).rejects.toThrow(InvoiceNotFoundError);
+  });
+
+  // ── Feature: costCenterCategoryId e propagação às linhas ─────────────────
+
+  it("actualiza costCenterCategoryId na fatura", async () => {
+    const inv = makeInvoice();
+    await repo.save(inv);
+
+    const dto = await useCase.execute({ id: inv.id, costCenterCategoryId: "cat-cmv" });
+    expect(dto.costCenterCategoryId).toBe("cat-cmv");
+  });
+
+  it("propaga costCenterCategoryId às linhas existentes quando o campo é enviado", async () => {
+    const inv = makeInvoice();
+    await repo.save(inv);
+
+    const line = InvoiceLine.create({
+      invoiceId: inv.id,
+      description: "Produto A",
+      quantity: 1,
+      unitCostWithoutVat: 5000,
+      vatRate: 23,
+      vatAmount: 1150,
+      totalWithVat: 6150,
+    });
+    await lineRepo.saveAll([line]);
+
+    await useCase.execute({ id: inv.id, costCenterCategoryId: "cat-pes" });
+
+    const lines = await lineRepo.findByInvoiceId(inv.id);
+    expect(lines[0].costCenterCategoryId).toBe("cat-pes");
+  });
+
+  it("propaga null às linhas quando costCenterCategoryId é explicitamente null", async () => {
+    const inv = Invoice.create({
+      supplierName: "Makro",
+      invoiceNumber: "MKR-001",
+      invoiceDate: new Date("2026-06-01"),
+      subtotalWithoutVat: 100000,
+      totalVat: 23000,
+      totalWithVat: 123000,
+      costCenterCategoryId: "cat-original",
+    });
+    await repo.save(inv);
+
+    const line = InvoiceLine.create({
+      invoiceId: inv.id,
+      description: "Produto A",
+      quantity: 1,
+      unitCostWithoutVat: 5000,
+      vatRate: 23,
+      vatAmount: 1150,
+      totalWithVat: 6150,
+      costCenterCategoryId: "cat-original",
+    });
+    await lineRepo.saveAll([line]);
+
+    await useCase.execute({ id: inv.id, costCenterCategoryId: null });
+
+    const lines = await lineRepo.findByInvoiceId(inv.id);
+    expect(lines[0].costCenterCategoryId).toBeNull();
+  });
+
+  // ── Direct Debit ──────────────────────────────────────────────────────────
+
+  it("actualiza isDirectDebit e directDebitDate", async () => {
+    const inv = makeInvoice();
+    await repo.save(inv);
+
+    const dto = await useCase.execute({
+      id: inv.id,
+      isDirectDebit: true,
+      directDebitDate: "2026-09-01",
+    });
+    expect(dto.isDirectDebit).toBe(true);
+    expect(dto.directDebitDate).toBe("2026-09-01");
+  });
+
+  it("limpa directDebitDate quando enviado como null", async () => {
+    const inv = Invoice.create({
+      supplierName: "EDP",
+      invoiceNumber: "EDP-001",
+      invoiceDate: new Date("2026-06-01"),
+      subtotalWithoutVat: 85000,
+      totalVat: 5100,
+      totalWithVat: 90100,
+      isDirectDebit: true,
+      directDebitDate: new Date("2026-08-01"),
+    });
+    await repo.save(inv);
+
+    const dto = await useCase.execute({ id: inv.id, isDirectDebit: false, directDebitDate: null });
+    expect(dto.isDirectDebit).toBe(false);
+    expect(dto.directDebitDate).toBeNull();
+  });
+
+  it("não propaga CC quando costCenterCategoryId não é enviado no comando", async () => {
+    const inv = makeInvoice();
+    await repo.save(inv);
+
+    const line = InvoiceLine.create({
+      invoiceId: inv.id,
+      description: "Produto B",
+      quantity: 1,
+      unitCostWithoutVat: 5000,
+      vatRate: 23,
+      vatAmount: 1150,
+      totalWithVat: 6150,
+      costCenterCategoryId: "cat-original",
+    });
+    await lineRepo.saveAll([line]);
+
+    // Atualizar outros campos, sem enviar costCenterCategoryId
+    await useCase.execute({ id: inv.id, supplierName: "NOS" });
+
+    const lines = await lineRepo.findByInvoiceId(inv.id);
+    expect(lines[0].costCenterCategoryId).toBe("cat-original");
   });
 });

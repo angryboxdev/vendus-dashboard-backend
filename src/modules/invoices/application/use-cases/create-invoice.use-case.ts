@@ -31,6 +31,11 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     if (command.supplierId !== undefined) invoiceProps.supplierId = command.supplierId;
     if (command.notes !== undefined) invoiceProps.notes = command.notes;
     if (command.attachmentUrl !== undefined) invoiceProps.attachmentUrl = command.attachmentUrl;
+    if (command.costCenterGroupId !== undefined) invoiceProps.costCenterGroupId = command.costCenterGroupId;
+    if (command.costCenterCategoryId !== undefined) invoiceProps.costCenterCategoryId = command.costCenterCategoryId;
+    if (command.financialType !== undefined) invoiceProps.financialType = command.financialType;
+    if (command.isDirectDebit !== undefined) invoiceProps.isDirectDebit = command.isDirectDebit;
+    if (command.directDebitDate !== undefined) invoiceProps.directDebitDate = command.directDebitDate ? new Date(command.directDebitDate) : null;
     const invoice = Invoice.create(invoiceProps);
 
     // Duplicate check — only when supplier is known
@@ -50,10 +55,7 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
         totalWithVat: lc.totalWithVat,
       };
       if (lc.type !== undefined) lineProps.type = lc.type;
-      if (lc.costCenterId !== undefined) lineProps.costCenterId = lc.costCenterId;
       if (lc.costCenterCategoryId !== undefined) lineProps.costCenterCategoryId = lc.costCenterCategoryId;
-      if (lc.category !== undefined) lineProps.category = lc.category;
-      if (lc.subcategory !== undefined) lineProps.subcategory = lc.subcategory;
       if (lc.stockItemId !== undefined) lineProps.stockItemId = lc.stockItemId;
       if (lc.unit !== undefined) lineProps.unit = lc.unit;
       return InvoiceLine.create(lineProps);

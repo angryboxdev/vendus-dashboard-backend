@@ -27,4 +27,13 @@ export class FakeInvoiceLineRepository implements InvoiceLineRepositoryPort {
       if (line.invoiceId === invoiceId) this.store.delete(id);
     }
   }
+
+  async updateCostCenterCategoryForInvoice(invoiceId: string, categoryId: string | null): Promise<void> {
+    for (const [id, line] of this.store) {
+      if (line.invoiceId === invoiceId) {
+        // InvoiceLine is immutable — reconstitute with updated field
+        this.store.set(id, line.classify({ costCenterCategoryId: categoryId }));
+      }
+    }
+  }
 }

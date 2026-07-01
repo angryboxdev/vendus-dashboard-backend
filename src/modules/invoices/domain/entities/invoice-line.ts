@@ -25,10 +25,7 @@ interface InvoiceLineProps {
 
 export interface ClassifyLineData {
   type?: InvoiceLineType;
-  costCenterId?: string | null;
   costCenterCategoryId?: string | null;
-  category?: string | null;
-  subcategory?: string | null;
   stockItemId?: string | null;
 }
 
@@ -127,10 +124,7 @@ export class InvoiceLine {
   classify(data: ClassifyLineData): InvoiceLine {
     const p = this.toProps();
     if (data.type !== undefined) p.type = data.type;
-    if (data.costCenterId !== undefined) p.costCenterId = data.costCenterId;
     if (data.costCenterCategoryId !== undefined) p.costCenterCategoryId = data.costCenterCategoryId;
-    if (data.category !== undefined) p.category = data.category;
-    if (data.subcategory !== undefined) p.subcategory = data.subcategory;
     if (data.stockItemId !== undefined) p.stockItemId = data.stockItemId;
     return new InvoiceLine(p);
   }

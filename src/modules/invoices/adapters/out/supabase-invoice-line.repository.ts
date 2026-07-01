@@ -111,4 +111,12 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
       .eq("invoice_id", invoiceId);
     if (error) throw new Error(error.message);
   }
+
+  async updateCostCenterCategoryForInvoice(invoiceId: string, categoryId: string | null): Promise<void> {
+    const { error } = await this.supabase
+      .from("invoice_lines")
+      .update({ cost_center_category_id: categoryId })
+      .eq("invoice_id", invoiceId);
+    if (error) throw new Error(error.message);
+  }
 }

@@ -74,7 +74,6 @@ describe("CreateInvoiceUseCase", () => {
           description: "Farinha T55",
           type: "stock_purchase",
           costCenterCategoryId: "cat-cmv",
-          category: "Ingredientes",
           quantity: 50,
           unitCostWithoutVat: 1000,
           vatRate: 6,
@@ -86,7 +85,6 @@ describe("CreateInvoiceUseCase", () => {
 
     expect(dto.lines).toHaveLength(1);
     expect(dto.lines![0]!.costCenterCategoryId).toBe("cat-cmv");
-    expect(dto.lines![0]!.category).toBe("Ingredientes");
     expect(dto.lines![0]!.type).toBe("stock_purchase");
   });
 
@@ -156,6 +154,36 @@ describe("CreateInvoiceUseCase", () => {
     };
     await useCase.execute(cmd);
     await expect(useCase.execute(cmd)).rejects.toThrow(DuplicateInvoiceError);
+  });
+
+  // ── Direct Debit ──────────────────────────────────────────────────────────
+
+  it("DTO tem isDirectDebit=false e directDebitDate=null por omissão", async () => {
+    const dto = await useCase.execute({
+      supplierName: "EDP",
+      invoiceNumber: "EDP-DD-000",
+      invoiceDate: "2026-06-01",
+      subtotalWithoutVat: 85000,
+      totalVat: 5100,
+      totalWithVat: 90100,
+    });
+    expect(dto.isDirectDebit).toBe(false);
+    expect(dto.directDebitDate).toBeNull();
+  });
+
+  it("persiste isDirectDebit e directDebitDate quando fornecidos", async () => {
+    const dto = await useCase.execute({
+      supplierName: "EDP",
+      invoiceNumber: "EDP-DD-001",
+      invoiceDate: "2026-06-01",
+      subtotalWithoutVat: 85000,
+      totalVat: 5100,
+      totalWithVat: 90100,
+      isDirectDebit: true,
+      directDebitDate: "2026-08-01",
+    });
+    expect(dto.isDirectDebit).toBe(true);
+    expect(dto.directDebitDate).toBe("2026-08-01");
   });
 
   it("não lança erro de duplicado quando supplierId não está definido", async () => {

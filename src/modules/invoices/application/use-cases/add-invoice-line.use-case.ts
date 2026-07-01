@@ -26,7 +26,6 @@ export class AddInvoiceLineUseCase implements AddInvoiceLinePort {
     };
     if (command.type !== undefined) createProps.type = command.type;
     if (command.costCenterCategoryId !== undefined) createProps.costCenterCategoryId = command.costCenterCategoryId;
-    if (command.category !== undefined) createProps.category = command.category;
     if (command.unit !== undefined) createProps.unit = command.unit;
     const line = InvoiceLine.create(createProps);
 

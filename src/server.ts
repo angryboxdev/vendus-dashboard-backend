@@ -3,7 +3,7 @@ import cors from "cors";
 import { documentsRoutes } from "./routes/documentsRoutes.js";
 import { dreRoutes } from "./routes/dreRoutes.js";
 import express from "express";
-import { internalCronRoutes } from "./routes/internalCronRoutes.js";
+import { createInternalCronRouter } from "./routes/internalCronRoutes.js";
 import { pizzaRoutes } from "./routes/pizzaRoutes.js";
 import { preparationRoutes } from "./routes/preparationRoutes.js";
 import { reportsRoutes } from "./routes/reportsRoutes.js";
@@ -83,8 +83,8 @@ app.use("/api", requireMinRole("manager"), crmRoutes);
 const financialBaseModule = createFinancialBaseModule();
 app.use("/api", requireMinRole("manager"), financialBaseModule.router);
 
-// Invoices module (hexagonal)
-const invoicesModule = createInvoicesModule();
+// Invoices module (hexagonal) — recebe createSupplier do financial-base
+const invoicesModule = createInvoicesModule(financialBaseModule.createSupplier);
 app.use("/api", requireMinRole("manager"), invoicesModule.router);
 
 // Payable entries module (hexagonal)
@@ -95,7 +95,7 @@ app.use("/api", requireMinRole("manager"), payableEntriesModule.router);
 app.use("/api", requireMinRole("manager"), cashClosingsModule.managedRouter);
 
 if (ENV.CRON_SECRET) {
-  app.use("/api", internalCronRoutes);
+  app.use("/api", createInternalCronRouter({ processDirectDebits: invoicesModule.processDirectDebits }));
 }
 
 app.listen(ENV.PORT, () => {

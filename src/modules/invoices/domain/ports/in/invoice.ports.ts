@@ -4,7 +4,6 @@ import type {
   InvoiceSource,
   AiExtractionStatus,
 } from "../../entities/invoice.js";
-import type { ClassifyLineData } from "../../entities/invoice-line.js";
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
 
@@ -13,10 +12,7 @@ export interface InvoiceLineDTO {
   invoiceId: string;
   description: string;
   type: InvoiceLineType;
-  costCenterId: string | null;
   costCenterCategoryId: string | null;
-  category: string | null;
-  subcategory: string | null;
   stockItemId: string | null;
   quantity: number;
   unit: string | null;
@@ -40,6 +36,8 @@ export interface InvoiceDTO {
   invoiceDate: string;    // YYYY-MM-DD
   dueDate: string | null;
   paidAt: string | null;
+  isDirectDebit: boolean;
+  directDebitDate: string | null; // YYYY-MM-DD
   subtotalWithoutVat: number;
   totalVat: number;
   totalWithVat: number;
@@ -51,6 +49,7 @@ export interface InvoiceDTO {
   aiConfidence: number | null;
   requiresReview: boolean;
   costCenterGroupId: string | null;
+  costCenterCategoryId: string | null;
   financialType: string | null;
   affectsDre: boolean;
   affectsCashflow: boolean;
@@ -104,10 +103,7 @@ export interface InvoiceAlertsDTO {
 export interface CreateInvoiceLineCommand {
   description: string;
   type?: InvoiceLineType;
-  costCenterId?: string | null;
   costCenterCategoryId?: string | null;
-  category?: string | null;
-  subcategory?: string | null;
   stockItemId?: string | null;
   quantity: number;
   unit?: string | null;
@@ -126,12 +122,15 @@ export interface CreateInvoiceCommand {
   invoiceNumber: string;
   invoiceDate: string; // YYYY-MM-DD
   dueDate?: string | null;
+  isDirectDebit?: boolean;
+  directDebitDate?: string | null; // YYYY-MM-DD
   subtotalWithoutVat: number;
   totalVat: number;
   totalWithVat: number;
   notes?: string | null;
   attachmentUrl?: string | null;
   costCenterGroupId?: string | null;
+  costCenterCategoryId?: string | null;
   financialType?: string | null;
   affectsDre?: boolean;
   affectsCashflow?: boolean;
@@ -148,12 +147,15 @@ export interface UpdateInvoiceCommand {
   invoiceNumber?: string;
   invoiceDate?: string;
   dueDate?: string | null;
+  isDirectDebit?: boolean;
+  directDebitDate?: string | null; // YYYY-MM-DD
   subtotalWithoutVat?: number;
   totalVat?: number;
   totalWithVat?: number;
   notes?: string | null;
   attachmentUrl?: string | null;
   costCenterGroupId?: string | null;
+  costCenterCategoryId?: string | null;
   financialType?: string | null;
   affectsDre?: boolean;
   affectsCashflow?: boolean;
@@ -174,7 +176,11 @@ export interface SetInvoiceStatusCommand {
 export interface ClassifyInvoiceLineCommand {
   invoiceId: string;
   lineId: string;
-  classify: ClassifyLineData;
+  classify: {
+    type?: InvoiceLineType;
+    costCenterCategoryId?: string | null;
+    stockItemId?: string | null;
+  };
   saveAsRule?: boolean;
 }
 
@@ -184,6 +190,7 @@ export interface ListInvoicesFilter {
   status?: InvoiceStatus;
   from?: string; // YYYY-MM-DD
   to?: string;
+  isDirectDebit?: boolean;
 }
 
 export interface SuggestClassificationResult {
@@ -200,19 +207,36 @@ export interface ImportInvoiceCommand {
   mimeType: string;
 }
 
+export interface NewSupplierCommand {
+  name: string;
+  nif?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  iban?: string | null;
+  defaultCostCenterGroupId?: string | null;
+  defaultCostCenterCategoryId?: string | null;
+  paymentTermsDays?: number | null;
+}
+
 export interface ConfirmImportedInvoiceCommand {
   id: string;
   supplierId?: string | null;
+  /** Criar novo fornecedor com os dados da fatura — se presente, supplierId é ignorado */
+  newSupplier?: NewSupplierCommand;
   supplierName?: string;
   supplierNifSnapshot?: string | null;
   invoiceNumber?: string;
   invoiceDate?: string; // YYYY-MM-DD
   dueDate?: string | null;
+  isDirectDebit?: boolean;
+  directDebitDate?: string | null; // YYYY-MM-DD
   subtotalWithoutVat?: number;
   totalVat?: number;
   totalWithVat?: number;
   notes?: string | null;
   costCenterGroupId?: string | null;
+  costCenterCategoryId?: string | null;
   financialType?: string | null;
   affectsDre?: boolean;
   affectsCashflow?: boolean;
@@ -229,7 +253,6 @@ export interface AddInvoiceLineCommand {
   description: string;
   type?: InvoiceLineType;
   costCenterCategoryId?: string | null;
-  category?: string | null;
   quantity: number;
   unit?: string | null;
   unitCostWithoutVat: number;
@@ -297,4 +320,8 @@ export interface ConfirmImportedInvoicePort {
 
 export interface GetInvoiceAlertsPort {
   execute(): Promise<InvoiceAlertsDTO>;
+}
+
+export interface ProcessDirectDebitsPort {
+  execute(): Promise<{ processed: number }>;
 }

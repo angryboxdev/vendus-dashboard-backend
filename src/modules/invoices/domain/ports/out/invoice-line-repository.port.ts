@@ -6,4 +6,5 @@ export interface InvoiceLineRepositoryPort {
   findByInvoiceId(invoiceId: string): Promise<InvoiceLine[]>;
   updateLine(line: InvoiceLine): Promise<void>;
   deleteByInvoiceId(invoiceId: string): Promise<void>;
+  updateCostCenterCategoryForInvoice(invoiceId: string, categoryId: string | null): Promise<void>;
 }

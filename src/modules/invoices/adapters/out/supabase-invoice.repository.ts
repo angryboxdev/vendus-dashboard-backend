@@ -17,6 +17,8 @@ function toEntity(row: Record<string, unknown>): Invoice {
     invoiceDate: new Date(row.invoice_date as string),
     dueDate: row.due_date ? new Date(row.due_date as string) : null,
     paidAt: row.paid_at ? new Date(row.paid_at as string) : null,
+    isDirectDebit: (row.is_direct_debit as boolean | null) ?? false,
+    directDebitDate: row.direct_debit_date ? new Date(row.direct_debit_date as string) : null,
     subtotalWithoutVat: row.subtotal_without_vat as number,
     totalVat: row.total_vat as number,
     totalWithVat: row.total_with_vat as number,
@@ -28,6 +30,7 @@ function toEntity(row: Record<string, unknown>): Invoice {
     aiConfidence: (row.ai_confidence as number | null) ?? null,
     requiresReview: (row.requires_review as boolean | null) ?? false,
     costCenterGroupId: (row.cost_center_group_id as string | null) ?? null,
+    costCenterCategoryId: (row.cost_center_category_id as string | null) ?? null,
     financialType: (row.financial_type as string | null) ?? null,
     affectsDre: (row.affects_dre as boolean | null) ?? true,
     affectsCashflow: (row.affects_cashflow as boolean | null) ?? true,
@@ -48,6 +51,8 @@ function toRow(invoice: Invoice): Record<string, unknown> {
     invoice_date: invoice.invoiceDate.toISOString().slice(0, 10),
     due_date: invoice.dueDate?.toISOString().slice(0, 10) ?? null,
     paid_at: invoice.paidAt?.toISOString().slice(0, 10) ?? null,
+    is_direct_debit: invoice.isDirectDebit,
+    direct_debit_date: invoice.directDebitDate?.toISOString().slice(0, 10) ?? null,
     subtotal_without_vat: invoice.subtotalWithoutVat,
     total_vat: invoice.totalVat,
     total_with_vat: invoice.totalWithVat,
@@ -59,6 +64,7 @@ function toRow(invoice: Invoice): Record<string, unknown> {
     ai_confidence: invoice.aiConfidence,
     requires_review: invoice.requiresReview,
     cost_center_group_id: invoice.costCenterGroupId,
+    cost_center_category_id: invoice.costCenterCategoryId,
     financial_type: invoice.financialType,
     affects_dre: invoice.affectsDre,
     affects_cashflow: invoice.affectsCashflow,
@@ -107,6 +113,7 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
       if (filter.status) q = q.eq("status", filter.status);
       if (filter.from) q = q.gte("invoice_date", filter.from.toISOString().slice(0, 10));
       if (filter.to) q = q.lte("invoice_date", filter.to.toISOString().slice(0, 10));
+      if (filter.isDirectDebit !== undefined) q = q.eq("is_direct_debit", filter.isDirectDebit);
       const { data, error } = await q;
       if (error) throw new Error(error.message);
       return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
@@ -121,6 +128,7 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
     if (filter?.status) q = q.eq("status", filter.status);
     if (filter?.from) q = q.gte("invoice_date", filter.from.toISOString().slice(0, 10));
     if (filter?.to) q = q.lte("invoice_date", filter.to.toISOString().slice(0, 10));
+    if (filter?.isDirectDebit !== undefined) q = q.eq("is_direct_debit", filter.isDirectDebit);
 
     const { data, error } = await q;
     if (error) throw new Error(error.message);
@@ -155,6 +163,18 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) return null;
     return toEntity(data[0] as Record<string, unknown>);
+  }
+
+  async findPendingDirectDebits(): Promise<Invoice[]> {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data, error } = await this.supabase
+      .from("invoices")
+      .select("*")
+      .eq("is_direct_debit", true)
+      .lte("direct_debit_date", today)
+      .not("status", "in", '("paid","cancelled")');
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
   }
 
   async findDuplicateByNif(invoiceNumber: string, supplierNif: string, excludeId?: string): Promise<Invoice | null> {
