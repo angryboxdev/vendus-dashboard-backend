@@ -11,14 +11,14 @@ export class FinancialBaseSupplierCreateAdapter implements SupplierCreatePort {
   async create(data: NewSupplierData): Promise<CreatedSupplierRef> {
     const supplier = await this.createSupplierPort.execute({
       name: data.name,
-      nif: data.nif,
-      email: data.email,
-      phone: data.phone,
-      address: data.address,
-      iban: data.iban,
-      defaultCostCenterGroupId: data.defaultCostCenterGroupId,
-      defaultCostCenterCategoryId: data.defaultCostCenterCategoryId,
-      paymentTermsDays: data.paymentTermsDays,
+      ...(data.nif !== undefined && { nif: data.nif }),
+      ...(data.email !== undefined && { email: data.email }),
+      ...(data.phone !== undefined && { phone: data.phone }),
+      ...(data.address !== undefined && { address: data.address }),
+      ...(data.iban !== undefined && { iban: data.iban }),
+      ...(data.defaultCostCenterGroupId !== undefined && { defaultCostCenterGroupId: data.defaultCostCenterGroupId }),
+      ...(data.defaultCostCenterCategoryId !== undefined && { defaultCostCenterCategoryId: data.defaultCostCenterCategoryId }),
+      ...(data.paymentTermsDays !== undefined && { paymentTermsDays: data.paymentTermsDays }),
     });
     return { id: supplier.id, name: supplier.name };
   }
