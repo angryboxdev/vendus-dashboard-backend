@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { pdf as pdfToImg } from "pdf-to-img";
 import type { AiExtractionPort } from "../../domain/ports/out/ai-extraction.port.js";
 import type { AiExtractionResult, AiExtractedLine } from "../../domain/entities/ai-extraction-result.js";
 
@@ -81,10 +82,14 @@ export class OpenAiExtractionAdapter implements AiExtractionPort {
     let raw: RawExtractionJson;
 
     try {
-      // Use base64 data URL so OpenAI receives the file directly — no public storage URL needed
-      const base64 = fileBuffer.toString("base64");
-      const dataUrl = `data:${mimeType};base64,${base64}`;
-      raw = await this.extractFromImage(dataUrl, isImage ? mimeType : "image/png");
+      if (isPdf) {
+        // PDFs are not supported as image_url by the Vision API — convert each page to PNG first
+        raw = await this.extractFromPdf(fileBuffer);
+      } else {
+        const base64 = fileBuffer.toString("base64");
+        const dataUrl = `data:${mimeType};base64,${base64}`;
+        raw = await this.extractFromImage(dataUrl);
+      }
     } catch (err) {
       return this.failedResult(err instanceof Error ? err.message : "extraction_error");
     }
@@ -92,22 +97,33 @@ export class OpenAiExtractionAdapter implements AiExtractionPort {
     return this.parseResult(raw);
   }
 
-  private async extractFromImage(imageUrl: string, mimeType: string): Promise<RawExtractionJson> {
+  private async extractFromPdf(buffer: Buffer): Promise<RawExtractionJson> {
+    const pageImages: OpenAI.Chat.ChatCompletionContentPart[] = [];
+    for await (const pageBuffer of await pdfToImg(buffer, { scale: 2 })) {
+      const base64 = (pageBuffer as Buffer).toString("base64");
+      pageImages.push({
+        type: "image_url",
+        image_url: { url: `data:image/png;base64,${base64}`, detail: "high" },
+      });
+    }
+    if (pageImages.length === 0) {
+      throw new Error("pdf_conversion_failed");
+    }
+    return this.callVisionApi([{ type: "text", text: EXTRACTION_PROMPT }, ...pageImages]);
+  }
+
+  private async extractFromImage(imageUrl: string): Promise<RawExtractionJson> {
+    return this.callVisionApi([
+      { type: "text", text: EXTRACTION_PROMPT },
+      { type: "image_url", image_url: { url: imageUrl, detail: "high" } },
+    ]);
+  }
+
+  private async callVisionApi(content: OpenAI.Chat.ChatCompletionContentPart[]): Promise<RawExtractionJson> {
     const response = await this.openai.chat.completions.create({
       model: "gpt-4o",
       max_tokens: 2000,
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: EXTRACTION_PROMPT },
-            {
-              type: "image_url",
-              image_url: { url: imageUrl, detail: "high" },
-            },
-          ],
-        },
-      ],
+      messages: [{ role: "user", content }],
     });
 
     const text = response.choices[0]?.message?.content ?? "";

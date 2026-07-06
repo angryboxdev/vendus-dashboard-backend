@@ -180,6 +180,7 @@ reconciliação ou relatórios financeiros.
   - Na importação é um aviso (`validationIssues: ["duplicate_invoice"]`); na confirmação é um erro que bloqueia (409 `DuplicateInvoiceError`).
 - **Novos campos com defaults seguros**: todos os campos novos têm defaults que preservam comportamento dos registos existentes (`source: "manual"`, `affectsDre: true`, `affectsCashflow: true`, `affectsProfitability: false`, `currency: "EUR"`, `requiresReview: false`).
 - **Sem OCR custom**: usamos o modelo de visão da OpenAI. `confidenceBoost` das regras de classificação e o campo `aiConfidence` são escalas independentes.
+- **PDFs convertidos a PNG antes do Vision API**: a OpenAI Vision API não aceita `data:application/pdf;base64,...` como `image_url`. O `OpenAiExtractionAdapter` usa `pdf-to-img` (já no projeto) para renderizar cada página a PNG com `scale: 2` e envia-as como múltiplos `image_url` no mesmo request. Faturas multi-página são suportadas. O fluxo de imagens mantém-se intacto e não é afetado.
 
 ## SQL — alterações às tabelas
 
@@ -226,7 +227,6 @@ alter table suppliers
 
 ## Pontos de atenção / dívidas conhecidas
 
-- `OpenAiExtractionAdapter` envia o URL do ficheiro ao GPT-4o Vision. PDFs precisam de ser convertidos para imagem (a lib `pdf-to-img` já existe no projeto) num adapter futuro ou num passo intermédio do use case.
 - `suppliers` precisa das colunas `default_cost_center_group_id`, `default_cost_center_category_id`, `default_financial_type` para o fluxo de aplicação de defaults funcionar.
 - `stock_item_id` e `stock_entry_id` nas linhas estão preparados para o módulo `stock-valuation`.
 - `cost_center_id` (legado) ainda existe nas tabelas `invoice_lines` e `classification_rules`. Remover após confirmação de que nenhum dado activo depende dele.
