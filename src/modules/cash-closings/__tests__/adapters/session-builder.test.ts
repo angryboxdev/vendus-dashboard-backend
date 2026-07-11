@@ -96,6 +96,51 @@ describe("buildSessions — desconto de NCs", () => {
     expect(result[0]?.total).toBe(644.22);
   });
 
+  it("subtrai NC quando o movimento 'out' tem doc_id+1 (quirk do Vendus)", () => {
+    // O Vendus devolve o id do documento NC + 1 no campo document_id do movimento
+    const movements = [
+      mov("open",  "11:00:00", "0"),
+      mov("in",    "11:30:00", "100.00", 101),
+      mov("out",   "12:00:00", "-32.80", 202),  // doc_id=202, mas a NC real é 201
+      mov("close", "16:00:00", "0"),
+    ];
+    const docMap = makeDocMap([
+      [101, { type: "FS", amount: 100   }],
+      [201, { type: "NC", amount: 32.80 }],  // id real = 202-1
+    ]);
+    const result = buildSessions(movements, docMap);
+
+    expect(result[0]?.total).toBe(67.20);  // 100 - 32.80
+  });
+
+  it("Vendus off-by-one: NC é descontada da sessão correcta, não da última", () => {
+    // Reproduz o bug real: sessão de teste + sessão real, NC com doc_id+1 no movimento
+    // Antes do fix: a NC ficava "não mapeada" e era atribuída à última sessão
+    const movements = [
+      mov("open",  "00:39:33", "0"),
+      mov("in",    "00:41:44", "16.40", 1001),
+      mov("in",    "00:42:00", "16.40", 1002),
+      mov("out",   "00:45:03", "-16.40", 1004),  // NC real é 1003 (doc_id+1)
+      mov("out",   "00:45:16", "-16.40", 1006),  // NC real é 1005 (doc_id+1)
+      mov("close", "00:45:47", "0"),
+      mov("open",  "10:57:06", "0"),
+      mov("in",    "11:00:00", "945.29", 2001),
+      // sem close (sessão ainda aberta)
+    ];
+    const docMap = makeDocMap([
+      [1001, { type: "FS", amount: 16.40 }],
+      [1002, { type: "FS", amount: 16.40 }],
+      [1003, { type: "NC", amount: 16.40 }],  // movement tem 1004
+      [1005, { type: "NC", amount: 16.40 }],  // movement tem 1006
+      [2001, { type: "FS", amount: 945.29 }],
+    ]);
+    const result = buildSessions(movements, docMap);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]?.total).toBe(0);       // sessão de teste: 32.80 - 16.40 - 16.40
+    expect(result[1]?.total).toBe(945.29);  // sessão real: intacta
+  });
+
   it("subtrai NC sem movimento quando há uma única sessão no dia", () => {
     // Caso mais comum: NC de cartão não gera movimento na caixa
     const movements = [

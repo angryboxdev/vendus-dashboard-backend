@@ -24,6 +24,8 @@ export interface DocEntry {
  * NCs não têm `type` nos movements (todos têm type "NU"); são identificadas
  * via docMap:
  *   1. "out" movements com document_id > 0 → se NC, desconta da sessão corrente.
+ *      ATENÇÃO: o Vendus devolve doc_id+1 nos movimentos "out" de NC — tentamos
+ *      também doc_id-1 quando o lookup directo falha.
  *   2. NCs do dia não encontradas em nenhum movimento → atribuídas à sessão
  *      única (dia normal) ou à última sessão (heurística multi-turno).
  *
@@ -56,10 +58,12 @@ export function buildSessions(
     } else if (m.operation === "in" && cur !== null) {
       cur.salesTotal += parseFloat(m.amount) || 0;
     } else if (m.operation === "out" && cur !== null && m.document_id > 0) {
-      const doc = docMap.get(m.document_id);
+      // Vendus devolve doc_id+1 nos movimentos "out" de NC — tenta também doc_id-1
+      const resolvedId = docMap.has(m.document_id) ? m.document_id : m.document_id - 1;
+      const doc = docMap.get(resolvedId);
       if (doc?.type === "NC") {
         cur.ncDeductions += doc.amount;
-        cur.handledNcIds.add(m.document_id);
+        cur.handledNcIds.add(resolvedId);
       }
     }
   }
