@@ -191,6 +191,7 @@ export interface ListInvoicesFilter {
   from?: string; // YYYY-MM-DD
   to?: string;
   isDirectDebit?: boolean;
+  search?: string; // free-text: supplier name or invoice number
 }
 
 export interface SuggestClassificationResult {

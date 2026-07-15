@@ -7,6 +7,7 @@ export interface InvoiceFilter {
   from?: Date;
   to?: Date;
   isDirectDebit?: boolean;
+  search?: string; // matches supplier_name or invoice_number (case-insensitive)
 }
 
 export interface InvoiceRepositoryPort {

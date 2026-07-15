@@ -67,6 +67,31 @@ describe("ListInvoicesUseCase", () => {
     expect(result[0]!.invoiceNumber).toBe("JUN");
   });
 
+  it("filtra por search — nome do fornecedor (case-insensitive)", async () => {
+    await repo.save(makeInvoice({ invoiceNumber: "EDP-001", supplierName: "EDP Comercial" }));
+    await repo.save(makeInvoice({ invoiceNumber: "MKR-001", supplierName: "Makro Portugal" }));
+
+    const result = await useCase.execute({ search: "edp" });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.supplierName).toBe("EDP Comercial");
+  });
+
+  it("filtra por search — número de fatura", async () => {
+    await repo.save(makeInvoice({ invoiceNumber: "FAT-2026-001", supplierName: "Makro" }));
+    await repo.save(makeInvoice({ invoiceNumber: "FAT-2026-002", supplierName: "EDP" }));
+
+    const result = await useCase.execute({ search: "FAT-2026-001" });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.invoiceNumber).toBe("FAT-2026-001");
+  });
+
+  it("search sem correspondência devolve lista vazia", async () => {
+    await repo.save(makeInvoice({ invoiceNumber: "MKR-001", supplierName: "Makro" }));
+
+    const result = await useCase.execute({ search: "xyz-inexistente" });
+    expect(result).toHaveLength(0);
+  });
+
   it("retorna DTOs com campos correctos", async () => {
     const inv = makeInvoice({ invoiceNumber: "TEST-001", supplierName: "EDP" });
     await repo.save(inv);

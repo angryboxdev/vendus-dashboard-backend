@@ -114,6 +114,10 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
       if (filter.from) q = q.gte("invoice_date", filter.from.toISOString().slice(0, 10));
       if (filter.to) q = q.lte("invoice_date", filter.to.toISOString().slice(0, 10));
       if (filter.isDirectDebit !== undefined) q = q.eq("is_direct_debit", filter.isDirectDebit);
+      if (filter.search) {
+        const like = `%${filter.search}%`;
+        q = q.or(`supplier_name.ilike.${like},invoice_number.ilike.${like}`);
+      }
       const { data, error } = await q;
       if (error) throw new Error(error.message);
       return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
@@ -129,6 +133,10 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
     if (filter?.from) q = q.gte("invoice_date", filter.from.toISOString().slice(0, 10));
     if (filter?.to) q = q.lte("invoice_date", filter.to.toISOString().slice(0, 10));
     if (filter?.isDirectDebit !== undefined) q = q.eq("is_direct_debit", filter.isDirectDebit);
+    if (filter?.search) {
+      const like = `%${filter.search}%`;
+      q = q.or(`supplier_name.ilike.${like},invoice_number.ilike.${like}`);
+    }
 
     const { data, error } = await q;
     if (error) throw new Error(error.message);

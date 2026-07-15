@@ -25,6 +25,14 @@ export class FakeInvoiceRepository implements InvoiceRepositoryPort {
       const to = filter.to;
       result = result.filter((i) => i.invoiceDate <= to);
     }
+    if (filter?.search) {
+      const q = filter.search.toLowerCase();
+      result = result.filter(
+        (i) =>
+          i.supplierName.toLowerCase().includes(q) ||
+          i.invoiceNumber.toLowerCase().includes(q)
+      );
+    }
     return result.sort((a, b) => b.invoiceDate.getTime() - a.invoiceDate.getTime());
   }
 

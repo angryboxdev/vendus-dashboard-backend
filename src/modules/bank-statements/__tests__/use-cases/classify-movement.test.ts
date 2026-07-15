@@ -1,0 +1,119 @@
+import { describe, it, expect, beforeEach } from "@jest/globals";
+import { ClassifyMovementUseCase } from "../../application/use-cases/classify-movement.use-case.js";
+import { BankMovement } from "../../domain/entities/bank-movement.js";
+import { FakeBankMovementRepository } from "../fakes/fake-bank-movement-repository.js";
+import { MovementNotFoundError } from "../../domain/errors.js";
+
+function makeMovement(id?: string) {
+  const m = BankMovement.create({
+    statementImportId: "s1",
+    bookingDate: new Date("2026-07-01T00:00:00.000Z"),
+    valueDate: new Date("2026-07-01T00:00:00.000Z"),
+    description: "COM.MAN.CONTA",
+    amount: 500,
+    balanceAfter: 149_500,
+    movementType: "debit",
+    deduplicationHash: id ?? "hash-1",
+  });
+  // Reconstitute with known id for testing
+  if (id) {
+    return BankMovement.reconstitute({
+      ...Object.assign({}, m),
+      id,
+    } as Parameters<typeof BankMovement.reconstitute>[0]);
+  }
+  return m;
+}
+
+describe("ClassifyMovementUseCase", () => {
+  let repo: FakeBankMovementRepository;
+  let useCase: ClassifyMovementUseCase;
+  let movement: BankMovement;
+
+  beforeEach(async () => {
+    repo = new FakeBankMovementRepository();
+    useCase = new ClassifyMovementUseCase(repo);
+    movement = BankMovement.create({
+      statementImportId: "s1",
+      bookingDate: new Date("2026-07-01T00:00:00.000Z"),
+      valueDate: new Date("2026-07-01T00:00:00.000Z"),
+      description: "COM.MAN.CONTA",
+      amount: 500,
+      balanceAfter: 149_500,
+      movementType: "debit",
+      deduplicationHash: "hash-1",
+    });
+    await repo.saveBulk([movement]);
+  });
+
+  it("throws MovementNotFoundError for unknown id", async () => {
+    await expect(
+      useCase.execute({ movementId: "not-found", justificationType: "despesa_bancaria_automatica" })
+    ).rejects.toThrow(MovementNotFoundError);
+  });
+
+  it("classifies movement as bank fee", async () => {
+    await useCase.execute({
+      movementId: movement.id,
+      justificationType: "despesa_bancaria_automatica",
+    });
+    const updated = await repo.findById(movement.id);
+    expect(updated?.reconciliationStatus).toBe("conciliado_sem_fatura");
+    expect(updated?.isResolved).toBe(true);
+  });
+
+  it("classifies movement as internal transfer with notes", async () => {
+    await useCase.execute({
+      movementId: movement.id,
+      justificationType: "transferencia_interna",
+      notes: "Conta poupança para conta corrente",
+    });
+    const updated = await repo.findById(movement.id);
+    expect(updated?.reconciliationStatus).toBe("transferencia_interna");
+    expect(updated?.notes).toBe("Conta poupança para conta corrente");
+  });
+
+  it("persists costCenterGroupId and costCenterCategoryId", async () => {
+    await useCase.execute({
+      movementId: movement.id,
+      justificationType: "despesa_bancaria_automatica",
+      costCenterGroupId: "grp-cap",
+      costCenterCategoryId: "cat-bancaria",
+    });
+    const updated = await repo.findById(movement.id);
+    expect(updated?.costCenterGroupId).toBe("grp-cap");
+    expect(updated?.costCenterCategoryId).toBe("cat-bancaria");
+  });
+
+  it("persists supplierId", async () => {
+    await useCase.execute({
+      movementId: movement.id,
+      justificationType: "recibo_comprovativo",
+      supplierId: "sup-edp",
+    });
+    const updated = await repo.findById(movement.id);
+    expect(updated?.supplierId).toBe("sup-edp");
+  });
+
+  it("persists vatRate and vatIncluded", async () => {
+    await useCase.execute({
+      movementId: movement.id,
+      justificationType: "recibo_comprovativo",
+      vatRate: 23,
+      vatIncluded: false,
+    });
+    const updated = await repo.findById(movement.id);
+    expect(updated?.vatRate).toBe(23);
+    expect(updated?.vatIncluded).toBe(false);
+  });
+
+  it("persists documentUrl", async () => {
+    await useCase.execute({
+      movementId: movement.id,
+      justificationType: "recibo_comprovativo",
+      documentUrl: "https://storage.example.com/doc.pdf",
+    });
+    const updated = await repo.findById(movement.id);
+    expect(updated?.documentUrl).toBe("https://storage.example.com/doc.pdf");
+  });
+});

@@ -16,6 +16,7 @@ export class ListInvoicesUseCase implements ListInvoicesPort {
     if (filter?.status) repoFilter.status = filter.status;
     if (filter?.from) repoFilter.from = new Date(filter.from);
     if (filter?.to) repoFilter.to = new Date(filter.to);
+    if (filter?.search) repoFilter.search = filter.search;
 
     const invoices = await this.invoiceRepo.findAll(repoFilter);
     return invoices.map((inv) => toInvoiceDTO(inv));

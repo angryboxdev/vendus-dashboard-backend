@@ -83,7 +83,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   // GET /invoices
   router.get("/invoices", async (req, res) => {
     try {
-      const { supplierId, costCenterId, status, from, to, isDirectDebit } = req.query as Record<string, string | undefined>;
+      const { supplierId, costCenterId, status, from, to, isDirectDebit, search } = req.query as Record<string, string | undefined>;
       const filter: Parameters<typeof ports.listInvoices.execute>[0] = {};
       if (supplierId !== undefined) filter.supplierId = supplierId;
       if (costCenterId !== undefined) filter.costCenterId = costCenterId;
@@ -91,6 +91,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
       if (from !== undefined) filter.from = from;
       if (to !== undefined) filter.to = to;
       if (isDirectDebit !== undefined) filter.isDirectDebit = isDirectDebit === "true";
+      if (search !== undefined) filter.search = search;
       const invoices = await ports.listInvoices.execute(filter);
       res.json(invoices);
     } catch (err) {
