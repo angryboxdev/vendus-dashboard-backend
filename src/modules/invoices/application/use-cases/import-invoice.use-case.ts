@@ -8,6 +8,9 @@ import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repos
 import type { DocumentStoragePort } from "../../domain/ports/out/document-storage.port.js";
 import type { AiExtractionPort } from "../../domain/ports/out/ai-extraction.port.js";
 import type { SupplierLookupPort, SupplierSummary } from "../../domain/ports/out/supplier-lookup.port.js";
+import type { SupplierHintPort } from "../../domain/ports/out/supplier-hint.port.js";
+import { normalizeNif } from "../../domain/utils/nif.js";
+import { normalizeSupplierName, supplierNameSimilarity, FUZZY_MATCH_THRESHOLD } from "../../domain/utils/supplier-name.js";
 import { toInvoiceDTO } from "./shared.js";
 
 const AI_CONFIDENCE_REVIEW_THRESHOLD = 0.7;
@@ -19,6 +22,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     private readonly storage: DocumentStoragePort,
     private readonly aiExtraction: AiExtractionPort,
     private readonly supplierLookup: SupplierLookupPort,
+    private readonly supplierHint: SupplierHintPort,
   ) {}
 
   async execute(command: ImportInvoiceCommand): Promise<InvoiceImportResultDTO> {
@@ -32,10 +36,39 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     // 2. Extract invoice data with AI (send buffer directly — no public URL needed)
     const extraction = await this.aiExtraction.extract(command.fileBuffer, command.mimeType);
 
-    // 3. Look up supplier by NIF
+    // 3. Look up supplier — 3-step chain:
+    //    a) NIF exacto (normalizado) → b) hint de confirmação anterior → c) fuzzy por nome
     let supplierMatch: SupplierSummary | null = null;
+    let supplierMatchMethod: "nif" | "hint" | "fuzzy" | null = null;
+
     if (extraction.supplierNif) {
-      supplierMatch = await this.supplierLookup.findByNif(extraction.supplierNif);
+      supplierMatch = await this.supplierLookup.findByNif(normalizeNif(extraction.supplierNif));
+      if (supplierMatch) supplierMatchMethod = "nif";
+    }
+
+    if (!supplierMatch && extraction.supplierName) {
+      const normalizedName = normalizeSupplierName(extraction.supplierName);
+      if (normalizedName) {
+        supplierMatch = await this.supplierHint.findByNormalizedName(normalizedName);
+        if (supplierMatch) supplierMatchMethod = "hint";
+      }
+    }
+
+    if (!supplierMatch && extraction.supplierName) {
+      const allSuppliers = await this.supplierLookup.findAll();
+      let bestScore = 0;
+      let bestSupplier: SupplierSummary | null = null;
+      for (const s of allSuppliers) {
+        const score = supplierNameSimilarity(extraction.supplierName, s.name);
+        if (score > bestScore) {
+          bestScore = score;
+          bestSupplier = s;
+        }
+      }
+      if (bestScore >= FUZZY_MATCH_THRESHOLD && bestSupplier) {
+        supplierMatch = bestSupplier;
+        supplierMatchMethod = "fuzzy";
+      }
     }
 
     // 4. Collect validation issues
@@ -52,6 +85,9 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     }
     if (!supplierMatch) {
       validationIssues.push("no_supplier_match");
+    } else if (supplierMatchMethod === "fuzzy") {
+      // Fuzzy match should be reviewed — hint matches (from prior confirmations) are reliable
+      validationIssues.push("supplier_matched_by_name");
     }
     if (extraction.confidence < AI_CONFIDENCE_REVIEW_THRESHOLD) {
       validationIssues.push("low_ai_confidence");

@@ -37,4 +37,13 @@ export class SupabaseSupplierLookupAdapter implements SupplierLookupPort {
     if (error) throw new Error(error.message);
     return (data ?? []).map((r) => toSummary(r as Record<string, unknown>));
   }
+
+  async findAll(): Promise<SupplierSummary[]> {
+    const { data, error } = await this.supabase
+      .from("suppliers")
+      .select("id, name, nif, default_cost_center_group_id, default_cost_center_category_id, default_financial_type");
+
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((r) => toSummary(r as Record<string, unknown>));
+  }
 }

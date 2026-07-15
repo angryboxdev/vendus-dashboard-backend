@@ -10,4 +10,6 @@ export interface SupplierSummary {
 export interface SupplierLookupPort {
   findByNif(nif: string): Promise<SupplierSummary | null>;
   findByName(query: string): Promise<SupplierSummary[]>;
+  /** Devolve todos os fornecedores — usado para fuzzy matching em memória. */
+  findAll(): Promise<SupplierSummary[]>;
 }

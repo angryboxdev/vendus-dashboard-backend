@@ -6,6 +6,7 @@ import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
 import { FakePayableEntryWrite } from "../fakes/fake-payable-entry-write.js";
 import { FakeSupplierCreatePort } from "../fakes/fake-supplier-create.port.js";
+import { FakeSupplierHintPort } from "../fakes/fake-supplier-hint.port.js";
 
 function makeDraftInvoice(overrides: Partial<Parameters<typeof Invoice.createFromImport>[0]> = {}): Invoice {
   return Invoice.createFromImport({
@@ -30,6 +31,7 @@ describe("ConfirmImportedInvoiceUseCase", () => {
   let lineRepo: FakeInvoiceLineRepository;
   let payableWrite: FakePayableEntryWrite;
   let supplierCreate: FakeSupplierCreatePort;
+  let supplierHint: FakeSupplierHintPort;
   let useCase: ConfirmImportedInvoiceUseCase;
 
   beforeEach(() => {
@@ -37,7 +39,8 @@ describe("ConfirmImportedInvoiceUseCase", () => {
     lineRepo = new FakeInvoiceLineRepository();
     payableWrite = new FakePayableEntryWrite();
     supplierCreate = new FakeSupplierCreatePort();
-    useCase = new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate);
+    supplierHint = new FakeSupplierHintPort();
+    useCase = new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint);
   });
 
   it("transitions draft_ai to pending", async () => {
@@ -286,5 +289,40 @@ describe("ConfirmImportedInvoiceUseCase", () => {
     });
 
     expect(result.costCenterCategoryId).toBe("cat-pes");
+  });
+
+  // ── Feature: guardar hint após confirmação ────────────────────────────────
+
+  it("guarda hint nome→fornecedor ao confirmar com supplierId", async () => {
+    const draft = makeDraftInvoice({ supplierName: "Makro Portugal SA" });
+    await invoiceRepo.save(draft);
+
+    await useCase.execute({ id: draft.id, supplierId: "sup-1" });
+
+    // Nome normalizado (sem "SA", sem pontuação) deve estar guardado
+    expect(supplierHint.saved.get("makro portugal")).toBe("sup-1");
+  });
+
+  it("guarda hint com ID do fornecedor recém-criado", async () => {
+    const draft = makeDraftInvoice({ supplierId: undefined, supplierName: "Novo Fornecedor Lda" });
+    await invoiceRepo.save(draft);
+
+    await useCase.execute({
+      id: draft.id,
+      newSupplier: { name: "Novo Fornecedor Lda", nif: "123456789" },
+    });
+
+    const savedId = supplierHint.saved.get("novo fornecedor");
+    expect(savedId).toMatch(/^supplier-/);
+  });
+
+  it("não guarda hint quando nenhum fornecedor é atribuído", async () => {
+    const draft = makeDraftInvoice({ supplierId: undefined });
+    await invoiceRepo.save(draft);
+
+    // Confirmar sem fornecer supplierId nem newSupplier
+    await useCase.execute({ id: draft.id });
+
+    expect(supplierHint.saved.size).toBe(0);
   });
 });

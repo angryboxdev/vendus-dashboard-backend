@@ -3,6 +3,7 @@ import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeDocumentStoragePort } from "../fakes/fake-document-storage.port.js";
 import { FakeAiExtractionPort } from "../fakes/fake-ai-extraction.port.js";
 import { FakeSupplierLookupPort } from "../fakes/fake-supplier-lookup.port.js";
+import { FakeSupplierHintPort } from "../fakes/fake-supplier-hint.port.js";
 
 function makeBuffer(): Buffer {
   return Buffer.from("fake-pdf-content");
@@ -13,6 +14,7 @@ describe("ImportInvoiceUseCase", () => {
   let storage: FakeDocumentStoragePort;
   let aiExtraction: FakeAiExtractionPort;
   let supplierLookup: FakeSupplierLookupPort;
+  let supplierHint: FakeSupplierHintPort;
   let useCase: ImportInvoiceUseCase;
 
   beforeEach(() => {
@@ -20,7 +22,8 @@ describe("ImportInvoiceUseCase", () => {
     storage = new FakeDocumentStoragePort();
     aiExtraction = new FakeAiExtractionPort();
     supplierLookup = new FakeSupplierLookupPort();
-    useCase = new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup);
+    supplierHint = new FakeSupplierHintPort();
+    useCase = new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint);
   });
 
   it("stores the file and creates a draft_ai invoice", async () => {
@@ -157,6 +160,104 @@ describe("ImportInvoiceUseCase", () => {
     const saved = await invoiceRepo.findById(result.invoice.id);
     expect(saved).not.toBeNull();
     expect(saved?.status).toBe("draft_ai");
+  });
+
+  it("normaliza NIF antes do lookup — casa mesmo com formatação diferente", async () => {
+    supplierLookup.seed([
+      {
+        id: "sup-1",
+        name: "Makro Portugal SA",
+        nif: "500123456",
+        defaultCostCenterGroupId: null,
+        defaultCostCenterCategoryId: null,
+        defaultFinancialType: null,
+      },
+    ]);
+    // IA extrai NIF com pontos (formato PT típico)
+    aiExtraction.setResult({ supplierNif: "500.123.456" });
+
+    const result = await useCase.execute({
+      fileBuffer: makeBuffer(),
+      filename: "fatura.pdf",
+      mimeType: "application/pdf",
+    });
+
+    expect(result.supplierMatch?.id).toBe("sup-1");
+    expect(result.validationIssues).not.toContain("no_supplier_match");
+  });
+
+  it("usa hint quando NIF não casa mas nome foi confirmado anteriormente", async () => {
+    const supplier = {
+      id: "sup-1",
+      name: "Makro Portugal SA",
+      nif: "500123456",
+      defaultCostCenterGroupId: null,
+      defaultCostCenterCategoryId: null,
+      defaultFinancialType: null,
+    };
+    supplierHint.seedSuppliers([supplier]);
+    // Pré-popular hint: nome normalizado → fornecedor
+    supplierHint.seedHint("makro portugal", "sup-1");
+    // IA extrai NIF errado — NIF lookup vai falhar
+    aiExtraction.setResult({ supplierNif: "999999999", supplierName: "Makro Portugal, SA" });
+
+    const result = await useCase.execute({
+      fileBuffer: makeBuffer(),
+      filename: "fatura.pdf",
+      mimeType: "application/pdf",
+    });
+
+    expect(result.supplierMatch?.id).toBe("sup-1");
+    expect(result.validationIssues).not.toContain("no_supplier_match");
+    expect(result.validationIssues).not.toContain("supplier_matched_by_name");
+  });
+
+  it("usa fuzzy matching quando NIF e hint falham — adiciona supplier_matched_by_name", async () => {
+    supplierLookup.seed([
+      {
+        id: "sup-1",
+        name: "Makro Portugal SA",
+        nif: "500123456",
+        defaultCostCenterGroupId: null,
+        defaultCostCenterCategoryId: null,
+        defaultFinancialType: null,
+      },
+    ]);
+    // NIF completamente diferente, sem hint
+    aiExtraction.setResult({ supplierNif: "000000000", supplierName: "Makro Portugal S.A." });
+
+    const result = await useCase.execute({
+      fileBuffer: makeBuffer(),
+      filename: "fatura.pdf",
+      mimeType: "application/pdf",
+    });
+
+    expect(result.supplierMatch?.id).toBe("sup-1");
+    expect(result.validationIssues).toContain("supplier_matched_by_name");
+    expect(result.validationIssues).not.toContain("no_supplier_match");
+  });
+
+  it("não casa por fuzzy quando similaridade é insuficiente", async () => {
+    supplierLookup.seed([
+      {
+        id: "sup-1",
+        name: "Metro Cash & Carry Portugal",
+        nif: "500123456",
+        defaultCostCenterGroupId: null,
+        defaultCostCenterCategoryId: null,
+        defaultFinancialType: null,
+      },
+    ]);
+    aiExtraction.setResult({ supplierNif: null, supplierName: "EDP Comercial SA" });
+
+    const result = await useCase.execute({
+      fileBuffer: makeBuffer(),
+      filename: "fatura.pdf",
+      mimeType: "application/pdf",
+    });
+
+    expect(result.supplierMatch).toBeNull();
+    expect(result.validationIssues).toContain("no_supplier_match");
   });
 
   it("adiciona duplicate_invoice às validationIssues quando já existe fatura com mesmo número e NIF", async () => {

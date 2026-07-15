@@ -8,6 +8,8 @@ import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repos
 import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
 import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry-write.port.js";
 import type { SupplierCreatePort } from "../../domain/ports/out/supplier-create.port.js";
+import type { SupplierHintPort } from "../../domain/ports/out/supplier-hint.port.js";
+import { normalizeSupplierName } from "../../domain/utils/supplier-name.js";
 import { InvoiceNotFoundError, DuplicateInvoiceError } from "../../domain/errors.js";
 import { toInvoiceDTO } from "./shared.js";
 
@@ -17,6 +19,7 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     private readonly lineRepo: InvoiceLineRepositoryPort,
     private readonly payableWrite: PayableEntryWritePort,
     private readonly supplierCreate: SupplierCreatePort,
+    private readonly supplierHint: SupplierHintPort,
   ) {}
 
   async execute(command: ConfirmImportedInvoiceCommand): Promise<InvoiceDTO> {
@@ -73,6 +76,16 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     }
 
     await this.invoiceRepo.update(confirmed);
+
+    // Guardar hint nome→fornecedor para importações futuras.
+    // Usa o nome extraído pela IA (pre-confirm) para que nomes ligeiramente
+    // diferentes do mesmo fornecedor sejam reconhecidos automaticamente.
+    if (resolvedSupplierId && existing.supplierName) {
+      const normalizedName = normalizeSupplierName(existing.supplierName);
+      if (normalizedName.length > 0) {
+        await this.supplierHint.save(normalizedName, resolvedSupplierId);
+      }
+    }
 
     // Save optional lines
     const lines: InvoiceLine[] = (command.lines ?? []).map((lc) => {

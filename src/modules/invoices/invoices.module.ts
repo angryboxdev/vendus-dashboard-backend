@@ -6,6 +6,7 @@ import { SupabaseClassificationRuleRepository } from "./adapters/out/supabase-cl
 import { SupabasePayableEntryWriteAdapter } from "./adapters/out/supabase-payable-entry-write.adapter.js";
 import { SupabaseDocumentStorageAdapter } from "./adapters/out/supabase-document-storage.adapter.js";
 import { SupabaseSupplierLookupAdapter } from "./adapters/out/supabase-supplier-lookup.adapter.js";
+import { SupabaseSupplierHintAdapter } from "./adapters/out/supabase-supplier-hint.adapter.js";
 import { FinancialBaseSupplierCreateAdapter } from "./adapters/out/financial-base-supplier-create.adapter.js";
 import { OpenAiExtractionAdapter } from "./adapters/out/openai-extraction.adapter.js";
 import { CreateInvoiceUseCase } from "./application/use-cases/create-invoice.use-case.js";
@@ -49,6 +50,7 @@ export function createInvoicesModule(
   const payableWrite = new SupabasePayableEntryWriteAdapter(client);
   const storage = new SupabaseDocumentStorageAdapter(client);
   const supplierLookup = new SupabaseSupplierLookupAdapter(client);
+  const supplierHint = new SupabaseSupplierHintAdapter(client);
   const supplierCreate = new FinancialBaseSupplierCreateAdapter(createSupplierPort);
   const aiExtraction = new OpenAiExtractionAdapter(openaiApiKey);
 
@@ -66,8 +68,8 @@ export function createInvoicesModule(
     getInvoice: new GetInvoiceUseCase(invoiceRepo, lineRepo),
     deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),
-    importInvoice: new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup),
-    confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate),
+    importInvoice: new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint),
+    confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint),
     getInvoiceAlerts: new GetInvoiceAlertsUseCase(invoiceRepo),
     processDirectDebits,
   });
