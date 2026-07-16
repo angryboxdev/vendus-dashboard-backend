@@ -11,6 +11,7 @@ export interface PayableEntryMatchCandidate {
   amount: number; // cents
   dueDate: string; // YYYY-MM-DD
   status: string;
+  invoiceId: string | null;
 }
 
 export interface PayableEntryMatchReadPort {

@@ -23,7 +23,7 @@ export class SupabasePayableEntryMatchReadAdapter implements PayableEntryMatchRe
 
     const { data, error } = await this.supabase
       .from("payable_entries")
-      .select("id, supplier_id, supplier_name, description, amount, due_date, status")
+      .select("id, supplier_id, supplier_name, description, amount, due_date, status, invoice_id")
       .gte("amount", min)
       .lte("amount", max)
       .gte("due_date", opts.dateFrom)
@@ -41,6 +41,7 @@ export class SupabasePayableEntryMatchReadAdapter implements PayableEntryMatchRe
         amount: r.amount as number,
         dueDate: r.due_date as string,
         status: r.status as string,
+        invoiceId: (r.invoice_id as string | null) ?? null,
       };
     });
   }

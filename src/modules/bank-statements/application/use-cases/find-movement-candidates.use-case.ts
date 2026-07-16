@@ -85,6 +85,8 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
       this.payableRead.findCandidates({ amountCents: movement.amount, dateFrom, dateTo, toleranceCents: tolerance }),
     ]);
 
+    const invoiceCandidateIds = new Set(invoiceCandidates.map((inv) => inv.id));
+
     const results: MovementCandidate[] = [];
 
     for (const inv of invoiceCandidates) {
@@ -110,6 +112,9 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
     }
 
     for (const pe of payableCandidates) {
+      // Skip payable entries that have an associated invoice already in the candidates list
+      if (pe.invoiceId && invoiceCandidateIds.has(pe.invoiceId)) continue;
+
       const confidence = scoreCandidate({
         candidateAmount: pe.amount,
         candidateDateStr: pe.dueDate,
