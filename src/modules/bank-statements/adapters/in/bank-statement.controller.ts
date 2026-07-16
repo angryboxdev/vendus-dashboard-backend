@@ -206,12 +206,12 @@ export class BankStatementController {
     this.router.get("/bank-statements", async (req, res) => {
       try {
         const q = req.query as Record<string, string | undefined>;
-        const results = await this.listStatements.execute({
-          accountNumber: q.accountNumber,
-          status: q.status as import("../../domain/entities/bank-statement-import.js").StatementStatus | undefined,
-          from: q.from ? new Date(q.from) : undefined,
-          to: q.to ? new Date(q.to) : undefined,
-        });
+        const filter: import("../../domain/ports/in/bank-statement.ports.js").ListBankStatementsFilter = {};
+        if (q.accountNumber) filter.accountNumber = q.accountNumber;
+        if (q.status) filter.status = q.status as import("../../domain/entities/bank-statement-import.js").StatementStatus;
+        if (q.from) filter.from = new Date(q.from);
+        if (q.to) filter.to = new Date(q.to);
+        const results = await this.listStatements.execute(filter);
         res.json(results);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
@@ -225,11 +225,11 @@ export class BankStatementController {
     this.router.get("/bank-statements/:id", async (req, res) => {
       try {
         const q = req.query as Record<string, string | undefined>;
-        const detail = await this.getStatement.execute(req.params["id"]!, {
-          reconciliationStatus: q.reconciliationStatus as import("../../domain/entities/bank-movement.js").ReconciliationStatus | undefined,
-          movementType: q.movementType as import("../../domain/entities/bank-movement.js").MovementType | undefined,
-          riskLevel: q.riskLevel as import("../../domain/entities/bank-movement.js").RiskLevel | undefined,
-        });
+        const movFilter: import("../../domain/ports/in/bank-statement.ports.js").GetBankStatementFilter = {};
+        if (q.reconciliationStatus) movFilter.reconciliationStatus = q.reconciliationStatus as import("../../domain/entities/bank-movement.js").ReconciliationStatus;
+        if (q.movementType) movFilter.movementType = q.movementType as import("../../domain/entities/bank-movement.js").MovementType;
+        if (q.riskLevel) movFilter.riskLevel = q.riskLevel as import("../../domain/entities/bank-movement.js").RiskLevel;
+        const detail = await this.getStatement.execute(req.params["id"]!, movFilter);
         if (!detail) {
           res.status(404).json({ error: "Statement not found" });
           return;
@@ -378,20 +378,21 @@ export class BankStatementController {
           res.status(400).json({ error: "justificationType is required" });
           return;
         }
-        await this.classifyMovement.execute({
+        const classifyCmd: import("../../domain/ports/in/bank-statement.ports.js").ClassifyMovementCommand = {
           movementId: req.params["movId"]!,
           justificationType: body.justificationType as import("../../domain/entities/bank-movement.js").JustificationType,
-          matchedEntityType: body.matchedEntityType as import("../../domain/entities/bank-movement.js").MatchedEntityType | undefined,
-          matchedEntityId: body.matchedEntityId as string | undefined,
-          riskLevel: body.riskLevel as import("../../domain/entities/bank-movement.js").RiskLevel | undefined,
-          notes: body.notes as string | undefined,
-          documentUrl: body.documentUrl as string | undefined,
-          costCenterGroupId: body.costCenterGroupId as string | undefined,
-          costCenterCategoryId: body.costCenterCategoryId as string | undefined,
-          supplierId: body.supplierId as string | undefined,
-          vatRate: body.vatRate != null ? Number(body.vatRate) : undefined,
-          vatIncluded: body.vatIncluded != null ? Boolean(body.vatIncluded) : undefined,
-        });
+        };
+        if (body.matchedEntityType !== undefined) classifyCmd.matchedEntityType = body.matchedEntityType as import("../../domain/entities/bank-movement.js").MatchedEntityType;
+        if (body.matchedEntityId !== undefined) classifyCmd.matchedEntityId = body.matchedEntityId as string;
+        if (body.riskLevel !== undefined) classifyCmd.riskLevel = body.riskLevel as import("../../domain/entities/bank-movement.js").RiskLevel;
+        if (body.notes !== undefined) classifyCmd.notes = body.notes as string;
+        if (body.documentUrl !== undefined) classifyCmd.documentUrl = body.documentUrl as string;
+        if (body.costCenterGroupId !== undefined) classifyCmd.costCenterGroupId = body.costCenterGroupId as string;
+        if (body.costCenterCategoryId !== undefined) classifyCmd.costCenterCategoryId = body.costCenterCategoryId as string;
+        if (body.supplierId !== undefined) classifyCmd.supplierId = body.supplierId as string;
+        if (body.vatRate != null) classifyCmd.vatRate = Number(body.vatRate);
+        if (body.vatIncluded != null) classifyCmd.vatIncluded = Boolean(body.vatIncluded);
+        await this.classifyMovement.execute(classifyCmd);
         res.status(204).send();
       } catch (e) {
         if (e instanceof MovementNotFoundError) {
@@ -418,7 +419,7 @@ export class BankStatementController {
             return;
           }
           const result = await this.uploadMovementDocument.execute({
-            movementId: req.params["movId"]!,
+            movementId: req.params["movId"] as string,
             buffer: req.file.buffer,
             filename: req.file.originalname,
             mimeType: req.file.mimetype,
@@ -478,19 +479,20 @@ export class BankStatementController {
           });
           return;
         }
-        const rule = await this.createRule.execute({
+        const ruleCmd: import("../../domain/ports/in/bank-statement.ports.js").CreateReconciliationRuleCommand = {
           name: body.name as string,
           descriptionContains: body.descriptionContains as string,
-          movementType: body.movementType as import("../../domain/entities/bank-movement.js").MovementType | undefined,
-          costCenterGroupId: body.costCenterGroupId as string | undefined,
-          costCenterCategoryId: body.costCenterCategoryId as string | undefined,
           justificationType: body.justificationType as import("../../domain/entities/bank-movement.js").JustificationType,
-          requiresDocument: body.requiresDocument as boolean | undefined,
-          affectsDre: body.affectsDre as boolean | undefined,
-          affectsCashflow: body.affectsCashflow as boolean | undefined,
-          affectsProfitability: body.affectsProfitability as boolean | undefined,
-          riskLevel: body.riskLevel as import("../../domain/entities/bank-movement.js").RiskLevel | undefined,
-        });
+          movementType: (body.movementType as import("../../domain/entities/bank-movement.js").MovementType | undefined) ?? null,
+          costCenterGroupId: (body.costCenterGroupId as string | undefined) ?? null,
+          costCenterCategoryId: (body.costCenterCategoryId as string | undefined) ?? null,
+        };
+        if (body.requiresDocument !== undefined) ruleCmd.requiresDocument = body.requiresDocument as boolean;
+        if (body.affectsDre !== undefined) ruleCmd.affectsDre = body.affectsDre as boolean;
+        if (body.affectsCashflow !== undefined) ruleCmd.affectsCashflow = body.affectsCashflow as boolean;
+        if (body.affectsProfitability !== undefined) ruleCmd.affectsProfitability = body.affectsProfitability as boolean;
+        if (body.riskLevel !== undefined) ruleCmd.riskLevel = body.riskLevel as import("../../domain/entities/bank-movement.js").RiskLevel;
+        const rule = await this.createRule.execute(ruleCmd);
         res.status(201).json(rule);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });

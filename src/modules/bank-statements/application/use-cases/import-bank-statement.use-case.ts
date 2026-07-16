@@ -42,9 +42,9 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
       accountNumber: command.accountNumber,
       periodStart: command.periodStart,
       periodEnd: command.periodEnd,
-      currency: command.currency,
+      ...(command.currency !== undefined ? { currency: command.currency } : {}),
       sourceType: command.sourceType,
-      sourceFileName: command.sourceFileName,
+      ...(command.sourceFileName !== undefined ? { sourceFileName: command.sourceFileName } : {}),
       openingBalance: command.openingBalance,
       closingBalance: command.closingBalance,
     });
@@ -94,7 +94,7 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
           description: raw.description,
           amount: raw.amount,
           balanceAfter: raw.balanceAfter,
-          currency: command.currency,
+          ...(command.currency !== undefined ? { currency: command.currency } : {}),
           movementType: raw.movementType,
           deduplicationHash: hash,
         })

@@ -37,6 +37,7 @@ import { BankStatementController } from "./adapters/in/bank-statement.controller
  */
 export function createBankStatementsModule(): { router: Router } {
   const supabase = getSupabaseServiceRole();
+  if (!supabase) throw new Error("Supabase service role client is not configured");
 
   // Adapters out
   const statementRepo = new SupabaseBankStatementImportRepository(supabase);
