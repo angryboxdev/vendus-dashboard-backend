@@ -24,7 +24,6 @@ export class SupabaseInvoiceMatchReadAdapter implements InvoiceMatchReadPort {
     const { data, error } = await this.supabase
       .from("invoices")
       .select("id, supplier_id, supplier_name, invoice_number, total_with_vat, invoice_date, due_date, paid_at, status")
-      .in("status", ["pending", "overdue"])
       .gte("total_with_vat", min)
       .lte("total_with_vat", max)
       .or(

@@ -24,7 +24,6 @@ export class SupabasePayableEntryMatchReadAdapter implements PayableEntryMatchRe
     const { data, error } = await this.supabase
       .from("payable_entries")
       .select("id, supplier_id, supplier_name, description, amount, due_date, status")
-      .in("status", ["pending", "overdue"])
       .gte("amount", min)
       .lte("amount", max)
       .gte("due_date", opts.dateFrom)
