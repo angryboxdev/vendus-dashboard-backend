@@ -131,6 +131,8 @@ export interface ReconcileMovementCommand {
   movementId: string;
   entityType: "invoice" | "payable_entry";
   entityId: string;
+  /** supplierId do candidato seleccionado — usado para guardar o hint de learning. */
+  supplierId?: string | null;
 }
 
 export interface ReconcileMovementPort {
@@ -266,6 +268,7 @@ export interface MovementCandidate {
   entityType: "invoice" | "payable_entry";
   entityId: string;
   entityLabel: string;
+  supplierId: string | null;
   amountCents: number;
   date: string; // best available date (paid_at ?? due_date ?? invoice_date)
   confidence: number;

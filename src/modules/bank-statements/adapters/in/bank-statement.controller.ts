@@ -356,6 +356,7 @@ export class BankStatementController {
           movementId: req.params["movId"]!,
           entityType: body.entityType as "invoice" | "payable_entry",
           entityId: body.entityId as string,
+          supplierId: typeof body.supplierId === "string" ? body.supplierId : null,
         });
         res.status(204).send();
       } catch (e) {

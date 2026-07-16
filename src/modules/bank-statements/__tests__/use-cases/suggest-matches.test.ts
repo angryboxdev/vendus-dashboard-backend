@@ -6,6 +6,7 @@ import { FakeBankStatementImportRepository } from "../fakes/fake-bank-statement-
 import { FakeBankMovementRepository } from "../fakes/fake-bank-movement-repository.js";
 import { FakeInvoiceMatchRead } from "../fakes/fake-invoice-match-read.js";
 import { FakePayableEntryMatchRead } from "../fakes/fake-payable-entry-match-read.js";
+import { FakeMovementMatchHint } from "../fakes/fake-movement-match-hint.js";
 import { StatementNotFoundError } from "../../domain/errors.js";
 import type { InvoiceMatchCandidate } from "../../domain/ports/out/invoice-match-read.port.js";
 
@@ -69,6 +70,7 @@ describe("SuggestMatchesUseCase", () => {
   let movementRepo: FakeBankMovementRepository;
   let invoiceRead: FakeInvoiceMatchRead;
   let payableRead: FakePayableEntryMatchRead;
+  let hint: FakeMovementMatchHint;
   let useCase: SuggestMatchesUseCase;
   let statement: BankStatementImport;
 
@@ -77,7 +79,8 @@ describe("SuggestMatchesUseCase", () => {
     movementRepo = new FakeBankMovementRepository();
     invoiceRead = new FakeInvoiceMatchRead();
     payableRead = new FakePayableEntryMatchRead();
-    useCase = new SuggestMatchesUseCase(statementRepo, movementRepo, invoiceRead, payableRead);
+    hint = new FakeMovementMatchHint();
+    useCase = new SuggestMatchesUseCase(statementRepo, movementRepo, invoiceRead, payableRead, hint);
     statement = makeStatement();
     await statementRepo.save(statement);
   });
@@ -161,5 +164,27 @@ describe("SuggestMatchesUseCase", () => {
 
     const suggestions = await useCase.execute(statement.id);
     expect(suggestions).toHaveLength(0);
+  });
+
+  it("applies hint boost when description matches a known supplier", async () => {
+    // movement description "PAGAMENTO EDP SA" → normalized contains "edp"
+    // Pre-populate hint: "edp" → "sup-1"
+    hint.setHint("edp", "sup-1");
+
+    const movement = makeDebit(statement.id);
+    await movementRepo.saveBulk([movement]);
+
+    // Two candidates: one for the hinted supplier (sup-1), one for another supplier
+    invoiceRead.setcandidates([
+      makeInvoiceCandidate({ id: "inv-hinted", supplierId: "sup-1", supplierName: "EDP SA" }),
+      makeInvoiceCandidate({ id: "inv-other", supplierId: "sup-9", supplierName: "OTHER SA" }),
+    ]);
+
+    const suggestions = await useCase.execute(statement.id);
+    // The hinted invoice should win
+    expect(suggestions).toHaveLength(1);
+    expect(suggestions[0]!.entityId).toBe("inv-hinted");
+    // Confidence must be above what name-substring alone would give
+    expect(suggestions[0]!.confidence).toBeGreaterThan(0.6);
   });
 });

@@ -1,15 +1,19 @@
 import { StatementNotFoundError } from "../../domain/errors.js";
 import { RESOLVED_STATUSES } from "../../domain/entities/bank-movement.js";
+import { normalizeBankDescription } from "../../domain/utils/bank-description.js";
 import type { BankStatementImportRepositoryPort } from "../../domain/ports/out/bank-statement-import-repository.port.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
 import type { InvoiceMatchReadPort } from "../../domain/ports/out/invoice-match-read.port.js";
 import type { PayableEntryMatchReadPort } from "../../domain/ports/out/payable-entry-match-read.port.js";
+import type { MovementMatchHintPort } from "../../domain/ports/out/movement-match-hint.port.js";
 import type {
   MatchSuggestion,
   SuggestMatchesPort,
 } from "../../domain/ports/in/bank-statement.ports.js";
 import type { BankMovement } from "../../domain/entities/bank-movement.js";
 
+/** Confidence boost when the description was previously confirmed for this supplier. */
+const HINT_MATCH_BOOST = 0.35;
 /** Confidence boost when supplier name appears in the movement description. */
 const SUPPLIER_NAME_BOOST = 0.2;
 /** Confidence for exact amount match. */
@@ -43,7 +47,8 @@ export class SuggestMatchesUseCase implements SuggestMatchesPort {
     private readonly statementRepo: BankStatementImportRepositoryPort,
     private readonly movementRepo: BankMovementRepositoryPort,
     private readonly invoiceRead: InvoiceMatchReadPort,
-    private readonly payableRead: PayableEntryMatchReadPort
+    private readonly payableRead: PayableEntryMatchReadPort,
+    private readonly hint: MovementMatchHintPort,
   ) {}
 
   async execute(statementImportId: string): Promise<MatchSuggestion[]> {
@@ -92,6 +97,12 @@ export class SuggestMatchesUseCase implements SuggestMatchesPort {
     const dateFrom = offsetDays(movement.bookingDate, -30);
     const dateTo = offsetDays(movement.bookingDate, 30);
 
+    // Resolve hint once per movement — single DB lookup
+    const normalizedDesc = normalizeBankDescription(movement.description);
+    const hintSupplierId = normalizedDesc.length > 0
+      ? await this.hint.findSupplierByDescription(normalizedDesc)
+      : null;
+
     const [invoiceCandidates, payableCandidates] = await Promise.all([
       this.invoiceRead.findCandidates({
         amountCents: movement.amount,
@@ -116,9 +127,11 @@ export class SuggestMatchesUseCase implements SuggestMatchesPort {
         // Best date to compare with movement: paid_at > due_date > invoice_date
         candidateDueDateStr: inv.paidAt ?? inv.dueDate ?? inv.invoiceDate,
         candidateName: inv.supplierName,
+        candidateSupplierId: inv.supplierId,
         movementAmount: movement.amount,
         movementDate: movement.bookingDate,
         movementDesc: movement.description,
+        hintSupplierId,
       });
       if (confidence >= MIN_CONFIDENCE && (!best || confidence > best.confidence)) {
         best = {
@@ -137,9 +150,11 @@ export class SuggestMatchesUseCase implements SuggestMatchesPort {
         candidateAmount: pe.amount,
         candidateDueDateStr: pe.dueDate,
         candidateName: pe.supplierName,
+        candidateSupplierId: pe.supplierId,
         movementAmount: movement.amount,
         movementDate: movement.bookingDate,
         movementDesc: movement.description,
+        hintSupplierId,
       });
       if (confidence >= MIN_CONFIDENCE && (!best || confidence > best.confidence)) {
         best = {
@@ -159,9 +174,11 @@ export class SuggestMatchesUseCase implements SuggestMatchesPort {
     candidateAmount: number;
     candidateDueDateStr: string | null;
     candidateName: string;
+    candidateSupplierId: string | null;
     movementAmount: number;
     movementDate: Date;
     movementDesc: string;
+    hintSupplierId: string | null;
   }): number {
     let score = 0;
 
@@ -182,14 +199,19 @@ export class SuggestMatchesUseCase implements SuggestMatchesPort {
       else if (diff <= 30) score += DATE_NEAR_BONUS;
     }
 
-    // Supplier name in description
-    const desc = opts.movementDesc.toLowerCase();
-    const nameWords = opts.candidateName
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((w) => w.length > 3);
-    if (nameWords.some((w) => desc.includes(w))) {
-      score += SUPPLIER_NAME_BOOST;
+    // Hint match (stronger signal — confirmed by past reconciliation)
+    if (opts.hintSupplierId && opts.candidateSupplierId === opts.hintSupplierId) {
+      score += HINT_MATCH_BOOST;
+    } else {
+      // Fallback: supplier name substring in description
+      const desc = opts.movementDesc.toLowerCase();
+      const nameWords = opts.candidateName
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 3);
+      if (nameWords.some((w) => desc.includes(w))) {
+        score += SUPPLIER_NAME_BOOST;
+      }
     }
 
     return Math.min(1, score);

@@ -1,12 +1,15 @@
 import { MovementNotFoundError } from "../../domain/errors.js";
+import { normalizeBankDescription } from "../../domain/utils/bank-description.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
 import type { InvoiceMatchReadPort } from "../../domain/ports/out/invoice-match-read.port.js";
 import type { PayableEntryMatchReadPort } from "../../domain/ports/out/payable-entry-match-read.port.js";
+import type { MovementMatchHintPort } from "../../domain/ports/out/movement-match-hint.port.js";
 import type {
   FindMovementCandidatesPort,
   MovementCandidate,
 } from "../../domain/ports/in/bank-statement.ports.js";
 
+const HINT_MATCH_BOOST = 0.35;
 const SUPPLIER_NAME_BOOST = 0.2;
 const EXACT_AMOUNT_CONFIDENCE = 0.6;
 const DATE_CLOSE_BONUS = 0.15;
@@ -29,9 +32,11 @@ function scoreCandidate(opts: {
   candidateAmount: number;
   candidateDateStr: string | null;
   candidateName: string;
+  candidateSupplierId: string | null;
   movementAmount: number;
   movementDate: Date;
   movementDesc: string;
+  hintSupplierId: string | null;
 }): number {
   let score = 0;
 
@@ -50,13 +55,19 @@ function scoreCandidate(opts: {
     else if (diff <= 30) score += DATE_NEAR_BONUS;
   }
 
-  const desc = opts.movementDesc.toLowerCase();
-  const nameWords = opts.candidateName
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((w) => w.length > 3);
-  if (nameWords.some((w) => desc.includes(w))) {
-    score += SUPPLIER_NAME_BOOST;
+  // Hint match (stronger signal — confirmed by past reconciliation)
+  if (opts.hintSupplierId && opts.candidateSupplierId === opts.hintSupplierId) {
+    score += HINT_MATCH_BOOST;
+  } else {
+    // Fallback: supplier name substring in description
+    const desc = opts.movementDesc.toLowerCase();
+    const nameWords = opts.candidateName
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length > 3);
+    if (nameWords.some((w) => desc.includes(w))) {
+      score += SUPPLIER_NAME_BOOST;
+    }
   }
 
   return Math.min(1, score);
@@ -66,7 +77,8 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
   constructor(
     private readonly movementRepo: BankMovementRepositoryPort,
     private readonly invoiceRead: InvoiceMatchReadPort,
-    private readonly payableRead: PayableEntryMatchReadPort
+    private readonly payableRead: PayableEntryMatchReadPort,
+    private readonly hint: MovementMatchHintPort,
   ) {}
 
   async execute(movementId: string): Promise<MovementCandidate[]> {
@@ -79,6 +91,12 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
     );
     const dateFrom = offsetDays(movement.bookingDate, -30);
     const dateTo = offsetDays(movement.bookingDate, 30);
+
+    // Resolve hint once — single DB lookup for this movement
+    const normalizedDesc = normalizeBankDescription(movement.description);
+    const hintSupplierId = normalizedDesc.length > 0
+      ? await this.hint.findSupplierByDescription(normalizedDesc)
+      : null;
 
     const [invoiceCandidates, payableCandidates] = await Promise.all([
       this.invoiceRead.findCandidates({ amountCents: movement.amount, dateFrom, dateTo, toleranceCents: tolerance }),
@@ -95,15 +113,18 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
         candidateAmount: inv.totalWithVat,
         candidateDateStr: bestDate,
         candidateName: inv.supplierName,
+        candidateSupplierId: inv.supplierId,
         movementAmount: movement.amount,
         movementDate: movement.bookingDate,
         movementDesc: movement.description,
+        hintSupplierId,
       });
       if (confidence >= MIN_CONFIDENCE) {
         results.push({
           entityType: "invoice",
           entityId: inv.id,
           entityLabel: `${inv.supplierName} — ${inv.invoiceNumber}`,
+          supplierId: inv.supplierId,
           amountCents: inv.totalWithVat,
           date: bestDate,
           confidence,
@@ -119,15 +140,18 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
         candidateAmount: pe.amount,
         candidateDateStr: pe.dueDate,
         candidateName: pe.supplierName,
+        candidateSupplierId: pe.supplierId,
         movementAmount: movement.amount,
         movementDate: movement.bookingDate,
         movementDesc: movement.description,
+        hintSupplierId,
       });
       if (confidence >= MIN_CONFIDENCE) {
         results.push({
           entityType: "payable_entry",
           entityId: pe.id,
           entityLabel: `${pe.supplierName} — ${pe.description}`,
+          supplierId: pe.supplierId,
           amountCents: pe.amount,
           date: pe.dueDate ?? "",
           confidence,

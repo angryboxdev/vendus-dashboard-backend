@@ -4,6 +4,7 @@ import { BankMovement } from "../../domain/entities/bank-movement.js";
 import { FakeBankMovementRepository } from "../fakes/fake-bank-movement-repository.js";
 import { FakeInvoiceMatchRead } from "../fakes/fake-invoice-match-read.js";
 import { FakePayableEntryMatchRead } from "../fakes/fake-payable-entry-match-read.js";
+import { FakeMovementMatchHint } from "../fakes/fake-movement-match-hint.js";
 import { MovementNotFoundError } from "../../domain/errors.js";
 import type { InvoiceMatchCandidate } from "../../domain/ports/out/invoice-match-read.port.js";
 import type { PayableEntryMatchCandidate } from "../../domain/ports/out/payable-entry-match-read.port.js";
@@ -55,6 +56,7 @@ describe("FindMovementCandidatesUseCase", () => {
   let movementRepo: FakeBankMovementRepository;
   let invoiceRead: FakeInvoiceMatchRead;
   let payableRead: FakePayableEntryMatchRead;
+  let hint: FakeMovementMatchHint;
   let useCase: FindMovementCandidatesUseCase;
   let movement: BankMovement;
 
@@ -62,7 +64,8 @@ describe("FindMovementCandidatesUseCase", () => {
     movementRepo = new FakeBankMovementRepository();
     invoiceRead = new FakeInvoiceMatchRead();
     payableRead = new FakePayableEntryMatchRead();
-    useCase = new FindMovementCandidatesUseCase(movementRepo, invoiceRead, payableRead);
+    hint = new FakeMovementMatchHint();
+    useCase = new FindMovementCandidatesUseCase(movementRepo, invoiceRead, payableRead, hint);
     movement = makeDebit();
     await movementRepo.saveBulk([movement]);
   });
@@ -153,5 +156,38 @@ describe("FindMovementCandidatesUseCase", () => {
 
     const result = await useCase.execute(movement.id);
     expect(result[0]!.entityLabel).toBe("EDP SA — FT 2026/100");
+  });
+
+  it("includes supplierId in each candidate", async () => {
+    invoiceRead.setcandidates([makeInvoiceCandidate({ supplierId: "sup-edp" })]);
+    payableRead.setCandidates([makePayableCandidate({ supplierId: "sup-nos" })]);
+
+    const result = await useCase.execute(movement.id);
+    const inv = result.find((c) => c.entityType === "invoice");
+    const pe = result.find((c) => c.entityType === "payable_entry");
+    expect(inv!.supplierId).toBe("sup-edp");
+    expect(pe!.supplierId).toBe("sup-nos");
+  });
+
+  it("applies hint boost — hinted candidate scores higher than name-only candidate", async () => {
+    // movement description "PAGAMENTO EDP SA" → normalized "edp"
+    // Pre-populate hint: the normalized description maps to sup-1
+    hint.setHint("edp", "sup-1");
+
+    invoiceRead.setcandidates([
+      makeInvoiceCandidate({ id: "inv-hinted", supplierId: "sup-1", supplierName: "EDP SA" }),
+      makeInvoiceCandidate({ id: "inv-other", supplierId: "sup-9", supplierName: "OTHER Corp" }),
+    ]);
+
+    const result = await useCase.execute(movement.id);
+    const hinted = result.find((c) => c.entityId === "inv-hinted");
+    const other = result.find((c) => c.entityId === "inv-other");
+
+    expect(hinted).toBeDefined();
+    expect(other).toBeDefined();
+    // Hinted candidate must score higher
+    expect(hinted!.confidence).toBeGreaterThan(other!.confidence);
+    // And the list must be sorted descending
+    expect(result[0]!.entityId).toBe("inv-hinted");
   });
 });

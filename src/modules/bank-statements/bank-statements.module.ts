@@ -7,6 +7,7 @@ import { SupabaseBankMovementRepository } from "./adapters/out/supabase-bank-mov
 import { SupabaseBankReconciliationRuleRepository } from "./adapters/out/supabase-bank-reconciliation-rule.repository.js";
 import { SupabaseInvoiceMatchReadAdapter } from "./adapters/out/supabase-invoice-match-read.adapter.js";
 import { SupabasePayableEntryMatchReadAdapter } from "./adapters/out/supabase-payable-entry-match-read.adapter.js";
+import { SupabaseMovementMatchHintAdapter } from "./adapters/out/supabase-movement-match-hint.adapter.js";
 
 // Use cases
 import { ImportBankStatementUseCase } from "./application/use-cases/import-bank-statement.use-case.js";
@@ -45,19 +46,21 @@ export function createBankStatementsModule(): { router: Router } {
   const ruleRepo = new SupabaseBankReconciliationRuleRepository(supabase);
   const invoiceRead = new SupabaseInvoiceMatchReadAdapter(supabase);
   const payableRead = new SupabasePayableEntryMatchReadAdapter(supabase);
+  const movementHint = new SupabaseMovementMatchHintAdapter(supabase);
 
   // Use cases
   const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo);
   const listStatements = new ListBankStatementsUseCase(statementRepo);
   const getStatement = new GetBankStatementUseCase(statementRepo, movementRepo);
-  const reconcileMovement = new ReconcileMovementUseCase(movementRepo);
+  const reconcileMovement = new ReconcileMovementUseCase(movementRepo, movementHint);
   const classifyMovement = new ClassifyMovementUseCase(movementRepo);
   const applyAutoRules = new ApplyAutoRulesUseCase(statementRepo, movementRepo, ruleRepo);
   const suggestMatches = new SuggestMatchesUseCase(
     statementRepo,
     movementRepo,
     invoiceRead,
-    payableRead
+    payableRead,
+    movementHint,
   );
   const createRule = new CreateReconciliationRuleUseCase(ruleRepo);
   const listRules = new ListReconciliationRulesUseCase(ruleRepo);
@@ -65,7 +68,7 @@ export function createBankStatementsModule(): { router: Router } {
   const closeStatement = new CloseStatementUseCase(statementRepo, movementRepo);
   const deleteStatement = new DeleteBankStatementUseCase(statementRepo);
   const updateBalances = new UpdateStatementBalancesUseCase(statementRepo);
-  const findMovementCandidates = new FindMovementCandidatesUseCase(movementRepo, invoiceRead, payableRead);
+  const findMovementCandidates = new FindMovementCandidatesUseCase(movementRepo, invoiceRead, payableRead, movementHint);
   const documentStorage = new SupabaseBankDocumentStorageAdapter(supabase);
   const uploadMovementDocument = new UploadMovementDocumentUseCase(movementRepo, documentStorage);
 
