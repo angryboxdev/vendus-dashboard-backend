@@ -90,6 +90,23 @@ export class CsvStatementParser {
           ? firstMovement.amount
           : -firstMovement.amount;
       openingBalance = firstMovement.balanceAfter - firstNet;
+
+      // Guard: verify that opening + movements ≈ closing (tolerance: 1 cent per movement)
+      const calculated = movements.reduce(
+        (acc, m) => acc + (m.movementType === "credit" ? m.amount : -m.amount),
+        openingBalance
+      );
+      const drift = Math.abs(calculated - closingBalance);
+      const toleranceCents = Math.max(100, movements.length); // at least 1€ or 1 cent/movement
+      if (drift > toleranceCents) {
+        throw new ParseError(
+          `Balance mismatch after parsing: calculated closing balance is ${(calculated / 100).toFixed(2)} ` +
+          `but statement shows ${(closingBalance / 100).toFixed(2)} ` +
+          `(difference: ${(drift / 100).toFixed(2)}). ` +
+          `This likely means some amounts were parsed incorrectly. ` +
+          `Please verify the file format.`
+        );
+      }
     }
 
     // Period: prefer metadata rows (XLSX format), fall back to movement dates
@@ -280,30 +297,62 @@ export class CsvStatementParser {
 
   /**
    * Parses a Portuguese-formatted amount string to cents.
-   * Examples: "1.234,56" → 123456 | "234,56" → 23456 | "1234.56" → 123456
+   *
+   * Handles both European (1.078,27) and English (1,078.27) formats by
+   * comparing the position of the last comma vs the last dot:
+   *   - lastComma > lastDot  → European: dot=thousands, comma=decimal
+   *   - lastDot   > lastComma → English:  comma=thousands, dot=decimal
+   *   - only comma → if exactly 3 digits after → thousands; else → decimal
+   *   - only dot   → if exactly 3 digits after → thousands; else → decimal
+   *
+   * Examples: "1.078,27" → 107827 | "1,078.27" → 107827 | "-1 078,27" → 107827
    */
   private parseAmount(raw: string): number | null {
     if (!raw || raw.trim() === "") return null;
-    const cleaned = raw.trim().replace(/\s/g, "");
 
-    // Detect Portuguese format (comma decimal): has comma and no dot after comma
-    const hasComma = cleaned.includes(",");
-    const hasDot = cleaned.includes(".");
+    // Remove spaces (thousands sep in some locales) and currency symbols
+    const cleaned = raw.trim().replace(/[\s\u00a0€$£]/g, "");
+    if (!cleaned || cleaned === "-" || cleaned === "+") return null;
+
+    // Strip sign — we only need absolute value (movementType carries the direction)
+    const digits = cleaned.replace(/^[+-]/, "");
+
+    const lastComma = digits.lastIndexOf(",");
+    const lastDot   = digits.lastIndexOf(".");
 
     let normalised: string;
-    if (hasComma) {
-      // 1.234,56 → 1234.56
-      normalised = cleaned.replace(/\./g, "").replace(",", ".");
-    } else if (hasDot) {
-      // Might be 1234.56 (already decimal)
-      normalised = cleaned;
+
+    if (lastComma !== -1 && lastDot !== -1) {
+      if (lastComma > lastDot) {
+        // European format: 1.078,27 → dot=thousands, comma=decimal
+        normalised = digits.replace(/\./g, "").replace(",", ".");
+      } else {
+        // English format: 1,078.27 → comma=thousands, dot=decimal
+        normalised = digits.replace(/,/g, "");
+      }
+    } else if (lastComma !== -1) {
+      // Only comma: 3 digits after → thousands sep (1,000); otherwise → decimal (1,08)
+      const afterComma = digits.slice(lastComma + 1);
+      if (afterComma.length === 3 && /^\d+$/.test(afterComma)) {
+        normalised = digits.replace(/,/g, "");
+      } else {
+        normalised = digits.replace(",", ".");
+      }
+    } else if (lastDot !== -1) {
+      // Only dot: 3 digits after → thousands sep (1.000); otherwise → decimal (1.08)
+      const afterDot = digits.slice(lastDot + 1);
+      if (afterDot.length === 3 && /^\d+$/.test(afterDot)) {
+        normalised = digits.replace(/\./g, "");
+      } else {
+        normalised = digits;
+      }
     } else {
-      normalised = cleaned;
+      normalised = digits;
     }
 
     const value = parseFloat(normalised);
     if (isNaN(value)) return null;
-    return Math.round(Math.abs(value) * 100);
+    return Math.round(value * 100);
   }
 
   /**
