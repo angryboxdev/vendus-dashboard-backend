@@ -13,6 +13,7 @@ import { hrKioskRoutes } from "./routes/hrKioskRoutes.js";
 import { hrAuditRoutes } from "./routes/hrAuditRoutes.js";
 import { hrLeaveRoutes } from "./routes/hrLeaveRoutes.js";
 import { createCashClosingsModule } from "./modules/cash-closings/cash-closings.module.js";
+import { createKdsModule } from "./modules/kds/kds.module.js";
 import { createFinancialBaseModule } from "./modules/financial-base/financial-base.module.js";
 import { createInvoicesModule } from "./modules/invoices/invoices.module.js";
 import { createPayableEntriesModule } from "./modules/payable-entries/payable-entries.module.js";
@@ -55,6 +56,10 @@ const cashClosingsModule = createCashClosingsModule();
 
 // Cash closing public routes (PIN verify + submit) — no auth required
 app.use("/api", cashClosingsModule.publicRouter);
+
+// KDS — public (kitchen screen, no login needed)
+const kdsModule = createKdsModule();
+app.use("/api", kdsModule.router);
 
 // All routes below this line require authentication
 app.use(requireAuth);
