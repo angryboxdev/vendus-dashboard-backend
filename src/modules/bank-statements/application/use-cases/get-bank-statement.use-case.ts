@@ -1,6 +1,7 @@
 import { ReconciliationCalculatorService } from "../../domain/services/reconciliation-calculator.service.js";
 import type { BankStatementImportRepositoryPort } from "../../domain/ports/out/bank-statement-import-repository.port.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
+import type { BankMovementEntityLinkRepositoryPort, BankMovementEntityLink } from "../../domain/ports/out/bank-movement-entity-link-repository.port.js";
 import type {
   BankMovementDto,
   BankStatementDetail,
@@ -9,7 +10,7 @@ import type {
 } from "../../domain/ports/in/bank-statement.ports.js";
 import type { BankMovement } from "../../domain/entities/bank-movement.js";
 
-function toMovementDto(m: BankMovement): BankMovementDto {
+function toMovementDto(m: BankMovement, links: BankMovementEntityLink[]): BankMovementDto {
   return {
     id: m.id,
     bookingDate: m.bookingDate,
@@ -34,6 +35,14 @@ function toMovementDto(m: BankMovement): BankMovementDto {
     supplierId: m.supplierId,
     vatRate: m.vatRate,
     vatIncluded: m.vatIncluded,
+    entityLinks: links.map((l) => ({
+      id: l.id,
+      entityType: l.entityType,
+      entityId: l.entityId,
+      amountCents: l.amountCents,
+      entityLabel: l.entityLabel,
+    })),
+    reconciliationAmountDiff: m.reconciliationAmountDiff,
   };
 }
 
@@ -42,7 +51,8 @@ export class GetBankStatementUseCase implements GetBankStatementPort {
 
   constructor(
     private readonly statementRepo: BankStatementImportRepositoryPort,
-    private readonly movementRepo: BankMovementRepositoryPort
+    private readonly movementRepo: BankMovementRepositoryPort,
+    private readonly linkRepo: BankMovementEntityLinkRepositoryPort,
   ) {}
 
   async execute(
@@ -54,6 +64,19 @@ export class GetBankStatementUseCase implements GetBankStatementPort {
 
     const movements = await this.movementRepo.findByStatementId(id, filter);
     const stats = this.calculator.compute(statement.openingBalance, movements);
+
+    // Bulk-load entity links for all movements in one query
+    const movementIds = movements.map((m) => m.id);
+    const allLinks = movementIds.length > 0
+      ? await this.linkRepo.findByMovementIds(movementIds)
+      : [];
+
+    const linksByMovementId = new Map<string, BankMovementEntityLink[]>();
+    for (const link of allLinks) {
+      const existing = linksByMovementId.get(link.movementId) ?? [];
+      existing.push(link);
+      linksByMovementId.set(link.movementId, existing);
+    }
 
     return {
       id: statement.id,
@@ -72,7 +95,7 @@ export class GetBankStatementUseCase implements GetBankStatementPort {
       reconciliationProgress: stats.reconciliationProgress,
       status: statement.status,
       createdAt: statement.createdAt,
-      movements: movements.map(toMovementDto),
+      movements: movements.map((m) => toMovementDto(m, linksByMovementId.get(m.id) ?? [])),
       statusCounts: stats.statusCounts,
     };
   }

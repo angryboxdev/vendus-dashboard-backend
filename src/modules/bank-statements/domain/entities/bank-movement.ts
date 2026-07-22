@@ -2,6 +2,7 @@ export type MovementType = "debit" | "credit";
 
 export type ReconciliationStatus =
   | "conciliado_com_fatura"
+  | "conciliado_parcial"
   | "conciliado_sem_fatura"
   | "sugestao"
   | "pendente_de_documento"
@@ -94,6 +95,8 @@ interface BankMovementProps {
   supplierId: string | null;
   vatRate: number | null;       // percentage e.g. 23 — null = not applicable
   vatIncluded: boolean | null;  // true = amount includes VAT — null = not applicable
+  // Multi-entity reconciliation
+  reconciliationAmountDiff: number | null; // cents: movement.amount - sum(entity_links.amount). null = not applicable
 }
 
 export class BankMovement {
@@ -123,6 +126,10 @@ export class BankMovement {
   readonly supplierId: string | null;
   readonly vatRate: number | null;
   readonly vatIncluded: boolean | null;
+  readonly reconciliationAmountDiff: number | null;
+
+  /** Tolerance for considering a multi-entity reconciliation as fully matched (1€). */
+  static readonly PARTIAL_TOLERANCE_CENTS = 100;
 
   private constructor(props: BankMovementProps) {
     this.id = props.id;
@@ -151,6 +158,7 @@ export class BankMovement {
     this.supplierId = props.supplierId;
     this.vatRate = props.vatRate;
     this.vatIncluded = props.vatIncluded;
+    this.reconciliationAmountDiff = props.reconciliationAmountDiff;
   }
 
   get isResolved(): boolean {
@@ -206,6 +214,7 @@ export class BankMovement {
       supplierId: null,
       vatRate: null,
       vatIncluded: null,
+      reconciliationAmountDiff: null,
     });
   }
 
@@ -268,6 +277,26 @@ export class BankMovement {
   }
 
   /**
+   * Reconciles the movement against one or more entities.
+   * @param amountDiff movement.amount - sum(entity amounts). Positive = excess, negative = shortfall.
+   */
+  multiReconcile(amountDiff: number): BankMovement {
+    const isPartial = Math.abs(amountDiff) > BankMovement.PARTIAL_TOLERANCE_CENTS;
+    return new BankMovement({
+      ...this.toProps(),
+      reconciliationStatus: isPartial ? "conciliado_parcial" : "conciliado_com_fatura",
+      justificationType: "fatura",
+      matchedEntityType: null,
+      matchedEntityId: null,
+      riskLevel: "low",
+      requiresDocument: true,
+      confidenceScore: null,
+      reconciliationAmountDiff: isPartial ? amountDiff : null,
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
    * Ignores the movement with a mandatory reason.
    */
   ignore(reason: string): BankMovement {
@@ -311,6 +340,7 @@ export class BankMovement {
       supplierId: this.supplierId,
       vatRate: this.vatRate,
       vatIncluded: this.vatIncluded,
+      reconciliationAmountDiff: this.reconciliationAmountDiff,
     };
   }
 }

@@ -2,6 +2,9 @@ import { MovementNotFoundError } from "../../domain/errors.js";
 import { normalizeBankDescription } from "../../domain/utils/bank-description.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
 import type { MovementMatchHintPort } from "../../domain/ports/out/movement-match-hint.port.js";
+import type { InvoiceMatchReadPort } from "../../domain/ports/out/invoice-match-read.port.js";
+import type { PayableEntryMatchReadPort } from "../../domain/ports/out/payable-entry-match-read.port.js";
+import type { BankMovementEntityLinkRepositoryPort, BankMovementEntityLink } from "../../domain/ports/out/bank-movement-entity-link-repository.port.js";
 import type {
   ReconcileMovementCommand,
   ReconcileMovementPort,
@@ -11,29 +14,84 @@ export class ReconcileMovementUseCase implements ReconcileMovementPort {
   constructor(
     private readonly movementRepo: BankMovementRepositoryPort,
     private readonly hint: MovementMatchHintPort,
+    private readonly invoiceRead: InvoiceMatchReadPort,
+    private readonly payableRead: PayableEntryMatchReadPort,
+    private readonly linkRepo: BankMovementEntityLinkRepositoryPort,
   ) {}
 
   async execute(command: ReconcileMovementCommand): Promise<void> {
+    if (command.entityLinks.length === 0) {
+      throw new Error("At least one entity link is required");
+    }
+
     const movement = await this.movementRepo.findById(command.movementId);
     if (!movement) throw new MovementNotFoundError(command.movementId);
 
-    const justificationType = command.entityType === "invoice" ? "fatura" : "fatura";
+    // ── 1. Look up entity amounts and labels ──────────────────────────────────
 
-    const updated = movement.classify({
-      justificationType,
-      matchedEntityType: command.entityType,
-      matchedEntityId: command.entityId,
+    const invoiceIds = command.entityLinks
+      .filter((l) => l.entityType === "invoice")
+      .map((l) => l.entityId);
+    const payableIds = command.entityLinks
+      .filter((l) => l.entityType === "payable_entry")
+      .map((l) => l.entityId);
+
+    const [invoices, payables] = await Promise.all([
+      invoiceIds.length > 0 ? this.invoiceRead.findByIds(invoiceIds) : Promise.resolve([]),
+      payableIds.length > 0 ? this.payableRead.findByIds(payableIds) : Promise.resolve([]),
+    ]);
+
+    const invoiceMap = new Map(invoices.map((i) => [i.id, i]));
+    const payableMap = new Map(payables.map((p) => [p.id, p]));
+
+    // ── 2. Build entity links with amounts ───────────────────────────────────
+
+    const links: BankMovementEntityLink[] = command.entityLinks.map((el) => {
+      if (el.entityType === "invoice") {
+        const inv = invoiceMap.get(el.entityId);
+        if (!inv) throw new Error(`Invoice not found: ${el.entityId}`);
+        return {
+          id: crypto.randomUUID(),
+          movementId: movement.id,
+          entityType: "invoice" as const,
+          entityId: el.entityId,
+          amountCents: inv.totalWithVat,
+          entityLabel: `${inv.supplierName} — ${inv.invoiceNumber}`,
+        };
+      } else {
+        const pe = payableMap.get(el.entityId);
+        if (!pe) throw new Error(`Payable entry not found: ${el.entityId}`);
+        return {
+          id: crypto.randomUUID(),
+          movementId: movement.id,
+          entityType: "payable_entry" as const,
+          entityId: el.entityId,
+          amountCents: pe.amount,
+          entityLabel: `${pe.supplierName} — ${pe.description}`,
+        };
+      }
     });
 
-    await this.movementRepo.update(updated);
+    // ── 3. Compute amount difference and determine status ────────────────────
 
-    // Guardar hint description → supplier para conciliações futuras.
-    // Usa a descrição original (pré-confirmação) para que variações ligeiras
-    // da mesma descrição sejam reconhecidas automaticamente.
-    if (command.supplierId) {
+    const totalLinked = links.reduce((sum, l) => sum + l.amountCents, 0);
+    const amountDiff = movement.amount - totalLinked;
+    const updated = movement.multiReconcile(amountDiff);
+
+    // ── 4. Persist ───────────────────────────────────────────────────────────
+
+    await this.movementRepo.update(updated);
+    await this.linkRepo.deleteByMovementId(movement.id);
+    await this.linkRepo.saveAll(links);
+
+    // ── 5. Save learning hint — only for single-entity full matches ──────────
+
+    const isFull = updated.reconciliationAmountDiff === null;
+    const firstLink = command.entityLinks[0]!;
+    if (isFull && command.entityLinks.length === 1 && firstLink.supplierId) {
       const normalizedDesc = normalizeBankDescription(movement.description);
       if (normalizedDesc.length > 0) {
-        await this.hint.save(normalizedDesc, command.supplierId);
+        await this.hint.save(normalizedDesc, firstLink.supplierId);
       }
     }
   }

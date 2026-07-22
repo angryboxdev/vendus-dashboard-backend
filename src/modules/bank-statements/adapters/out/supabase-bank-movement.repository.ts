@@ -40,6 +40,7 @@ function toEntity(row: Record<string, unknown>): BankMovement {
     supplierId: (row.supplier_id as string | null) ?? null,
     vatRate: (row.vat_rate as number | null) ?? null,
     vatIncluded: (row.vat_included as boolean | null) ?? null,
+    reconciliationAmountDiff: (row.reconciliation_amount_diff as number | null) ?? null,
   });
 }
 
@@ -127,6 +128,7 @@ export class SupabaseBankMovementRepository implements BankMovementRepositoryPor
         supplier_id: movement.supplierId,
         vat_rate: movement.vatRate,
         vat_included: movement.vatIncluded,
+        reconciliation_amount_diff: movement.reconciliationAmountDiff,
       })
       .eq("id", movement.id);
     if (error) throw new Error(error.message);

@@ -27,4 +27,7 @@ export interface InvoiceMatchReadPort {
     dateTo: string; // YYYY-MM-DD
     toleranceCents?: number;
   }): Promise<InvoiceMatchCandidate[]>;
+
+  /** Returns invoices by their IDs regardless of status or date — used when reconciling. */
+  findByIds(ids: string[]): Promise<InvoiceMatchCandidate[]>;
 }

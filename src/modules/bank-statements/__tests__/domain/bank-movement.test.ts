@@ -169,4 +169,63 @@ describe("BankMovement", () => {
       expect(() => makeDebit().ignore("")).toThrow("reason is required");
     });
   });
+
+  describe("multiReconcile", () => {
+    it("exact match (diff = 0) → conciliado_com_fatura, reconciliationAmountDiff = null", () => {
+      const m = makeDebit({ amount: 70_000 }).multiReconcile(0);
+      expect(m.reconciliationStatus).toBe("conciliado_com_fatura");
+      expect(m.reconciliationAmountDiff).toBeNull();
+      expect(m.isResolved).toBe(true);
+      expect(m.justificationType).toBe("fatura");
+      expect(m.requiresDocument).toBe(true);
+      expect(m.riskLevel).toBe("low");
+    });
+
+    it("within tolerance (|diff| <= 100) → conciliado_com_fatura, reconciliationAmountDiff = null", () => {
+      const m = makeDebit({ amount: 70_000 }).multiReconcile(50); // 0.50€ difference
+      expect(m.reconciliationStatus).toBe("conciliado_com_fatura");
+      expect(m.reconciliationAmountDiff).toBeNull();
+    });
+
+    it("exactly at tolerance boundary (diff = 100) → conciliado_com_fatura", () => {
+      const m = makeDebit({ amount: 70_000 }).multiReconcile(100);
+      expect(m.reconciliationStatus).toBe("conciliado_com_fatura");
+      expect(m.reconciliationAmountDiff).toBeNull();
+    });
+
+    it("one cent above tolerance (diff = 101) → conciliado_parcial", () => {
+      const m = makeDebit({ amount: 70_000 }).multiReconcile(101);
+      expect(m.reconciliationStatus).toBe("conciliado_parcial");
+      expect(m.reconciliationAmountDiff).toBe(101);
+      expect(m.isResolved).toBe(false);
+    });
+
+    it("large shortfall → conciliado_parcial with correct diff", () => {
+      const m = makeDebit({ amount: 70_000 }).multiReconcile(20_000);
+      expect(m.reconciliationStatus).toBe("conciliado_parcial");
+      expect(m.reconciliationAmountDiff).toBe(20_000);
+      expect(m.isResolved).toBe(false);
+    });
+
+    it("negative diff (entities exceed movement) → conciliado_parcial", () => {
+      const m = makeDebit({ amount: 70_000 }).multiReconcile(-500); // entities sum > movement
+      expect(m.reconciliationStatus).toBe("conciliado_parcial");
+      expect(m.reconciliationAmountDiff).toBe(-500);
+    });
+
+    it("clears matchedEntityId and matchedEntityType (multi-entity has no single match)", () => {
+      const classified = makeDebit().classify({
+        justificationType: "fatura",
+        matchedEntityType: "invoice",
+        matchedEntityId: "inv-old",
+      });
+      const m = classified.multiReconcile(0);
+      expect(m.matchedEntityType).toBeNull();
+      expect(m.matchedEntityId).toBeNull();
+    });
+
+    it("PARTIAL_TOLERANCE_CENTS constant is 100", () => {
+      expect(BankMovement.PARTIAL_TOLERANCE_CENTS).toBe(100);
+    });
+  });
 });

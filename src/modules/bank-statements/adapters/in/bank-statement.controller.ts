@@ -348,15 +348,18 @@ export class BankStatementController {
     this.router.patch("/bank-statements/movements/:movId/reconcile", async (req, res) => {
       try {
         const body = req.body as Record<string, unknown>;
-        if (!body.entityType || !body.entityId) {
-          res.status(400).json({ error: "entityType and entityId are required" });
+        if (!Array.isArray(body.entityLinks) || (body.entityLinks as unknown[]).length === 0) {
+          res.status(400).json({ error: "entityLinks must be a non-empty array" });
           return;
         }
+        const entityLinks = (body.entityLinks as Record<string, unknown>[]).map((el) => ({
+          entityType: el["entityType"] as "invoice" | "payable_entry",
+          entityId: el["entityId"] as string,
+          supplierId: typeof el["supplierId"] === "string" ? el["supplierId"] : null,
+        }));
         await this.reconcileMovement.execute({
           movementId: req.params["movId"]!,
-          entityType: body.entityType as "invoice" | "payable_entry",
-          entityId: body.entityId as string,
-          supplierId: typeof body.supplierId === "string" ? body.supplierId : null,
+          entityLinks,
         });
         res.status(204).send();
       } catch (e) {

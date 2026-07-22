@@ -80,6 +80,14 @@ export interface ListBankStatementsPort {
 
 // ─── Get ──────────────────────────────────────────────────────────────────────
 
+export interface EntityLinkDto {
+  id: string;
+  entityType: "invoice" | "payable_entry";
+  entityId: string;
+  amountCents: number;
+  entityLabel: string;
+}
+
 export interface BankMovementDto {
   id: string;
   bookingDate: Date;
@@ -104,6 +112,8 @@ export interface BankMovementDto {
   supplierId: string | null;
   vatRate: number | null;
   vatIncluded: boolean | null;
+  entityLinks: EntityLinkDto[];
+  reconciliationAmountDiff: number | null;
 }
 
 export interface BankStatementDetail extends BankStatementSummary {
@@ -127,12 +137,17 @@ export interface GetBankStatementPort {
 
 // ─── Reconcile movement ───────────────────────────────────────────────────────
 
-export interface ReconcileMovementCommand {
-  movementId: string;
+export interface EntityLinkInput {
   entityType: "invoice" | "payable_entry";
   entityId: string;
-  /** supplierId do candidato seleccionado — usado para guardar o hint de learning. */
+  /** supplierId — used to save the description→supplier learning hint. */
   supplierId?: string | null;
+}
+
+export interface ReconcileMovementCommand {
+  movementId: string;
+  /** One or more entities to link to this movement. */
+  entityLinks: EntityLinkInput[];
 }
 
 export interface ReconcileMovementPort {

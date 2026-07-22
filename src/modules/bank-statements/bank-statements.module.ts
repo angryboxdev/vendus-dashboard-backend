@@ -8,6 +8,7 @@ import { SupabaseBankReconciliationRuleRepository } from "./adapters/out/supabas
 import { SupabaseInvoiceMatchReadAdapter } from "./adapters/out/supabase-invoice-match-read.adapter.js";
 import { SupabasePayableEntryMatchReadAdapter } from "./adapters/out/supabase-payable-entry-match-read.adapter.js";
 import { SupabaseMovementMatchHintAdapter } from "./adapters/out/supabase-movement-match-hint.adapter.js";
+import { SupabaseBankMovementEntityLinkRepository } from "./adapters/out/supabase-bank-movement-entity-link.repository.js";
 
 // Use cases
 import { ImportBankStatementUseCase } from "./application/use-cases/import-bank-statement.use-case.js";
@@ -47,12 +48,13 @@ export function createBankStatementsModule(): { router: Router } {
   const invoiceRead = new SupabaseInvoiceMatchReadAdapter(supabase);
   const payableRead = new SupabasePayableEntryMatchReadAdapter(supabase);
   const movementHint = new SupabaseMovementMatchHintAdapter(supabase);
+  const entityLinkRepo = new SupabaseBankMovementEntityLinkRepository(supabase);
 
   // Use cases
   const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo);
   const listStatements = new ListBankStatementsUseCase(statementRepo);
-  const getStatement = new GetBankStatementUseCase(statementRepo, movementRepo);
-  const reconcileMovement = new ReconcileMovementUseCase(movementRepo, movementHint);
+  const getStatement = new GetBankStatementUseCase(statementRepo, movementRepo, entityLinkRepo);
+  const reconcileMovement = new ReconcileMovementUseCase(movementRepo, movementHint, invoiceRead, payableRead, entityLinkRepo);
   const classifyMovement = new ClassifyMovementUseCase(movementRepo);
   const applyAutoRules = new ApplyAutoRulesUseCase(statementRepo, movementRepo, ruleRepo);
   const suggestMatches = new SuggestMatchesUseCase(

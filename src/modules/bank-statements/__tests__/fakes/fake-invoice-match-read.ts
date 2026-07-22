@@ -10,6 +10,10 @@ export class FakeInvoiceMatchRead implements InvoiceMatchReadPort {
     this.candidates = candidates;
   }
 
+  async findByIds(ids: string[]): Promise<InvoiceMatchCandidate[]> {
+    return this.candidates.filter((c) => ids.includes(c.id));
+  }
+
   async findCandidates(opts: {
     amountCents: number;
     dateFrom: string;

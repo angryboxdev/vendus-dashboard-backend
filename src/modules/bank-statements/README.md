@@ -1,7 +1,7 @@
 # Módulo: bank-statements
 
 > Status: ativo
-> Última atualização: 2026-07-15
+> Última atualização: 2026-07-22
 
 ---
 
@@ -22,22 +22,27 @@ Gestor Financeiro
 3. Aplica regras automáticas (ex: "COM.MAN.CONTA" → taxa bancária)
 4. Sistema sugere conciliações com faturas e contas a pagar existentes
 5. Gestor revisa movimento a movimento:
-   a. "Conciliar com sistema" — selecciona a fatura/conta a pagar correspondente
+   a. "Conciliar com sistema" — selecciona uma ou mais faturas/contas a pagar
+      que juntas justificam o pagamento; o sistema mostra a diferença em tempo real
    b. "Justificar despesa" — sobe comprovativo, indica fornecedor (opcional),
       centro de custo e IVA; para tipos sem documento (ex: transferência interna)
       preenche apenas as notas
 6. Movimentos não justificados ficam destacados como "Saída não justificada"
-7. Quando saldo fecha (diff = 0) e sem pendências de alto risco → fecha conciliação
+7. Movimentos com entidades associadas mas com diferença de montante > 1€
+   ficam como "Conciliação parcial" — visíveis numa tab dedicada para revisão
+8. Quando saldo fecha (diff = 0) e sem pendências de alto risco → fecha conciliação
 ```
 
 **Conceitos-chave para o negócio:**
 
 - **Extrato bancário** — ficheiro CSV/XLSX exportado do banco com os movimentos de um período.
 - **Conciliação** — processo de verificar que cada movimento bancário tem uma explicação válida no sistema.
+- **Conciliação multi-entidade** — um único pagamento bancário pode corresponder a várias faturas em simultâneo (ex: pagamento agregado ao mesmo fornecedor). O gestor selecciona as faturas que juntas compõem o total; o sistema valida se os montantes fecham.
+- **Conciliação parcial** — movimento já associado a entidades, mas com diferença de montante superior a 1€. Sinaliza que algo ficou por explicar: pode faltar uma fatura, ou o pagamento incluiu uma taxa não registada.
 - **Saldo calculado** — saldo que o sistema computa somando/subtraindo os movimentos; deve coincidir com o saldo final do extrato.
 - **Saída não justificada** — débito sem fatura, sem regra, sem contrato e sem explicação manual.
 - **Regra automática** — padrão de texto na descrição bancária que classifica automaticamente futuros movimentos similares (ex: "COM.MAN.CONTA" → taxa bancária).
-- **Sugestão** — correspondência provável que o sistema encontrou entre um movimento e uma fatura/conta a pagar; pendente de confirmação pelo gestor.
+- **Sugestão** — correspondência provável que o sistema encontrou entre um movimento e uma fatura/conta a pagar; pendente de confirmação pelo gestor. O sistema aprende com conciliações exactas passadas para melhorar as sugestões futuras.
 - **Comprovativo** — ficheiro (PDF ou imagem) que justifica uma despesa sem fatura no sistema (ex: recibo de uma compra pontual, taxa bancária manual).
 - **Centro de custo** — classificação interna da despesa (grupo + categoria) para efeitos de DRE e cashflow; obrigatório em todos os tipos de justificação que não sejam transferências internas.
 - **IVA** — registado como taxa percentual + indicador de inclusão no valor (incluído/excluído/isento); os relatórios financeiros usam esta informação para calcular o valor líquido da despesa.
@@ -46,7 +51,7 @@ Gestor Financeiro
 
 ## Propósito técnico
 
-Importa, persiste e reconcilia movimentos bancários contra entidades do sistema financeiro (faturas, contas a pagar). Também suporta classificação manual enriquecida com centro de custo, fornecedor, IVA e upload de comprovativo. Não é responsabilidade deste módulo: contabilidade fiscal formal, SAF-T, integração bancária automática via API.
+Importa, persiste e reconcilia movimentos bancários contra entidades do sistema financeiro (faturas, contas a pagar), suportando ligação de um movimento a múltiplas entidades. Também suporta classificação manual enriquecida com centro de custo, fornecedor, IVA e upload de comprovativo. Não é responsabilidade deste módulo: contabilidade fiscal formal, SAF-T, integração bancária automática via API.
 
 ## Conceitos do domínio
 
@@ -66,8 +71,27 @@ Campos de classificação manual (todos opcionais no domínio):
 - `vatRate` — taxa de IVA em percentagem (ex: 23)
 - `vatIncluded` — `true` se o `amount` já inclui IVA; `false` se é valor base; `null` se isento/não aplicável
 - `documentUrl` — URL pública do comprovativo no Supabase Storage
+- `reconciliationAmountDiff` — diferença em cêntimos entre `amount` e a soma dos `entityLinks` associados. `null` quando não aplicável (conciliação exacta ou movimento por classificar).
 
 Risco inicial para débitos: `< 50€ → low`, `>= 50€ → medium`, `>= 500€ → high`, `>= 5000€ → critical`.
+
+Métodos de domínio relevantes:
+- `classify(opts)` — classificação manual com justificação livre.
+- `multiReconcile(amountDiff)` — conciliação contra uma ou mais entidades. Se `|amountDiff| ≤ PARTIAL_TOLERANCE_CENTS (100 cts)` → `conciliado_com_fatura`; caso contrário → `conciliado_parcial`. Limpa `matchedEntityId/Type` (a ligação detalha via `BankMovementEntityLink`).
+- `markAsSuggestion(...)` — marca como sugestão pendente de confirmação.
+- `ignore(reason)` — exclui com motivo obrigatório.
+
+**BankMovementEntityLink**
+Registo de ligação individual entre um `BankMovement` e uma entidade do sistema (fatura ou conta a pagar) no contexto de uma conciliação. Cada conciliação pode ter um ou mais links. Guardado na tabela `bank_movement_entity_links`.
+
+Campos:
+- `movementId` — FK para `bank_movements`
+- `entityType` — `"invoice"` ou `"payable_entry"`
+- `entityId` — ID da entidade no sistema
+- `amountCents` — montante da entidade no momento da conciliação (snapshot imutável)
+- `entityLabel` — label legível, ex: `"Galp Energia — FT 2026/42"`
+
+Ao re-conciliar um movimento, os links anteriores são apagados e substituídos pelos novos.
 
 **BankReconciliationRule**
 Regra de matching automático por `descriptionContains` (case-insensitive). Ao fazer match, classifica o movimento com o `justificationType` e `riskLevel` da regra.
@@ -85,7 +109,8 @@ Hash SHA-256 de `accountNumber + bookingDate + description + amount + movementTy
 
 | Estado | Conta como resolvido? | Quando ocorre |
 |---|---|---|
-| `conciliado_com_fatura` | Sim | Ligado a fatura/payable do sistema |
+| `conciliado_com_fatura` | Sim | Ligado a fatura/payable(s) com diferença ≤ 1€ |
+| `conciliado_parcial` | **Não** | Ligado a entidades mas com diferença de montante > 1€ |
 | `conciliado_sem_fatura` | Sim | Justificado sem entidade (comprovativo, taxa, etc.) |
 | `transferencia_interna` | Sim | Classificado como transferência entre contas |
 | `ignorado_com_motivo` | Sim | Excluído da conciliação com razão registada |
@@ -93,6 +118,8 @@ Hash SHA-256 de `accountNumber + bookingDate + description + amount + movementTy
 | `pendente_de_documento` | Não | Classificado mas sem comprovativo obrigatório |
 | `saida_nao_justificada` | Não | Débito sem qualquer justificativa (estado inicial) |
 | `divergente` | Não | Valor não bate com a entidade ligada |
+
+`conciliado_parcial` é um estado de atenção: as entidades são conhecidas mas os montantes não fecham. O gestor deve investigar a diferença e re-conciliar ou justificar o remanescente.
 
 ### Tipos de justificação
 
@@ -114,8 +141,8 @@ Hash SHA-256 de `accountNumber + bookingDate + description + amount + movementTy
 
 - `ImportBankStatementPort` — importa CSV/XLSX; cria o import header e os movimentos em bulk; deduplica por hash.
 - `ListBankStatementsPort` — lista imports com filtros opcionais.
-- `GetBankStatementPort` — devolve detalhe do import + movimentos (com filtros) + stats ao vivo.
-- `ReconcileMovementPort` — vincula um movimento a uma fatura ou conta a pagar (→ `conciliado_com_fatura`).
+- `GetBankStatementPort` — devolve detalhe do import + movimentos (com filtros) + stats ao vivo. Cada movimento inclui `entityLinks[]` carregados em bulk (uma query para todos os movimentos).
+- `ReconcileMovementPort` — vincula um movimento a uma ou mais faturas/contas a pagar. Calcula a diferença de montantes e determina o status (`conciliado_com_fatura` se `|diff| ≤ 1€`, `conciliado_parcial` caso contrário). Guarda learning hint apenas para conciliações de entidade única com match exacto.
 - `ClassifyMovementPort` — classificação manual com suporte a `costCenterGroupId`, `costCenterCategoryId`, `supplierId`, `vatRate`, `vatIncluded` e `documentUrl`.
 - `UploadMovementDocumentPort` — faz upload de ficheiro para Supabase Storage e devolve a URL pública; o movimento em si não é alterado (a URL é passada no classify subsequente).
 - `ApplyAutoRulesPort` — aplica todas as regras ativas aos movimentos não resolvidos de um import.
@@ -134,8 +161,10 @@ Hash SHA-256 de `accountNumber + bookingDate + description + amount + movementTy
 - `BankMovementRepositoryPort` — saveBulk, findByStatementId, findById, update, existsByHash.
 - `BankReconciliationRuleRepositoryPort` — save, findAll, findById, update, delete.
 - `DocumentStoragePort` — store(buffer, filename, mimeType) → URL pública.
-- `InvoiceMatchReadPort` *(cross-module)* — findCandidates por amount + date range.
-- `PayableEntryMatchReadPort` *(cross-module)* — findCandidates por amount + date range.
+- `BankMovementEntityLinkRepositoryPort` — `saveAll`, `findByMovementIds` (bulk), `deleteByMovementId` (para re-conciliação).
+- `MovementMatchHintPort` — `save(normalizedDesc, supplierId)` para aprendizagem; `findBySupplierId` para sugestões.
+- `InvoiceMatchReadPort` *(cross-module)* — `findCandidates` por amount + date range; `findByIds` para lookup bulk na reconciliação.
+- `PayableEntryMatchReadPort` *(cross-module)* — `findCandidates` por amount + date range; `findByIds` para lookup bulk na reconciliação.
 
 ---
 
@@ -148,7 +177,8 @@ Hash SHA-256 de `accountNumber + bookingDate + description + amount + movementTy
 ### Saída
 
 - `SupabaseBankStatementImportRepository` → tabela `bank_statement_imports`.
-- `SupabaseBankMovementRepository` → tabela `bank_movements` (inclui os novos campos de classificação: cost_center_group_id, cost_center_category_id, supplier_id, vat_rate, vat_included).
+- `SupabaseBankMovementRepository` → tabela `bank_movements` (inclui campos de classificação: cost_center_group_id, cost_center_category_id, supplier_id, vat_rate, vat_included, reconciliation_amount_diff).
+- `SupabaseBankMovementEntityLinkRepository` → tabela `bank_movement_entity_links`.
 - `SupabaseBankReconciliationRuleRepository` → tabela `bank_reconciliation_rules`.
 - `SupabaseBankDocumentStorageAdapter` → Supabase Storage, bucket `bank-statement-documents`.
 - `SupabaseInvoiceMatchReadAdapter` → cross-module; acede à tabela `invoices` directamente.
@@ -201,6 +231,14 @@ DELETE /api/bank-statements/rules/:ruleId                 remover regra
 
 **CSV parser no adapter** — a lógica de parse de CSV/XLSX vive em `adapters/out/` e é usada pelo controller antes de chamar o use case. O use case recebe `ParsedMovement[]` já estruturado — independente do formato de origem.
 
+**Conciliação multi-entidade via tabela separada** — os links entre um movimento e as suas entidades (faturas/contas) vivem em `bank_movement_entity_links` (e não como array na coluna do movimento). Razões: (1) permite queries inversas (qual movimento pagou esta fatura); (2) auditabilidade — cada link tem o montante da entidade no momento da conciliação; (3) re-conciliação limpa: `deleteByMovementId` + `saveAll` sem UPDATE de arrays. A entidade `BankMovement` não carrega os links em memória — são carregados pelo use case quando necessário.
+
+**`conciliado_parcial` não é resolvido** — este estado não consta em `RESOLVED_STATUSES` propositalmente. O progresso da conciliação deve reflectir que ainda há uma diferença por explicar. O gestor tem de investigar e re-conciliar ou criar uma segunda justificação para o remanescente.
+
+**Tolerância de 1€ na conciliação** — `PARTIAL_TOLERANCE_CENTS = 100` (1,00€). Cobre diferenças de arredondamento ou pequenas taxas bancárias sem marcar o movimento como parcial. Decidido empiricamente com base em casos reais de extratos portugueses.
+
+**Learning hints só para single full match** — a aprendizagem automática de descrição → fornecedor só dispara quando (1) a conciliação é de entidade única e (2) o match é completo (diff ≤ 1€). Conciliações multi-entidade ou parciais são ambíguas e não devem ser aprendidas.
+
 ---
 
 ## Como testar
@@ -215,7 +253,6 @@ npx jest --testPathPattern="bank-statements|list-invoices"
 
 ## Pontos de atenção / dívidas conhecidas
 
-- **Migration 062 pendente de aplicação** em Supabase (`062_bank_statements_classification.sql`) — adiciona `cost_center_group_id`, `cost_center_category_id`, `supplier_id`, `vat_rate`, `vat_included` à tabela `bank_movements`.
 - CSV parser suporta formato Millennium BCP; outros bancos podem requerer adapter próprio.
 - `suggest-matches` faz N queries ao DB (uma por movimento não resolvido); para volumes grandes, considerar batch query futura.
 - `calculatedClosingBalance` no `ListBankStatementsUseCase` usa o valor persistido (pode estar desatualizado se movimentos forem alterados sem update ao header); o `GetBankStatementUseCase` recalcula ao vivo.

@@ -11,6 +11,30 @@ import type {
 export class SupabaseInvoiceMatchReadAdapter implements InvoiceMatchReadPort {
   constructor(private readonly supabase: SupabaseClient) {}
 
+  private mapRow(row: Record<string, unknown>): InvoiceMatchCandidate {
+    return {
+      id: row.id as string,
+      supplierId: (row.supplier_id as string | null) ?? null,
+      supplierName: row.supplier_name as string,
+      invoiceNumber: row.invoice_number as string,
+      totalWithVat: row.total_with_vat as number,
+      invoiceDate: row.invoice_date as string,
+      dueDate: (row.due_date as string | null) ?? null,
+      paidAt: (row.paid_at as string | null) ?? null,
+      status: row.status as string,
+    };
+  }
+
+  async findByIds(ids: string[]): Promise<InvoiceMatchCandidate[]> {
+    if (ids.length === 0) return [];
+    const { data, error } = await this.supabase
+      .from("invoices")
+      .select("id, supplier_id, supplier_name, invoice_number, total_with_vat, invoice_date, due_date, paid_at, status")
+      .in("id", ids);
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((row) => this.mapRow(row as Record<string, unknown>));
+  }
+
   async findCandidates(opts: {
     amountCents: number;
     dateFrom: string;
@@ -32,19 +56,6 @@ export class SupabaseInvoiceMatchReadAdapter implements InvoiceMatchReadPort {
 
     if (error) throw new Error(error.message);
 
-    return (data ?? []).map((row) => {
-      const r = row as Record<string, unknown>;
-      return {
-        id: r.id as string,
-        supplierId: (r.supplier_id as string | null) ?? null,
-        supplierName: r.supplier_name as string,
-        invoiceNumber: r.invoice_number as string,
-        totalWithVat: r.total_with_vat as number,
-        invoiceDate: r.invoice_date as string,
-        dueDate: (r.due_date as string | null) ?? null,
-        paidAt: (r.paid_at as string | null) ?? null,
-        status: r.status as string,
-      };
-    });
+    return (data ?? []).map((row) => this.mapRow(row as Record<string, unknown>));
   }
 }

@@ -11,6 +11,29 @@ import type {
 export class SupabasePayableEntryMatchReadAdapter implements PayableEntryMatchReadPort {
   constructor(private readonly supabase: SupabaseClient) {}
 
+  private mapRow(row: Record<string, unknown>): PayableEntryMatchCandidate {
+    return {
+      id: row.id as string,
+      supplierId: (row.supplier_id as string | null) ?? null,
+      supplierName: row.supplier_name as string,
+      description: row.description as string,
+      amount: row.amount as number,
+      dueDate: row.due_date as string,
+      status: row.status as string,
+      invoiceId: (row.invoice_id as string | null) ?? null,
+    };
+  }
+
+  async findByIds(ids: string[]): Promise<PayableEntryMatchCandidate[]> {
+    if (ids.length === 0) return [];
+    const { data, error } = await this.supabase
+      .from("payable_entries")
+      .select("id, supplier_id, supplier_name, description, amount, due_date, status, invoice_id")
+      .in("id", ids);
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((row) => this.mapRow(row as Record<string, unknown>));
+  }
+
   async findCandidates(opts: {
     amountCents: number;
     dateFrom: string;
@@ -31,18 +54,6 @@ export class SupabasePayableEntryMatchReadAdapter implements PayableEntryMatchRe
 
     if (error) throw new Error(error.message);
 
-    return (data ?? []).map((row) => {
-      const r = row as Record<string, unknown>;
-      return {
-        id: r.id as string,
-        supplierId: (r.supplier_id as string | null) ?? null,
-        supplierName: r.supplier_name as string,
-        description: r.description as string,
-        amount: r.amount as number,
-        dueDate: r.due_date as string,
-        status: r.status as string,
-        invoiceId: (r.invoice_id as string | null) ?? null,
-      };
-    });
+    return (data ?? []).map((row) => this.mapRow(row as Record<string, unknown>));
   }
 }

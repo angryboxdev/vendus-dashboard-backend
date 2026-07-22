@@ -65,4 +65,24 @@ describe("ReconciliationCalculatorService", () => {
     expect(stats.statusCounts["conciliado_sem_fatura"]).toBe(1);
     expect(stats.statusCounts["saida_nao_justificada"]).toBe(1);
   });
+
+  it("conciliado_parcial counts as unresolved for progress", () => {
+    const partial = BankMovement.create({
+      statementImportId: "s1",
+      bookingDate: new Date("2026-07-01T00:00:00.000Z"),
+      valueDate: new Date("2026-07-01T00:00:00.000Z"),
+      description: "PAGAMENTO GALP",
+      amount: 70_000,
+      balanceAfter: 0,
+      movementType: "debit",
+      deduplicationHash: "h-partial",
+    }).multiReconcile(2_000); // diff > 100 → conciliado_parcial
+
+    const resolved = makeMovement({ type: "debit", amount: 1_000, hash: "h-resolved", resolved: true });
+
+    const stats = calculator.compute(0, [partial, resolved]);
+    expect(stats.statusCounts["conciliado_parcial"]).toBe(1);
+    expect(stats.resolvedCount).toBe(1); // partial does NOT count as resolved
+    expect(stats.reconciliationProgress).toBe(50);
+  });
 });

@@ -10,6 +10,10 @@ export class FakePayableEntryMatchRead implements PayableEntryMatchReadPort {
     this.candidates = candidates;
   }
 
+  async findByIds(ids: string[]): Promise<PayableEntryMatchCandidate[]> {
+    return this.candidates.filter((c) => ids.includes(c.id));
+  }
+
   async findCandidates(opts: {
     amountCents: number;
     dateFrom: string;

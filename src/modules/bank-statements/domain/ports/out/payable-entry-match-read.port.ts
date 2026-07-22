@@ -25,4 +25,7 @@ export interface PayableEntryMatchReadPort {
     dateTo: string; // YYYY-MM-DD
     toleranceCents?: number;
   }): Promise<PayableEntryMatchCandidate[]>;
+
+  /** Returns payable entries by their IDs regardless of status or date — used when reconciling. */
+  findByIds(ids: string[]): Promise<PayableEntryMatchCandidate[]>;
 }
