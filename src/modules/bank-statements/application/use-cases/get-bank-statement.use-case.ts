@@ -10,14 +10,14 @@ import type {
 } from "../../domain/ports/in/bank-statement.ports.js";
 import type { BankMovement } from "../../domain/entities/bank-movement.js";
 
-function toMovementDto(m: BankMovement, links: BankMovementEntityLink[]): BankMovementDto {
+function toMovementDto(m: BankMovement, links: BankMovementEntityLink[], computedBalanceAfter: number): BankMovementDto {
   return {
     id: m.id,
     bookingDate: m.bookingDate,
     valueDate: m.valueDate,
     description: m.description,
     amount: m.amount,
-    balanceAfter: m.balanceAfter,
+    balanceAfter: computedBalanceAfter,
     currency: m.currency,
     movementType: m.movementType,
     reconciliationStatus: m.reconciliationStatus,
@@ -78,6 +78,14 @@ export class GetBankStatementUseCase implements GetBankStatementPort {
       linksByMovementId.set(link.movementId, existing);
     }
 
+    // Compute running balance from openingBalance so that edits to openingBalance
+    // are immediately reflected in the per-movement balanceAfter values.
+    let runningBalance = statement.openingBalance;
+    const movementDtos = movements.map((m) => {
+      runningBalance += m.movementType === "credit" ? m.amount : -m.amount;
+      return toMovementDto(m, linksByMovementId.get(m.id) ?? [], runningBalance);
+    });
+
     return {
       id: statement.id,
       bankName: statement.bankName,
@@ -95,7 +103,7 @@ export class GetBankStatementUseCase implements GetBankStatementPort {
       reconciliationProgress: stats.reconciliationProgress,
       status: statement.status,
       createdAt: statement.createdAt,
-      movements: movements.map((m) => toMovementDto(m, linksByMovementId.get(m.id) ?? [])),
+      movements: movementDtos,
       statusCounts: stats.statusCounts,
     };
   }

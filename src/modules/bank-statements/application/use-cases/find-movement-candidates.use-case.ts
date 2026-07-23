@@ -4,6 +4,7 @@ import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-mov
 import type { InvoiceMatchReadPort } from "../../domain/ports/out/invoice-match-read.port.js";
 import type { PayableEntryMatchReadPort } from "../../domain/ports/out/payable-entry-match-read.port.js";
 import type { MovementMatchHintPort } from "../../domain/ports/out/movement-match-hint.port.js";
+import type { BankMovementEntityLinkRepositoryPort } from "../../domain/ports/out/bank-movement-entity-link-repository.port.js";
 import type {
   FindMovementCandidatesPort,
   MovementCandidate,
@@ -79,6 +80,7 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
     private readonly invoiceRead: InvoiceMatchReadPort,
     private readonly payableRead: PayableEntryMatchReadPort,
     private readonly hint: MovementMatchHintPort,
+    private readonly linkRepo: BankMovementEntityLinkRepositoryPort,
   ) {}
 
   async execute(movementId: string): Promise<MovementCandidate[]> {
@@ -103,11 +105,27 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
       this.payableRead.findCandidates({ amountCents: movement.amount, dateFrom, dateTo, toleranceCents: tolerance }),
     ]);
 
+    // Exclude entities already reconciled with a DIFFERENT movement.
+    // (Same movement is allowed — it may be re-reconciling.)
+    const allInvoiceIds = invoiceCandidates.map((inv) => inv.id);
+    const allPayableIds = payableCandidates.map((pe) => pe.id);
+    const [invoiceLinks, payableLinks] = await Promise.all([
+      allInvoiceIds.length > 0 ? this.linkRepo.findByEntityIds("invoice", allInvoiceIds) : Promise.resolve([]),
+      allPayableIds.length > 0 ? this.linkRepo.findByEntityIds("payable_entry", allPayableIds) : Promise.resolve([]),
+    ]);
+    const reconciledInvoiceIds = new Set(
+      invoiceLinks.filter((l) => l.movementId !== movement.id).map((l) => l.entityId)
+    );
+    const reconciledPayableIds = new Set(
+      payableLinks.filter((l) => l.movementId !== movement.id).map((l) => l.entityId)
+    );
+
     const invoiceCandidateIds = new Set(invoiceCandidates.map((inv) => inv.id));
 
     const results: MovementCandidate[] = [];
 
     for (const inv of invoiceCandidates) {
+      if (reconciledInvoiceIds.has(inv.id)) continue;
       const bestDate = inv.paidAt ?? inv.dueDate ?? inv.invoiceDate;
       const confidence = scoreCandidate({
         candidateAmount: inv.totalWithVat,
@@ -135,6 +153,7 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
     for (const pe of payableCandidates) {
       // Skip payable entries that have an associated invoice already in the candidates list
       if (pe.invoiceId && invoiceCandidateIds.has(pe.invoiceId)) continue;
+      if (reconciledPayableIds.has(pe.id)) continue;
 
       const confidence = scoreCandidate({
         candidateAmount: pe.amount,

@@ -5,6 +5,7 @@ import { FakeBankMovementRepository } from "../fakes/fake-bank-movement-reposito
 import { FakeInvoiceMatchRead } from "../fakes/fake-invoice-match-read.js";
 import { FakePayableEntryMatchRead } from "../fakes/fake-payable-entry-match-read.js";
 import { FakeMovementMatchHint } from "../fakes/fake-movement-match-hint.js";
+import { FakeBankMovementEntityLinkRepository } from "../fakes/fake-bank-movement-entity-link-repository.js";
 import { MovementNotFoundError } from "../../domain/errors.js";
 import type { InvoiceMatchCandidate } from "../../domain/ports/out/invoice-match-read.port.js";
 import type { PayableEntryMatchCandidate } from "../../domain/ports/out/payable-entry-match-read.port.js";
@@ -57,6 +58,7 @@ describe("FindMovementCandidatesUseCase", () => {
   let invoiceRead: FakeInvoiceMatchRead;
   let payableRead: FakePayableEntryMatchRead;
   let hint: FakeMovementMatchHint;
+  let linkRepo: FakeBankMovementEntityLinkRepository;
   let useCase: FindMovementCandidatesUseCase;
   let movement: BankMovement;
 
@@ -65,7 +67,8 @@ describe("FindMovementCandidatesUseCase", () => {
     invoiceRead = new FakeInvoiceMatchRead();
     payableRead = new FakePayableEntryMatchRead();
     hint = new FakeMovementMatchHint();
-    useCase = new FindMovementCandidatesUseCase(movementRepo, invoiceRead, payableRead, hint);
+    linkRepo = new FakeBankMovementEntityLinkRepository();
+    useCase = new FindMovementCandidatesUseCase(movementRepo, invoiceRead, payableRead, hint, linkRepo);
     movement = makeDebit();
     await movementRepo.saveBulk([movement]);
   });
@@ -167,6 +170,62 @@ describe("FindMovementCandidatesUseCase", () => {
     const pe = result.find((c) => c.entityType === "payable_entry");
     expect(inv!.supplierId).toBe("sup-edp");
     expect(pe!.supplierId).toBe("sup-nos");
+  });
+
+  it("excludes invoice already reconciled with another movement", async () => {
+    invoiceRead.setcandidates([
+      makeInvoiceCandidate({ id: "inv-taken" }),
+      makeInvoiceCandidate({ id: "inv-free" }),
+    ]);
+    // Simulate inv-taken already linked to a different movement
+    await linkRepo.saveAll([{
+      id: "link-1",
+      movementId: "other-movement-id",
+      entityType: "invoice",
+      entityId: "inv-taken",
+      amountCents: 12_000,
+      entityLabel: "EDP SA — FT 2026/100",
+    }]);
+
+    const result = await useCase.execute(movement.id);
+    const ids = result.map((c) => c.entityId);
+    expect(ids).not.toContain("inv-taken");
+    expect(ids).toContain("inv-free");
+  });
+
+  it("excludes payable_entry already reconciled with another movement", async () => {
+    payableRead.setCandidates([
+      makePayableCandidate({ id: "pe-taken" }),
+      makePayableCandidate({ id: "pe-free" }),
+    ]);
+    await linkRepo.saveAll([{
+      id: "link-1",
+      movementId: "other-movement-id",
+      entityType: "payable_entry",
+      entityId: "pe-taken",
+      amountCents: 12_000,
+      entityLabel: "NOS — Fatura NOS Jul",
+    }]);
+
+    const result = await useCase.execute(movement.id);
+    const ids = result.map((c) => c.entityId);
+    expect(ids).not.toContain("pe-taken");
+    expect(ids).toContain("pe-free");
+  });
+
+  it("does not exclude invoice already linked to the same movement (re-reconciliation)", async () => {
+    invoiceRead.setcandidates([makeInvoiceCandidate({ id: "inv-own" })]);
+    await linkRepo.saveAll([{
+      id: "link-1",
+      movementId: movement.id,
+      entityType: "invoice",
+      entityId: "inv-own",
+      amountCents: 12_000,
+      entityLabel: "EDP SA — FT 2026/100",
+    }]);
+
+    const result = await useCase.execute(movement.id);
+    expect(result.map((c) => c.entityId)).toContain("inv-own");
   });
 
   it("applies hint boost — hinted candidate scores higher than name-only candidate", async () => {

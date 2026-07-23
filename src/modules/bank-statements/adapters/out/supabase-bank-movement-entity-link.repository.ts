@@ -45,6 +45,30 @@ export class SupabaseBankMovementEntityLinkRepository
     });
   }
 
+  async findByEntityIds(
+    entityType: "invoice" | "payable_entry",
+    entityIds: string[]
+  ): Promise<BankMovementEntityLink[]> {
+    if (entityIds.length === 0) return [];
+    const { data, error } = await this.supabase
+      .from("bank_movement_entity_links")
+      .select("id, movement_id, entity_type, entity_id, amount_cents, entity_label")
+      .eq("entity_type", entityType)
+      .in("entity_id", entityIds);
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((row) => {
+      const r = row as Record<string, unknown>;
+      return {
+        id: r.id as string,
+        movementId: r.movement_id as string,
+        entityType: r.entity_type as "invoice" | "payable_entry",
+        entityId: r.entity_id as string,
+        amountCents: r.amount_cents as number,
+        entityLabel: r.entity_label as string,
+      };
+    });
+  }
+
   async deleteByMovementId(movementId: string): Promise<void> {
     const { error } = await this.supabase
       .from("bank_movement_entity_links")

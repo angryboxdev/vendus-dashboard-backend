@@ -70,7 +70,7 @@ export function createBankStatementsModule(): { router: Router } {
   const closeStatement = new CloseStatementUseCase(statementRepo, movementRepo);
   const deleteStatement = new DeleteBankStatementUseCase(statementRepo);
   const updateBalances = new UpdateStatementBalancesUseCase(statementRepo);
-  const findMovementCandidates = new FindMovementCandidatesUseCase(movementRepo, invoiceRead, payableRead, movementHint);
+  const findMovementCandidates = new FindMovementCandidatesUseCase(movementRepo, invoiceRead, payableRead, movementHint, entityLinkRepo);
   const documentStorage = new SupabaseBankDocumentStorageAdapter(supabase);
   const uploadMovementDocument = new UploadMovementDocumentUseCase(movementRepo, documentStorage);
 

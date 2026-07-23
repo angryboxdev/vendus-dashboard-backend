@@ -52,3 +52,10 @@ export class DuplicateMovementError extends Error {
     this.name = "DuplicateMovementError";
   }
 }
+
+export class EntityAlreadyReconciledError extends Error {
+  constructor(entityType: string, entityId: string) {
+    super(`${entityType} ${entityId} is already reconciled with another movement`);
+    this.name = "EntityAlreadyReconciledError";
+  }
+}

@@ -6,7 +6,7 @@ import { FakeMovementMatchHint } from "../fakes/fake-movement-match-hint.js";
 import { FakeInvoiceMatchRead } from "../fakes/fake-invoice-match-read.js";
 import { FakePayableEntryMatchRead } from "../fakes/fake-payable-entry-match-read.js";
 import { FakeBankMovementEntityLinkRepository } from "../fakes/fake-bank-movement-entity-link-repository.js";
-import { MovementNotFoundError } from "../../domain/errors.js";
+import { MovementNotFoundError, EntityAlreadyReconciledError } from "../../domain/errors.js";
 import type { InvoiceMatchCandidate } from "../../domain/ports/out/invoice-match-read.port.js";
 import type { PayableEntryMatchCandidate } from "../../domain/ports/out/payable-entry-match-read.port.js";
 
@@ -253,5 +253,64 @@ describe("ReconcileMovementUseCase", () => {
         entityLinks: [{ entityType: "invoice", entityId: "inv-ghost" }],
       })
     ).rejects.toThrow("Invoice not found: inv-ghost");
+  });
+
+  it("throws EntityAlreadyReconciledError when payable_entry is already linked to another movement", async () => {
+    const otherMovement = makeDebit(70_000, "hash-other");
+    await repo.saveBulk([otherMovement]);
+    payableRead.setCandidates([makePayable("pe-taken", 70_000)]);
+
+    await useCase.execute({
+      movementId: otherMovement.id,
+      entityLinks: [{ entityType: "payable_entry", entityId: "pe-taken" }],
+    });
+
+    await expect(
+      useCase.execute({
+        movementId: movement.id,
+        entityLinks: [{ entityType: "payable_entry", entityId: "pe-taken" }],
+      })
+    ).rejects.toThrow(EntityAlreadyReconciledError);
+  });
+
+  it("throws EntityAlreadyReconciledError when invoice is already linked to another movement", async () => {
+    const otherMovement = makeDebit(70_000, "hash-other");
+    await repo.saveBulk([otherMovement]);
+    invoiceRead.setcandidates([makeInvoice("inv-taken", 70_000)]);
+
+    // Reconcile the other movement with inv-taken first
+    await useCase.execute({
+      movementId: otherMovement.id,
+      entityLinks: [{ entityType: "invoice", entityId: "inv-taken" }],
+    });
+
+    // Now try to reconcile movement with the same invoice → should fail
+    await expect(
+      useCase.execute({
+        movementId: movement.id,
+        entityLinks: [{ entityType: "invoice", entityId: "inv-taken" }],
+      })
+    ).rejects.toThrow(EntityAlreadyReconciledError);
+  });
+
+  it("allows re-reconciling the same movement with its own invoice", async () => {
+    invoiceRead.setcandidates([makeInvoice("inv-1", 70_000), makeInvoice("inv-2", 70_000)]);
+
+    // First reconciliation
+    await useCase.execute({
+      movementId: movement.id,
+      entityLinks: [{ entityType: "invoice", entityId: "inv-1" }],
+    });
+
+    // Re-reconcile with a different invoice — should succeed (replaces old link)
+    await expect(
+      useCase.execute({
+        movementId: movement.id,
+        entityLinks: [{ entityType: "invoice", entityId: "inv-2" }],
+      })
+    ).resolves.toBeUndefined();
+
+    expect(linkRepo.all()).toHaveLength(1);
+    expect(linkRepo.all()[0]!.entityId).toBe("inv-2");
   });
 });

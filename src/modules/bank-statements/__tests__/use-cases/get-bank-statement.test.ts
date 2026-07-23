@@ -119,6 +119,26 @@ describe("GetBankStatementUseCase", () => {
     expect(result!.balanceDifference).toBe(105_000 - 95_000); // 10_000
   });
 
+  it("computes balanceAfter dynamically from openingBalance", async () => {
+    const debit = makeDebit(statement.id, 5_000, "h1");
+    const credit = BankMovement.create({
+      statementImportId: statement.id,
+      bookingDate: new Date("2026-07-10"),
+      valueDate: new Date("2026-07-10"),
+      description: "TRANSFERENCIA RECEBIDA",
+      amount: 10_000,
+      balanceAfter: 0, // raw stored value is irrelevant
+      movementType: "credit",
+      deduplicationHash: "h2",
+    });
+    await movementRepo.saveBulk([debit, credit]);
+
+    const result = await useCase.execute(statement.id);
+    // openingBalance=100_000, debit 5_000 → 95_000, credit 10_000 → 105_000
+    expect(result!.movements[0]!.balanceAfter).toBe(95_000);
+    expect(result!.movements[1]!.balanceAfter).toBe(105_000);
+  });
+
   it("statusCounts reflects movement statuses", async () => {
     const debit = makeDebit(statement.id, 5_000, "h1");
     await movementRepo.saveBulk([debit]);

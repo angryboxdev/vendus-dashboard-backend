@@ -1,4 +1,4 @@
-import { MovementNotFoundError } from "../../domain/errors.js";
+import { MovementNotFoundError, EntityAlreadyReconciledError } from "../../domain/errors.js";
 import { normalizeBankDescription } from "../../domain/utils/bank-description.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
 import type { MovementMatchHintPort } from "../../domain/ports/out/movement-match-hint.port.js";
@@ -36,10 +36,20 @@ export class ReconcileMovementUseCase implements ReconcileMovementPort {
       .filter((l) => l.entityType === "payable_entry")
       .map((l) => l.entityId);
 
-    const [invoices, payables] = await Promise.all([
+    // Guard: ensure none of the entities are already reconciled with a DIFFERENT movement.
+    // (Re-reconciling the same movement is allowed — its old links will be replaced.)
+    const [existingInvoiceLinks, existingPayableLinks, invoices, payables] = await Promise.all([
+      invoiceIds.length > 0 ? this.linkRepo.findByEntityIds("invoice", invoiceIds) : Promise.resolve([]),
+      payableIds.length > 0 ? this.linkRepo.findByEntityIds("payable_entry", payableIds) : Promise.resolve([]),
       invoiceIds.length > 0 ? this.invoiceRead.findByIds(invoiceIds) : Promise.resolve([]),
       payableIds.length > 0 ? this.payableRead.findByIds(payableIds) : Promise.resolve([]),
     ]);
+
+    for (const link of [...existingInvoiceLinks, ...existingPayableLinks]) {
+      if (link.movementId !== command.movementId) {
+        throw new EntityAlreadyReconciledError(link.entityType, link.entityId);
+      }
+    }
 
     const invoiceMap = new Map(invoices.map((i) => [i.id, i]));
     const payableMap = new Map(payables.map((p) => [p.id, p]));
