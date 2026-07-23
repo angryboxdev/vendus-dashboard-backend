@@ -4,6 +4,21 @@ import type {
   BankMovementEntityLinkRepositoryPort,
 } from "../../domain/ports/out/bank-movement-entity-link-repository.port.js";
 
+const SELECT_COLS =
+  "id, movement_id, entity_type, entity_id, amount_cents, allocated_amount_cents, entity_label";
+
+function mapRow(row: Record<string, unknown>): BankMovementEntityLink {
+  return {
+    id: row.id as string,
+    movementId: row.movement_id as string,
+    entityType: row.entity_type as "invoice" | "payable_entry",
+    entityId: row.entity_id as string,
+    amountCents: row.amount_cents as number,
+    allocatedAmountCents: row.allocated_amount_cents as number,
+    entityLabel: row.entity_label as string,
+  };
+}
+
 export class SupabaseBankMovementEntityLinkRepository
   implements BankMovementEntityLinkRepositoryPort
 {
@@ -17,6 +32,7 @@ export class SupabaseBankMovementEntityLinkRepository
       entity_type: l.entityType,
       entity_id: l.entityId,
       amount_cents: l.amountCents,
+      allocated_amount_cents: l.allocatedAmountCents,
       entity_label: l.entityLabel,
     }));
     const { error } = await this.supabase
@@ -29,20 +45,10 @@ export class SupabaseBankMovementEntityLinkRepository
     if (movementIds.length === 0) return [];
     const { data, error } = await this.supabase
       .from("bank_movement_entity_links")
-      .select("id, movement_id, entity_type, entity_id, amount_cents, entity_label")
+      .select(SELECT_COLS)
       .in("movement_id", movementIds);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((row) => {
-      const r = row as Record<string, unknown>;
-      return {
-        id: r.id as string,
-        movementId: r.movement_id as string,
-        entityType: r.entity_type as "invoice" | "payable_entry",
-        entityId: r.entity_id as string,
-        amountCents: r.amount_cents as number,
-        entityLabel: r.entity_label as string,
-      };
-    });
+    return (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
   }
 
   async findByEntityIds(
@@ -52,21 +58,11 @@ export class SupabaseBankMovementEntityLinkRepository
     if (entityIds.length === 0) return [];
     const { data, error } = await this.supabase
       .from("bank_movement_entity_links")
-      .select("id, movement_id, entity_type, entity_id, amount_cents, entity_label")
+      .select(SELECT_COLS)
       .eq("entity_type", entityType)
       .in("entity_id", entityIds);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((row) => {
-      const r = row as Record<string, unknown>;
-      return {
-        id: r.id as string,
-        movementId: r.movement_id as string,
-        entityType: r.entity_type as "invoice" | "payable_entry",
-        entityId: r.entity_id as string,
-        amountCents: r.amount_cents as number,
-        entityLabel: r.entity_label as string,
-      };
-    });
+    return (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
   }
 
   async deleteByMovementId(movementId: string): Promise<void> {

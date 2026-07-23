@@ -40,6 +40,7 @@ function toMovementDto(m: BankMovement, links: BankMovementEntityLink[], compute
       entityType: l.entityType,
       entityId: l.entityId,
       amountCents: l.amountCents,
+      allocatedAmountCents: l.allocatedAmountCents,
       entityLabel: l.entityLabel,
     })),
     reconciliationAmountDiff: m.reconciliationAmountDiff,

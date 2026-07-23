@@ -1,7 +1,7 @@
 # Módulo: bank-statements
 
 > Status: ativo
-> Última atualização: 2026-07-23
+> Última atualização: 2026-07-30
 
 ---
 
@@ -22,12 +22,14 @@ Gestor Financeiro
 3. Aplica regras automáticas (ex: "COM.MAN.CONTA" → taxa bancária)
 4. Sistema sugere conciliações com faturas e contas a pagar existentes
 5. Gestor revisa movimento a movimento:
-   a. "Conciliar com sistema" — selecciona uma ou mais faturas/contas a pagar
-      que juntas justificam o pagamento; o sistema mostra a diferença em tempo real.
-      O sistema só apresenta faturas ainda não conciliadas — faturas já associadas
-      a outro movimento são automaticamente ocultadas, evitando registar o mesmo
-      pagamento duas vezes. Alterar a conciliação do próprio movimento (ex: trocar
-      de fatura) é sempre permitido.
+   a. "Conciliar com sistema" — selecciona uma ou mais faturas/contas a pagar e
+      indica quanto deste movimento paga cada uma. O sistema mostra em tempo real
+      quanto já foi alocado e quanto resta por justificar. Só aparecem entidades
+      com saldo em aberto (faturas totalmente pagas por outros movimentos são
+      ocultadas). Suporta pagamentos parciais (ex: este movimento paga metade de
+      uma fatura), pagamentos agrupados (ex: um único débito cobre três faturas)
+      e pagamentos faseados (ex: a mesma fatura paga em dois movimentos distintos).
+      Alterar a conciliação do próprio movimento é sempre permitido.
    b. "Justificar despesa" — sobe comprovativo, indica fornecedor (opcional),
       centro de custo e IVA; para tipos sem documento (ex: transferência interna)
       preenche apenas as notas
@@ -41,7 +43,7 @@ Gestor Financeiro
 
 - **Extrato bancário** — ficheiro CSV/XLSX exportado do banco com os movimentos de um período.
 - **Conciliação** — processo de verificar que cada movimento bancário tem uma explicação válida no sistema.
-- **Conciliação multi-entidade** — um único pagamento bancário pode corresponder a várias faturas em simultâneo (ex: pagamento agregado ao mesmo fornecedor). O gestor selecciona as faturas que juntas compõem o total; o sistema valida se os montantes fecham.
+- **Conciliação multi-entidade** — um único pagamento bancário pode cobrir várias faturas em simultâneo (ex: pagamento agregado ao mesmo fornecedor). O gestor selecciona cada fatura e indica quanto deste pagamento lhe corresponde; o sistema valida que a soma não excede o valor do movimento e que cada fatura não fica a receber mais do que o seu saldo em aberto. Também suporta o inverso: a mesma fatura paga por vários movimentos em momentos diferentes (pagamento faseado).
 - **Conciliação parcial** — movimento já associado a entidades, mas com diferença de montante superior a 1€. Sinaliza que algo ficou por explicar: pode faltar uma fatura, ou o pagamento incluiu uma taxa não registada.
 - **Saldo calculado** — saldo que o sistema computa somando/subtraindo os movimentos; deve coincidir com o saldo final do extrato.
 - **Saída não justificada** — débito sem fatura, sem regra, sem contrato e sem explicação manual.
@@ -50,7 +52,7 @@ Gestor Financeiro
 - **Comprovativo** — ficheiro (PDF ou imagem) que justifica uma despesa sem fatura no sistema (ex: recibo de uma compra pontual, taxa bancária manual).
 - **Centro de custo** — classificação interna da despesa (grupo + categoria) para efeitos de DRE e cashflow; obrigatório em todos os tipos de justificação que não sejam transferências internas.
 - **IVA** — registado como taxa percentual + indicador de inclusão no valor (incluído/excluído/isento); os relatórios financeiros usam esta informação para calcular o valor líquido da despesa.
-- **Exclusividade de conciliação** — cada fatura ou conta a pagar só pode estar associada a um movimento bancário de cada vez. O sistema impede que a mesma fatura apareça em dois movimentos diferentes, garantindo que um pagamento não seja registado em duplicado. Se o gestor tentar conciliar um movimento com uma fatura já tomada, recebe um erro imediato.
+- **Saldo em aberto** — o que falta pagar de uma fatura ou conta a pagar, depois de descontar o que outros movimentos bancários já lhe alocaram. Se uma fatura de 1.000 € tiver um pagamento parcial de 600 € registado noutro movimento, o saldo em aberto é 400 €. O sistema apresenta sempre este valor atualizado ao gestor, para que saiba exatamente quanto pode ainda imputar a essa fatura.
 
 ---
 
@@ -87,16 +89,17 @@ Métodos de domínio relevantes:
 - `ignore(reason)` — exclui com motivo obrigatório.
 
 **BankMovementEntityLink**
-Registo de ligação individual entre um `BankMovement` e uma entidade do sistema (fatura ou conta a pagar) no contexto de uma conciliação. Cada conciliação pode ter um ou mais links. Guardado na tabela `bank_movement_entity_links`.
+Registo de ligação individual entre um `BankMovement` e uma entidade do sistema (fatura ou conta a pagar) no contexto de uma conciliação. Cada conciliação pode ter um ou mais links, e a mesma entidade pode ter links de vários movimentos diferentes (pagamento faseado). Guardado na tabela `bank_movement_entity_links`.
 
 Campos:
 - `movementId` — FK para `bank_movements`
 - `entityType` — `"invoice"` ou `"payable_entry"`
 - `entityId` — ID da entidade no sistema
-- `amountCents` — montante da entidade no momento da conciliação (snapshot imutável)
+- `amountCents` — total da entidade no momento da conciliação (snapshot histórico imutável)
+- `allocatedAmountCents` — porção do `amount` do movimento atribuída a esta entidade; `<= amountCents` e `<= saldo em aberto` no momento da conciliação
 - `entityLabel` — label legível, ex: `"Galp Energia — FT 2026/42"`
 
-Ao re-conciliar um movimento, os links anteriores são apagados e substituídos pelos novos.
+Ao re-conciliar um movimento, os links anteriores são apagados e substituídos pelos novos. O cálculo do saldo em aberto de cada entidade factora de volta as alocações saintes do próprio movimento, evitando falsos erros de over-allocation.
 
 **BankReconciliationRule**
 Regra de matching automático por `descriptionContains` (case-insensitive). Ao fazer match, classifica o movimento com o `justificationType` e `riskLevel` da regra.
@@ -147,12 +150,12 @@ Hash SHA-256 de `accountNumber + bookingDate + description + amount + movementTy
 - `ImportBankStatementPort` — importa CSV/XLSX; cria o import header e os movimentos em bulk; deduplica por hash.
 - `ListBankStatementsPort` — lista imports com filtros opcionais.
 - `GetBankStatementPort` — devolve detalhe do import + movimentos (com filtros) + stats ao vivo. Cada movimento inclui `entityLinks[]` carregados em bulk (uma query para todos os movimentos). O campo `balanceAfter` de cada movimento é **calculado dinamicamente** a partir do `openingBalance` do extrato + soma acumulada dos movimentos em ordem cronológica — não lido do valor raw guardado em DB. Isto garante que edições ao saldo inicial se reflectem imediatamente na coluna "Saldo após".
-- `ReconcileMovementPort` — vincula um movimento a uma ou mais faturas/contas a pagar. Calcula a diferença de montantes e determina o status (`conciliado_com_fatura` se `|diff| ≤ 1€`, `conciliado_parcial` caso contrário). Guarda learning hint apenas para conciliações de entidade única com match exacto. **Guard de exclusividade:** lança `EntityAlreadyReconciledError` (HTTP 409) se qualquer fatura ou conta a pagar já estiver ligada a um movimento diferente; re-conciliar o mesmo movimento é sempre permitido.
+- `ReconcileMovementPort` — vincula um movimento a uma ou mais faturas/contas a pagar com alocação explícita por entidade. Validações: (1) `allocatedAmountCents > 0` por link; (2) `sum(allocatedAmountCents) ≤ movement.amount`; (3) por entidade, `allocatedAmountCents ≤ saldo em aberto` (total da entidade − alocações existentes de outros movimentos + alocações saintes do próprio movimento para re-conciliação). Determina o status: `conciliado_com_fatura` se `|diff| ≤ 1€`, `conciliado_parcial` caso contrário. Guarda learning hint apenas para conciliações de entidade única com match exacto de montante.
 - `ClassifyMovementPort` — classificação manual com suporte a `costCenterGroupId`, `costCenterCategoryId`, `supplierId`, `vatRate`, `vatIncluded` e `documentUrl`.
 - `UploadMovementDocumentPort` — faz upload de ficheiro para Supabase Storage e devolve a URL pública; o movimento em si não é alterado (a URL é passada no classify subsequente).
 - `ApplyAutoRulesPort` — aplica todas as regras ativas aos movimentos não resolvidos de um import.
 - `SuggestMatchesPort` — gera sugestões de correspondência por valor + data + nome do fornecedor.
-- `FindMovementCandidatesPort` — devolve candidatos pontuados (fatura + conta a pagar) para um movimento específico; usado pelo drawer de classificação. **Filtro de conciliados:** entidades já ligadas a um movimento diferente são excluídas automaticamente da lista de candidatos; entidades ligadas ao próprio movimento (re-conciliação) são mantidas.
+- `FindMovementCandidatesPort` — devolve candidatos pontuados (fatura + conta a pagar) para um movimento específico; usado pelo drawer de classificação. Cada candidato inclui `openBalanceCents` (saldo em aberto da entidade). **Filtro por saldo:** entidades com `openBalanceCents = 0` (totalmente alocadas a outros movimentos) são excluídas; entidades com alocação parcial são incluídas com o saldo residual. Payable entries associadas a uma fatura que já aparece na lista de candidatos são omitidas (evita dupla contagem).
 - `CreateReconciliationRulePort` — cria regra automática.
 - `ListReconciliationRulesPort` — lista regras.
 - `DeleteReconciliationRulePort` — remove regra.
@@ -166,7 +169,7 @@ Hash SHA-256 de `accountNumber + bookingDate + description + amount + movementTy
 - `BankMovementRepositoryPort` — saveBulk, findByStatementId, findById, update, existsByHash.
 - `BankReconciliationRuleRepositoryPort` — save, findAll, findById, update, delete.
 - `DocumentStoragePort` — store(buffer, filename, mimeType) → URL pública.
-- `BankMovementEntityLinkRepositoryPort` — `saveAll`, `findByMovementIds` (bulk por movimento), `findByEntityIds(entityType, entityIds)` (bulk por entidade — usado para o guard de exclusividade e filtragem de candidatos), `deleteByMovementId` (para re-conciliação).
+- `BankMovementEntityLinkRepositoryPort` — `saveAll`, `findByMovementIds` (bulk por movimento — usado para carregar links do próprio movimento em re-conciliação), `findByEntityIds(entityType, entityIds)` (bulk por entidade — usado para calcular alocações existentes e saldo em aberto), `deleteByMovementId` (para re-conciliação).
 - `MovementMatchHintPort` — `save(normalizedDesc, supplierId)` para aprendizagem; `findBySupplierId` para sugestões.
 - `InvoiceMatchReadPort` *(cross-module)* — `findCandidates` por amount + date range; `findByIds` para lookup bulk na reconciliação.
 - `PayableEntryMatchReadPort` *(cross-module)* — `findCandidates` por amount + date range; `findByIds` para lookup bulk na reconciliação.
@@ -246,7 +249,7 @@ DELETE /api/bank-statements/rules/:ruleId                 remover regra
 
 **`balanceAfter` calculado ao vivo, não lido do DB** — o valor raw guardado em `bank_movements.balance_after` vem do CSV/XLSX importado e nunca é atualizado. O `GetBankStatementUseCase` recalcula o saldo acumulado a partir do `openingBalance` do extrato para cada movimento devolvido, em ordem cronológica. Assim, qualquer edição manual ao saldo inicial reflecte-se imediatamente sem necessidade de batch update aos movimentos.
 
-**Uma entidade só pode estar ligada a um movimento de cada vez** — `ReconcileMovementUseCase` verifica, antes de persistir, se alguma das faturas ou contas a pagar pedidas já existe em `bank_movement_entity_links` com um `movementId` diferente. Se sim, lança `EntityAlreadyReconciledError` (HTTP 409). Isto evita que a mesma fatura seja "paga" duas vezes em movimentos diferentes. Re-conciliar o mesmo movimento é permitido: os links anteriores são apagados e substituídos (`deleteByMovementId` + `saveAll`). O mesmo filtro é aplicado no `FindMovementCandidatesUseCase` para não apresentar como candidatos entidades já tomadas.
+**Modelo de alocação N:M em vez de exclusividade 1:1** — a ligação entre movimento e entidade armazena `allocatedAmountCents` (porção do movimento que paga aquela entidade) separado de `amountCents` (total da entidade, snapshot). Isto suporta: (1) pagamento parcial — um movimento cobre parte de uma fatura; (2) pagamento agrupado — um movimento cobre várias faturas; (3) pagamento faseado — várias movimentos cobrem a mesma fatura em prestações. A validação não é de exclusividade mas de saldo: `allocatedAmountCents ≤ openBalance` onde `openBalance = entityTotal − sum(todasAlocações) + alocaçõesSaintes`. O guard `EntityAlreadyReconciledError` foi removido. `FindMovementCandidatesUseCase` filtra entidades com `openBalance = 0` (totalmente pagas) mas inclui as com saldo residual, devolvendo `openBalanceCents` em cada candidato para o UI exibir.
 
 ---
 

@@ -84,7 +84,8 @@ export interface EntityLinkDto {
   id: string;
   entityType: "invoice" | "payable_entry";
   entityId: string;
-  amountCents: number;
+  amountCents: number;           // entity's total at time of reconciliation
+  allocatedAmountCents: number;  // portion of movement allocated to this entity
   entityLabel: string;
 }
 
@@ -140,6 +141,8 @@ export interface GetBankStatementPort {
 export interface EntityLinkInput {
   entityType: "invoice" | "payable_entry";
   entityId: string;
+  /** Amount of the movement allocated to this entity (cents). Must be > 0 and ≤ entity open balance. */
+  allocatedAmountCents: number;
   /** supplierId — used to save the description→supplier learning hint. */
   supplierId?: string | null;
 }
@@ -284,8 +287,9 @@ export interface MovementCandidate {
   entityId: string;
   entityLabel: string;
   supplierId: string | null;
-  amountCents: number;
-  date: string; // best available date (paid_at ?? due_date ?? invoice_date)
+  amountCents: number;       // entity's full amount (total with VAT)
+  openBalanceCents: number;  // unpaid balance = total - sum of existing allocations
+  date: string;              // best available date (paid_at ?? due_date ?? invoice_date)
   confidence: number;
 }
 

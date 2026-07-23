@@ -6,7 +6,7 @@ import { FakeMovementMatchHint } from "../fakes/fake-movement-match-hint.js";
 import { FakeInvoiceMatchRead } from "../fakes/fake-invoice-match-read.js";
 import { FakePayableEntryMatchRead } from "../fakes/fake-payable-entry-match-read.js";
 import { FakeBankMovementEntityLinkRepository } from "../fakes/fake-bank-movement-entity-link-repository.js";
-import { MovementNotFoundError, EntityAlreadyReconciledError } from "../../domain/errors.js";
+import { MovementNotFoundError } from "../../domain/errors.js";
 import type { InvoiceMatchCandidate } from "../../domain/ports/out/invoice-match-read.port.js";
 import type { PayableEntryMatchCandidate } from "../../domain/ports/out/payable-entry-match-read.port.js";
 
@@ -75,7 +75,7 @@ describe("ReconcileMovementUseCase", () => {
     await expect(
       useCase.execute({
         movementId: "not-found",
-        entityLinks: [{ entityType: "invoice", entityId: "inv-1" }],
+        entityLinks: [{ entityType: "invoice", entityId: "inv-1", allocatedAmountCents: 70_000 }],
       })
     ).rejects.toThrow(MovementNotFoundError);
   });
@@ -85,7 +85,7 @@ describe("ReconcileMovementUseCase", () => {
 
     await useCase.execute({
       movementId: movement.id,
-      entityLinks: [{ entityType: "invoice", entityId: "inv-42" }],
+      entityLinks: [{ entityType: "invoice", entityId: "inv-42", allocatedAmountCents: 70_000 }],
     });
 
     const updated = await repo.findById(movement.id);
@@ -97,6 +97,7 @@ describe("ReconcileMovementUseCase", () => {
     expect(links).toHaveLength(1);
     expect(links[0]!.entityId).toBe("inv-42");
     expect(links[0]!.amountCents).toBe(70_000);
+    expect(links[0]!.allocatedAmountCents).toBe(70_000);
   });
 
   it("single payable_entry exact match → conciliado_com_fatura", async () => {
@@ -104,7 +105,7 @@ describe("ReconcileMovementUseCase", () => {
 
     await useCase.execute({
       movementId: movement.id,
-      entityLinks: [{ entityType: "payable_entry", entityId: "pe-7" }],
+      entityLinks: [{ entityType: "payable_entry", entityId: "pe-7", allocatedAmountCents: 70_000 }],
     });
 
     const updated = await repo.findById(movement.id);
@@ -114,9 +115,10 @@ describe("ReconcileMovementUseCase", () => {
     const links = linkRepo.all();
     expect(links).toHaveLength(1);
     expect(links[0]!.entityId).toBe("pe-7");
+    expect(links[0]!.allocatedAmountCents).toBe(70_000);
   });
 
-  it("two invoices summing exactly to movement → conciliado_com_fatura", async () => {
+  it("two invoices allocated to exactly match movement → conciliado_com_fatura", async () => {
     invoiceRead.setcandidates([
       makeInvoice("inv-1", 40_000),
       makeInvoice("inv-2", 30_000),
@@ -125,8 +127,8 @@ describe("ReconcileMovementUseCase", () => {
     await useCase.execute({
       movementId: movement.id,
       entityLinks: [
-        { entityType: "invoice", entityId: "inv-1" },
-        { entityType: "invoice", entityId: "inv-2" },
+        { entityType: "invoice", entityId: "inv-1", allocatedAmountCents: 40_000 },
+        { entityType: "invoice", entityId: "inv-2", allocatedAmountCents: 30_000 },
       ],
     });
 
@@ -138,32 +140,26 @@ describe("ReconcileMovementUseCase", () => {
     expect(links).toHaveLength(2);
   });
 
-  it("two invoices summing less than movement (diff > 100 cts) → conciliado_parcial", async () => {
-    invoiceRead.setcandidates([
-      makeInvoice("inv-1", 40_000),
-      makeInvoice("inv-2", 28_000), // total 68_000, diff = 2_000
-    ]);
+  it("movement partially allocated (diff > 100 cts) → conciliado_parcial", async () => {
+    invoiceRead.setcandidates([makeInvoice("inv-1", 100_000)]);
 
     await useCase.execute({
       movementId: movement.id,
-      entityLinks: [
-        { entityType: "invoice", entityId: "inv-1" },
-        { entityType: "invoice", entityId: "inv-2" },
-      ],
+      // Allocating only 68_000 out of 70_000 movement
+      entityLinks: [{ entityType: "invoice", entityId: "inv-1", allocatedAmountCents: 68_000 }],
     });
 
     const updated = await repo.findById(movement.id);
     expect(updated!.reconciliationStatus).toBe("conciliado_parcial");
     expect(updated!.reconciliationAmountDiff).toBe(2_000); // 70_000 - 68_000
-    expect(updated!.isResolved).toBe(false);
   });
 
   it("within tolerance (diff ≤ 100 cts) → conciliado_com_fatura", async () => {
-    invoiceRead.setcandidates([makeInvoice("inv-1", 69_950)]); // diff = 50
+    invoiceRead.setcandidates([makeInvoice("inv-1", 70_000)]);
 
     await useCase.execute({
       movementId: movement.id,
-      entityLinks: [{ entityType: "invoice", entityId: "inv-1" }],
+      entityLinks: [{ entityType: "invoice", entityId: "inv-1", allocatedAmountCents: 69_950 }],
     });
 
     const updated = await repo.findById(movement.id);
@@ -171,30 +167,139 @@ describe("ReconcileMovementUseCase", () => {
     expect(updated!.reconciliationAmountDiff).toBeNull();
   });
 
+  it("partial payment to invoice — invoice keeps open balance", async () => {
+    // Invoice total = 100_000, we pay 70_000 (the movement amount)
+    invoiceRead.setcandidates([makeInvoice("inv-big", 100_000)]);
+
+    await useCase.execute({
+      movementId: movement.id,
+      entityLinks: [{ entityType: "invoice", entityId: "inv-big", allocatedAmountCents: 70_000 }],
+    });
+
+    const updated = await repo.findById(movement.id);
+    // Movement fully used (diff = 0 → conciliado_com_fatura)
+    expect(updated!.reconciliationStatus).toBe("conciliado_com_fatura");
+    expect(updated!.reconciliationAmountDiff).toBeNull();
+
+    const links = linkRepo.all();
+    expect(links[0]!.allocatedAmountCents).toBe(70_000);
+    expect(links[0]!.amountCents).toBe(100_000); // entity total preserved
+  });
+
+  it("N:1 — two movements can allocate to the same invoice", async () => {
+    const movement2 = makeDebit(30_000, "hash-2");
+    await repo.saveBulk([movement2]);
+    invoiceRead.setcandidates([makeInvoice("inv-shared", 100_000)]);
+
+    // First movement allocates 70_000
+    await useCase.execute({
+      movementId: movement.id,
+      entityLinks: [{ entityType: "invoice", entityId: "inv-shared", allocatedAmountCents: 70_000 }],
+    });
+
+    // Second movement allocates the remaining 30_000
+    await useCase.execute({
+      movementId: movement2.id,
+      entityLinks: [{ entityType: "invoice", entityId: "inv-shared", allocatedAmountCents: 30_000 }],
+    });
+
+    const links = linkRepo.all();
+    expect(links).toHaveLength(2);
+    const totalAllocated = links.reduce((s, l) => s + l.allocatedAmountCents, 0);
+    expect(totalAllocated).toBe(100_000);
+  });
+
+  it("throws when allocated amount exceeds invoice open balance", async () => {
+    const movement2 = makeDebit(40_000, "hash-2");
+    await repo.saveBulk([movement2]);
+    invoiceRead.setcandidates([makeInvoice("inv-small", 70_000)]);
+
+    // First movement takes 70_000 (full invoice)
+    await useCase.execute({
+      movementId: movement.id,
+      entityLinks: [{ entityType: "invoice", entityId: "inv-small", allocatedAmountCents: 70_000 }],
+    });
+
+    // Second movement tries to allocate 40_000 but invoice is fully paid (open balance = 0)
+    await expect(
+      useCase.execute({
+        movementId: movement2.id,
+        entityLinks: [{ entityType: "invoice", entityId: "inv-small", allocatedAmountCents: 40_000 }],
+      })
+    ).rejects.toThrow(/exceeds open balance/);
+  });
+
+  it("throws when total allocated exceeds movement amount", async () => {
+    invoiceRead.setcandidates([
+      makeInvoice("inv-1", 50_000),
+      makeInvoice("inv-2", 50_000),
+    ]);
+
+    await expect(
+      useCase.execute({
+        movementId: movement.id,
+        entityLinks: [
+          { entityType: "invoice", entityId: "inv-1", allocatedAmountCents: 50_000 },
+          { entityType: "invoice", entityId: "inv-2", allocatedAmountCents: 50_000 },
+          // total = 100_000, movement = 70_000
+        ],
+      })
+    ).rejects.toThrow(/exceeds movement amount/);
+  });
+
+  it("throws when allocatedAmountCents is zero or negative", async () => {
+    invoiceRead.setcandidates([makeInvoice("inv-1", 70_000)]);
+
+    await expect(
+      useCase.execute({
+        movementId: movement.id,
+        entityLinks: [{ entityType: "invoice", entityId: "inv-1", allocatedAmountCents: 0 }],
+      })
+    ).rejects.toThrow(/allocatedAmountCents must be positive/);
+  });
+
   it("re-reconciling clears old links and saves new ones", async () => {
     invoiceRead.setcandidates([makeInvoice("inv-1", 70_000), makeInvoice("inv-2", 70_000)]);
 
     await useCase.execute({
       movementId: movement.id,
-      entityLinks: [{ entityType: "invoice", entityId: "inv-1" }],
+      entityLinks: [{ entityType: "invoice", entityId: "inv-1", allocatedAmountCents: 70_000 }],
     });
     expect(linkRepo.all()).toHaveLength(1);
 
     await useCase.execute({
       movementId: movement.id,
-      entityLinks: [{ entityType: "invoice", entityId: "inv-2" }],
+      entityLinks: [{ entityType: "invoice", entityId: "inv-2", allocatedAmountCents: 70_000 }],
     });
     const links = linkRepo.all();
     expect(links).toHaveLength(1);
     expect(links[0]!.entityId).toBe("inv-2");
   });
 
-  it("saves hint when single-entity full match and supplierId provided", async () => {
+  it("allows re-reconciling the same movement to the same invoice with a different amount", async () => {
+    invoiceRead.setcandidates([makeInvoice("inv-1", 100_000)]);
+
+    await useCase.execute({
+      movementId: movement.id,
+      entityLinks: [{ entityType: "invoice", entityId: "inv-1", allocatedAmountCents: 60_000 }],
+    });
+
+    await useCase.execute({
+      movementId: movement.id,
+      entityLinks: [{ entityType: "invoice", entityId: "inv-1", allocatedAmountCents: 70_000 }],
+    });
+
+    const links = linkRepo.all();
+    expect(links).toHaveLength(1);
+    expect(links[0]!.allocatedAmountCents).toBe(70_000);
+  });
+
+  it("saves hint when single-entity full-movement match and supplierId provided", async () => {
     invoiceRead.setcandidates([makeInvoice("inv-1", 70_000)]);
 
     await useCase.execute({
       movementId: movement.id,
-      entityLinks: [{ entityType: "invoice", entityId: "inv-1", supplierId: "sup-galp" }],
+      entityLinks: [{ entityType: "invoice", entityId: "inv-1", allocatedAmountCents: 70_000, supplierId: "sup-galp" }],
     });
 
     expect(hint.savedCalls).toHaveLength(1);
@@ -208,20 +313,21 @@ describe("ReconcileMovementUseCase", () => {
     await useCase.execute({
       movementId: movement.id,
       entityLinks: [
-        { entityType: "invoice", entityId: "inv-1", supplierId: "sup-galp" },
-        { entityType: "invoice", entityId: "inv-2", supplierId: "sup-galp" },
+        { entityType: "invoice", entityId: "inv-1", allocatedAmountCents: 35_000, supplierId: "sup-galp" },
+        { entityType: "invoice", entityId: "inv-2", allocatedAmountCents: 35_000, supplierId: "sup-galp" },
       ],
     });
 
     expect(hint.savedCalls).toHaveLength(0);
   });
 
-  it("does not save hint for partial reconciliation", async () => {
-    invoiceRead.setcandidates([makeInvoice("inv-1", 50_000)]); // diff = 20_000
+  it("does not save hint when movement is not fully allocated", async () => {
+    invoiceRead.setcandidates([makeInvoice("inv-1", 100_000)]);
 
     await useCase.execute({
       movementId: movement.id,
-      entityLinks: [{ entityType: "invoice", entityId: "inv-1", supplierId: "sup-galp" }],
+      // 50_000 allocated, 20_000 unallocated → partial
+      entityLinks: [{ entityType: "invoice", entityId: "inv-1", allocatedAmountCents: 50_000, supplierId: "sup-galp" }],
     });
 
     expect(hint.savedCalls).toHaveLength(0);
@@ -232,7 +338,7 @@ describe("ReconcileMovementUseCase", () => {
 
     await useCase.execute({
       movementId: movement.id,
-      entityLinks: [{ entityType: "invoice", entityId: "inv-1" }],
+      entityLinks: [{ entityType: "invoice", entityId: "inv-1", allocatedAmountCents: 70_000 }],
     });
 
     expect(hint.savedCalls).toHaveLength(0);
@@ -250,67 +356,40 @@ describe("ReconcileMovementUseCase", () => {
     await expect(
       useCase.execute({
         movementId: movement.id,
-        entityLinks: [{ entityType: "invoice", entityId: "inv-ghost" }],
+        entityLinks: [{ entityType: "invoice", entityId: "inv-ghost", allocatedAmountCents: 70_000 }],
       })
     ).rejects.toThrow("Invoice not found: inv-ghost");
   });
 
-  it("throws EntityAlreadyReconciledError when payable_entry is already linked to another movement", async () => {
-    const otherMovement = makeDebit(70_000, "hash-other");
-    await repo.saveBulk([otherMovement]);
-    payableRead.setCandidates([makePayable("pe-taken", 70_000)]);
-
-    await useCase.execute({
-      movementId: otherMovement.id,
-      entityLinks: [{ entityType: "payable_entry", entityId: "pe-taken" }],
-    });
+  it("throws when payable_entry not found in adapter", async () => {
+    payableRead.setCandidates([]); // no payables
 
     await expect(
       useCase.execute({
         movementId: movement.id,
-        entityLinks: [{ entityType: "payable_entry", entityId: "pe-taken" }],
+        entityLinks: [{ entityType: "payable_entry", entityId: "pe-ghost", allocatedAmountCents: 70_000 }],
       })
-    ).rejects.toThrow(EntityAlreadyReconciledError);
+    ).rejects.toThrow("Payable entry not found: pe-ghost");
   });
 
-  it("throws EntityAlreadyReconciledError when invoice is already linked to another movement", async () => {
-    const otherMovement = makeDebit(70_000, "hash-other");
-    await repo.saveBulk([otherMovement]);
-    invoiceRead.setcandidates([makeInvoice("inv-taken", 70_000)]);
+  it("mixed invoice + payable_entry in the same reconciliation", async () => {
+    invoiceRead.setcandidates([makeInvoice("inv-1", 40_000)]);
+    payableRead.setCandidates([makePayable("pe-1", 30_000)]);
 
-    // Reconcile the other movement with inv-taken first
-    await useCase.execute({
-      movementId: otherMovement.id,
-      entityLinks: [{ entityType: "invoice", entityId: "inv-taken" }],
-    });
-
-    // Now try to reconcile movement with the same invoice → should fail
-    await expect(
-      useCase.execute({
-        movementId: movement.id,
-        entityLinks: [{ entityType: "invoice", entityId: "inv-taken" }],
-      })
-    ).rejects.toThrow(EntityAlreadyReconciledError);
-  });
-
-  it("allows re-reconciling the same movement with its own invoice", async () => {
-    invoiceRead.setcandidates([makeInvoice("inv-1", 70_000), makeInvoice("inv-2", 70_000)]);
-
-    // First reconciliation
     await useCase.execute({
       movementId: movement.id,
-      entityLinks: [{ entityType: "invoice", entityId: "inv-1" }],
+      entityLinks: [
+        { entityType: "invoice", entityId: "inv-1", allocatedAmountCents: 40_000 },
+        { entityType: "payable_entry", entityId: "pe-1", allocatedAmountCents: 30_000 },
+      ],
     });
 
-    // Re-reconcile with a different invoice — should succeed (replaces old link)
-    await expect(
-      useCase.execute({
-        movementId: movement.id,
-        entityLinks: [{ entityType: "invoice", entityId: "inv-2" }],
-      })
-    ).resolves.toBeUndefined();
+    const updated = await repo.findById(movement.id);
+    expect(updated!.reconciliationStatus).toBe("conciliado_com_fatura");
 
-    expect(linkRepo.all()).toHaveLength(1);
-    expect(linkRepo.all()[0]!.entityId).toBe("inv-2");
+    const links = linkRepo.all();
+    expect(links).toHaveLength(2);
+    expect(links.find((l) => l.entityType === "invoice")!.allocatedAmountCents).toBe(40_000);
+    expect(links.find((l) => l.entityType === "payable_entry")!.allocatedAmountCents).toBe(30_000);
   });
 });

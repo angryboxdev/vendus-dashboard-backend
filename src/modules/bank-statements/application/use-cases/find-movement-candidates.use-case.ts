@@ -105,30 +105,33 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
       this.payableRead.findCandidates({ amountCents: movement.amount, dateFrom, dateTo, toleranceCents: tolerance }),
     ]);
 
-    // Exclude entities already reconciled with a DIFFERENT movement.
-    // (Same movement is allowed — it may be re-reconciling.)
+    // Load existing allocations for all candidate entities to compute open balances.
+    // Entities may have partial allocations from other movements and still be eligible.
     const allInvoiceIds = invoiceCandidates.map((inv) => inv.id);
     const allPayableIds = payableCandidates.map((pe) => pe.id);
     const [invoiceLinks, payableLinks] = await Promise.all([
       allInvoiceIds.length > 0 ? this.linkRepo.findByEntityIds("invoice", allInvoiceIds) : Promise.resolve([]),
       allPayableIds.length > 0 ? this.linkRepo.findByEntityIds("payable_entry", allPayableIds) : Promise.resolve([]),
     ]);
-    const reconciledInvoiceIds = new Set(
-      invoiceLinks.filter((l) => l.movementId !== movement.id).map((l) => l.entityId)
-    );
-    const reconciledPayableIds = new Set(
-      payableLinks.filter((l) => l.movementId !== movement.id).map((l) => l.entityId)
-    );
 
     const invoiceCandidateIds = new Set(invoiceCandidates.map((inv) => inv.id));
+
+    // Compute existing allocations per entity to derive open balances.
+    // Entities linked to other movements may still have remaining open balance.
+    const allocByEntity = new Map<string, number>();
+    for (const l of [...invoiceLinks, ...payableLinks]) {
+      allocByEntity.set(l.entityId, (allocByEntity.get(l.entityId) ?? 0) + l.allocatedAmountCents);
+    }
 
     const results: MovementCandidate[] = [];
 
     for (const inv of invoiceCandidates) {
-      if (reconciledInvoiceIds.has(inv.id)) continue;
+      const openBalanceCents = inv.totalWithVat - (allocByEntity.get(inv.id) ?? 0);
+      if (openBalanceCents <= 0) continue; // fully paid, skip
+
       const bestDate = inv.paidAt ?? inv.dueDate ?? inv.invoiceDate;
       const confidence = scoreCandidate({
-        candidateAmount: inv.totalWithVat,
+        candidateAmount: inv.totalWithVat, // score by total — openBalanceCents is for allocation UI
         candidateDateStr: bestDate,
         candidateName: inv.supplierName,
         candidateSupplierId: inv.supplierId,
@@ -144,6 +147,7 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
           entityLabel: `${inv.supplierName} — ${inv.invoiceNumber}`,
           supplierId: inv.supplierId,
           amountCents: inv.totalWithVat,
+          openBalanceCents,
           date: bestDate,
           confidence,
         });
@@ -153,10 +157,12 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
     for (const pe of payableCandidates) {
       // Skip payable entries that have an associated invoice already in the candidates list
       if (pe.invoiceId && invoiceCandidateIds.has(pe.invoiceId)) continue;
-      if (reconciledPayableIds.has(pe.id)) continue;
+
+      const openBalanceCents = pe.amount - (allocByEntity.get(pe.id) ?? 0);
+      if (openBalanceCents <= 0) continue; // fully paid, skip
 
       const confidence = scoreCandidate({
-        candidateAmount: pe.amount,
+        candidateAmount: pe.amount, // score by total
         candidateDateStr: pe.dueDate,
         candidateName: pe.supplierName,
         candidateSupplierId: pe.supplierId,
@@ -172,6 +178,7 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
           entityLabel: `${pe.supplierName} — ${pe.description}`,
           supplierId: pe.supplierId,
           amountCents: pe.amount,
+          openBalanceCents,
           date: pe.dueDate ?? "",
           confidence,
         });

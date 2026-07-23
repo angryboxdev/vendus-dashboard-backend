@@ -172,18 +172,19 @@ describe("FindMovementCandidatesUseCase", () => {
     expect(pe!.supplierId).toBe("sup-nos");
   });
 
-  it("excludes invoice already reconciled with another movement", async () => {
+  it("excludes invoice fully allocated to another movement (openBalance = 0)", async () => {
     invoiceRead.setcandidates([
       makeInvoiceCandidate({ id: "inv-taken" }),
       makeInvoiceCandidate({ id: "inv-free" }),
     ]);
-    // Simulate inv-taken already linked to a different movement
+    // inv-taken fully allocated to a different movement → openBalance = 0
     await linkRepo.saveAll([{
       id: "link-1",
       movementId: "other-movement-id",
       entityType: "invoice",
       entityId: "inv-taken",
       amountCents: 12_000,
+      allocatedAmountCents: 12_000,
       entityLabel: "EDP SA — FT 2026/100",
     }]);
 
@@ -193,7 +194,27 @@ describe("FindMovementCandidatesUseCase", () => {
     expect(ids).toContain("inv-free");
   });
 
-  it("excludes payable_entry already reconciled with another movement", async () => {
+  it("includes invoice partially allocated to another movement (openBalance > 0)", async () => {
+    // Invoice total = 12_000, partially allocated (3_000) → openBalance = 9_000 > 0 → included
+    invoiceRead.setcandidates([makeInvoiceCandidate({ id: "inv-partial", totalWithVat: 12_000 })]);
+    await linkRepo.saveAll([{
+      id: "link-1",
+      movementId: "other-movement-id",
+      entityType: "invoice",
+      entityId: "inv-partial",
+      amountCents: 12_000,
+      allocatedAmountCents: 3_000,
+      entityLabel: "EDP SA — FT 2026/partial",
+    }]);
+
+    const result = await useCase.execute(movement.id);
+    const candidate = result.find((c) => c.entityId === "inv-partial");
+    expect(candidate).toBeDefined();
+    expect(candidate!.openBalanceCents).toBe(9_000);   // 12_000 - 3_000
+    expect(candidate!.amountCents).toBe(12_000);        // entity total preserved
+  });
+
+  it("excludes payable_entry fully allocated to another movement (openBalance = 0)", async () => {
     payableRead.setCandidates([
       makePayableCandidate({ id: "pe-taken" }),
       makePayableCandidate({ id: "pe-free" }),
@@ -204,6 +225,7 @@ describe("FindMovementCandidatesUseCase", () => {
       entityType: "payable_entry",
       entityId: "pe-taken",
       amountCents: 12_000,
+      allocatedAmountCents: 12_000,
       entityLabel: "NOS — Fatura NOS Jul",
     }]);
 
@@ -213,7 +235,9 @@ describe("FindMovementCandidatesUseCase", () => {
     expect(ids).toContain("pe-free");
   });
 
-  it("does not exclude invoice already linked to the same movement (re-reconciliation)", async () => {
+  it("excludes invoice fully allocated to the same movement (shown in linked section)", async () => {
+    // When re-reconciling, a fully-allocated entity disappears from candidates
+    // because openBalance = 0. It is still shown in the drawer's "linked" section.
     invoiceRead.setcandidates([makeInvoiceCandidate({ id: "inv-own" })]);
     await linkRepo.saveAll([{
       id: "link-1",
@@ -221,11 +245,13 @@ describe("FindMovementCandidatesUseCase", () => {
       entityType: "invoice",
       entityId: "inv-own",
       amountCents: 12_000,
+      allocatedAmountCents: 12_000,
       entityLabel: "EDP SA — FT 2026/100",
     }]);
 
     const result = await useCase.execute(movement.id);
-    expect(result.map((c) => c.entityId)).toContain("inv-own");
+    // openBalance = 12_000 - 12_000 = 0 → excluded from candidates
+    expect(result.map((c) => c.entityId)).not.toContain("inv-own");
   });
 
   it("applies hint boost — hinted candidate scores higher than name-only candidate", async () => {
@@ -248,5 +274,29 @@ describe("FindMovementCandidatesUseCase", () => {
     expect(hinted!.confidence).toBeGreaterThan(other!.confidence);
     // And the list must be sorted descending
     expect(result[0]!.entityId).toBe("inv-hinted");
+  });
+
+  it("exposes openBalanceCents in each candidate", async () => {
+    invoiceRead.setcandidates([makeInvoiceCandidate()]);
+
+    const result = await useCase.execute(movement.id);
+    expect(result[0]!.openBalanceCents).toBeDefined();
+    expect(result[0]!.openBalanceCents).toBe(12_000); // no existing allocations
+  });
+
+  it("skips payable_entry whose linked invoice is already a candidate", async () => {
+    // Invoice inv-linked is in the candidate list
+    invoiceRead.setcandidates([makeInvoiceCandidate({ id: "inv-linked" })]);
+    // Payable pe-dup is associated with inv-linked → should be skipped (avoid double-counting)
+    payableRead.setCandidates([
+      makePayableCandidate({ id: "pe-dup", invoiceId: "inv-linked" }),
+      makePayableCandidate({ id: "pe-standalone" }),
+    ]);
+
+    const result = await useCase.execute(movement.id);
+    const ids = result.map((c) => c.entityId);
+    expect(ids).toContain("inv-linked");
+    expect(ids).not.toContain("pe-dup");      // skipped — invoice already present
+    expect(ids).toContain("pe-standalone");   // no linked invoice → included
   });
 });

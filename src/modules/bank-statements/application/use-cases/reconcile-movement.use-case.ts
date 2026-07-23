@@ -1,10 +1,13 @@
-import { MovementNotFoundError, EntityAlreadyReconciledError } from "../../domain/errors.js";
+import { MovementNotFoundError } from "../../domain/errors.js";
 import { normalizeBankDescription } from "../../domain/utils/bank-description.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
 import type { MovementMatchHintPort } from "../../domain/ports/out/movement-match-hint.port.js";
 import type { InvoiceMatchReadPort } from "../../domain/ports/out/invoice-match-read.port.js";
 import type { PayableEntryMatchReadPort } from "../../domain/ports/out/payable-entry-match-read.port.js";
-import type { BankMovementEntityLinkRepositoryPort, BankMovementEntityLink } from "../../domain/ports/out/bank-movement-entity-link-repository.port.js";
+import type {
+  BankMovementEntityLink,
+  BankMovementEntityLinkRepositoryPort,
+} from "../../domain/ports/out/bank-movement-entity-link-repository.port.js";
 import type {
   ReconcileMovementCommand,
   ReconcileMovementPort,
@@ -20,14 +23,42 @@ export class ReconcileMovementUseCase implements ReconcileMovementPort {
   ) {}
 
   async execute(command: ReconcileMovementCommand): Promise<void> {
+    // ── 1. Input validation ───────────────────────────────────────────────────
+
     if (command.entityLinks.length === 0) {
       throw new Error("At least one entity link is required");
     }
+    for (const el of command.entityLinks) {
+      if (el.allocatedAmountCents <= 0) {
+        throw new Error(`allocatedAmountCents must be positive (got ${el.allocatedAmountCents})`);
+      }
+    }
+
+    // ── 2. Fetch movement ─────────────────────────────────────────────────────
 
     const movement = await this.movementRepo.findById(command.movementId);
     if (!movement) throw new MovementNotFoundError(command.movementId);
 
-    // ── 1. Look up entity amounts and labels ──────────────────────────────────
+    // ── 3. Validate total allocated ≤ movement amount ─────────────────────────
+
+    const totalAllocated = command.entityLinks.reduce((s, el) => s + el.allocatedAmountCents, 0);
+    if (totalAllocated > movement.amount) {
+      throw new Error(
+        `Total allocated (${totalAllocated}) exceeds movement amount (${movement.amount})`
+      );
+    }
+
+    // ── 4. Fetch this movement's current links (for re-reconciliation) ────────
+    //   When re-reconciling, the current movement's existing allocations will be
+    //   deleted. We factor them back in when computing each entity's open balance
+    //   so the validation is not distorted by the outgoing allocations.
+
+    const currentLinks = await this.linkRepo.findByMovementIds([command.movementId]);
+    const currentAllocByEntity = new Map(
+      currentLinks.map((l) => [l.entityId, l.allocatedAmountCents])
+    );
+
+    // ── 5. Fetch entities ─────────────────────────────────────────────────────
 
     const invoiceIds = command.entityLinks
       .filter((l) => l.entityType === "invoice")
@@ -36,65 +67,88 @@ export class ReconcileMovementUseCase implements ReconcileMovementPort {
       .filter((l) => l.entityType === "payable_entry")
       .map((l) => l.entityId);
 
-    // Guard: ensure none of the entities are already reconciled with a DIFFERENT movement.
-    // (Re-reconciling the same movement is allowed — its old links will be replaced.)
-    const [existingInvoiceLinks, existingPayableLinks, invoices, payables] = await Promise.all([
-      invoiceIds.length > 0 ? this.linkRepo.findByEntityIds("invoice", invoiceIds) : Promise.resolve([]),
-      payableIds.length > 0 ? this.linkRepo.findByEntityIds("payable_entry", payableIds) : Promise.resolve([]),
+    const [invoices, payables] = await Promise.all([
       invoiceIds.length > 0 ? this.invoiceRead.findByIds(invoiceIds) : Promise.resolve([]),
       payableIds.length > 0 ? this.payableRead.findByIds(payableIds) : Promise.resolve([]),
     ]);
 
-    for (const link of [...existingInvoiceLinks, ...existingPayableLinks]) {
-      if (link.movementId !== command.movementId) {
-        throw new EntityAlreadyReconciledError(link.entityType, link.entityId);
-      }
-    }
-
     const invoiceMap = new Map(invoices.map((i) => [i.id, i]));
     const payableMap = new Map(payables.map((p) => [p.id, p]));
 
-    // ── 2. Build entity links with amounts ───────────────────────────────────
+    // ── 6. Fetch existing allocations for all entities across ALL movements ───
+    //   Used to compute each entity's open balance.
+
+    const [existingInvoiceLinks, existingPayableLinks] = await Promise.all([
+      invoiceIds.length > 0
+        ? this.linkRepo.findByEntityIds("invoice", invoiceIds)
+        : Promise.resolve([]),
+      payableIds.length > 0
+        ? this.linkRepo.findByEntityIds("payable_entry", payableIds)
+        : Promise.resolve([]),
+    ]);
+
+    const totalAllocByEntity = new Map<string, number>();
+    for (const l of [...existingInvoiceLinks, ...existingPayableLinks]) {
+      totalAllocByEntity.set(
+        l.entityId,
+        (totalAllocByEntity.get(l.entityId) ?? 0) + l.allocatedAmountCents
+      );
+    }
+
+    // ── 7. Build links, validate open balances ────────────────────────────────
 
     const links: BankMovementEntityLink[] = command.entityLinks.map((el) => {
+      let entityTotal: number;
+      let entityLabel: string;
+
       if (el.entityType === "invoice") {
         const inv = invoiceMap.get(el.entityId);
         if (!inv) throw new Error(`Invoice not found: ${el.entityId}`);
-        return {
-          id: crypto.randomUUID(),
-          movementId: movement.id,
-          entityType: "invoice" as const,
-          entityId: el.entityId,
-          amountCents: inv.totalWithVat,
-          entityLabel: `${inv.supplierName} — ${inv.invoiceNumber}`,
-        };
+        entityTotal = inv.totalWithVat;
+        entityLabel = `${inv.supplierName} — ${inv.invoiceNumber}`;
       } else {
         const pe = payableMap.get(el.entityId);
         if (!pe) throw new Error(`Payable entry not found: ${el.entityId}`);
-        return {
-          id: crypto.randomUUID(),
-          movementId: movement.id,
-          entityType: "payable_entry" as const,
-          entityId: el.entityId,
-          amountCents: pe.amount,
-          entityLabel: `${pe.supplierName} — ${pe.description}`,
-        };
+        entityTotal = pe.amount;
+        entityLabel = `${pe.supplierName} — ${pe.description}`;
       }
+
+      // Open balance = entity total − all existing allocations + this movement's outgoing allocation
+      // (the current movement's links are about to be deleted, so we add them back)
+      const existingAlloc = totalAllocByEntity.get(el.entityId) ?? 0;
+      const outgoingAlloc = currentAllocByEntity.get(el.entityId) ?? 0;
+      const openBalance = entityTotal - existingAlloc + outgoingAlloc;
+
+      if (el.allocatedAmountCents > openBalance) {
+        throw new Error(
+          `Allocated amount (${el.allocatedAmountCents} cts) exceeds open balance ` +
+          `(${openBalance} cts) for entity ${el.entityId}`
+        );
+      }
+
+      return {
+        id: crypto.randomUUID(),
+        movementId: movement.id,
+        entityType: el.entityType,
+        entityId: el.entityId,
+        amountCents: entityTotal,
+        allocatedAmountCents: el.allocatedAmountCents,
+        entityLabel,
+      };
     });
 
-    // ── 3. Compute amount difference and determine status ────────────────────
+    // ── 8. Compute movement status ────────────────────────────────────────────
 
-    const totalLinked = links.reduce((sum, l) => sum + l.amountCents, 0);
-    const amountDiff = movement.amount - totalLinked;
+    const amountDiff = movement.amount - totalAllocated;
     const updated = movement.multiReconcile(amountDiff);
 
-    // ── 4. Persist ───────────────────────────────────────────────────────────
+    // ── 9. Persist ────────────────────────────────────────────────────────────
 
     await this.movementRepo.update(updated);
     await this.linkRepo.deleteByMovementId(movement.id);
     await this.linkRepo.saveAll(links);
 
-    // ── 5. Save learning hint — only for single-entity full matches ──────────
+    // ── 10. Save learning hint — only for single-entity full-movement matches ─
 
     const isFull = updated.reconciliationAmountDiff === null;
     const firstLink = command.entityLinks[0]!;

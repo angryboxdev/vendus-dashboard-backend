@@ -353,11 +353,24 @@ export class BankStatementController {
           res.status(400).json({ error: "entityLinks must be a non-empty array" });
           return;
         }
-        const entityLinks = (body.entityLinks as Record<string, unknown>[]).map((el) => ({
-          entityType: el["entityType"] as "invoice" | "payable_entry",
-          entityId: el["entityId"] as string,
-          supplierId: typeof el["supplierId"] === "string" ? el["supplierId"] : null,
-        }));
+        let entityLinks: import("../../domain/ports/in/bank-statement.ports.js").EntityLinkInput[];
+        try {
+          entityLinks = (body.entityLinks as Record<string, unknown>[]).map((el) => {
+          const allocatedAmountCents = Number(el["allocatedAmountCents"]);
+          if (!Number.isFinite(allocatedAmountCents) || allocatedAmountCents <= 0) {
+            throw new Error(`allocatedAmountCents must be a positive number (got ${el["allocatedAmountCents"]})`);
+          }
+          return {
+            entityType: el["entityType"] as "invoice" | "payable_entry",
+            entityId: el["entityId"] as string,
+            allocatedAmountCents: Math.round(allocatedAmountCents),
+            supplierId: typeof el["supplierId"] === "string" ? el["supplierId"] : null,
+          };
+        });
+        } catch (parseErr) {
+          res.status(400).json({ error: parseErr instanceof Error ? parseErr.message : "Invalid entityLinks" });
+          return;
+        }
         await this.reconcileMovement.execute({
           movementId: req.params["movId"]!,
           entityLinks,

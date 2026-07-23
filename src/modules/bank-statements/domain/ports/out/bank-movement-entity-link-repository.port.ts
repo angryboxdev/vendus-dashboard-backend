@@ -3,8 +3,9 @@ export interface BankMovementEntityLink {
   movementId: string;
   entityType: "invoice" | "payable_entry";
   entityId: string;
-  amountCents: number;  // amount of this entity at time of reconciliation
-  entityLabel: string;  // e.g. "Galp Energia — FT 2026/42"
+  amountCents: number;           // entity's total at time of reconciliation (historical reference)
+  allocatedAmountCents: number;  // portion of the movement's amount allocated to this entity
+  entityLabel: string;           // e.g. "Galp Energia — FT 2026/42"
 }
 
 export interface BankMovementEntityLinkRepositoryPort {
