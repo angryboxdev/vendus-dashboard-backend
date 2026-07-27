@@ -4,6 +4,7 @@ import { BankMovement } from "../../domain/entities/bank-movement.js";
 import { ReconciliationCalculatorService } from "../../domain/services/reconciliation-calculator.service.js";
 import type { BankStatementImportRepositoryPort } from "../../domain/ports/out/bank-statement-import-repository.port.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
+import type { BankAccountReadPort } from "../../domain/ports/out/bank-account-read.port.js";
 import type {
   ImportBankStatementCommand,
   ImportBankStatementPort,
@@ -32,12 +33,26 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
 
   constructor(
     private readonly statementRepo: BankStatementImportRepositoryPort,
-    private readonly movementRepo: BankMovementRepositoryPort
+    private readonly movementRepo: BankMovementRepositoryPort,
+    private readonly bankAccountRead?: BankAccountReadPort
   ) {}
 
   async execute(command: ImportBankStatementCommand): Promise<ImportBankStatementResult> {
-    // 1. Create import header
+    // 1. Resolve bank account linkage
+    let resolvedBankAccountId: string | null = command.bankAccountId ?? null;
+    let accountMatched = resolvedBankAccountId != null;
+
+    if (!accountMatched && this.bankAccountRead && command.accountNumber) {
+      const match = await this.bankAccountRead.findByAccountNumber(command.accountNumber);
+      if (match) {
+        resolvedBankAccountId = match.id;
+        accountMatched = true;
+      }
+    }
+
+    // 2. Create import header
     const statement = BankStatementImport.create({
+      bankAccountId: resolvedBankAccountId,
       bankName: command.bankName,
       accountNumber: command.accountNumber,
       periodStart: command.periodStart,
@@ -51,7 +66,7 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
 
     await this.statementRepo.save(statement);
 
-    // 2. Build movements, skipping duplicates
+    // 3. Build movements, skipping duplicates
     const toSave: BankMovement[] = [];
     let skippedDuplicates = 0;
 
@@ -88,6 +103,7 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
 
       toSave.push(
         BankMovement.create({
+          bankAccountId: resolvedBankAccountId,
           statementImportId: statement.id,
           bookingDate: raw.bookingDate,
           valueDate: raw.valueDate,
@@ -105,7 +121,7 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
       await this.movementRepo.saveBulk(toSave);
     }
 
-    // 3. Compute stats and update statement
+    // 4. Compute stats and update statement
     const stats = this.calculator.compute(command.openingBalance, toSave);
     const updated = statement.updateStats({
       importedMovementsCount: toSave.length,
@@ -117,6 +133,9 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
 
     return {
       id: updated.id,
+      bankAccountId: resolvedBankAccountId,
+      accountMatched,
+      parsedAccountNumber: command.accountNumber,
       bankName: updated.bankName,
       accountNumber: updated.accountNumber,
       importedMovementsCount: updated.importedMovementsCount,

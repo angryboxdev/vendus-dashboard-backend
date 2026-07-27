@@ -43,6 +43,19 @@ export class FakeBankMovementRepository implements BankMovementRepositoryPort {
     this.store.set(movement.id, movement);
   }
 
+  async findByAccountAndPeriod(
+    bankAccountId: string,
+    from: Date,
+    to: Date
+  ): Promise<BankMovement[]> {
+    return [...this.store.values()].filter(
+      (m) =>
+        m.bankAccountId === bankAccountId &&
+        m.bookingDate >= from &&
+        m.bookingDate <= to
+    );
+  }
+
   async existsByHash(deduplicationHash: string): Promise<boolean> {
     return [...this.store.values()].some(
       (m) => m.deduplicationHash === deduplicationHash

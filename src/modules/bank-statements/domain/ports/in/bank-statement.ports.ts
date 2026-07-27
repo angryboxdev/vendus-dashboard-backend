@@ -19,6 +19,8 @@ export interface ParsedMovement {
 }
 
 export interface ImportBankStatementCommand {
+  /** If provided, links the import directly to this account (skips auto-detect). */
+  bankAccountId?: string | null;
   bankName: string;
   accountNumber: string;
   periodStart: Date;
@@ -33,6 +35,11 @@ export interface ImportBankStatementCommand {
 
 export interface ImportBankStatementResult {
   id: string;
+  bankAccountId: string | null;
+  /** true when accountNumber matched a registered bank account automatically or via bankAccountId param */
+  accountMatched: boolean;
+  /** the accountNumber parsed from the file, so the UI can ask the user to link manually */
+  parsedAccountNumber: string;
   bankName: string;
   accountNumber: string;
   importedMovementsCount: number;
@@ -58,6 +65,7 @@ export interface ListBankStatementsFilter {
 
 export interface BankStatementSummary {
   id: string;
+  bankAccountId: string | null;
   bankName: string;
   accountNumber: string;
   periodStart: Date;
@@ -278,6 +286,55 @@ export interface UploadMovementDocumentPort {
 
 export interface UpdateStatementBalancesPort {
   execute(statementImportId: string, openingBalance: number, closingBalance: number): Promise<void>;
+}
+
+// ─── Link statement to bank account ──────────────────────────────────────────
+
+export interface LinkStatementToAccountPort {
+  execute(statementImportId: string, bankAccountId: string): Promise<void>;
+}
+
+// ─── Account calendar ─────────────────────────────────────────────────────────
+
+export interface AccountMonthStat {
+  year: number;
+  month: number; // 1–12
+  totalDays: number;
+  coveredDays: number;
+  totalMovements: number;
+  reconciledMovements: number;
+  coveragePercent: number; // 0–100
+  reconciliationPercent: number; // 0–100
+}
+
+export interface GetAccountCalendarQuery {
+  bankAccountId: string;
+  year: number;
+}
+
+export interface GetAccountCalendarPort {
+  execute(query: GetAccountCalendarQuery): Promise<AccountMonthStat[]>;
+}
+
+// ─── Account month detail ─────────────────────────────────────────────────────
+
+export interface DaySlot {
+  date: string; // YYYY-MM-DD
+  movements: BankMovementDto[];
+  totalDebitCents: number;
+  totalCreditCents: number;
+  totalMovements: number;
+  reconciledCount: number;
+}
+
+export interface GetAccountMonthDetailQuery {
+  bankAccountId: string;
+  year: number;
+  month: number; // 1–12
+}
+
+export interface GetAccountMonthDetailPort {
+  execute(query: GetAccountMonthDetailQuery): Promise<DaySlot[]>;
 }
 
 // ─── Find movement candidates ─────────────────────────────────────────────────

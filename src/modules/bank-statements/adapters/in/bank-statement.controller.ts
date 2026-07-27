@@ -29,6 +29,9 @@ import type { DeleteBankStatementPort } from "../../domain/ports/in/bank-stateme
 import type { UpdateStatementBalancesPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { FindMovementCandidatesPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { UploadMovementDocumentPort } from "../../domain/ports/in/bank-statement.ports.js";
+import type { LinkStatementToAccountPort } from "../../domain/ports/in/bank-statement.ports.js";
+import type { GetAccountCalendarPort } from "../../domain/ports/in/bank-statement.ports.js";
+import type { GetAccountMonthDetailPort } from "../../domain/ports/in/bank-statement.ports.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const csvParser = new CsvStatementParser();
@@ -52,7 +55,10 @@ export class BankStatementController {
     private readonly deleteStatement: DeleteBankStatementPort,
     private readonly updateBalances: UpdateStatementBalancesPort,
     private readonly findMovementCandidates: FindMovementCandidatesPort,
-    private readonly uploadMovementDocument: UploadMovementDocumentPort
+    private readonly uploadMovementDocument: UploadMovementDocumentPort,
+    private readonly linkStatementToAccount: LinkStatementToAccountPort,
+    private readonly getAccountCalendar: GetAccountCalendarPort,
+    private readonly getAccountMonthDetail: GetAccountMonthDetailPort
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -168,7 +174,10 @@ export class BankStatementController {
             ? new Date(body.periodEnd as string)
             : (parsed.periodEnd ?? new Date());
 
+          const bankAccountId = body.bankAccountId as string | undefined | null;
+
           const result = await this.importStatement.execute({
+            bankAccountId: bankAccountId ?? null,
             bankName,
             accountNumber,
             periodStart,
@@ -476,6 +485,33 @@ export class BankStatementController {
     });
 
     /**
+     * PATCH /bank-statements/:id/link-account
+     * Body: { bankAccountId: string }
+     * Manually links an import to a registered bank account (used when auto-link failed).
+     */
+    this.router.patch("/bank-statements/:id/link-account", async (req, res) => {
+      try {
+        const body = req.body as Record<string, unknown>;
+        if (!body["bankAccountId"] || typeof body["bankAccountId"] !== "string") {
+          res.status(400).json({ error: "bankAccountId is required" });
+          return;
+        }
+        await this.linkStatementToAccount.execute(req.params["id"]!, body["bankAccountId"]);
+        res.status(204).send();
+      } catch (e) {
+        if (e instanceof StatementNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        if (e instanceof Error && e.message.startsWith("Bank account not found")) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
      * GET /bank-statements/rules
      * Query: activeOnly?
      */
@@ -533,6 +569,47 @@ export class BankStatementController {
           res.status(404).json({ error: e.message });
           return;
         }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * GET /bank-statements/accounts/:accountId/calendar?year=YYYY
+     * Returns AccountMonthStat[] for the given year (up to current month if current year).
+     */
+    this.router.get("/bank-statements/accounts/:accountId/calendar", async (req, res) => {
+      try {
+        const accountId = req.params["accountId"]!;
+        const year = req.query["year"]
+          ? parseInt(req.query["year"] as string, 10)
+          : new Date().getFullYear();
+        if (isNaN(year)) {
+          res.status(400).json({ error: "year must be a valid integer" });
+          return;
+        }
+        const result = await this.getAccountCalendar.execute({ bankAccountId: accountId, year });
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * GET /bank-statements/accounts/:accountId/calendar/:year/:month
+     * Returns DaySlot[] for the given month (movements grouped by day).
+     */
+    this.router.get("/bank-statements/accounts/:accountId/calendar/:year/:month", async (req, res) => {
+      try {
+        const accountId = req.params["accountId"]!;
+        const year = parseInt(req.params["year"]!, 10);
+        const month = parseInt(req.params["month"]!, 10);
+        if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
+          res.status(400).json({ error: "Invalid year or month" });
+          return;
+        }
+        const result = await this.getAccountMonthDetail.execute({ bankAccountId: accountId, year, month });
+        res.json(result);
+      } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
       }
     });

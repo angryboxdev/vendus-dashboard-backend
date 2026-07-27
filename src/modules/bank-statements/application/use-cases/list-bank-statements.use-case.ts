@@ -9,6 +9,7 @@ import type { BankStatementImport } from "../../domain/entities/bank-statement-i
 function toSummary(s: BankStatementImport): BankStatementSummary {
   return {
     id: s.id,
+    bankAccountId: s.bankAccountId,
     bankName: s.bankName,
     accountNumber: s.accountNumber,
     periodStart: s.periodStart,

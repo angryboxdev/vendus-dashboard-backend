@@ -17,6 +17,7 @@ import { createKdsModule } from "./modules/kds/kds.module.js";
 import { createFinancialBaseModule } from "./modules/financial-base/financial-base.module.js";
 import { createInvoicesModule } from "./modules/invoices/invoices.module.js";
 import { createPayableEntriesModule } from "./modules/payable-entries/payable-entries.module.js";
+import { createBankAccountsModule } from "./modules/bank-accounts/bank-accounts.module.js";
 import { createBankStatementsModule } from "./modules/bank-statements/bank-statements.module.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
@@ -97,8 +98,12 @@ app.use("/api", requireMinRole("manager"), invoicesModule.router);
 const payableEntriesModule = createPayableEntriesModule();
 app.use("/api", requireMinRole("manager"), payableEntriesModule.router);
 
-// Bank statements module (hexagonal)
-const bankStatementsModule = createBankStatementsModule();
+// Bank accounts module (hexagonal) — must be before bank-statements
+const bankAccountsModule = createBankAccountsModule();
+app.use("/api", requireMinRole("manager"), bankAccountsModule.router);
+
+// Bank statements module (hexagonal) — receives bank account read port for auto-linking
+const bankStatementsModule = createBankStatementsModule(bankAccountsModule.accountRepo);
 app.use("/api", requireMinRole("manager"), bankStatementsModule.router);
 
 // Cash closing manager routes (authenticated)

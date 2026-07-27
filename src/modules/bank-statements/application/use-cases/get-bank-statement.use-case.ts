@@ -89,6 +89,7 @@ export class GetBankStatementUseCase implements GetBankStatementPort {
 
     return {
       id: statement.id,
+      bankAccountId: statement.bankAccountId,
       bankName: statement.bankName,
       accountNumber: statement.accountNumber,
       periodStart: statement.periodStart,

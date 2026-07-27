@@ -1,7 +1,7 @@
 # Módulo: bank-statements
 
 > Status: ativo
-> Última atualização: 2026-07-30
+> Última atualização: 2026-07-28
 
 ---
 
@@ -17,22 +17,27 @@ Sem este módulo, o gestor não tem visibilidade sobre se o saldo do banco coinc
 ```
 Gestor Financeiro
 ────────────────────────────────────────────────────────────
-1. Importa extrato (CSV ou XLSX) do banco
-2. Sistema detecta banco, conta, período, saldos e movimentos
-3. Aplica regras automáticas (ex: "COM.MAN.CONTA" → taxa bancária)
-4. Sistema sugere conciliações com faturas e contas a pagar existentes
-5. Gestor revisa movimento a movimento:
-   a. "Conciliar com sistema" — selecciona uma ou mais faturas/contas a pagar e
-      indica quanto deste movimento paga cada uma. O sistema mostra em tempo real
-      quanto já foi alocado e quanto resta por justificar. Só aparecem entidades
-      com saldo em aberto (faturas totalmente pagas por outros movimentos são
-      ocultadas). Suporta pagamentos parciais (ex: este movimento paga metade de
-      uma fatura), pagamentos agrupados (ex: um único débito cobre três faturas)
-      e pagamentos faseados (ex: a mesma fatura paga em dois movimentos distintos).
-      Alterar a conciliação do próprio movimento é sempre permitido.
-   b. "Justificar despesa" — sobe comprovativo, indica fornecedor (opcional),
-      centro de custo e IVA; para tipos sem documento (ex: transferência interna)
-      preenche apenas as notas
+1. Entra na conta bancária → vê calendário anual com 12 cartões de mês
+2. Cada cartão mostra: % de cobertura (dias com movimentos / dias do mês)
+   e % de conciliação (movimentos resolvidos / total de movimentos)
+3. Importa extrato (CSV ou XLSX) de qualquer mês ou período:
+   - Sistema detecta banco, conta, período, saldos e movimentos
+   - Movimentos duplicados (já importados) são ignorados automaticamente
+   - Pode importar extratos com datas sobrepostas sem criar duplicados
+4. Clica num mês → vista de dia a dia com todos os movimentos desse mês,
+   agrupados por data de lançamento
+5. Clica num movimento para conciliar ou classificar:
+   - Se já resolvido → painel mostra resumo da classificação actual
+     (entidades conciliadas, tipo de justificação, fornecedor, centro de custo)
+     com opção "Alterar classificação" para re-abrir o formulário
+   - Se pendente → formulário com duas tabs:
+     a. "Conciliar com sistema" — selecciona uma ou mais faturas/contas a pagar e
+        indica quanto deste movimento paga cada uma. Suporta pagamentos parciais,
+        pagamentos agrupados e pagamentos faseados. Só aparecem entidades com
+        saldo em aberto.
+     b. "Justificar despesa" — sobe comprovativo, indica fornecedor (opcional),
+        centro de custo e IVA; para tipos sem documento (ex: transferência interna)
+        preenche apenas as notas
 6. Movimentos não justificados ficam destacados como "Saída não justificada"
 7. Movimentos com entidades associadas mas com diferença de montante > 1€
    ficam como "Conciliação parcial" — visíveis numa tab dedicada para revisão
@@ -53,6 +58,9 @@ Gestor Financeiro
 - **Centro de custo** — classificação interna da despesa (grupo + categoria) para efeitos de DRE e cashflow; obrigatório em todos os tipos de justificação que não sejam transferências internas.
 - **IVA** — registado como taxa percentual + indicador de inclusão no valor (incluído/excluído/isento); os relatórios financeiros usam esta informação para calcular o valor líquido da despesa.
 - **Saldo em aberto** — o que falta pagar de uma fatura ou conta a pagar, depois de descontar o que outros movimentos bancários já lhe alocaram. Se uma fatura de 1.000 € tiver um pagamento parcial de 600 € registado noutro movimento, o saldo em aberto é 400 €. O sistema apresenta sempre este valor atualizado ao gestor, para que saiba exatamente quanto pode ainda imputar a essa fatura.
+- **Calendário mensal** — a visão principal de uma conta bancária: um cartão por mês do ano, mostrando o grau de cobertura e de conciliação. O gestor navega pelo calendário para perceber rapidamente que meses estão completos e quais precisam de atenção.
+- **Cobertura** — percentagem de dias do mês que têm pelo menos um movimento bancário registado (ex: 18/31 dias = 58%). Indica se o extrato desse mês foi importado. Um mês com 0% de cobertura não tem extrato ainda.
+- **Slot de dia** — agrupamento de todos os movimentos de uma conta numa data de lançamento específica, independentemente do extrato de que vieram. Permite conciliar dia a dia mesmo que tenham sido importados extratos sobrepostos (ex: extrato de 1–17 e extrato de 15–30 do mesmo mês — os dias 15–17 aparecem num único slot sem duplicados).
 
 ---
 
@@ -71,6 +79,8 @@ Invariante: `close()` rejeita se `balanceDifference !== 0`.
 
 **BankMovement**
 Cada linha do extrato. Armazena valor absoluto (cents) + `movementType` (debit/credit) para determinar direção. Status inicial: débitos → `saida_nao_justificada`; créditos → `conciliado_sem_fatura` (auto-resolvidos).
+
+`bankAccountId` — FK opcional para `bank_accounts.id`. Preenchido no import quando a conta é conhecida (via auto-link por IBAN ou injecção directa). Permite queries de calendário directamente sobre `bank_movements` sem passar pelo import header.
 
 Campos de classificação manual (todos opcionais no domínio):
 - `costCenterGroupId` / `costCenterCategoryId` — centro de custo da despesa
@@ -162,11 +172,15 @@ Hash SHA-256 de `accountNumber + bookingDate + description + amount + movementTy
 - `CloseStatementPort` — fecha conciliação (valida balance diff = 0 e ausência de movimentos bloqueantes de alto risco).
 - `DeleteBankStatementPort` — elimina import e movimentos (CASCADE).
 - `UpdateStatementBalancesPort` — corrige saldo inicial/final manualmente.
+- `LinkStatementToAccountPort` — associa manualmente um import a uma conta cadastrada (usado quando o auto-link falhou na importação).
+- `GetAccountCalendarPort` — agrega os movimentos de uma conta por mês para um dado ano; devolve `AccountMonthStat[]` com cobertura (dias com ≥1 movimento / total de dias do mês) e progresso de conciliação por mês. Para o ano corrente devolve apenas os meses até ao mês actual.
+- `GetAccountMonthDetailPort` — devolve os movimentos de uma conta num mês específico agrupados por dia (`DaySlot[]`), com totais de débito/crédito e contagem de resolvidos por dia. Os entity links são carregados em bulk.
 
 ### Saída (dependências do domínio)
 
 - `BankStatementImportRepositoryPort` — save, findById, findAll, update.
-- `BankMovementRepositoryPort` — saveBulk, findByStatementId, findById, update, existsByHash.
+- `BankMovementRepositoryPort` — saveBulk, findByStatementId, findById, update, existsByHash, `findByAccountAndPeriod(bankAccountId, from, to)` (usado pelos use cases de calendário).
+- `BankAccountReadPort` *(cross-module)* — `findByAccountNumber`, `findById`; permite ao módulo tentar auto-link sem depender directamente de bank-accounts.
 - `BankReconciliationRuleRepositoryPort` — save, findAll, findById, update, delete.
 - `DocumentStoragePort` — store(buffer, filename, mimeType) → URL pública.
 - `BankMovementEntityLinkRepositoryPort` — `saveAll`, `findByMovementIds` (bulk por movimento — usado para carregar links do próprio movimento em re-conciliação), `findByEntityIds(entityType, entityIds)` (bulk por entidade — usado para calcular alocações existentes e saldo em aberto), `deleteByMovementId` (para re-conciliação).
@@ -210,9 +224,12 @@ PATCH  /api/bank-statements/movements/:movId/reconcile    vincular a invoice/pay
 PATCH  /api/bank-statements/movements/:movId/classify     classificação manual (incl. costCenter, supplier, VAT, documentUrl)
 POST   /api/bank-statements/movements/:movId/document     upload de comprovativo → { documentUrl }
 GET    /api/bank-statements/movements/:movId/candidates   candidatos pontuados para um movimento
-GET    /api/bank-statements/rules                         listar regras (?activeOnly=true)
-POST   /api/bank-statements/rules                         criar regra
-DELETE /api/bank-statements/rules/:ruleId                 remover regra
+GET    /api/bank-statements/rules                                              listar regras (?activeOnly=true)
+POST   /api/bank-statements/rules                                              criar regra
+DELETE /api/bank-statements/rules/:ruleId                                     remover regra
+PATCH  /api/bank-statements/:id/link-account                                  associar import a uma conta (body: { bankAccountId })
+GET    /api/bank-statements/accounts/:accountId/calendar?year=YYYY            calendário anual da conta (AccountMonthStat[])
+GET    /api/bank-statements/accounts/:accountId/calendar/:year/:month         detalhe mensal (DaySlot[])
 ```
 
 ---
@@ -245,6 +262,8 @@ DELETE /api/bank-statements/rules/:ruleId                 remover regra
 
 **Tolerância de 1€ na conciliação** — `PARTIAL_TOLERANCE_CENTS = 100` (1,00€). Cobre diferenças de arredondamento ou pequenas taxas bancárias sem marcar o movimento como parcial. Decidido empiricamente com base em casos reais de extratos portugueses.
 
+**Paradigma de calendário: `bank_account_id` directamente em `bank_movements`** — a navegação primária deixou de ser "lista de imports" para passar a ser "calendário por conta". O problema do modelo anterior era que importar dois extratos com datas sobrepostas (ex: dias 1–17 e dias 15–30) obrigava a conciliar os dias sobrepostos duas vezes. A solução: cada movimento guarda `bank_account_id` directamente, e a deduplicação por hash garante que movimentos repetidos num reimport são ignorados. O `BankStatementImport` é mantido como "artefacto de auditoria" (regista que houve um upload, quando, e quantos movimentos vieram), mas a navegação e o calendário são construídos sobre `bank_movements` directamente via `findByAccountAndPeriod`. A agregação por mês é feita em memória no use case (volumes típicos de 50–200 movimentos/mês são negligenciáveis).
+
 **Learning hints só para single full match** — a aprendizagem automática de descrição → fornecedor só dispara quando (1) a conciliação é de entidade única e (2) o match é completo (diff ≤ 1€). Conciliações multi-entidade ou parciais são ambíguas e não devem ser aprendidas.
 
 **`balanceAfter` calculado ao vivo, não lido do DB** — o valor raw guardado em `bank_movements.balance_after` vem do CSV/XLSX importado e nunca é atualizado. O `GetBankStatementUseCase` recalcula o saldo acumulado a partir do `openingBalance` do extrato para cada movimento devolvido, em ordem cronológica. Assim, qualquer edição manual ao saldo inicial reflecte-se imediatamente sem necessidade de batch update aos movimentos.
@@ -269,4 +288,4 @@ npx jest --testPathPattern="bank-statements|list-invoices"
 - `suggest-matches` faz N queries ao DB (uma por movimento não resolvido); para volumes grandes, considerar batch query futura.
 - `calculatedClosingBalance` no `ListBankStatementsUseCase` usa o valor persistido (pode estar desatualizado se movimentos forem alterados sem update ao header); o `GetBankStatementUseCase` recalcula ao vivo.
 - O bucket `bank-statement-documents` no Supabase Storage deve ser criado manualmente com política de acesso público de leitura.
-- Créditos (entradas) ficam automaticamente como `conciliado_sem_fatura` e fora do scope do drawer de classificação.
+- Créditos (entradas) ficam automaticamente como `conciliado_sem_fatura` ao importar. No drawer de classificação, ao clicar num crédito já conciliado, é exibido um cartão informativo a explicar que foi auto-resolvido — o gestor pode sempre usar "Alterar classificação" para reclassificar manualmente se necessário.

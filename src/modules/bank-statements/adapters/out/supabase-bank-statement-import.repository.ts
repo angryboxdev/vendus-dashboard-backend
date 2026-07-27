@@ -12,6 +12,7 @@ import type {
 function toEntity(row: Record<string, unknown>): BankStatementImport {
   return BankStatementImport.reconstitute({
     id: row.id as string,
+    bankAccountId: (row.bank_account_id as string | null) ?? null,
     bankName: row.bank_name as string,
     accountNumber: row.account_number as string,
     periodStart: new Date(row.period_start as string),
@@ -39,6 +40,7 @@ export class SupabaseBankStatementImportRepository
   async save(statement: BankStatementImport): Promise<void> {
     const { error } = await this.supabase.from("bank_statement_imports").insert({
       id: statement.id,
+      bank_account_id: statement.bankAccountId,
       bank_name: statement.bankName,
       account_number: statement.accountNumber,
       period_start: statement.periodStart.toISOString().slice(0, 10),
@@ -98,6 +100,7 @@ export class SupabaseBankStatementImportRepository
     const { error } = await this.supabase
       .from("bank_statement_imports")
       .update({
+        bank_account_id: statement.bankAccountId,
         bank_name: statement.bankName,
         account_number: statement.accountNumber,
         period_start: statement.periodStart.toISOString().slice(0, 10),

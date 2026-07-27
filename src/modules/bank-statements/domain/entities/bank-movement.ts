@@ -69,6 +69,7 @@ export function computeInitialRisk(amountCents: number, type: MovementType): Ris
 
 interface BankMovementProps {
   id: string;
+  bankAccountId: string | null;
   statementImportId: string;
   bookingDate: Date;
   valueDate: Date;
@@ -101,6 +102,7 @@ interface BankMovementProps {
 
 export class BankMovement {
   readonly id: string;
+  readonly bankAccountId: string | null;
   readonly statementImportId: string;
   readonly bookingDate: Date;
   readonly valueDate: Date;
@@ -133,6 +135,7 @@ export class BankMovement {
 
   private constructor(props: BankMovementProps) {
     this.id = props.id;
+    this.bankAccountId = props.bankAccountId;
     this.statementImportId = props.statementImportId;
     this.bookingDate = props.bookingDate;
     this.valueDate = props.valueDate;
@@ -170,6 +173,7 @@ export class BankMovement {
    * Debits start as "saida_nao_justificada"; credits are auto-resolved as "conciliado_sem_fatura".
    */
   static create(props: {
+    bankAccountId?: string | null;
     statementImportId: string;
     bookingDate: Date;
     valueDate: Date;
@@ -189,6 +193,7 @@ export class BankMovement {
     const now = new Date();
     return new BankMovement({
       id: crypto.randomUUID(),
+      bankAccountId: props.bankAccountId ?? null,
       statementImportId: props.statementImportId,
       bookingDate: props.bookingDate,
       valueDate: props.valueDate,
@@ -315,6 +320,7 @@ export class BankMovement {
   private toProps(): BankMovementProps {
     return {
       id: this.id,
+      bankAccountId: this.bankAccountId,
       statementImportId: this.statementImportId,
       bookingDate: this.bookingDate,
       valueDate: this.valueDate,

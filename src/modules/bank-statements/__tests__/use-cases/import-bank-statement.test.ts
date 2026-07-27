@@ -73,4 +73,24 @@ describe("ImportBankStatementUseCase", () => {
     const result2 = await useCase.execute({ ...baseCommand, movements: [] });
     expect(result2.importedMovementsCount).toBe(0);
   });
+
+  it("propagates bankAccountId to all saved movements", async () => {
+    const bankAccountId = "bank-acc-xyz";
+    await useCase.execute({ ...baseCommand, bankAccountId });
+
+    const allStatements = await statementRepo.findAll({});
+    const movements = await movementRepo.findByStatementId(allStatements[0].id);
+
+    expect(movements).toHaveLength(2);
+    expect(movements.every((m) => m.bankAccountId === bankAccountId)).toBe(true);
+  });
+
+  it("sets bankAccountId to null on movements when not provided", async () => {
+    await useCase.execute(baseCommand);
+
+    const allStatements = await statementRepo.findAll({});
+    const movements = await movementRepo.findByStatementId(allStatements[0].id);
+
+    expect(movements.every((m) => m.bankAccountId === null)).toBe(true);
+  });
 });

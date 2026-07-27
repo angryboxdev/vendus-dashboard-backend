@@ -15,6 +15,7 @@ export const STATEMENT_STATUSES: StatementStatus[] = [
 
 interface BankStatementImportProps {
   id: string;
+  bankAccountId: string | null;
   bankName: string;
   accountNumber: string;
   periodStart: Date;
@@ -35,6 +36,7 @@ interface BankStatementImportProps {
 
 export class BankStatementImport {
   readonly id: string;
+  readonly bankAccountId: string | null;
   readonly bankName: string;
   readonly accountNumber: string;
   readonly periodStart: Date;
@@ -54,6 +56,7 @@ export class BankStatementImport {
 
   private constructor(props: BankStatementImportProps) {
     this.id = props.id;
+    this.bankAccountId = props.bankAccountId;
     this.bankName = props.bankName;
     this.accountNumber = props.accountNumber;
     this.periodStart = props.periodStart;
@@ -73,6 +76,7 @@ export class BankStatementImport {
   }
 
   static create(props: {
+    bankAccountId?: string | null;
     bankName: string;
     accountNumber: string;
     periodStart: Date;
@@ -91,6 +95,7 @@ export class BankStatementImport {
     const now = new Date();
     return new BankStatementImport({
       id: crypto.randomUUID(),
+      bankAccountId: props.bankAccountId ?? null,
       bankName: props.bankName.trim(),
       accountNumber: props.accountNumber.trim(),
       periodStart: props.periodStart,
@@ -150,6 +155,17 @@ export class BankStatementImport {
   }
 
   /**
+   * Links this statement to a bank account.
+   */
+  linkAccount(bankAccountId: string): BankStatementImport {
+    return new BankStatementImport({
+      ...this.toProps(),
+      bankAccountId,
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
    * Closes the reconciliation.
    * Invariant: balance difference must be 0.
    * Additional movement validations are enforced by the CloseStatementUseCase.
@@ -168,6 +184,7 @@ export class BankStatementImport {
   private toProps(): BankStatementImportProps {
     return {
       id: this.id,
+      bankAccountId: this.bankAccountId,
       bankName: this.bankName,
       accountNumber: this.accountNumber,
       periodStart: this.periodStart,

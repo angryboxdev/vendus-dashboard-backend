@@ -9,6 +9,7 @@ import { SupabaseInvoiceMatchReadAdapter } from "./adapters/out/supabase-invoice
 import { SupabasePayableEntryMatchReadAdapter } from "./adapters/out/supabase-payable-entry-match-read.adapter.js";
 import { SupabaseMovementMatchHintAdapter } from "./adapters/out/supabase-movement-match-hint.adapter.js";
 import { SupabaseBankMovementEntityLinkRepository } from "./adapters/out/supabase-bank-movement-entity-link.repository.js";
+import { SupabaseBankAccountReadAdapter } from "./adapters/out/supabase-bank-account-read.adapter.js";
 
 // Use cases
 import { ImportBankStatementUseCase } from "./application/use-cases/import-bank-statement.use-case.js";
@@ -26,18 +27,24 @@ import { DeleteBankStatementUseCase } from "./application/use-cases/delete-bank-
 import { UpdateStatementBalancesUseCase } from "./application/use-cases/update-statement-balances.use-case.js";
 import { FindMovementCandidatesUseCase } from "./application/use-cases/find-movement-candidates.use-case.js";
 import { UploadMovementDocumentUseCase } from "./application/use-cases/upload-movement-document.use-case.js";
+import { LinkStatementToAccountUseCase } from "./application/use-cases/link-statement-to-account.use-case.js";
+import { GetAccountCalendarUseCase } from "./application/use-cases/get-account-calendar.use-case.js";
+import { GetAccountMonthDetailUseCase } from "./application/use-cases/get-account-month-detail.use-case.js";
 import { SupabaseBankDocumentStorageAdapter } from "./adapters/out/supabase-bank-document-storage.adapter.js";
 
 // Adapter in
 import { BankStatementController } from "./adapters/in/bank-statement.controller.js";
 
+// Cross-module port
+import type { BankAccountReadPort } from "./domain/ports/out/bank-account-read.port.js";
+
 /**
  * Composition root for the bank-statements module.
  *
- * This is the ONLY place that knows about concrete adapter implementations.
- * All other files in this module (use cases, domain) depend only on interfaces (ports).
+ * Accepts an optional bankAccountRead port (injected from bank-accounts module)
+ * to enable automatic account linking on import.
  */
-export function createBankStatementsModule(): { router: Router } {
+export function createBankStatementsModule(bankAccountRead?: BankAccountReadPort): { router: Router } {
   const supabase = getSupabaseServiceRole();
   if (!supabase) throw new Error("Supabase service role client is not configured");
 
@@ -50,8 +57,12 @@ export function createBankStatementsModule(): { router: Router } {
   const movementHint = new SupabaseMovementMatchHintAdapter(supabase);
   const entityLinkRepo = new SupabaseBankMovementEntityLinkRepository(supabase);
 
+  // Cross-module: fall back to direct Supabase adapter if not injected
+  const resolvedBankAccountRead: BankAccountReadPort =
+    bankAccountRead ?? new SupabaseBankAccountReadAdapter(supabase);
+
   // Use cases
-  const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo);
+  const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo, resolvedBankAccountRead);
   const listStatements = new ListBankStatementsUseCase(statementRepo);
   const getStatement = new GetBankStatementUseCase(statementRepo, movementRepo, entityLinkRepo);
   const reconcileMovement = new ReconcileMovementUseCase(movementRepo, movementHint, invoiceRead, payableRead, entityLinkRepo);
@@ -73,6 +84,9 @@ export function createBankStatementsModule(): { router: Router } {
   const findMovementCandidates = new FindMovementCandidatesUseCase(movementRepo, invoiceRead, payableRead, movementHint, entityLinkRepo);
   const documentStorage = new SupabaseBankDocumentStorageAdapter(supabase);
   const uploadMovementDocument = new UploadMovementDocumentUseCase(movementRepo, documentStorage);
+  const linkStatementToAccount = new LinkStatementToAccountUseCase(statementRepo, resolvedBankAccountRead);
+  const getAccountCalendar = new GetAccountCalendarUseCase(movementRepo);
+  const getAccountMonthDetail = new GetAccountMonthDetailUseCase(movementRepo, entityLinkRepo);
 
   // Adapter in
   const controller = new BankStatementController(
@@ -90,7 +104,10 @@ export function createBankStatementsModule(): { router: Router } {
     deleteStatement,
     updateBalances,
     findMovementCandidates,
-    uploadMovementDocument
+    uploadMovementDocument,
+    linkStatementToAccount,
+    getAccountCalendar,
+    getAccountMonthDetail
   );
 
   return { router: controller.router };

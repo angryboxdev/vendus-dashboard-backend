@@ -15,6 +15,7 @@ import type {
 function toEntity(row: Record<string, unknown>): BankMovement {
   return BankMovement.reconstitute({
     id: row.id as string,
+    bankAccountId: (row.bank_account_id as string | null) ?? null,
     statementImportId: row.statement_import_id as string,
     bookingDate: new Date(row.booking_date as string),
     valueDate: new Date(row.value_date as string),
@@ -51,6 +52,7 @@ export class SupabaseBankMovementRepository implements BankMovementRepositoryPor
     if (movements.length === 0) return;
     const rows = movements.map((m) => ({
       id: m.id,
+      bank_account_id: m.bankAccountId,
       statement_import_id: m.statementImportId,
       booking_date: m.bookingDate.toISOString().slice(0, 10),
       value_date: m.valueDate.toISOString().slice(0, 10),
@@ -132,6 +134,23 @@ export class SupabaseBankMovementRepository implements BankMovementRepositoryPor
       })
       .eq("id", movement.id);
     if (error) throw new Error(error.message);
+  }
+
+  async findByAccountAndPeriod(
+    bankAccountId: string,
+    from: Date,
+    to: Date
+  ): Promise<BankMovement[]> {
+    const { data, error } = await this.supabase
+      .from("bank_movements")
+      .select("*")
+      .eq("bank_account_id", bankAccountId)
+      .gte("booking_date", from.toISOString().slice(0, 10))
+      .lte("booking_date", to.toISOString().slice(0, 10))
+      .order("booking_date", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
   }
 
   async existsByHash(deduplicationHash: string): Promise<boolean> {
