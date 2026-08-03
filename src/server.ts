@@ -19,6 +19,7 @@ import { createInvoicesModule } from "./modules/invoices/invoices.module.js";
 import { createPayableEntriesModule } from "./modules/payable-entries/payable-entries.module.js";
 import { createBankAccountsModule } from "./modules/bank-accounts/bank-accounts.module.js";
 import { createBankStatementsModule } from "./modules/bank-statements/bank-statements.module.js";
+import { createAirMenuModule } from "./modules/air-menu/air-menu.module.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { crmRoutes } from "./routes/crmRoutes.js";
@@ -105,6 +106,15 @@ app.use("/api", requireMinRole("manager"), bankAccountsModule.router);
 // Bank statements module (hexagonal) — receives bank account read port for auto-linking
 const bankStatementsModule = createBankStatementsModule(bankAccountsModule.accountRepo);
 app.use("/api", requireMinRole("manager"), bankStatementsModule.router);
+
+// Air Menu: agregador de pedidos Glovo / Uber Eats / Bolt Food
+const airMenuModule = createAirMenuModule({
+  apiKey: ENV.AIRMENU_API_KEY,
+  username: ENV.AIRMENU_USERNAME,
+  password: ENV.AIRMENU_PASSWORD,
+  enterprises: ENV.AIRMENU_ENTERPRISES,
+});
+app.use("/api", requireMinRole("manager"), airMenuModule.router);
 
 // Cash closing manager routes (authenticated)
 app.use("/api", requireMinRole("manager"), cashClosingsModule.managedRouter);

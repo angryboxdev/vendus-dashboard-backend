@@ -55,6 +55,18 @@ export const ENV = {
   /** JWT secret legado (HS256). Já não obrigatório — verificação usa JWKS. */
   SUPABASE_JWT_SECRET: process.env.SUPABASE_JWT_SECRET ?? "",
 
+  /** AirMenu: API de agregação de pedidos Glovo/Uber Eats/Bolt. */
+  AIRMENU_API_KEY: must(process.env.AIRMENU_API_KEY, "AIRMENU_API_KEY"),
+  AIRMENU_USERNAME: must(process.env.AIRMENU_USERNAME, "AIRMENU_USERNAME"),
+  AIRMENU_PASSWORD: must(process.env.AIRMENU_PASSWORD, "AIRMENU_PASSWORD"),
+  AIRMENU_ENTERPRISES: must(process.env.AIRMENU_ENTERPRISES, "AIRMENU_ENTERPRISES")
+    .split("|")
+    .map((entry) => {
+      const [id, ...nameParts] = entry.trim().split(":");
+      return { id: id!.trim(), name: nameParts.join(":").trim() };
+    })
+    .filter((e) => e.id && e.name),
+
   /**
    * Ano a partir do qual se calcula o histórico total de faturação.
    * Default: 2021.
