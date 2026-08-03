@@ -32,6 +32,9 @@ function toEntity(row: Record<string, unknown>): CashClosing {
     submittedAt: row.submitted_at as string,
     sessionOpenedAt: (row.session_opened_at as string | null) ?? null,
     drawerDenominations: (row.drawer_denominations as DrawerDenominations | null) ?? null,
+    airMenuUber: row.air_menu_uber != null ? Number(row.air_menu_uber) : null,
+    airMenuGlovo: row.air_menu_glovo != null ? Number(row.air_menu_glovo) : null,
+    airMenuBolt: row.air_menu_bolt != null ? Number(row.air_menu_bolt) : null,
   });
 }
 
@@ -61,6 +64,9 @@ export class SupabaseCashClosingRepository implements CashClosingRepositoryPort 
       submitted_at: closing.submittedAt,
       session_opened_at: closing.sessionOpenedAt,
       drawer_denominations: closing.drawerDenominations,
+      air_menu_uber: closing.airMenuUber,
+      air_menu_glovo: closing.airMenuGlovo,
+      air_menu_bolt: closing.airMenuBolt,
     });
 
     if (error) throw new Error(error.message);

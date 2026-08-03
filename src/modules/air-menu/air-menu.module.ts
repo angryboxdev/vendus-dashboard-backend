@@ -8,13 +8,14 @@ import { GetSummaryUseCase } from "./application/use-cases/get-summary.use-case.
 import { GetOrderRawUseCase } from "./application/use-cases/get-order-raw.use-case.js";
 import { AirMenuController } from "./adapters/in/air-menu.controller.js";
 import type { AirMenuEnterprise } from "./domain/entities/air-menu-enterprise.js";
+import type { GetSummaryPort } from "./domain/ports/in/get-summary.port.js";
 
 export function createAirMenuModule(config: {
   apiKey: string;
   username: string;
   password: string;
   enterprises: AirMenuEnterprise[];
-}): { router: Router } {
+}): { router: Router; getSummary: GetSummaryPort } {
   const gateway = new AirMenuHttpGateway(config.apiKey);
 
   const sessionManager = new SessionManagerService(
@@ -32,5 +33,5 @@ export function createAirMenuModule(config: {
 
   const controller = new AirMenuController(getEnterprises, getSummary, getOrderRaw);
 
-  return { router: controller.router };
+  return { router: controller.router, getSummary };
 }

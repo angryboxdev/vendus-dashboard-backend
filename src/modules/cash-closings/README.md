@@ -1,7 +1,7 @@
 # Módulo: cash-closings
 
 > Status: ativo
-> Última atualização: 2026-06-15
+> Última atualização: 2026-08-04
 
 ---
 
@@ -14,9 +14,10 @@ kiosk até ao momento em que o manager aprova ou rejeita o fecho no backoffice.
 
 **O problema que resolve:**
 Sem este sistema, o fecho de caixa seria feito em papel ou numa folha de cálculo,
-sem rastreabilidade, sem comparação automática com o Vendus e sem histórico
-consultável. Qualquer divergência entre o dinheiro real e o que o Vendus registou
-teria de ser investigada manualmente.
+sem rastreabilidade e sem histórico consultável. O manager não teria forma de
+comparar automaticamente o que o funcionário declarou com o que o Vendus registou
+(canal próprio) nem com o que o AirMenu registou (canais externos de delivery).
+Qualquer divergência teria de ser investigada manualmente plataforma a plataforma.
 
 **O fluxo do ponto de vista do negócio:**
 
@@ -34,22 +35,36 @@ Funcionário (kiosk)                         Manager (backoffice)
 6. Regista total de vendas a dinheiro
 7. Conta nota a nota e moeda a moeda
    o que está na gaveta no fim do turno
-8. Submete — o sistema compara
-   automaticamente com o Vendus         →   9. Vê o fecho como "pendente"
-                                            10. Confirma ou corrige valores
-                                            11. Aprova ou rejeita
+8. Submete — o sistema vai buscar        →   9. Vê o fecho como "pendente"
+   automaticamente o total Vendus             10. Vê diferenças por canal:
+   (canal próprio) e os totais AirMenu             canal próprio (vs Vendus),
+   por plataforma (Uber/Glovo/Bolt)                canais externos (vs AirMenu),
+                                                    gaveta (esperada vs declarada)
+                                            11. Confirma ou corrige valores
+                                            12. Aprova ou rejeita
 ```
 
 **Conceitos-chave para o negócio:**
 
-- **Total calculado** — soma de todos os canais de venda registados pelo
-  funcionário (TPA + apps + dinheiro). É o que o funcionário declara ter vendido.
+- **Total calculado** — soma de todos os canais declarados pelo funcionário
+  (TPA + Uber + Glovo + Bolt + Eatz + dinheiro). É a declaração total do turno.
 - **Total Vendus** — o que o sistema de POS (Vendus) registou para aquela
   sessão de caixa. O sistema vai buscar este valor automaticamente para servir
   de referência ao manager.
-- **Diferença Vendus** — total calculado menos total Vendus. Deve ser zero ou
-  explicado. Uma diferença positiva pode indicar vendas não registadas no Vendus;
-  negativa pode indicar um erro de registo.
+- **Canal Próprio (Vendus)** — vendas faturadas no Vendus: TPA, Eatz e dinheiro.
+  O `vendusTotal` é a referência automática para este canal.
+- **Canais Externos (AirMenu)** — pedidos de delivery de plataformas externas
+  (Glovo, Uber Eats, Bolt Food) faturados no AirMenu. Os `airMenuUber/Glovo/Bolt`
+  são as referências automáticas para cada plataforma.
+- **Diferença (canal próprio)** — `(tpa + eatz + cashSales) − vendusTotal`. Deve
+  ser zero ou explicado. Uma diferença positiva pode indicar vendas não registadas
+  no Vendus; negativa pode indicar um erro de registo.
+- **Diferença (delivery)** — por plataforma e no total: valor declarado pelo
+  funcionário menos total AirMenu. Útil para detetar erros de declaração ou
+  discrepâncias nas plataformas externas.
+- **Diferença de gaveta** — `(cashDrawerOpen + cashSales + cashIn − cashOut) − cashDrawerTotal`.
+  Revela se falta ou sobra dinheiro na gaveta face ao esperado pela aritmética do
+  turno. Calculada na UI; não persistida.
 - **Sangria** — quando a gaveta tem mais de 100 € no fim do turno, o excesso
   deve ser retirado e colocado num envelope (a "sangria"). O sistema calcula
   automaticamente o valor a sangrar e alerta o funcionário no ecrã de confirmação.
@@ -62,16 +77,18 @@ Funcionário (kiosk)                         Manager (backoffice)
 ## Propósito técnico
 
 Gere o ciclo completo do fecho de caixa diário: submissão pelo funcionário no
-kiosk, verificação cruzada com os totais Vendus por sessão, e revisão/aprovação
-pelo manager no backoffice. NÃO é responsável pela autenticação dos managers
-(feita pelo middleware global), nem pelo agendamento de notificações.
+kiosk, verificação cruzada automática com o Vendus (canal próprio) e com o
+AirMenu (canais externos de delivery), e revisão/aprovação pelo manager no
+backoffice. NÃO é responsável pela autenticação dos managers (feita pelo
+middleware global), nem pelo agendamento de notificações.
 
 ## Conceitos do domínio
 
 - **CashClosing** — entidade principal; imutável após criação, alterada via
-  `review()` que devolve nova instância. Guarda os montantes por canal
-  (TPA, Uber, Glovo, Bolt, Eatz, dinheiro), movimento de caixa (entradas/saídas,
-  gaveta início/fim), a contagem física de denominações (`drawerDenominations`)
+  `review()` que devolve nova instância. Guarda os montantes declarados por canal
+  (TPA, Uber, Glovo, Bolt, Eatz, dinheiro), os totais de referência AirMenu
+  (`airMenuUber/Glovo/Bolt`), movimento de caixa (entradas/saídas, gaveta
+  início/fim), a contagem física de denominações (`drawerDenominations`)
   e os campos derivados `totalCalculated` e `sangriaAmount`.
 - **CashClosingStatus** — `"pending" | "approved" | "rejected"`.
 - **CashClosingCalculator** — serviço de domínio puro com dois métodos estáticos:
@@ -104,7 +121,8 @@ pelo manager no backoffice. NÃO é responsável pela autenticação dos manager
 - `GetClosingPort` — detalhe de um fecho por ID; lança `ClosingNotFoundError`.
 - `ReviewClosingPort` — manager aprova/rejeita e/ou edita valores; recalcula
   `totalCalculated` e `sangriaAmount` se campos numéricos mudarem; define
-  `reviewedAt` se `status` mudar. Nunca altera `drawerDenominations`.
+  `reviewedAt` se `status` mudar. Nunca altera `drawerDenominations` nem
+  `airMenuUber/Glovo/Bolt` (ambos imutáveis após submissão).
 
 ### Saída (dependências do domínio)
 
@@ -112,6 +130,8 @@ pelo manager no backoffice. NÃO é responsável pela autenticação dos manager
   `existsForEmployeeOnDate`, `existsForSession`.
 - `EmployeeRepositoryPort` — `findActiveByPinHash`, `findActiveById`.
 - `VendusRegisterSessionsGatewayPort` — `getSessionsForDate(date)`, `getSessionTotal(date, openedAt)`.
+- `AirMenuDeliveryGatewayPort` — `getDeliveryTotalsForDate(date)` → `{ uber, glovo, bolt }`.
+  Opcional: se não configurado, os campos AirMenu ficam null.
 
 ## Adapters
 
@@ -129,8 +149,13 @@ pelo manager no backoffice. NÃO é responsável pela autenticação dos manager
 
 - `SupabaseCashClosingRepository` — implementa `CashClosingRepositoryPort`
   usando Supabase (service role). Faz join com `hr_employees` para popular
-  `employeeName`. Persiste `drawer_denominations` como JSONB; não o actualiza
-  no `update()` (imutável após submissão).
+  `employeeName`. Persiste `drawer_denominations` como JSONB e `air_menu_uber/glovo/bolt`
+  como numeric nullable; nenhum destes campos é atualizado no `update()` (imutáveis
+  após submissão).
+- `AirMenuDeliveryGateway` — implementa `AirMenuDeliveryGatewayPort`. Recebe
+  `GetSummaryPort` (do módulo air-menu) e `enterpriseId` (env `AIRMENU_CLOSING_ENTERPRISE_ID`).
+  Chama `getSummary` com `startOfDay/endOfDay` para a data do fecho e lê
+  `analytics.byPlatform` para extrair os totais por plataforma (NCs já descontadas).
 - `SupabaseEmployeeRepository` — implementa `EmployeeRepositoryPort` usando Supabase.
 - `VendusRegisterSessionsGateway` — implementa `VendusRegisterSessionsGatewayPort`;
   chama `GET /registers/{id}/movements/` em paralelo com `GET /documents/` (FS+FT+NC)
@@ -157,6 +182,17 @@ persistidos desnormalizados para facilitar queries e ordenação.
 **`vendusTotal` é best-effort.**
 A submissão não falha se a API Vendus estiver indisponível; `vendusTotal` fica
 `null`. O manager pode comparar manualmente e editar via `ReviewClosingPort`.
+
+**`airMenuUber/Glovo/Bolt` são best-effort e imutáveis.**
+Calculados na submissão chamando `AirMenuDeliveryGatewayPort`. Se a API AirMenu
+estiver indisponível ou o gateway não estiver configurado, ficam `null`.
+Não são editáveis pelo manager (são dados externos, não declarados pelo funcionário).
+O `SubmitClosingUseCase` recebe o gateway como 4.º parâmetro opcional.
+
+**Separação canal próprio / canais externos.**
+`vendusTotal` é a referência para TPA + Eatz + cashSales (Vendus).
+`airMenuUber/Glovo/Bolt` são as referências para os respetivos canais de delivery.
+`totalCalculated` continua a ser a soma de todos os campos declarados pelo funcionário.
 
 **`drawerDenominations` é imutável após submissão.**
 A contagem física de notas e moedas é auditoria — representa o que o funcionário
@@ -188,8 +224,9 @@ ficheiro sem dependências de infra, os testes podem importá-la directamente.
 
 ## Como testar
 
-- Domínio/use cases/session-builder: `npx jest --config jest.config.cjs --testPathPattern=src/modules/cash-closings`
-- Adapters (Supabase, Vendus API): testes de integração não incluídos (requerem staging).
+- Domínio/use cases/adapters puros: `npx jest --config jest.config.cjs --testPathPattern=src/modules/cash-closings`
+  (inclui `AirMenuDeliveryGateway` com fake `GetSummaryPort`)
+- Adapters de infra (Supabase, Vendus API, AirMenu HTTP): testes de integração não incluídos (requerem staging).
 
 ## Pontos de atenção / dívidas conhecidas
 
@@ -203,3 +240,11 @@ ficheiro sem dependências de infra, os testes podem importá-la directamente.
 - NC sem movimento em dias multi-turno é atribuída à última sessão por heurística.
   Se um dia tiver NCs de múltiplos turnos sem movimento, o total da última sessão
   pode ficar ligeiramente errado. Casos raros no contexto actual.
+- `AirMenuDeliveryGateway` filtra por `orderDate` (data de criação da ordem), não
+  por `documentDate`. Ordens aceites próximo da meia-noite podem cair no dia
+  seguinte se a criação e a faturação ocorrerem em dias diferentes.
+- Os totais AirMenu (`airMenuUber/Glovo/Bolt`) reflectem apenas a enterprise
+  configurada em `AIRMENU_CLOSING_ENTERPRISE_ID`. Se o negócio tiver múltiplas
+  localizações com enterprises distintas no AirMenu, os totais serão incompletos.
+- A diferença de gaveta é calculada apenas na UI e não é persistida. Não pode
+  ser usada para filtrar ou ordenar fechos no backoffice.

@@ -5,20 +5,24 @@ import type { CashClosingDto } from "../../domain/ports/in/shared-dto.js";
 import type { CashClosingRepositoryPort } from "../../domain/ports/out/cash-closing-repository.port.js";
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
 import type { VendusRegisterSessionsGatewayPort } from "../../domain/ports/out/vendus-register-sessions-gateway.port.js";
+import type { AirMenuDeliveryGatewayPort } from "../../domain/ports/out/air-menu-delivery-gateway.port.js";
 
 export class SubmitClosingUseCase implements SubmitClosingPort {
   private readonly closingRepository: CashClosingRepositoryPort;
   private readonly employeeRepository: EmployeeRepositoryPort;
   private readonly sessionsGateway: VendusRegisterSessionsGatewayPort;
+  private readonly airMenuGateway: AirMenuDeliveryGatewayPort | undefined;
 
   constructor(
     closingRepository: CashClosingRepositoryPort,
     employeeRepository: EmployeeRepositoryPort,
     sessionsGateway: VendusRegisterSessionsGatewayPort,
+    airMenuGateway?: AirMenuDeliveryGatewayPort,
   ) {
     this.closingRepository = closingRepository;
     this.employeeRepository = employeeRepository;
     this.sessionsGateway = sessionsGateway;
+    this.airMenuGateway = airMenuGateway;
   }
 
   async execute(command: SubmitClosingCommand): Promise<CashClosingDto> {
@@ -39,7 +43,7 @@ export class SubmitClosingUseCase implements SubmitClosingPort {
       if (isDuplicate) throw new DuplicateClosingError(command.employeeId, command.closingDate);
     }
 
-    // Total Vendus: best-effort — se a API falhar não impede a submissão.
+    // Total Vendus (canal próprio): best-effort — se a API falhar não impede a submissão.
     let vendusTotal: number | null = null;
     try {
       if (sessionOpenedAt) {
@@ -50,6 +54,21 @@ export class SubmitClosingUseCase implements SubmitClosingPort {
       }
     } catch {
       // silently ignored
+    }
+
+    // Totais AirMenu (canais externos): best-effort — se a API falhar ficam null.
+    let airMenuUber: number | null = null;
+    let airMenuGlovo: number | null = null;
+    let airMenuBolt: number | null = null;
+    if (this.airMenuGateway) {
+      try {
+        const totals = await this.airMenuGateway.getDeliveryTotalsForDate(command.closingDate);
+        airMenuUber = totals.uber;
+        airMenuGlovo = totals.glovo;
+        airMenuBolt = totals.bolt;
+      } catch {
+        // silently ignored
+      }
     }
 
     const closing = CashClosing.create({
@@ -70,6 +89,9 @@ export class SubmitClosingUseCase implements SubmitClosingPort {
       notes: command.notes,
       sessionOpenedAt,
       drawerDenominations: command.drawerDenominations,
+      airMenuUber,
+      airMenuGlovo,
+      airMenuBolt,
     });
 
     await this.closingRepository.save(closing);
@@ -103,5 +125,8 @@ export function toDto(closing: CashClosing): CashClosingDto {
     submittedAt: closing.submittedAt,
     sessionOpenedAt: closing.sessionOpenedAt,
     drawerDenominations: closing.drawerDenominations,
+    airMenuUber: closing.airMenuUber,
+    airMenuGlovo: closing.airMenuGlovo,
+    airMenuBolt: closing.airMenuBolt,
   };
 }

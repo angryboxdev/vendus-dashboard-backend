@@ -6,6 +6,8 @@ import { hashPin } from "../../utils/kiosk.js";
 import { SupabaseCashClosingRepository } from "./adapters/out/supabase-cash-closing.repository.js";
 import { SupabaseEmployeeRepository } from "./adapters/out/supabase-employee.repository.js";
 import { VendusRegisterSessionsGateway } from "./adapters/out/vendus-register-sessions.gateway.js";
+import { AirMenuDeliveryGateway } from "./adapters/out/air-menu-delivery.gateway.js";
+import type { GetSummaryPort } from "../air-menu/domain/ports/in/get-summary.port.js";
 
 import { VerifyPinUseCase } from "./application/use-cases/verify-pin.use-case.js";
 import { SubmitClosingUseCase } from "./application/use-cases/submit-closing.use-case.js";
@@ -28,8 +30,11 @@ export interface CashClosingsModule {
  *
  * Único lugar que conhece as implementações concretas dos adapters.
  * Os use cases e o domínio apenas conhecem interfaces (ports).
+ *
+ * @param airMenuSummary - GetSummaryPort do módulo air-menu (injectado pelo servidor).
+ *   Opcional: se ausente, os totais AirMenu ficam null nos fechos submetidos.
  */
-export function createCashClosingsModule(): CashClosingsModule {
+export function createCashClosingsModule(airMenuSummary?: GetSummaryPort): CashClosingsModule {
   const supabase = getSupabaseServiceRole();
   if (!supabase) throw new Error("Supabase service role não configurado");
 
@@ -37,6 +42,11 @@ export function createCashClosingsModule(): CashClosingsModule {
   const closingRepository = new SupabaseCashClosingRepository(supabase);
   const employeeRepository = new SupabaseEmployeeRepository(supabase);
   const sessionsGateway = new VendusRegisterSessionsGateway(ENV.VENDUS_REGISTER_ID);
+
+  const airMenuGateway =
+    airMenuSummary && ENV.AIRMENU_CLOSING_ENTERPRISE_ID
+      ? new AirMenuDeliveryGateway(airMenuSummary, ENV.AIRMENU_CLOSING_ENTERPRISE_ID)
+      : undefined;
 
   // Função de hash injectada no use case (evita dependência directa de infra no domínio)
   const hashPinFn = (pin: string) => hashPin(ENV.HR_KIOSK_HMAC_SECRET, pin);
@@ -47,6 +57,7 @@ export function createCashClosingsModule(): CashClosingsModule {
     closingRepository,
     employeeRepository,
     sessionsGateway,
+    airMenuGateway,
   );
   const listClosings = new ListClosingsUseCase(closingRepository);
   const getClosing = new GetClosingUseCase(closingRepository);

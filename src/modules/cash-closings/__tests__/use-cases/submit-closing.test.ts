@@ -2,6 +2,7 @@ import { SubmitClosingUseCase } from "../../application/use-cases/submit-closing
 import { FakeCashClosingRepository } from "../fakes/fake-cash-closing-repository.js";
 import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
 import { FakeVendusRegisterSessionsGateway } from "../fakes/fake-vendus-register-sessions-gateway.js";
+import { FakeAirMenuDeliveryGateway } from "../fakes/fake-air-menu-delivery-gateway.js";
 import { DuplicateClosingError, EmployeeNotFoundError } from "../../domain/errors.js";
 
 function makeUseCase() {
@@ -10,6 +11,15 @@ function makeUseCase() {
   const sessionsGateway = new FakeVendusRegisterSessionsGateway();
   const useCase = new SubmitClosingUseCase(closingRepo, employeeRepo, sessionsGateway);
   return { closingRepo, employeeRepo, sessionsGateway, useCase };
+}
+
+function makeUseCaseWithAirMenu() {
+  const closingRepo = new FakeCashClosingRepository();
+  const employeeRepo = new FakeEmployeeRepository();
+  const sessionsGateway = new FakeVendusRegisterSessionsGateway();
+  const airMenuGateway = new FakeAirMenuDeliveryGateway();
+  const useCase = new SubmitClosingUseCase(closingRepo, employeeRepo, sessionsGateway, airMenuGateway);
+  return { closingRepo, employeeRepo, airMenuGateway, useCase };
 }
 
 const baseCommand = {
@@ -87,6 +97,17 @@ describe("SubmitClosingUseCase", () => {
     expect(result.drawerDenominations).toBeNull();
   });
 
+  it("campos AirMenu ficam null quando gateway não configurado", async () => {
+    const { employeeRepo, useCase } = makeUseCase();
+    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+
+    const result = await useCase.execute(baseCommand);
+
+    expect(result.airMenuUber).toBeNull();
+    expect(result.airMenuGlovo).toBeNull();
+    expect(result.airMenuBolt).toBeNull();
+  });
+
   it("permite que o mesmo funcionário submeta em datas diferentes", async () => {
     const { closingRepo, employeeRepo, useCase } = makeUseCase();
     employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
@@ -159,5 +180,58 @@ describe("SubmitClosingUseCase — modo sessions", () => {
     const result = await useCase.execute({ ...sessionCommand, sessionOpenedAt: SESSION_1 });
     expect(result.vendusTotal).toBeNull();
     expect(result.status).toBe("pending");
+  });
+});
+
+describe("SubmitClosingUseCase — totais AirMenu", () => {
+  const baseCmd = {
+    employeeId: "emp-1",
+    closingDate: "2026-08-01",
+    tpa: 200,
+    uber: 50,
+    glovo: 30,
+    bolt: 20,
+    eatz: 10,
+    cashSales: 100,
+    cashIn: 50,
+    cashOut: 20,
+    cashDrawerOpen: 100,
+    cashDrawerTotal: 150,
+  };
+
+  it("popula airMenuUber/Glovo/Bolt a partir do gateway", async () => {
+    const { employeeRepo, airMenuGateway, useCase } = makeUseCaseWithAirMenu();
+    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    airMenuGateway.setTotals("2026-08-01", { uber: 48.20, glovo: 30.00, bolt: 21.50 });
+
+    const result = await useCase.execute(baseCmd);
+
+    expect(result.airMenuUber).toBe(48.20);
+    expect(result.airMenuGlovo).toBe(30.00);
+    expect(result.airMenuBolt).toBe(21.50);
+  });
+
+  it("airMenuUber/Glovo/Bolt ficam null se o gateway falhar (best-effort)", async () => {
+    const { employeeRepo, airMenuGateway, useCase } = makeUseCaseWithAirMenu();
+    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    airMenuGateway.shouldFail = true;
+
+    const result = await useCase.execute(baseCmd);
+
+    expect(result.airMenuUber).toBeNull();
+    expect(result.airMenuGlovo).toBeNull();
+    expect(result.airMenuBolt).toBeNull();
+    expect(result.status).toBe("pending");
+  });
+
+  it("totais AirMenu não afectam totalCalculated", async () => {
+    const { employeeRepo, airMenuGateway, useCase } = makeUseCaseWithAirMenu();
+    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    airMenuGateway.setTotals("2026-08-01", { uber: 9999, glovo: 9999, bolt: 9999 });
+
+    const result = await useCase.execute(baseCmd);
+
+    // totalCalculated = tpa + uber + glovo + bolt + eatz + cashSales = 410
+    expect(result.totalCalculated).toBe(410);
   });
 });

@@ -74,6 +74,13 @@ export const ENV = {
   ANALYTICS_HISTORY_START_YEAR: Number(process.env.ANALYTICS_HISTORY_START_YEAR ?? 2025),
 
   /**
+   * Enterprise AirMenu usada para obter totais de delivery nos fechos de caixa.
+   * Corresponde à localização do restaurante (ex: Angry Box - Porto).
+   * Opcional: se não configurado, os totais AirMenu ficam null no fecho.
+   */
+  AIRMENU_CLOSING_ENTERPRISE_ID: process.env.AIRMENU_CLOSING_ENTERPRISE_ID ?? null,
+
+  /**
    * ID do caixa registador Vendus usado nos fechos de caixa.
    * Fallback para UBER_EATS_VENDUS_REGISTER_ID (mesmo registo).
    */

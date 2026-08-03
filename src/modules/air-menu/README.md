@@ -1,7 +1,7 @@
 # Módulo: air-menu
 
 > Status: ativo
-> Última atualização: 2026-08-03
+> Última atualização: 2026-08-04
 
 ---
 
@@ -329,6 +329,7 @@ O `tax` propaga-se da família para os itens filhos (`activeTax`): se um item n�
 - **`walkMenu` usa a primeira família real**: famílias chamadas `"Menu"` são wrappers estruturais e ignoradas na determinação da categoria.
 - **Analytics computados no backend**: o frontend recebe dados já calculados, sem precisar de processar a lista raw de ordens.
 - **Comissão de plataforma omitida do backend**: a estimativa de comissão (default 30%) é um cálculo do frontend, configurável pelo utilizador.
+- **`getSummary` exposto pelo composition root**: `createAirMenuModule` retorna `{ router, getSummary }`. O `getSummary` é injectado no módulo `cash-closings` para obter totais de delivery na submissão de fechos de caixa — sem duplicar a lógica de sessão ou catálogo.
 - **Fusão de complemento de tamanho em `extractItems`**: complementos do grupo "tamanho" são detetados por regex (`/tamanho|size/i`) e fundidos no item pai (título + preço).
 - **`topItemMap` chaveado por `plu|title`**: a mesma SKU pode ter tamanhos diferentes — usar apenas o PLU como chave agregaria tamanhos indevidamente.
 - **Herança de `tax` na família**: o `walkMenu` propaga `activeTax` pela árvore do menu. Necessário porque no AirMenu o IVA pode estar configurado ao nível da família e não em cada item individualmente.

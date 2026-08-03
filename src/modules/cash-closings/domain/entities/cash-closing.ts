@@ -52,6 +52,16 @@ export interface CashClosingProps {
    * null em fechos criados antes desta feature.
    */
   drawerDenominations: DrawerDenominations | null;
+  /**
+   * Totais de referência AirMenu por plataforma de delivery externo.
+   * Calculados automaticamente na submissão (best-effort); null se AirMenu indisponível
+   * ou não configurado. Não fazem parte de totalCalculated — são apenas referência
+   * para o manager comparar com os valores declarados pelo funcionário.
+   * Imutáveis após submissão (não editáveis pelo manager).
+   */
+  airMenuUber: number | null;
+  airMenuGlovo: number | null;
+  airMenuBolt: number | null;
 }
 
 export interface ReviewPatch {
@@ -95,6 +105,9 @@ export class CashClosing {
   readonly submittedAt: string;
   readonly sessionOpenedAt: string | null;
   readonly drawerDenominations: DrawerDenominations | null;
+  readonly airMenuUber: number | null;
+  readonly airMenuGlovo: number | null;
+  readonly airMenuBolt: number | null;
 
   private constructor(props: CashClosingProps) {
     this.id = props.id;
@@ -121,6 +134,9 @@ export class CashClosing {
     this.submittedAt = props.submittedAt;
     this.sessionOpenedAt = props.sessionOpenedAt;
     this.drawerDenominations = props.drawerDenominations;
+    this.airMenuUber = props.airMenuUber;
+    this.airMenuGlovo = props.airMenuGlovo;
+    this.airMenuBolt = props.airMenuBolt;
   }
 
   /**
@@ -145,6 +161,9 @@ export class CashClosing {
     notes?: string | null | undefined;
     sessionOpenedAt?: string | null | undefined;
     drawerDenominations?: DrawerDenominations | null | undefined;
+    airMenuUber?: number | null | undefined;
+    airMenuGlovo?: number | null | undefined;
+    airMenuBolt?: number | null | undefined;
   }): CashClosing {
     const totalCalculated = CashClosingCalculator.computeTotal({
       tpa: params.tpa,
@@ -181,6 +200,9 @@ export class CashClosing {
       submittedAt: new Date().toISOString(),
       sessionOpenedAt: params.sessionOpenedAt ?? null,
       drawerDenominations: params.drawerDenominations ?? null,
+      airMenuUber: params.airMenuUber ?? null,
+      airMenuGlovo: params.airMenuGlovo ?? null,
+      airMenuBolt: params.airMenuBolt ?? null,
     });
   }
 
@@ -238,6 +260,9 @@ export class CashClosing {
       submittedAt: this.submittedAt,
       sessionOpenedAt: this.sessionOpenedAt,
       drawerDenominations: this.drawerDenominations,
+      airMenuUber: this.airMenuUber,
+      airMenuGlovo: this.airMenuGlovo,
+      airMenuBolt: this.airMenuBolt,
     });
   }
 
@@ -267,6 +292,9 @@ export class CashClosing {
       submittedAt: this.submittedAt,
       sessionOpenedAt: this.sessionOpenedAt,
       drawerDenominations: this.drawerDenominations,
+      airMenuUber: this.airMenuUber,
+      airMenuGlovo: this.airMenuGlovo,
+      airMenuBolt: this.airMenuBolt,
     };
   }
 }

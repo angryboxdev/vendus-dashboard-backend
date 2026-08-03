@@ -128,5 +128,35 @@ describe("CashClosing entity", () => {
       const reviewed = c.review({ status: "approved", cashDrawerTotal: 300, tpa: 999 });
       expect(reviewed.drawerDenominations).toEqual(denoms);
     });
+
+    it("review() preserva airMenuUber/Glovo/Bolt (imutáveis após submissão)", () => {
+      const c = makeClosing({ airMenuUber: 48.20, airMenuGlovo: 30.00, airMenuBolt: 21.50 });
+      const reviewed = c.review({ status: "approved", tpa: 999 });
+      expect(reviewed.airMenuUber).toBe(48.20);
+      expect(reviewed.airMenuGlovo).toBe(30.00);
+      expect(reviewed.airMenuBolt).toBe(21.50);
+    });
+  });
+
+  describe("campos AirMenu", () => {
+    it("persiste airMenuUber/Glovo/Bolt quando fornecidos", () => {
+      const c = makeClosing({ airMenuUber: 48.20, airMenuGlovo: 30.00, airMenuBolt: 21.50 });
+      expect(c.airMenuUber).toBe(48.20);
+      expect(c.airMenuGlovo).toBe(30.00);
+      expect(c.airMenuBolt).toBe(21.50);
+    });
+
+    it("airMenuUber/Glovo/Bolt são null quando não fornecidos", () => {
+      const c = makeClosing();
+      expect(c.airMenuUber).toBeNull();
+      expect(c.airMenuGlovo).toBeNull();
+      expect(c.airMenuBolt).toBeNull();
+    });
+
+    it("campos AirMenu não afectam totalCalculated", () => {
+      const sem = makeClosing();
+      const com = makeClosing({ airMenuUber: 9999, airMenuGlovo: 9999, airMenuBolt: 9999 });
+      expect(com.totalCalculated).toBe(sem.totalCalculated);
+    });
   });
 });

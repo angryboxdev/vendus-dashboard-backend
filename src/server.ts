@@ -53,8 +53,16 @@ app.use(populateAuth);
 // PATCH /employees/:id/kiosk-pin has inline requireAuth inside the handler
 app.use("/api/hr", hrKioskRoutes);
 
-// Cash closing module (hexagonal)
-const cashClosingsModule = createCashClosingsModule();
+// Air Menu: instanciado antes do cash-closings para injectar getSummary
+const airMenuModule = createAirMenuModule({
+  apiKey: ENV.AIRMENU_API_KEY,
+  username: ENV.AIRMENU_USERNAME,
+  password: ENV.AIRMENU_PASSWORD,
+  enterprises: ENV.AIRMENU_ENTERPRISES,
+});
+
+// Cash closing module (hexagonal) — recebe getSummary do air-menu para totais de delivery
+const cashClosingsModule = createCashClosingsModule(airMenuModule.getSummary);
 
 // Cash closing public routes (PIN verify + submit) — no auth required
 app.use("/api", cashClosingsModule.publicRouter);
@@ -107,13 +115,7 @@ app.use("/api", requireMinRole("manager"), bankAccountsModule.router);
 const bankStatementsModule = createBankStatementsModule(bankAccountsModule.accountRepo);
 app.use("/api", requireMinRole("manager"), bankStatementsModule.router);
 
-// Air Menu: agregador de pedidos Glovo / Uber Eats / Bolt Food
-const airMenuModule = createAirMenuModule({
-  apiKey: ENV.AIRMENU_API_KEY,
-  username: ENV.AIRMENU_USERNAME,
-  password: ENV.AIRMENU_PASSWORD,
-  enterprises: ENV.AIRMENU_ENTERPRISES,
-});
+// Air Menu: rota protegida (módulo já instanciado acima)
 app.use("/api", requireMinRole("manager"), airMenuModule.router);
 
 // Cash closing manager routes (authenticated)
