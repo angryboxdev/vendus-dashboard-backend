@@ -11,6 +11,6 @@ export class GetOrderRawUseCase implements GetOrderRawPort {
   async execute(enterpriseId: string, orderId: string): Promise<Record<string, unknown>[]> {
     const session = await this.sessionManager.getValidSession();
     const rawOrders = await this.gateway.getOrders(session.sessionId, enterpriseId, orderId);
-    return Object.values(rawOrders).flat() as Record<string, unknown>[];
+    return Object.values(rawOrders).flat() as unknown as Record<string, unknown>[];
   }
 }
