@@ -1,15 +1,7 @@
 import type { RegisterSession } from "../../domain/entities/register-session.js";
+import type { VendusRegisterMovement } from "../../../vendus/domain/ports/out/vendus-gateway.port.js";
 
-export interface VendusMovement {
-  operation: string;
-  type: string;
-  amount: string;
-  obs: string | null;
-  document_id: number;
-  user_id: number;
-  date: string;
-  time: string;
-}
+export type { VendusRegisterMovement };
 
 export interface DocEntry {
   type: string;
@@ -32,7 +24,7 @@ export interface DocEntry {
  * Replica a lógica do dashboard: sumGrossCents = sum(FS/FT) - sum(NC).
  */
 export function buildSessions(
-  movements: VendusMovement[],
+  movements: VendusRegisterMovement[],
   docMap: Map<number, DocEntry>,
 ): RegisterSession[] {
   const sorted = [...movements].sort((a, b) => a.time.localeCompare(b.time));

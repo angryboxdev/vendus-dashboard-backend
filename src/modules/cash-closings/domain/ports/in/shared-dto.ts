@@ -30,4 +30,10 @@ export interface CashClosingDto {
   airMenuUber: number | null;
   airMenuGlovo: number | null;
   airMenuBolt: number | null;
+  /** Sub-total dos canais Vendus declarados pelo funcionário (TPA + Eatz + Dinheiro). */
+  vendusCalculated: number;
+  /** Sub-total dos canais AirMenu declarados pelo funcionário (Uber + Glovo + Bolt). */
+  airMenuCalculated: number;
+  /** Soma dos totais AirMenu por plataforma (referência API). null se AirMenu indisponível. */
+  airMenuTotal: number | null;
 }

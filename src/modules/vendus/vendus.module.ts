@@ -1,4 +1,5 @@
 import type { Router } from "express";
+import type { VendusGatewayPort } from "./domain/ports/out/vendus-gateway.port.js";
 import { VendusHttpGateway } from "./adapters/out/vendus-http.gateway.js";
 import { VendusProductCatalogAdapter } from "./adapters/out/vendus-product-catalog.adapter.js";
 import { SupabaseAnalyticsCacheAdapter } from "./adapters/out/supabase-analytics-cache.adapter.js";
@@ -32,6 +33,7 @@ export interface VendusModuleConfig {
 export function createVendusModule(config: VendusModuleConfig): {
   router: Router;
   getSummary: GetSummaryPort;
+  gateway: VendusGatewayPort;
 } {
   // Adapters de saída
   const gateway = new VendusHttpGateway();
@@ -76,5 +78,5 @@ export function createVendusModule(config: VendusModuleConfig): {
     getSelfConsumption,
   );
 
-  return { router: controller.router, getSummary };
+  return { router: controller.router, getSummary, gateway };
 }

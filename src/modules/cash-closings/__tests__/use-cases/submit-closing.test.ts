@@ -47,6 +47,9 @@ describe("SubmitClosingUseCase", () => {
     expect(result.status).toBe("pending");
     expect(result.employeeName).toBe("Ana Silva");
     expect(result.totalCalculated).toBe(410);
+    expect(result.vendusCalculated).toBe(310); // 200 + 10 + 100
+    expect(result.airMenuCalculated).toBe(100); // 50 + 30 + 20
+    expect(result.airMenuTotal).toBeNull(); // sem gateway AirMenu
     expect(result.sangriaAmount).toBe(150);
     expect(result.vendusTotal).toBeNull(); // sem sessão, vendusTotal fica null
 
@@ -209,6 +212,7 @@ describe("SubmitClosingUseCase — totais AirMenu", () => {
     expect(result.airMenuUber).toBe(48.20);
     expect(result.airMenuGlovo).toBe(30.00);
     expect(result.airMenuBolt).toBe(21.50);
+    expect(result.airMenuTotal).toBe(99.70); // 48.20 + 30.00 + 21.50
   });
 
   it("airMenuUber/Glovo/Bolt ficam null se o gateway falhar (best-effort)", async () => {
@@ -221,6 +225,7 @@ describe("SubmitClosingUseCase — totais AirMenu", () => {
     expect(result.airMenuUber).toBeNull();
     expect(result.airMenuGlovo).toBeNull();
     expect(result.airMenuBolt).toBeNull();
+    expect(result.airMenuTotal).toBeNull();
     expect(result.status).toBe("pending");
   });
 

@@ -128,5 +128,11 @@ export function toDto(closing: CashClosing): CashClosingDto {
     airMenuUber: closing.airMenuUber,
     airMenuGlovo: closing.airMenuGlovo,
     airMenuBolt: closing.airMenuBolt,
+    vendusCalculated: closing.vendusCalculated,
+    airMenuCalculated: closing.airMenuCalculated,
+    airMenuTotal:
+      closing.airMenuUber !== null && closing.airMenuGlovo !== null && closing.airMenuBolt !== null
+        ? Math.round((closing.airMenuUber + closing.airMenuGlovo + closing.airMenuBolt) * 100) / 100
+        : null,
   };
 }

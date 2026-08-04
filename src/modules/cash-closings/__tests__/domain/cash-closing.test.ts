@@ -34,6 +34,23 @@ describe("CashClosing entity", () => {
       expect(c.totalCalculated).toBe(410);
     });
 
+    it("calcula vendusCalculated correctamente (TPA + Eatz + Dinheiro)", () => {
+      const c = makeClosing();
+      // 200 + 10 + 100 = 310
+      expect(c.vendusCalculated).toBe(310);
+    });
+
+    it("calcula airMenuCalculated correctamente (Uber + Glovo + Bolt)", () => {
+      const c = makeClosing();
+      // 50 + 30 + 20 = 100
+      expect(c.airMenuCalculated).toBe(100);
+    });
+
+    it("vendusCalculated + airMenuCalculated == totalCalculated", () => {
+      const c = makeClosing();
+      expect(c.vendusCalculated + c.airMenuCalculated).toBe(c.totalCalculated);
+    });
+
     it("calcula sangriaAmount correctamente (gaveta > 100)", () => {
       const c = makeClosing({ cashDrawerTotal: 250 });
       expect(c.sangriaAmount).toBe(150);
@@ -135,6 +152,20 @@ describe("CashClosing entity", () => {
       expect(reviewed.airMenuUber).toBe(48.20);
       expect(reviewed.airMenuGlovo).toBe(30.00);
       expect(reviewed.airMenuBolt).toBe(21.50);
+    });
+
+    it("recalcula vendusCalculated ao alterar TPA no review", () => {
+      const c = makeClosing({ tpa: 200 });
+      const patched = c.review({ tpa: 300 });
+      // 300 + 10 + 100 = 410
+      expect(patched.vendusCalculated).toBe(410);
+    });
+
+    it("recalcula airMenuCalculated ao alterar Uber no review", () => {
+      const c = makeClosing({ uber: 50 });
+      const patched = c.review({ uber: 80 });
+      // 80 + 30 + 20 = 130
+      expect(patched.airMenuCalculated).toBe(130);
     });
   });
 

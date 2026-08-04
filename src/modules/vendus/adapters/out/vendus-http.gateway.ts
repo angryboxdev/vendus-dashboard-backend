@@ -5,6 +5,7 @@ import type {
   SelfConsumptionPage,
   RawSelfConsumptionRecord,
   RawSelfConsumptionProduct,
+  VendusRegisterMovement,
 } from "../../domain/ports/out/vendus-gateway.port.js";
 import type { VendusDocument, VendusDetailedDocumentRaw } from "../../domain/entities/vendus-document.js";
 import { vendusGet, vendusGetBasic } from "../../../../infra/vendusClient.js";
@@ -69,6 +70,16 @@ export class VendusHttpGateway implements VendusGatewayPort {
   async fetchSelfConsumptionDetail(id: string | number): Promise<RawSelfConsumptionProduct[]> {
     const data = await vendusGetBasic<unknown>(`/selfconsumption/${id}/`);
     return extractSelfConsumptionProducts(data);
+  }
+
+  async listRegisterMovements(registerId: string, date: string): Promise<VendusRegisterMovement[]> {
+    type MovementsResponse = VendusRegisterMovement[] | { errors?: unknown };
+    const response = await vendusGetBasic<MovementsResponse>(
+      `/v1.1/registers/${registerId}/movements/`,
+      { since: date, until: date, per_page: 500 },
+    );
+    if (Array.isArray(response)) return response;
+    return [];
   }
 }
 

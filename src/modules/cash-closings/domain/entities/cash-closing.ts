@@ -108,6 +108,10 @@ export class CashClosing {
   readonly airMenuUber: number | null;
   readonly airMenuGlovo: number | null;
   readonly airMenuBolt: number | null;
+  /** Sub-total declarado para canais Vendus (TPA + Eatz + Dinheiro). Derivado. */
+  readonly vendusCalculated: number;
+  /** Sub-total declarado para canais AirMenu (Uber + Glovo + Bolt). Derivado. */
+  readonly airMenuCalculated: number;
 
   private constructor(props: CashClosingProps) {
     this.id = props.id;
@@ -137,6 +141,16 @@ export class CashClosing {
     this.airMenuUber = props.airMenuUber;
     this.airMenuGlovo = props.airMenuGlovo;
     this.airMenuBolt = props.airMenuBolt;
+    this.vendusCalculated = CashClosingCalculator.computeVendusSubtotal({
+      tpa: props.tpa,
+      eatz: props.eatz,
+      cashSales: props.cashSales,
+    });
+    this.airMenuCalculated = CashClosingCalculator.computeAirMenuSubtotal({
+      uber: props.uber,
+      glovo: props.glovo,
+      bolt: props.bolt,
+    });
   }
 
   /**

@@ -29,6 +29,40 @@ describe("CashClosingCalculator", () => {
     });
   });
 
+  describe("computeVendusSubtotal", () => {
+    it("soma TPA + Eatz + Dinheiro", () => {
+      const result = CashClosingCalculator.computeVendusSubtotal({
+        tpa: 200, eatz: 10, cashSales: 100,
+      });
+      expect(result).toBe(310);
+    });
+
+    it("devolve 0 quando todos os canais são 0", () => {
+      expect(CashClosingCalculator.computeVendusSubtotal({ tpa: 0, eatz: 0, cashSales: 0 })).toBe(0);
+    });
+
+    it("arredonda a 2 casas decimais", () => {
+      expect(CashClosingCalculator.computeVendusSubtotal({ tpa: 0.1, eatz: 0.2, cashSales: 0 })).toBe(0.30);
+    });
+  });
+
+  describe("computeAirMenuSubtotal", () => {
+    it("soma Uber + Glovo + Bolt", () => {
+      const result = CashClosingCalculator.computeAirMenuSubtotal({
+        uber: 50, glovo: 30, bolt: 20,
+      });
+      expect(result).toBe(100);
+    });
+
+    it("devolve 0 quando todos os canais são 0", () => {
+      expect(CashClosingCalculator.computeAirMenuSubtotal({ uber: 0, glovo: 0, bolt: 0 })).toBe(0);
+    });
+
+    it("arredonda a 2 casas decimais", () => {
+      expect(CashClosingCalculator.computeAirMenuSubtotal({ uber: 0.1, glovo: 0.2, bolt: 0 })).toBe(0.30);
+    });
+  });
+
   describe("computeSangria", () => {
     it("devolve 0 quando gaveta é igual a 100", () => {
       expect(CashClosingCalculator.computeSangria(100)).toBe(0);

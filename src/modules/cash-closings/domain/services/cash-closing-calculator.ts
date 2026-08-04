@@ -28,6 +28,24 @@ export class CashClosingCalculator {
   }
 
   /**
+   * Sub-total dos canais faturados no Vendus (canal próprio): TPA + Eatz + Dinheiro.
+   * Arredondado a 2 casas decimais.
+   */
+  static computeVendusSubtotal(channels: Pick<ChannelAmounts, "tpa" | "eatz" | "cashSales">): number {
+    const raw = channels.tpa + channels.eatz + channels.cashSales;
+    return Math.round(raw * 100) / 100;
+  }
+
+  /**
+   * Sub-total dos canais faturados no AirMenu (delivery externo): Uber + Glovo + Bolt.
+   * Arredondado a 2 casas decimais.
+   */
+  static computeAirMenuSubtotal(channels: Pick<ChannelAmounts, "uber" | "glovo" | "bolt">): number {
+    const raw = channels.uber + channels.glovo + channels.bolt;
+    return Math.round(raw * 100) / 100;
+  }
+
+  /**
    * Sangria: valor a retirar da gaveta para a manter com fundo de 100 €.
    * Se a gaveta ficar igual ou abaixo de 100 €, sangria = 0.
    */

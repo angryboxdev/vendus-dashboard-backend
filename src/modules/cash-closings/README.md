@@ -35,13 +35,19 @@ Funcionário (kiosk)                         Manager (backoffice)
 6. Regista total de vendas a dinheiro
 7. Conta nota a nota e moeda a moeda
    o que está na gaveta no fim do turno
-8. Submete — o sistema vai buscar        →   9. Vê o fecho como "pendente"
-   automaticamente o total Vendus             10. Vê diferenças por canal:
-   (canal próprio) e os totais AirMenu             canal próprio (vs Vendus),
-   por plataforma (Uber/Glovo/Bolt)                canais externos (vs AirMenu),
-                                                    gaveta (esperada vs declarada)
-                                            11. Confirma ou corrige valores
-                                            12. Aprova ou rejeita
+8. Revê o resumo antes de submeter:
+   vê Total Vendus (da sessão Vendus
+   selecionada), Total AirMenu (buscado
+   à API AirMenu neste momento) e as
+   respetivas diferenças por canal
+9. Submete — o sistema persiste os      →  10. Vê o fecho como "pendente"
+   totais de referência AirMenu              11. Vê diferenças por canal:
+   por plataforma (Uber/Glovo/Bolt)              canal próprio (vs Vendus),
+                                                  canais externos (vs AirMenu,
+                                                  por plataforma e no total),
+                                                  gaveta (esperada vs declarada)
+                                           12. Confirma ou corrige valores
+                                           13. Aprova ou rejeita
 ```
 
 **Conceitos-chave para o negócio:**
@@ -52,16 +58,18 @@ Funcionário (kiosk)                         Manager (backoffice)
   sessão de caixa. O sistema vai buscar este valor automaticamente para servir
   de referência ao manager.
 - **Canal Próprio (Vendus)** — vendas faturadas no Vendus: TPA, Eatz e dinheiro.
-  O `vendusTotal` é a referência automática para este canal.
+  O `vendusCalculated` é o subtotal declarado pelo funcionário para este canal;
+  o `vendusTotal` é a referência automática vinda da API Vendus (total da sessão).
 - **Canais Externos (AirMenu)** — pedidos de delivery de plataformas externas
-  (Glovo, Uber Eats, Bolt Food) faturados no AirMenu. Os `airMenuUber/Glovo/Bolt`
-  são as referências automáticas para cada plataforma.
-- **Diferença (canal próprio)** — `(tpa + eatz + cashSales) − vendusTotal`. Deve
-  ser zero ou explicado. Uma diferença positiva pode indicar vendas não registadas
-  no Vendus; negativa pode indicar um erro de registo.
-- **Diferença (delivery)** — por plataforma e no total: valor declarado pelo
-  funcionário menos total AirMenu. Útil para detetar erros de declaração ou
-  discrepâncias nas plataformas externas.
+  (Glovo, Uber Eats, Bolt Food) faturados no AirMenu. O `airMenuCalculated` é o
+  subtotal declarado pelo funcionário; `airMenuUber/Glovo/Bolt` são as referências
+  automáticas por plataforma; `airMenuTotal` é a sua soma.
+- **Diferença Vendus** — `vendusCalculated − vendusTotal`. Deve ser zero ou
+  explicado. Uma diferença positiva pode indicar vendas não registadas no Vendus;
+  negativa pode indicar um erro de registo.
+- **Diferença AirMenu** — `airMenuCalculated − airMenuTotal`. Deve ser zero ou
+  explicado. Visível ao funcionário no step de revisão (pré-submissão) e ao
+  manager no backoffice. Por plataforma: `uber/glovo/bolt − airMenuUber/Glovo/Bolt`.
 - **Diferença de gaveta** — `(cashDrawerOpen + cashSales + cashIn − cashOut) − cashDrawerTotal`.
   Revela se falta ou sobra dinheiro na gaveta face ao esperado pela aritmética do
   turno. Calculada na UI; não persistida.
@@ -89,11 +97,14 @@ middleware global), nem pelo agendamento de notificações.
   (TPA, Uber, Glovo, Bolt, Eatz, dinheiro), os totais de referência AirMenu
   (`airMenuUber/Glovo/Bolt`), movimento de caixa (entradas/saídas, gaveta
   início/fim), a contagem física de denominações (`drawerDenominations`)
-  e os campos derivados `totalCalculated` e `sangriaAmount`.
+  e os campos derivados `totalCalculated`, `vendusCalculated`, `airMenuCalculated`
+  e `sangriaAmount`. `vendusCalculated` e `airMenuCalculated` são calculados no
+  construtor a partir dos campos brutos — não persistidos na BD.
 - **CashClosingStatus** — `"pending" | "approved" | "rejected"`.
-- **CashClosingCalculator** — serviço de domínio puro com dois métodos estáticos:
-  `computeTotal()` (soma dos canais) e `computeSangria()` (excesso de gaveta
-  acima de 100 €, arredondado a 2 casas).
+- **CashClosingCalculator** — serviço de domínio puro com quatro métodos estáticos:
+  `computeTotal()` (soma de todos os canais), `computeVendusSubtotal()` (TPA + Eatz + dinheiro),
+  `computeAirMenuSubtotal()` (Uber + Glovo + Bolt) e `computeSangria()` (excesso de
+  gaveta acima de 100 €, arredondado a 2 casas).
 - **DrawerDenominations** — contagem física das notas e moedas na gaveta no fim
   do turno. Campos: `notes50/20/10/5`, `coins200/100/50/20/10/1`. Imutável após
   submissão — o manager não a pode alterar, pois é auditoria.
@@ -120,9 +131,12 @@ middleware global), nem pelo agendamento de notificações.
   paginação `limit`/`offset`.
 - `GetClosingPort` — detalhe de um fecho por ID; lança `ClosingNotFoundError`.
 - `ReviewClosingPort` — manager aprova/rejeita e/ou edita valores; recalcula
-  `totalCalculated` e `sangriaAmount` se campos numéricos mudarem; define
-  `reviewedAt` se `status` mudar. Nunca altera `drawerDenominations` nem
-  `airMenuUber/Glovo/Bolt` (ambos imutáveis após submissão).
+  `totalCalculated`, `vendusCalculated`, `airMenuCalculated` e `sangriaAmount`
+  se campos numéricos mudarem; define `reviewedAt` se `status` mudar. Nunca
+  altera `drawerDenominations` nem `airMenuUber/Glovo/Bolt` (imutáveis após submissão).
+- `GetAirMenuTotalsPort` — consulta os totais AirMenu para uma data sem submeter
+  fecho. Usado pelo kiosk no step de revisão (pré-submissão). Devolve `null` se
+  o gateway não estiver configurado ou falhar (best-effort).
 
 ### Saída (dependências do domínio)
 
@@ -142,6 +156,7 @@ middleware global), nem pelo agendamento de notificações.
     - `POST /cash-closings/verify-pin`
     - `POST /cash-closings/submit` — aceita `sessionOpenedAt?` e `drawerDenominations?`
     - `GET /cash-closings/sessions?date=` — lista sessões Vendus com flag `alreadySubmitted`
+    - `GET /cash-closings/airmenu-totals?date=` — totais AirMenu pré-submissão (best-effort; `null` se indisponível)
   - `managedRouter` → rotas com `requireAuth + requireMinRole("manager")`:
     `GET /cash-closings`, `GET /cash-closings/:id`, `PATCH /cash-closings/:id`.
 
@@ -190,9 +205,14 @@ Não são editáveis pelo manager (são dados externos, não declarados pelo fun
 O `SubmitClosingUseCase` recebe o gateway como 4.º parâmetro opcional.
 
 **Separação canal próprio / canais externos.**
-`vendusTotal` é a referência para TPA + Eatz + cashSales (Vendus).
-`airMenuUber/Glovo/Bolt` são as referências para os respetivos canais de delivery.
-`totalCalculated` continua a ser a soma de todos os campos declarados pelo funcionário.
+`vendusCalculated` (TPA + Eatz + cashSales) é o subtotal declarado para o canal próprio;
+compara com `vendusTotal` (referência API Vendus) para produzir a diferença Vendus.
+`airMenuCalculated` (Uber + Glovo + Bolt) é o subtotal declarado para canais externos;
+compara com `airMenuTotal` = `airMenuUber + airMenuGlovo + airMenuBolt` (referência API
+AirMenu) para produzir a diferença AirMenu. `totalCalculated` = `vendusCalculated +
+airMenuCalculated` — soma de todos os campos declarados pelo funcionário.
+`vendusCalculated` e `airMenuCalculated` são campos derivados calculados no construtor
+da entidade; `airMenuTotal` é calculado no `toDto()` do use case e não é persistido.
 
 **`drawerDenominations` é imutável após submissão.**
 A contagem física de notas e moedas é auditoria — representa o que o funcionário

@@ -54,6 +54,15 @@ app.use(populateAuth);
 // PATCH /employees/:id/kiosk-pin has inline requireAuth inside the handler
 app.use("/api/hr", hrKioskRoutes);
 
+// Vendus: instanciado antes do cash-closings para injectar o gateway de sessões
+const vendusModule = createVendusModule({
+  eatzPaymentId: ENV.VENDUS_EATZ_PAYMENT_ID,
+  salaoPriceGroupId: ENV.VENDUS_PRICE_GROUP_SALAO,
+  eatzPriceGroupId: ENV.VENDUS_PRICE_GROUP_EATZ,
+  concurrency: ENV.CONCURRENCY,
+  historyStartYear: ENV.ANALYTICS_HISTORY_START_YEAR,
+});
+
 // Air Menu: instanciado antes do cash-closings para injectar getSummary
 const airMenuModule = createAirMenuModule({
   apiKey: ENV.AIRMENU_API_KEY,
@@ -66,8 +75,8 @@ const airMenuModule = createAirMenuModule({
 // Air Menu public routes (webhook receiver + SSE stream) — no auth required
 app.use("/api", airMenuModule.publicRouter);
 
-// Cash closing module (hexagonal) — recebe getSummary do air-menu para totais de delivery
-const cashClosingsModule = createCashClosingsModule(airMenuModule.getSummary);
+// Cash closing module (hexagonal) — recebe gateway Vendus e getSummary do air-menu
+const cashClosingsModule = createCashClosingsModule(vendusModule.gateway, airMenuModule.getSummary);
 
 // Cash closing public routes (PIN verify + submit) — no auth required
 app.use("/api", cashClosingsModule.publicRouter);
@@ -124,16 +133,9 @@ app.use("/api", requireMinRole("manager"), bankStatementsModule.router);
 // Air Menu: rota protegida (módulo já instanciado acima)
 app.use("/api", requireMinRole("manager"), airMenuModule.router);
 
-// Vendus (hexagonal) — substitui analyticsRoutes, documentsRoutes e parte de reportsRoutes
+// Vendus (hexagonal) — router registado aqui; módulo instanciado acima (antes do cash-closings)
 // As routes legadas (/api/analytics/*, /api/documents, /api/reports/monthly-summary)
 // continuam registadas acima durante a migração do frontend.
-const vendusModule = createVendusModule({
-  eatzPaymentId: ENV.VENDUS_EATZ_PAYMENT_ID,
-  salaoPriceGroupId: ENV.VENDUS_PRICE_GROUP_SALAO,
-  eatzPriceGroupId: ENV.VENDUS_PRICE_GROUP_EATZ,
-  concurrency: ENV.CONCURRENCY,
-  historyStartYear: ENV.ANALYTICS_HISTORY_START_YEAR,
-});
 app.use("/api", requireMinRole("manager"), vendusModule.router);
 
 // Cash closing manager routes (authenticated)

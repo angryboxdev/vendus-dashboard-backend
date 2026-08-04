@@ -8,6 +8,7 @@ import type { ListClosingsPort } from "../../domain/ports/in/list-closings.port.
 import type { GetClosingPort } from "../../domain/ports/in/get-closing.port.js";
 import type { ReviewClosingPort } from "../../domain/ports/in/review-closing.port.js";
 import type { GetAvailableSessionsPort } from "../../domain/ports/in/get-available-sessions.port.js";
+import type { GetAirMenuTotalsPort } from "../../domain/ports/in/get-airmenu-totals.port.js";
 import type { CashClosingStatus } from "../../domain/entities/cash-closing.js";
 import {
   ClosingNotFoundError,
@@ -37,6 +38,7 @@ export class CashClosingController {
     private readonly getClosing: GetClosingPort,
     private readonly reviewClosing: ReviewClosingPort,
     private readonly getAvailableSessions: GetAvailableSessionsPort,
+    private readonly getAirMenuTotals: GetAirMenuTotalsPort,
   ) {
     this.publicRouter = Router();
     this.managedRouter = Router();
@@ -140,6 +142,25 @@ export class CashClosingController {
           const msg = e instanceof Error ? e.message : "Erro interno";
           const status = msg.includes("inválido") ? 400 : 500;
           res.status(status).json({ error: msg });
+        }
+      },
+    );
+
+    /** GET /api/cash-closings/airmenu-totals?date=YYYY-MM-DD */
+    this.publicRouter.get(
+      "/cash-closings/airmenu-totals",
+      async (req: Request, res: Response) => {
+        try {
+          const date = req.query.date as string | undefined;
+          if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+            jsonError(res, 400, "date obrigatório (YYYY-MM-DD)");
+            return;
+          }
+          const totals = await this.getAirMenuTotals.execute(date);
+          res.json(totals ?? null);
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "Erro interno";
+          res.status(500).json({ error: msg });
         }
       },
     );

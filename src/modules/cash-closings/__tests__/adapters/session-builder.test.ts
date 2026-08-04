@@ -1,6 +1,6 @@
 import {
   buildSessions,
-  type VendusMovement,
+  type VendusRegisterMovement,
   type DocEntry,
 } from "../../adapters/out/session-builder.js";
 
@@ -11,7 +11,7 @@ function mov(
   time: string,
   amount: string,
   document_id = 0,
-): VendusMovement {
+): VendusRegisterMovement {
   return { operation, type: "NU", amount, obs: null, document_id, user_id: 1, date: "2026-06-14", time };
 }
 

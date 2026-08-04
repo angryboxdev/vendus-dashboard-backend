@@ -8,6 +8,7 @@ import { SupabaseEmployeeRepository } from "./adapters/out/supabase-employee.rep
 import { VendusRegisterSessionsGateway } from "./adapters/out/vendus-register-sessions.gateway.js";
 import { AirMenuDeliveryGateway } from "./adapters/out/air-menu-delivery.gateway.js";
 import type { GetSummaryPort } from "../air-menu/domain/ports/in/get-summary.port.js";
+import type { VendusGatewayPort } from "../vendus/domain/ports/out/vendus-gateway.port.js";
 
 import { VerifyPinUseCase } from "./application/use-cases/verify-pin.use-case.js";
 import { SubmitClosingUseCase } from "./application/use-cases/submit-closing.use-case.js";
@@ -15,6 +16,7 @@ import { ListClosingsUseCase } from "./application/use-cases/list-closings.use-c
 import { GetClosingUseCase } from "./application/use-cases/get-closing.use-case.js";
 import { ReviewClosingUseCase } from "./application/use-cases/review-closing.use-case.js";
 import { GetAvailableSessionsUseCase } from "./application/use-cases/get-available-sessions.use-case.js";
+import { GetAirMenuTotalsUseCase } from "./application/use-cases/get-airmenu-totals.use-case.js";
 
 import { CashClosingController } from "./adapters/in/cash-closing.controller.js";
 
@@ -31,17 +33,22 @@ export interface CashClosingsModule {
  * Único lugar que conhece as implementações concretas dos adapters.
  * Os use cases e o domínio apenas conhecem interfaces (ports).
  *
+ * @param vendusGateway  - VendusGatewayPort do módulo vendus (injectado pelo servidor).
+ *   Usado para buscar movimentos de caixa e documentos ao calcular sessões.
  * @param airMenuSummary - GetSummaryPort do módulo air-menu (injectado pelo servidor).
  *   Opcional: se ausente, os totais AirMenu ficam null nos fechos submetidos.
  */
-export function createCashClosingsModule(airMenuSummary?: GetSummaryPort): CashClosingsModule {
+export function createCashClosingsModule(
+  vendusGateway: VendusGatewayPort,
+  airMenuSummary?: GetSummaryPort,
+): CashClosingsModule {
   const supabase = getSupabaseServiceRole();
   if (!supabase) throw new Error("Supabase service role não configurado");
 
   // Adapters de saída
   const closingRepository = new SupabaseCashClosingRepository(supabase);
   const employeeRepository = new SupabaseEmployeeRepository(supabase);
-  const sessionsGateway = new VendusRegisterSessionsGateway(ENV.VENDUS_REGISTER_ID);
+  const sessionsGateway = new VendusRegisterSessionsGateway(ENV.VENDUS_REGISTER_ID, vendusGateway);
 
   const airMenuGateway =
     airMenuSummary && ENV.AIRMENU_CLOSING_ENTERPRISE_ID
@@ -63,6 +70,7 @@ export function createCashClosingsModule(airMenuSummary?: GetSummaryPort): CashC
   const getClosing = new GetClosingUseCase(closingRepository);
   const reviewClosing = new ReviewClosingUseCase(closingRepository);
   const getAvailableSessions = new GetAvailableSessionsUseCase(sessionsGateway, closingRepository);
+  const getAirMenuTotals = new GetAirMenuTotalsUseCase(airMenuGateway);
 
   // Adapter de entrada (HTTP)
   const controller = new CashClosingController(
@@ -72,6 +80,7 @@ export function createCashClosingsModule(airMenuSummary?: GetSummaryPort): CashC
     getClosing,
     reviewClosing,
     getAvailableSessions,
+    getAirMenuTotals,
   );
 
   return {

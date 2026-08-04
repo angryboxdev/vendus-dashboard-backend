@@ -1,5 +1,21 @@
 import type { VendusDocument, VendusDetailedDocumentRaw } from "../../entities/vendus-document.js";
 
+// ─── Register movements ────────────────────────────────────────────────────────
+
+/** Movimento de caixa tal como vem da API Vendus /registers/{id}/movements/. */
+export interface VendusRegisterMovement {
+  operation: string;
+  type: string;
+  amount: string;
+  obs: string | null;
+  document_id: number;
+  user_id: number;
+  date: string;
+  time: string;
+}
+
+// ─── Documents ────────────────────────────────────────────────────────────────
+
 export interface ListDocumentsParams {
   since: string;
   until: string;
@@ -69,4 +85,10 @@ export interface VendusGatewayPort {
    * Necessário quando a listagem devolve registos sem array `products`.
    */
   fetchSelfConsumptionDetail(id: string | number): Promise<RawSelfConsumptionProduct[]>;
+
+  /**
+   * Busca todos os movimentos de um registo de caixa para a data indicada.
+   * Usado pelo cash-closings para calcular sessões e totais.
+   */
+  listRegisterMovements(registerId: string, date: string): Promise<VendusRegisterMovement[]>;
 }
