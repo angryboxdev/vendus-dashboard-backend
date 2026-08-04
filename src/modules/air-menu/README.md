@@ -1,7 +1,7 @@
 # Módulo: air-menu
 
 > Status: ativo
-> Última atualização: 2026-08-04 (webhook + event bus)
+> Última atualização: 2026-08-04 (testes unitários + correção nota webhook)
 
 ---
 
@@ -382,7 +382,16 @@ Enterprises configuradas actualmente:
 
 ## Como testar
 
-- Domínio/use cases: `jest --testPathPattern=air-menu` (com fakes de `AirMenuGatewayPort` e `MenuCatalogPort`).
+Todos os testes unitários: `jest --testPathPattern=air-menu`
+
+| Ficheiro | Cobre |
+|---|---|
+| `__tests__/entities/air-menu-order.test.ts` | Derivação de `documentType`, `documentDate` e `total` na entidade |
+| `__tests__/use-cases/get-analytics.use-case.test.ts` | `computeAnalytics` — summary, byPlatform, byVatRate, byCategory, topItems, temporalDistribution |
+| `__tests__/use-cases/get-orders.use-case.test.ts` | `derivePlatform`, extracção de itens, fusão de tamanho, add-ons pagos, consolidação de divisões, filtro por `documentDate` |
+| `__tests__/services/session-manager.service.test.ts` | Re-autenticação, sessão válida em cache, deduplicação de chamadas concorrentes |
+| `__tests__/use-cases/register-webhook.use-case.test.ts` | Passagem de sessionId e campos ao gateway |
+
 - Integração manual — summary:
   ```
   GET /api/air-menu/summary?enterpriseId=1783676282106&startDate=2026-08-01&endDate=2026-08-03
@@ -410,6 +419,6 @@ Enterprises configuradas actualmente:
 - **`orderLimitReached`**: se o período tiver muitas ordens, o `GetOrderIds` pode retornar `orderLimitReached: true` — o resultado estaria truncado silenciosamente. Não está tratado.
 - **Sessão em idle longo**: o `SessionManagerService` renova a sessão por demanda. Se não houver pedidos durante mais de 25 min, a primeira chamada seguinte aguarda a renovação. Aceitável em produção.
 - **Encoding latin-1**: a API pode retornar nomes com acentos em latin-1 em alguns casos. O gateway usa `fetch` que assume UTF-8 — pode haver corrupção em edge cases.
-- **Assinatura do webhook não verificada**: o header exacto de assinatura enviado pela AirMenu (`X-AirMenu-Signature` ou similar) não foi confirmado com o suporte. A variável `AIRMENU_WEBHOOK_SECRET` existe mas a verificação não está implementada — dívida de segurança conhecida.
+- **Header de assinatura do webhook por confirmar**: a verificação HMAC-SHA256 está implementada em `AirMenuController.verifySignature` e é chamada quando `AIRMENU_WEBHOOK_SECRET` está definido. O que não foi confirmado com o suporte AirMenu é o nome exacto do header que enviam (assumido `X-AirMenu-Signature`).
 - **Estado do webhook perde-se ao reiniciar**: o `AirMenuKdsStoreAdapter` (no módulo `kds`) é em memória — pedidos AirMenu em curso são perdidos num restart do servidor. Persistência em Supabase é um próximo passo possível.
 - **Eventos `MODIFIED`/`ACCEPTED` ignorados**: o mapper descarta tudo que não seja `CREATED`. Tratar `ACCEPTED` → status `cooking` e `READY` → `waiting_to_delivery` é um próximo passo para automatizar transições no KDS.
