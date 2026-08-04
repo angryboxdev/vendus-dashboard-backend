@@ -1,7 +1,7 @@
 # Módulo: air-menu
 
 > Status: ativo
-> Última atualização: 2026-08-04
+> Última atualização: 2026-08-04 (webhook + event bus)
 
 ---
 
@@ -23,6 +23,14 @@ Plataforma (Glovo/Uber/Bolt)        Dashboard
                                     5. Vê KPIs: bruto, IVA, líquido,
                                        ticket médio, top itens,
                                        breakdowns plataforma/categoria/IVA
+
+Webhook (tempo real — KDS)
+──────────────────────────────────────────────────────────────────────
+1. Pedido chega na plataforma
+2. AirMenu notifica via webhook  →  3. Backend publica no OrderEventBus
+                                    4. KDS recebe via SSE e mostra o card
+                                    5. Cozinha actualiza status do card
+                                    6. SSE propaga a todos os ecrãs ligados
 ```
 
 **Conceitos-chave para o negócio:**
@@ -191,6 +199,7 @@ O `tax` propaga-se da família para os itens filhos (`activeTax`): se um item n�
 - `GetEnterprisesPort` — `execute()` → `AirMenuEnterprise[]`
 - `GetSummaryPort` — `execute(enterpriseId, startDate, endDate)` → `{ orders: AirMenuOrder[], analytics: AirMenuAnalytics }`
 - `GetOrderRawPort` — `execute(enterpriseId, orderId)` → `Record<string, unknown>[]`
+- `RegisterWebhookPort` — `execute(input)` → `AirMenuWebhook` — regista um webhook na API AirMenu para uma enterprise.
 
 `GetOrdersPort` existe internamente como dependência de `GetSummaryUseCase` — não é exposto no controller.
 
@@ -201,7 +210,11 @@ O `tax` propaga-se da família para os itens filhos (`activeTax`): se um item n�
   - `getOrderIds(sessionId, enterpriseId, startDate_ms, endDate_ms)` → `string[]`
   - `getOrders(sessionId, enterpriseId, orderId)` → mapa divisão → instâncias
   - `getMenu(sessionId, enterpriseId, divisionId)` → `RawMenuNode[]`
+  - `createWebhook(input)` → `CreateWebhookResult` — cria webhook via `ACTION=CreateWebhook`
 - `MenuCatalogPort` — `getMenuItems(enterpriseId)` → `Map<plu, AirMenuMenuItem>`
+- `OrderEventBusPort` — pub/sub em memória de eventos de webhook recebidos:
+  - `publish(event)` — emite um `WebhookOrderEvent` para todos os subscribers
+  - `subscribe(listener)` → `unsubscribe()` — regista listener; retorna função de cleanup
 
 ---
 
@@ -211,16 +224,22 @@ O `tax` propaga-se da família para os itens filhos (`activeTax`): se um item n�
 
 `AirMenuController` expõe via REST:
 
-| Endpoint | Descrição |
-|---|---|
-| `GET /api/air-menu/enterprises` | Lista enterprises configuradas |
-| `GET /api/air-menu/summary?enterpriseId=&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` | Ordens + analytics do período numa única chamada (sem `rawData`) |
-| `GET /api/air-menu/orders/:orderId/raw?enterpriseId=` | Payload bruto da API para uma ordem específica (on-demand) |
+| Endpoint | Auth | Descrição |
+|---|---|---|
+| `GET /api/air-menu/enterprises` | ✅ | Lista enterprises configuradas |
+| `GET /api/air-menu/summary?enterpriseId=&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` | ✅ | Ordens + analytics do período numa única chamada (sem `rawData`) |
+| `GET /api/air-menu/orders/:orderId/raw?enterpriseId=` | ✅ | Payload bruto da API para uma ordem específica (on-demand) |
+| `POST /api/air-menu/webhook/register` | ✅ | Regista um webhook na AirMenu para uma enterprise |
+| `POST /api/air-menu/webhook/receive` | ❌ público | Recebe notificações da AirMenu (chamado pela AirMenu, não pelo frontend) |
+| `GET /api/air-menu/webhook/stream` | ❌ público | SSE stream de eventos de webhook (usado internamente; o KDS usa `/kds/stream`) |
+
+Os endpoints públicos (`/webhook/receive` e `/webhook/stream`) são registados **antes** do middleware `requireAuth` em `server.ts` via `publicRouter`.
 
 ### Saída
 
 - `AirMenuHttpGateway` — implementa `AirMenuGatewayPort`. Todas as chamadas usam o padrão `?ACTION=X&VERSION=1.0.0&KEY=...&DATA={...}` com resposta `RESULT={...json...}`.
 - `AirMenuMenuCatalogAdapter` — implementa `MenuCatalogPort`. Carrega o catálogo via `GetMenu` e mantém-no em cache em memória por 1 hora. Ver nota de configuração acima.
+- `OrderEventBusAdapter` — implementa `OrderEventBusPort`. Wrapper fino sobre `EventEmitter` do Node. Partilhado entre o módulo `air-menu` (que publica) e o módulo `kds` (que subscreve) via injeção no composition root (`server.ts`).
 
 ---
 
@@ -329,7 +348,10 @@ O `tax` propaga-se da família para os itens filhos (`activeTax`): se um item n�
 - **`walkMenu` usa a primeira família real**: famílias chamadas `"Menu"` são wrappers estruturais e ignoradas na determinação da categoria.
 - **Analytics computados no backend**: o frontend recebe dados já calculados, sem precisar de processar a lista raw de ordens.
 - **Comissão de plataforma omitida do backend**: a estimativa de comissão (default 30%) é um cálculo do frontend, configurável pelo utilizador.
-- **`getSummary` exposto pelo composition root**: `createAirMenuModule` retorna `{ router, getSummary }`. O `getSummary` é injectado no módulo `cash-closings` para obter totais de delivery na submissão de fechos de caixa — sem duplicar a lógica de sessão ou catálogo.
+- **`getSummary` exposto pelo composition root**: `createAirMenuModule` retorna `{ router, getSummary, eventBus }`. O `getSummary` é injectado no módulo `cash-closings` para obter totais de delivery na submissão de fechos de caixa — sem duplicar a lógica de sessão ou catálogo.
+- **`eventBus` exposto pelo composition root**: o `OrderEventBusAdapter` é criado em `createAirMenuModule` e partilhado com o módulo `kds` via `server.ts`. Isto garante que o mesmo bus é usado pelo publisher (webhook receiver) e pelo subscriber (KDS bridge) — sem acoplamento direto entre módulos.
+- **Webhook receiver público, sem auth**: o endpoint `POST /api/air-menu/webhook/receive` é chamado pela AirMenu directamente — não pelo frontend autenticado. Registado antes de `requireAuth` via `publicRouter` em `server.ts`.
+- **`RegisterWebhookUseCase` inclui `sessionId` automaticamente**: o use case obtém a sessão válida via `SessionManagerService` e injeta o `sessionId` no input — o caller não precisa de gerir sessões.
 - **Fusão de complemento de tamanho em `extractItems`**: complementos do grupo "tamanho" são detetados por regex (`/tamanho|size/i`) e fundidos no item pai (título + preço).
 - **`topItemMap` chaveado por `plu|title`**: a mesma SKU pode ter tamanhos diferentes — usar apenas o PLU como chave agregaria tamanhos indevidamente.
 - **Herança de `tax` na família**: o `walkMenu` propaga `activeTax` pela árvore do menu. Necessário porque no AirMenu o IVA pode estar configurado ao nível da família e não em cada item individualmente.
@@ -344,6 +366,8 @@ O `tax` propaga-se da família para os itens filhos (`activeTax`): se um item n�
 | `AIRMENU_USERNAME` | Utilizador para `Authenticate` |
 | `AIRMENU_PASSWORD` | Password para `Authenticate` |
 | `AIRMENU_ENTERPRISES` | Enterprises no formato `id:nome\|id:nome` |
+| `AIRMENU_WEBHOOK_URL` | URL pública onde a AirMenu entrega notificações (`POST /api/air-menu/webhook/receive`) |
+| `AIRMENU_WEBHOOK_SECRET` | Secret opcional para validação de assinatura do payload (header ainda a confirmar com suporte AirMenu) |
 
 Enterprises configuradas actualmente:
 
@@ -367,6 +391,16 @@ Enterprises configuradas actualmente:
   ```
   GET /api/air-menu/orders/9876543/raw?enterpriseId=1783676282106
   ```
+- Registar webhook (requer token de manager):
+  ```
+  POST /api/air-menu/webhook/register
+  { "enterpriseId": "1785509161620", "url": "https://<ngrok-ou-prod>/api/air-menu/webhook/receive" }
+  ```
+- Simular recepção de webhook (sem auth):
+  ```
+  POST /api/air-menu/webhook/receive
+  { "enterpriseId": "...", "event": "CREATED", "resource": "ORDER", "payload": { ... } }
+  ```
 
 ---
 
@@ -376,3 +410,6 @@ Enterprises configuradas actualmente:
 - **`orderLimitReached`**: se o período tiver muitas ordens, o `GetOrderIds` pode retornar `orderLimitReached: true` — o resultado estaria truncado silenciosamente. Não está tratado.
 - **Sessão em idle longo**: o `SessionManagerService` renova a sessão por demanda. Se não houver pedidos durante mais de 25 min, a primeira chamada seguinte aguarda a renovação. Aceitável em produção.
 - **Encoding latin-1**: a API pode retornar nomes com acentos em latin-1 em alguns casos. O gateway usa `fetch` que assume UTF-8 — pode haver corrupção em edge cases.
+- **Assinatura do webhook não verificada**: o header exacto de assinatura enviado pela AirMenu (`X-AirMenu-Signature` ou similar) não foi confirmado com o suporte. A variável `AIRMENU_WEBHOOK_SECRET` existe mas a verificação não está implementada — dívida de segurança conhecida.
+- **Estado do webhook perde-se ao reiniciar**: o `AirMenuKdsStoreAdapter` (no módulo `kds`) é em memória — pedidos AirMenu em curso são perdidos num restart do servidor. Persistência em Supabase é um próximo passo possível.
+- **Eventos `MODIFIED`/`ACCEPTED` ignorados**: o mapper descarta tudo que não seja `CREATED`. Tratar `ACCEPTED` → status `cooking` e `READY` → `waiting_to_delivery` é um próximo passo para automatizar transições no KDS.

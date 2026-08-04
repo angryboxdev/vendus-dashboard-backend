@@ -59,7 +59,11 @@ const airMenuModule = createAirMenuModule({
   username: ENV.AIRMENU_USERNAME,
   password: ENV.AIRMENU_PASSWORD,
   enterprises: ENV.AIRMENU_ENTERPRISES,
+  webhookSecret: ENV.AIRMENU_WEBHOOK_SECRET,
 });
+
+// Air Menu public routes (webhook receiver + SSE stream) — no auth required
+app.use("/api", airMenuModule.publicRouter);
 
 // Cash closing module (hexagonal) — recebe getSummary do air-menu para totais de delivery
 const cashClosingsModule = createCashClosingsModule(airMenuModule.getSummary);
@@ -68,7 +72,8 @@ const cashClosingsModule = createCashClosingsModule(airMenuModule.getSummary);
 app.use("/api", cashClosingsModule.publicRouter);
 
 // KDS — public (kitchen screen, no login needed)
-const kdsModule = createKdsModule();
+// Recebe o eventBus do air-menu para emitir pedidos AirMenu via SSE em tempo real
+const kdsModule = createKdsModule({ eventBus: airMenuModule.eventBus });
 app.use("/api", kdsModule.router);
 
 // All routes below this line require authentication

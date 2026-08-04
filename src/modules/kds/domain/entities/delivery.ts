@@ -33,4 +33,6 @@ export interface Delivery {
   extraInfo: string;
   dateCreate?: string;
   dateUpdate?: string;
+  /** Unix ms timestamp of when the order was marked as delivered. AirMenu only — set by the KDS store. */
+  deliveredAt?: number;
 }

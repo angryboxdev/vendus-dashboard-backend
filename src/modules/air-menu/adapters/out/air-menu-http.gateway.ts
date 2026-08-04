@@ -1,6 +1,8 @@
 import type {
   AirMenuGatewayPort,
   AuthenticateResult,
+  CreateWebhookInput,
+  CreateWebhookResult,
   RawMenuNode,
   RawOrderItemInstance,
 } from "../../domain/ports/out/air-menu-gateway.port.js";
@@ -149,5 +151,34 @@ export class AirMenuHttpGateway implements AirMenuGatewayPort {
       weekTime: 1,
     });
     return res.menu ?? [];
+  }
+
+  async createWebhook(input: CreateWebhookInput): Promise<CreateWebhookResult> {
+    interface CreateWebhookResponse extends AirMenuResponseBase {
+      webhookId: string;
+      url: string;
+      events: string[];
+      resource: string;
+      active: boolean;
+    }
+
+    const data: Record<string, unknown> = {
+      sessionId: input.sessionId,
+      enterpriseId: input.enterpriseId,
+      url: input.url,
+    };
+    if (input.events !== undefined) data["events"] = input.events;
+    if (input.resource !== undefined) data["resource"] = input.resource;
+    if (input.secret !== undefined) data["secret"] = input.secret;
+    if (input.active !== undefined) data["active"] = input.active;
+
+    const res = await callApi<CreateWebhookResponse>("CreateWebhook", this.apiKey, data);
+    return {
+      webhookId: res.webhookId,
+      url: res.url,
+      events: res.events,
+      resource: res.resource,
+      active: res.active,
+    };
   }
 }

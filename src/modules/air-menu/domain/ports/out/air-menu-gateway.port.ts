@@ -35,6 +35,24 @@ export interface RawOrderItemInstance {
   bookingTime?: number;
 }
 
+export interface CreateWebhookInput {
+  sessionId: string;
+  enterpriseId: string;
+  url: string;
+  events?: string[];
+  resource?: string;
+  secret?: string;
+  active?: boolean;
+}
+
+export interface CreateWebhookResult {
+  webhookId: string;
+  url: string;
+  events: string[];
+  resource: string;
+  active: boolean;
+}
+
 export interface AirMenuGatewayPort {
   authenticate(username: string, password: string): Promise<AuthenticateResult>;
   getOrderIds(
@@ -50,4 +68,5 @@ export interface AirMenuGatewayPort {
   ): Promise<Record<string, RawOrderItemInstance[]>>;
   getEnterpriseDivisionIds(sessionId: string, enterpriseId: string): Promise<string[]>;
   getMenu(sessionId: string, enterpriseId: string, divisionId: string): Promise<RawMenuNode[]>;
+  createWebhook(input: CreateWebhookInput): Promise<CreateWebhookResult>;
 }

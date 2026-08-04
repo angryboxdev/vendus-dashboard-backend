@@ -74,6 +74,19 @@ export const ENV = {
   ANALYTICS_HISTORY_START_YEAR: Number(process.env.ANALYTICS_HISTORY_START_YEAR ?? 2025),
 
   /**
+   * Webhook: segredo HMAC-SHA256 para verificar payloads recebidos da AirMenu.
+   * Mínimo 16 caracteres. Se não configurado, a verificação de assinatura é ignorada.
+   */
+  AIRMENU_WEBHOOK_SECRET: process.env.AIRMENU_WEBHOOK_SECRET ?? null,
+
+  /**
+   * URL pública deste servidor para registar o webhook na AirMenu.
+   * Ex: https://meu-servidor.com/api/air-menu/webhook/receive
+   * Opcional — apenas necessário ao chamar POST /api/air-menu/webhook/register.
+   */
+  AIRMENU_WEBHOOK_URL: process.env.AIRMENU_WEBHOOK_URL ?? null,
+
+  /**
    * Enterprise AirMenu usada para obter totais de delivery nos fechos de caixa.
    * Corresponde à localização do restaurante (ex: Angry Box - Porto).
    * Opcional: se não configurado, os totais AirMenu ficam null no fecho.
