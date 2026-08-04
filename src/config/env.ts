@@ -101,4 +101,19 @@ export const ENV = {
     process.env.VENDUS_REGISTER_ID ?? process.env.UBER_EATS_VENDUS_REGISTER_ID,
     "VENDUS_REGISTER_ID (ou UBER_EATS_VENDUS_REGISTER_ID)",
   ),
+
+  /**
+   * Módulo Vendus (hexagonal) — channel detection e catálogo de produtos.
+   *
+   * VENDUS_EATZ_PAYMENT_ID   — ID do método de pagamento "Eatz" na Vendus.
+   *                            Documentos com este payment → canal 'eatz'.
+   * VENDUS_PRICE_GROUP_SALAO — ID do price group de salão (preços de restaurante).
+   * VENDUS_PRICE_GROUP_EATZ  — ID do price group de delivery/eatz.
+   *
+   * Os IDs por omissão correspondem à instalação actual (Angry Box).
+   * Se o Vendus recriar os price groups, actualizar aqui.
+   */
+  VENDUS_EATZ_PAYMENT_ID: Number(process.env.VENDUS_EATZ_PAYMENT_ID ?? 275787588),
+  VENDUS_PRICE_GROUP_SALAO: Number(process.env.VENDUS_PRICE_GROUP_SALAO ?? 275787593),
+  VENDUS_PRICE_GROUP_EATZ: Number(process.env.VENDUS_PRICE_GROUP_EATZ ?? 290759644),
 };

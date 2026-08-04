@@ -20,6 +20,7 @@ import { createPayableEntriesModule } from "./modules/payable-entries/payable-en
 import { createBankAccountsModule } from "./modules/bank-accounts/bank-accounts.module.js";
 import { createBankStatementsModule } from "./modules/bank-statements/bank-statements.module.js";
 import { createAirMenuModule } from "./modules/air-menu/air-menu.module.js";
+import { createVendusModule } from "./modules/vendus/vendus.module.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { crmRoutes } from "./routes/crmRoutes.js";
@@ -122,6 +123,18 @@ app.use("/api", requireMinRole("manager"), bankStatementsModule.router);
 
 // Air Menu: rota protegida (módulo já instanciado acima)
 app.use("/api", requireMinRole("manager"), airMenuModule.router);
+
+// Vendus (hexagonal) — substitui analyticsRoutes, documentsRoutes e parte de reportsRoutes
+// As routes legadas (/api/analytics/*, /api/documents, /api/reports/monthly-summary)
+// continuam registadas acima durante a migração do frontend.
+const vendusModule = createVendusModule({
+  eatzPaymentId: ENV.VENDUS_EATZ_PAYMENT_ID,
+  salaoPriceGroupId: ENV.VENDUS_PRICE_GROUP_SALAO,
+  eatzPriceGroupId: ENV.VENDUS_PRICE_GROUP_EATZ,
+  concurrency: ENV.CONCURRENCY,
+  historyStartYear: ENV.ANALYTICS_HISTORY_START_YEAR,
+});
+app.use("/api", requireMinRole("manager"), vendusModule.router);
 
 // Cash closing manager routes (authenticated)
 app.use("/api", requireMinRole("manager"), cashClosingsModule.managedRouter);
