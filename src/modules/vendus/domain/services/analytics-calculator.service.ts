@@ -7,6 +7,7 @@ import type {
   VendusCategoryStats,
   VendusVatRateStats,
   VendusTopProduct,
+  VendusProductChannelBreakdown,
   VendusTemporalPoint,
 } from "../entities/vendus-analytics.js";
 import type { VendusCategory } from "../entities/vendus-product.js";
@@ -77,7 +78,7 @@ export function computeVendusAnalytics(
 
   const categoryMap = new Map<VendusCategory, { quantitySold: number; grossCents: number; vatCents: number }>();
   const vatRateMap = new Map<number, { grossCents: number; vatCents: number }>();
-  const topProductMap = new Map<string, VendusTopProduct & { grossCents: number; quantitySold: number }>();
+  const topProductMap = new Map<string, VendusTopProduct & { grossCents: number; quantitySold: number; byChannel: { salao: number; take_away: number; eatz: number } }>();
   const temporalMap = new Map<string, VendusTemporalPoint>();
 
   let totalDocuments = 0;
@@ -185,6 +186,7 @@ export function computeVendusAnalytics(
       if (existing) {
         existing.quantitySold += itemQty;
         existing.grossCents += Math.round(itemGross * 100);
+        existing.byChannel[doc.channel] += itemQty;
       } else {
         topProductMap.set(productKey, {
           reference: item.reference,
@@ -194,6 +196,7 @@ export function computeVendusAnalytics(
           quantitySold: itemQty,
           grossRevenue: 0,
           grossCents: Math.round(itemGross * 100),
+          byChannel: { salao: 0, take_away: 0, eatz: 0, [doc.channel]: itemQty },
         });
       }
     }
@@ -253,6 +256,19 @@ export function computeVendusAnalytics(
     .map((p) => ({ ...p, grossRevenue: round2(p.grossCents / 100) }))
     .sort((a, b) => b.grossRevenue - a.grossRevenue);
 
+  // Build productsByChannel
+  const productsByChannel: VendusProductChannelBreakdown[] = Array.from(topProductMap.values())
+    .map((p) => ({
+      reference: p.reference,
+      title: p.title,
+      category: p.category,
+      vatRate: p.vatRate,
+      quantitySold: p.quantitySold,
+      byChannel: p.byChannel,
+      grossRevenue: round2(p.grossCents / 100),
+    }))
+    .sort((a, b) => b.grossRevenue - a.grossRevenue);
+
   return {
     summary,
     byChannel,
@@ -263,6 +279,7 @@ export function computeVendusAnalytics(
       creditNotes: { count: totalCreditNotes, grossRevenue: round2(creditNoteGrossCents / 100) },
     },
     topProducts,
+    productsByChannel,
     temporalDistribution: Array.from(temporalMap.values()).map((t) => ({
       ...t,
       grossRevenue: round2(t.grossRevenue),

@@ -129,4 +129,63 @@ describe("computeVendusAnalytics", () => {
     expect(result.topProducts[0]!.reference).toBe("B");
     expect(result.topProducts[1]!.reference).toBe("A");
   });
+
+  describe("productsByChannel", () => {
+    const pizza = {
+      id: 1, qty: 1, title: "Honey Peperoni (Grande)", reference: "HP-L",
+      amounts: { gross_total: "19.90" }, discounts: {}, tax: { rate: 13 },
+    };
+
+    it("puts all quantity in salao when channel is salao", () => {
+      const doc = makeDoc({ id: 1, channel: "salao", items: [pizza] });
+      const { productsByChannel } = computeVendusAnalytics([doc], emptyMap, start, end);
+      const p = productsByChannel.find((x) => x.reference === "HP-L")!;
+      expect(p.byChannel.salao).toBe(1);
+      expect(p.byChannel.take_away).toBe(0);
+      expect(p.byChannel.eatz).toBe(0);
+      expect(p.quantitySold).toBe(1);
+    });
+
+    it("puts all quantity in take_away when channel is take_away", () => {
+      const doc = makeDoc({ id: 1, channel: "take_away", items: [pizza] });
+      const { productsByChannel } = computeVendusAnalytics([doc], emptyMap, start, end);
+      const p = productsByChannel.find((x) => x.reference === "HP-L")!;
+      expect(p.byChannel.take_away).toBe(1);
+      expect(p.byChannel.salao).toBe(0);
+      expect(p.byChannel.eatz).toBe(0);
+    });
+
+    it("puts all quantity in eatz when channel is eatz", () => {
+      const doc = makeDoc({ id: 1, channel: "eatz", items: [pizza] });
+      const { productsByChannel } = computeVendusAnalytics([doc], emptyMap, start, end);
+      const p = productsByChannel.find((x) => x.reference === "HP-L")!;
+      expect(p.byChannel.eatz).toBe(1);
+      expect(p.byChannel.salao).toBe(0);
+      expect(p.byChannel.take_away).toBe(0);
+    });
+
+    it("accumulates same product across multiple documents and channels", () => {
+      const docSalao1 = makeDoc({ id: 1, channel: "salao", items: [{ ...pizza, qty: 2 }] });
+      const docSalao2 = makeDoc({ id: 2, channel: "salao", items: [{ ...pizza, qty: 1 }] });
+      const docTakeAway = makeDoc({ id: 3, channel: "take_away", items: [{ ...pizza, qty: 1 }] });
+      const docEatz = makeDoc({ id: 4, channel: "eatz", items: [{ ...pizza, qty: 3 }] });
+      const { productsByChannel } = computeVendusAnalytics(
+        [docSalao1, docSalao2, docTakeAway, docEatz], emptyMap, start, end,
+      );
+      const p = productsByChannel.find((x) => x.reference === "HP-L")!;
+      expect(p.byChannel.salao).toBe(3);
+      expect(p.byChannel.take_away).toBe(1);
+      expect(p.byChannel.eatz).toBe(3);
+      expect(p.quantitySold).toBe(7);
+    });
+
+    it("is sorted by grossRevenue descending", () => {
+      const itemA = { id: 1, qty: 1, title: "A", reference: "A", amounts: { gross_total: "5.00" }, discounts: {}, tax: { rate: 0 } };
+      const itemB = { id: 2, qty: 1, title: "B", reference: "B", amounts: { gross_total: "20.00" }, discounts: {}, tax: { rate: 0 } };
+      const doc = makeDoc({ id: 1, taxes: [], items: [itemA, itemB] });
+      const { productsByChannel } = computeVendusAnalytics([doc], emptyMap, start, end);
+      expect(productsByChannel[0]!.reference).toBe("B");
+      expect(productsByChannel[1]!.reference).toBe("A");
+    });
+  });
 });

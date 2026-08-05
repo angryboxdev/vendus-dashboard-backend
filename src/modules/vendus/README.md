@@ -1,7 +1,7 @@
 # Módulo: vendus
 
 > Status: ativo
-> Última atualização: 2026-08-04
+> Última atualização: 2026-08-05
 
 ---
 
@@ -63,7 +63,7 @@ Módulo hexagonal que consome dois endpoints distintos da API REST Vendus e tran
 1. Listar documentos fiscais do período (com paginação transparente).
 2. Buscar detalhes de documentos (items, payments, taxes) para enriquecimento com canal e categoria.
 3. Carregar e cachear o catálogo de produtos (`/products/`) para lookup de categoria/preço.
-4. Computar analytics consolidados de faturação (byChannel, byCategory, byVatRate, topProducts, temporalDistribution).
+4. Computar analytics consolidados de faturação (byChannel, byCategory, byVatRate, topProducts, productsByChannel, temporalDistribution).
 5. Fornecer métricas rápidas do mês (analytics/current) e históricas com cache (analytics/historical).
 6. Listar e agregar registos de autoconsumo de funcionários com analytics (byEmployee, byCategory, topProducts).
 
@@ -83,7 +83,7 @@ items[] contém título com "embalagem" →  'take_away'
 caso contrário                         →  'salao'
 ```
 
-`take_away` é agrupado com `salao` nos analytics (`byChannel`), mas contabilizado em `takeAwayCount`.
+`take_away` é agrupado com `salao` em `byChannel` (contabilizado em `takeAwayCount`), mas mantido como canal separado em `productsByChannel` — onde cada produto mostra quantidades distintas por `salao`, `take_away` e `eatz`. Isso permite calcular o CMV por canal com precisão (ex: take-away tem custo de embalagem que o salão não tem).
 
 ### Filtro de NC
 
@@ -145,7 +145,7 @@ Carregado de `GET /products/` da Vendus. Indexado por `reference` (primário) e 
 - **Dois endpoints distintos**: `/analytics/current` (rápido, list docs) vs `/summary` (completo, detail docs + channel). Evita N+1 no dashboard principal.
 - **Routes legadas em paralelo**: `/api/analytics/*`, `/api/documents`, `/api/reports/monthly-summary` continuam activas até o frontend migrar para `/api/vendus/*`.
 - **`getSummary` exposto pelo composition root**: para injeção futura no `cash-closings` module sem importar o adapter diretamente.
-- **`take_away` como sub-canal**: mantido no domínio como canal distinto para eventual análise futura, mas agrupado com `salao` nos analytics (`byChannel` apenas tem `salao` e `eatz`).
+- **`take_away` como sub-canal**: mantido no domínio como canal distinto. Em `byChannel` é agrupado com `salao` (apenas dois canais na UI de faturação). Em `productsByChannel` é exposto separado — necessário para o cálculo de CMV por canal, onde take-away tem custos de embalagem distintos do salão.
 
 ---
 
@@ -164,7 +164,7 @@ Os defaults correspondem à instalação actual (Angry Box). Se o Vendus recriar
 ## Como testar
 
 ```bash
-# Todos os testes do módulo (8 suites, ~104 testes)
+# Todos os testes do módulo (8 suites, ~109 testes)
 npx jest src/modules/vendus --no-coverage
 ```
 
@@ -174,7 +174,7 @@ Testes disponíveis por área:
 |---|---|
 | `__tests__/services/channel-detector.service.test.ts` | Lógica de detecção de canal (eatz / salao / take_away) |
 | `__tests__/services/category-detector.service.test.ts` | Lookup por ID, heurística de título, `detectCategory` completo |
-| `__tests__/services/analytics-calculator.service.test.ts` | Cálculo de analytics (byChannel, byCategory, topProducts, temporal) |
+| `__tests__/services/analytics-calculator.service.test.ts` | Cálculo de analytics (byChannel, byCategory, topProducts, productsByChannel por canal, temporal) |
 | `__tests__/use-cases/get-summary.use-case.test.ts` | Orquestração de detail fetches, filtro de NC, canal por documento |
 | `__tests__/use-cases/get-analytics-current.use-case.test.ts` | Período corrente vs passado, daysElapsed, projeção, by_weekday |
 | `__tests__/use-cases/get-analytics-historical.use-case.test.ts` | Cache hit/miss, annual/historical totals, growth chart, comparações |

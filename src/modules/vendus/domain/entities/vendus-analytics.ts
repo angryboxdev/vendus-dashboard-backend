@@ -59,6 +59,22 @@ export interface VendusTopProduct {
   grossRevenue: number;
 }
 
+// ─── Products by channel ──────────────────────────────────────────────────────
+
+export interface VendusProductChannelBreakdown {
+  reference: string;
+  title: string;
+  category: VendusCategory;
+  vatRate: number;
+  quantitySold: number;
+  byChannel: {
+    salao: number;
+    take_away: number;
+    eatz: number;
+  };
+  grossRevenue: number;
+}
+
 // ─── Temporal distribution ───────────────────────────────────────────────────
 
 export interface VendusTemporalPoint {
@@ -80,6 +96,7 @@ export interface VendusAnalytics {
     creditNotes: { count: number; grossRevenue: number };
   };
   topProducts: VendusTopProduct[];
+  productsByChannel: VendusProductChannelBreakdown[];
   temporalDistribution: VendusTemporalPoint[];
 }
 
