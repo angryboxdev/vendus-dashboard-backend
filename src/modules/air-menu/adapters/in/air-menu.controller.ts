@@ -95,14 +95,24 @@ export class AirMenuController {
      * body before express.json() (see Express rawBody middleware pattern).
      */
     this.publicRouter.post("/air-menu/webhook/receive", (req, res) => {
+      console.log(`[AirMenu webhook] received — ip=${req.ip} contentType=${req.headers["content-type"]} bodyKeys=${Object.keys(req.body ?? {}).join(",")}`);
+
       const signature = req.headers["x-airmenu-signature"];
 
-      if (this.webhookSecret && typeof signature === "string") {
-        const rawBody = JSON.stringify(req.body);
-        if (!this.verifySignature(rawBody, signature)) {
-          res.status(401).json({ error: "Invalid webhook signature" });
-          return;
+      if (this.webhookSecret) {
+        if (typeof signature !== "string") {
+          console.warn(`[AirMenu webhook] signature header missing (x-airmenu-signature) — secret is configured`);
+        } else {
+          const rawBody = JSON.stringify(req.body);
+          if (!this.verifySignature(rawBody, signature)) {
+            console.warn(`[AirMenu webhook] signature mismatch — rejecting 401`);
+            res.status(401).json({ error: "Invalid webhook signature" });
+            return;
+          }
+          console.log(`[AirMenu webhook] signature OK`);
         }
+      } else {
+        console.log(`[AirMenu webhook] no secret configured — skipping signature check`);
       }
 
       const body = req.body as Record<string, unknown>;
@@ -133,6 +143,8 @@ export class AirMenuController {
     this.publicRouter.get("/air-menu/webhook/stream", (req, res) => {
       const { enterpriseId } = req.query as { enterpriseId?: string };
 
+      console.log(`[AirMenu SSE] client connected ip=${req.ip} enterpriseId=${enterpriseId ?? "all"}`);
+
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
@@ -142,7 +154,11 @@ export class AirMenuController {
       res.write(`event: connected\ndata: {}\n\n`);
 
       const unsubscribe = this.eventBus.subscribe((event) => {
-        if (enterpriseId && event.enterpriseId !== enterpriseId) return;
+        if (enterpriseId && event.enterpriseId !== enterpriseId) {
+          console.log(`[AirMenu SSE] event filtered out — event.enterpriseId=${event.enterpriseId} filter=${enterpriseId}`);
+          return;
+        }
+        console.log(`[AirMenu SSE] sending event=${event.event} enterprise=${event.enterpriseId}`);
         const data = JSON.stringify(event);
         res.write(`event: order\ndata: ${data}\n\n`);
       });
@@ -152,6 +168,7 @@ export class AirMenuController {
       }, 30_000);
 
       req.on("close", () => {
+        console.log(`[AirMenu SSE] client disconnected ip=${req.ip} enterpriseId=${enterpriseId ?? "all"}`);
         clearInterval(heartbeat);
         unsubscribe();
       });
