@@ -11,6 +11,7 @@ export class GetDocumentDetailUseCase implements GetDocumentDetailPort {
     private readonly gateway: VendusGatewayPort,
     private readonly productCatalog: VendusProductCatalogPort,
     private readonly eatzPaymentId: number,
+    private readonly appsPaymentId: number,
   ) {}
 
   async execute(id: number): Promise<GetDocumentDetailResult> {
@@ -19,7 +20,7 @@ export class GetDocumentDetailUseCase implements GetDocumentDetailPort {
       this.productCatalog.getProducts(),
     ]);
 
-    const channel = detectChannel(raw, this.eatzPaymentId);
+    const channel = detectChannel(raw, this.eatzPaymentId, this.appsPaymentId);
     const has_drinks = raw.items.some((item) => {
       const cat = detectCategory({ reference: item.reference, title: item.title }, catalog);
       return DRINK_CATEGORIES.has(cat);

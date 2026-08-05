@@ -6,15 +6,18 @@
  * - 'salao'     — consumo no restaurante (preço de salão)
  * - 'eatz'      — delivery próprio (pagamento via método Eatz)
  * - 'take_away' — take-away (preço de salão + item "embalagem")
+ * - 'apps'      — delivery via plataformas externas (Glovo/Uber/Bolt), faturado via Vendus
+ *                 (histórico pré-AirMenu; daqui em diante faturado diretamente pelo AirMenu)
  *
  * Derivado dos `payments[]` do documento detalhado:
+ *   se payments contém o método Apps  → 'apps'
  *   se payments contém o método Eatz  → 'eatz'
  *   se items contém "embalagem"        → 'take_away'
  *   caso contrário                     → 'salao'
  *
- * Na UI, 'take_away' é agrupado com 'salao'.
+ * Na UI, 'take_away' é agrupado com 'salao'. 'apps' só aparece se houver documentos.
  */
-export type VendusChannel = "salao" | "eatz" | "take_away";
+export type VendusChannel = "salao" | "eatz" | "take_away" | "apps";
 
 // ─── List document (GET /documents/) ─────────────────────────────────────────
 

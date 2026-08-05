@@ -15,11 +15,12 @@ export interface VendusSummaryStats {
 
 /**
  * Breakdown por canal de venda.
- * 'take_away' é agrupado com 'salao' — apenas dois canais: salao e eatz.
+ * 'take_away' é agrupado com 'salao' — canais base: salao e eatz.
+ * 'apps' só é incluído no array se houver documentos com esse canal (histórico pré-AirMenu).
  * `takeAwayCount` regista quantos dos documentos de salão são take-away.
  */
 export interface VendusChannelStats {
-  channel: "salao" | "eatz";
+  channel: "salao" | "eatz" | "apps";
   documentCount: number;
   creditNoteCount: number;
   grossRevenue: number;
@@ -71,6 +72,7 @@ export interface VendusProductChannelBreakdown {
     salao: number;
     take_away: number;
     eatz: number;
+    apps: number;
   };
   grossRevenue: number;
 }

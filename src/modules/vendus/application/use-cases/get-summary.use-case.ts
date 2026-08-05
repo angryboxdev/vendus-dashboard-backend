@@ -11,6 +11,7 @@ export class GetSummaryUseCase implements GetSummaryPort {
     private readonly gateway: VendusGatewayPort,
     private readonly productCatalog: VendusProductCatalogPort,
     private readonly eatzPaymentId: number,
+    private readonly appsPaymentId: number,
     private readonly concurrency: number,
   ) {}
 
@@ -47,8 +48,8 @@ export class GetSummaryUseCase implements GetSummaryPort {
     );
 
     // 5. Enrich all docs with channel
-    const fsEnriched = fsDetails.map((raw) => ({ ...raw, channel: detectChannel(raw, this.eatzPaymentId) }));
-    const ncEnriched = ncDetails.map((raw) => ({ ...raw, channel: detectChannel(raw, this.eatzPaymentId) }));
+    const fsEnriched = fsDetails.map((raw) => ({ ...raw, channel: detectChannel(raw, this.eatzPaymentId, this.appsPaymentId) }));
+    const ncEnriched = ncDetails.map((raw) => ({ ...raw, channel: detectChannel(raw, this.eatzPaymentId, this.appsPaymentId) }));
 
     // All documents for UI (cancelled FS included so they are visible and linkable)
     const documents: VendusDetailedDocument[] = [...fsEnriched, ...ncEnriched]

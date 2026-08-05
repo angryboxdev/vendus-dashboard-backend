@@ -1,7 +1,7 @@
 # Módulo: vendus
 
 > Status: ativo
-> Última atualização: 2026-08-05
+> Última atualização: 2026-08-05 (canal apps)
 
 ---
 
@@ -47,9 +47,10 @@ Funcionário (Vendus POS)               Dashboard (gestor)
 
 **Conceitos-chave para o negócio:**
 
-- **Salão** — consumo no restaurante. Detectado pela ausência do método de pagamento Eatz e sem item de embalagem.
+- **Salão** — consumo no restaurante. Detectado pela ausência dos métodos Apps/Eatz e sem item de embalagem.
 - **Eatz** — delivery próprio (marca Eatz). Detectado pelo método de pagamento Eatz (ID configurável via `VENDUS_EATZ_PAYMENT_ID`).
 - **Take Away** — salão com embalagem. Agrupado com Salão na UI; sub-contado em `takeAwayCount`.
+- **Apps** — delivery via plataformas externas (Glovo/Uber Eats/Bolt) faturado directamente no Vendus. **Histórico pré-AirMenu** — daqui em diante estas plataformas são integradas via AirMenu e não geram faturas Vendus com este método. Detectado pelo método de pagamento Apps (ID configurável via `VENDUS_APPS_PAYMENT_ID`). Só aparece na UI quando existem documentos com este método.
 - **FS / FT** — fatura simplificada / fatura completa. Documentos de receita de clientes.
 - **NC** — nota de crédito. Anula uma FS/FT; subtrai da receita.
 - **Autoconsumo** — registo de consumo interno de um funcionário. Não é um documento fiscal; usa um endpoint separado da API Vendus com autenticação Basic Auth. Não entra nos totais de faturação.
@@ -78,12 +79,13 @@ Não é responsável por emitir documentos fiscais; apenas os lê e classifica.
 O canal de um documento é derivado dos `payments[]` do documento detalhado:
 
 ```
+payments[] contém ID do método Apps  →  'apps'
 payments[] contém ID do método Eatz  →  'eatz'
 items[] contém título com "embalagem" →  'take_away'
 caso contrário                         →  'salao'
 ```
 
-`take_away` é agrupado com `salao` em `byChannel` (contabilizado em `takeAwayCount`), mas mantido como canal separado em `productsByChannel` — onde cada produto mostra quantidades distintas por `salao`, `take_away` e `eatz`. Isso permite calcular o CMV por canal com precisão (ex: take-away tem custo de embalagem que o salão não tem).
+`take_away` é agrupado com `salao` em `byChannel` (contabilizado em `takeAwayCount`), mas mantido como canal separado em `productsByChannel`. `apps` só é incluído em `byChannel` se houver documentos com esse canal no período — caso contrário é omitido do array. Em `productsByChannel`, o campo `byChannel.apps` está sempre presente (pode ser 0).
 
 ### Filtro de NC
 
@@ -139,7 +141,8 @@ Carregado de `GET /products/` da Vendus. Indexado por `reference` (primário) e 
 
 ## Decisões de design
 
-- **Channel por payment method, não por preço**: a detecção de canal anterior (comparação de preço unitário com price groups) foi substituída pela presença do método de pagamento Eatz (`VENDUS_EATZ_PAYMENT_ID`). Mais simples, mais robusta, sem necessidade de `legacy_prices`.
+- **Channel por payment method, não por preço**: a detecção de canal anterior (comparação de preço unitário com price groups) foi substituída pela presença do método de pagamento. Ordem de prioridade: Apps (`VENDUS_APPS_PAYMENT_ID`) → Eatz (`VENDUS_EATZ_PAYMENT_ID`) → embalagem → salão. Mais simples, mais robusta, sem necessidade de `legacy_prices`.
+- **Canal `apps` condicional**: o canal `apps` representa faturação histórica de plataformas externas (Glovo/Uber Eats/Bolt) directamente no Vendus, antes da integração AirMenu. Só aparece em `byChannel` quando existem documentos com esse canal — meses sem Apps não mostram a linha na UI.
 - **`VENDUS_CATEGORY_MAP` como constante de domínio**: os IDs de categoria Vendus são estáveis por instalação. Mantidos em `vendus-product.ts` com comentário. Alternativa (env/config) considerada mas rejeitada por complexidade desnecessária.
 - **`price-map.json` deixa de ser lido pelo novo módulo**: `price_group_ids` migram para env vars (`VENDUS_PRICE_GROUP_SALAO`, `VENDUS_PRICE_GROUP_EATZ`). `legacy_prices` removidos (obsoletos com o novo channel detection). O ficheiro é mantido para os módulos legados que ainda o usam.
 - **Dois endpoints distintos**: `/analytics/current` (rápido, list docs) vs `/summary` (completo, detail docs + channel). Evita N+1 no dashboard principal.
@@ -154,6 +157,7 @@ Carregado de `GET /products/` da Vendus. Indexado por `reference` (primário) e 
 | Variável | Default | Descrição |
 |---|---|---|
 | `VENDUS_EATZ_PAYMENT_ID` | `275787588` | ID do método de pagamento Eatz |
+| `VENDUS_APPS_PAYMENT_ID` | `355967761` | ID do método de pagamento Apps (histórico pré-AirMenu) |
 | `VENDUS_PRICE_GROUP_SALAO` | `275787593` | ID do price group de salão |
 | `VENDUS_PRICE_GROUP_EATZ` | `290759644` | ID do price group de eatz/delivery |
 
@@ -172,7 +176,7 @@ Testes disponíveis por área:
 
 | Ficheiro | Cobre |
 |---|---|
-| `__tests__/services/channel-detector.service.test.ts` | Lógica de detecção de canal (eatz / salao / take_away) |
+| `__tests__/services/channel-detector.service.test.ts` | Lógica de detecção de canal (apps / eatz / salao / take_away, prioridades) |
 | `__tests__/services/category-detector.service.test.ts` | Lookup por ID, heurística de título, `detectCategory` completo |
 | `__tests__/services/analytics-calculator.service.test.ts` | Cálculo de analytics (byChannel, byCategory, topProducts, productsByChannel por canal, temporal) |
 | `__tests__/use-cases/get-summary.use-case.test.ts` | Orquestração de detail fetches, filtro de NC, canal por documento |

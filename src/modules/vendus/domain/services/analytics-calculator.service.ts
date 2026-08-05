@@ -64,7 +64,7 @@ export function computeVendusAnalytics(
   endDate: Date,
 ): VendusAnalytics {
   // Accumulators
-  const channelMap = new Map<"salao" | "eatz", {
+  const channelMap = new Map<"salao" | "eatz" | "apps", {
     invoiceCount: number;
     creditNoteCount: number;
     takeAwayCount: number;
@@ -72,13 +72,13 @@ export function computeVendusAnalytics(
     totalGross: number;
     vatCents: number;
   }>();
-  for (const ch of ["salao", "eatz"] as const) {
+  for (const ch of ["salao", "eatz", "apps"] as const) {
     channelMap.set(ch, { invoiceCount: 0, creditNoteCount: 0, takeAwayCount: 0, invoiceGross: 0, totalGross: 0, vatCents: 0 });
   }
 
   const categoryMap = new Map<VendusCategory, { quantitySold: number; grossCents: number; vatCents: number }>();
   const vatRateMap = new Map<number, { grossCents: number; vatCents: number }>();
-  const topProductMap = new Map<string, VendusTopProduct & { grossCents: number; quantitySold: number; byChannel: { salao: number; take_away: number; eatz: number } }>();
+  const topProductMap = new Map<string, VendusTopProduct & { grossCents: number; quantitySold: number; byChannel: { salao: number; take_away: number; eatz: number; apps: number } }>();
   const temporalMap = new Map<string, VendusTemporalPoint>();
 
   let totalDocuments = 0;
@@ -121,8 +121,8 @@ export function computeVendusAnalytics(
       creditNoteGrossCents += Math.round(docGross * 100);
     }
 
-    // Channel (take_away → salao)
-    const displayChannel = doc.channel === "eatz" ? "eatz" : "salao";
+    // Channel (take_away → salao; apps stays as apps)
+    const displayChannel = doc.channel === "eatz" ? "eatz" : doc.channel === "apps" ? "apps" : "salao";
     const chAcc = channelMap.get(displayChannel)!;
     if (isInvoice) {
       chAcc.invoiceCount++;
@@ -196,7 +196,7 @@ export function computeVendusAnalytics(
           quantitySold: itemQty,
           grossRevenue: 0,
           grossCents: Math.round(itemGross * 100),
-          byChannel: { salao: 0, take_away: 0, eatz: 0, [doc.channel]: itemQty },
+          byChannel: { salao: 0, take_away: 0, eatz: 0, apps: 0, [doc.channel]: itemQty },
         });
       }
     }
@@ -214,21 +214,23 @@ export function computeVendusAnalytics(
     averageTicket: round2(totalDocuments > 0 ? invoiceGrossCents / totalDocuments / 100 : 0),
   };
 
-  // Build byChannel
-  const byChannel: VendusChannelStats[] = (["salao", "eatz"] as const).map((ch) => {
-    const acc = channelMap.get(ch)!;
-    const vatCentsForChannel = acc.vatCents;
-    return {
-      channel: ch,
-      documentCount: acc.invoiceCount,
-      creditNoteCount: acc.creditNoteCount,
-      grossRevenue: round2(acc.totalGross),
-      vatCollected: round2(vatCentsForChannel / 100),
-      netRevenue: round2(acc.totalGross - vatCentsForChannel / 100),
-      averageTicket: round2(acc.invoiceCount > 0 ? acc.invoiceGross / acc.invoiceCount : 0),
-      takeAwayCount: ch === "salao" ? acc.takeAwayCount : 0,
-    };
-  });
+  // Build byChannel — 'apps' only included if it has documents (historical pre-AirMenu data)
+  const byChannel: VendusChannelStats[] = (["salao", "eatz", "apps"] as const)
+    .filter((ch) => ch !== "apps" || (channelMap.get("apps")!.invoiceCount + channelMap.get("apps")!.creditNoteCount) > 0)
+    .map((ch) => {
+      const acc = channelMap.get(ch)!;
+      const vatCentsForChannel = acc.vatCents;
+      return {
+        channel: ch,
+        documentCount: acc.invoiceCount,
+        creditNoteCount: acc.creditNoteCount,
+        grossRevenue: round2(acc.totalGross),
+        vatCollected: round2(vatCentsForChannel / 100),
+        netRevenue: round2(acc.totalGross - vatCentsForChannel / 100),
+        averageTicket: round2(acc.invoiceCount > 0 ? acc.invoiceGross / acc.invoiceCount : 0),
+        takeAwayCount: ch === "salao" ? acc.takeAwayCount : 0,
+      };
+    });
 
   // Build byCategory
   const byCategory: VendusCategoryStats[] = Array.from(categoryMap.entries())

@@ -57,6 +57,7 @@ app.use("/api/hr", hrKioskRoutes);
 // Vendus: instanciado antes do cash-closings para injectar o gateway de sessões
 const vendusModule = createVendusModule({
   eatzPaymentId: ENV.VENDUS_EATZ_PAYMENT_ID,
+  appsPaymentId: ENV.VENDUS_APPS_PAYMENT_ID,
   salaoPriceGroupId: ENV.VENDUS_PRICE_GROUP_SALAO,
   eatzPriceGroupId: ENV.VENDUS_PRICE_GROUP_EATZ,
   concurrency: ENV.CONCURRENCY,

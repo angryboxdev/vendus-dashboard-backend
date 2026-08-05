@@ -14,6 +14,7 @@ import type { GetSummaryPort } from "./domain/ports/in/get-summary.port.js";
 
 export interface VendusModuleConfig {
   eatzPaymentId: number;
+  appsPaymentId: number;
   salaoPriceGroupId: number;
   eatzPriceGroupId: number;
   concurrency: number;
@@ -48,6 +49,7 @@ export function createVendusModule(config: VendusModuleConfig): {
     gateway,
     productCatalog,
     config.eatzPaymentId,
+    config.appsPaymentId,
     config.concurrency,
   );
   const getAnalyticsCurrent = new GetAnalyticsCurrentUseCase(gateway);
@@ -60,6 +62,7 @@ export function createVendusModule(config: VendusModuleConfig): {
     gateway,
     productCatalog,
     config.eatzPaymentId,
+    config.appsPaymentId,
   );
   const listDocuments = new ListDocumentsUseCase(gateway);
   const getSelfConsumption = new GetSelfConsumptionUseCase(
