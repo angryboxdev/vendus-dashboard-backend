@@ -36,10 +36,17 @@ export class ClassifyInvoiceLineUseCase implements ClassifyInvoiceLinePort {
       if (!category) throw new Error(`Subcategoria não encontrada: ${costCenterCategoryId}`);
       classified = line.classifyFromCategory(category, channelId);
       if (type !== undefined || stockItemId !== undefined) {
-        classified = classified.classify({ type, stockItemId });
+        const extra: Parameters<InvoiceLine["classify"]>[0] = {};
+        if (type !== undefined) extra.type = type;
+        if (stockItemId !== undefined) extra.stockItemId = stockItemId;
+        classified = classified.classify(extra);
       }
     } else {
-      classified = line.classify({ type, costCenterCategoryId, stockItemId });
+      const data: Parameters<InvoiceLine["classify"]>[0] = {};
+      if (type !== undefined) data.type = type;
+      if (costCenterCategoryId !== undefined) data.costCenterCategoryId = costCenterCategoryId;
+      if (stockItemId !== undefined) data.stockItemId = stockItemId;
+      classified = line.classify(data);
     }
 
     await this.lineRepo.updateLine(classified);
