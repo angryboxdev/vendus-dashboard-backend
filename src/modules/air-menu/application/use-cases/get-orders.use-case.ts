@@ -9,6 +9,7 @@ import {
   type AirMenuFlag,
   type AirMenuOrderItem,
 } from "../../domain/entities/air-menu-order.js";
+import { extractItems } from "../../domain/services/order-item-extractor.js";
 
 function derivePlatform(divisionName: string): string {
   const lower = divisionName.toLowerCase();
@@ -16,86 +17,6 @@ function derivePlatform(divisionName: string): string {
   if (lower.includes("uber")) return "Uber Eats";
   if (lower.includes("bolt")) return "Bolt Food";
   return divisionName;
-}
-
-/**
- * Complement groups whose title matches this pattern represent a size selector
- * (e.g. "Escolha o tamanho"). The selected complementItem is merged into the
- * parent item's title and price instead of appearing as a separate line.
- */
-const SIZE_COMPLEMENT_RE = /tamanho|size/i;
-
-/**
- * Finds the first size complementItem within an item's children.
- * Recurses into nested complement nodes to handle deep nesting.
- */
-function findSizeComplementItem(
-  childs: RawOrderItemInstance[],
-): { title: string; price: number } | null {
-  for (const child of childs) {
-    if (
-      child.menuRelation === "complement" &&
-      SIZE_COMPLEMENT_RE.test(child.title ?? "")
-    ) {
-      for (const cc of child.childs ?? []) {
-        if (cc.menuRelation === "complementItem") {
-          return { title: cc.title, price: cc.price ?? 0 };
-        }
-      }
-    }
-    const found = findSizeComplementItem(child.childs ?? []);
-    if (found) return found;
-  }
-  return null;
-}
-
-/**
- * Collects paid complementItems that are NOT part of a size group.
- * These remain as separate `+ Title` lines.
- */
-function collectPaidNonSizeComplements(
-  childs: RawOrderItemInstance[],
-): AirMenuOrderItem[] {
-  const items: AirMenuOrderItem[] = [];
-  for (const child of childs) {
-    if (child.menuRelation === "complement") {
-      if (SIZE_COMPLEMENT_RE.test(child.title ?? "")) continue;
-      for (const cc of child.childs ?? []) {
-        if (cc.menuRelation === "complementItem" && (cc.price ?? 0) > 0) {
-          items.push({
-            title: `+ ${cc.title}`,
-            plu: cc.plu ?? "",
-            price: cc.price!,
-            count: cc.count ?? 1,
-          });
-        }
-      }
-    } else {
-      items.push(...collectPaidNonSizeComplements(child.childs ?? []));
-    }
-  }
-  return items;
-}
-
-function extractItems(childs: RawOrderItemInstance[]): AirMenuOrderItem[] {
-  const items: AirMenuOrderItem[] = [];
-  for (const child of childs) {
-    if (child.menuRelation === "item") {
-      const size = findSizeComplementItem(child.childs ?? []);
-      items.push({
-        title: size ? `${child.title} ${size.title}` : child.title,
-        plu: child.plu ?? "",
-        price: (child.price ?? 0) + (size?.price ?? 0),
-        count: child.count ?? 1,
-      });
-      // Non-size paid add-ons for this item
-      items.push(...collectPaidNonSizeComplements(child.childs ?? []));
-    } else if (child.childs?.length) {
-      // Recurse into families and other containers (not into item children)
-      items.push(...extractItems(child.childs));
-    }
-  }
-  return items;
 }
 
 function normalizeExtraInfo(

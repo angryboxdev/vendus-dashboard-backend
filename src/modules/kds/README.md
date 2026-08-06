@@ -1,7 +1,7 @@
 # Módulo: kds
 
 > Status: ativo
-> Última atualização: 2026-08-04
+> Última atualização: 2026-08-06
 
 ---
 
@@ -118,7 +118,7 @@ O SSE stream emite:
 
 - `VendusDeliveryGateway` — implementa `DeliveryGatewayPort`. Consome a API REST do Vendus.
 - `AirMenuKdsStoreAdapter` — implementa `AirMenuKdsStorePort`. Map em memória + EventEmitter interno. Gere `deliveredAt` (set ao passar para `delivered`, clear ao reverter).
-- `air-menu-delivery.mapper.ts` — função pura `mapAirMenuEventToDelivery(event)` → `Delivery | null`. Mapeia `WebhookOrderEvent` (CREATED) para `Delivery`. Extrai plataforma do nome da division e `AM_PROVIDER_ORDER_ID` do campo `extraInfo` aninhado.
+- `air-menu-delivery.mapper.ts` — função pura `mapAirMenuEventToDelivery(event)` → `Delivery | null`. Mapeia `WebhookOrderEvent` (CREATED) para `Delivery`. Extrai plataforma do nome da division e `AM_PROVIDER_ORDER_ID` do campo `extraInfo` aninhado. Os nomes dos itens incluem sufixo de tamanho (`S`/`L`) — ver "Resolução de tamanho" abaixo.
 
 ---
 
@@ -148,6 +148,8 @@ Esta ligação acontece **uma vez por processo**, ao nível do módulo — não 
 - **Bridge no composition root, não no controller**: a ligação `eventBus → store` é feita em `kds.module.ts`, não no controller. O controller não sabe de onde vêm os pedidos AirMenu — só conhece o `AirMenuKdsStorePort`.
 - **Heartbeat a cada 30 s**: previne que proxies e load balancers fechem a ligação SSE por inactividade.
 - **Polling Vendus separado do SSE**: pedidos Vendus continuam a ser obtidos por polling (`GET /kds/deliveries`) no frontend a cada 5 s. O SSE é exclusivo para AirMenu. Esta separação mantém compatibilidade sem mudar o fluxo Vendus existente.
+- **Resolução de tamanho no mapper**: `mapAirMenuEventToDelivery` usa a estrutura nested `orders[division][].childs` do payload do webhook (mesmo formato que `GetOrders`) para extrair itens com sufixo de tamanho correto (`S`/`L`), via `extractItems` de `order-item-extractor.ts`. Recorre a `simplifiedItems` (com normalização de sufixos legados) apenas como fallback quando o campo `childs` não estiver presente. Isto garante que o KDS mostra `"Honey Pepperoni L"` ou `"Tomate e Pesto S"` em vez de apenas `"Honey Pepperoni"`.
+- **Sufixos legados no fallback `simplifiedItems`**: pedidos do formato anterior ao menu com opções chegam com `"Tomate e Pesto - Grande"` em `simplifiedItems`. A função `applyLegacyNormalization` converte `"- Grande"` → `L` e `"- Individual"` → `S` antes de emitir o card no KDS.
 
 ---
 

@@ -275,3 +275,168 @@ describe('GetOrdersUseCase — sem orders', () => {
     expect(orders).toEqual([]);
   });
 });
+
+// ─── upgrade complement (Dobre a sua pizza) ───────────────────────────────────
+
+describe('GetOrdersUseCase — upgrade complement "Dobre a sua pizza"', () => {
+  it('identifica pizza como L quando complementItem de upgrade está presente', async () => {
+    const upgradeComplement = makeComplement('Dobre a sua pizza 🍕', [
+      makeComplementItem('Upgrade para L (20→25 cm)', 10),
+    ]);
+    const item = makeItemChild({ title: 'Honey Pepperoni', plu: 'ITM-1', price: 15.9, childs: [upgradeComplement] });
+    const uc = makeStubs({
+      'ord-1': { 'Glovo': [makeOrderInstance('ord-1', [item])] },
+    });
+    const orders = await uc.execute(ENT_ID, START, END);
+    const [extracted] = orders[0].items;
+    expect(extracted.title).toBe('Honey Pepperoni L');
+    expect(extracted.price).toBe(25.9); // 15.9 + 10
+  });
+
+  it('identifica pizza como S quando complementItem de upgrade está ausente', async () => {
+    const upgradeComplement = makeComplement('Dobre a sua pizza 🍕', []); // sem complementItem seleccionado
+    const item = makeItemChild({ title: 'Chicken & Cheese', plu: 'ITM-2', price: 15.9, childs: [upgradeComplement] });
+    const uc = makeStubs({
+      'ord-1': { 'Glovo': [makeOrderInstance('ord-1', [item])] },
+    });
+    const orders = await uc.execute(ENT_ID, START, END);
+    const [extracted] = orders[0].items;
+    expect(extracted.title).toBe('Chicken & Cheese S');
+    expect(extracted.price).toBe(15.9);
+  });
+
+  it('o complement "Dobre" não aparece como linha separada', async () => {
+    const upgradeComplement = makeComplement('Dobre a sua pizza 🍕', [
+      makeComplementItem('Upgrade para L (20→25 cm)', 10),
+    ]);
+    const item = makeItemChild({ title: 'Honey Pepperoni', plu: 'ITM-1', price: 15.9, childs: [upgradeComplement] });
+    const uc = makeStubs({
+      'ord-1': { 'Glovo': [makeOrderInstance('ord-1', [item])] },
+    });
+    const orders = await uc.execute(ENT_ID, START, END);
+    expect(orders[0].items).toHaveLength(1); // só a pizza, sem linha extra
+  });
+
+  it('detecta upgrade mesmo aninhado em múltiplas famílias', async () => {
+    const upgradeComplement = makeComplement('Dobre a sua pizza 🍕', [
+      makeComplementItem('Upgrade para L (20→25 cm)', 10),
+    ]);
+    const item = makeItemChild({ title: 'Honey Pepperoni', plu: 'ITM-1', price: 15.9, childs: [upgradeComplement] });
+    const family = { title: 'Specials', menuRelation: 'family' as const, childs: [item] };
+    const root   = { title: 'Menu',     menuRelation: 'family' as const, childs: [family] };
+    const uc = makeStubs({
+      'ord-1': { 'Glovo': [makeOrderInstance('ord-1', [root])] },
+    });
+    const orders = await uc.execute(ENT_ID, START, END);
+    expect(orders[0].items[0].title).toBe('Honey Pepperoni L');
+  });
+});
+
+// ─── default S por família de pizza ───────────────────────────────────────────
+
+describe('GetOrdersUseCase — default S por família de pizza', () => {
+  for (const familyName of ['Classics', 'Specials', 'Sweeties']) {
+    it(`assume S para item sem complement dentro da família "${familyName}"`, async () => {
+      const item = makeItemChild({ title: 'Tomate e Pesto', plu: 'ITM-1', price: 13.9, childs: [] });
+      const family = { title: familyName, menuRelation: 'family' as const, childs: [item] };
+      const uc = makeStubs({
+        'ord-1': { 'Glovo': [makeOrderInstance('ord-1', [family])] },
+      });
+      const orders = await uc.execute(ENT_ID, START, END);
+      expect(orders[0].items[0].title).toBe('Tomate e Pesto S');
+    });
+  }
+
+  it('não aplica S a items fora de famílias de pizza', async () => {
+    const item = makeItemChild({ title: 'Coca-Cola', plu: 'PLU-DRINK', price: 2, childs: [] });
+    const family = { title: 'Drinks', menuRelation: 'family' as const, childs: [item] };
+    const uc = makeStubs({
+      'ord-1': { 'Glovo': [makeOrderInstance('ord-1', [family])] },
+    });
+    const orders = await uc.execute(ENT_ID, START, END);
+    expect(orders[0].items[0].title).toBe('Coca-Cola');
+  });
+
+  it('complement de upgrade tem prioridade sobre o default S da família', async () => {
+    const upgradeComplement = makeComplement('Dobre a sua pizza 🍕', [
+      makeComplementItem('Upgrade para L (20→25 cm)', 10),
+    ]);
+    const item = makeItemChild({ title: 'Honey Pepperoni', plu: 'ITM-2', price: 15.9, childs: [upgradeComplement] });
+    const family = { title: 'Specials', menuRelation: 'family' as const, childs: [item] };
+    const uc = makeStubs({
+      'ord-1': { 'Glovo': [makeOrderInstance('ord-1', [family])] },
+    });
+    const orders = await uc.execute(ENT_ID, START, END);
+    expect(orders[0].items[0].title).toBe('Honey Pepperoni L');
+  });
+
+  it('propaga contexto de pizza através de nesting profundo (como no payload real)', async () => {
+    const item = makeItemChild({ title: 'Tomate e Pesto', plu: 'ITM-1', price: 13.9, childs: [] });
+    const classics = { title: 'Classics',  menuRelation: 'family' as const, childs: [item] };
+    const menu1    = { title: 'Menu',      menuRelation: 'family' as const, childs: [classics] };
+    const root1    = { title: 'Root',      menuRelation: 'family' as const, childs: [menu1] };
+    const uc = makeStubs({
+      'ord-1': { 'Glovo': [makeOrderInstance('ord-1', [root1])] },
+    });
+    const orders = await uc.execute(ENT_ID, START, END);
+    expect(orders[0].items[0].title).toBe('Tomate e Pesto S');
+  });
+
+  it('remove trailing space do título antes de adicionar o sufixo de tamanho', async () => {
+    // Payload real da AirMenu tem títulos com espaço no fim: "Tomate e Pesto "
+    const item = makeItemChild({ title: 'Tomate e Pesto ', plu: 'ITM-1', price: 13.9, childs: [] });
+    const family = { title: 'Classics', menuRelation: 'family' as const, childs: [item] };
+    const uc = makeStubs({
+      'ord-1': { 'Glovo': [makeOrderInstance('ord-1', [family])] },
+    });
+    const orders = await uc.execute(ENT_ID, START, END);
+    expect(orders[0].items[0].title).toBe('Tomate e Pesto S'); // sem duplo espaço
+  });
+});
+
+// ─── variantes do regex de upgrade ────────────────────────────────────────────
+
+describe('GetOrdersUseCase — variantes do regex de upgrade', () => {
+  it('detecta "dobrar" como variante do complement de upgrade', async () => {
+    const upgradeComplement = makeComplement('Dobrar a pizza', [
+      makeComplementItem('Upgrade para L (20→25 cm)', 10),
+    ]);
+    const item = makeItemChild({ title: 'Tomate e Pesto', plu: 'ITM-1', price: 13.9, childs: [upgradeComplement] });
+    const uc = makeStubs({
+      'ord-1': { 'Glovo': [makeOrderInstance('ord-1', [item])] },
+    });
+    const orders = await uc.execute(ENT_ID, START, END);
+    expect(orders[0].items[0].title).toBe('Tomate e Pesto L');
+  });
+});
+
+// ─── normalização de sufixo legado ────────────────────────────────────────────
+
+describe('GetOrdersUseCase — normalização de sufixo legado', () => {
+  it('converte "- Grande" em L no título', async () => {
+    const item = makeItemChild({ title: '4 Formaggios - Grande', plu: 'ITM-X', price: 25.9 });
+    const uc = makeStubs({
+      'ord-1': { 'Glovo': [makeOrderInstance('ord-1', [item])] },
+    });
+    const orders = await uc.execute(ENT_ID, START, END);
+    expect(orders[0].items[0].title).toBe('4 Formaggios L');
+  });
+
+  it('converte "- Individual" em S no título', async () => {
+    const item = makeItemChild({ title: 'Tomate e Pesto - Individual', plu: 'ITM-Y', price: 12 });
+    const uc = makeStubs({
+      'ord-1': { 'Glovo': [makeOrderInstance('ord-1', [item])] },
+    });
+    const orders = await uc.execute(ENT_ID, START, END);
+    expect(orders[0].items[0].title).toBe('Tomate e Pesto S');
+  });
+
+  it('items sem sufixo legado não são alterados', async () => {
+    const item = makeItemChild({ title: 'Coca-Cola', plu: 'ITM-Z', price: 2 });
+    const uc = makeStubs({
+      'ord-1': { 'Glovo': [makeOrderInstance('ord-1', [item])] },
+    });
+    const orders = await uc.execute(ENT_ID, START, END);
+    expect(orders[0].items[0].title).toBe('Coca-Cola');
+  });
+});

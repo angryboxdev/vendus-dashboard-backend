@@ -1,4 +1,6 @@
 import type { WebhookOrderEvent } from '../../../air-menu/domain/ports/out/order-event-bus.port.js';
+import type { RawOrderItemInstance } from '../../../air-menu/domain/ports/out/air-menu-gateway.port.js';
+import { extractItems, applyLegacyNormalization } from '../../../air-menu/domain/services/order-item-extractor.js';
 import type { Delivery, DeliveryItem } from '../../domain/entities/delivery.js';
 
 interface SimplifiedItem {
@@ -67,12 +69,31 @@ export function mapAirMenuEventToDelivery(event: WebhookOrderEvent): Delivery | 
   const platform = derivePlatform(orders);
   const providerOrderId = extractProviderOrderId(orders);
 
-  const items: DeliveryItem[] = simplifiedItems.map((item, idx) => ({
-    id: idx,
-    name: item.name ?? '',
-    qty: item.quantity ?? 1,
-    notes: '',
-  }));
+  // Prefer the nested `orders` structure (same shape as GetOrders) so we can
+  // resolve sizes from complement trees. Fall back to simplifiedItems (with
+  // legacy-suffix normalisation) when no nested items are found.
+  const ordersMap =
+    typeof payload['orders'] === 'object' && payload['orders'] !== null
+      ? (payload['orders'] as Record<string, RawOrderItemInstance[]>)
+      : {};
+
+  const nestedItems = Object.values(ordersMap).flatMap((instances) =>
+    instances.flatMap((instance) => extractItems(instance.childs ?? [])),
+  );
+
+  const items: DeliveryItem[] = nestedItems.length > 0
+    ? nestedItems.map((item, idx) => ({
+        id: idx,
+        name: item.title,
+        qty: item.count,
+        notes: '',
+      }))
+    : simplifiedItems.map((item, idx) => ({
+        id: idx,
+        name: applyLegacyNormalization(item.name ?? ''),
+        qty: item.quantity ?? 1,
+        notes: '',
+      }));
 
   return {
     id: orderId,

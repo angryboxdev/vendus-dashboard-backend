@@ -1,7 +1,7 @@
 # Módulo: air-menu
 
 > Status: ativo
-> Última atualização: 2026-08-04 (testes unitários + correção nota webhook)
+> Última atualização: 2026-08-06
 
 ---
 
@@ -80,9 +80,9 @@ Não é responsável por emitir documentos fiscais; apenas classifica o tipo de 
 
 | Campo | Tipo | Descrição |
 |---|---|---|
-| `title` | `string` | Nome do item, já com o tamanho fundido quando aplicável (ex.: `"Brigadeiro Normal"`) |
+| `title` | `string` | Nome do item com sufixo de tamanho quando aplicável (ex.: `"Honey Pepperoni L"`, `"Tomate e Pesto S"`, `"Brigadeiro Grande"`). Ver regra 6. |
 | `plu` | `string` | Código PLU do item base (ex.: `"ITM-4138583"`). Vazio para add-ons sem PLU |
-| `price` | `number` | Preço unitário já incluindo o add-on de tamanho (preço base + preço do tamanho) |
+| `price` | `number` | Preço unitário já incluindo o custo do upgrade de tamanho quando aplicável |
 | `count` | `number` | Quantidade |
 
 ### `AirMenuMenuItem`
@@ -110,7 +110,14 @@ Objecto de resultado da secção `analytics` do endpoint `/summary`. Ver secçã
 3. Uma ordem com múltiplas divisões no mesmo `orderId` é **consolidada numa única `AirMenuOrder`** — os itens são agregados.
 4. O `documentDate` é a data contabilisticamente relevante: data da flag `FATURAR` para faturas, data da flag `CANCEL` para notas de crédito. Se a flag não tiver timestamp, usa-se `orderDate`.
 5. A categoria e o IVA de um item são obtidos pelo **lookup de PLU** no catálogo de menu. Se o PLU não constar do catálogo, a categoria é `"Outros"` e o IVA é `0`. Itens sem PLU também são indexados usando o título como chave virtual.
-6. **Complementos de tamanho** (grupos `complement` cujo título contém "tamanho" ou "size") são **fundidos no item pai**: o nome do tamanho seleccionado é anexado ao título do item e o seu preço adicionado ao preço base. Não aparecem como linha separada. Outros add-ons pagos (que não sejam de tamanho) continuam como linhas `+ Nome`.
+6. **Resolução de tamanho dos itens** — o `extractItems` em `order-item-extractor.ts` aplica a seguinte prioridade (a primeira que match vence):
+   1. **Complement "Dobre a sua pizza"** (`/dobre|dobrar/i`): se tiver `complementItem` com "Upgrade para L" → sufixo `L` (preço do upgrade somado ao base); se o `complementItem` estiver ausente → sufixo `S` (sem custo extra). O nó complement não aparece como linha separada.
+   2. **Complement "Tamanho/Size"** (`/tamanho|size/i`): o título da opção seleccionada é fundido no título do item e o seu preço somado ao preço base. Também não aparece como linha separada.
+   3. **Sufixo legado no título** (`"- Grande"` → `L`, `"- Individual"` → `S`): para pedidos do formato anterior ao menu com opções. O sufixo é removido e substituído por `L`/`S`.
+   4. **Default por família de pizza**: se nenhum dos anteriores se aplicar e o item estiver dentro de uma família `Classics`, `Specials` ou `Sweeties` → sufixo `S`. Resolve o caso em que o AirMenu omite o nó complement quando o upgrade não foi seleccionado.
+   5. **Sem tamanho**: itens fora de famílias de pizza e sem complement de tamanho (ex.: bebidas, sobremesas não-pizza) não recebem sufixo.
+
+   Outros add-ons pagos (complementos que não são de tamanho) continuam a aparecer como linhas `+ Nome`.
 7. **`topItems` retorna todos os itens** (sem limite), ordenados por receita bruta descendente. Itens do mesmo PLU mas com tamanhos diferentes são entradas distintas (chave = `plu|title`).
 
 ---
@@ -258,7 +265,7 @@ Os endpoints públicos (`/webhook/receive` e `/webhook/stream`) são registados 
       "documentDate": "2026-08-03T13:25:00.000Z",
       "paymentMethod": "Online",
       "items": [
-        { "title": "Honey Pepperoni Grande", "plu": "ITM-4138583", "price": 16.90, "count": 1 }
+        { "title": "Honey Pepperoni L", "plu": "ITM-4138583", "price": 25.90, "count": 1 }
       ],
       "total": 16.90,
       "firstName": "João",
@@ -315,7 +322,7 @@ Os endpoints públicos (`/webhook/receive` e `/webhook/stream`) são registados 
     "topItems": [
       {
         "plu": "ITM-4138583",
-        "title": "Honey Pepperoni - Grande",
+        "title": "Honey Pepperoni L",
         "category": "Specials",
         "vatRate": 0,
         "quantitySold": 12,
@@ -352,7 +359,9 @@ Os endpoints públicos (`/webhook/receive` e `/webhook/stream`) são registados 
 - **`eventBus` exposto pelo composition root**: o `OrderEventBusAdapter` é criado em `createAirMenuModule` e partilhado com o módulo `kds` via `server.ts`. Isto garante que o mesmo bus é usado pelo publisher (webhook receiver) e pelo subscriber (KDS bridge) — sem acoplamento direto entre módulos.
 - **Webhook receiver público, sem auth**: o endpoint `POST /api/air-menu/webhook/receive` é chamado pela AirMenu directamente — não pelo frontend autenticado. Registado antes de `requireAuth` via `publicRouter` em `server.ts`.
 - **`RegisterWebhookUseCase` inclui `sessionId` automaticamente**: o use case obtém a sessão válida via `SessionManagerService` e injeta o `sessionId` no input — o caller não precisa de gerir sessões.
-- **Fusão de complemento de tamanho em `extractItems`**: complementos do grupo "tamanho" são detetados por regex (`/tamanho|size/i`) e fundidos no item pai (título + preço).
+- **Resolução de tamanho extraída para `order-item-extractor.ts`**: toda a lógica de determinação do tamanho de um item (complement "Dobre", complement "Tamanho/Size", sufixo legado, default por família) vive em `domain/services/order-item-extractor.ts` e é partilhada entre `GetOrdersUseCase` e o mapper KDS (`air-menu-delivery.mapper.ts`). Este ficheiro é a única fonte de verdade das regras de tamanho — adicionar um novo padrão (ex.: nova família de pizza) é feito aqui e propaga-se automaticamente para ambos os contextos.
+- **`PIZZA_FAMILY_RE = /classics|specials|sweeties/i`**: famílias configuradas como categorias de pizza. Items sem indicação de tamanho dentro destas famílias assumem `S` por default. A AirMenu omite o nó complement quando o upgrade não é seleccionado — este default resolve o caso silencioso.
+- **Títulos com trailing space**: o AirMenu pode enviar títulos com espaço no final (ex.: `"Tomate e Pesto "`). O extractor faz `.trim()` antes de construir o título final.
 - **`topItemMap` chaveado por `plu|title`**: a mesma SKU pode ter tamanhos diferentes — usar apenas o PLU como chave agregaria tamanhos indevidamente.
 - **Herança de `tax` na família**: o `walkMenu` propaga `activeTax` pela árvore do menu. Necessário porque no AirMenu o IVA pode estar configurado ao nível da família e não em cada item individualmente.
 
@@ -388,7 +397,7 @@ Todos os testes unitários: `jest --testPathPattern=air-menu`
 |---|---|
 | `__tests__/entities/air-menu-order.test.ts` | Derivação de `documentType`, `documentDate` e `total` na entidade |
 | `__tests__/use-cases/get-analytics.use-case.test.ts` | `computeAnalytics` — summary, byPlatform, byVatRate, byCategory, topItems, temporalDistribution |
-| `__tests__/use-cases/get-orders.use-case.test.ts` | `derivePlatform`, extracção de itens, fusão de tamanho, add-ons pagos, consolidação de divisões, filtro por `documentDate` |
+| `__tests__/use-cases/get-orders.use-case.test.ts` | `derivePlatform`, extracção de itens, complement "Dobre" (L/S), default S por família de pizza, sufixo legado, add-ons pagos, consolidação de divisões, filtro por `documentDate` |
 | `__tests__/services/session-manager.service.test.ts` | Re-autenticação, sessão válida em cache, deduplicação de chamadas concorrentes |
 | `__tests__/use-cases/register-webhook.use-case.test.ts` | Passagem de sessionId e campos ao gateway |
 
