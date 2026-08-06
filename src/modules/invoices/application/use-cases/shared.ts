@@ -63,6 +63,12 @@ export function toInvoiceLineDTO(line: InvoiceLine): InvoiceLineDTO {
     affectsDre: line.affectsDre,
     affectsCashflow: line.affectsCashflow,
     affectsProfitability: line.affectsProfitability,
+    financialType: line.financialType,
+    channelId: line.channelId,
+    requiresChannel: line.requiresChannel,
+    requiresAllocation: line.requiresAllocation,
+    dreValue: line.totalWithVat - line.vatAmount,
+    cashflowValue: line.totalWithVat,
     createdAt: line.createdAt.toISOString(),
   };
 }

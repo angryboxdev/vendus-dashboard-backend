@@ -308,6 +308,16 @@ export const DEFAULT_COST_CENTERS: DefaultGroupSeed[] = [
         requiresChannel: false,
         requiresAllocation: false,
       },
+      {
+        code: "MKT.05",
+        name: "Anúncios por Marketplace",
+        financialType: "marketing",
+        affectsDre: true,
+        affectsCashflow: true,
+        affectsProfitability: true,
+        requiresChannel: true,
+        requiresAllocation: false,
+      },
     ],
   },
   {

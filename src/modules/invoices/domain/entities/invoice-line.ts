@@ -1,4 +1,5 @@
 import type { InvoiceLineType } from "./invoice.js";
+import { ChannelRequiredError } from "../errors.js";
 
 interface InvoiceLineProps {
   id: string;
@@ -20,6 +21,14 @@ interface InvoiceLineProps {
   affectsDre: boolean;
   affectsCashflow: boolean;
   affectsProfitability: boolean;
+  // Campos herdados da subcategoria ao classificar (Fase 2 adiciona a lógica de herança)
+  financialType: string | null;
+  channelId: string | null;
+  requiresChannel: boolean;
+  requiresAllocation: boolean;
+  // Sugestão de IA
+  aiSuggestedCategoryId: string | null;
+  aiConfidence: number | null;
   createdAt: Date;
 }
 
@@ -27,6 +36,16 @@ export interface ClassifyLineData {
   type?: InvoiceLineType;
   costCenterCategoryId?: string | null;
   stockItemId?: string | null;
+}
+
+export interface CategorySnapshot {
+  id: string;
+  financialType: string;
+  affectsDre: boolean;
+  affectsCashflow: boolean;
+  affectsProfitability: boolean;
+  requiresChannel: boolean;
+  requiresAllocation: boolean;
 }
 
 export class InvoiceLine {
@@ -49,6 +68,12 @@ export class InvoiceLine {
   readonly affectsDre: boolean;
   readonly affectsCashflow: boolean;
   readonly affectsProfitability: boolean;
+  readonly financialType: string | null;
+  readonly channelId: string | null;
+  readonly requiresChannel: boolean;
+  readonly requiresAllocation: boolean;
+  readonly aiSuggestedCategoryId: string | null;
+  readonly aiConfidence: number | null;
   readonly createdAt: Date;
 
   private constructor(props: InvoiceLineProps) {
@@ -71,6 +96,12 @@ export class InvoiceLine {
     this.affectsDre = props.affectsDre;
     this.affectsCashflow = props.affectsCashflow;
     this.affectsProfitability = props.affectsProfitability;
+    this.financialType = props.financialType;
+    this.channelId = props.channelId;
+    this.requiresChannel = props.requiresChannel;
+    this.requiresAllocation = props.requiresAllocation;
+    this.aiSuggestedCategoryId = props.aiSuggestedCategoryId;
+    this.aiConfidence = props.aiConfidence;
     this.createdAt = props.createdAt;
   }
 
@@ -113,6 +144,12 @@ export class InvoiceLine {
       affectsDre: props.affectsDre ?? true,
       affectsCashflow: props.affectsCashflow ?? true,
       affectsProfitability: props.affectsProfitability ?? false,
+      financialType: null,
+      channelId: null,
+      requiresChannel: false,
+      requiresAllocation: false,
+      aiSuggestedCategoryId: null,
+      aiConfidence: null,
       createdAt: new Date(),
     });
   }
@@ -126,6 +163,22 @@ export class InvoiceLine {
     if (data.type !== undefined) p.type = data.type;
     if (data.costCenterCategoryId !== undefined) p.costCenterCategoryId = data.costCenterCategoryId;
     if (data.stockItemId !== undefined) p.stockItemId = data.stockItemId;
+    return new InvoiceLine(p);
+  }
+
+  classifyFromCategory(category: CategorySnapshot, channelId?: string | null): InvoiceLine {
+    if (category.requiresChannel && !channelId) {
+      throw new ChannelRequiredError(category.id);
+    }
+    const p = this.toProps();
+    p.costCenterCategoryId = category.id;
+    p.financialType = category.financialType;
+    p.affectsDre = category.affectsDre;
+    p.affectsCashflow = category.affectsCashflow;
+    p.affectsProfitability = category.affectsProfitability;
+    p.requiresChannel = category.requiresChannel;
+    p.requiresAllocation = category.requiresAllocation;
+    if (channelId !== undefined) p.channelId = channelId;
     return new InvoiceLine(p);
   }
 
@@ -154,6 +207,12 @@ export class InvoiceLine {
       affectsDre: this.affectsDre,
       affectsCashflow: this.affectsCashflow,
       affectsProfitability: this.affectsProfitability,
+      financialType: this.financialType,
+      channelId: this.channelId,
+      requiresChannel: this.requiresChannel,
+      requiresAllocation: this.requiresAllocation,
+      aiSuggestedCategoryId: this.aiSuggestedCategoryId,
+      aiConfidence: this.aiConfidence,
       createdAt: this.createdAt,
     };
   }

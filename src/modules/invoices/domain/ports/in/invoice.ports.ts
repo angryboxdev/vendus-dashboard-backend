@@ -24,6 +24,14 @@ export interface InvoiceLineDTO {
   affectsDre: boolean;
   affectsCashflow: boolean;
   affectsProfitability: boolean;
+  financialType: string | null;
+  channelId: string | null;
+  requiresChannel: boolean;
+  requiresAllocation: boolean;
+  /** Valor para DRE/Rentabilidade: totalWithVat − vatAmount (sem IVA) */
+  dreValue: number;
+  /** Valor para Fluxo de Caixa: totalWithVat (com IVA) */
+  cashflowValue: number;
   createdAt: string;
 }
 
@@ -180,6 +188,7 @@ export interface ClassifyInvoiceLineCommand {
     type?: InvoiceLineType;
     costCenterCategoryId?: string | null;
     stockItemId?: string | null;
+    channelId?: string | null;
   };
   saveAsRule?: boolean;
 }
@@ -199,6 +208,7 @@ export interface SuggestClassificationResult {
   costCenterCategoryId: string | null;
   lineType: InvoiceLineType | null;
   category: string | null;
+  channelId: string | null;
   confidenceScore: number; // 0.0 – 1.0
 }
 
@@ -308,7 +318,7 @@ export interface DeleteInvoicePort {
 }
 
 export interface SuggestLineClassificationPort {
-  execute(supplierId: string): Promise<SuggestClassificationResult | null>;
+  execute(supplierId: string, description?: string): Promise<SuggestClassificationResult | null>;
 }
 
 export interface ImportInvoicePort {

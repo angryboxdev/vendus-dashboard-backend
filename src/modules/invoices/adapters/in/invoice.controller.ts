@@ -192,7 +192,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   router.patch("/invoices/:invoiceId/lines/:lineId/classify", async (req, res) => {
     try {
       const { classify, saveAsRule } = req.body as {
-        classify: { type?: InvoiceLineType; costCenterCategoryId?: string | null; stockItemId?: string | null };
+        classify: { type?: InvoiceLineType; costCenterCategoryId?: string | null; stockItemId?: string | null; channelId?: string | null };
         saveAsRule?: boolean;
       };
       const classifyCmd: Parameters<typeof ports.classifyInvoiceLine.execute>[0] = {
@@ -208,10 +208,11 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
     }
   });
 
-  // GET /invoices/suggest-classification/:supplierId
+  // GET /invoices/suggest-classification/:supplierId?description=...
   router.get("/invoices/suggest-classification/:supplierId", async (req, res) => {
     try {
-      const result = await ports.suggestLineClassification.execute(req.params.supplierId);
+      const { description } = req.query as { description?: string };
+      const result = await ports.suggestLineClassification.execute(req.params.supplierId, description);
       res.json(result ?? null);
     } catch (err) {
       handleError(res, err);

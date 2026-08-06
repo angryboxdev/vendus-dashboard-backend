@@ -6,6 +6,8 @@ import type {
 import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
 import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
 import type { ClassificationRuleRepositoryPort } from "../../domain/ports/out/classification-rule-repository.port.js";
+import type { CostCenterCategoryReaderPort } from "../../domain/ports/out/cost-center-category-reader.port.js";
+import type { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import { ClassificationRule } from "../../domain/entities/classification-rule.js";
 import { InvoiceNotFoundError, InvoiceLineNotFoundError } from "../../domain/errors.js";
 import { toInvoiceLineDTO } from "./shared.js";
@@ -15,6 +17,7 @@ export class ClassifyInvoiceLineUseCase implements ClassifyInvoiceLinePort {
     private readonly invoiceRepo: InvoiceRepositoryPort,
     private readonly lineRepo: InvoiceLineRepositoryPort,
     private readonly ruleRepo: ClassificationRuleRepositoryPort,
+    private readonly categoryReader: CostCenterCategoryReaderPort,
   ) {}
 
   async execute(command: ClassifyInvoiceLineCommand): Promise<InvoiceLineDTO> {
@@ -25,26 +28,41 @@ export class ClassifyInvoiceLineUseCase implements ClassifyInvoiceLinePort {
     const line = lines.find((l) => l.id === command.lineId);
     if (!line) throw new InvoiceLineNotFoundError(command.lineId);
 
-    const classified = line.classify(command.classify);
+    const { costCenterCategoryId, channelId, stockItemId, type } = command.classify;
+
+    let classified: InvoiceLine;
+    if (costCenterCategoryId !== undefined && costCenterCategoryId !== null) {
+      const category = await this.categoryReader.findById(costCenterCategoryId);
+      if (!category) throw new Error(`Subcategoria não encontrada: ${costCenterCategoryId}`);
+      classified = line.classifyFromCategory(category, channelId);
+      if (type !== undefined || stockItemId !== undefined) {
+        classified = classified.classify({ type, stockItemId });
+      }
+    } else {
+      classified = line.classify({ type, costCenterCategoryId, stockItemId });
+    }
+
     await this.lineRepo.updateLine(classified);
 
     if (command.saveAsRule && invoice.supplierId) {
-      const existing = await this.ruleRepo.findBySupplierId(invoice.supplierId);
+      const existing = await this.ruleRepo.findBySupplierIdAndDescription(invoice.supplierId, classified.description);
       if (existing) {
         const updated = existing.update({
-          defaultCostCenterCategoryId: command.classify.costCenterCategoryId ?? existing.defaultCostCenterCategoryId,
-          defaultLineType: command.classify.type ?? existing.defaultLineType,
+          defaultCostCenterCategoryId: classified.costCenterCategoryId ?? existing.defaultCostCenterCategoryId,
+          defaultLineType: classified.type !== "other" ? classified.type : (existing.defaultLineType ?? null),
+          channelId: classified.channelId ?? existing.channelId,
           confidenceBoost: Math.min(existing.confidenceBoost + 10, 100),
         });
         await this.ruleRepo.update(updated);
       } else {
-        const ruleProps: Parameters<typeof ClassificationRule.create>[0] = {
+        const rule = ClassificationRule.create({
           supplierId: invoice.supplierId,
+          descriptionPattern: classified.description,
+          defaultCostCenterCategoryId: classified.costCenterCategoryId,
+          defaultLineType: classified.type !== "other" ? classified.type : null,
+          channelId: classified.channelId,
           confidenceBoost: 10,
-        };
-        if (command.classify.costCenterCategoryId !== undefined) ruleProps.defaultCostCenterCategoryId = command.classify.costCenterCategoryId;
-        if (command.classify.type !== undefined) ruleProps.defaultLineType = command.classify.type;
-        const rule = ClassificationRule.create(ruleProps);
+        });
         await this.ruleRepo.save(rule);
       }
     }

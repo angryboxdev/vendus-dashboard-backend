@@ -8,6 +8,8 @@ interface ClassificationRuleProps {
   defaultLineType: InvoiceLineType | null;
   defaultCategory: string | null;
   confidenceBoost: number;
+  descriptionPattern: string | null;
+  channelId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -18,6 +20,8 @@ export interface UpdateClassificationRuleData {
   defaultLineType?: InvoiceLineType | null;
   defaultCategory?: string | null;
   confidenceBoost?: number;
+  descriptionPattern?: string | null;
+  channelId?: string | null;
 }
 
 export class ClassificationRule {
@@ -28,6 +32,8 @@ export class ClassificationRule {
   readonly defaultLineType: InvoiceLineType | null;
   readonly defaultCategory: string | null;
   readonly confidenceBoost: number;
+  readonly descriptionPattern: string | null;
+  readonly channelId: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 
@@ -39,6 +45,8 @@ export class ClassificationRule {
     this.defaultLineType = props.defaultLineType;
     this.defaultCategory = props.defaultCategory;
     this.confidenceBoost = props.confidenceBoost;
+    this.descriptionPattern = props.descriptionPattern;
+    this.channelId = props.channelId;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
   }
@@ -50,6 +58,8 @@ export class ClassificationRule {
     defaultLineType?: InvoiceLineType | null;
     defaultCategory?: string | null;
     confidenceBoost?: number;
+    descriptionPattern?: string | null;
+    channelId?: string | null;
   }): ClassificationRule {
     const now = new Date();
     return new ClassificationRule({
@@ -60,6 +70,8 @@ export class ClassificationRule {
       defaultLineType: props.defaultLineType ?? null,
       defaultCategory: props.defaultCategory ?? null,
       confidenceBoost: props.confidenceBoost ?? 0,
+      descriptionPattern: props.descriptionPattern ?? null,
+      channelId: props.channelId ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -78,6 +90,8 @@ export class ClassificationRule {
       defaultLineType: this.defaultLineType,
       defaultCategory: this.defaultCategory,
       confidenceBoost: this.confidenceBoost,
+      descriptionPattern: this.descriptionPattern,
+      channelId: this.channelId,
       createdAt: this.createdAt,
       updatedAt: new Date(),
     };
@@ -86,6 +100,8 @@ export class ClassificationRule {
     if (data.defaultLineType !== undefined) p.defaultLineType = data.defaultLineType;
     if (data.defaultCategory !== undefined) p.defaultCategory = data.defaultCategory;
     if (data.confidenceBoost !== undefined) p.confidenceBoost = data.confidenceBoost;
+    if (data.descriptionPattern !== undefined) p.descriptionPattern = data.descriptionPattern;
+    if (data.channelId !== undefined) p.channelId = data.channelId;
     return new ClassificationRule(p);
   }
 }

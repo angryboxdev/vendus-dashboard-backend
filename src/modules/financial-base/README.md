@@ -1,7 +1,7 @@
 # Módulo: financial-base
 
 > Status: ativo
-> Última atualização: 2026-06-21
+> Última atualização: 2026-08-06
 
 ---
 
@@ -24,16 +24,21 @@ pagamento. Este módulo cria e mantém essa estrutura base.
 ```
 Manager (backoffice)
 ────────────────────────────────────────────────────
-1. Seed inicial carrega os 7 grupos e 28 subcategorias padrão
+1. Seed inicial carrega os 7 grupos, 28+ subcategorias e 7 canais padrão
    (ou manager cria manualmente novos grupos/subcategorias)
 2. Cada subcategoria tem regras financeiras:
    afeta DRE? afeta fluxo de caixa? afeta rentabilidade?
+   requer canal? (ex: comissões de marketplace obrigam a indicar
+   de qual plataforma veio — Uber Eats, Glovo, Bolt…)
 3. Manager cria fornecedores com grupo+subcategoria por defeito
    (ex: Makro → OPD / CMV / Ingredientes)
 4. À medida que entram faturas, o sistema usa a classificação
    do fornecedor para sugerir o centro de custo
-5. DRE, Fluxo de Caixa e Rentabilidade filtram por affects_dre,
-   affects_cashflow, affects_profitability
+5. Quando a subcategoria exige canal, o manager indica em que
+   plataforma foi gerada a despesa
+6. DRE, Fluxo de Caixa e Rentabilidade filtram por affects_dre,
+   affects_cashflow, affects_profitability; análise por canal
+   permite saber quanto custou cada plataforma de delivery
 ```
 
 **Conceitos-chave para o negócio:**
@@ -49,6 +54,10 @@ Manager (backoffice)
   `capex`, `fiscal`, `off_dre`, `internal_transfer`, `transitory`.
 - **Fornecedor** — entidade externa que emite faturas. Pode ter grupo e
   subcategoria por defeito para acelerar a classificação automática.
+- **Canal** — canal de venda ou distribuição onde uma despesa ocorre.
+  Exemplos: Salão, Take Away, Uber Eats, Glovo. Obrigatório em subcategorias
+  com `requiresChannel=true` (ex: MKT.05). 7 canais seed com UUIDs fixos
+  (`80000000-0000-0000-0000-00000000000X`).
 
 ---
 
@@ -78,6 +87,8 @@ gerir contas a pagar (módulo `payable-entries`).
 - **Supplier** — fornecedor com dados de contacto, IBAN, condições de
   pagamento, `defaultCostCenterGroupId` e `defaultCostCenterCategoryId`
   (sugestão de classificação para novas faturas).
+- **Channel** — canal com `id`, `code`, `name`, `sortOrder`, `isActive`.
+  Apenas `reconstitute()` (sem `create()` — os canais vêm do seed da migration).
 
 ## Ports
 
@@ -105,11 +116,15 @@ gerir contas a pagar (módulo `payable-entries`).
 - `ListSuppliersPort` — lista com filtros `status?` e `search?`.
 - `GetSupplierPort` — obtém um fornecedor por id; lança `SupplierNotFoundError`.
 
+**Canais**
+- `ListChannelsPort` — lista canais com filtro opcional `isActive?`.
+
 ### Saída (dependências do domínio)
 
 - `CostCenterGroupRepositoryPort` — `save`, `findById`, `findByCode`, `findAll`, `update`.
 - `CostCenterCategoryRepositoryPort` — `save`, `findById`, `findByCode`, `findByGroupId`, `findAll`, `update`.
 - `SupplierRepositoryPort` — `save`, `findById`, `findAll`, `update`.
+- `ChannelRepositoryPort` — `findAll(isActive?)`, `findById`.
 
 ## Adapters
 
@@ -123,6 +138,7 @@ gerir contas a pagar (módulo `payable-entries`).
 - `SupabaseCostCenterGroupRepository` → implementa `CostCenterGroupRepositoryPort` na tabela `cost_center_groups`.
 - `SupabaseCostCenterCategoryRepository` → implementa `CostCenterCategoryRepositoryPort` na tabela `cost_center_categories`.
 - `SupabaseSupplierRepository` → implementa `SupplierRepositoryPort` na tabela `suppliers`.
+- `SupabaseChannelRepository` → implementa `ChannelRepositoryPort` na tabela `channels` (read-only; canais geridos por migration).
 
 ## Rotas REST
 
@@ -147,9 +163,26 @@ GET    /api/financial-base/suppliers/:id                     detalhe
 POST   /api/financial-base/suppliers                         criar
 PATCH  /api/financial-base/suppliers/:id                     actualizar
 PATCH  /api/financial-base/suppliers/:id/status              activar/desactivar
+
+GET    /api/financial-base/channels                          lista (query: isActive?)
 ```
 
 ## Tabelas Supabase
+
+```sql
+channels (
+  id         uuid        PRIMARY KEY,  -- fixo: 80000000-0000-0000-0000-00000000000X
+  code       text        NOT NULL UNIQUE,
+  name       text        NOT NULL,
+  sort_order int         NOT NULL DEFAULT 0,
+  is_active  boolean     NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+-- Seed: SALON(1), TAKEAWAY(2), EATZ(3), UBER_EATS(4), GLOVO(5), BOLT(6), INTERNAL(7)
+```
+
+## Tabelas Supabase (existentes)
 
 ```sql
 cost_center_groups (

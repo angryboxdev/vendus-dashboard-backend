@@ -5,6 +5,7 @@ import type { CreateSupplierPort } from "./domain/ports/in/supplier.ports.js";
 import { SupabaseCostCenterGroupRepository } from "./adapters/out/supabase-cost-center-group.repository.js";
 import { SupabaseCostCenterCategoryRepository } from "./adapters/out/supabase-cost-center-category.repository.js";
 import { SupabaseSupplierRepository } from "./adapters/out/supabase-supplier.repository.js";
+import { SupabaseChannelRepository } from "./adapters/out/supabase-channel.repository.js";
 
 import { ListCostCenterGroupsUseCase } from "./application/use-cases/list-cost-center-groups.use-case.js";
 import { GetCostCenterGroupUseCase } from "./application/use-cases/get-cost-center-group.use-case.js";
@@ -24,6 +25,7 @@ import { UpdateSupplierUseCase } from "./application/use-cases/update-supplier.u
 import { ToggleSupplierStatusUseCase } from "./application/use-cases/toggle-supplier-status.use-case.js";
 import { ListSuppliersUseCase } from "./application/use-cases/list-suppliers.use-case.js";
 import { GetSupplierUseCase } from "./application/use-cases/get-supplier.use-case.js";
+import { ListChannelsUseCase } from "./application/use-cases/list-channels.use-case.js";
 
 import { FinancialBaseController } from "./adapters/in/financial-base.controller.js";
 
@@ -41,6 +43,7 @@ export function createFinancialBaseModule(): { router: Router; createSupplier: C
   const groupRepository = new SupabaseCostCenterGroupRepository(supabase);
   const categoryRepository = new SupabaseCostCenterCategoryRepository(supabase);
   const supplierRepository = new SupabaseSupplierRepository(supabase);
+  const channelRepository = new SupabaseChannelRepository(supabase);
 
   // Use cases — grupos de centros de custo
   const listCostCenterGroups = new ListCostCenterGroupsUseCase(groupRepository);
@@ -64,6 +67,9 @@ export function createFinancialBaseModule(): { router: Router; createSupplier: C
     groupRepository,
     categoryRepository,
   );
+
+  // Use cases — canais
+  const listChannels = new ListChannelsUseCase(channelRepository);
 
   // Use cases — fornecedores
   const createSupplier = new CreateSupplierUseCase(supplierRepository);
@@ -90,6 +96,7 @@ export function createFinancialBaseModule(): { router: Router; createSupplier: C
     toggleSupplierStatus,
     listSuppliers,
     getSupplier,
+    listChannels,
   );
 
   return { router: controller.router, createSupplier };

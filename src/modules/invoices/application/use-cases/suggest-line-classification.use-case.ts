@@ -7,8 +7,8 @@ import type { ClassificationRuleRepositoryPort } from "../../domain/ports/out/cl
 export class SuggestLineClassificationUseCase implements SuggestLineClassificationPort {
   constructor(private readonly ruleRepo: ClassificationRuleRepositoryPort) {}
 
-  async execute(supplierId: string): Promise<SuggestClassificationResult | null> {
-    const rule = await this.ruleRepo.findBySupplierId(supplierId);
+  async execute(supplierId: string, description?: string): Promise<SuggestClassificationResult | null> {
+    const rule = await this.ruleRepo.findBySupplierIdAndDescription(supplierId, description);
     if (!rule) return null;
 
     // Base score 0.5 + up to 0.5 from confidence boost
@@ -19,6 +19,7 @@ export class SuggestLineClassificationUseCase implements SuggestLineClassificati
       costCenterCategoryId: rule.defaultCostCenterCategoryId,
       lineType: rule.defaultLineType,
       category: rule.defaultCategory,
+      channelId: rule.channelId,
       confidenceScore,
     };
   }

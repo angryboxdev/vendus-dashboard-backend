@@ -4,6 +4,7 @@ import { SupabaseInvoiceRepository } from "./adapters/out/supabase-invoice.repos
 import { SupabaseInvoiceLineRepository } from "./adapters/out/supabase-invoice-line.repository.js";
 import { SupabaseClassificationRuleRepository } from "./adapters/out/supabase-classification-rule.repository.js";
 import { SupabasePayableEntryWriteAdapter } from "./adapters/out/supabase-payable-entry-write.adapter.js";
+import { SupabaseCostCenterCategoryReaderAdapter } from "./adapters/out/supabase-cost-center-category-reader.adapter.js";
 import { SupabaseDocumentStorageAdapter } from "./adapters/out/supabase-document-storage.adapter.js";
 import { SupabaseSupplierLookupAdapter } from "./adapters/out/supabase-supplier-lookup.adapter.js";
 import { SupabaseSupplierHintAdapter } from "./adapters/out/supabase-supplier-hint.adapter.js";
@@ -47,6 +48,7 @@ export function createInvoicesModule(
   const invoiceRepo = new SupabaseInvoiceRepository(client);
   const lineRepo = new SupabaseInvoiceLineRepository(client);
   const ruleRepo = new SupabaseClassificationRuleRepository(client);
+  const categoryReader = new SupabaseCostCenterCategoryReaderAdapter(client);
   const payableWrite = new SupabasePayableEntryWriteAdapter(client);
   const storage = new SupabaseDocumentStorageAdapter(client);
   const supplierLookup = new SupabaseSupplierLookupAdapter(client);
@@ -62,7 +64,7 @@ export function createInvoicesModule(
     markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite),
     setInvoiceStatus: new SetInvoiceStatusUseCase(invoiceRepo, payableWrite),
     addInvoiceLine: new AddInvoiceLineUseCase(invoiceRepo, lineRepo),
-    classifyInvoiceLine: new ClassifyInvoiceLineUseCase(invoiceRepo, lineRepo, ruleRepo),
+    classifyInvoiceLine: new ClassifyInvoiceLineUseCase(invoiceRepo, lineRepo, ruleRepo, categoryReader),
     listInvoices: new ListInvoicesUseCase(invoiceRepo),
     listInvoiceLines: new ListInvoiceLinesUseCase(lineRepo),
     getInvoice: new GetInvoiceUseCase(invoiceRepo, lineRepo),

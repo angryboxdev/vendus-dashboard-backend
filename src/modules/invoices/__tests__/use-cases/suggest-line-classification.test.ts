@@ -16,6 +16,17 @@ describe("SuggestLineClassificationUseCase", () => {
     expect(result).toBeNull();
   });
 
+  it("retorna null quando não existe regra que corresponda à descrição", async () => {
+    const rule = ClassificationRule.create({
+      supplierId: "supplier-1",
+      descriptionPattern: "Taxa de Serviço",
+      defaultCostCenterCategoryId: "cat-opd",
+    });
+    await ruleRepo.save(rule);
+    const result = await useCase.execute("supplier-1", "Ingredientes");
+    expect(result).toBeNull();
+  });
+
   it("retorna sugestão com score base 0.5 quando confidenceBoost é 0", async () => {
     const rule = ClassificationRule.create({
       supplierId: "supplier-1",
@@ -78,5 +89,72 @@ describe("SuggestLineClassificationUseCase", () => {
 
     const result = await useCase.execute("supplier-5");
     expect(result!.costCenterCategoryId).toBe("cat-cmv");
+  });
+
+  it("retorna regra específica por descrição quando descriptionPattern faz match", async () => {
+    const generic = ClassificationRule.create({
+      supplierId: "supplier-uber",
+      defaultCostCenterCategoryId: "cat-generic",
+    });
+    const specific = ClassificationRule.create({
+      supplierId: "supplier-uber",
+      descriptionPattern: "Taxa de Serviço",
+      defaultCostCenterCategoryId: "cat-opd04",
+      channelId: "ch-uber",
+    });
+    await ruleRepo.save(generic);
+    await ruleRepo.save(specific);
+
+    const result = await useCase.execute("supplier-uber", "Taxa de Serviço Uber Eats");
+    expect(result!.costCenterCategoryId).toBe("cat-opd04");
+    expect(result!.channelId).toBe("ch-uber");
+  });
+
+  it("retorna regra genérica como fallback quando nenhum padrão faz match", async () => {
+    const generic = ClassificationRule.create({
+      supplierId: "supplier-uber",
+      defaultCostCenterCategoryId: "cat-generic",
+    });
+    const specific = ClassificationRule.create({
+      supplierId: "supplier-uber",
+      descriptionPattern: "Taxa de Serviço",
+      defaultCostCenterCategoryId: "cat-opd04",
+    });
+    await ruleRepo.save(generic);
+    await ruleRepo.save(specific);
+
+    const result = await useCase.execute("supplier-uber", "Outro custo qualquer");
+    expect(result!.costCenterCategoryId).toBe("cat-generic");
+  });
+
+  it("regra mais longa tem prioridade quando dois padrões fazem match", async () => {
+    const short = ClassificationRule.create({
+      supplierId: "supplier-uber",
+      descriptionPattern: "Taxa",
+      defaultCostCenterCategoryId: "cat-short",
+    });
+    const long = ClassificationRule.create({
+      supplierId: "supplier-uber",
+      descriptionPattern: "Taxa de Publicidade",
+      defaultCostCenterCategoryId: "cat-mkt05",
+    });
+    await ruleRepo.save(short);
+    await ruleRepo.save(long);
+
+    const result = await useCase.execute("supplier-uber", "Taxa de Publicidade Glovo");
+    expect(result!.costCenterCategoryId).toBe("cat-mkt05");
+  });
+
+  it("retorna channelId quando definido na regra", async () => {
+    const rule = ClassificationRule.create({
+      supplierId: "supplier-glovo",
+      descriptionPattern: "publicidade",
+      defaultCostCenterCategoryId: "cat-mkt05",
+      channelId: "ch-glovo",
+    });
+    await ruleRepo.save(rule);
+
+    const result = await useCase.execute("supplier-glovo", "Custos de publicidade Glovo");
+    expect(result!.channelId).toBe("ch-glovo");
   });
 });

@@ -25,6 +25,7 @@ import type { ToggleSupplierStatusPort } from "../../domain/ports/in/supplier.po
 import type { ListSuppliersPort } from "../../domain/ports/in/supplier.ports.js";
 import type { GetSupplierPort } from "../../domain/ports/in/supplier.ports.js";
 import type { SupplierFilter } from "../../domain/ports/out/supplier-repository.port.js";
+import type { ListChannelsPort } from "../../domain/ports/in/channel.ports.js";
 
 export class FinancialBaseController {
   readonly router: Router;
@@ -46,6 +47,7 @@ export class FinancialBaseController {
     private readonly toggleSupplierStatus: ToggleSupplierStatusPort,
     private readonly listSuppliers: ListSuppliersPort,
     private readonly getSupplier: GetSupplierPort,
+    private readonly listChannels: ListChannelsPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -349,6 +351,23 @@ export class FinancialBaseController {
       try {
         const result = await this.seedDefaultCostCenters.execute();
         res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    // ── Channels ─────────────────────────────────────────────────────────────
+
+    /**
+     * GET /financial-base/channels
+     * Query: isActive? (boolean)
+     */
+    this.router.get("/financial-base/channels", async (req, res) => {
+      try {
+        const { isActive } = req.query as Record<string, string | undefined>;
+        const filter = isActive === "true" ? true : isActive === "false" ? false : undefined;
+        const results = await this.listChannels.execute(filter);
+        res.json(results);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
       }

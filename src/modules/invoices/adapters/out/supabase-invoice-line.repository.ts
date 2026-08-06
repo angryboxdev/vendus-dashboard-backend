@@ -24,6 +24,12 @@ function toEntity(row: Record<string, unknown>): InvoiceLine {
     affectsDre: (row.affects_dre as boolean | null) ?? true,
     affectsCashflow: (row.affects_cashflow as boolean | null) ?? true,
     affectsProfitability: (row.affects_profitability as boolean | null) ?? false,
+    financialType: (row.financial_type as string | null) ?? null,
+    channelId: (row.channel_id as string | null) ?? null,
+    requiresChannel: (row.requires_channel as boolean | null) ?? false,
+    requiresAllocation: (row.requires_allocation as boolean | null) ?? false,
+    aiSuggestedCategoryId: (row.ai_suggested_category_id as string | null) ?? null,
+    aiConfidence: (row.ai_confidence as number | null) ?? null,
     createdAt: new Date(row.created_at as string),
   });
 }
@@ -53,6 +59,12 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
       affects_dre: l.affectsDre,
       affects_cashflow: l.affectsCashflow,
       affects_profitability: l.affectsProfitability,
+      financial_type: l.financialType,
+      channel_id: l.channelId,
+      requires_channel: l.requiresChannel,
+      requires_allocation: l.requiresAllocation,
+      ai_suggested_category_id: l.aiSuggestedCategoryId,
+      ai_confidence: l.aiConfidence,
       created_at: l.createdAt.toISOString(),
     }));
     const { error } = await this.supabase.from("invoice_lines").insert(rows);
@@ -99,6 +111,12 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
         affects_dre: line.affectsDre,
         affects_cashflow: line.affectsCashflow,
         affects_profitability: line.affectsProfitability,
+        financial_type: line.financialType,
+        channel_id: line.channelId,
+        requires_channel: line.requiresChannel,
+        requires_allocation: line.requiresAllocation,
+        ai_suggested_category_id: line.aiSuggestedCategoryId,
+        ai_confidence: line.aiConfidence,
       })
       .eq("id", line.id);
     if (error) throw new Error(error.message);

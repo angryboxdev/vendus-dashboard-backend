@@ -25,3 +25,10 @@ export class DuplicateInvoiceError extends Error {
     this.name = "DuplicateInvoiceError";
   }
 }
+
+export class ChannelRequiredError extends Error {
+  constructor(categoryId: string) {
+    super(`Canal obrigatório para a subcategoria: ${categoryId}`);
+    this.name = "ChannelRequiredError";
+  }
+}

@@ -41,7 +41,10 @@ Fluxo de importação inteligente (novo):
 Fluxo manual (mantido):
 1. Manager introduz a fatura manualmente
 2. A fatura fica em estado "Pendente"
-3. Manager classifica as linhas por tipo e centro de custo
+3. Manager classifica as linhas: tipo + subcategoria de centro de custo
+   → se a subcategoria exigir canal (ex: MKT.05), seleciona também
+     a plataforma (Uber Eats, Glovo…) antes de poder guardar
+   → opcionalmente marca "Guardar como regra" para automatizar futuras
 4. Quando paga, regista a data → estado "Paga"
 ```
 
@@ -55,8 +58,9 @@ Fluxo manual (mantido):
   de confirmar.
 - **Linha de fatura** — detalhe do que foi comprado/contratado. Opcional no MVP;
   o sistema regista sempre os totais da fatura e aceita linhas quando fornecidas.
-- **Regra de classificação** — por fornecedor, memoriza centro de custo, tipo
-  financeiro e categoria para faturas futuras.
+- **Regra de classificação** — por fornecedor e padrão de descrição (substring),
+  memoriza subcategoria, tipo de linha e canal para faturas futuras. A regra mais
+  longa que faz match vence; regra sem padrão serve de fallback genérico do fornecedor.
 - **Débito direto** — modalidade de pagamento em que o fornecedor debita
   automaticamente a conta na data acordada. A fatura fica *Pendente* até essa
   data; um cron diário processa-a e marca-a como *Paga* sem intervenção manual.
@@ -84,11 +88,15 @@ reconciliação ou relatórios financeiros.
     linhas ao confirmar importação ou ao actualizar a fatura.
   - Factory `createFromImport()` para faturas criadas pelo fluxo IA.
   - Método `confirmImport()` para transitar `draft_ai` → `pending`.
-- **InvoiceLine** — linha de detalhe. Classificação simplificada: apenas `type` e
-  `costCenterCategoryId` (removidos `costCenterId`, `category`, `subcategory`).
-  `affectsDre`, `affectsCashflow`, `affectsProfitability` herdados do cabeçalho.
-- **ClassificationRule** — regra determinística por `supplierId`: guarda `type` e
-  `costCenterCategoryId` (campos `costCenterId`/`category` removidos).
+- **InvoiceLine** — linha de detalhe. Campos `financialType`, `affectsDre`, `affectsCashflow`,
+  `affectsProfitability`, `requiresChannel` e `requiresAllocation` são herdados automaticamente
+  da subcategoria ao classificar (`classifyFromCategory`). `channelId` é obrigatório quando
+  `requiresChannel = true`. Dois campos calculados na DTO:
+  - `dreValue = totalWithVat − vatAmount` — valor sem IVA, para DRE e Rentabilidade.
+  - `cashflowValue = totalWithVat` — valor total com IVA, para Fluxo de Caixa.
+- **ClassificationRule** — regra por `(supplierId, descriptionPattern)`. Múltiplas regras por
+  fornecedor são suportadas; o match usa substring case-insensitive (padrão mais longo vence);
+  regra sem padrão serve de fallback genérico. Inclui `channelId` para sugerir canal.
 - **AiExtractionResult** — value object com os dados extraídos pela IA + confidence + validationIssues.
 - **InvoiceStatus**: `draft_ai | pending_review | pending | paid | overdue | partial | cancelled | review`
 - **InvoiceSource**: `manual | pdf_import | image_import`
@@ -103,8 +111,8 @@ reconciliação ou relatórios financeiros.
 - `MarkInvoicePaidUseCase` — transita para `paid`, sincroniza payable entry.
 - `SetInvoiceStatusUseCase` — força estado arbitrário; cancela payable entry se `cancelled`.
 - `AddInvoiceLineUseCase` — adiciona linha a fatura existente.
-- `ClassifyInvoiceLineUseCase` — classifica linha; opcionalmente cria/actualiza `ClassificationRule`.
-- `SuggestLineClassificationUseCase` — sugestão de classificação por fornecedor.
+- `ClassifyInvoiceLineUseCase` — classifica linha; quando `costCenterCategoryId` presente, herda automaticamente os campos da subcategoria via `CostCenterCategoryReaderPort`. Opcionalmente grava/actualiza `ClassificationRule` com `descriptionPattern` e `channelId`.
+- `SuggestLineClassificationUseCase` — sugestão de classificação por `supplierId` + `description?`; retorna `channelId` quando presente na regra.
 - `ListInvoicesUseCase` — filtra por fornecedor, CC, estado, intervalo de datas, `isDirectDebit`.
 - **`ProcessDirectDebitsUseCase`** *(novo)* — busca faturas de DD com `directDebitDate ≤ hoje` e status não pago/cancelado; marca-as como pagas na `directDebitDate` e sincroniza payable entries.
 - `ListInvoiceLinesUseCase` — todas as linhas (para analytics por CC).
@@ -118,7 +126,8 @@ reconciliação ou relatórios financeiros.
 
 - `InvoiceRepositoryPort` — CRUD de faturas + `findAll(filter?)` + `findPendingDirectDebits()`.
 - `InvoiceLineRepositoryPort` — `saveAll`, `save`, `findByInvoiceId`, `findAll`, `updateLine`, `deleteByInvoiceId`, `updateCostCenterCategoryForInvoice` (bulk update do CC de todas as linhas).
-- `ClassificationRuleRepositoryPort` — `findBySupplierId`, `save`, `update`.
+- `ClassificationRuleRepositoryPort` — `findBySupplierId`, `findBySupplierIdAndDescription`, `save`, `update`.
+- `CostCenterCategoryReaderPort` — `findById` (snapshot mínimo da subcategoria para herança; sem acoplamento ao módulo `financial-base`).
 - `PayableEntryWritePort` — cria/marca-pago/cancela entradas em `payable_entries`.
 - **`AiExtractionPort`** *(novo)* — `extract(fileUrl, mimeType): Promise<AiExtractionResult>`.
 - **`DocumentStoragePort`** *(novo)* — `store(buffer, filename, mimeType): Promise<string>`.
@@ -149,7 +158,7 @@ reconciliação ou relatórios financeiros.
 | GET | `/api/invoices/lines` | Todas as linhas (para analytics por CC) |
 | GET | `/api/invoices` | Lista faturas (query: `supplierId`, `costCenterId`, `status`, `from`, `to`, `isDirectDebit`) |
 | GET | `/api/invoices/alerts` | **Novo** — KPIs de alertas operacionais |
-| GET | `/api/invoices/suggest-classification/:supplierId` | Sugestão de classificação |
+| GET | `/api/invoices/suggest-classification/:supplierId?description=...` | Sugestão de classificação (com match por descrição) |
 | GET | `/api/invoices/:id` | Detalhe com linhas |
 | POST | `/api/invoices` | Criar fatura manualmente (com linhas opcionais) |
 | POST | `/api/invoices/import` | **Novo** — importar PDF/imagem via IA (multipart `file`) |
@@ -232,3 +241,6 @@ alter table suppliers
 - `cost_center_id` (legado) ainda existe nas tabelas `invoice_lines` e `classification_rules`. Remover após confirmação de que nenhum dado activo depende dele.
 - `ListInvoiceLinesUseCase` devolve todas as linhas sem paginação.
 - Importação automática por email não implementada (fora do scope do MVP).
+- Seed de regras built-in para Uber Eats/Glovo/Bolt adiado: requer UUIDs dos fornecedores
+  reais na base de dados, que não existem em tempo de migration. As regras criam-se
+  organicamente quando o utilizador classifica a primeira fatura e clica "Guardar como regra".
