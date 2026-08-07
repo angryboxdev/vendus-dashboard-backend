@@ -40,7 +40,8 @@ const LEGACY_SIZE_MAP: Record<string, string> = {
 function normalizeLegacyTitle(title: string): { baseTitle: string; size: string | null } {
   const match = LEGACY_SIZE_RE.exec(title);
   if (!match) return { baseTitle: title.trim(), size: null };
-  const size = LEGACY_SIZE_MAP[match[1].toLowerCase()] ?? null;
+  const captured = match[1] ?? '';
+  const size = LEGACY_SIZE_MAP[captured.toLowerCase()] ?? null;
   return { baseTitle: title.slice(0, match.index).trim(), size };
 }
 
