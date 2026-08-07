@@ -4,6 +4,7 @@ import type { VendusProductCatalogPort } from "../../domain/ports/out/vendus-pro
 import type { VendusDetailedDocument } from "../../domain/entities/vendus-document.js";
 import { detectChannel } from "../../domain/services/channel-detector.service.js";
 import { computeVendusAnalytics } from "../../domain/services/analytics-calculator.service.js";
+import { normalizeProductTitle } from "../../domain/services/product-title-normalizer.js";
 import { mapLimit } from "../../../../utils/mapLimit.js";
 
 export class GetSummaryUseCase implements GetSummaryPort {
@@ -53,7 +54,11 @@ export class GetSummaryUseCase implements GetSummaryPort {
 
     // All documents for UI (cancelled FS included so they are visible and linkable)
     const documents: VendusDetailedDocument[] = [...fsEnriched, ...ncEnriched]
-      .sort((a, b) => (a.date < b.date ? 1 : -1));
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
+      .map((doc) => ({
+        ...doc,
+        items: doc.items.map((item) => ({ ...item, title: normalizeProductTitle(item.title) })),
+      }));
 
     // Analytics: only exclude FS/NC pairs where BOTH are in the same period.
     // A NC that cancels a FS from a different period is a real deduction and must be included.

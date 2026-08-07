@@ -4,6 +4,7 @@ import { FakeProductCatalog } from "../fakes/fake-product-catalog.js";
 import type { VendusDocument, VendusDetailedDocumentRaw } from "../../domain/entities/vendus-document.js";
 
 const EATZ_ID = 275787588;
+const APPS_ID = 999999999;
 const CONCURRENCY = 4;
 
 function makeListDoc(id: number, type = "FS", number = `FS 1/${id}`): VendusDocument {
@@ -40,7 +41,7 @@ describe("GetSummaryUseCase", () => {
   beforeEach(() => {
     gateway = new FakeVendusGateway();
     catalog = new FakeProductCatalog();
-    useCase = new GetSummaryUseCase(gateway, catalog, EATZ_ID, CONCURRENCY);
+    useCase = new GetSummaryUseCase(gateway, catalog, EATZ_ID, APPS_ID, CONCURRENCY);
   });
 
   it("returns documents and analytics for invoices only", async () => {
@@ -103,6 +104,29 @@ describe("GetSummaryUseCase", () => {
     const result = await useCase.execute({ since: "2026-08-01", until: "2026-08-01" });
 
     expect(result.documents[0]!.channel).toBe("salao");
+  });
+
+  // ─── Title normalisation ──────────────────────────────────────────────────────
+
+  it("normalises (Grande) to L in returned documents' item titles", async () => {
+    gateway.setDocuments([makeListDoc(1)]);
+    gateway.setDetail(1, makeDetailDoc(1));
+
+    const result = await useCase.execute({ since: "2026-08-01", until: "2026-08-01" });
+
+    expect(result.documents[0]!.items[0]!.title).toBe("Honey Pepperoni L");
+  });
+
+  it("normalises (Individual) to S in returned documents' item titles", async () => {
+    gateway.setDocuments([makeListDoc(1)]);
+    gateway.setDetail(1, makeDetailDoc(1, {
+      items: [{ id: 1, qty: 1, title: "Truffle Shrooms (Individual)", reference: "ANB-002",
+        amounts: { gross_total: "10.00", net_total: "8.85" }, discounts: {}, tax: { rate: 13 } }],
+    }));
+
+    const result = await useCase.execute({ since: "2026-08-01", until: "2026-08-01" });
+
+    expect(result.documents[0]!.items[0]!.title).toBe("Truffle Shrooms S");
   });
 
   it("returns empty result for empty period", async () => {

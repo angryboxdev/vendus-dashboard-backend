@@ -1,7 +1,7 @@
 # Módulo: vendus
 
 > Status: ativo
-> Última atualização: 2026-08-05 (canal apps)
+> Última atualização: 2026-08-07
 
 ---
 
@@ -65,8 +65,9 @@ Módulo hexagonal que consome dois endpoints distintos da API REST Vendus e tran
 2. Buscar detalhes de documentos (items, payments, taxes) para enriquecimento com canal e categoria.
 3. Carregar e cachear o catálogo de produtos (`/products/`) para lookup de categoria/preço.
 4. Computar analytics consolidados de faturação (byChannel, byCategory, byVatRate, topProducts, productsByChannel, temporalDistribution).
-5. Fornecer métricas rápidas do mês (analytics/current) e históricas com cache (analytics/historical).
-6. Listar e agregar registos de autoconsumo de funcionários com analytics (byEmployee, byCategory, topProducts).
+5. Normalizar títulos de produtos pizza para exibição (`(Individual)` → `S`, `(Grande)` → `L`) de forma consistente com o AirMenu.
+6. Fornecer métricas rápidas do mês (analytics/current) e históricas com cache (analytics/historical).
+7. Listar e agregar registos de autoconsumo de funcionários com analytics (byEmployee, byCategory, topProducts).
 
 Não é responsável por emitir documentos fiscais; apenas os lê e classifica.
 
@@ -104,7 +105,7 @@ Carregado de `GET /products/` da Vendus. Indexado por `reference` (primário) e 
 - `GetAnalyticsCurrentPort` — `execute(year, month)` → métricas rápidas do mês (list docs apenas, sem channel).
 - `GetAnalyticsHistoricalPort` — `execute(year, month)` → totais históricos, gráfico 6 meses, comparações (cache-aware).
 - `GetSummaryPort` — `execute({ since, until })` → `{ documents, analytics }` completos com channel. **Exposto via composition root para injeção noutros módulos.**
-- `GetDocumentDetailPort` — `execute(id)` → documento detalhado + channel + has_drinks.
+- `GetDocumentDetailPort` — `execute(id)` → documento detalhado + channel + has_drinks. Títulos de itens normalizados (S/L).
 - `ListDocumentsPort` — `execute(params)` → lista de documentos sem detail (rápida).
 - `GetSelfConsumptionPort` — `execute({ since, until })` → registos de autoconsumo normalizados + analytics (byEmployee, byCategory, topProducts).
 
@@ -141,6 +142,7 @@ Carregado de `GET /products/` da Vendus. Indexado por `reference` (primário) e 
 
 ## Decisões de design
 
+- **Normalização de títulos pizza (`product-title-normalizer.ts`)**: os produtos pizza são configurados no Vendus com sufixo de tamanho em parênteses — `"Honey Peperoni (Individual)"` / `"Chicken & Cheese (Grande)"`. A função `normalizeProductTitle` converte `(Individual)` → `S` e `(Grande)` → `L`, para exibição consistente com o AirMenu. É aplicada em três sítios: `analytics-calculator.service.ts` (topProducts / productsByChannel), `GetSummaryUseCase` (items nos documents devolvidos ao frontend), e `GetDocumentDetailUseCase` (items no detalhe do documento). A detecção de categoria (`detectCategory`) usa o título raw antes da normalização — não é afectada.
 - **Channel por payment method, não por preço**: a detecção de canal anterior (comparação de preço unitário com price groups) foi substituída pela presença do método de pagamento. Ordem de prioridade: Apps (`VENDUS_APPS_PAYMENT_ID`) → Eatz (`VENDUS_EATZ_PAYMENT_ID`) → embalagem → salão. Mais simples, mais robusta, sem necessidade de `legacy_prices`.
 - **Canal `apps` condicional**: o canal `apps` representa faturação histórica de plataformas externas (Glovo/Uber Eats/Bolt) directamente no Vendus, antes da integração AirMenu. Só aparece em `byChannel` quando existem documentos com esse canal — meses sem Apps não mostram a linha na UI.
 - **`VENDUS_CATEGORY_MAP` como constante de domínio**: os IDs de categoria Vendus são estáveis por instalação. Mantidos em `vendus-product.ts` com comentário. Alternativa (env/config) considerada mas rejeitada por complexidade desnecessária.
@@ -168,7 +170,7 @@ Os defaults correspondem à instalação actual (Angry Box). Se o Vendus recriar
 ## Como testar
 
 ```bash
-# Todos os testes do módulo (8 suites, ~109 testes)
+# Todos os testes do módulo (9 suites, ~130 testes)
 npx jest src/modules/vendus --no-coverage
 ```
 
@@ -179,11 +181,12 @@ Testes disponíveis por área:
 | `__tests__/services/channel-detector.service.test.ts` | Lógica de detecção de canal (apps / eatz / salao / take_away, prioridades) |
 | `__tests__/services/category-detector.service.test.ts` | Lookup por ID, heurística de título, `detectCategory` completo |
 | `__tests__/services/analytics-calculator.service.test.ts` | Cálculo de analytics (byChannel, byCategory, topProducts, productsByChannel por canal, temporal) |
-| `__tests__/use-cases/get-summary.use-case.test.ts` | Orquestração de detail fetches, filtro de NC, canal por documento |
+| `__tests__/services/product-title-normalizer.test.ts` | Conversão `(Individual)` → `S`, `(Grande)` → `L`; case-insensitive; títulos não-pizza inalterados |
+| `__tests__/use-cases/get-summary.use-case.test.ts` | Orquestração de detail fetches, filtro de NC, canal por documento, normalização de títulos |
 | `__tests__/use-cases/get-analytics-current.use-case.test.ts` | Período corrente vs passado, daysElapsed, projeção, by_weekday |
 | `__tests__/use-cases/get-analytics-historical.use-case.test.ts` | Cache hit/miss, annual/historical totals, growth chart, comparações |
 | `__tests__/use-cases/get-selfconsumption.use-case.test.ts` | Detail fetch de fallback, normalização, analytics de autoconsumo |
-| `__tests__/use-cases/get-document-detail.use-case.test.ts` | Channel + has_drinks derivados; lookup por catálogo |
+| `__tests__/use-cases/get-document-detail.use-case.test.ts` | Channel + has_drinks derivados; lookup por catálogo; normalização de títulos |
 
 Integração manual:
 ```

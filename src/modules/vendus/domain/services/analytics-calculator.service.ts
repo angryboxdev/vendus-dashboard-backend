@@ -12,6 +12,7 @@ import type {
 } from "../entities/vendus-analytics.js";
 import type { VendusCategory } from "../entities/vendus-product.js";
 import { detectCategory } from "./category-detector.service.js";
+import { normalizeProductTitle } from "./product-title-normalizer.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -182,6 +183,7 @@ export function computeVendusAnalytics(
 
       // Top products (keyed by reference or title fallback)
       const productKey = item.reference.trim() || `title:${item.title}`;
+      const displayTitle = normalizeProductTitle(item.title);
       const existing = topProductMap.get(productKey);
       if (existing) {
         existing.quantitySold += itemQty;
@@ -190,7 +192,7 @@ export function computeVendusAnalytics(
       } else {
         topProductMap.set(productKey, {
           reference: item.reference,
-          title: item.title,
+          title: displayTitle,
           category,
           vatRate,
           quantitySold: itemQty,

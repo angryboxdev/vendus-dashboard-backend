@@ -3,6 +3,7 @@ import type { VendusGatewayPort } from "../../domain/ports/out/vendus-gateway.po
 import type { VendusProductCatalogPort } from "../../domain/ports/out/vendus-product-catalog.port.js";
 import { detectChannel } from "../../domain/services/channel-detector.service.js";
 import { detectCategory } from "../../domain/services/category-detector.service.js";
+import { normalizeProductTitle } from "../../domain/services/product-title-normalizer.js";
 
 const DRINK_CATEGORIES = new Set(["bebida_alcoolica", "bebida_nao_alcoolica"]);
 
@@ -26,6 +27,11 @@ export class GetDocumentDetailUseCase implements GetDocumentDetailPort {
       return DRINK_CATEGORIES.has(cat);
     });
 
-    return { ...raw, channel, has_drinks };
+    return {
+      ...raw,
+      channel,
+      has_drinks,
+      items: raw.items.map((item) => ({ ...item, title: normalizeProductTitle(item.title) })),
+    };
   }
 }

@@ -141,6 +141,42 @@ describe("GetDocumentDetailUseCase", () => {
     expect(result.has_drinks).toBe(true);
   });
 
+  // ─── Title normalisation ──────────────────────────────────────────────────────
+
+  it("normalises (Grande) to L in returned item titles", async () => {
+    gateway.setDetail(1, makeDetailDoc(1));
+
+    const result = await useCase.execute(1);
+
+    expect(result.items[0].title).toBe("Honey Pepperoni L");
+  });
+
+  it("normalises (Individual) to S in returned item titles", async () => {
+    gateway.setDetail(1, makeDetailDoc(1, {
+      items: [
+        { id: 1, qty: 1, title: "Truffle Shrooms (Individual)", reference: "ANB-002",
+          amounts: { gross_total: "10.00" }, discounts: {}, tax: { rate: 13 } },
+      ],
+    }));
+
+    const result = await useCase.execute(1);
+
+    expect(result.items[0].title).toBe("Truffle Shrooms S");
+  });
+
+  it("leaves non-pizza item titles unchanged", async () => {
+    gateway.setDetail(1, makeDetailDoc(1, {
+      items: [
+        { id: 1, qty: 1, title: "Coca Cola 33cl", reference: "DRK-001",
+          amounts: { gross_total: "3.00" }, discounts: {}, tax: { rate: 23 } },
+      ],
+    }));
+
+    const result = await useCase.execute(1);
+
+    expect(result.items[0].title).toBe("Coca Cola 33cl");
+  });
+
   it("returns all raw document fields alongside the derived ones", async () => {
     gateway.setDetail(1, makeDetailDoc(1));
 
