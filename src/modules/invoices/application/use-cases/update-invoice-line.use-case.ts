@@ -24,15 +24,15 @@ export class UpdateInvoiceLineUseCase implements UpdateInvoiceLinePort {
     const line = existingLines.find((l) => l.id === command.lineId);
     if (!line) throw new InvoiceLineNotFoundError(command.lineId);
 
-    const updatedLine = line.updateValues({
-      description: command.description,
-      quantity: command.quantity,
-      unit: command.unit,
-      unitCostWithoutVat: command.unitCostWithoutVat,
-      vatRate: command.vatRate,
-      vatAmount: command.vatAmount,
-      totalWithVat: command.totalWithVat,
-    });
+    const patch: Parameters<typeof line.updateValues>[0] = {};
+    if (command.description !== undefined) patch.description = command.description;
+    if (command.quantity !== undefined) patch.quantity = command.quantity;
+    if (command.unit !== undefined) patch.unit = command.unit;
+    if (command.unitCostWithoutVat !== undefined) patch.unitCostWithoutVat = command.unitCostWithoutVat;
+    if (command.vatRate !== undefined) patch.vatRate = command.vatRate;
+    if (command.vatAmount !== undefined) patch.vatAmount = command.vatAmount;
+    if (command.totalWithVat !== undefined) patch.totalWithVat = command.totalWithVat;
+    const updatedLine = line.updateValues(patch);
 
     // Validate: sum of all lines (with updated line) must not exceed invoice totals
     const otherLines = existingLines.filter((l) => l.id !== command.lineId);
