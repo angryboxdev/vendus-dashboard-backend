@@ -3,6 +3,8 @@ import type {
   InvoiceLineType,
   InvoiceSource,
   AiExtractionStatus,
+  ReconciliationStatus,
+  LineDetailMode,
 } from "../../entities/invoice.js";
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
@@ -50,6 +52,12 @@ export interface InvoiceDTO {
   totalVat: number;
   totalWithVat: number;
   status: InvoiceStatus;
+  reconciliationStatus: ReconciliationStatus;
+  lineDetailMode: LineDetailMode;
+  paymentBankAccountId: string | null;
+  paymentMethod: string | null;
+  paymentNotes: string | null;
+  competenceDate: string | null; // YYYY-MM-DD
   notes: string | null;
   attachmentUrl: string | null;
   source: InvoiceSource;
@@ -99,6 +107,7 @@ export interface InvoiceAlertsDTO {
   overdue: { count: number; totalAmount: number };
   dueToday: { count: number; totalAmount: number };
   dueIn7Days: { count: number; totalAmount: number };
+  pendingReconciliation: { count: number; totalAmount: number };
   noDueDateCount: number;
   noSupplierCount: number;
   pendingReviewCount: number;
@@ -174,6 +183,18 @@ export interface UpdateInvoiceCommand {
 export interface MarkInvoicePaidCommand {
   id: string;
   paidAt?: string; // YYYY-MM-DD — defaults to today
+  bankAccountId?: string | null;
+  paymentMethod?: string | null;
+  paymentNotes?: string | null;
+}
+
+export interface MarkInvoiceReconciledCommand {
+  id: string;
+}
+
+export interface SetLineDetailModeCommand {
+  id: string;
+  mode: LineDetailMode;
 }
 
 export interface SetInvoiceStatusCommand {
@@ -197,6 +218,7 @@ export interface ListInvoicesFilter {
   supplierId?: string;
   costCenterId?: string;
   status?: InvoiceStatus;
+  reconciliationStatus?: ReconciliationStatus;
   from?: string; // YYYY-MM-DD
   to?: string;
   isDirectDebit?: boolean;
@@ -335,4 +357,28 @@ export interface GetInvoiceAlertsPort {
 
 export interface ProcessDirectDebitsPort {
   execute(): Promise<{ processed: number }>;
+}
+
+export interface MarkInvoiceReconciledPort {
+  execute(command: MarkInvoiceReconciledCommand): Promise<InvoiceDTO>;
+}
+
+export interface SetLineDetailModePort {
+  execute(command: SetLineDetailModeCommand): Promise<InvoiceDTO>;
+}
+
+export interface UpdateInvoiceLineCommand {
+  invoiceId: string;
+  lineId: string;
+  description?: string;
+  quantity?: number;
+  unit?: string | null;
+  unitCostWithoutVat?: number;
+  vatRate?: number;
+  vatAmount?: number;
+  totalWithVat?: number;
+}
+
+export interface UpdateInvoiceLinePort {
+  execute(command: UpdateInvoiceLineCommand): Promise<InvoiceLineDTO>;
 }

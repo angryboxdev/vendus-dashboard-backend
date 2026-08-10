@@ -17,6 +17,10 @@ const baseReconstitute = {
   isDirectDebit: false,
   directDebitDate: null,
   status: "pending" as const,
+  reconciliationStatus: "none" as const,
+  lineDetailMode: "simple" as const,
+  paymentBankAccountId: null,
+  competenceDate: null,
   notes: null,
   attachmentUrl: null,
   source: "manual" as const,
@@ -52,14 +56,38 @@ describe("Invoice entity", () => {
     expect(inv.supplierId).toBeNull();
   });
 
-  it("markPaid sets paidAt and status", () => {
+  it("markPaid sets paidAt, status=paid and reconciliationStatus=pending_reconciliation", () => {
     const inv = Invoice.create(base);
     const paid = inv.markPaid(new Date("2026-06-15"));
     expect(paid.status).toBe("paid");
     expect(paid.paidAt?.toISOString().slice(0, 10)).toBe("2026-06-15");
+    expect(paid.reconciliationStatus).toBe("pending_reconciliation");
     // immutability
     expect(inv.status).toBe("pending");
     expect(inv.paidAt).toBeNull();
+    expect(inv.reconciliationStatus).toBe("none");
+  });
+
+  it("markPaid stores bankAccountId when provided", () => {
+    const inv = Invoice.create(base);
+    const paid = inv.markPaid(new Date("2026-06-15"), "bank-123");
+    expect(paid.paymentBankAccountId).toBe("bank-123");
+  });
+
+  it("markReconciled sets reconciliationStatus=reconciled", () => {
+    const inv = Invoice.create(base).markPaid(new Date("2026-06-15"));
+    const reconciled = inv.markReconciled();
+    expect(reconciled.reconciliationStatus).toBe("reconciled");
+    // immutability
+    expect(inv.reconciliationStatus).toBe("pending_reconciliation");
+  });
+
+  it("setLineDetailMode toggles lineDetailMode", () => {
+    const inv = Invoice.create(base);
+    expect(inv.lineDetailMode).toBe("simple");
+    const detailed = inv.setLineDetailMode("detailed");
+    expect(detailed.lineDetailMode).toBe("detailed");
+    expect(inv.lineDetailMode).toBe("simple");
   });
 
   it("markPaid throws if invoice is cancelled", () => {

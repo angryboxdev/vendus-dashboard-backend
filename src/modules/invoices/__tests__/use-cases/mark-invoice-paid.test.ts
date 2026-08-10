@@ -25,13 +25,22 @@ describe("MarkInvoicePaidUseCase", () => {
     useCase = new MarkInvoicePaidUseCase(invoiceRepo, payableWrite);
   });
 
-  it("marks invoice as paid with provided date", async () => {
+  it("marks invoice as paid with provided date and sets reconciliation to pending", async () => {
     const inv = makeInvoice();
     await invoiceRepo.save(inv);
 
     const dto = await useCase.execute({ id: inv.id, paidAt: "2026-06-15" });
     expect(dto.status).toBe("paid");
     expect(dto.paidAt).toBe("2026-06-15");
+    expect(dto.reconciliationStatus).toBe("pending_reconciliation");
+  });
+
+  it("stores bankAccountId when provided", async () => {
+    const inv = makeInvoice();
+    await invoiceRepo.save(inv);
+
+    const dto = await useCase.execute({ id: inv.id, bankAccountId: "bank-xyz" });
+    expect(dto.paymentBankAccountId).toBe("bank-xyz");
   });
 
   it("defaults paidAt to today when not provided", async () => {
@@ -51,6 +60,22 @@ describe("MarkInvoicePaidUseCase", () => {
     const inv = makeInvoice().cancel();
     await invoiceRepo.save(inv);
     await expect(useCase.execute({ id: inv.id })).rejects.toThrow();
+  });
+
+  it("stores paymentMethod when provided", async () => {
+    const inv = makeInvoice();
+    await invoiceRepo.save(inv);
+
+    const dto = await useCase.execute({ id: inv.id, paymentMethod: "bank_transfer" });
+    expect(dto.paymentMethod).toBe("bank_transfer");
+  });
+
+  it("stores paymentNotes when provided", async () => {
+    const inv = makeInvoice();
+    await invoiceRepo.save(inv);
+
+    const dto = await useCase.execute({ id: inv.id, paymentNotes: "Pago via homebanking" });
+    expect(dto.paymentNotes).toBe("Pago via homebanking");
   });
 
   it("syncs the linked payable entry as paid", async () => {

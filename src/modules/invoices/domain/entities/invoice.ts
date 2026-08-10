@@ -8,6 +8,12 @@ export type InvoiceStatus =
   | "cancelled"
   | "review";
 
+export type ReconciliationStatus = "none" | "pending_reconciliation" | "reconciled";
+
+export type LineDetailMode = "simple" | "detailed";
+
+export const RECONCILIATION_STATUSES: ReconciliationStatus[] = ["none", "pending_reconciliation", "reconciled"];
+
 export type InvoiceLineType =
   | "stock_purchase"
   | "operational_expense"
@@ -49,6 +55,12 @@ interface InvoiceProps {
   totalVat: number;
   totalWithVat: number;
   status: InvoiceStatus;
+  reconciliationStatus: ReconciliationStatus;
+  lineDetailMode: LineDetailMode;
+  paymentBankAccountId: string | null;
+  paymentMethod: string | null;
+  paymentNotes: string | null;
+  competenceDate: Date | null;
   notes: string | null;
   attachmentUrl: string | null;
   source: InvoiceSource;
@@ -87,6 +99,7 @@ export interface UpdateInvoiceData {
   affectsCashflow?: boolean;
   affectsProfitability?: boolean;
   currency?: string;
+  competenceDate?: Date | null;
 }
 
 export interface ConfirmImportData {
@@ -126,6 +139,12 @@ export class Invoice {
   readonly totalVat: number;
   readonly totalWithVat: number;
   readonly status: InvoiceStatus;
+  readonly reconciliationStatus: ReconciliationStatus;
+  readonly lineDetailMode: LineDetailMode;
+  readonly paymentBankAccountId: string | null;
+  readonly paymentMethod: string | null;
+  readonly paymentNotes: string | null;
+  readonly competenceDate: Date | null;
   readonly notes: string | null;
   readonly attachmentUrl: string | null;
   readonly source: InvoiceSource;
@@ -157,6 +176,12 @@ export class Invoice {
     this.totalVat = props.totalVat;
     this.totalWithVat = props.totalWithVat;
     this.status = props.status;
+    this.reconciliationStatus = props.reconciliationStatus;
+    this.lineDetailMode = props.lineDetailMode;
+    this.paymentBankAccountId = props.paymentBankAccountId;
+    this.paymentMethod = props.paymentMethod;
+    this.paymentNotes = props.paymentNotes;
+    this.competenceDate = props.competenceDate;
     this.notes = props.notes;
     this.attachmentUrl = props.attachmentUrl;
     this.source = props.source;
@@ -196,6 +221,8 @@ export class Invoice {
     affectsCashflow?: boolean;
     affectsProfitability?: boolean;
     currency?: string;
+    competenceDate?: Date | null;
+    lineDetailMode?: LineDetailMode;
   }): Invoice {
     const now = new Date();
     return new Invoice({
@@ -213,6 +240,12 @@ export class Invoice {
       totalVat: props.totalVat,
       totalWithVat: props.totalWithVat,
       status: "pending",
+      reconciliationStatus: "none",
+      lineDetailMode: props.lineDetailMode ?? "simple",
+      paymentBankAccountId: null,
+      paymentMethod: null,
+      paymentNotes: null,
+      competenceDate: props.competenceDate ?? null,
       notes: props.notes ?? null,
       attachmentUrl: props.attachmentUrl ?? null,
       source: "manual",
@@ -266,6 +299,12 @@ export class Invoice {
       totalVat: props.totalVat,
       totalWithVat: props.totalWithVat,
       status: "draft_ai",
+      reconciliationStatus: "none",
+      lineDetailMode: "simple",
+      paymentBankAccountId: null,
+      paymentMethod: null,
+      paymentNotes: null,
+      competenceDate: null,
       notes: null,
       attachmentUrl: props.attachmentUrl ?? null,
       source: props.source,
@@ -312,6 +351,7 @@ export class Invoice {
     if (data.affectsCashflow !== undefined) p.affectsCashflow = data.affectsCashflow;
     if (data.affectsProfitability !== undefined) p.affectsProfitability = data.affectsProfitability;
     if (data.currency !== undefined) p.currency = data.currency;
+    if (data.competenceDate !== undefined) p.competenceDate = data.competenceDate;
     p.updatedAt = new Date();
     return new Invoice(p);
   }
@@ -343,11 +383,32 @@ export class Invoice {
     return new Invoice(p);
   }
 
-  markPaid(paidAt: Date): Invoice {
+  markPaid(paidAt: Date, bankAccountId?: string | null, paymentMethod?: string | null, paymentNotes?: string | null): Invoice {
     if (this.status === "cancelled") {
       throw new Error(`Cannot mark a cancelled invoice as paid: ${this.id}`);
     }
-    return new Invoice({ ...this.toProps(), paidAt, status: "paid", updatedAt: new Date() });
+    return new Invoice({
+      ...this.toProps(),
+      paidAt,
+      status: "paid",
+      reconciliationStatus: "pending_reconciliation",
+      paymentBankAccountId: bankAccountId ?? this.paymentBankAccountId,
+      paymentMethod: paymentMethod !== undefined ? paymentMethod : this.paymentMethod,
+      paymentNotes: paymentNotes !== undefined ? paymentNotes : this.paymentNotes,
+      updatedAt: new Date(),
+    });
+  }
+
+  markReconciled(): Invoice {
+    return new Invoice({
+      ...this.toProps(),
+      reconciliationStatus: "reconciled",
+      updatedAt: new Date(),
+    });
+  }
+
+  setLineDetailMode(mode: LineDetailMode): Invoice {
+    return new Invoice({ ...this.toProps(), lineDetailMode: mode, updatedAt: new Date() });
   }
 
   markOverdue(): Invoice {
@@ -379,6 +440,12 @@ export class Invoice {
       totalVat: this.totalVat,
       totalWithVat: this.totalWithVat,
       status: this.status,
+      reconciliationStatus: this.reconciliationStatus,
+      lineDetailMode: this.lineDetailMode,
+      paymentBankAccountId: this.paymentBankAccountId,
+      paymentMethod: this.paymentMethod,
+      paymentNotes: this.paymentNotes,
+      competenceDate: this.competenceDate,
       notes: this.notes,
       attachmentUrl: this.attachmentUrl,
       source: this.source,

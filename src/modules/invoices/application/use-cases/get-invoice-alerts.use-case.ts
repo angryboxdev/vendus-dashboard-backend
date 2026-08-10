@@ -84,6 +84,10 @@ export class GetInvoiceAlertsUseCase implements GetInvoiceAlertsPort {
       return diff > VALUE_DISCREPANCY_MARGIN_CENTS;
     });
 
+    const pendingReconciliation = all.filter(
+      (inv) => inv.reconciliationStatus === "pending_reconciliation",
+    );
+
     const sum = (invoices: typeof all) =>
       invoices.reduce((acc, inv) => acc + inv.totalWithVat, 0);
 
@@ -91,6 +95,7 @@ export class GetInvoiceAlertsUseCase implements GetInvoiceAlertsPort {
       overdue: { count: overdue.length, totalAmount: sum(overdue) },
       dueToday: { count: dueToday.length, totalAmount: sum(dueToday) },
       dueIn7Days: { count: dueIn7Days.length, totalAmount: sum(dueIn7Days) },
+      pendingReconciliation: { count: pendingReconciliation.length, totalAmount: sum(pendingReconciliation) },
       noDueDateCount: noDueDate.length,
       noSupplierCount: noSupplier.length,
       pendingReviewCount: pendingReview.length,

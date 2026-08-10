@@ -4,6 +4,8 @@ import {
   type InvoiceStatus,
   type InvoiceSource,
   type AiExtractionStatus,
+  type ReconciliationStatus,
+  type LineDetailMode,
 } from "../../domain/entities/invoice.js";
 import type { InvoiceFilter, InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
 
@@ -23,6 +25,12 @@ function toEntity(row: Record<string, unknown>): Invoice {
     totalVat: row.total_vat as number,
     totalWithVat: row.total_with_vat as number,
     status: row.status as InvoiceStatus,
+    reconciliationStatus: ((row.reconciliation_status as string | null) ?? "none") as ReconciliationStatus,
+    lineDetailMode: ((row.line_detail_mode as string | null) ?? "simple") as LineDetailMode,
+    paymentBankAccountId: (row.payment_bank_account_id as string | null) ?? null,
+    paymentMethod: (row.payment_method as string | null) ?? null,
+    paymentNotes: (row.payment_notes as string | null) ?? null,
+    competenceDate: row.competence_date ? new Date(row.competence_date as string) : null,
     notes: (row.notes as string | null) ?? null,
     attachmentUrl: (row.attachment_url as string | null) ?? null,
     source: ((row.source as string | null) ?? "manual") as InvoiceSource,
@@ -57,6 +65,12 @@ function toRow(invoice: Invoice): Record<string, unknown> {
     total_vat: invoice.totalVat,
     total_with_vat: invoice.totalWithVat,
     status: invoice.status,
+    reconciliation_status: invoice.reconciliationStatus,
+    line_detail_mode: invoice.lineDetailMode,
+    payment_bank_account_id: invoice.paymentBankAccountId,
+    payment_method: invoice.paymentMethod,
+    payment_notes: invoice.paymentNotes,
+    competence_date: invoice.competenceDate?.toISOString().slice(0, 10) ?? null,
     notes: invoice.notes,
     attachment_url: invoice.attachmentUrl,
     source: invoice.source,
@@ -111,6 +125,7 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
         .order("invoice_date", { ascending: false });
       if (filter.supplierId) q = q.eq("supplier_id", filter.supplierId);
       if (filter.status) q = q.eq("status", filter.status);
+      if (filter.reconciliationStatus) q = q.eq("reconciliation_status", filter.reconciliationStatus);
       if (filter.from) q = q.gte("invoice_date", filter.from.toISOString().slice(0, 10));
       if (filter.to) q = q.lte("invoice_date", filter.to.toISOString().slice(0, 10));
       if (filter.isDirectDebit !== undefined) q = q.eq("is_direct_debit", filter.isDirectDebit);
@@ -130,6 +145,7 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
 
     if (filter?.supplierId) q = q.eq("supplier_id", filter.supplierId);
     if (filter?.status) q = q.eq("status", filter.status);
+    if (filter?.reconciliationStatus) q = q.eq("reconciliation_status", filter.reconciliationStatus);
     if (filter?.from) q = q.gte("invoice_date", filter.from.toISOString().slice(0, 10));
     if (filter?.to) q = q.lte("invoice_date", filter.to.toISOString().slice(0, 10));
     if (filter?.isDirectDebit !== undefined) q = q.eq("is_direct_debit", filter.isDirectDebit);

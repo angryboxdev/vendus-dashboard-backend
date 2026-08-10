@@ -14,6 +14,7 @@ export class ListInvoicesUseCase implements ListInvoicesPort {
     if (filter?.supplierId) repoFilter.supplierId = filter.supplierId;
     if (filter?.costCenterId) repoFilter.costCenterId = filter.costCenterId;
     if (filter?.status) repoFilter.status = filter.status;
+    if (filter?.reconciliationStatus) repoFilter.reconciliationStatus = filter.reconciliationStatus;
     if (filter?.from) repoFilter.from = new Date(filter.from);
     if (filter?.to) repoFilter.to = new Date(filter.to);
     if (filter?.search) repoFilter.search = filter.search;

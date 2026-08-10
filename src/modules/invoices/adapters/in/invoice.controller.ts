@@ -7,6 +7,7 @@ import type {
   SetInvoiceStatusPort,
   AddInvoiceLinePort,
   ClassifyInvoiceLinePort,
+  UpdateInvoiceLinePort,
   ListInvoicesPort,
   ListInvoiceLinesPort,
   GetInvoicePort,
@@ -16,17 +17,31 @@ import type {
   ConfirmImportedInvoicePort,
   GetInvoiceAlertsPort,
   ProcessDirectDebitsPort,
+  MarkInvoiceReconciledPort,
+  SetLineDetailModePort,
 } from "../../domain/ports/in/invoice.ports.js";
-import type { InvoiceStatus, InvoiceLineType } from "../../domain/entities/invoice.js";
-import { InvoiceNotFoundError, InvoiceLineNotFoundError, InvoiceAlreadyCancelledError, DuplicateInvoiceError } from "../../domain/errors.js";
+import type { InvoiceStatus, InvoiceLineType, LineDetailMode } from "../../domain/entities/invoice.js";
+import {
+  InvoiceNotFoundError,
+  InvoiceLineNotFoundError,
+  InvoiceAlreadyCancelledError,
+  DuplicateInvoiceError,
+  LineDetailModeError,
+  LinesTotalMismatchError,
+  InvoiceAlreadyReconciledError,
+  InvoiceNotPaidError,
+} from "../../domain/errors.js";
 
 interface InvoicePorts {
   createInvoice: CreateInvoicePort;
   updateInvoice: UpdateInvoicePort;
   markInvoicePaid: MarkInvoicePaidPort;
   setInvoiceStatus: SetInvoiceStatusPort;
+  markInvoiceReconciled: MarkInvoiceReconciledPort;
+  setLineDetailMode: SetLineDetailModePort;
   addInvoiceLine: AddInvoiceLinePort;
   classifyInvoiceLine: ClassifyInvoiceLinePort;
+  updateInvoiceLine: UpdateInvoiceLinePort;
   listInvoices: ListInvoicesPort;
   listInvoiceLines: ListInvoiceLinesPort;
   getInvoice: GetInvoicePort;
@@ -43,8 +58,16 @@ function handleError(res: import("express").Response, err: unknown): void {
     res.status(404).json({ error: (err as Error).message });
     return;
   }
-  if (err instanceof InvoiceAlreadyCancelledError || err instanceof DuplicateInvoiceError) {
+  if (
+    err instanceof InvoiceAlreadyCancelledError ||
+    err instanceof DuplicateInvoiceError ||
+    err instanceof InvoiceAlreadyReconciledError
+  ) {
     res.status(409).json({ error: (err as Error).message });
+    return;
+  }
+  if (err instanceof InvoiceNotPaidError || err instanceof LineDetailModeError || err instanceof LinesTotalMismatchError) {
+    res.status(422).json({ error: (err as Error).message });
     return;
   }
   if (err instanceof Error) {
@@ -83,11 +106,12 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   // GET /invoices
   router.get("/invoices", async (req, res) => {
     try {
-      const { supplierId, costCenterId, status, from, to, isDirectDebit, search } = req.query as Record<string, string | undefined>;
+      const { supplierId, costCenterId, status, reconciliationStatus, from, to, isDirectDebit, search } = req.query as Record<string, string | undefined>;
       const filter: Parameters<typeof ports.listInvoices.execute>[0] = {};
       if (supplierId !== undefined) filter.supplierId = supplierId;
       if (costCenterId !== undefined) filter.costCenterId = costCenterId;
       if (status !== undefined) filter.status = status as InvoiceStatus;
+      if (reconciliationStatus !== undefined) filter.reconciliationStatus = reconciliationStatus as import("../../domain/entities/invoice.js").ReconciliationStatus;
       if (from !== undefined) filter.from = from;
       if (to !== undefined) filter.to = to;
       if (isDirectDebit !== undefined) filter.isDirectDebit = isDirectDebit === "true";
@@ -132,10 +156,34 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   // PATCH /invoices/:id/paid
   router.patch("/invoices/:id/paid", async (req, res) => {
     try {
-      const { paidAt } = req.body as { paidAt?: string };
+      const { paidAt, bankAccountId, paymentMethod, paymentNotes } = req.body as { paidAt?: string; bankAccountId?: string | null; paymentMethod?: string | null; paymentNotes?: string | null };
       const paidCmd: Parameters<typeof ports.markInvoicePaid.execute>[0] = { id: req.params.id };
       if (paidAt !== undefined) paidCmd.paidAt = paidAt;
+      if (bankAccountId !== undefined) paidCmd.bankAccountId = bankAccountId;
+      if (paymentMethod !== undefined) paidCmd.paymentMethod = paymentMethod;
+      if (paymentNotes !== undefined) paidCmd.paymentNotes = paymentNotes;
       const invoice = await ports.markInvoicePaid.execute(paidCmd);
+      res.json(invoice);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // PATCH /invoices/:id/reconcile
+  router.patch("/invoices/:id/reconcile", async (req, res) => {
+    try {
+      const invoice = await ports.markInvoiceReconciled.execute({ id: req.params.id });
+      res.json(invoice);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // PATCH /invoices/:id/line-detail-mode
+  router.patch("/invoices/:id/line-detail-mode", async (req, res) => {
+    try {
+      const { mode } = req.body as { mode: LineDetailMode };
+      const invoice = await ports.setLineDetailMode.execute({ id: req.params.id, mode });
       res.json(invoice);
     } catch (err) {
       handleError(res, err);
@@ -183,6 +231,37 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
         ...body,
       });
       res.status(201).json(line);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // PATCH /invoices/:invoiceId/lines/:lineId — edit line values
+  router.patch("/invoices/:invoiceId/lines/:lineId", async (req, res) => {
+    try {
+      const { description, quantity, unit, unitCostWithoutVat, vatRate, vatAmount, totalWithVat } =
+        req.body as {
+          description?: string;
+          quantity?: number;
+          unit?: string | null;
+          unitCostWithoutVat?: number;
+          vatRate?: number;
+          vatAmount?: number;
+          totalWithVat?: number;
+        };
+      const cmd: Parameters<typeof ports.updateInvoiceLine.execute>[0] = {
+        invoiceId: req.params.invoiceId,
+        lineId: req.params.lineId,
+      };
+      if (description !== undefined) cmd.description = description;
+      if (quantity !== undefined) cmd.quantity = quantity;
+      if (unit !== undefined) cmd.unit = unit;
+      if (unitCostWithoutVat !== undefined) cmd.unitCostWithoutVat = unitCostWithoutVat;
+      if (vatRate !== undefined) cmd.vatRate = vatRate;
+      if (vatAmount !== undefined) cmd.vatAmount = vatAmount;
+      if (totalWithVat !== undefined) cmd.totalWithVat = totalWithVat;
+      const line = await ports.updateInvoiceLine.execute(cmd);
+      res.json(line);
     } catch (err) {
       handleError(res, err);
     }

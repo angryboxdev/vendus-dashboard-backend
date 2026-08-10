@@ -182,6 +182,26 @@ export class InvoiceLine {
     return new InvoiceLine(p);
   }
 
+  updateValues(data: {
+    description?: string;
+    quantity?: number;
+    unit?: string | null;
+    unitCostWithoutVat?: number;
+    vatRate?: number;
+    vatAmount?: number;
+    totalWithVat?: number;
+  }): InvoiceLine {
+    const p = this.toProps();
+    if (data.description !== undefined) p.description = data.description.trim();
+    if (data.quantity !== undefined) p.quantity = data.quantity;
+    if (data.unit !== undefined) p.unit = data.unit;
+    if (data.unitCostWithoutVat !== undefined) p.unitCostWithoutVat = data.unitCostWithoutVat;
+    if (data.vatRate !== undefined) p.vatRate = data.vatRate;
+    if (data.vatAmount !== undefined) p.vatAmount = data.vatAmount;
+    if (data.totalWithVat !== undefined) p.totalWithVat = data.totalWithVat;
+    return new InvoiceLine(p);
+  }
+
   setStockEntry(stockEntryId: string): InvoiceLine {
     return new InvoiceLine({ ...this.toProps(), stockEntryId });
   }

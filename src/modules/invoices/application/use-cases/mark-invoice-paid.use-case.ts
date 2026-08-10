@@ -19,7 +19,7 @@ export class MarkInvoicePaidUseCase implements MarkInvoicePaidPort {
     if (!existing) throw new InvoiceNotFoundError(command.id);
 
     const paidAt = command.paidAt ? new Date(command.paidAt) : new Date();
-    const updated = existing.markPaid(paidAt);
+    const updated = existing.markPaid(paidAt, command.bankAccountId, command.paymentMethod, command.paymentNotes);
     await this.invoiceRepo.update(updated);
 
     // Sincronizar conta a pagar ligada, se existir

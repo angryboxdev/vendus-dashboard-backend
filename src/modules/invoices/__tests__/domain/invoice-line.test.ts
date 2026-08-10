@@ -76,6 +76,75 @@ describe("InvoiceLine entity", () => {
   });
 });
 
+describe("InvoiceLine.updateValues", () => {
+  const baseLine = {
+    invoiceId: "inv-1",
+    description: "Serviço de limpeza",
+    quantity: 2,
+    unitCostWithoutVat: 5000,
+    vatRate: 23,
+    vatAmount: 2300,
+    totalWithVat: 12300,
+  };
+
+  it("updates description and returns a new immutable instance", () => {
+    const line = InvoiceLine.create(baseLine);
+    const updated = line.updateValues({ description: "Serviço de limpeza exterior" });
+    expect(updated.description).toBe("Serviço de limpeza exterior");
+    expect(line.description).toBe("Serviço de limpeza"); // original untouched
+  });
+
+  it("trims whitespace from description", () => {
+    const line = InvoiceLine.create(baseLine);
+    const updated = line.updateValues({ description: "  Nova descrição  " });
+    expect(updated.description).toBe("Nova descrição");
+  });
+
+  it("updates quantity", () => {
+    const line = InvoiceLine.create(baseLine);
+    const updated = line.updateValues({ quantity: 5 });
+    expect(updated.quantity).toBe(5);
+    expect(line.quantity).toBe(2);
+  });
+
+  it("updates unit (including clearing to null)", () => {
+    const line = InvoiceLine.create({ ...baseLine, unit: "kg" });
+    const cleared = line.updateValues({ unit: null });
+    expect(cleared.unit).toBeNull();
+    const set = line.updateValues({ unit: "un" });
+    expect(set.unit).toBe("un");
+  });
+
+  it("updates unitCostWithoutVat", () => {
+    const line = InvoiceLine.create(baseLine);
+    const updated = line.updateValues({ unitCostWithoutVat: 7500 });
+    expect(updated.unitCostWithoutVat).toBe(7500);
+  });
+
+  it("updates vatRate, vatAmount and totalWithVat together", () => {
+    const line = InvoiceLine.create(baseLine);
+    const updated = line.updateValues({ vatRate: 6, vatAmount: 600, totalWithVat: 10600 });
+    expect(updated.vatRate).toBe(6);
+    expect(updated.vatAmount).toBe(600);
+    expect(updated.totalWithVat).toBe(10600);
+  });
+
+  it("preserves unspecified fields", () => {
+    const line = InvoiceLine.create({ ...baseLine, costCenterCategoryId: "cat-xyz" });
+    const updated = line.updateValues({ quantity: 3 });
+    expect(updated.costCenterCategoryId).toBe("cat-xyz");
+    expect(updated.vatRate).toBe(23);
+    expect(updated.description).toBe("Serviço de limpeza");
+  });
+
+  it("is immutable — original line unchanged after update", () => {
+    const line = InvoiceLine.create(baseLine);
+    line.updateValues({ quantity: 99, unitCostWithoutVat: 99999 });
+    expect(line.quantity).toBe(2);
+    expect(line.unitCostWithoutVat).toBe(5000);
+  });
+});
+
 describe("InvoiceLine.classifyFromCategory", () => {
   const baseLine = {
     invoiceId: "inv-1",

@@ -1,7 +1,7 @@
 # Módulo: invoices
 
 > Status: ativo
-> Última atualização: 2026-07-01
+> Última atualização: 2026-08-10 (updateLine endpoint + UpdateInvoiceLineUseCase)
 
 ---
 
@@ -83,12 +83,15 @@ reconciliação ou relatórios financeiros.
   - Campos: `supplierNifSnapshot`, `source`, `aiExtractionStatus`, `aiConfidence`,
     `requiresReview`, `costCenterGroupId`, `costCenterCategoryId`, `financialType`,
     `affectsDre`, `affectsCashflow`, `affectsProfitability`, `currency`,
-    `isDirectDebit`, `directDebitDate`.
+    `isDirectDebit`, `directDebitDate`, `paymentBankAccountId`, `paymentMethod`, `paymentNotes`.
   - `costCenterCategoryId` ao nível da fatura propaga automaticamente para todas as
     linhas ao confirmar importação ou ao actualizar a fatura.
   - Factory `createFromImport()` para faturas criadas pelo fluxo IA.
   - Método `confirmImport()` para transitar `draft_ai` → `pending`.
-- **InvoiceLine** — linha de detalhe. Campos `financialType`, `affectsDre`, `affectsCashflow`,
+- **InvoiceLine** — linha de detalhe. Imutável; métodos devolvem nova instância.
+  - `classify()` / `classifyFromCategory()` — alteram tipo, subcategoria e canal.
+  - `updateValues()` — altera valores de negócio (descrição, quantidade, unidade, preço unitário, IVA, total). Só permitido quando `invoice.lineDetailMode === "detailed"`.
+  - Campos `financialType`, `affectsDre`, `affectsCashflow`,
   `affectsProfitability`, `requiresChannel` e `requiresAllocation` são herdados automaticamente
   da subcategoria ao classificar (`classifyFromCategory`). `channelId` é obrigatório quando
   `requiresChannel = true`. Dois campos calculados na DTO:
@@ -99,6 +102,8 @@ reconciliação ou relatórios financeiros.
   regra sem padrão serve de fallback genérico. Inclui `channelId` para sugerir canal.
 - **AiExtractionResult** — value object com os dados extraídos pela IA + confidence + validationIssues.
 - **InvoiceStatus**: `draft_ai | pending_review | pending | paid | overdue | partial | cancelled | review`
+- **ReconciliationStatus**: `none | pending_reconciliation | reconciled` — estado bancário, ortogonal ao `InvoiceStatus`. Após `markPaid()` fica `pending_reconciliation`; passa a `reconciled` via `markReconciled()` ou conciliação bancária.
+- **LineDetailMode**: `simple | detailed` — controla se a fatura tem linha única automática (bloqueada) ou detalhamento editável. Padrão: `simple`.
 - **InvoiceSource**: `manual | pdf_import | image_import`
 - Todos os valores monetários em **cêntimos** (inteiros).
 
@@ -108,9 +113,12 @@ reconciliação ou relatórios financeiros.
 
 - `CreateInvoiceUseCase` — criação manual com linhas opcionais; cria payable entry se dueDate presente.
 - `UpdateInvoiceUseCase` — actualiza campos do cabeçalho (inclui novos campos de classificação financeira).
-- `MarkInvoicePaidUseCase` — transita para `paid`, sincroniza payable entry.
+- `MarkInvoicePaidUseCase` — transita para `paid` + `reconciliationStatus=pending_reconciliation`; aceita `bankAccountId`, `paymentMethod` e `paymentNotes` opcionais; sincroniza payable entry.
+- `MarkInvoiceReconciledUseCase` — transita `reconciliationStatus` de `pending_reconciliation` para `reconciled`. Requer fatura já paga.
 - `SetInvoiceStatusUseCase` — força estado arbitrário; cancela payable entry se `cancelled`.
-- `AddInvoiceLineUseCase` — adiciona linha a fatura existente.
+- `SetLineDetailModeUseCase` — alterna entre `simple` e `detailed`.
+- `AddInvoiceLineUseCase` — adiciona linha a fatura existente (requer `lineDetailMode=detailed`).
+- `UpdateInvoiceLineUseCase` — actualiza valores de uma linha existente (descrição, quantidade, unidade, preço unitário, IVA, total). Requer `lineDetailMode=detailed`. Valida que a soma das linhas não excede os totais da fatura (tolerância: 1 cêntimo).
 - `ClassifyInvoiceLineUseCase` — classifica linha; quando `costCenterCategoryId` presente, herda automaticamente os campos da subcategoria via `CostCenterCategoryReaderPort`. Opcionalmente grava/actualiza `ClassificationRule` com `descriptionPattern` e `channelId`.
 - `SuggestLineClassificationUseCase` — sugestão de classificação por `supplierId` + `description?`; retorna `channelId` quando presente na regra.
 - `ListInvoicesUseCase` — filtra por fornecedor, CC, estado, intervalo de datas, `isDirectDebit`.
@@ -164,10 +172,13 @@ reconciliação ou relatórios financeiros.
 | POST | `/api/invoices/import` | **Novo** — importar PDF/imagem via IA (multipart `file`) |
 | POST | `/api/invoices/:id/confirm` | **Novo** — confirmar fatura importada |
 | PATCH | `/api/invoices/:id` | Actualizar cabeçalho |
-| PATCH | `/api/invoices/:id/paid` | Marcar como paga |
+| PATCH | `/api/invoices/:id/paid` | Marcar como paga — body: `{ paidAt?, bankAccountId?, paymentMethod?, paymentNotes? }` |
+| PATCH | `/api/invoices/:id/reconcile` | **Novo** — marcar como conciliada (requer `status=paid`) |
+| PATCH | `/api/invoices/:id/line-detail-mode` | **Novo** — alternar modo de linhas — body: `{ mode: "simple"|"detailed" }` |
 | PATCH | `/api/invoices/:id/status` | Forçar estado |
 | DELETE | `/api/invoices/:id` | Eliminar fatura e linhas |
 | POST | `/api/invoices/:invoiceId/lines` | Adicionar linha a fatura existente |
+| PATCH | `/api/invoices/:invoiceId/lines/:lineId` | Editar valores de uma linha (requer `lineDetailMode=detailed`) |
 | PATCH | `/api/invoices/:invoiceId/lines/:lineId/classify` | Classificar linha |
 | POST | `/api/invoices/process-direct-debits` | Processar débitos diretos vencidos (manager+) |
 | POST | `/api/internal/cron/process-direct-debits` | Idem, via cron (Bearer `CRON_SECRET`) |
@@ -190,10 +201,29 @@ reconciliação ou relatórios financeiros.
 - **Novos campos com defaults seguros**: todos os campos novos têm defaults que preservam comportamento dos registos existentes (`source: "manual"`, `affectsDre: true`, `affectsCashflow: true`, `affectsProfitability: false`, `currency: "EUR"`, `requiresReview: false`).
 - **Sem OCR custom**: usamos o modelo de visão da OpenAI. `confidenceBoost` das regras de classificação e o campo `aiConfidence` são escalas independentes.
 - **PDFs convertidos a PNG antes do Vision API**: a OpenAI Vision API não aceita `data:application/pdf;base64,...` como `image_url`. O `OpenAiExtractionAdapter` usa `pdf-to-img` (já no projeto) para renderizar cada página a PNG com `scale: 2` e envia-as como múltiplos `image_url` no mesmo request. Faturas multi-página são suportadas. O fluxo de imagens mantém-se intacto e não é afetado.
+- **`reconciliationStatus` ortogonal ao `status`**: `status=paid` continua a ser o estado documental/operacional de paga (usado em filtros, listas, alertas de vencimento). `reconciliationStatus` rastreia a confirmação bancária e é independente. Ambos os campos existem em simultâneo sem conflito. Faturas anteriores à migration ficam com `reconciliationStatus=none` (neutro).
+- **`lineDetailMode=simple` bloqueia `AddInvoiceLineUseCase`**: em modo simples, a fatura tem uma linha única automática (gerida pelo frontend). Tentar adicionar uma linha via API com `lineDetailMode=simple` retorna 422. Para ativar o detalhamento, o utilizador usa `PATCH /invoices/:id/line-detail-mode` com `{ mode: "detailed" }`.
+- **Validação de totais de linhas (modo detalhado)**: ao adicionar ou editar uma linha, a soma das linhas (com os novos valores) não pode exceder os totais da fatura — `totalWithVat`, `totalVat` e `subtotalWithoutVat` — com tolerância de 1 cêntimo. Somas parciais abaixo do total são permitidas (utilizador pode adicionar linhas incrementalmente). Esta validação aplica-se a `AddInvoiceLineUseCase` e `UpdateInvoiceLineUseCase`.
 
 ## SQL — alterações às tabelas
 
 ```sql
+-- Reconciliação e modo de linhas (migration: docs/migrations/invoices-reconciliation-and-line-mode.sql)
+alter table invoices
+  add column if not exists reconciliation_status text not null default 'none'
+    check (reconciliation_status in ('none', 'pending_reconciliation', 'reconciled')),
+  add column if not exists payment_bank_account_id uuid,
+  add column if not exists line_detail_mode text not null default 'simple'
+    check (line_detail_mode in ('simple', 'detailed')),
+  add column if not exists competence_date date;
+
+-- Método e notas de pagamento (migration: docs/migrations/invoices-payment-method-notes.sql)
+alter table invoices
+  add column if not exists payment_method text,
+  add column if not exists payment_notes text;
+
+create index if not exists idx_invoices_reconciliation_status on invoices (reconciliation_status);
+
 -- Débito direto (migration: docs/migrations/invoices-direct-debit.sql)
 alter table invoices
   add column if not exists is_direct_debit boolean not null default false,
@@ -233,6 +263,22 @@ alter table suppliers
 
 - Domínio/use cases: `npx jest --testPathPattern="src/modules/invoices" --no-coverage`
 - Adapters: integração com Supabase (requer env vars `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`).
+
+## Alertas operacionais (GetInvoiceAlertsUseCase)
+
+`GET /api/invoices/alerts` devolve:
+
+| Campo | Significado |
+|---|---|
+| `overdue` | Faturas vencidas e não pagas |
+| `dueToday` | Faturas a vencer hoje e não pagas |
+| `dueIn7Days` | Faturas a vencer nos próximos 7 dias e não pagas |
+| `pendingReconciliation` | **Novo** — faturas pagas aguardando confirmação bancária |
+| `noDueDateCount` | Faturas sem data de vencimento |
+| `noSupplierCount` | Faturas sem fornecedor |
+| `pendingReviewCount` | Faturas para rever (draft_ai, pending_review, requires_review) |
+| `lowAiConfidenceCount` | Faturas com baixa confiança IA |
+| `valueDiscrepancyCount` | Faturas com subtotal+IVA ≠ total |
 
 ## Pontos de atenção / dívidas conhecidas
 

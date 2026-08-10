@@ -1,0 +1,168 @@
+import { UpdateInvoiceLineUseCase } from "../../application/use-cases/update-invoice-line.use-case.js";
+import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
+import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
+import { Invoice } from "../../domain/entities/invoice.js";
+import { InvoiceLine } from "../../domain/entities/invoice-line.js";
+import {
+  InvoiceNotFoundError,
+  InvoiceLineNotFoundError,
+  LineDetailModeError,
+  LinesTotalMismatchError,
+} from "../../domain/errors.js";
+
+const makeInvoice = (lineDetailMode: "simple" | "detailed" = "detailed") => {
+  const inv = Invoice.create({
+    supplierName: "Makro",
+    invoiceNumber: "MKR-001",
+    invoiceDate: new Date("2026-06-01"),
+    subtotalWithoutVat: 10000,
+    totalVat: 2300,
+    totalWithVat: 12300,
+  });
+  return lineDetailMode === "detailed" ? inv.setLineDetailMode("detailed") : inv;
+};
+
+const makeLine = (invoiceId: string, overrides: Partial<{
+  description: string;
+  quantity: number;
+  unitCostWithoutVat: number;
+  vatRate: number;
+  vatAmount: number;
+  totalWithVat: number;
+}> = {}) =>
+  InvoiceLine.create({
+    invoiceId,
+    description: overrides.description ?? "Serviço de limpeza",
+    quantity: overrides.quantity ?? 1,
+    unitCostWithoutVat: overrides.unitCostWithoutVat ?? 10000,
+    vatRate: overrides.vatRate ?? 23,
+    vatAmount: overrides.vatAmount ?? 2300,
+    totalWithVat: overrides.totalWithVat ?? 12300,
+  });
+
+describe("UpdateInvoiceLineUseCase", () => {
+  let invoiceRepo: FakeInvoiceRepository;
+  let lineRepo: FakeInvoiceLineRepository;
+  let useCase: UpdateInvoiceLineUseCase;
+
+  beforeEach(() => {
+    invoiceRepo = new FakeInvoiceRepository();
+    lineRepo = new FakeInvoiceLineRepository();
+    useCase = new UpdateInvoiceLineUseCase(invoiceRepo, lineRepo);
+  });
+
+  it("updates description of an existing line", async () => {
+    const inv = makeInvoice();
+    const line = makeLine(inv.id);
+    await invoiceRepo.save(inv);
+    await lineRepo.saveAll([line]);
+
+    const dto = await useCase.execute({
+      invoiceId: inv.id,
+      lineId: line.id,
+      description: "Serviço de limpeza exterior",
+    });
+
+    expect(dto.description).toBe("Serviço de limpeza exterior");
+    expect(dto.id).toBe(line.id);
+  });
+
+  it("updates quantity, unitCost, vatRate and totals", async () => {
+    const inv = makeInvoice();
+    const line = makeLine(inv.id);
+    await invoiceRepo.save(inv);
+    await lineRepo.saveAll([line]);
+
+    const dto = await useCase.execute({
+      invoiceId: inv.id,
+      lineId: line.id,
+      quantity: 2,
+      unitCostWithoutVat: 5000,
+      vatRate: 23,
+      vatAmount: 2300,
+      totalWithVat: 12300,
+    });
+
+    expect(dto.quantity).toBe(2);
+    expect(dto.unitCostWithoutVat).toBe(5000);
+    expect(dto.totalWithVat).toBe(12300);
+  });
+
+  it("throws InvoiceNotFoundError when invoice does not exist", async () => {
+    await expect(
+      useCase.execute({ invoiceId: "nonexistent", lineId: "any" }),
+    ).rejects.toThrow(InvoiceNotFoundError);
+  });
+
+  it("throws LineDetailModeError when invoice is in simple mode", async () => {
+    const inv = makeInvoice("simple");
+    const line = makeLine(inv.id);
+    await invoiceRepo.save(inv);
+    await lineRepo.saveAll([line]);
+
+    await expect(
+      useCase.execute({ invoiceId: inv.id, lineId: line.id, description: "x" }),
+    ).rejects.toThrow(LineDetailModeError);
+  });
+
+  it("throws InvoiceLineNotFoundError when line does not belong to invoice", async () => {
+    const inv = makeInvoice();
+    await invoiceRepo.save(inv);
+    // no lines saved
+
+    await expect(
+      useCase.execute({ invoiceId: inv.id, lineId: "nonexistent-line" }),
+    ).rejects.toThrow(InvoiceLineNotFoundError);
+  });
+
+  it("throws LinesTotalMismatchError when updated total exceeds invoice total", async () => {
+    const inv = makeInvoice();
+    const line = makeLine(inv.id);
+    await invoiceRepo.save(inv);
+    await lineRepo.saveAll([line]);
+
+    // totalWithVat=99999 far exceeds invoice.totalWithVat=12300
+    await expect(
+      useCase.execute({
+        invoiceId: inv.id,
+        lineId: line.id,
+        unitCostWithoutVat: 80000,
+        vatAmount: 18400,
+        totalWithVat: 98400,
+      }),
+    ).rejects.toThrow(LinesTotalMismatchError);
+  });
+
+  it("allows update within 1-cent tolerance", async () => {
+    const inv = makeInvoice();
+    const line = makeLine(inv.id);
+    await invoiceRepo.save(inv);
+    await lineRepo.saveAll([line]);
+
+    // totalWithVat=12301 is invoice total (12300) + 1 cent — within tolerance
+    const dto = await useCase.execute({
+      invoiceId: inv.id,
+      lineId: line.id,
+      vatAmount: 2301,
+      totalWithVat: 12301,
+    });
+
+    expect(dto.totalWithVat).toBe(12301);
+  });
+
+  it("persists the updated line in the repository", async () => {
+    const inv = makeInvoice();
+    const line = makeLine(inv.id);
+    await invoiceRepo.save(inv);
+    await lineRepo.saveAll([line]);
+
+    await useCase.execute({
+      invoiceId: inv.id,
+      lineId: line.id,
+      description: "Descrição actualizada",
+    });
+
+    const persisted = await lineRepo.findByInvoiceId(inv.id);
+    expect(persisted[0]?.description).toBe("Descrição actualizada");
+  });
+});

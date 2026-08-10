@@ -1,9 +1,10 @@
-import type { Invoice, InvoiceStatus } from "../../entities/invoice.js";
+import type { Invoice, InvoiceStatus, ReconciliationStatus } from "../../entities/invoice.js";
 
 export interface InvoiceFilter {
   supplierId?: string;
   costCenterId?: string;
   status?: InvoiceStatus;
+  reconciliationStatus?: ReconciliationStatus;
   from?: Date;
   to?: Date;
   isDirectDebit?: boolean;

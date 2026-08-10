@@ -15,6 +15,7 @@ import { UpdateInvoiceUseCase } from "./application/use-cases/update-invoice.use
 import { MarkInvoicePaidUseCase } from "./application/use-cases/mark-invoice-paid.use-case.js";
 import { SetInvoiceStatusUseCase } from "./application/use-cases/set-invoice-status.use-case.js";
 import { AddInvoiceLineUseCase } from "./application/use-cases/add-invoice-line.use-case.js";
+import { UpdateInvoiceLineUseCase } from "./application/use-cases/update-invoice-line.use-case.js";
 import { ClassifyInvoiceLineUseCase } from "./application/use-cases/classify-invoice-line.use-case.js";
 import { SuggestLineClassificationUseCase } from "./application/use-cases/suggest-line-classification.use-case.js";
 import { ListInvoicesUseCase } from "./application/use-cases/list-invoices.use-case.js";
@@ -25,6 +26,8 @@ import { ImportInvoiceUseCase } from "./application/use-cases/import-invoice.use
 import { ConfirmImportedInvoiceUseCase } from "./application/use-cases/confirm-imported-invoice.use-case.js";
 import { GetInvoiceAlertsUseCase } from "./application/use-cases/get-invoice-alerts.use-case.js";
 import { ProcessDirectDebitsUseCase } from "./application/use-cases/process-direct-debits.use-case.js";
+import { MarkInvoiceReconciledUseCase } from "./application/use-cases/mark-invoice-reconciled.use-case.js";
+import { SetLineDetailModeUseCase } from "./application/use-cases/set-line-detail-mode.use-case.js";
 import { createInvoiceRouter } from "./adapters/in/invoice.controller.js";
 import type { CreateSupplierPort } from "../financial-base/domain/ports/in/supplier.ports.js";
 import type { ProcessDirectDebitsPort } from "./domain/ports/in/invoice.ports.js";
@@ -63,7 +66,10 @@ export function createInvoicesModule(
     updateInvoice: new UpdateInvoiceUseCase(invoiceRepo, lineRepo),
     markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite),
     setInvoiceStatus: new SetInvoiceStatusUseCase(invoiceRepo, payableWrite),
+    markInvoiceReconciled: new MarkInvoiceReconciledUseCase(invoiceRepo),
+    setLineDetailMode: new SetLineDetailModeUseCase(invoiceRepo),
     addInvoiceLine: new AddInvoiceLineUseCase(invoiceRepo, lineRepo),
+    updateInvoiceLine: new UpdateInvoiceLineUseCase(invoiceRepo, lineRepo),
     classifyInvoiceLine: new ClassifyInvoiceLineUseCase(invoiceRepo, lineRepo, ruleRepo, categoryReader),
     listInvoices: new ListInvoicesUseCase(invoiceRepo),
     listInvoiceLines: new ListInvoiceLinesUseCase(lineRepo),
