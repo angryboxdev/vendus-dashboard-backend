@@ -123,6 +123,49 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
       allocByEntity.set(l.entityId, (allocByEntity.get(l.entityId) ?? 0) + l.allocatedAmountCents);
     }
 
+    // ── Partially-reconciled invoices: match by open balance ──────────────────
+    // findCandidates only searches by totalWithVat. An invoice that is 60€ with
+    // 30€ already allocated won't appear above when the movement is 30€.
+    // We scan all existing invoice links, compute open balances, and add those
+    // whose open balance falls within tolerance.
+
+    const alreadyCandidateIds = new Set(invoiceCandidates.map((i) => i.id));
+    const allInvoiceLinks = await this.linkRepo.findAllByEntityType("invoice");
+
+    // Aggregate total allocated per invoice from the links table
+    // (amountCents in the link IS the invoice total at time of reconciliation)
+    const linkSumByInvoice = new Map<string, { entityTotal: number; totalAllocated: number }>();
+    for (const l of allInvoiceLinks) {
+      const prev = linkSumByInvoice.get(l.entityId) ?? { entityTotal: l.amountCents, totalAllocated: 0 };
+      prev.totalAllocated += l.allocatedAmountCents;
+      linkSumByInvoice.set(l.entityId, prev);
+    }
+
+    // Find invoice IDs whose open balance ≈ movement amount and that are not
+    // already in the main candidates list
+    const partiallyMatchingIds = [...linkSumByInvoice.entries()]
+      .filter(([id, { entityTotal, totalAllocated }]) => {
+        if (alreadyCandidateIds.has(id)) return false;
+        const openBalance = entityTotal - totalAllocated;
+        return openBalance > 0 && Math.abs(openBalance - movement.amount) <= tolerance;
+      })
+      .map(([id]) => id);
+
+    const extraInvoices = partiallyMatchingIds.length > 0
+      ? await this.invoiceRead.findByIds(partiallyMatchingIds)
+      : [];
+
+    // Merge extras into invoiceCandidates list; update allocByEntity for them
+    const extraInvoiceIds = new Set<string>();
+    for (const inv of extraInvoices) {
+      invoiceCandidates.push(inv);
+      extraInvoiceIds.add(inv.id);
+      const sum = linkSumByInvoice.get(inv.id);
+      if (sum) allocByEntity.set(inv.id, sum.totalAllocated);
+    }
+
+    // ── Score and build results ───────────────────────────────────────────────
+
     const results: MovementCandidate[] = [];
 
     for (const inv of invoiceCandidates) {
@@ -130,8 +173,10 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
       if (openBalanceCents <= 0) continue; // fully paid, skip
 
       const bestDate = inv.paidAt ?? inv.dueDate ?? inv.invoiceDate;
+      // Extra invoices (matched by open balance) are scored by their open balance;
+      // main candidates (matched by totalWithVat) are scored by their full total.
       const confidence = scoreCandidate({
-        candidateAmount: inv.totalWithVat, // score by total — openBalanceCents is for allocation UI
+        candidateAmount: extraInvoiceIds.has(inv.id) ? openBalanceCents : inv.totalWithVat,
         candidateDateStr: bestDate,
         candidateName: inv.supplierName,
         candidateSupplierId: inv.supplierId,

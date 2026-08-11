@@ -72,4 +72,15 @@ export class SupabaseBankMovementEntityLinkRepository
       .eq("movement_id", movementId);
     if (error) throw new Error(error.message);
   }
+
+  async findAllByEntityType(
+    entityType: "invoice" | "payable_entry"
+  ): Promise<BankMovementEntityLink[]> {
+    const { data, error } = await this.supabase
+      .from("bank_movement_entity_links")
+      .select(SELECT_COLS)
+      .eq("entity_type", entityType);
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
+  }
 }

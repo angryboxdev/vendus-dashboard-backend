@@ -165,6 +165,12 @@ export interface ReconcileMovementPort {
   execute(command: ReconcileMovementCommand): Promise<void>;
 }
 
+// ─── Unreconcile movement ──────────────────────────────────────────────────────
+
+export interface UnreconcileMovementPort {
+  execute(movementId: string): Promise<void>;
+}
+
 // ─── Classify movement ────────────────────────────────────────────────────────
 
 export interface ClassifyMovementCommand {
@@ -352,4 +358,29 @@ export interface MovementCandidate {
 
 export interface FindMovementCandidatesPort {
   execute(movementId: string): Promise<MovementCandidate[]>;
+}
+
+// ─── Get movements linked to invoice ──────────────────────────────────────────
+
+export interface InvoiceLinkedMovement {
+  movementId: string;
+  bookingDate: string;          // YYYY-MM-DD
+  description: string;
+  allocatedAmountCents: number; // portion of the movement allocated to this invoice
+  movementType: MovementType;
+}
+
+export interface GetMovementsLinkedToInvoicePort {
+  execute(invoiceId: string): Promise<InvoiceLinkedMovement[]>;
+}
+
+// ─── Get open balances for multiple invoices ───────────────────────────────────
+
+/**
+ * Returns the remaining open balance (cents) for each invoice ID.
+ * Invoices with no links have an open balance equal to their totalWithVat.
+ * Result key is the invoiceId.
+ */
+export interface GetInvoiceOpenBalancesPort {
+  execute(invoiceIds: string[]): Promise<Record<string, number>>;
 }

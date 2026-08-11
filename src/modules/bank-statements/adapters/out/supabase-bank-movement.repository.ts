@@ -111,6 +111,16 @@ export class SupabaseBankMovementRepository implements BankMovementRepositoryPor
     return toEntity(data as Record<string, unknown>);
   }
 
+  async findByIds(ids: string[]): Promise<BankMovement[]> {
+    if (ids.length === 0) return [];
+    const { data, error } = await this.supabase
+      .from("bank_movements")
+      .select("*")
+      .in("id", ids);
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+  }
+
   async update(movement: BankMovement): Promise<void> {
     const { error } = await this.supabase
       .from("bank_movements")

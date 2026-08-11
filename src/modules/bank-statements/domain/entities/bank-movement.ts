@@ -317,6 +317,25 @@ export class BankMovement {
     });
   }
 
+  /**
+   * Cancels the reconciliation, resetting the movement to its default unclassified state.
+   */
+  unreconcile(): BankMovement {
+    const resetStatus: ReconciliationStatus =
+      this.movementType === "debit" ? "saida_nao_justificada" : "conciliado_sem_fatura";
+    return new BankMovement({
+      ...this.toProps(),
+      reconciliationStatus: resetStatus,
+      justificationType: null,
+      matchedEntityType: null,
+      matchedEntityId: null,
+      requiresDocument: false,
+      confidenceScore: null,
+      reconciliationAmountDiff: null,
+      updatedAt: new Date(),
+    });
+  }
+
   private toProps(): BankMovementProps {
     return {
       id: this.id,

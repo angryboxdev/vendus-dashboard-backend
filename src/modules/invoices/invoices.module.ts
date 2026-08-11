@@ -26,7 +26,6 @@ import { ImportInvoiceUseCase } from "./application/use-cases/import-invoice.use
 import { ConfirmImportedInvoiceUseCase } from "./application/use-cases/confirm-imported-invoice.use-case.js";
 import { GetInvoiceAlertsUseCase } from "./application/use-cases/get-invoice-alerts.use-case.js";
 import { ProcessDirectDebitsUseCase } from "./application/use-cases/process-direct-debits.use-case.js";
-import { MarkInvoiceReconciledUseCase } from "./application/use-cases/mark-invoice-reconciled.use-case.js";
 import { SetLineDetailModeUseCase } from "./application/use-cases/set-line-detail-mode.use-case.js";
 import { createInvoiceRouter } from "./adapters/in/invoice.controller.js";
 import type { CreateSupplierPort } from "../financial-base/domain/ports/in/supplier.ports.js";
@@ -66,7 +65,6 @@ export function createInvoicesModule(
     updateInvoice: new UpdateInvoiceUseCase(invoiceRepo, lineRepo),
     markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite),
     setInvoiceStatus: new SetInvoiceStatusUseCase(invoiceRepo, payableWrite),
-    markInvoiceReconciled: new MarkInvoiceReconciledUseCase(invoiceRepo),
     setLineDetailMode: new SetLineDetailModeUseCase(invoiceRepo),
     addInvoiceLine: new AddInvoiceLineUseCase(invoiceRepo, lineRepo),
     updateInvoiceLine: new UpdateInvoiceLineUseCase(invoiceRepo, lineRepo),

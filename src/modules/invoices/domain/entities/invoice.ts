@@ -8,11 +8,11 @@ export type InvoiceStatus =
   | "cancelled"
   | "review";
 
-export type ReconciliationStatus = "none" | "pending_reconciliation" | "reconciled";
+export type ReconciliationStatus = "none" | "pending_reconciliation" | "partially_reconciled" | "reconciled";
 
 export type LineDetailMode = "simple" | "detailed";
 
-export const RECONCILIATION_STATUSES: ReconciliationStatus[] = ["none", "pending_reconciliation", "reconciled"];
+export const RECONCILIATION_STATUSES: ReconciliationStatus[] = ["none", "pending_reconciliation", "partially_reconciled", "reconciled"];
 
 export type InvoiceLineType =
   | "stock_purchase"

@@ -32,6 +32,9 @@ import type { UploadMovementDocumentPort } from "../../domain/ports/in/bank-stat
 import type { LinkStatementToAccountPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { GetAccountCalendarPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { GetAccountMonthDetailPort } from "../../domain/ports/in/bank-statement.ports.js";
+import type { GetMovementsLinkedToInvoicePort } from "../../domain/ports/in/bank-statement.ports.js";
+import type { GetInvoiceOpenBalancesPort } from "../../domain/ports/in/bank-statement.ports.js";
+import type { UnreconcileMovementPort } from "../../domain/ports/in/bank-statement.ports.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const csvParser = new CsvStatementParser();
@@ -58,7 +61,10 @@ export class BankStatementController {
     private readonly uploadMovementDocument: UploadMovementDocumentPort,
     private readonly linkStatementToAccount: LinkStatementToAccountPort,
     private readonly getAccountCalendar: GetAccountCalendarPort,
-    private readonly getAccountMonthDetail: GetAccountMonthDetailPort
+    private readonly getAccountMonthDetail: GetAccountMonthDetailPort,
+    private readonly getMovementsLinkedToInvoice: GetMovementsLinkedToInvoicePort,
+    private readonly getInvoiceOpenBalances: GetInvoiceOpenBalancesPort,
+    private readonly unreconcileMovement: UnreconcileMovementPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -399,6 +405,23 @@ export class BankStatementController {
     });
 
     /**
+     * DELETE /bank-statements/movements/:movId/reconcile
+     * Cancels reconciliation: removes all entity links and resets the movement status.
+     */
+    this.router.delete("/bank-statements/movements/:movId/reconcile", async (req, res) => {
+      try {
+        await this.unreconcileMovement.execute(req.params["movId"]!);
+        res.status(204).send();
+      } catch (e) {
+        if (e instanceof MovementNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
      * PATCH /bank-statements/movements/:movId/classify
      * Body: { justificationType, matchedEntityType?, matchedEntityId?, riskLevel?, notes?, documentUrl? }
      */
@@ -608,6 +631,35 @@ export class BankStatementController {
           return;
         }
         const result = await this.getAccountMonthDetail.execute({ bankAccountId: accountId, year, month });
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * GET /bank-statements/invoices/open-balances?ids=id1,id2,...
+     * Returns the open balance (cents) for each invoice ID.
+     */
+    this.router.get("/bank-statements/invoices/open-balances", async (req, res) => {
+      try {
+        const raw = req.query["ids"];
+        const ids = typeof raw === "string" && raw.length > 0 ? raw.split(",").filter(Boolean) : [];
+        const result = await this.getInvoiceOpenBalances.execute(ids);
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * GET /bank-statements/invoices/:invoiceId/movements
+     * Returns the bank movements linked (reconciled) to the given invoice.
+     */
+    this.router.get("/bank-statements/invoices/:invoiceId/movements", async (req, res) => {
+      try {
+        const invoiceId = req.params["invoiceId"]!;
+        const result = await this.getMovementsLinkedToInvoice.execute(invoiceId);
         res.json(result);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });

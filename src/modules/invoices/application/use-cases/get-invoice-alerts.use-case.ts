@@ -85,7 +85,9 @@ export class GetInvoiceAlertsUseCase implements GetInvoiceAlertsPort {
     });
 
     const pendingReconciliation = all.filter(
-      (inv) => inv.reconciliationStatus === "pending_reconciliation",
+      (inv) =>
+        inv.reconciliationStatus === "pending_reconciliation" ||
+        inv.reconciliationStatus === "partially_reconciled",
     );
 
     const sum = (invoices: typeof all) =>

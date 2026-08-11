@@ -36,6 +36,13 @@ export class FakeBankMovementRepository implements BankMovementRepositoryPort {
     return this.store.get(id) ?? null;
   }
 
+  async findByIds(ids: string[]): Promise<BankMovement[]> {
+    return ids.flatMap((id) => {
+      const m = this.store.get(id);
+      return m ? [m] : [];
+    });
+  }
+
   async update(movement: BankMovement): Promise<void> {
     if (!this.store.has(movement.id)) {
       throw new Error(`Movement ${movement.id} not found`);

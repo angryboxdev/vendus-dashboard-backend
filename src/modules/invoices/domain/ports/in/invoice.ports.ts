@@ -188,10 +188,6 @@ export interface MarkInvoicePaidCommand {
   paymentNotes?: string | null;
 }
 
-export interface MarkInvoiceReconciledCommand {
-  id: string;
-}
-
 export interface SetLineDetailModeCommand {
   id: string;
   mode: LineDetailMode;
@@ -357,10 +353,6 @@ export interface GetInvoiceAlertsPort {
 
 export interface ProcessDirectDebitsPort {
   execute(): Promise<{ processed: number }>;
-}
-
-export interface MarkInvoiceReconciledPort {
-  execute(command: MarkInvoiceReconciledCommand): Promise<InvoiceDTO>;
 }
 
 export interface SetLineDetailModePort {

@@ -12,6 +12,7 @@ import type {
   ReconcileMovementCommand,
   ReconcileMovementPort,
 } from "../../domain/ports/in/bank-statement.ports.js";
+import type { InvoiceReconciliationWritePort } from "../../domain/ports/out/invoice-reconciliation-write.port.js";
 
 export class ReconcileMovementUseCase implements ReconcileMovementPort {
   constructor(
@@ -20,6 +21,7 @@ export class ReconcileMovementUseCase implements ReconcileMovementPort {
     private readonly invoiceRead: InvoiceMatchReadPort,
     private readonly payableRead: PayableEntryMatchReadPort,
     private readonly linkRepo: BankMovementEntityLinkRepositoryPort,
+    private readonly invoiceReconciliationWrite: InvoiceReconciliationWritePort,
   ) {}
 
   async execute(command: ReconcileMovementCommand): Promise<void> {
@@ -157,6 +159,53 @@ export class ReconcileMovementUseCase implements ReconcileMovementPort {
       if (normalizedDesc.length > 0) {
         await this.hint.save(normalizedDesc, firstLink.supplierId);
       }
+    }
+
+    // ── 11. Propagate reconciliation status to affected invoices ─────────────
+    //   Affected = new invoice links ∪ previous invoice links (re-reconciliation)
+
+    const prevInvoiceIds = currentLinks
+      .filter((l) => l.entityType === "invoice")
+      .map((l) => l.entityId);
+    const newInvoiceIds = command.entityLinks
+      .filter((l) => l.entityType === "invoice")
+      .map((l) => l.entityId);
+    const affectedInvoiceIds = [...new Set([...newInvoiceIds, ...prevInvoiceIds])];
+
+    if (affectedInvoiceIds.length > 0) {
+      // Fetch invoices that are NOT already in invoiceMap (i.e. those removed by re-reconciliation)
+      const missingIds = affectedInvoiceIds.filter((id) => !invoiceMap.has(id));
+      if (missingIds.length > 0) {
+        const missing = await this.invoiceRead.findByIds(missingIds);
+        for (const inv of missing) {
+          invoiceMap.set(inv.id, inv);
+        }
+      }
+
+      // Fetch all current links for these invoices (already saved in step 9)
+      const allLinksForInvoices = await this.linkRepo.findByEntityIds("invoice", affectedInvoiceIds);
+
+      const allocByInvoice = new Map<string, number>();
+      for (const l of allLinksForInvoices) {
+        allocByInvoice.set(l.entityId, (allocByInvoice.get(l.entityId) ?? 0) + l.allocatedAmountCents);
+      }
+
+      await Promise.all(
+        affectedInvoiceIds.map(async (invoiceId) => {
+          const totalAllocated = allocByInvoice.get(invoiceId) ?? 0;
+          const inv = invoiceMap.get(invoiceId);
+          if (!inv) return; // safety guard
+          const invoiceTotalWithVat = inv.totalWithVat;
+
+          if (totalAllocated === 0) {
+            await this.invoiceReconciliationWrite.markUnreconciled(invoiceId);
+          } else if (totalAllocated >= invoiceTotalWithVat - 1) {
+            await this.invoiceReconciliationWrite.markReconciled(invoiceId, movement.bookingDate);
+          } else {
+            await this.invoiceReconciliationWrite.markPartiallyReconciled(invoiceId);
+          }
+        })
+      );
     }
   }
 }

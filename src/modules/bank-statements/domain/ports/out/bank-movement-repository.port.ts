@@ -20,6 +20,7 @@ export interface BankMovementRepositoryPort {
     to: Date
   ): Promise<BankMovement[]>;
   findById(id: string): Promise<BankMovement | null>;
+  findByIds(ids: string[]): Promise<BankMovement[]>;
   update(movement: BankMovement): Promise<void>;
   existsByHash(deduplicationHash: string): Promise<boolean>;
 }

@@ -17,7 +17,6 @@ import type {
   ConfirmImportedInvoicePort,
   GetInvoiceAlertsPort,
   ProcessDirectDebitsPort,
-  MarkInvoiceReconciledPort,
   SetLineDetailModePort,
 } from "../../domain/ports/in/invoice.ports.js";
 import type { InvoiceStatus, InvoiceLineType, LineDetailMode } from "../../domain/entities/invoice.js";
@@ -28,8 +27,6 @@ import {
   DuplicateInvoiceError,
   LineDetailModeError,
   LinesTotalMismatchError,
-  InvoiceAlreadyReconciledError,
-  InvoiceNotPaidError,
 } from "../../domain/errors.js";
 
 interface InvoicePorts {
@@ -37,7 +34,6 @@ interface InvoicePorts {
   updateInvoice: UpdateInvoicePort;
   markInvoicePaid: MarkInvoicePaidPort;
   setInvoiceStatus: SetInvoiceStatusPort;
-  markInvoiceReconciled: MarkInvoiceReconciledPort;
   setLineDetailMode: SetLineDetailModePort;
   addInvoiceLine: AddInvoiceLinePort;
   classifyInvoiceLine: ClassifyInvoiceLinePort;
@@ -58,15 +54,11 @@ function handleError(res: import("express").Response, err: unknown): void {
     res.status(404).json({ error: (err as Error).message });
     return;
   }
-  if (
-    err instanceof InvoiceAlreadyCancelledError ||
-    err instanceof DuplicateInvoiceError ||
-    err instanceof InvoiceAlreadyReconciledError
-  ) {
+  if (err instanceof InvoiceAlreadyCancelledError || err instanceof DuplicateInvoiceError) {
     res.status(409).json({ error: (err as Error).message });
     return;
   }
-  if (err instanceof InvoiceNotPaidError || err instanceof LineDetailModeError || err instanceof LinesTotalMismatchError) {
+  if (err instanceof LineDetailModeError || err instanceof LinesTotalMismatchError) {
     res.status(422).json({ error: (err as Error).message });
     return;
   }
@@ -163,16 +155,6 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
       if (paymentMethod !== undefined) paidCmd.paymentMethod = paymentMethod;
       if (paymentNotes !== undefined) paidCmd.paymentNotes = paymentNotes;
       const invoice = await ports.markInvoicePaid.execute(paidCmd);
-      res.json(invoice);
-    } catch (err) {
-      handleError(res, err);
-    }
-  });
-
-  // PATCH /invoices/:id/reconcile
-  router.patch("/invoices/:id/reconcile", async (req, res) => {
-    try {
-      const invoice = await ports.markInvoiceReconciled.execute({ id: req.params.id });
       res.json(invoice);
     } catch (err) {
       handleError(res, err);

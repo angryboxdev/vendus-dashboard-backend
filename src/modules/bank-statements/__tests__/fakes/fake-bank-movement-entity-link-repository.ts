@@ -25,6 +25,10 @@ export class FakeBankMovementEntityLinkRepository implements BankMovementEntityL
     this.links = this.links.filter((l) => l.movementId !== movementId);
   }
 
+  async findAllByEntityType(entityType: "invoice" | "payable_entry"): Promise<BankMovementEntityLink[]> {
+    return this.links.filter((l) => l.entityType === entityType);
+  }
+
   /** Test helper — returns all stored links. */
   all(): BankMovementEntityLink[] {
     return [...this.links];

@@ -16,4 +16,9 @@ export interface BankMovementEntityLinkRepositoryPort {
   findByEntityIds(entityType: "invoice" | "payable_entry", entityIds: string[]): Promise<BankMovementEntityLink[]>;
   /** Deletes all entity links for a movement (used when re-reconciling). */
   deleteByMovementId(movementId: string): Promise<void>;
+  /**
+   * Returns ALL links for the given entity type (no ID filter).
+   * Used to find partially-reconciled entities by open balance.
+   */
+  findAllByEntityType(entityType: "invoice" | "payable_entry"): Promise<BankMovementEntityLink[]>;
 }

@@ -228,4 +228,46 @@ describe("BankMovement", () => {
       expect(BankMovement.PARTIAL_TOLERANCE_CENTS).toBe(100);
     });
   });
+
+  describe("unreconcile", () => {
+    it("debit movement resets to saida_nao_justificada", () => {
+      const reconciled = makeDebit().multiReconcile(0);
+      const reset = reconciled.unreconcile();
+      expect(reset.reconciliationStatus).toBe("saida_nao_justificada");
+      expect(reset.justificationType).toBeNull();
+      expect(reset.reconciliationAmountDiff).toBeNull();
+      expect(reset.requiresDocument).toBe(false);
+      expect(reset.isResolved).toBe(false);
+    });
+
+    it("credit movement resets to conciliado_sem_fatura", () => {
+      const reconciled = makeCredit().multiReconcile(0);
+      const reset = reconciled.unreconcile();
+      expect(reset.reconciliationStatus).toBe("conciliado_sem_fatura");
+      expect(reset.justificationType).toBeNull();
+      expect(reset.reconciliationAmountDiff).toBeNull();
+    });
+
+    it("clears matchedEntityType, matchedEntityId and confidenceScore", () => {
+      const classified = makeDebit().classify({
+        justificationType: "fatura",
+        matchedEntityType: "invoice",
+        matchedEntityId: "inv-42",
+        confidenceScore: 0.9,
+      });
+      const reset = classified.unreconcile();
+      expect(reset.matchedEntityType).toBeNull();
+      expect(reset.matchedEntityId).toBeNull();
+      expect(reset.confidenceScore).toBeNull();
+    });
+
+    it("preserves movement identity fields (id, amount, description, dates)", () => {
+      const m = makeDebit({ amount: 15_000 });
+      const reset = m.multiReconcile(0).unreconcile();
+      expect(reset.id).toBe(m.id);
+      expect(reset.amount).toBe(15_000);
+      expect(reset.description).toBe(m.description);
+      expect(reset.bookingDate).toEqual(m.bookingDate);
+    });
+  });
 });

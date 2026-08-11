@@ -50,6 +50,7 @@ export class SupabaseInvoiceMatchReadAdapter implements InvoiceMatchReadPort {
       .select("id, supplier_id, supplier_name, invoice_number, total_with_vat, invoice_date, due_date, paid_at, status")
       .gte("total_with_vat", min)
       .lte("total_with_vat", max)
+      .neq("reconciliation_status", "reconciled")
       .or(
         `and(paid_at.gte.${opts.dateFrom},paid_at.lte.${opts.dateTo}),and(due_date.gte.${opts.dateFrom},due_date.lte.${opts.dateTo}),and(invoice_date.gte.${opts.dateFrom},invoice_date.lte.${opts.dateTo})`
       );

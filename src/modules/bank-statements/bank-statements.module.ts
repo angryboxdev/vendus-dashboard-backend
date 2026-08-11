@@ -10,6 +10,7 @@ import { SupabasePayableEntryMatchReadAdapter } from "./adapters/out/supabase-pa
 import { SupabaseMovementMatchHintAdapter } from "./adapters/out/supabase-movement-match-hint.adapter.js";
 import { SupabaseBankMovementEntityLinkRepository } from "./adapters/out/supabase-bank-movement-entity-link.repository.js";
 import { SupabaseBankAccountReadAdapter } from "./adapters/out/supabase-bank-account-read.adapter.js";
+import { SupabaseInvoiceReconciliationWriteAdapter } from "./adapters/out/supabase-invoice-reconciliation-write.adapter.js";
 
 // Use cases
 import { ImportBankStatementUseCase } from "./application/use-cases/import-bank-statement.use-case.js";
@@ -30,6 +31,9 @@ import { UploadMovementDocumentUseCase } from "./application/use-cases/upload-mo
 import { LinkStatementToAccountUseCase } from "./application/use-cases/link-statement-to-account.use-case.js";
 import { GetAccountCalendarUseCase } from "./application/use-cases/get-account-calendar.use-case.js";
 import { GetAccountMonthDetailUseCase } from "./application/use-cases/get-account-month-detail.use-case.js";
+import { GetMovementsLinkedToInvoiceUseCase } from "./application/use-cases/get-movements-linked-to-invoice.use-case.js";
+import { GetInvoiceOpenBalancesUseCase } from "./application/use-cases/get-invoice-open-balances.use-case.js";
+import { UnreconcileMovementUseCase } from "./application/use-cases/unreconcile-movement.use-case.js";
 import { SupabaseBankDocumentStorageAdapter } from "./adapters/out/supabase-bank-document-storage.adapter.js";
 
 // Adapter in
@@ -56,6 +60,7 @@ export function createBankStatementsModule(bankAccountRead?: BankAccountReadPort
   const payableRead = new SupabasePayableEntryMatchReadAdapter(supabase);
   const movementHint = new SupabaseMovementMatchHintAdapter(supabase);
   const entityLinkRepo = new SupabaseBankMovementEntityLinkRepository(supabase);
+  const invoiceReconciliationWrite = new SupabaseInvoiceReconciliationWriteAdapter(supabase);
 
   // Cross-module: fall back to direct Supabase adapter if not injected
   const resolvedBankAccountRead: BankAccountReadPort =
@@ -65,7 +70,7 @@ export function createBankStatementsModule(bankAccountRead?: BankAccountReadPort
   const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo, resolvedBankAccountRead);
   const listStatements = new ListBankStatementsUseCase(statementRepo);
   const getStatement = new GetBankStatementUseCase(statementRepo, movementRepo, entityLinkRepo);
-  const reconcileMovement = new ReconcileMovementUseCase(movementRepo, movementHint, invoiceRead, payableRead, entityLinkRepo);
+  const reconcileMovement = new ReconcileMovementUseCase(movementRepo, movementHint, invoiceRead, payableRead, entityLinkRepo, invoiceReconciliationWrite);
   const classifyMovement = new ClassifyMovementUseCase(movementRepo);
   const applyAutoRules = new ApplyAutoRulesUseCase(statementRepo, movementRepo, ruleRepo);
   const suggestMatches = new SuggestMatchesUseCase(
@@ -87,6 +92,9 @@ export function createBankStatementsModule(bankAccountRead?: BankAccountReadPort
   const linkStatementToAccount = new LinkStatementToAccountUseCase(statementRepo, resolvedBankAccountRead);
   const getAccountCalendar = new GetAccountCalendarUseCase(movementRepo);
   const getAccountMonthDetail = new GetAccountMonthDetailUseCase(movementRepo, entityLinkRepo);
+  const getMovementsLinkedToInvoice = new GetMovementsLinkedToInvoiceUseCase(entityLinkRepo, movementRepo);
+  const getInvoiceOpenBalances = new GetInvoiceOpenBalancesUseCase(entityLinkRepo, invoiceRead);
+  const unreconcileMovement = new UnreconcileMovementUseCase(movementRepo, entityLinkRepo, invoiceRead, invoiceReconciliationWrite);
 
   // Adapter in
   const controller = new BankStatementController(
@@ -107,7 +115,10 @@ export function createBankStatementsModule(bankAccountRead?: BankAccountReadPort
     uploadMovementDocument,
     linkStatementToAccount,
     getAccountCalendar,
-    getAccountMonthDetail
+    getAccountMonthDetail,
+    getMovementsLinkedToInvoice,
+    getInvoiceOpenBalances,
+    unreconcileMovement,
   );
 
   return { router: controller.router };
