@@ -18,10 +18,11 @@ const STRUCTURAL_FAMILY_NAMES = new Set(["Menu"]);
 
 /**
  * Mapeamento de família AirMenu → categoria pai de negócio.
- * Salties, Specials e Sweeties são sub-categorias de "Pizzas".
- * Famílias sem entrada mapeiam para si próprias (ex: "Bebidas" → "Bebidas").
+ * Classics, Salties, Specials e Sweeties são sub-categorias de "Pizzas".
+ * Famílias sem entrada mapeiam para si próprias (ex: "Drinks" → "Drinks").
  */
 const CATEGORY_PARENT_MAP: Record<string, string> = {
+  Classics: "Pizzas",
   Salties: "Pizzas",
   Specials: "Pizzas",
   Sweeties: "Pizzas",

@@ -319,4 +319,71 @@ describe('computeAnalytics — byCategory', () => {
     const cat = r.byCategory.find((c) => c.category === 'Bebidas')!;
     expect(cat.subcategories).toHaveLength(0);
   });
+
+  it('complemento sem PLU resolve categoria pelo título (strip "+")', () => {
+    // Simula Coca-cola que vem como complemento de pizza: plu vazio, título com prefixo "+"
+    const catalog = new Map<string, AirMenuMenuItem>([
+      ['PLU-COKE', { plu: 'PLU-COKE', title: 'Coca-cola 33cl', category: 'Drinks', parentCategory: 'Drinks', vatRate: 0.23 }],
+    ]);
+    const order = AirMenuOrder.create({
+      orderId: uid(), platform: 'Glovo', divisionName: 'div', orderDate: DAY_START,
+      paymentMethod: '', items: [{ title: '+ Coca-cola 33cl', plu: '', price: 2.5, count: 1 }],
+      firstName: '', lastName: '',
+      activeFlags: [{ key: 'FATURAR', operator: '', datetime: DOC_TS }],
+      providerOrderId: null, extraInfo: {}, rawData: [],
+    });
+    const r = computeAnalytics([order], catalog, DAY_START, DAY_END);
+    const cat = r.byCategory.find((c) => c.category === 'Drinks')!;
+    expect(cat).toBeDefined();
+    expect(cat.grossRevenue).toBe(2.5);
+    // IVA também resolvido pelo catálogo
+    const vat = r.byVatRate.find((v) => v.rate === 23)!;
+    expect(vat).toBeDefined();
+    expect(vat.grossRevenue).toBe(2.5);
+  });
+
+  it('complemento sem PLU cai em "Outros" quando título não existe no catálogo', () => {
+    const order = AirMenuOrder.create({
+      orderId: uid(), platform: 'Glovo', divisionName: 'div', orderDate: DAY_START,
+      paymentMethod: '', items: [{ title: '+ Desconto', plu: '', price: 0, count: 1 }],
+      firstName: '', lastName: '',
+      activeFlags: [{ key: 'FATURAR', operator: '', datetime: DOC_TS }],
+      providerOrderId: null, extraInfo: {}, rawData: [],
+    });
+    const r = computeAnalytics([order], EMPTY_CATALOG, DAY_START, DAY_END);
+    const outros = r.byCategory.find((c) => c.category === 'Outros')!;
+    expect(outros).toBeDefined();
+  });
+});
+
+// ─── topItems — merging complemento + standalone ───────────────────────────────
+
+describe('computeAnalytics — topItems merging complemento + standalone', () => {
+  it('mesmo produto standalone (com PLU) e como complemento (sem PLU) agrega numa única entrada', () => {
+    const catalog = new Map<string, AirMenuMenuItem>([
+      ['PLU-COKE', { plu: 'PLU-COKE', title: 'Coca-cola 33cl', category: 'Drinks', parentCategory: 'Drinks', vatRate: 0.23 }],
+    ]);
+    const standaloneOrder = AirMenuOrder.create({
+      orderId: uid(), platform: 'Glovo', divisionName: 'div', orderDate: DAY_START,
+      paymentMethod: '',
+      items: [{ title: 'Coca-cola 33cl', plu: 'PLU-COKE', price: 2.5, count: 1 }],
+      firstName: '', lastName: '',
+      activeFlags: [{ key: 'FATURAR', operator: '', datetime: DOC_TS }],
+      providerOrderId: null, extraInfo: {}, rawData: [],
+    });
+    const complementOrder = AirMenuOrder.create({
+      orderId: uid(), platform: 'Glovo', divisionName: 'div', orderDate: DAY_START,
+      paymentMethod: '',
+      items: [{ title: '+ Coca-cola 33cl', plu: '', price: 2.5, count: 2 }],
+      firstName: '', lastName: '',
+      activeFlags: [{ key: 'FATURAR', operator: '', datetime: DOC_TS }],
+      providerOrderId: null, extraInfo: {}, rawData: [],
+    });
+    const r = computeAnalytics([standaloneOrder, complementOrder], catalog, DAY_START, DAY_END);
+    const cokeItems = r.topItems.filter((t) => t.title === 'Coca-cola 33cl');
+    expect(cokeItems).toHaveLength(1);
+    expect(cokeItems[0].quantitySold).toBe(3);   // 1 standalone + 2 complemento
+    expect(cokeItems[0].grossRevenue).toBe(7.5);  // 2.5 + 5.0
+    expect(cokeItems[0].plu).toBe('PLU-COKE');
+  });
 });

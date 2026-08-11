@@ -1,7 +1,7 @@
 # Módulo: air-menu
 
 > Status: ativo
-> Última atualização: 2026-08-06
+> Última atualização: 2026-08-11
 
 ---
 
@@ -93,8 +93,8 @@ Representa um item do catálogo de menu (carregado via `GetMenu`).
 |---|---|---|
 | `plu` | `string` | Código PLU — chave de lookup |
 | `title` | `string` | Nome no menu |
-| `category` | `string` | Família AirMenu (ex.: `"Salties"`, `"Specials"`, `"Sweeties"`, `"Bebidas"`) |
-| `parentCategory` | `string` | Categoria de negócio (via `CATEGORY_PARENT_MAP`; ex.: `"Pizzas"` para `"Sweeties"`) |
+| `category` | `string` | Família AirMenu (ex.: `"Classics"`, `"Specials"`, `"Sweeties"`, `"Drinks"`) |
+| `parentCategory` | `string` | Categoria de negócio (via `CATEGORY_PARENT_MAP`; ex.: `"Pizzas"` para `"Classics"`, `"Specials"` e `"Sweeties"`) |
 | `vatRate` | `number` | Taxa de IVA como fracção (ex.: `0.23`, `0.13`, `0`). Herda da família pai se não definida no item |
 
 ### `AirMenuAnalytics`
@@ -109,7 +109,7 @@ Objecto de resultado da secção `analytics` do endpoint `/summary`. Ver secçã
 2. O `platform` é derivado do `divisionName` por heurística de substring (`glovo`, `uber`, `bolt`).
 3. Uma ordem com múltiplas divisões no mesmo `orderId` é **consolidada numa única `AirMenuOrder`** — os itens são agregados.
 4. O `documentDate` é a data contabilisticamente relevante: data da flag `FATURAR` para faturas, data da flag `CANCEL` para notas de crédito. Se a flag não tiver timestamp, usa-se `orderDate`.
-5. A categoria e o IVA de um item são obtidos pelo **lookup de PLU** no catálogo de menu. Se o PLU não constar do catálogo, a categoria é `"Outros"` e o IVA é `0`. Itens sem PLU também são indexados usando o título como chave virtual.
+5. A categoria e o IVA de um item são obtidos pelo **lookup de PLU** no catálogo de menu. Se o PLU estiver vazio (complementos de pizza como bebidas add-on), o `computeAnalytics` faz um segundo lookup por título (strip do prefixo `"+ "` e comparação case-insensitive via índice invertido `buildTitleIndex`). Se o título também não constar do catálogo, a categoria cai em `"Outros"` e o IVA fica `0`.
 6. **Resolução de tamanho dos itens** — o `extractItems` em `order-item-extractor.ts` aplica a seguinte prioridade (a primeira que match vence):
    1. **Complement "Dobre a sua pizza"** (`/dobre|dobrar/i`): se tiver `complementItem` com "Upgrade para L" → sufixo `L` (preço do upgrade somado ao base); se o `complementItem` estiver ausente → sufixo `S` (sem custo extra). O nó complement não aparece como linha separada.
    2. **Complement "Tamanho/Size"** (`/tamanho|size/i`): o título da opção seleccionada é fundido no título do item e o seu preço somado ao preço base. Também não aparece como linha separada.
@@ -191,7 +191,7 @@ A resposta é uma árvore de nós com `menuRelation`:
 - `"complementItem"` — opção individual (ex.: "Grande") — pode ter `price`
 - `"enterprise"` — wrapper estrutural de enterprise (sem itens)
 
-**Categorias actuais:** `Salties`, `Specials`, `Sweeties`, `Bebidas`.
+**Categorias actuais:** `Classics`, `Specials`, `Sweeties`, `Drinks`.
 
 O `walkMenu` usa o título da **primeira família com nome real** (não-estrutural) encontrada na hierarquia como categoria. Famílias chamadas `"Menu"` são tratadas como wrappers estruturais e ignoradas. Isto garante que sub-famílias dentro de `"Salties"` não substituem `"Salties"` como categoria dos seus itens.
 
@@ -362,7 +362,7 @@ Os endpoints públicos (`/webhook/receive` e `/webhook/stream`) são registados 
 - **Resolução de tamanho extraída para `order-item-extractor.ts`**: toda a lógica de determinação do tamanho de um item (complement "Dobre", complement "Tamanho/Size", sufixo legado, default por família) vive em `domain/services/order-item-extractor.ts` e é partilhada entre `GetOrdersUseCase` e o mapper KDS (`air-menu-delivery.mapper.ts`). Este ficheiro é a única fonte de verdade das regras de tamanho — adicionar um novo padrão (ex.: nova família de pizza) é feito aqui e propaga-se automaticamente para ambos os contextos.
 - **`PIZZA_FAMILY_RE = /classics|specials|sweeties/i`**: famílias configuradas como categorias de pizza. Items sem indicação de tamanho dentro destas famílias assumem `S` por default. A AirMenu omite o nó complement quando o upgrade não é seleccionado — este default resolve o caso silencioso.
 - **Títulos com trailing space**: o AirMenu pode enviar títulos com espaço no final (ex.: `"Tomate e Pesto "`). O extractor faz `.trim()` antes de construir o título final.
-- **`topItemMap` chaveado por `plu|title`**: a mesma SKU pode ter tamanhos diferentes — usar apenas o PLU como chave agregaria tamanhos indevidamente.
+- **`topItemMap` chaveado por `resolvedPlu|rawTitle`**: a mesma SKU pode ter tamanhos diferentes — usar apenas o PLU como chave agregaria tamanhos indevidamente. `resolvedPlu` usa o PLU do item quando presente, ou o PLU resolvido via catálogo pelo título quando o item é um complemento sem PLU. `rawTitle` é o título sem o prefixo `"+ "`. Isto garante que o mesmo produto (ex.: Coca-cola) agregue numa única linha independentemente de ter sido pedido standalone ou como add-on de pizza.
 - **Herança de `tax` na família**: o `walkMenu` propaga `activeTax` pela árvore do menu. Necessário porque no AirMenu o IVA pode estar configurado ao nível da família e não em cada item individualmente.
 
 ---

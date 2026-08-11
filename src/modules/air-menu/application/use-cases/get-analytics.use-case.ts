@@ -45,12 +45,27 @@ function dayLabel(d: Date): string {
 // Core computation (pure)
 // ---------------------------------------------------------------------------
 
+/**
+ * Índice invertido título → item do catálogo.
+ * Usado como fallback quando um item não tem PLU (ex: complementItems de pizza).
+ * A chave é o título em lowercase para comparação case-insensitive.
+ */
+function buildTitleIndex(catalog: Map<string, AirMenuMenuItem>): Map<string, AirMenuMenuItem> {
+  const index = new Map<string, AirMenuMenuItem>();
+  for (const item of catalog.values()) {
+    index.set(item.title.toLowerCase(), item);
+  }
+  return index;
+}
+
 export function computeAnalytics(
   orders: AirMenuOrder[],
   catalog: Map<string, AirMenuMenuItem>,
   startDate: Date,
   endDate: Date,
 ): AirMenuAnalytics {
+  const titleIndex = buildTitleIndex(catalog);
+
   // Accumulators
   const platformMap = new Map<string, PlatformStats>();
   // parentCategory → { stats, subcategoryMap }
@@ -122,7 +137,12 @@ export function computeAnalytics(
 
     // Items (category, vatRate, topItems)
     for (const item of order.items) {
-      const menuItem = item.plu ? catalog.get(item.plu) : undefined;
+      // Complementos de pizza não têm PLU na API AirMenu — fallback por título
+      // (strip do prefixo "+ " adicionado por collectPaidNonSizeComplements).
+      const rawTitle = item.title.startsWith("+ ") ? item.title.slice(2) : item.title;
+      const menuItem = item.plu
+        ? catalog.get(item.plu)
+        : titleIndex.get(rawTitle.toLowerCase());
       const subcategory = menuItem?.category ?? "Outros";
       const parentCategory = menuItem?.parentCategory ?? "Outros";
       const vatRate = menuItem?.vatRate ?? 0;
@@ -168,14 +188,15 @@ export function computeAnalytics(
       vat.netRevenue += itemNet;
 
       // Top items — chave inclui título para separar tamanhos do mesmo PLU
-      // (ex: "Brigadeiro Normal" vs "Brigadeiro Grande" têm o mesmo PLU)
-      const topItemKey = item.plu
-        ? `${item.plu}|${item.title}`
-        : `title:${item.title}`;
+      // (ex: "Brigadeiro Normal" vs "Brigadeiro Grande" têm o mesmo PLU).
+      // Usa PLU e título canónico (sem prefixo "+ ") para que o mesmo produto
+      // seja agrupado independentemente de vir como item standalone ou complemento.
+      const resolvedPlu = item.plu || menuItem?.plu || '';
+      const topItemKey = resolvedPlu ? `${resolvedPlu}|${rawTitle}` : `title:${rawTitle}`;
       if (!topItemMap.has(topItemKey)) {
         topItemMap.set(topItemKey, {
-          plu: item.plu,
-          title: item.title,
+          plu: resolvedPlu,
+          title: rawTitle,
           category: parentCategory,
           vatRate: vatPercent,
           quantitySold: 0,
