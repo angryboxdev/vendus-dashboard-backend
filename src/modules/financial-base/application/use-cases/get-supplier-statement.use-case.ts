@@ -19,7 +19,10 @@ export class GetSupplierStatementUseCase implements GetSupplierStatementPort {
     if (!supplier) throw new SupplierNotFoundError(command.id);
 
     const filter = command.startDate ?? command.endDate
-      ? { startDate: command.startDate, endDate: command.endDate }
+      ? {
+          ...(command.startDate && { startDate: command.startDate }),
+          ...(command.endDate && { endDate: command.endDate }),
+        }
       : undefined;
 
     const invoices = await this.invoiceStats.listInvoicesBySupplier(supplier.id, filter);

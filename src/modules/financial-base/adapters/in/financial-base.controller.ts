@@ -652,8 +652,8 @@ export class FinancialBaseController {
 
         const data = await this.getSupplierStatement.execute({
           id: req.params["id"] as string,
-          startDate,
-          endDate,
+          ...(startDate && { startDate }),
+          ...(endDate && { endDate }),
         });
 
         const pdf = await buildStatementPdf(data);
