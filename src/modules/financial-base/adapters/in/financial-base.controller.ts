@@ -1,4 +1,6 @@
 import { Router } from "express";
+import PDFDocument from "pdfkit";
+import { COMPANY } from "../../../../config/company.js";
 import {
   CostCenterGroupNotFoundError,
   CostCenterGroupCodeAlreadyExistsError,
@@ -25,7 +27,193 @@ import type { ToggleSupplierStatusPort } from "../../domain/ports/in/supplier.po
 import type { ListSuppliersPort } from "../../domain/ports/in/supplier.ports.js";
 import type { GetSupplierPort } from "../../domain/ports/in/supplier.ports.js";
 import type { SupplierFilter } from "../../domain/ports/out/supplier-repository.port.js";
+import type {
+  GetSuppliersKpisPort,
+  GetSupplierDetailPort,
+  ListSuppliersWithStatsPort,
+} from "../../domain/ports/in/supplier-detail.ports.js";
+import type { GetSupplierStatementPort } from "../../domain/ports/in/supplier-statement.ports.js";
+import type { SupplierStatementDTO } from "../../domain/ports/in/supplier-statement.ports.js";
 import type { ListChannelsPort } from "../../domain/ports/in/channel.ports.js";
+
+// ── Helpers de formatação ─────────────────────────────────────────────────────
+
+const EUR = new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" });
+const DATE_FMT = new Intl.DateTimeFormat("pt-PT", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+function formatMoney(value: number): string {
+  return EUR.format(value);
+}
+
+function formatDate(date: Date | string | null | undefined): string {
+  if (!date) return "—";
+  return DATE_FMT.format(typeof date === "string" ? new Date(date) : date);
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  paid: "Paga",
+  pending: "Pendente",
+  overdue: "Vencida",
+  partial: "Parcial",
+  cancelled: "Anulada",
+  draft_ai: "Rascunho IA",
+  pending_review: "Em revisão",
+};
+
+// ── Geração de PDF ────────────────────────────────────────────────────────────
+
+function buildStatementPdf(data: SupplierStatementDTO): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ margin: 40, size: "A4" });
+
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const pageWidth = doc.page.width - 80; // total usável (margens 40+40)
+    const gray = "#6b7280";
+    const dark = "#111827";
+    const accent = "#ED5C32";
+    const lineGray = "#e5e7eb";
+
+    // ── Cabeçalho ───────────────────────────────────────────────────────────
+    doc
+      .fontSize(18).fillColor(accent).font("Helvetica-Bold")
+      .text("Extrato de Fornecedor", 40, 40);
+
+    doc.fontSize(9).fillColor(gray).font("Helvetica")
+      .text(COMPANY.name || "—", 40, 66)
+      .text(`NIF: ${COMPANY.nif || "—"}`, 40, 78)
+      .text(COMPANY.address || "", 40, 90);
+
+    // Período (canto direito)
+    const periodLabel = (() => {
+      const { startDate, endDate } = data.period;
+      if (startDate && endDate) return `${formatDate(startDate)} – ${formatDate(endDate)}`;
+      if (startDate) return `A partir de ${formatDate(startDate)}`;
+      if (endDate) return `Até ${formatDate(endDate)}`;
+      return "Histórico completo";
+    })();
+    doc.text(`Período: ${periodLabel}`, 40, 66, { align: "right", width: pageWidth });
+    doc.text(`Gerado em: ${formatDate(new Date())}`, 40, 78, { align: "right", width: pageWidth });
+
+    // Linha separadora
+    doc.moveTo(40, 112).lineTo(40 + pageWidth, 112).strokeColor(lineGray).lineWidth(1).stroke();
+
+    // ── Dados do fornecedor ──────────────────────────────────────────────────
+    const s = data.supplier;
+    doc.y = 120;
+    doc.fontSize(11).fillColor(dark).font("Helvetica-Bold").text(s.name, 40);
+    doc.fontSize(9).fillColor(gray).font("Helvetica");
+
+    const supplierFields: [string, string | null | undefined][] = [
+      ["NIF", s.nif],
+      ["Email", s.email],
+      ["Telefone", s.phone],
+      ["Prazo de pagamento", s.paymentTermsDays ? `${s.paymentTermsDays} dias` : null],
+    ];
+    for (const [label, value] of supplierFields) {
+      if (value) doc.text(`${label}: ${value}`, 40);
+    }
+
+    // ── KPI cards (linha) ────────────────────────────────────────────────────
+    const kpiY = doc.y + 14;
+    const kpiW = pageWidth / 3;
+    const kpis: [string, string][] = [
+      ["Total faturado", formatMoney(data.stats.totalBilled)],
+      ["Total pago", formatMoney(data.stats.totalPaid)],
+      ["Total pendente", formatMoney(data.stats.totalPending)],
+    ];
+
+    kpis.forEach(([label, value], i) => {
+      const x = 40 + i * kpiW;
+      doc.rect(x, kpiY, kpiW - 8, 38).fillAndStroke("#f9fafb", lineGray);
+      doc.fontSize(7).fillColor(gray).font("Helvetica").text(label, x + 6, kpiY + 6, { width: kpiW - 20 });
+      doc.fontSize(12).fillColor(dark).font("Helvetica-Bold").text(value, x + 6, kpiY + 17, { width: kpiW - 20 });
+    });
+
+    doc.y = kpiY + 48;
+
+    // ── Tabela de faturas ────────────────────────────────────────────────────
+    doc.fontSize(10).fillColor(dark).font("Helvetica-Bold").text("Faturas", 40, doc.y + 6);
+    doc.y += 22;
+
+    // Cabeçalho da tabela
+    const cols = {
+      num:      { x: 40,   w: 80 },
+      date:     { x: 124,  w: 68 },
+      due:      { x: 196,  w: 68 },
+      netVal:   { x: 268,  w: 72 },
+      vat:      { x: 344,  w: 60 },
+      total:    { x: 408,  w: 72 },
+      status:   { x: 484,  w: 72 },
+    };
+
+    const headerY = doc.y;
+    doc.rect(40, headerY, pageWidth, 18).fill("#f3f4f6");
+
+    doc.fontSize(7).fillColor(gray).font("Helvetica-Bold");
+    doc.text("Nº Fatura",    cols.num.x + 4,    headerY + 5, { width: cols.num.w });
+    doc.text("Emissão",      cols.date.x,        headerY + 5, { width: cols.date.w });
+    doc.text("Vencimento",   cols.due.x,         headerY + 5, { width: cols.due.w });
+    doc.text("Valor s/ IVA", cols.netVal.x,      headerY + 5, { width: cols.netVal.w, align: "right" });
+    doc.text("IVA",          cols.vat.x,         headerY + 5, { width: cols.vat.w, align: "right" });
+    doc.text("Total c/ IVA", cols.total.x,       headerY + 5, { width: cols.total.w, align: "right" });
+    doc.text("Estado",       cols.status.x,      headerY + 5, { width: cols.status.w });
+
+    doc.y = headerY + 18;
+
+    // Linhas de dados
+    for (let i = 0; i < data.invoices.length; i++) {
+      const inv = data.invoices[i]!;
+      const rowY = doc.y;
+
+      // Nova página se necessário (rodapé reserva 60px)
+      if (rowY > doc.page.height - 80) {
+        doc.addPage();
+        doc.y = 40;
+      }
+
+      const bg = i % 2 === 0 ? "#ffffff" : "#f9fafb";
+      doc.rect(40, doc.y, pageWidth, 16).fill(bg);
+
+      doc.fontSize(8).fillColor(dark).font("Helvetica");
+      const ry = doc.y + 4;
+      doc.text(inv.invoiceNumber,             cols.num.x + 4,   ry, { width: cols.num.w });
+      doc.text(formatDate(inv.invoiceDate),   cols.date.x,      ry, { width: cols.date.w });
+      doc.text(formatDate(inv.dueDate),       cols.due.x,       ry, { width: cols.due.w });
+      doc.text(formatMoney(inv.totalWithoutVat), cols.netVal.x, ry, { width: cols.netVal.w, align: "right" });
+      doc.text(formatMoney(inv.vatAmount),    cols.vat.x,       ry, { width: cols.vat.w, align: "right" });
+      doc.text(formatMoney(inv.totalWithVat), cols.total.x,     ry, { width: cols.total.w, align: "right" });
+      doc.text(STATUS_LABELS[inv.status] ?? inv.status, cols.status.x, ry, { width: cols.status.w });
+
+      doc.y += 16;
+    }
+
+    // Linha de total
+    doc.moveTo(40, doc.y).lineTo(40 + pageWidth, doc.y).strokeColor(lineGray).lineWidth(0.5).stroke();
+    doc.y += 6;
+    doc.fontSize(8).fillColor(dark).font("Helvetica-Bold");
+    doc.text(`${data.stats.invoiceCount} fatura(s)`, cols.num.x + 4, doc.y, { width: cols.num.w });
+    doc.text(formatMoney(data.stats.totalBilled), cols.total.x, doc.y, { width: cols.total.w, align: "right" });
+
+    // ── Rodapé ───────────────────────────────────────────────────────────────
+    const footerY = doc.page.height - 40;
+    doc.moveTo(40, footerY - 10).lineTo(40 + pageWidth, footerY - 10).strokeColor(lineGray).lineWidth(0.5).stroke();
+    doc.fontSize(7).fillColor(gray).font("Helvetica")
+      .text(
+        `Extrato gerado a partir das faturas registadas no Angrybox Hub em ${formatDate(new Date())}`,
+        40,
+        footerY - 4,
+        { width: pageWidth, align: "center" },
+      );
+
+    doc.end();
+  });
+}
+
+// ── Controller ────────────────────────────────────────────────────────────────
 
 export class FinancialBaseController {
   readonly router: Router;
@@ -47,6 +235,10 @@ export class FinancialBaseController {
     private readonly toggleSupplierStatus: ToggleSupplierStatusPort,
     private readonly listSuppliers: ListSuppliersPort,
     private readonly getSupplier: GetSupplierPort,
+    private readonly listSuppliersWithStats: ListSuppliersWithStatsPort,
+    private readonly getSuppliersKpis: GetSuppliersKpisPort,
+    private readonly getSupplierDetail: GetSupplierDetailPort,
+    private readonly getSupplierStatement: GetSupplierStatementPort,
     private readonly listChannels: ListChannelsPort,
   ) {
     this.router = Router();
@@ -377,17 +569,107 @@ export class FinancialBaseController {
 
     /**
      * GET /financial-base/suppliers
-     * Query: status?, search?
+     * Query: status?, search?, includeStats? (boolean)
+     * Com includeStats=true devolve SupplierWithStatsDTO[] (agrega dados de faturas).
      */
     this.router.get("/financial-base/suppliers", async (req, res) => {
       try {
-        const { status, search } = req.query as Record<string, string | undefined>;
+        const { status, search, includeStats } = req.query as Record<string, string | undefined>;
+
+        if (includeStats === "true") {
+          const command: Parameters<typeof this.listSuppliersWithStats.execute>[0] = {};
+          if (status === "active" || status === "inactive") command.status = status;
+          if (search) command.search = search;
+          const results = await this.listSuppliersWithStats.execute(command);
+          res.json(results);
+          return;
+        }
+
         const filter: SupplierFilter = {};
         if (status === "active" || status === "inactive") filter.status = status;
         if (search) filter.search = search;
         const results = await this.listSuppliers.execute(filter);
         res.json(results);
       } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * GET /financial-base/suppliers/kpis
+     * KPIs globais: total ativos, inativos, com pendências e total faturado.
+     * DEVE ficar registado ANTES de /:id para evitar que "kpis" seja interpretado como id.
+     */
+    this.router.get("/financial-base/suppliers/kpis", async (_req, res) => {
+      try {
+        const result = await this.getSuppliersKpis.execute();
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * GET /financial-base/suppliers/:id/detail
+     * Detalhe completo do fornecedor: dados base + resumo financeiro + lista de faturas.
+     * DEVE ficar registado ANTES de /:id para não ser capturado pela rota genérica.
+     */
+    this.router.get("/financial-base/suppliers/:id/detail", async (req, res) => {
+      try {
+        const result = await this.getSupplierDetail.execute({
+          id: req.params["id"] as string,
+        });
+        res.json(result);
+      } catch (e) {
+        if (e instanceof SupplierNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * GET /financial-base/suppliers/:id/statement-pdf
+     * Query: startDate? (YYYY-MM-DD), endDate? (YYYY-MM-DD)
+     * Devolve application/pdf com o extrato do fornecedor.
+     */
+    this.router.get("/financial-base/suppliers/:id/statement-pdf", async (req, res) => {
+      try {
+        const { startDate: startStr, endDate: endStr } = req.query as Record<string, string | undefined>;
+
+        const startDate = startStr ? new Date(startStr) : undefined;
+        const endDate = endStr ? new Date(endStr) : undefined;
+
+        if (startDate && isNaN(startDate.getTime())) {
+          res.status(400).json({ error: "startDate inválido (usa formato YYYY-MM-DD)" });
+          return;
+        }
+        if (endDate && isNaN(endDate.getTime())) {
+          res.status(400).json({ error: "endDate inválido (usa formato YYYY-MM-DD)" });
+          return;
+        }
+
+        const data = await this.getSupplierStatement.execute({
+          id: req.params["id"] as string,
+          startDate,
+          endDate,
+        });
+
+        const pdf = await buildStatementPdf(data);
+
+        const filename = `extrato-${data.supplier.name.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase()}.pdf`;
+        res.set({
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="${filename}"`,
+          "Content-Length": String(pdf.length),
+        });
+        res.send(pdf);
+      } catch (e) {
+        if (e instanceof SupplierNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
       }
     });

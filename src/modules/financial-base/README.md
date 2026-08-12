@@ -1,7 +1,7 @@
 # Módulo: financial-base
 
 > Status: ativo
-> Última atualização: 2026-08-06
+> Última atualização: 2026-08-12
 
 ---
 
@@ -39,6 +39,9 @@ Manager (backoffice)
 6. DRE, Fluxo de Caixa e Rentabilidade filtram por affects_dre,
    affects_cashflow, affects_profitability; análise por canal
    permite saber quanto custou cada plataforma de delivery
+7. No detalhe do fornecedor, o manager consulta o histórico de faturas
+   e pode exportar um extrato PDF formal (filtrado por período)
+   para enviar ao fornecedor como comprovativo de conta corrente
 ```
 
 **Conceitos-chave para o negócio:**
@@ -54,6 +57,10 @@ Manager (backoffice)
   `capex`, `fiscal`, `off_dre`, `internal_transfer`, `transitory`.
 - **Fornecedor** — entidade externa que emite faturas. Pode ter grupo e
   subcategoria por defeito para acelerar a classificação automática.
+  O detalhe inclui resumo financeiro e histórico de faturas exportável em PDF.
+- **Extrato de fornecedor** — documento PDF formal com identificação do fornecedor,
+  período selecionado, resumo financeiro (total faturado, pago, pendente) e tabela
+  de faturas. Gerado a pedido para enviar ao fornecedor como conta corrente.
 - **Canal** — canal de venda ou distribuição onde uma despesa ocorre.
   Exemplos: Salão, Take Away, Uber Eats, Glovo. Obrigatório em subcategorias
   com `requiresChannel=true` (ex: MKT.05). 7 canais seed com UUIDs fixos
@@ -113,8 +120,12 @@ gerir contas a pagar (módulo `payable-entries`).
 - `CreateSupplierPort` — cria um novo fornecedor.
 - `UpdateSupplierPort` — actualiza campos editáveis.
 - `ToggleSupplierStatusPort` — activa ou desactiva.
-- `ListSuppliersPort` — lista com filtros `status?` e `search?`.
+- `ListSuppliersPort` — lista com filtros `status?` e `search?` (resposta básica, sem stats).
+- `ListSuppliersWithStatsPort` — lista com filtros + agregados financeiros por fornecedor (invoiceCount, totalBilled, totalPaid, totalPending).
 - `GetSupplierPort` — obtém um fornecedor por id; lança `SupplierNotFoundError`.
+- `GetSuppliersKpisPort` — KPIs globais da listagem: totalActive, totalInactive, totalWithPending, totalBilledAll.
+- `GetSupplierDetailPort` — detalhe completo: dados base + resumo financeiro + lista de faturas.
+- `GetSupplierStatementPort` — dados filtrados por período (startDate?, endDate?) para geração de extrato PDF.
 
 **Canais**
 - `ListChannelsPort` — lista canais com filtro opcional `isActive?`.
@@ -124,6 +135,7 @@ gerir contas a pagar (módulo `payable-entries`).
 - `CostCenterGroupRepositoryPort` — `save`, `findById`, `findByCode`, `findAll`, `update`.
 - `CostCenterCategoryRepositoryPort` — `save`, `findById`, `findByCode`, `findByGroupId`, `findAll`, `update`.
 - `SupplierRepositoryPort` — `save`, `findById`, `findAll`, `update`.
+- `SupplierInvoiceStatsPort` — `getSummariesForSuppliers(ids)`, `listInvoicesBySupplier(id, filter?)`. Lê da tabela `invoices` para agregar dados financeiros por fornecedor. `SupplierInvoiceRow` inclui `totalWithoutVat`, `vatAmount`, `totalWithVat`; `filter` aceita `startDate?`/`endDate?`.
 - `ChannelRepositoryPort` — `findAll(isActive?)`, `findById`.
 
 ## Adapters
@@ -138,6 +150,7 @@ gerir contas a pagar (módulo `payable-entries`).
 - `SupabaseCostCenterGroupRepository` → implementa `CostCenterGroupRepositoryPort` na tabela `cost_center_groups`.
 - `SupabaseCostCenterCategoryRepository` → implementa `CostCenterCategoryRepositoryPort` na tabela `cost_center_categories`.
 - `SupabaseSupplierRepository` → implementa `SupplierRepositoryPort` na tabela `suppliers`.
+- `SupabaseSupplierInvoiceStatsAdapter` → implementa `SupplierInvoiceStatsPort` lendo da tabela `invoices`. Agrega stats em TypeScript após fetch por `supplier_id`. **Atenção:** a tabela `invoices` guarda valores monetários em cêntimos (inteiros); o adapter divide por 100 ao mapear para euros — consistente com o módulo `invoices`.
 - `SupabaseChannelRepository` → implementa `ChannelRepositoryPort` na tabela `channels` (read-only; canais geridos por migration).
 
 ## Rotas REST
@@ -158,8 +171,11 @@ PATCH  /api/financial-base/cost-center-categories/:id/status activar/desactivar
 
 POST   /api/financial-base/cost-centers/seed                 popular com dados padrão (idempotente)
 
-GET    /api/financial-base/suppliers                         lista (query: status?, search?)
-GET    /api/financial-base/suppliers/:id                     detalhe
+GET    /api/financial-base/suppliers                         lista (query: status?, search?, includeStats?)
+GET    /api/financial-base/suppliers/kpis                    KPIs globais (totalActive, totalInactive, totalWithPending, totalBilledAll)
+GET    /api/financial-base/suppliers/:id                     detalhe básico
+GET    /api/financial-base/suppliers/:id/detail              detalhe completo com resumo financeiro + lista de faturas
+GET    /api/financial-base/suppliers/:id/statement-pdf       extrato PDF (query: startDate?, endDate? — formato YYYY-MM-DD)
 POST   /api/financial-base/suppliers                         criar
 PATCH  /api/financial-base/suppliers/:id                     actualizar
 PATCH  /api/financial-base/suppliers/:id/status              activar/desactivar
@@ -273,6 +289,14 @@ Os 12 tipos financeiros são um union type em vez de entidade com tabela
 própria. Simplifica: os tipos financeiros têm semântica precisa e
 estável — mudar um tipo teria impacto em DRE/Fluxo/Rentabilidade. Se no
 futuro forem necessários tipos dinâmicos, migra-se para entidade separada.
+
+### Extrato PDF gerado no backend, não no frontend
+
+O endpoint `GET /suppliers/:id/statement-pdf` devolve `application/pdf` gerado com `pdfkit`.
+A alternativa (geração no browser com `@react-pdf/renderer`) foi descartada por adicionar
+~200 KB ao bundle e produzir documentos menos consistentes. Os dados da empresa (nome, NIF,
+morada) estão em `src/config/company.ts` — ficheiro simples de constantes, sem tabela nem
+env var, alterável quando os dados mudarem.
 
 ### Supplier migrado de `defaultCostCenterId` para `defaultCostCenterGroupId` + `defaultCostCenterCategoryId`
 

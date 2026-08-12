@@ -5,6 +5,7 @@ import type { CreateSupplierPort } from "./domain/ports/in/supplier.ports.js";
 import { SupabaseCostCenterGroupRepository } from "./adapters/out/supabase-cost-center-group.repository.js";
 import { SupabaseCostCenterCategoryRepository } from "./adapters/out/supabase-cost-center-category.repository.js";
 import { SupabaseSupplierRepository } from "./adapters/out/supabase-supplier.repository.js";
+import { SupabaseSupplierInvoiceStatsAdapter } from "./adapters/out/supabase-supplier-invoice-stats.adapter.js";
 import { SupabaseChannelRepository } from "./adapters/out/supabase-channel.repository.js";
 
 import { ListCostCenterGroupsUseCase } from "./application/use-cases/list-cost-center-groups.use-case.js";
@@ -25,6 +26,10 @@ import { UpdateSupplierUseCase } from "./application/use-cases/update-supplier.u
 import { ToggleSupplierStatusUseCase } from "./application/use-cases/toggle-supplier-status.use-case.js";
 import { ListSuppliersUseCase } from "./application/use-cases/list-suppliers.use-case.js";
 import { GetSupplierUseCase } from "./application/use-cases/get-supplier.use-case.js";
+import { ListSuppliersWithStatsUseCase } from "./application/use-cases/list-suppliers-with-stats.use-case.js";
+import { GetSuppliersKpisUseCase } from "./application/use-cases/get-suppliers-kpis.use-case.js";
+import { GetSupplierDetailUseCase } from "./application/use-cases/get-supplier-detail.use-case.js";
+import { GetSupplierStatementUseCase } from "./application/use-cases/get-supplier-statement.use-case.js";
 import { ListChannelsUseCase } from "./application/use-cases/list-channels.use-case.js";
 
 import { FinancialBaseController } from "./adapters/in/financial-base.controller.js";
@@ -43,6 +48,7 @@ export function createFinancialBaseModule(): { router: Router; createSupplier: C
   const groupRepository = new SupabaseCostCenterGroupRepository(supabase);
   const categoryRepository = new SupabaseCostCenterCategoryRepository(supabase);
   const supplierRepository = new SupabaseSupplierRepository(supabase);
+  const supplierInvoiceStats = new SupabaseSupplierInvoiceStatsAdapter(supabase);
   const channelRepository = new SupabaseChannelRepository(supabase);
 
   // Use cases — grupos de centros de custo
@@ -77,6 +83,13 @@ export function createFinancialBaseModule(): { router: Router; createSupplier: C
   const toggleSupplierStatus = new ToggleSupplierStatusUseCase(supplierRepository);
   const listSuppliers = new ListSuppliersUseCase(supplierRepository);
   const getSupplier = new GetSupplierUseCase(supplierRepository);
+  const listSuppliersWithStats = new ListSuppliersWithStatsUseCase(
+    supplierRepository,
+    supplierInvoiceStats,
+  );
+  const getSuppliersKpis = new GetSuppliersKpisUseCase(supplierRepository, supplierInvoiceStats);
+  const getSupplierDetail = new GetSupplierDetailUseCase(supplierRepository, supplierInvoiceStats);
+  const getSupplierStatement = new GetSupplierStatementUseCase(supplierRepository, supplierInvoiceStats);
 
   // Adapter de entrada (HTTP)
   const controller = new FinancialBaseController(
@@ -96,6 +109,10 @@ export function createFinancialBaseModule(): { router: Router; createSupplier: C
     toggleSupplierStatus,
     listSuppliers,
     getSupplier,
+    listSuppliersWithStats,
+    getSuppliersKpis,
+    getSupplierDetail,
+    getSupplierStatement,
     listChannels,
   );
 
