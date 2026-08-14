@@ -1,7 +1,7 @@
 # Módulo: cash-closings
 
 > Status: ativo
-> Última atualização: 2026-08-04
+> Última atualização: 2026-08-14
 
 ---
 
@@ -229,6 +229,20 @@ subtrai os NCs da sessão onde apareceram como `out` movement; NCs sem movimento
 sessão em dias multi-turno. Replica exactamente a lógica do dashboard:
 `sum(FS/FT) - sum(NC)`.
 
+**Sessões cross-day: NCs da sessão anterior não debitam a sessão actual.**
+Quando uma sessão de caixa abre num dia e fecha no dia seguinte, o movimento
+`open` não aparece nos dados do dia do fecho. O `buildSessions` não consegue
+associar os `out` movements (NCs) dessa sessão a nenhum `cur` activo, e o
+fallback das "unhandled NCs" debitava-as incorrectamente na sessão seguinte.
+Fix: um pré-passo regista todas as NCs referenciadas por qualquer `out` movement
+no dia (independentemente de haver sessão activa). Essas NCs são excluídas do
+fallback — pertencem à sessão anterior, não à actual.
+
+**O Vendus devolve `doc_id+1` ou `doc_id+2` nos `out` movements de NC.**
+O lookup de NC em `resolveNcId` tenta `document_id`, `document_id − 1` e
+`document_id − 2` (casos reais observados com ambos os offsets no mesmo dia).
+Usar só `−1` deixava duas NCs sem resolver quando o offset era `+2`.
+
 **`from`/`to` em vez de só `date` no `ListClosingsPort`.**
 Permite ao frontend carregar uma semana completa (Mon-Sun) ou um mês inteiro
 numa única chamada, sem precisar de lógica de datas no adapter HTTP.
@@ -256,7 +270,10 @@ ficheiro sem dependências de infra, os testes podem importá-la directamente.
   se o servidor estiver desincronizado.
 - `VendusRegisterSessionsGateway` não suporta sessões que atravessam meia-noite
   (ex: abertura às 23h, fecho à 01h do dia seguinte). Para o contexto actual
-  (restaurante) é aceitável.
+  (restaurante) é aceitável. Sessões cross-day que abrem num dia e fecham no
+  seguinte são tratadas correctamente no que toca às NCs (o fix de 2026-08-14
+  exclui-as do fallback), mas as suas vendas (`in` movements) ficam invisíveis
+  para o dia do fecho — o total da sessão seguinte não inclui essas vendas.
 - NC sem movimento em dias multi-turno é atribuída à última sessão por heurística.
   Se um dia tiver NCs de múltiplos turnos sem movimento, o total da última sessão
   pode ficar ligeiramente errado. Casos raros no contexto actual.
