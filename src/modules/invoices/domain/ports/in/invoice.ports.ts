@@ -74,6 +74,14 @@ export interface InvoiceDTO {
   createdAt: string;
   updatedAt: string;
   lines?: InvoiceLineDTO[];
+  /** Presente apenas quando lineDetailMode === "detailed" e as linhas foram carregadas. */
+  linesSummary?: {
+    subtotalWithoutVat: number;
+    totalVat: number;
+    totalWithVat: number;
+    /** true quando qualquer dos três totais difere dos totais da fatura em mais de 1 cêntimo. */
+    totalsMismatch: boolean;
+  };
 }
 
 export interface SupplierMatchDTO {

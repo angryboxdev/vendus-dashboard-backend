@@ -47,6 +47,18 @@ export function toInvoiceDTO(invoice: Invoice, lines?: InvoiceLine[]): InvoiceDT
   };
   if (lines !== undefined) {
     dto.lines = lines.map(toInvoiceLineDTO);
+
+    if (invoice.lineDetailMode === "detailed") {
+      const TOLERANCE = 1;
+      const subtotalWithoutVat = lines.reduce((s, l) => s + (l.totalWithVat - l.vatAmount), 0);
+      const totalVat = lines.reduce((s, l) => s + l.vatAmount, 0);
+      const totalWithVat = lines.reduce((s, l) => s + l.totalWithVat, 0);
+      const totalsMismatch =
+        Math.abs(totalWithVat - invoice.totalWithVat) > TOLERANCE ||
+        Math.abs(totalVat - invoice.totalVat) > TOLERANCE ||
+        Math.abs(subtotalWithoutVat - invoice.subtotalWithoutVat) > TOLERANCE;
+      dto.linesSummary = { subtotalWithoutVat, totalVat, totalWithVat, totalsMismatch };
+    }
   }
   return dto;
 }

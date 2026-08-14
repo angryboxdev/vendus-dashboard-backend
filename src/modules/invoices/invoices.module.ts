@@ -65,7 +65,7 @@ export function createInvoicesModule(
     updateInvoice: new UpdateInvoiceUseCase(invoiceRepo, lineRepo),
     markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite),
     setInvoiceStatus: new SetInvoiceStatusUseCase(invoiceRepo, payableWrite),
-    setLineDetailMode: new SetLineDetailModeUseCase(invoiceRepo),
+    setLineDetailMode: new SetLineDetailModeUseCase(invoiceRepo, lineRepo),
     addInvoiceLine: new AddInvoiceLineUseCase(invoiceRepo, lineRepo),
     updateInvoiceLine: new UpdateInvoiceLineUseCase(invoiceRepo, lineRepo),
     classifyInvoiceLine: new ClassifyInvoiceLineUseCase(invoiceRepo, lineRepo, ruleRepo, categoryReader),

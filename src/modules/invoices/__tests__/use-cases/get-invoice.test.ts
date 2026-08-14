@@ -5,6 +5,26 @@ import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import { InvoiceNotFoundError } from "../../domain/errors.js";
 
+const makeDetailedInvoice = (props: { subtotalWithoutVat: number; totalVat: number; totalWithVat: number }) =>
+  Invoice.create({
+    supplierName: "Makro",
+    invoiceNumber: "MKR-001",
+    invoiceDate: new Date("2026-06-01"),
+    lineDetailMode: "detailed",
+    ...props,
+  });
+
+const makeLine = (invoiceId: string, totalWithVat: number, vatAmount: number) =>
+  InvoiceLine.create({
+    invoiceId,
+    description: "Produto",
+    quantity: 1,
+    unitCostWithoutVat: totalWithVat - vatAmount,
+    vatRate: 23,
+    vatAmount,
+    totalWithVat,
+  });
+
 describe("GetInvoiceUseCase", () => {
   let invoiceRepo: FakeInvoiceRepository;
   let lineRepo: FakeInvoiceLineRepository;
@@ -60,5 +80,79 @@ describe("GetInvoiceUseCase", () => {
 
   it("lança InvoiceNotFoundError para id inexistente", async () => {
     await expect(useCase.execute("nao-existe")).rejects.toThrow(InvoiceNotFoundError);
+  });
+
+  // ── linesSummary ────────────────────────────────────────────────────────────
+
+  it("não inclui linesSummary em modo simple", async () => {
+    const inv = Invoice.create({
+      supplierName: "EDP",
+      invoiceNumber: "EDP-001",
+      invoiceDate: new Date("2026-06-01"),
+      subtotalWithoutVat: 10000,
+      totalVat: 2300,
+      totalWithVat: 12300,
+      // lineDetailMode default = "simple"
+    });
+    await invoiceRepo.save(inv);
+
+    const dto = await useCase.execute(inv.id);
+    expect(dto.linesSummary).toBeUndefined();
+  });
+
+  it("inclui linesSummary em modo detailed com totais corretos e totalsMismatch=false", async () => {
+    const inv = makeDetailedInvoice({ subtotalWithoutVat: 10000, totalVat: 2300, totalWithVat: 12300 });
+    await invoiceRepo.save(inv);
+    await lineRepo.saveAll([makeLine(inv.id, 12300, 2300)]);
+
+    const dto = await useCase.execute(inv.id);
+    expect(dto.linesSummary).toBeDefined();
+    expect(dto.linesSummary!.totalWithVat).toBe(12300);
+    expect(dto.linesSummary!.totalVat).toBe(2300);
+    expect(dto.linesSummary!.subtotalWithoutVat).toBe(10000);
+    expect(dto.linesSummary!.totalsMismatch).toBe(false);
+  });
+
+  it("linesSummary.totalsMismatch=true quando linhas não somam o total da fatura", async () => {
+    const inv = makeDetailedInvoice({ subtotalWithoutVat: 10000, totalVat: 2300, totalWithVat: 12300 });
+    await invoiceRepo.save(inv);
+    await lineRepo.saveAll([makeLine(inv.id, 5000, 1000)]); // soma parcial
+
+    const dto = await useCase.execute(inv.id);
+    expect(dto.linesSummary!.totalsMismatch).toBe(true);
+  });
+
+  it("linesSummary.totalsMismatch=false dentro da tolerância de 1 cêntimo", async () => {
+    const inv = makeDetailedInvoice({ subtotalWithoutVat: 10000, totalVat: 2300, totalWithVat: 12300 });
+    await invoiceRepo.save(inv);
+    await lineRepo.saveAll([makeLine(inv.id, 12301, 2301)]); // 1 cêntimo acima
+
+    const dto = await useCase.execute(inv.id);
+    expect(dto.linesSummary!.totalsMismatch).toBe(false);
+  });
+
+  it("linesSummary com zero linhas em modo detailed mostra totalsMismatch=true", async () => {
+    const inv = makeDetailedInvoice({ subtotalWithoutVat: 10000, totalVat: 2300, totalWithVat: 12300 });
+    await invoiceRepo.save(inv);
+    // sem linhas
+
+    const dto = await useCase.execute(inv.id);
+    expect(dto.linesSummary!.totalWithVat).toBe(0);
+    expect(dto.linesSummary!.totalsMismatch).toBe(true);
+  });
+
+  it("linesSummary agrega corretamente múltiplas linhas", async () => {
+    const inv = makeDetailedInvoice({ subtotalWithoutVat: 20000, totalVat: 4600, totalWithVat: 24600 });
+    await invoiceRepo.save(inv);
+    await lineRepo.saveAll([
+      makeLine(inv.id, 12300, 2300), // subtotal 10000
+      makeLine(inv.id, 12300, 2300), // subtotal 10000
+    ]);
+
+    const dto = await useCase.execute(inv.id);
+    expect(dto.linesSummary!.totalWithVat).toBe(24600);
+    expect(dto.linesSummary!.totalVat).toBe(4600);
+    expect(dto.linesSummary!.subtotalWithoutVat).toBe(20000);
+    expect(dto.linesSummary!.totalsMismatch).toBe(false);
   });
 });
