@@ -1,7 +1,7 @@
 # Módulo: invoices
 
 > Status: ativo
-> Última atualização: 2026-08-14 (linesSummary em GetInvoice; SetLineDetailModeUseCase destrói linhas ao simplificar)
+> Última atualização: 2026-08-16 (classificationSummary em GetInvoice e ListInvoices; setInvoiceStatus via frontend)
 
 ---
 
@@ -115,7 +115,7 @@ reconciliação ou relatórios financeiros.
   fornecedor são suportadas; o match usa substring case-insensitive (padrão mais longo vence);
   regra sem padrão serve de fallback genérico. Inclui `channelId` para sugerir canal.
 - **AiExtractionResult** — value object com os dados extraídos pela IA + confidence + validationIssues.
-- **InvoiceStatus**: `draft_ai | pending_review | pending | paid | overdue | partial | cancelled | review`
+- **InvoiceStatus**: `draft_ai | pending_review | pending | paid | overdue | cancelled | review`
 - **ReconciliationStatus**: `none | pending_reconciliation | reconciled` — estado bancário, ortogonal ao `InvoiceStatus`. Após `markPaid()` fica `pending_reconciliation`; passa a `reconciled` via `markReconciled()` ou conciliação bancária.
 - **LineDetailMode**: `simple | detailed` — controla se a fatura usa linha única automática (derivada dos totais do cabeçalho, gerida pelo frontend) ou linhas reais persistidas e editáveis. Padrão: `simple`. Ao transitar para `simple`, todas as linhas são apagadas; ao transitar para `detailed`, parte de zero.
 - **InvoiceSource**: `manual | pdf_import | image_import`
@@ -135,10 +135,10 @@ reconciliação ou relatórios financeiros.
 - `UpdateInvoiceLineUseCase` — actualiza valores de uma linha existente (descrição, quantidade, unidade, preço unitário, IVA, total). Requer `lineDetailMode=detailed`. Valida que a soma das linhas não excede os totais da fatura (tolerância: 1 cêntimo).
 - `ClassifyInvoiceLineUseCase` — classifica linha; quando `costCenterCategoryId` presente, herda automaticamente os campos da subcategoria via `CostCenterCategoryReaderPort`. Opcionalmente grava/actualiza `ClassificationRule` com `descriptionPattern` e `channelId`.
 - `SuggestLineClassificationUseCase` — sugestão de classificação por `supplierId` + `description?`; retorna `channelId` quando presente na regra.
-- `ListInvoicesUseCase` — filtra por fornecedor, CC, estado, intervalo de datas, `isDirectDebit`.
+- `ListInvoicesUseCase` — filtra por fornecedor, CC, estado, intervalo de datas, `isDirectDebit`. Injeta `CostCenterCategoryReaderPort`; recolhe os `costCenterCategoryId` únicos de todas as faturas devolvidas, chama `findManyByIds` uma única vez e constrói o `categoryMap` passado a `toInvoiceDTO` — garante que `classificationSummary` tem `code` e `name` corretos mesmo na listagem.
 - **`ProcessDirectDebitsUseCase`** — busca faturas de DD com `directDebitDate ≤ hoje` e status não pago/cancelado; marca-as como pagas na `directDebitDate` e sincroniza payable entries.
 - `ListInvoiceLinesUseCase` — todas as linhas (para analytics por CC).
-- `GetInvoiceUseCase` — detalhe com linhas. Quando `lineDetailMode=detailed`, o DTO inclui `linesSummary = { subtotalWithoutVat, totalVat, totalWithVat, totalsMismatch }` com tolerância de 1 cêntimo.
+- `GetInvoiceUseCase` — detalhe com linhas. Inclui sempre `classificationSummary` (ver abaixo). Quando `lineDetailMode=detailed`, o DTO inclui também `linesSummary = { subtotalWithoutVat, totalVat, totalWithVat, totalsMismatch }` com tolerância de 1 cêntimo.
 - `DeleteInvoiceUseCase` — remove fatura, linhas e ficheiro em storage (se tiver `attachmentUrl`).
 - **`ImportInvoiceUseCase`** — armazena ficheiro, extrai dados via IA, procura fornecedor por NIF, aplica defaults, cria `Invoice` em `draft_ai`.
 - **`ConfirmImportedInvoiceUseCase`** — aplica correções do utilizador, transita `draft_ai`/`pending_review` → `pending`; salva linhas opcionais; cria payable entry se pedido. Suporta `newSupplier` (cria fornecedor via `SupplierCreatePort` antes de guardar) e propaga `costCenterCategoryId` para todas as linhas.
@@ -149,7 +149,7 @@ reconciliação ou relatórios financeiros.
 - `InvoiceRepositoryPort` — CRUD de faturas + `findAll(filter?)` + `findPendingDirectDebits()`.
 - `InvoiceLineRepositoryPort` — `saveAll`, `save`, `findByInvoiceId`, `findAll`, `updateLine`, `deleteByInvoiceId`, `updateCostCenterCategoryForInvoice` (bulk update do CC de todas as linhas).
 - `ClassificationRuleRepositoryPort` — `findBySupplierId`, `findBySupplierIdAndDescription`, `save`, `update`.
-- `CostCenterCategoryReaderPort` — `findById` (snapshot mínimo da subcategoria para herança; sem acoplamento ao módulo `financial-base`).
+- `CostCenterCategoryReaderPort` — `findById` (snapshot mínimo da subcategoria para herança; sem acoplamento ao módulo `financial-base`); `findManyByIds(ids)` (lookup batch para `classificationSummary` em `GetInvoice` e `ListInvoices`).
 - `PayableEntryWritePort` — cria/marca-pago/cancela entradas em `payable_entries`.
 - **`AiExtractionPort`** — `extract(fileUrl, mimeType): Promise<AiExtractionResult>`.
 - **`DocumentStoragePort`** — `store(buffer, filename, mimeType): Promise<string>`.
@@ -218,6 +218,12 @@ reconciliação ou relatórios financeiros.
 - **`reconciliationStatus` ortogonal ao `status`**: `status=paid` continua a ser o estado documental/operacional de paga (usado em filtros, listas, alertas de vencimento). `reconciliationStatus` rastreia a confirmação bancária e é independente. Ambos os campos existem em simultâneo sem conflito. Faturas anteriores à migration ficam com `reconciliationStatus=none` (neutro).
 - **`lineDetailMode=simple` bloqueia `AddInvoiceLineUseCase`**: em modo simples, a fatura tem uma linha única automática (gerida pelo frontend). Tentar adicionar uma linha via API com `lineDetailMode=simple` retorna 422. Para ativar o detalhamento, o utilizador usa `PATCH /invoices/:id/line-detail-mode` com `{ mode: "detailed" }`.
 - **`linesSummary` no `InvoiceDTO`**: quando `lineDetailMode=detailed` e as linhas são carregadas (`GetInvoice`), o DTO inclui `linesSummary = { subtotalWithoutVat, totalVat, totalWithVat, totalsMismatch }`. O campo `totalsMismatch: true` sinaliza ao frontend divergência entre linhas e totais da fatura. Tolerância: 1 cêntimo por campo.
+- **`classificationSummary` no `InvoiceDTO`** (campo obrigatório): derivado em `toInvoiceDTO` via `computeClassificationSummary`. Três modos:
+  - `"unique"` — todas as linhas (ou a fatura em modo simples) partilham a mesma subcategoria. `entries` tem um elemento.
+  - `"mixed"` — linhas com subcategorias diferentes (só possível em `lineDetailMode=detailed`). `entries` tem N elementos com o total acumulado de cada subcategoria.
+  - `"none"` — nenhuma linha classificada e nenhuma categoria ao nível da fatura.
+  - Fallback: quando `lineDetailMode=detailed` mas não há linhas carregadas (ex: listagem), usa `invoice.costCenterCategoryId` se existir.
+  - Em `GetInvoice`, o `categoryMap` é construído com `findManyByIds` sobre os IDs únicos das linhas + cabeçalho. Em `ListInvoices`, o `categoryMap` cobre apenas o `costCenterCategoryId` do cabeçalho (sem linhas na listagem).
 - **Transição `detailed → simple` descarta linhas**: `SetLineDetailModeUseCase` apaga todas as linhas ao voltar para `simple`. Em modo simples, a linha automática deriva dos totais do cabeçalho da fatura; linhas persistidas seriam ambíguas para analytics. A transição nunca é bloqueada — o utilizador pode regressar a `simple` a qualquer momento e recomeçar o detalhamento depois.
 - **Modo determina a fonte para analytics**: em modo `simple`, não há linhas armazenadas — a fatura contribui para DRE/cashflow/rentabilidade através dos campos do cabeçalho (`costCenterCategoryId`, `financialType`, `affectsDre`, `affectsCashflow`, `affectsProfitability`). Em modo `detailed`, as linhas individuais são a fonte; cada linha herda os campos financeiros da sua subcategoria ao ser classificada. `ListInvoiceLinesUseCase` devolve todas as linhas persistidas — que, por definição, são apenas de faturas em `detailed` (faturas em `simple` não têm linhas).
 - **Validação de totais de linhas (modo detalhado)**: ao adicionar ou editar uma linha, a soma das linhas (com os novos valores) não pode exceder os totais da fatura — `totalWithVat`, `totalVat` e `subtotalWithoutVat` — com tolerância de 1 cêntimo. Somas parciais abaixo do total são permitidas (utilizador pode adicionar linhas incrementalmente). Esta validação aplica-se a `AddInvoiceLineUseCase` e `UpdateInvoiceLineUseCase`.

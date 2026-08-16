@@ -1,6 +1,9 @@
 import { ListInvoicesUseCase } from "../../application/use-cases/list-invoices.use-case.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
+import { FakeCostCenterCategoryReader } from "../fakes/fake-cost-center-category-reader.js";
 import { Invoice } from "../../domain/entities/invoice.js";
+
+const CAT_A = { id: "cat-a", code: "OPD.01", name: "CMV / Ingredientes", financialType: "opex" };
 
 const makeInvoice = (overrides: Partial<Parameters<typeof Invoice.create>[0]> = {}) =>
   Invoice.create({
@@ -15,11 +18,14 @@ const makeInvoice = (overrides: Partial<Parameters<typeof Invoice.create>[0]> = 
 
 describe("ListInvoicesUseCase", () => {
   let repo: FakeInvoiceRepository;
+  let categoryReader: FakeCostCenterCategoryReader;
   let useCase: ListInvoicesUseCase;
 
   beforeEach(() => {
     repo = new FakeInvoiceRepository();
-    useCase = new ListInvoicesUseCase(repo);
+    categoryReader = new FakeCostCenterCategoryReader();
+    categoryReader.seedLookup(CAT_A);
+    useCase = new ListInvoicesUseCase(repo, categoryReader);
   });
 
   it("retorna lista vazia quando não há faturas", async () => {
@@ -101,5 +107,40 @@ describe("ListInvoicesUseCase", () => {
     expect(dto!.supplierName).toBe("EDP");
     expect(dto!.totalWithVat).toBe(123000);
     expect(dto!.status).toBe("pending");
+  });
+
+  // ── classificationSummary ────────────────────────────────────────────────────
+
+  it("classificationSummary mode=none quando fatura não tem categoria", async () => {
+    await repo.save(makeInvoice({ invoiceNumber: "X-001" }));
+    const [dto] = await useCase.execute();
+    expect(dto!.classificationSummary.mode).toBe("none");
+    expect(dto!.classificationSummary.entries).toHaveLength(0);
+  });
+
+  it("classificationSummary mode=unique com code e name corretos quando fatura tem categoria", async () => {
+    await repo.save(makeInvoice({ invoiceNumber: "X-002", costCenterCategoryId: CAT_A.id }));
+    const [dto] = await useCase.execute();
+    expect(dto!.classificationSummary.mode).toBe("unique");
+    expect(dto!.classificationSummary.entries).toHaveLength(1);
+    expect(dto!.classificationSummary.entries[0]!.code).toBe("OPD.01");
+    expect(dto!.classificationSummary.entries[0]!.name).toBe("CMV / Ingredientes");
+    expect(dto!.classificationSummary.entries[0]!.totalWithVat).toBe(123000);
+  });
+
+  it("faz uma única chamada a findManyByIds mesmo com múltiplas faturas da mesma categoria", async () => {
+    await repo.save(makeInvoice({ invoiceNumber: "X-003", costCenterCategoryId: CAT_A.id }));
+    await repo.save(makeInvoice({ invoiceNumber: "X-004", costCenterCategoryId: CAT_A.id }));
+    const spy = jest.spyOn(categoryReader, "findManyByIds");
+    await useCase.execute();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith([CAT_A.id]); // IDs deduplicados
+  });
+
+  it("não chama findManyByIds quando nenhuma fatura tem categoria", async () => {
+    await repo.save(makeInvoice({ invoiceNumber: "X-005" }));
+    const spy = jest.spyOn(categoryReader, "findManyByIds");
+    await useCase.execute();
+    expect(spy).not.toHaveBeenCalled();
   });
 });

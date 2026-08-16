@@ -4,10 +4,14 @@ import type {
   InvoiceDTO,
 } from "../../domain/ports/in/invoice.ports.js";
 import type { InvoiceRepositoryPort, InvoiceFilter } from "../../domain/ports/out/invoice-repository.port.js";
+import type { CostCenterCategoryReaderPort, CategoryLookup } from "../../domain/ports/out/cost-center-category-reader.port.js";
 import { toInvoiceDTO } from "./shared.js";
 
 export class ListInvoicesUseCase implements ListInvoicesPort {
-  constructor(private readonly invoiceRepo: InvoiceRepositoryPort) {}
+  constructor(
+    private readonly invoiceRepo: InvoiceRepositoryPort,
+    private readonly categoryReader: CostCenterCategoryReaderPort,
+  ) {}
 
   async execute(filter?: ListInvoicesFilter): Promise<InvoiceDTO[]> {
     const repoFilter: InvoiceFilter = {};
@@ -20,6 +24,15 @@ export class ListInvoicesUseCase implements ListInvoicesPort {
     if (filter?.search) repoFilter.search = filter.search;
 
     const invoices = await this.invoiceRepo.findAll(repoFilter);
-    return invoices.map((inv) => toInvoiceDTO(inv));
+
+    const categoryIds = [...new Set(
+      invoices.map((inv) => inv.costCenterCategoryId).filter((id): id is string => id != null),
+    )];
+    const lookups: CategoryLookup[] = categoryIds.length > 0
+      ? await this.categoryReader.findManyByIds(categoryIds)
+      : [];
+    const categoryMap = new Map(lookups.map((l) => [l.id, l]));
+
+    return invoices.map((inv) => toInvoiceDTO(inv, undefined, categoryMap));
   }
 }

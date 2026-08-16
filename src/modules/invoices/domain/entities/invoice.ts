@@ -4,7 +4,6 @@ export type InvoiceStatus =
   | "pending"
   | "paid"
   | "overdue"
-  | "partial"
   | "cancelled"
   | "review";
 
@@ -32,7 +31,7 @@ export type InvoiceSource = "manual" | "pdf_import" | "image_import";
 export type AiExtractionStatus = "processing" | "done" | "failed";
 
 export const INVOICE_STATUSES: InvoiceStatus[] = [
-  "draft_ai", "pending_review", "pending", "paid", "overdue", "partial", "cancelled", "review",
+  "draft_ai", "pending_review", "pending", "paid", "overdue", "cancelled", "review",
 ];
 
 export const INVOICE_LINE_TYPES: InvoiceLineType[] = [

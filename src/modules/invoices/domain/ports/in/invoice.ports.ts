@@ -82,6 +82,23 @@ export interface InvoiceDTO {
     /** true quando qualquer dos três totais difere dos totais da fatura em mais de 1 cêntimo. */
     totalsMismatch: boolean;
   };
+  /**
+   * Resumo de classificação derivado das linhas reais.
+   * - "unique": todas as linhas têm a mesma subcategoria.
+   * - "mixed": linhas com subcategorias diferentes.
+   * - "none": nenhuma linha está classificada.
+   */
+  classificationSummary: {
+    mode: "unique" | "mixed" | "none";
+    entries: Array<{
+      costCenterCategoryId: string;
+      code: string;
+      name: string;
+      financialType: string | null;
+      /** Soma de totalWithVat das linhas com esta subcategoria (em cêntimos). */
+      totalWithVat: number;
+    }>;
+  };
 }
 
 export interface SupplierMatchDTO {
