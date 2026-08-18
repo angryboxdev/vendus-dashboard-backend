@@ -165,4 +165,26 @@ describe("UpdateInvoiceLineUseCase", () => {
     const persisted = await lineRepo.findByInvoiceId(inv.id);
     expect(persisted[0]?.description).toBe("Descrição actualizada");
   });
+
+  // ── Validação simplificada (apenas totalWithVat) ──────────────────────────
+
+  it("aceita update cujo vatAmount excederia o totalVat mas totalWithVat está dentro do limite", async () => {
+    // Faturas importadas por IA: vatAmount e subtotalWithoutVat podem ter arredondamentos
+    // diferentes dos totais cabeçalho — só totalWithVat é verificado.
+    const inv = makeInvoice(); // totalWithVat=12300, totalVat=2300
+    const line = makeLine(inv.id);
+    await invoiceRepo.save(inv);
+    await lineRepo.saveAll([line]);
+
+    // vatAmount=3000 excede invoice.totalVat=2300, mas totalWithVat=12300 está dentro do limite
+    const dto = await useCase.execute({
+      invoiceId: inv.id,
+      lineId: line.id,
+      vatAmount: 3000, // > invoice.totalVat
+      totalWithVat: 12300,
+    });
+
+    expect(dto.vatAmount).toBe(3000);
+    expect(dto.totalWithVat).toBe(12300);
+  });
 });

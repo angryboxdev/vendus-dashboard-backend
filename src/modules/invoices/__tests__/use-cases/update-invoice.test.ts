@@ -1,9 +1,11 @@
 import { UpdateInvoiceUseCase } from "../../application/use-cases/update-invoice.use-case.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
+import { FakePayableEntryWrite } from "../fakes/fake-payable-entry-write.js";
+import { FakeInvoiceReconciliationCleanup } from "../fakes/fake-invoice-reconciliation-cleanup.js";
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
-import { InvoiceNotFoundError } from "../../domain/errors.js";
+import { InvoiceNotFoundError, DuplicateInvoiceError } from "../../domain/errors.js";
 
 const makeInvoice = () =>
   Invoice.create({
@@ -18,12 +20,16 @@ const makeInvoice = () =>
 describe("UpdateInvoiceUseCase", () => {
   let repo: FakeInvoiceRepository;
   let lineRepo: FakeInvoiceLineRepository;
+  let payableWrite: FakePayableEntryWrite;
+  let reconciliationCleanup: FakeInvoiceReconciliationCleanup;
   let useCase: UpdateInvoiceUseCase;
 
   beforeEach(() => {
     repo = new FakeInvoiceRepository();
     lineRepo = new FakeInvoiceLineRepository();
-    useCase = new UpdateInvoiceUseCase(repo, lineRepo);
+    payableWrite = new FakePayableEntryWrite();
+    reconciliationCleanup = new FakeInvoiceReconciliationCleanup();
+    useCase = new UpdateInvoiceUseCase(repo, lineRepo, payableWrite, reconciliationCleanup);
   });
 
   it("actualiza o nome do fornecedor", async () => {
@@ -229,5 +235,112 @@ describe("UpdateInvoiceUseCase", () => {
 
     const lines = await lineRepo.findByInvoiceId(inv.id);
     expect(lines[0].costCenterCategoryId).toBe("cat-original");
+  });
+
+  // ── Feature: validação de duplicado ao alterar o número ──────────────────
+
+  it("lança DuplicateInvoiceError quando o novo número já existe para o mesmo NIF", async () => {
+    // Invoice.create não aceita supplierNifSnapshot → usar createFromImport
+    const baseProps = {
+      supplierName: "Makro",
+      supplierNifSnapshot: "500123456",
+      dueDate: null,
+      subtotalWithoutVat: 50000,
+      totalVat: 11500,
+      totalWithVat: 61500,
+      source: "pdf_import" as const,
+      attachmentUrl: null,
+      aiConfidence: 0.9,
+      requiresReview: false,
+    };
+    const existing = Invoice.createFromImport({ ...baseProps, invoiceNumber: "MKR-999", invoiceDate: new Date("2026-05-01") });
+    const inv = Invoice.createFromImport({ ...baseProps, invoiceNumber: "MKR-001", invoiceDate: new Date("2026-06-01") });
+    await repo.save(existing);
+    await repo.save(inv);
+
+    await expect(
+      useCase.execute({ id: inv.id, invoiceNumber: "MKR-999" }),
+    ).rejects.toThrow(DuplicateInvoiceError);
+  });
+
+  it("lança DuplicateInvoiceError quando o novo número já existe para o mesmo supplierId (sem NIF)", async () => {
+    const existing = Invoice.create({
+      supplierName: "Makro",
+      supplierId: "sup-1",
+      invoiceNumber: "MKR-999",
+      invoiceDate: new Date("2026-05-01"),
+      subtotalWithoutVat: 50000,
+      totalVat: 11500,
+      totalWithVat: 61500,
+    });
+    const inv = Invoice.create({
+      supplierName: "Makro",
+      supplierId: "sup-1",
+      invoiceNumber: "MKR-001",
+      invoiceDate: new Date("2026-06-01"),
+      subtotalWithoutVat: 100000,
+      totalVat: 23000,
+      totalWithVat: 123000,
+    });
+    await repo.save(existing);
+    await repo.save(inv);
+
+    await expect(
+      useCase.execute({ id: inv.id, invoiceNumber: "MKR-999" }),
+    ).rejects.toThrow(DuplicateInvoiceError);
+  });
+
+  it("não lança erro de duplicado quando o número é o mesmo (sem alteração)", async () => {
+    const inv = makeInvoice();
+    await repo.save(inv);
+
+    await expect(
+      useCase.execute({ id: inv.id, invoiceNumber: "MKR-001", supplierName: "Makro PT" }),
+    ).resolves.toBeDefined();
+  });
+
+  // ── Feature: propagação de renumber ──────────────────────────────────────
+
+  it("propaga novo número ao payable quando o invoiceNumber muda", async () => {
+    const inv = makeInvoice();
+    await repo.save(inv);
+
+    await useCase.execute({ id: inv.id, invoiceNumber: "MKR-002" });
+
+    expect(payableWrite.renumbered).toHaveLength(1);
+    expect(payableWrite.renumbered[0].invoiceId).toBe(inv.id);
+    // O use case passa o novo número directamente; o adapter Supabase adiciona o prefixo "Fatura"
+    expect(payableWrite.renumbered[0].newInvoiceNumber).toBe("MKR-002");
+  });
+
+  it("propaga novo label aos links de reconciliação quando o invoiceNumber muda", async () => {
+    const inv = makeInvoice();
+    await repo.save(inv);
+
+    await useCase.execute({ id: inv.id, invoiceNumber: "MKR-002" });
+
+    expect(reconciliationCleanup.renumbered).toHaveLength(1);
+    expect(reconciliationCleanup.renumbered[0].invoiceId).toBe(inv.id);
+    expect(reconciliationCleanup.renumbered[0].newLabel).toContain("MKR-002");
+  });
+
+  it("não propaga renumber quando invoiceNumber não é enviado no comando", async () => {
+    const inv = makeInvoice();
+    await repo.save(inv);
+
+    await useCase.execute({ id: inv.id, supplierName: "NOS" });
+
+    expect(payableWrite.renumbered).toHaveLength(0);
+    expect(reconciliationCleanup.renumbered).toHaveLength(0);
+  });
+
+  it("não propaga renumber quando o número enviado é igual ao actual", async () => {
+    const inv = makeInvoice(); // invoiceNumber = "MKR-001"
+    await repo.save(inv);
+
+    await useCase.execute({ id: inv.id, invoiceNumber: "MKR-001" });
+
+    expect(payableWrite.renumbered).toHaveLength(0);
+    expect(reconciliationCleanup.renumbered).toHaveLength(0);
   });
 });

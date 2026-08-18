@@ -25,17 +25,13 @@ export class AddInvoiceLineUseCase implements AddInvoiceLinePort {
     // Validar que a nova linha não fará a soma divergir dos totais da fatura
     const existingLines = await this.lineRepo.findByInvoiceId(command.invoiceId);
     const newTotalWithVat = existingLines.reduce((sum, l) => sum + l.totalWithVat, 0) + command.totalWithVat;
-    const newVatAmount = existingLines.reduce((sum, l) => sum + l.vatAmount, 0) + command.vatAmount;
-    const newSubtotalWithoutVat = newTotalWithVat - newVatAmount;
 
     // Bloquear apenas quando a soma das linhas EXCEDE o total da fatura (além da tolerância).
-    // Somas parciais (ainda abaixo do total) são permitidas — o utilizador pode estar
-    // a adicionar as linhas de forma incremental.
-    if (
-      newTotalWithVat > invoice.totalWithVat + LINE_TOTAL_TOLERANCE_CENTS ||
-      newVatAmount > invoice.totalVat + LINE_TOTAL_TOLERANCE_CENTS ||
-      newSubtotalWithoutVat > invoice.subtotalWithoutVat + LINE_TOTAL_TOLERANCE_CENTS
-    ) {
+    // Somas parciais (ainda abaixo do total) são permitidas — o utilizador pode estar a
+    // adicionar as linhas de forma incremental. Só verificamos totalWithVat: vatAmount e
+    // subtotalWithoutVat são campos derivados que podem ter arredondamentos diferentes dos
+    // valores linha-a-linha, causando falsos positivos em faturas importadas por IA.
+    if (newTotalWithVat > invoice.totalWithVat + LINE_TOTAL_TOLERANCE_CENTS) {
       throw new LinesTotalMismatchError(command.invoiceId);
     }
 

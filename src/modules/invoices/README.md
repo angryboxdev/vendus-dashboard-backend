@@ -1,7 +1,7 @@
 # Módulo: invoices
 
 > Status: ativo
-> Última atualização: 2026-08-16 (classificationSummary em GetInvoice e ListInvoices; setInvoiceStatus via frontend)
+> Última atualização: 2026-08-18 (DeleteInvoiceLine; DeleteInvoice com cleanup de payable e reconciliação; UpdateInvoice com validação de duplicado e renumber; validação de linhas simplificada; ConfirmImport define lineDetailMode automaticamente)
 
 ---
 
@@ -48,10 +48,18 @@ Fluxo manual:
      individualmente (ex: "Farinha T55", "Embalagens", "MOD"); cada linha tem
      o seu próprio tipo e subcategoria de CC; o sistema verifica em tempo real
      se a soma das linhas bate com o total da fatura
+   → manager pode editar ou eliminar qualquer linha individualmente enquanto
+     os totais não fecharem
    → em qualquer modo, se a subcategoria exigir canal (ex: MKT.05), seleciona
      também a plataforma (Uber Eats, Glovo…)
    → opcionalmente marca "Guardar como regra" para automatizar faturas futuras
-4. Quando paga, regista a data → estado "Paga"
+4. Se necessário, o manager pode corrigir o número da fatura directamente no
+   drawer — o sistema valida duplicados e propaga o novo número à conta a pagar
+   e aos registos de conciliação bancária associados
+5. Quando paga, regista a data → estado "Paga"
+6. Ao eliminar uma fatura: o sistema cancela automaticamente a conta a pagar
+   associada e remove os vínculos de conciliação bancária, actualizando o estado
+   dos movimentos bancários afectados — sem intervenção manual adicional
 ```
 
 **Conceitos-chave para o negócio:**
@@ -66,8 +74,10 @@ Fluxo manual:
   dois modos: *resumo* (uma linha automática igual ao total da fatura, suficiente
   para a maioria dos casos) e *detalhado* (o manager decompõe o valor em várias
   linhas com classificações independentes, útil quando uma fatura cobre despesas
-  de diferentes áreas). O manager pode alternar entre modos a qualquer momento;
-  ao voltar ao resumo, o detalhamento anterior é descartado.
+  de diferentes áreas). Em modo detalhado cada linha pode ser editada (descrição,
+  quantidade, preço, IVA, tipo, subcategoria de CC) ou eliminada individualmente.
+  O manager pode alternar entre modos a qualquer momento; ao voltar ao resumo,
+  o detalhamento anterior é descartado.
 - **Conferência de totais** — no modo detalhado, o sistema compara em tempo real
   a soma das linhas com o total da fatura. Enquanto os valores divergirem, o
   manager é alertado visualmente; a fatura só pode ser considerada válida quando
@@ -81,6 +91,9 @@ Fluxo manual:
 - **Alertas de vencimento** — o módulo transforma faturas em ações operacionais:
   vencidas, a vencer hoje, nos próximos 7 dias, sem vencimento, sem fornecedor,
   baixa confiança IA, divergência de valores.
+- **Número de fatura editável** — o manager pode corrigir o número directamente
+  no drawer de detalhe; o sistema verifica duplicados e actualiza automaticamente
+  a descrição da conta a pagar e os rótulos dos vínculos de conciliação bancária.
 
 ---
 
@@ -126,31 +139,33 @@ reconciliação ou relatórios financeiros.
 ### Entrada (use cases)
 
 - `CreateInvoiceUseCase` — criação manual com linhas opcionais; cria payable entry se dueDate presente.
-- `UpdateInvoiceUseCase` — actualiza campos do cabeçalho (inclui novos campos de classificação financeira).
+- `UpdateInvoiceUseCase` — actualiza campos do cabeçalho (inclui novos campos de classificação financeira). Quando `invoiceNumber` muda: (1) valida duplicado por NIF (se disponível) ou por `supplierId`; (2) propaga o novo número ao payable entry (`renumberByInvoiceId`) e aos links de conciliação bancária (`renumberLinksForInvoice`).
 - `MarkInvoicePaidUseCase` — transita para `paid` + `reconciliationStatus=pending_reconciliation`; aceita `bankAccountId`, `paymentMethod` e `paymentNotes` opcionais; sincroniza payable entry.
 - `MarkInvoiceReconciledUseCase` — transita `reconciliationStatus` de `pending_reconciliation` para `reconciled`. Requer fatura já paga.
 - `SetInvoiceStatusUseCase` — força estado arbitrário; cancela payable entry se `cancelled`.
 - `SetLineDetailModeUseCase` — alterna entre `simple` e `detailed`. Na transição `detailed → simple`, apaga todas as linhas da fatura (`deleteByInvoiceId`) — em modo simples a linha automática é derivada dos totais do cabeçalho, e linhas armazenadas ficariam ambíguas para analytics. A transição nunca é bloqueada por divergência de totais.
-- `AddInvoiceLineUseCase` — adiciona linha a fatura existente (requer `lineDetailMode=detailed`).
-- `UpdateInvoiceLineUseCase` — actualiza valores de uma linha existente (descrição, quantidade, unidade, preço unitário, IVA, total). Requer `lineDetailMode=detailed`. Valida que a soma das linhas não excede os totais da fatura (tolerância: 1 cêntimo).
+- `AddInvoiceLineUseCase` — adiciona linha a fatura existente (requer `lineDetailMode=detailed`). Valida que a soma das linhas não excede `totalWithVat` da fatura (tolerância: 1 cêntimo).
+- `UpdateInvoiceLineUseCase` — actualiza valores de uma linha existente (descrição, quantidade, unidade, preço unitário, IVA, total). Requer `lineDetailMode=detailed`. Valida que a soma das linhas não excede `totalWithVat` da fatura (tolerância: 1 cêntimo).
+- `DeleteInvoiceLineUseCase` — elimina uma linha de uma fatura em modo `detailed`. Requer `lineDetailMode=detailed`; lança `LineDetailModeError` caso contrário.
 - `ClassifyInvoiceLineUseCase` — classifica linha; quando `costCenterCategoryId` presente, herda automaticamente os campos da subcategoria via `CostCenterCategoryReaderPort`. Opcionalmente grava/actualiza `ClassificationRule` com `descriptionPattern` e `channelId`.
 - `SuggestLineClassificationUseCase` — sugestão de classificação por `supplierId` + `description?`; retorna `channelId` quando presente na regra.
 - `ListInvoicesUseCase` — filtra por fornecedor, CC, estado, intervalo de datas, `isDirectDebit`. Injeta `CostCenterCategoryReaderPort`; recolhe os `costCenterCategoryId` únicos de todas as faturas devolvidas, chama `findManyByIds` uma única vez e constrói o `categoryMap` passado a `toInvoiceDTO` — garante que `classificationSummary` tem `code` e `name` corretos mesmo na listagem.
 - **`ProcessDirectDebitsUseCase`** — busca faturas de DD com `directDebitDate ≤ hoje` e status não pago/cancelado; marca-as como pagas na `directDebitDate` e sincroniza payable entries.
 - `ListInvoiceLinesUseCase` — todas as linhas (para analytics por CC).
 - `GetInvoiceUseCase` — detalhe com linhas. Inclui sempre `classificationSummary` (ver abaixo). Quando `lineDetailMode=detailed`, o DTO inclui também `linesSummary = { subtotalWithoutVat, totalVat, totalWithVat, totalsMismatch }` com tolerância de 1 cêntimo.
-- `DeleteInvoiceUseCase` — remove fatura, linhas e ficheiro em storage (se tiver `attachmentUrl`).
+- `DeleteInvoiceUseCase` — remove fatura, linhas e ficheiro em storage (se tiver `attachmentUrl`). Antes de apagar: cancela o payable entry associado (`cancelByInvoiceId`) e remove os links de conciliação bancária (`removeLinksForInvoice`), actualizando os movimentos bancários afectados.
 - **`ImportInvoiceUseCase`** — armazena ficheiro, extrai dados via IA, procura fornecedor por NIF, aplica defaults, cria `Invoice` em `draft_ai`.
-- **`ConfirmImportedInvoiceUseCase`** — aplica correções do utilizador, transita `draft_ai`/`pending_review` → `pending`; salva linhas opcionais; cria payable entry se pedido. Suporta `newSupplier` (cria fornecedor via `SupplierCreatePort` antes de guardar) e propaga `costCenterCategoryId` para todas as linhas.
+- **`ConfirmImportedInvoiceUseCase`** — aplica correções do utilizador, transita `draft_ai`/`pending_review` → `pending`; salva linhas opcionais; cria payable entry se pedido. Suporta `newSupplier` (cria fornecedor via `SupplierCreatePort` antes de guardar) e propaga `costCenterCategoryId` para todas as linhas. Quando linhas são fornecidas, define automaticamente `lineDetailMode=detailed`.
 - **`GetInvoiceAlertsUseCase`** — devolve contagens e valores para os 8 tipos de alerta.
 
 ### Saída (dependências do domínio)
 
 - `InvoiceRepositoryPort` — CRUD de faturas + `findAll(filter?)` + `findPendingDirectDebits()`.
-- `InvoiceLineRepositoryPort` — `saveAll`, `save`, `findByInvoiceId`, `findAll`, `updateLine`, `deleteByInvoiceId`, `updateCostCenterCategoryForInvoice` (bulk update do CC de todas as linhas).
+- `InvoiceLineRepositoryPort` — `saveAll`, `save`, `findByInvoiceId`, `findAll`, `updateLine`, `deleteByInvoiceId`, `deleteLineById`, `updateCostCenterCategoryForInvoice` (bulk update do CC de todas as linhas).
 - `ClassificationRuleRepositoryPort` — `findBySupplierId`, `findBySupplierIdAndDescription`, `save`, `update`.
 - `CostCenterCategoryReaderPort` — `findById` (snapshot mínimo da subcategoria para herança; sem acoplamento ao módulo `financial-base`); `findManyByIds(ids)` (lookup batch para `classificationSummary` em `GetInvoice` e `ListInvoices`).
-- `PayableEntryWritePort` — cria/marca-pago/cancela entradas em `payable_entries`.
+- `PayableEntryWritePort` — cria/marca-pago/cancela/renumera entradas em `payable_entries`. Método `renumberByInvoiceId(invoiceId, newInvoiceNumber)` actualiza a `description` das entradas não canceladas quando o número da fatura muda.
+- `InvoiceReconciliationCleanupPort` — interface declarada no módulo `invoices` para evitar acoplamento ao módulo `bank-statements`. Dois métodos: `removeLinksForInvoice(invoiceId)` (remove links do tipo `invoice` e recalcula estado de conciliação dos movimentos afectados) e `renumberLinksForInvoice(invoiceId, newLabel)` (actualiza `entity_label` dos links quando o número da fatura muda).
 - **`AiExtractionPort`** — `extract(fileUrl, mimeType): Promise<AiExtractionResult>`.
 - **`DocumentStoragePort`** — `store(buffer, filename, mimeType): Promise<string>`.
 - **`SupplierLookupPort`** — `findByNif(nif)` + `findByName(query)`. Inclui defaults do fornecedor.
@@ -165,7 +180,8 @@ reconciliação ou relatórios financeiros.
 ### Saída
 
 - `SupabaseInvoiceRepository` → tabela `invoices` (actualizado com novos campos).
-- `SupabaseInvoiceLineRepository` → tabela `invoice_lines`; inclui `updateCostCenterCategoryForInvoice`.
+- `SupabaseInvoiceLineRepository` → tabela `invoice_lines`; inclui `updateCostCenterCategoryForInvoice` e `deleteLineById`.
+- `SupabaseInvoiceReconciliationCleanupAdapter` → acede directamente às tabelas `bank_movement_entity_links` e `bank_movements` sem importar código do módulo `bank-statements`. Implementa `removeLinksForInvoice` (apaga links + recalcula status dos movimentos) e `renumberLinksForInvoice` (actualiza `entity_label`).
 - **`FinancialBaseSupplierCreateAdapter`** → delega criação de fornecedor ao financial-base.
 - `SupabaseClassificationRuleRepository` → tabela `classification_rules`.
 - `SupabasePayableEntryWriteAdapter` → tabela `payable_entries`.
@@ -193,6 +209,7 @@ reconciliação ou relatórios financeiros.
 | DELETE | `/api/invoices/:id` | Eliminar fatura e linhas |
 | POST | `/api/invoices/:invoiceId/lines` | Adicionar linha a fatura existente |
 | PATCH | `/api/invoices/:invoiceId/lines/:lineId` | Editar valores de uma linha (requer `lineDetailMode=detailed`) |
+| DELETE | `/api/invoices/:invoiceId/lines/:lineId` | Eliminar linha (requer `lineDetailMode=detailed`) |
 | PATCH | `/api/invoices/:invoiceId/lines/:lineId/classify` | Classificar linha |
 | POST | `/api/invoices/process-direct-debits` | Processar débitos diretos vencidos (manager+) |
 | POST | `/api/internal/cron/process-direct-debits` | Idem, via cron (Bearer `CRON_SECRET`) |
@@ -226,7 +243,10 @@ reconciliação ou relatórios financeiros.
   - Em `GetInvoice`, o `categoryMap` é construído com `findManyByIds` sobre os IDs únicos das linhas + cabeçalho. Em `ListInvoices`, o `categoryMap` cobre apenas o `costCenterCategoryId` do cabeçalho (sem linhas na listagem).
 - **Transição `detailed → simple` descarta linhas**: `SetLineDetailModeUseCase` apaga todas as linhas ao voltar para `simple`. Em modo simples, a linha automática deriva dos totais do cabeçalho da fatura; linhas persistidas seriam ambíguas para analytics. A transição nunca é bloqueada — o utilizador pode regressar a `simple` a qualquer momento e recomeçar o detalhamento depois.
 - **Modo determina a fonte para analytics**: em modo `simple`, não há linhas armazenadas — a fatura contribui para DRE/cashflow/rentabilidade através dos campos do cabeçalho (`costCenterCategoryId`, `financialType`, `affectsDre`, `affectsCashflow`, `affectsProfitability`). Em modo `detailed`, as linhas individuais são a fonte; cada linha herda os campos financeiros da sua subcategoria ao ser classificada. `ListInvoiceLinesUseCase` devolve todas as linhas persistidas — que, por definição, são apenas de faturas em `detailed` (faturas em `simple` não têm linhas).
-- **Validação de totais de linhas (modo detalhado)**: ao adicionar ou editar uma linha, a soma das linhas (com os novos valores) não pode exceder os totais da fatura — `totalWithVat`, `totalVat` e `subtotalWithoutVat` — com tolerância de 1 cêntimo. Somas parciais abaixo do total são permitidas (utilizador pode adicionar linhas incrementalmente). Esta validação aplica-se a `AddInvoiceLineUseCase` e `UpdateInvoiceLineUseCase`.
+- **Validação de totais de linhas (modo detalhado)**: ao adicionar ou editar uma linha, a soma das linhas não pode exceder `totalWithVat` da fatura com tolerância de 1 cêntimo. Somas parciais abaixo do total são permitidas (utilizador pode adicionar linhas incrementalmente). Apenas `totalWithVat` é verificado — `vatAmount` e `subtotalWithoutVat` são campos derivados que em faturas importadas por IA podem ter arredondamentos diferentes dos valores cabeçalho, causando falsos positivos. Esta validação aplica-se a `AddInvoiceLineUseCase` e `UpdateInvoiceLineUseCase`.
+- **Cleanup de dependências ao apagar fatura**: `DeleteInvoiceUseCase` cancela o payable entry e remove os links de conciliação bancária antes de apagar a fatura e as linhas. Ordem garantida: (1) apagar linhas, (2) remover links de reconciliação + recalcular movimentos afectados, (3) cancelar payable entry, (4) apagar fatura, (5) apagar ficheiro em storage. `InvoiceReconciliationCleanupPort` é declarado no módulo `invoices` para evitar acoplamento ao módulo `bank-statements`; o adapter concreto acede directamente às tabelas `bank_movement_entity_links` e `bank_movements`.
+- **Renumber propagation no UpdateInvoice**: quando `invoiceNumber` muda, o use case actualiza a `description` do payable entry (via `renumberByInvoiceId`) e o `entity_label` dos links de conciliação bancária (via `renumberLinksForInvoice`). A propagação só ocorre quando o número realmente muda (não quando é omitido nem quando é igual ao actual).
+- **lineDetailMode automático no ConfirmImport**: quando o utilizador fornece linhas ao confirmar uma fatura importada, o use case define automaticamente `lineDetailMode=detailed` e persiste a fatura actualizada antes de criar o payable entry — garantindo que o DTO retornado reflecte o modo correcto.
 
 ## SQL — alterações às tabelas
 

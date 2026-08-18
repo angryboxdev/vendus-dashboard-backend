@@ -130,6 +130,14 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
     if (error) throw new Error(error.message);
   }
 
+  async deleteLineById(lineId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from("invoice_lines")
+      .delete()
+      .eq("id", lineId);
+    if (error) throw new Error(error.message);
+  }
+
   async updateCostCenterCategoryForInvoice(invoiceId: string, categoryId: string | null): Promise<void> {
     const { error } = await this.supabase
       .from("invoice_lines")

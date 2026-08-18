@@ -28,6 +28,10 @@ export class FakeInvoiceLineRepository implements InvoiceLineRepositoryPort {
     }
   }
 
+  async deleteLineById(lineId: string): Promise<void> {
+    this.store.delete(lineId);
+  }
+
   async updateCostCenterCategoryForInvoice(invoiceId: string, categoryId: string | null): Promise<void> {
     for (const [id, line] of this.store) {
       if (line.invoiceId === invoiceId) {

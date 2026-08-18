@@ -24,4 +24,10 @@ export interface PayableEntryWritePort {
 
   /** Cancela o payable ligado a esta fatura, se existir e não estiver pago. */
   cancelByInvoiceId(invoiceId: string): Promise<void>;
+
+  /**
+   * Actualiza a description do payable ligado a esta fatura quando o número da fatura muda.
+   * Apenas actualiza entradas não canceladas.
+   */
+  renumberByInvoiceId(invoiceId: string, newInvoiceNumber: string): Promise<void>;
 }

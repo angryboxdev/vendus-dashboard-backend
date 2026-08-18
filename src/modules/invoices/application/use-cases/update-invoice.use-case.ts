@@ -5,7 +5,9 @@ import type {
 } from "../../domain/ports/in/invoice.ports.js";
 import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
 import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
-import { InvoiceNotFoundError } from "../../domain/errors.js";
+import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry-write.port.js";
+import type { InvoiceReconciliationCleanupPort } from "../../domain/ports/out/invoice-reconciliation-cleanup.port.js";
+import { InvoiceNotFoundError, DuplicateInvoiceError } from "../../domain/errors.js";
 import type { UpdateInvoiceData } from "../../domain/entities/invoice.js";
 import { toInvoiceDTO } from "./shared.js";
 
@@ -13,11 +15,25 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
   constructor(
     private readonly invoiceRepo: InvoiceRepositoryPort,
     private readonly lineRepo: InvoiceLineRepositoryPort,
+    private readonly payableWrite: PayableEntryWritePort,
+    private readonly reconciliationCleanup: InvoiceReconciliationCleanupPort,
   ) {}
 
   async execute(command: UpdateInvoiceCommand): Promise<InvoiceDTO> {
     const existing = await this.invoiceRepo.findById(command.id);
     if (!existing) throw new InvoiceNotFoundError(command.id);
+
+    // Validar duplicado se o número da fatura for alterado
+    if (command.invoiceNumber !== undefined && command.invoiceNumber !== existing.invoiceNumber) {
+      const nif = existing.supplierNifSnapshot;
+      if (nif) {
+        const dup = await this.invoiceRepo.findDuplicateByNif(command.invoiceNumber, nif, command.id);
+        if (dup) throw new DuplicateInvoiceError(command.invoiceNumber, existing.supplierName);
+      } else if (existing.supplierId) {
+        const dup = await this.invoiceRepo.findDuplicate(command.invoiceNumber, existing.supplierId, command.id);
+        if (dup) throw new DuplicateInvoiceError(command.invoiceNumber, existing.supplierName);
+      }
+    }
 
     const data: UpdateInvoiceData = {};
     if (command.supplierId !== undefined) data.supplierId = command.supplierId;
@@ -47,6 +63,15 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     // Propagar costCenterCategoryId às linhas sempre que o campo for explicitamente enviado
     if (command.costCenterCategoryId !== undefined) {
       await this.lineRepo.updateCostCenterCategoryForInvoice(updated.id, updated.costCenterCategoryId);
+    }
+
+    // Propagar novo número às tabelas denormalizadas (payable_entries e bank_movement_entity_links)
+    if (command.invoiceNumber !== undefined && command.invoiceNumber !== existing.invoiceNumber) {
+      await this.payableWrite.renumberByInvoiceId(updated.id, updated.invoiceNumber);
+      await this.reconciliationCleanup.renumberLinksForInvoice(
+        updated.id,
+        `${updated.supplierName} — ${updated.invoiceNumber}`,
+      );
     }
 
     return toInvoiceDTO(updated);

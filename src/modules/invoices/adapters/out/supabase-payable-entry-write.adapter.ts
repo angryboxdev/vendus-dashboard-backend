@@ -65,4 +65,16 @@ export class SupabasePayableEntryWriteAdapter implements PayableEntryWritePort {
       .neq("status", "paid");
     if (error) throw new Error(error.message);
   }
+
+  async renumberByInvoiceId(invoiceId: string, newInvoiceNumber: string): Promise<void> {
+    const { error } = await this.supabase
+      .from("payable_entries")
+      .update({
+        description: `Fatura ${newInvoiceNumber}`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("invoice_id", invoiceId)
+      .neq("status", "cancelled");
+    if (error) throw new Error(error.message);
+  }
 }

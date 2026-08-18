@@ -34,17 +34,13 @@ export class UpdateInvoiceLineUseCase implements UpdateInvoiceLinePort {
     if (command.totalWithVat !== undefined) patch.totalWithVat = command.totalWithVat;
     const updatedLine = line.updateValues(patch);
 
-    // Validate: sum of all lines (with updated line) must not exceed invoice totals
+    // Validate: sum of all lines (with updated line) must not exceed invoice total.
+    // Only totalWithVat is checked — vatAmount and subtotalWithoutVat are derived fields
+    // that may have rounding differences in AI-imported invoices, causing false positives.
     const otherLines = existingLines.filter((l) => l.id !== command.lineId);
     const newTotal = otherLines.reduce((s, l) => s + l.totalWithVat, 0) + updatedLine.totalWithVat;
-    const newVat = otherLines.reduce((s, l) => s + l.vatAmount, 0) + updatedLine.vatAmount;
-    const newSubtotal = newTotal - newVat;
 
-    if (
-      newTotal > invoice.totalWithVat + LINE_TOTAL_TOLERANCE_CENTS ||
-      newVat > invoice.totalVat + LINE_TOTAL_TOLERANCE_CENTS ||
-      newSubtotal > invoice.subtotalWithoutVat + LINE_TOTAL_TOLERANCE_CENTS
-    ) {
+    if (newTotal > invoice.totalWithVat + LINE_TOTAL_TOLERANCE_CENTS) {
       throw new LinesTotalMismatchError(command.invoiceId);
     }
 

@@ -325,4 +325,58 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
     expect(supplierHint.saved.size).toBe(0);
   });
+
+  // ── Feature: lineDetailMode automático ───────────────────────────────────
+
+  it("define lineDetailMode como 'detailed' quando são fornecidas linhas na confirmação", async () => {
+    const draft = makeDraftInvoice();
+    await invoiceRepo.save(draft);
+
+    const result = await useCase.execute({
+      id: draft.id,
+      lines: [
+        {
+          description: "Farinha T55",
+          quantity: 10,
+          unitCostWithoutVat: 8000,
+          vatRate: 6,
+          vatAmount: 480,
+          totalWithVat: 8480,
+        },
+      ],
+    });
+
+    expect(result.lineDetailMode).toBe("detailed");
+  });
+
+  it("mantém lineDetailMode 'simple' quando não são fornecidas linhas", async () => {
+    const draft = makeDraftInvoice();
+    await invoiceRepo.save(draft);
+
+    const result = await useCase.execute({ id: draft.id });
+
+    expect(result.lineDetailMode).toBe("simple");
+  });
+
+  it("persiste lineDetailMode 'detailed' no repositório quando há linhas", async () => {
+    const draft = makeDraftInvoice();
+    await invoiceRepo.save(draft);
+
+    await useCase.execute({
+      id: draft.id,
+      lines: [
+        {
+          description: "Produto",
+          quantity: 1,
+          unitCostWithoutVat: 5000,
+          vatRate: 23,
+          vatAmount: 1150,
+          totalWithVat: 6150,
+        },
+      ],
+    });
+
+    const saved = await invoiceRepo.findById(draft.id);
+    expect(saved?.lineDetailMode).toBe("detailed");
+  });
 });

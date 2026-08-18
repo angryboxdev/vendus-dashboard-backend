@@ -111,23 +111,30 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       await this.lineRepo.saveAll(lines);
     }
 
+    // Derivar lineDetailMode automaticamente: se há linhas confirmadas → detailed, caso contrário manter simple
+    let finalInvoice = confirmed;
+    if (lines.length > 0) {
+      finalInvoice = confirmed.setLineDetailMode("detailed");
+      await this.invoiceRepo.update(finalInvoice);
+    }
+
     // Propagar costCenterCategoryId da fatura para todas as linhas existentes
-    if (confirmed.costCenterCategoryId !== null) {
-      await this.lineRepo.updateCostCenterCategoryForInvoice(confirmed.id, confirmed.costCenterCategoryId);
+    if (finalInvoice.costCenterCategoryId !== null) {
+      await this.lineRepo.updateCostCenterCategoryForInvoice(finalInvoice.id, finalInvoice.costCenterCategoryId);
     }
 
     // Create payable entry if explicitly requested and due date is set
-    if (command.saveAsPayable && confirmed.dueDate) {
+    if (command.saveAsPayable && finalInvoice.dueDate) {
       await this.payableWrite.createForInvoice({
-        invoiceId: confirmed.id,
-        supplierId: confirmed.supplierId,
-        supplierName: confirmed.supplierName,
-        invoiceNumber: confirmed.invoiceNumber,
-        dueDate: confirmed.dueDate,
-        amount: confirmed.totalWithVat,
+        invoiceId: finalInvoice.id,
+        supplierId: finalInvoice.supplierId,
+        supplierName: finalInvoice.supplierName,
+        invoiceNumber: finalInvoice.invoiceNumber,
+        dueDate: finalInvoice.dueDate,
+        amount: finalInvoice.totalWithVat,
       });
     }
 
-    return toInvoiceDTO(confirmed, lines);
+    return toInvoiceDTO(finalInvoice, lines);
   }
 }

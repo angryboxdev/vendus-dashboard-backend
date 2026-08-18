@@ -286,4 +286,26 @@ describe("AddInvoiceLineUseCase", () => {
 
     expect(dto.id).toBeDefined();
   });
+
+  // ── Validação simplificada (apenas totalWithVat) ─────────────────────────
+
+  it("aceita linha cujo vatAmount excederia o totalVat da fatura mas totalWithVat está dentro do limite", async () => {
+    // Caso de faturas importadas por IA: os campos derivados (vatAmount, subtotal) podem
+    // ter arredondamentos diferentes dos valores cabeçalho. Só totalWithVat é validado.
+    const invoice = makeDetailedInvoice({ subtotalWithoutVat: 10000, totalVat: 1000, totalWithVat: 11000 });
+    await invoiceRepo.save(invoice);
+
+    // vatAmount=1500 excede totalVat=1000, mas totalWithVat=11000 está dentro do limite
+    const dto = await useCase.execute({
+      invoiceId: invoice.id,
+      description: "Linha com IVA discrepante",
+      quantity: 1,
+      unitCostWithoutVat: 9500,
+      vatRate: 23,
+      vatAmount: 1500, // > invoice.totalVat (1000)
+      totalWithVat: 11000,
+    });
+
+    expect(dto.id).toBeDefined();
+  });
 });

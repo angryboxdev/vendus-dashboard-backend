@@ -8,6 +8,7 @@ import type {
   AddInvoiceLinePort,
   ClassifyInvoiceLinePort,
   UpdateInvoiceLinePort,
+  DeleteInvoiceLinePort,
   ListInvoicesPort,
   ListInvoiceLinesPort,
   GetInvoicePort,
@@ -38,6 +39,7 @@ interface InvoicePorts {
   addInvoiceLine: AddInvoiceLinePort;
   classifyInvoiceLine: ClassifyInvoiceLinePort;
   updateInvoiceLine: UpdateInvoiceLinePort;
+  deleteInvoiceLine: DeleteInvoiceLinePort;
   listInvoices: ListInvoicesPort;
   listInvoiceLines: ListInvoiceLinesPort;
   getInvoice: GetInvoicePort;
@@ -244,6 +246,16 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
       if (totalWithVat !== undefined) cmd.totalWithVat = totalWithVat;
       const line = await ports.updateInvoiceLine.execute(cmd);
       res.json(line);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // DELETE /invoices/:invoiceId/lines/:lineId
+  router.delete("/invoices/:invoiceId/lines/:lineId", async (req, res) => {
+    try {
+      await ports.deleteInvoiceLine.execute(req.params.invoiceId, req.params.lineId);
+      res.status(204).send();
     } catch (err) {
       handleError(res, err);
     }

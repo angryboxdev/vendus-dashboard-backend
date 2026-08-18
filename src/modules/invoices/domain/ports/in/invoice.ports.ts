@@ -399,3 +399,7 @@ export interface UpdateInvoiceLineCommand {
 export interface UpdateInvoiceLinePort {
   execute(command: UpdateInvoiceLineCommand): Promise<InvoiceLineDTO>;
 }
+
+export interface DeleteInvoiceLinePort {
+  execute(invoiceId: string, lineId: string): Promise<void>;
+}
