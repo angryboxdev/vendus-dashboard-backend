@@ -5,7 +5,10 @@ import { FakeInvoiceRead } from "../fakes/fake-invoice-read.js";
 import { PayableEntry } from "../../domain/entities/payable-entry.js";
 import { PayableEntryNotFoundError } from "../../domain/errors.js";
 
-function makeUseCase(repo: FakePayableEntryRepository, invoiceGateway = new FakeInvoiceRead()) {
+function makeUseCase(
+  repo: FakePayableEntryRepository,
+  invoiceGateway = new FakeInvoiceRead(),
+) {
   return { uc: new MarkPayableAsPaidUseCase(repo, invoiceGateway), invoiceGateway };
 }
 
@@ -87,4 +90,5 @@ describe("MarkPayableAsPaidUseCase", () => {
     await uc.execute({ id: created.id });
     expect(invoiceGateway.markedPaid).toHaveLength(0);
   });
+
 });

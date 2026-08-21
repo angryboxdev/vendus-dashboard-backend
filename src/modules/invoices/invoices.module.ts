@@ -7,6 +7,7 @@ import { SupabasePayableEntryWriteAdapter } from "./adapters/out/supabase-payabl
 import { SupabaseCostCenterCategoryReaderAdapter } from "./adapters/out/supabase-cost-center-category-reader.adapter.js";
 import { SupabaseDocumentStorageAdapter } from "./adapters/out/supabase-document-storage.adapter.js";
 import { SupabaseInvoiceReconciliationCleanupAdapter } from "./adapters/out/supabase-invoice-reconciliation-cleanup.adapter.js";
+import { SupabaseOccurrenceSyncAdapter } from "./adapters/out/supabase-occurrence-sync.adapter.js";
 import { SupabaseSupplierLookupAdapter } from "./adapters/out/supabase-supplier-lookup.adapter.js";
 import { SupabaseSupplierHintAdapter } from "./adapters/out/supabase-supplier-hint.adapter.js";
 import { FinancialBaseSupplierCreateAdapter } from "./adapters/out/financial-base-supplier-create.adapter.js";
@@ -54,6 +55,7 @@ export function createInvoicesModule(
   const ruleRepo = new SupabaseClassificationRuleRepository(client);
   const categoryReader = new SupabaseCostCenterCategoryReaderAdapter(client);
   const payableWrite = new SupabasePayableEntryWriteAdapter(client);
+  const occurrenceSync = new SupabaseOccurrenceSyncAdapter(client);
   const storage = new SupabaseDocumentStorageAdapter(client);
   const reconciliationCleanup = new SupabaseInvoiceReconciliationCleanupAdapter(client);
   const supplierLookup = new SupabaseSupplierLookupAdapter(client);
@@ -66,7 +68,7 @@ export function createInvoicesModule(
   const router = createInvoiceRouter({
     createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite),
     updateInvoice: new UpdateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, reconciliationCleanup),
-    markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite),
+    markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite, occurrenceSync),
     setInvoiceStatus: new SetInvoiceStatusUseCase(invoiceRepo, payableWrite),
     setLineDetailMode: new SetLineDetailModeUseCase(invoiceRepo, lineRepo),
     addInvoiceLine: new AddInvoiceLineUseCase(invoiceRepo, lineRepo),

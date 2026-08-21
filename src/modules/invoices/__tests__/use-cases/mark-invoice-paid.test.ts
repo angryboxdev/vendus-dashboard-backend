@@ -1,6 +1,7 @@
 import { MarkInvoicePaidUseCase } from "../../application/use-cases/mark-invoice-paid.use-case.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakePayableEntryWrite } from "../fakes/fake-payable-entry-write.js";
+import { FakeOccurrenceSync } from "../fakes/fake-occurrence-sync.js";
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceNotFoundError } from "../../domain/errors.js";
 
@@ -17,12 +18,14 @@ const makeInvoice = () =>
 describe("MarkInvoicePaidUseCase", () => {
   let invoiceRepo: FakeInvoiceRepository;
   let payableWrite: FakePayableEntryWrite;
+  let occurrenceSync: FakeOccurrenceSync;
   let useCase: MarkInvoicePaidUseCase;
 
   beforeEach(() => {
     invoiceRepo = new FakeInvoiceRepository();
     payableWrite = new FakePayableEntryWrite();
-    useCase = new MarkInvoicePaidUseCase(invoiceRepo, payableWrite);
+    occurrenceSync = new FakeOccurrenceSync();
+    useCase = new MarkInvoicePaidUseCase(invoiceRepo, payableWrite, occurrenceSync);
   });
 
   it("marks invoice as paid with provided date and sets reconciliation to pending", async () => {

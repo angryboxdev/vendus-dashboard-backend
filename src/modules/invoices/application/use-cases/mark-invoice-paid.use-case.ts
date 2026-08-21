@@ -5,6 +5,7 @@ import type {
 } from "../../domain/ports/in/invoice.ports.js";
 import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
 import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry-write.port.js";
+import type { OccurrenceSyncPort } from "../../domain/ports/out/occurrence-sync.port.js";
 import { InvoiceNotFoundError } from "../../domain/errors.js";
 import { toInvoiceDTO } from "./shared.js";
 
@@ -12,6 +13,7 @@ export class MarkInvoicePaidUseCase implements MarkInvoicePaidPort {
   constructor(
     private readonly invoiceRepo: InvoiceRepositoryPort,
     private readonly payableWrite: PayableEntryWritePort,
+    private readonly occurrenceSync: OccurrenceSyncPort,
   ) {}
 
   async execute(command: MarkInvoicePaidCommand): Promise<InvoiceDTO> {
@@ -24,6 +26,9 @@ export class MarkInvoicePaidUseCase implements MarkInvoicePaidPort {
 
     // Sincronizar conta a pagar ligada, se existir
     await this.payableWrite.markPaidByInvoiceId(updated.id, paidAt);
+
+    // Sincronizar ocorrência recorrente vinculada, se existir
+    await this.occurrenceSync.markPaidByInvoiceId(updated.id, paidAt);
 
     return toInvoiceDTO(updated);
   }

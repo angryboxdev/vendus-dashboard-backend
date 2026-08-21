@@ -27,6 +27,7 @@ export class SupabasePayableEntryWriteAdapter implements PayableEntryWritePort {
     const now = new Date().toISOString();
     const { error } = await this.supabase.from("payable_entries").insert({
       id: crypto.randomUUID(),
+      source: "invoice",
       invoice_id: data.invoiceId,
       supplier_id: data.supplierId,
       supplier_name: data.supplierName,
