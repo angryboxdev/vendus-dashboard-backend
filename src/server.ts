@@ -18,7 +18,6 @@ import { createFinancialBaseModule } from "./modules/financial-base/financial-ba
 import { createInvoicesModule } from "./modules/invoices/invoices.module.js";
 import { createPayableEntriesModule } from "./modules/payable-entries/payable-entries.module.js";
 import { createPayableRecurrencesModule } from "./modules/payable-recurrences/payable-recurrences.module.js";
-import { createFinancialObligationsModule } from "./modules/financial-obligations/financial-obligations.module.js";
 import { createBankAccountsModule } from "./modules/bank-accounts/bank-accounts.module.js";
 import { createBankStatementsModule } from "./modules/bank-statements/bank-statements.module.js";
 import { createAirMenuModule } from "./modules/air-menu/air-menu.module.js";
@@ -128,10 +127,6 @@ app.use("/api", requireMinRole("manager"), payableEntriesModule.router);
 // Payable recurrences module (hexagonal)
 const payableRecurrencesModule = createPayableRecurrencesModule();
 app.use("/api", requireMinRole("manager"), payableRecurrencesModule.router);
-
-// Financial obligations module (hexagonal) — lista obrigações concretas (recurrence + manual)
-const financialObligationsModule = createFinancialObligationsModule();
-app.use("/api", requireMinRole("manager"), financialObligationsModule.router);
 
 // Bank accounts module (hexagonal) — must be before bank-statements
 const bankAccountsModule = createBankAccountsModule();
