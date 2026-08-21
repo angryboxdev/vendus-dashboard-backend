@@ -1,5 +1,6 @@
 import type { OccurrenceStatus, OccurrencePaymentMethod } from "../../entities/recurrence-occurrence.js";
 import type { OccurrenceFilter } from "../out/occurrence-repository.port.js";
+import type { LinkedBankMovement } from "../out/bank-movement-link-read.port.js";
 
 // ── DTO ───────────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,8 @@ export interface OccurrenceDTO {
   paymentNotes: string | null;
   notes: string | null;
   documentUrl: string | null;
+  /** Bank movement that justified this occurrence, if any. */
+  linkedBankMovement: LinkedBankMovement | null;
   createdAt: string;
   updatedAt: string;
 }

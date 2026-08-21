@@ -34,7 +34,9 @@ import { GetAccountMonthDetailUseCase } from "./application/use-cases/get-accoun
 import { GetMovementsLinkedToInvoiceUseCase } from "./application/use-cases/get-movements-linked-to-invoice.use-case.js";
 import { GetInvoiceOpenBalancesUseCase } from "./application/use-cases/get-invoice-open-balances.use-case.js";
 import { UnreconcileMovementUseCase } from "./application/use-cases/unreconcile-movement.use-case.js";
+import { SearchOccurrenceCandidatesUseCase } from "./application/use-cases/search-occurrence-candidates.use-case.js";
 import { SupabaseBankDocumentStorageAdapter } from "./adapters/out/supabase-bank-document-storage.adapter.js";
+import { SupabaseOccurrenceMatchReadAdapter } from "./adapters/out/supabase-occurrence-match-read.adapter.js";
 
 // Adapter in
 import { BankStatementController } from "./adapters/in/bank-statement.controller.js";
@@ -61,6 +63,7 @@ export function createBankStatementsModule(bankAccountRead?: BankAccountReadPort
   const movementHint = new SupabaseMovementMatchHintAdapter(supabase);
   const entityLinkRepo = new SupabaseBankMovementEntityLinkRepository(supabase);
   const invoiceReconciliationWrite = new SupabaseInvoiceReconciliationWriteAdapter(supabase);
+  const occurrenceRead = new SupabaseOccurrenceMatchReadAdapter(supabase);
 
   // Cross-module: fall back to direct Supabase adapter if not injected
   const resolvedBankAccountRead: BankAccountReadPort =
@@ -95,6 +98,7 @@ export function createBankStatementsModule(bankAccountRead?: BankAccountReadPort
   const getMovementsLinkedToInvoice = new GetMovementsLinkedToInvoiceUseCase(entityLinkRepo, movementRepo);
   const getInvoiceOpenBalances = new GetInvoiceOpenBalancesUseCase(entityLinkRepo, invoiceRead);
   const unreconcileMovement = new UnreconcileMovementUseCase(movementRepo, entityLinkRepo, invoiceRead, invoiceReconciliationWrite);
+  const searchOccurrenceCandidates = new SearchOccurrenceCandidatesUseCase(occurrenceRead);
 
   // Adapter in
   const controller = new BankStatementController(
@@ -119,6 +123,7 @@ export function createBankStatementsModule(bankAccountRead?: BankAccountReadPort
     getMovementsLinkedToInvoice,
     getInvoiceOpenBalances,
     unreconcileMovement,
+    searchOccurrenceCandidates,
   );
 
   return { router: controller.router };

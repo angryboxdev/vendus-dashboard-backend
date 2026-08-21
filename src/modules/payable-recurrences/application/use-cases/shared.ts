@@ -2,6 +2,7 @@ import type { Recurrence } from "../../domain/entities/recurrence.js";
 import type { RecurrenceOccurrence } from "../../domain/entities/recurrence-occurrence.js";
 import type { RecurrenceDTO } from "../../domain/ports/in/recurrence.ports.js";
 import type { OccurrenceDTO } from "../../domain/ports/in/occurrence.ports.js";
+import type { LinkedBankMovement } from "../../domain/ports/out/bank-movement-link-read.port.js";
 
 /** Serializes a Date to YYYY-MM-DD using local time (avoids UTC offset shifting the day). */
 function toLocalDateString(date: Date): string {
@@ -37,7 +38,7 @@ export function toRecurrenceDTO(r: Recurrence): RecurrenceDTO {
   };
 }
 
-export function toOccurrenceDTO(o: RecurrenceOccurrence): OccurrenceDTO {
+export function toOccurrenceDTO(o: RecurrenceOccurrence, linkedBankMovement?: LinkedBankMovement | null): OccurrenceDTO {
   return {
     id: o.id,
     recurrenceId: o.recurrenceId,
@@ -55,6 +56,7 @@ export function toOccurrenceDTO(o: RecurrenceOccurrence): OccurrenceDTO {
     paymentNotes: o.paymentNotes,
     notes: o.notes,
     documentUrl: o.documentUrl,
+    linkedBankMovement: linkedBankMovement ?? null,
     createdAt: o.createdAt.toISOString(),
     updatedAt: o.updatedAt.toISOString(),
   };

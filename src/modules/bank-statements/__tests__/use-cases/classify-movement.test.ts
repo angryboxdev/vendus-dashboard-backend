@@ -52,13 +52,27 @@ describe("ClassifyMovementUseCase", () => {
     ).rejects.toThrow(MovementNotFoundError);
   });
 
-  it("classifies movement as bank fee", async () => {
+  it("classifies movement as bank fee → justificado", async () => {
     await useCase.execute({
       movementId: movement.id,
       justificationType: "despesa_bancaria_automatica",
     });
     const updated = await repo.findById(movement.id);
-    expect(updated?.reconciliationStatus).toBe("conciliado_sem_fatura");
+    expect(updated?.reconciliationStatus).toBe("justificado");
+    expect(updated?.isResolved).toBe(true);
+  });
+
+  it("classifies movement as contrato_recorrencia → justificado with matched occurrence", async () => {
+    await useCase.execute({
+      movementId: movement.id,
+      justificationType: "contrato_recorrencia",
+      matchedEntityType: "recurrence_occurrence",
+      matchedEntityId: "occ-aug-2026",
+    });
+    const updated = await repo.findById(movement.id);
+    expect(updated?.reconciliationStatus).toBe("justificado");
+    expect(updated?.matchedEntityType).toBe("recurrence_occurrence");
+    expect(updated?.matchedEntityId).toBe("occ-aug-2026");
     expect(updated?.isResolved).toBe(true);
   });
 

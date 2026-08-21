@@ -58,11 +58,11 @@ describe("ReconciliationCalculatorService", () => {
 
   it("counts statuses correctly", () => {
     const movements = [
-      makeMovement({ type: "debit", amount: 100, hash: "h1", resolved: true }), // conciliado_sem_fatura
+      makeMovement({ type: "debit", amount: 100, hash: "h1", resolved: true }), // justificado (despesa_bancaria_automatica)
       makeMovement({ type: "debit", amount: 200, hash: "h2" }), // saida_nao_justificada
     ];
     const stats = calculator.compute(0, movements);
-    expect(stats.statusCounts["conciliado_sem_fatura"]).toBe(1);
+    expect(stats.statusCounts["justificado"]).toBe(1);
     expect(stats.statusCounts["saida_nao_justificada"]).toBe(1);
   });
 

@@ -7,6 +7,7 @@ import { SupabaseRecurrenceRepository } from "./adapters/out/supabase-recurrence
 import { SupabaseOccurrenceRepository } from "./adapters/out/supabase-occurrence.repository.js";
 import { SupabaseInvoiceReadAdapter } from "./adapters/out/supabase-invoice-read.adapter.js";
 import { SupabaseRecurrenceDocumentStorageAdapter } from "./adapters/out/supabase-document-storage.adapter.js";
+import { SupabaseBankMovementLinkReadAdapter } from "./adapters/out/supabase-bank-movement-link-read.adapter.js";
 
 // Use cases — recorrências
 import { CreateRecurrenceUseCase } from "./application/use-cases/create-recurrence.use-case.js";
@@ -56,6 +57,7 @@ export function createPayableRecurrencesModule(supabase?: SupabaseClient): Payab
   const occurrenceRepo = new SupabaseOccurrenceRepository(client);
   const invoiceRead = new SupabaseInvoiceReadAdapter(client);
   const documentStorage = new SupabaseRecurrenceDocumentStorageAdapter(client);
+  const bankMovementLinkRead = new SupabaseBankMovementLinkReadAdapter(client);
 
   // Controller
   const router = createRecurrenceRouter({
@@ -69,8 +71,8 @@ export function createPayableRecurrencesModule(supabase?: SupabaseClient): Payab
     getRecurrence: new GetRecurrenceUseCase(recurrenceRepo),
     // Ocorrências
     generateOccurrence: new GenerateOccurrenceUseCase(recurrenceRepo, occurrenceRepo),
-    listOccurrences: new ListOccurrencesUseCase(occurrenceRepo),
-    getOccurrence: new GetOccurrenceUseCase(occurrenceRepo),
+    listOccurrences: new ListOccurrencesUseCase(occurrenceRepo, bankMovementLinkRead),
+    getOccurrence: new GetOccurrenceUseCase(occurrenceRepo, bankMovementLinkRead),
     linkInvoiceToOccurrence: new LinkInvoiceToOccurrenceUseCase(occurrenceRepo, invoiceRead),
     markOccurrenceAsPaid: new MarkOccurrenceAsPaidUseCase(occurrenceRepo),
     cancelOccurrence: new CancelOccurrenceUseCase(occurrenceRepo),

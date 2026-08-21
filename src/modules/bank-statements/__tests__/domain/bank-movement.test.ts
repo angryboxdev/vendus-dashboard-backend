@@ -86,12 +86,36 @@ describe("BankMovement", () => {
       expect(m.riskLevel).toBe("low");
     });
 
-    it("despesa_bancaria_automatica → conciliado_sem_fatura", () => {
+    it("despesa_bancaria_automatica → justificado", () => {
       const m = makeDebit().classify({
         justificationType: "despesa_bancaria_automatica",
       });
-      expect(m.reconciliationStatus).toBe("conciliado_sem_fatura");
+      expect(m.reconciliationStatus).toBe("justificado");
       expect(m.requiresDocument).toBe(false);
+      expect(m.isResolved).toBe(true);
+    });
+
+    it("recibo_comprovativo → justificado", () => {
+      const m = makeDebit().classify({ justificationType: "recibo_comprovativo" });
+      expect(m.reconciliationStatus).toBe("justificado");
+      expect(m.isResolved).toBe(true);
+    });
+
+    it("contrato_recorrencia → justificado", () => {
+      const m = makeDebit().classify({
+        justificationType: "contrato_recorrencia",
+        matchedEntityType: "recurrence_occurrence",
+        matchedEntityId: "occ-1",
+      });
+      expect(m.reconciliationStatus).toBe("justificado");
+      expect(m.matchedEntityType).toBe("recurrence_occurrence");
+      expect(m.matchedEntityId).toBe("occ-1");
+      expect(m.isResolved).toBe(true);
+    });
+
+    it("emprestimo_financiamento → justificado", () => {
+      const m = makeDebit().classify({ justificationType: "emprestimo_financiamento" });
+      expect(m.reconciliationStatus).toBe("justificado");
       expect(m.isResolved).toBe(true);
     });
 

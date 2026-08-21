@@ -374,6 +374,31 @@ export interface GetMovementsLinkedToInvoicePort {
   execute(invoiceId: string): Promise<InvoiceLinkedMovement[]>;
 }
 
+// ─── Search recurrence occurrence candidates ──────────────────────────────────
+
+export interface OccurrenceCandidateDto {
+  id: string;
+  recurrenceId: string;
+  recurrenceName: string;
+  supplierId: string | null;
+  supplierName: string;
+  period: string;             // YYYY-MM
+  effectiveAmountCents: number;
+  dueDate: string;            // YYYY-MM-DD
+  status: string;
+}
+
+export interface SearchOccurrenceCandidatesQuery {
+  q?: string;
+  dateFrom?: string; // YYYY-MM-DD
+  dateTo?: string;   // YYYY-MM-DD
+  limit?: number;
+}
+
+export interface SearchOccurrenceCandidatesPort {
+  execute(query: SearchOccurrenceCandidatesQuery): Promise<OccurrenceCandidateDto[]>;
+}
+
 // ─── Get open balances for multiple invoices ───────────────────────────────────
 
 /**

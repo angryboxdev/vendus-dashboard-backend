@@ -73,7 +73,7 @@ describe("ApplyAutoRulesUseCase", () => {
 
     expect(result.appliedCount).toBe(1);
     const updated = await movementRepo.findById(m1.id);
-    expect(updated?.reconciliationStatus).toBe("conciliado_sem_fatura");
+    expect(updated?.reconciliationStatus).toBe("justificado");
     // m2 not matched
     const m2Updated = await movementRepo.findById(m2.id);
     expect(m2Updated?.reconciliationStatus).toBe("saida_nao_justificada");

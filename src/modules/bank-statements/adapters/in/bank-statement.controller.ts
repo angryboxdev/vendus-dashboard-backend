@@ -35,6 +35,7 @@ import type { GetAccountMonthDetailPort } from "../../domain/ports/in/bank-state
 import type { GetMovementsLinkedToInvoicePort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { GetInvoiceOpenBalancesPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { UnreconcileMovementPort } from "../../domain/ports/in/bank-statement.ports.js";
+import type { SearchOccurrenceCandidatesPort } from "../../domain/ports/in/bank-statement.ports.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const csvParser = new CsvStatementParser();
@@ -65,6 +66,7 @@ export class BankStatementController {
     private readonly getMovementsLinkedToInvoice: GetMovementsLinkedToInvoicePort,
     private readonly getInvoiceOpenBalances: GetInvoiceOpenBalancesPort,
     private readonly unreconcileMovement: UnreconcileMovementPort,
+    private readonly searchOccurrenceCandidates: SearchOccurrenceCandidatesPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -660,6 +662,27 @@ export class BankStatementController {
       try {
         const invoiceId = req.params["invoiceId"]!;
         const result = await this.getMovementsLinkedToInvoice.execute(invoiceId);
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * GET /bank-statements/occurrences/candidates
+     * Query: q? (text search on recurrence/supplier name), dateFrom?, dateTo?, limit?
+     * Returns recurrence occurrences without an invoice that can be linked to a movement
+     * when justification is "contrato_recorrencia".
+     */
+    this.router.get("/bank-statements/occurrences/candidates", async (req, res) => {
+      try {
+        const q = req.query as Record<string, string | undefined>;
+        const searchQuery: import("../../domain/ports/in/bank-statement.ports.js").SearchOccurrenceCandidatesQuery = {};
+        if (q["q"]) searchQuery.q = q["q"];
+        if (q["dateFrom"]) searchQuery.dateFrom = q["dateFrom"];
+        if (q["dateTo"]) searchQuery.dateTo = q["dateTo"];
+        if (q["limit"]) searchQuery.limit = parseInt(q["limit"], 10);
+        const result = await this.searchOccurrenceCandidates.execute(searchQuery);
         res.json(result);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });

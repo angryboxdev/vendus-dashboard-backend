@@ -4,6 +4,7 @@ export type ReconciliationStatus =
   | "conciliado_com_fatura"
   | "conciliado_parcial"
   | "conciliado_sem_fatura"
+  | "justificado"
   | "sugestao"
   | "pendente_de_documento"
   | "saida_nao_justificada"
@@ -25,6 +26,7 @@ export type RiskLevel = "low" | "medium" | "high" | "critical";
 export type MatchedEntityType =
   | "invoice"
   | "payable_entry"
+  | "recurrence_occurrence"
   | "receipt"
   | "internal_transfer"
   | "manual_entry";
@@ -32,6 +34,7 @@ export type MatchedEntityType =
 export const RESOLVED_STATUSES: ReadonlySet<ReconciliationStatus> = new Set([
   "conciliado_com_fatura",
   "conciliado_sem_fatura",
+  "justificado",
   "transferencia_interna",
   "ignorado_com_motivo",
 ]);
@@ -45,8 +48,11 @@ function justificationToStatus(jt: JustificationType): ReconciliationStatus {
       return "transferencia_interna";
     case "sem_justificativa":
       return "saida_nao_justificada";
-    default:
-      return "conciliado_sem_fatura";
+    case "recibo_comprovativo":
+    case "contrato_recorrencia":
+    case "despesa_bancaria_automatica":
+    case "emprestimo_financiamento":
+      return "justificado";
   }
 }
 

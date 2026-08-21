@@ -5,6 +5,7 @@ import { GetOccurrenceUseCase } from "../../application/use-cases/get-occurrence
 import { CancelOccurrenceUseCase } from "../../application/use-cases/cancel-occurrence.use-case.js";
 import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js";
 import { FakeOccurrenceRepository } from "../fakes/fake-occurrence-repository.js";
+import { FakeBankMovementLinkReadAdapter } from "../fakes/fake-bank-movement-link-read.js";
 import { OccurrenceNotFoundError } from "../../domain/errors.js";
 
 // fixed_contract com requireInvoice=false → ocorrências em "forecast"
@@ -32,13 +33,15 @@ const VARIABLE_CMD = {
 function make() {
   const recurrenceRepo = new FakeRecurrenceRepository();
   const occurrenceRepo = new FakeOccurrenceRepository();
+  const bankMovementLinkRead = new FakeBankMovementLinkReadAdapter();
   return {
     recurrenceRepo,
     occurrenceRepo,
+    bankMovementLinkRead,
     create: new CreateRecurrenceUseCase(recurrenceRepo),
     generate: new GenerateOccurrenceUseCase(recurrenceRepo, occurrenceRepo),
-    list: new ListOccurrencesUseCase(occurrenceRepo),
-    get: new GetOccurrenceUseCase(occurrenceRepo),
+    list: new ListOccurrencesUseCase(occurrenceRepo, bankMovementLinkRead),
+    get: new GetOccurrenceUseCase(occurrenceRepo, bankMovementLinkRead),
     cancel: new CancelOccurrenceUseCase(occurrenceRepo),
   } as const;
 }

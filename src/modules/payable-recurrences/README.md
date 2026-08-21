@@ -64,6 +64,32 @@ Gestor                                  Sistema
                                     →   8. Ocorrência: paga. Ciclo completo.
 ```
 
+*Caminho C — contrato fixo justificado pelo extrato bancário (sem fatura obrigatória):*
+```
+Gestor                                  Sistema
+──────────────────────────────          ────────────────────────────────────────
+1. Cria recorrência
+   (ex: Renda, fixo,
+    dia 5, 1.000 EUR)
+                                    →   2. Regista contrato. Status: activa.
+
+3. Gera ocorrência para Ago 2026
+                                    →   4. Cria ocorrência 2026-08.
+                                           Status: previsão.
+                                           Due: 05/08/2026 (estimado: 1.000 EUR)
+
+5. Importa extrato de Agosto.
+   Vê débito de 1.000 EUR → clica
+   em "Justificar despesa" →
+   escolhe "Contrato recorrente" →
+   selecciona a recorrência "Renda"
+   e a ocorrência de Agosto
+                                    →   6. Movimento: Justificado.
+                                           Ocorrência 2026-08 recebe badge "Banco"
+                                           na lista de recorrências, confirmando
+                                           que o pagamento bancário foi identificado.
+```
+
 **Conceitos-chave para o negócio:**
 
 - **Recorrência / Contrato** — regra permanente que define o compromisso: quem paga,
@@ -73,6 +99,7 @@ Gestor                                  Sistema
 - **Fatura / documento real** — documento recebido que confirma valor e datas.
   Vinculado à ocorrência, nunca ao contrato.
 - **Conta a pagar** — obrigação financeira em `payable-entries` que pode ser criada automaticamente na geração (contratos fixos com `autoCreatePayable=true`) ou gerida independentemente em `financial-obligations`. O pagamento pode também ser registado directamente na ocorrência sem passar por uma conta a pagar explícita.
+- **Movimento bancário vinculado** — quando um débito do extrato bancário é justificado como "Contrato recorrente", fica ligado à ocorrência correspondente. A partir desse momento, a ocorrência exibe um badge "Banco" na lista (com o valor e a data do débito), indicando que o pagamento já está identificado no extrato — mesmo que a ocorrência não esteja marcada como paga formalmente.
 - **Paga** — significa que o pagamento foi registado no sistema (estado terminal da ocorrência).
 
 ---
@@ -164,8 +191,8 @@ ao mês pedido.
 
 **Ocorrências:**
 - `GenerateOccurrencePort` — gera ocorrência para um mês específico. Se `autoCreatePayable=true`, cria conta a pagar imediatamente.
-- `ListOccurrencesPort` — lista com filtros (recurrenceId, period, status).
-- `GetOccurrencePort` — detalhe de uma ocorrência.
+- `ListOccurrencesPort` — lista com filtros (recurrenceId, period, status). Cada DTO inclui `linkedBankMovement` (ou `null`) carregado em batch via `BankMovementLinkReadPort`.
+- `GetOccurrencePort` — detalhe de uma ocorrência. Inclui `linkedBankMovement` (ou `null`) via `BankMovementLinkReadPort`.
 - `LinkInvoiceToOccurrencePort` — vincula fatura à ocorrência e regista valor real.
 - `MarkOccurrenceAsPaidPort` — marca ocorrência como paga (directamente ou após fatura vinculada).
 - `CancelOccurrencePort` — cancela ocorrência (não permite cancelar `paid`).
@@ -186,6 +213,7 @@ ao mês pedido.
 - `PayableEntryWritePort` — cross-módulo: criar conta a pagar em `payable_entries`.
 - `InvoiceReadPort` — cross-módulo: ler dados mínimos de uma fatura para vincular.
 - `DocumentStoragePort` — armazenamento de ficheiros (contrato base, faturas mensais).
+- `BankMovementLinkReadPort` — cross-módulo: dado um conjunto de `occurrenceIds`, devolve um `Map<occurrenceId, LinkedBankMovement>` com data, montante e descrição do movimento bancário que justificou cada ocorrência. Usado por `ListOccurrencesUseCase` e `GetOccurrenceUseCase` para enriquecer o DTO com `linkedBankMovement`. O adapter concreto lê directamente `bank_movements` sem importar código de `bank-statements`.
 
 ---
 
@@ -202,6 +230,7 @@ ao mês pedido.
 - `SupabasePayableEntryWriteAdapter` → cross-módulo, acede directamente à tabela `payable_entries`.
 - `SupabaseInvoiceReadAdapter` → cross-módulo, acede directamente à tabela `invoices`.
 - `SupabaseRecurrenceDocumentStorageAdapter` → implementa `DocumentStoragePort` no bucket Supabase Storage `recurrence-documents`.
+- `SupabaseBankMovementLinkReadAdapter` → cross-módulo; lê `bank_movements WHERE matched_entity_type = 'recurrence_occurrence' AND matched_entity_id IN (...)` directamente, sem importar código de `bank-statements`. Implementa `BankMovementLinkReadPort`.
 
 ---
 
@@ -301,6 +330,13 @@ cada ocorrência tem o seu `documentUrl` (fatura mensal / comprovativo). Fazer u
 quando já existe um documento substitui o anterior (deleta do storage primeiro).
 O bucket Supabase é `recurrence-documents`, partilhado entre os dois níveis.
 
+**D10 — `linkedBankMovement` enriquecido via cross-module read em batch.**
+`ListOccurrencesUseCase` e `GetOccurrenceUseCase` injectam `BankMovementLinkReadPort`
+para enriquecer cada `OccurrenceDTO` com o movimento bancário que o justificou (se
+existir). O port recebe todos os IDs de ocorrências de uma vez e devolve um `Map`
+— sem N+1 queries. O OccurrenceDTO inclui `linkedBankMovement: { id, bookingDate, amountCents, description } | null`.
+Esta informação é exibida no frontend como coluna "Banco" na lista de ocorrências.
+
 ---
 
 ## Como testar
@@ -309,7 +345,7 @@ O bucket Supabase é `recurrence-documents`, partilhado entre os dois níveis.
 - Todos os módulos financeiros: `npx jest --testPathPattern="payable-recurrences|payable-entries" --no-coverage`.
 - Adapters Supabase: requerem instância real — testar manualmente contra ambiente de desenvolvimento.
 
-**Cobertura atual:** 14 suites, 142 testes, 0 falhos. Todos os 20 use cases cobertos.
+**Cobertura atual:** 16 suites, 155+ testes, 0 falhos. Todos os 20 use cases cobertos. Inclui testes de enriquecimento `linkedBankMovement` via `FakeBankMovementLinkReadAdapter`.
 
 ---
 

@@ -1,7 +1,7 @@
 # Módulo: bank-statements
 
 > Status: ativo
-> Última atualização: 2026-08-11
+> Última atualização: 2026-08-21
 
 ---
 
@@ -28,20 +28,27 @@ Gestor Financeiro
    agrupados por data de lançamento
 5. Clica num movimento para conciliar ou classificar:
    - Se já resolvido → painel mostra resumo da classificação actual
-     (entidades conciliadas, tipo de justificação, fornecedor, centro de custo)
+     (faturas/contratos associados, tipo de justificação, fornecedor, centro de custo)
      com opções:
      • "Alterar classificação" — re-abre o formulário para corrigir
-     • "Anular conciliação" — remove todas as ligações deste movimento e repõe-o
-       como pendente; o estado de cada fatura afectada é recalculado automaticamente
-       (pode regredir de "Conciliada" para "Parcialmente conciliada" ou sem estado)
+     • "Anular conciliação" (se ligado a faturas) — remove todas as ligações e repõe
+       o movimento como pendente; o estado de cada fatura afectada é recalculado
+       automaticamente (pode regredir de "Conciliada" para "Parcialmente conciliada")
+     • "Anular justificação" (se justificado sem fatura) — repõe o movimento como
+       pendente sem alterar nenhuma fatura; permite corrigir erros de classificação
    - Se pendente → formulário com duas tabs:
-     a. "Conciliar com sistema" — selecciona uma ou mais faturas/contas a pagar e
+     a. "Justificar com fatura" — selecciona uma ou mais faturas/contas a pagar e
         indica quanto deste movimento paga cada uma. Suporta pagamentos parciais,
         pagamentos agrupados e pagamentos faseados. Só aparecem entidades com
         saldo em aberto (faturas já totalmente pagas não figuram na lista).
-     b. "Justificar despesa" — sobe comprovativo, indica fornecedor (opcional),
-        centro de custo e IVA; para tipos sem documento (ex: transferência interna)
-        preenche apenas as notas
+     b. "Justificar despesa" — escolhe o tipo de despesa e preenche os campos:
+        • Comprovativo / recibo pontual — sobe o ficheiro PDF ou imagem
+        • Taxa bancária automática — regista sem documento
+        • Contrato recorrente — escolhe a recorrência e a ocorrência do mês da lista
+          de compromissos periódicos; a ocorrência fica marcada como "Banco" na lista
+          de recorrências, confirmando que o pagamento bancário foi identificado
+        • Transferência interna — preenche só as notas
+        • Empréstimo / financiamento — regista com centro de custo
    - Após conciliar: o estado de cada fatura associada é actualizado automaticamente,
      sem qualquer acção manual do gestor na lista de faturas:
      • 0 alocado → sem estado de conciliação bancária
@@ -64,6 +71,7 @@ Gestor Financeiro
 - **Conciliação multi-entidade** — um único pagamento bancário pode cobrir várias faturas em simultâneo (ex: pagamento agregado ao mesmo fornecedor). O gestor selecciona cada fatura e indica quanto deste pagamento lhe corresponde; o sistema valida que a soma não excede o valor do movimento e que cada fatura não fica a receber mais do que o seu saldo em aberto. Também suporta o inverso: a mesma fatura paga por vários movimentos em momentos diferentes (pagamento faseado).
 - **Conciliação parcial** — movimento já associado a entidades, mas com diferença de montante superior a 1€. Sinaliza que algo ficou por explicar: pode faltar uma fatura, ou o pagamento incluiu uma taxa não registada.
 - **Saldo calculado** — saldo que o sistema computa somando/subtraindo os movimentos; deve coincidir com o saldo final do extrato.
+- **Justificado** — estado de um débito que foi explicado manualmente sem necessitar de fatura formal: pode ser um comprovativo de compra, uma taxa bancária automática, o pagamento de um contrato recorrente ou um empréstimo. Distingue-se de "Conciliado com fatura" porque não existe um documento formal no sistema — apenas a evidência de que o gestor reconheceu e classificou o movimento. O movimento sai da lista de pendentes e conta como resolvido para efeitos de progresso de conciliação.
 - **Saída não justificada** — débito sem fatura, sem regra, sem contrato e sem explicação manual.
 - **Regra automática** — padrão de texto na descrição bancária que classifica automaticamente futuros movimentos similares (ex: "COM.MAN.CONTA" → taxa bancária).
 - **Sugestão** — correspondência provável que o sistema encontrou entre um movimento e uma fatura/conta a pagar; pendente de confirmação pelo gestor. O sistema aprende com conciliações exactas passadas para melhorar as sugestões futuras.
@@ -73,7 +81,7 @@ Gestor Financeiro
 - **Saldo em aberto** — o que falta pagar de uma fatura ou conta a pagar, depois de descontar o que outros movimentos bancários já lhe alocaram. Se uma fatura de 1.000 € tiver um pagamento parcial de 600 € registado noutro movimento, o saldo em aberto é 400 €. O sistema apresenta sempre este valor atualizado ao gestor, para que saiba exatamente quanto pode ainda imputar a essa fatura.
 - **Conciliação faseada** — pagamento de uma única fatura distribuído por vários movimentos bancários em momentos diferentes (ex: adiantamento de 30% em Julho e restante em Agosto). Cada movimento é conciliado separadamente, indicando quanto paga desta fatura; o sistema soma todas as alocações para calcular o saldo em aberto e o estado da fatura.
 - **Estado de conciliação da fatura** — classificação automática do grau de cobertura bancária de uma fatura: sem estado (nenhum movimento alocado), "Parcialmente conciliada" (parte do valor está coberta por movimentos bancários) ou "Conciliada" (total coberto, dentro de tolerância de 1€). O estado é recalculado pelo sistema sempre que um movimento é conciliado ou a conciliação é anulada — o gestor nunca precisa de o actualizar manualmente.
-- **Anular conciliação** — acção que desfaz a conciliação de um movimento: remove todas as ligações desse movimento a faturas/contas a pagar, repõe o movimento como pendente ("Saída não justificada") e recalcula automaticamente o estado de conciliação de cada fatura afectada. Permite corrigir erros de classificação sem perda de dados.
+- **Anular conciliação / Anular justificação** — acção que desfaz a conciliação ou a justificação de um movimento: remove todas as ligações (se existirem) e repõe o movimento como pendente ("Saída não justificada"). Para movimentos conciliados com faturas, recalcula o estado de conciliação de cada fatura afectada. Permite corrigir erros de classificação sem perda de dados.
 - **Calendário mensal** — a visão principal de uma conta bancária: um cartão por mês do ano, mostrando o grau de cobertura e de conciliação. O gestor navega pelo calendário para perceber rapidamente que meses estão completos e quais precisam de atenção.
 - **Cobertura** — percentagem de dias do mês que têm pelo menos um movimento bancário registado (ex: 18/31 dias = 58%). Indica se o extrato desse mês foi importado. Um mês com 0% de cobertura não tem extrato ainda.
 - **Slot de dia** — agrupamento de todos os movimentos de uma conta numa data de lançamento específica, independentemente do extrato de que vieram. Permite conciliar dia a dia mesmo que tenham sido importados extratos sobrepostos (ex: extrato de 1–17 e extrato de 15–30 do mesmo mês — os dias 15–17 aparecem num único slot sem duplicados).
@@ -146,7 +154,8 @@ Hash SHA-256 de `accountNumber + bookingDate + description + amount + movementTy
 |---|---|---|
 | `conciliado_com_fatura` | Sim | Ligado a fatura/payable(s) com diferença ≤ 1€ |
 | `conciliado_parcial` | **Não** | Ligado a entidades mas com diferença de montante > 1€ |
-| `conciliado_sem_fatura` | Sim | Justificado sem entidade (comprovativo, taxa, etc.) |
+| `conciliado_sem_fatura` | Sim | Crédito auto-resolvido no import (entradas bancárias) |
+| `justificado` | Sim | Justificado manualmente sem fatura: comprovativo, taxa bancária, contrato recorrente, empréstimo |
 | `transferencia_interna` | Sim | Classificado como transferência entre contas |
 | `ignorado_com_motivo` | Sim | Excluído da conciliação com razão registada |
 | `sugestao` | Não | Correspondência automática pendente de revisão |
@@ -156,17 +165,19 @@ Hash SHA-256 de `accountNumber + bookingDate + description + amount + movementTy
 
 `conciliado_parcial` é um estado de atenção: as entidades são conhecidas mas os montantes não fecham. O gestor deve investigar a diferença e re-conciliar ou justificar o remanescente.
 
+`justificado` vs `conciliado_sem_fatura`: `conciliado_sem_fatura` aplica-se apenas a créditos auto-resolvidos no import. `justificado` aplica-se a débitos justificados manualmente no drawer — mesmo conceito semântico de "resolvido sem entidade ligada", mas com label distinto para clareza no UI.
+
 ### Tipos de justificação
 
-| Tipo | Tab no drawer | Campos obrigatórios |
-|---|---|---|
-| `fatura` | Conciliar com sistema | entidade ligada (invoice/payable) |
-| `recibo_comprovativo` | Justificar despesa | centro de custo |
-| `despesa_bancaria_automatica` | Justificar despesa | centro de custo |
-| `contrato_recorrencia` | Justificar despesa | fornecedor + centro de custo |
-| `transferencia_interna` | Justificar despesa | — |
-| `emprestimo_financiamento` | Justificar despesa | centro de custo |
-| `sem_justificativa` | Justificar despesa | notas |
+| Tipo | Tab no drawer | Estado resultante | Campos obrigatórios |
+|---|---|---|---|
+| `fatura` | Justificar com fatura | `conciliado_com_fatura` / `conciliado_parcial` | entidade ligada (invoice/payable) |
+| `recibo_comprovativo` | Justificar despesa | `justificado` | centro de custo |
+| `despesa_bancaria_automatica` | Justificar despesa | `justificado` | centro de custo |
+| `contrato_recorrencia` | Justificar despesa | `justificado` | ocorrência de recorrência vinculada |
+| `transferencia_interna` | Justificar despesa | `transferencia_interna` | — |
+| `emprestimo_financiamento` | Justificar despesa | `justificado` | centro de custo |
+| `sem_justificativa` | Justificar despesa | `saida_nao_justificada` | notas |
 
 ---
 
@@ -195,6 +206,7 @@ Hash SHA-256 de `accountNumber + bookingDate + description + amount + movementTy
 - `UnreconcileMovementPort` — cancela a conciliação de um movimento: remove todos os `BankMovementEntityLink` do movimento, repõe o estado do movimento via `BankMovement.unreconcile()`, e recomputa o `reconciliation_status` de cada fatura afectada (pode passar a `none`, `partially_reconciled` ou `reconciled` consoante as alocações remanescentes de outros movimentos).
 - `GetMovementsLinkedToInvoicePort` — dado um `invoiceId`, devolve todos os movimentos bancários que têm links para essa fatura (`InvoiceLinkedMovement[]`), com data, descrição, montante alocado e tipo de movimento. Usado pelo drawer de detalhe da fatura para mostrar o histórico de pagamentos conciliados.
 - `GetInvoiceOpenBalancesPort` — recebe uma lista de IDs de faturas e devolve `Record<invoiceId, openBalanceCents>` (saldo em aberto de cada uma). Usado no drawer de conciliação para mostrar o saldo real em faturas pesquisadas manualmente que não estejam na lista de auto-sugestões.
+- `SearchOccurrenceCandidatesPort` — dado um movimento, retorna ocorrências de recorrências candidatas a ser justificadas (`OccurrenceMatchCandidate[]`), com filtros opcionais por texto (`q`), período (`dateFrom`/`dateTo`) e limite. Exclui ocorrências canceladas. Usado pelo drawer "Justificar despesa" quando o tipo é `contrato_recorrencia`.
 
 ### Saída (dependências do domínio)
 
@@ -209,6 +221,7 @@ Hash SHA-256 de `accountNumber + bookingDate + description + amount + movementTy
 - `InvoiceMatchReadPort` *(cross-module)* — `findCandidates` por amount + date range (exclui faturas com `reconciliation_status = 'reconciled'`); `findByIds` para lookup bulk na reconciliação e cálculo de saldos em aberto.
 - `PayableEntryMatchReadPort` *(cross-module)* — `findCandidates` por amount + date range; `findByIds` para lookup bulk na reconciliação.
 - `InvoiceReconciliationWritePort` *(cross-module)* — `markReconciled(invoiceId, movementDate)`, `markPartiallyReconciled(invoiceId)`, `markUnreconciled(invoiceId)`; actualiza o campo `reconciliation_status` (e `status`/`paid_at` em `markReconciled`) directamente na tabela `invoices`. Invocado pelo `ReconcileMovementUseCase` e `UnreconcileMovementUseCase` após cada alteração de links.
+- `OccurrenceMatchReadPort` *(cross-module)* — `findCandidates(filters)`: lê `recurring_occurrences` com join a `recurring_contracts` directamente; não importa código de `payable-recurrences`. Devolve `OccurrenceMatchCandidate[]` com campos de nome, fornecedor, período, montante e estado.
 
 ---
 
@@ -228,6 +241,7 @@ Hash SHA-256 de `accountNumber + bookingDate + description + amount + movementTy
 - `SupabaseInvoiceMatchReadAdapter` → cross-module; acede à tabela `invoices` directamente. `findCandidates` exclui explicitamente `reconciliation_status = 'reconciled'` para que faturas totalmente conciliadas nunca apareçam como candidatas.
 - `SupabasePayableEntryMatchReadAdapter` → cross-module; acede à tabela `payable_entries` directamente.
 - `SupabaseInvoiceReconciliationWriteAdapter` → cross-module; acede à tabela `invoices` directamente para actualizar `reconciliation_status` (e `status`/`paid_at` quando aplicável), sem importar nenhum código do módulo `invoices`.
+- `SupabaseOccurrenceMatchReadAdapter` → cross-module; acede à tabela `recurring_occurrences` com join à tabela `recurring_contracts` (não a `payable_recurrences`). Implementa `OccurrenceMatchReadPort`.
 - `CsvStatementParser` → parse de ficheiro CSV (formato Millennium BCP).
 - `XlsxStatementParser` → parse de ficheiro XLSX.
 
@@ -256,6 +270,7 @@ DELETE /api/bank-statements/rules/:ruleId                 remover regra
 PATCH  /api/bank-statements/:id/link-account              associar import a uma conta (body: { bankAccountId })
 GET    /api/bank-statements/accounts/:accountId/calendar?year=YYYY            calendário anual da conta (AccountMonthStat[])
 GET    /api/bank-statements/accounts/:accountId/calendar/:year/:month         detalhe mensal (DaySlot[])
+GET    /api/bank-statements/occurrences/candidates                            candidatos de ocorrências de recorrências (?q, ?dateFrom, ?dateTo, ?limit)
 ```
 
 ---
