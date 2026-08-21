@@ -1,215 +1,145 @@
 # CLAUDE.md
 
-Diretrizes deste projeto. Valem para **todo** trabalho de código. Não desenvolva
-fora delas. Em caso de conflito entre um pedido e estas regras, pare e me avise
-antes de prosseguir.
+Guidelines for this project. They apply to **all** code work. Don't develop
+outside them. If a request conflicts with these rules, stop and let me know
+before proceeding.
 
-## Repositórios (back + front)
+## Repositories (back + front)
 
-Este produto vive em dois repositórios separados, e **as regras deste arquivo
-valem igualmente para os dois** — mesma arquitetura hexagonal, mesma estrutura de
-`src/modules/`, mesmo lint de fronteiras, mesma disciplina de testes e
-documentação.
+This product lives in two separate repositories, and **the rules in this file
+apply equally to both** — same hexagonal architecture, same `src/modules/`
+structure, same boundary lint, same testing and documentation discipline.
 
-- **Backend** — este repositório, onde você está sendo executado.
-- **Frontend** — repositório separado. Caminho local (setup da minha máquina):
+- **Backend** — this repository, where you're running.
+- **Frontend** — separate repository. Local path (my machine's setup):
   `/Users/raulafonso/Documents/r4ff/vendus-dashboard/vendus-dashboard-frontend`
 
-A arquitetura é a mesma; o que muda é a **natureza dos adapters** e as **libs
-proibidas no domínio** de cada repo:
+The architecture is the same; what changes is the **nature of the adapters**
+and the **libraries banned from the domain** in each repo:
 
-|           | Adapter de entrada             | Adapter de saída                           | Domínio NÃO pode importar                 |
-| --------- | ------------------------------ | ------------------------------------------ | ----------------------------------------- |
-| **Back**  | controller HTTP, CLI, consumer | repositório de banco, gateway de API, fila | ORM, client de banco, SDK HTTP            |
-| **Front** | componente/hook de UI          | client HTTP/API, storage, etc.             | React, `fetch`/axios, APIs de DOM/browser |
+|           | Input adapter                  | Output adapter                             | Domain must NOT import              |
+| --------- | ------------------------------ | ------------------------------------------ | ------------------------------------ |
+| **Back**  | HTTP controller, CLI, consumer | DB repository, API gateway, queue          | ORM, DB client, HTTP SDK            |
+| **Front** | UI component/hook              | HTTP/API client, storage, etc.             | React, `fetch`/axios, DOM/browser APIs |
 
-Regras adicionais ao trabalhar no front:
+Additional rules when working on the front end:
 
-1. **Leia o `CLAUDE.md` do próprio frontend** e o módulo de referência dele antes
-   de codar. Cada repo tem seu próprio módulo de referência e sua própria lista de
-   módulos migrados.
-2. **Mantenha o contrato back/front em sincronia:** ao mudar endpoints, formatos
-   de request/response ou tipos compartilhados de um lado, ajuste o outro lado na
-   mesma tarefa e me avise se algo ficar incompatível.
+1. **Read the front end's own `CLAUDE.md`** and its reference module before
+   coding. Each repo has its own reference module and its own way of
+   tracking which modules have migrated.
+2. **Keep the back/front contract in sync:** when you change endpoints,
+   request/response formats or shared types on one side, adjust the other
+   side in the same task and flag it if something ends up incompatible.
 
-## Estado do projeto: migração em andamento
+## Project status
 
-Este **backend** está em **migração gradual** para a arquitetura hexagonal
-descrita abaixo. Hoje convivem dois padrões:
-
-- **Padrão novo** (hexagonal): a referência para TODO trabalho novo.
-- **Padrão legado**: a maior parte do código ainda está aqui. Está sendo migrado
-  aos poucos, um módulo por vez.
-
-**Regra crítica:** a maioria do código ao redor é legada. Isso **não** é endosso.
-Nunca imite a estrutura de um módulo legado ao escrever código novo. A fonte de
-verdade do padrão é: (1) estas regras e (2) o módulo de referência indicado
-abaixo — nunca o código vizinho. Se você não tem certeza se um módulo segue o
-padrão novo, abra o `README.md` dele e veja o campo `Status`; sem README ou com
-`Status: legado`, trate-o como legado e não o copie.
-
-### Módulos já no padrão novo
-
-<!-- Mantenha esta lista atualizada. É a fonte de verdade de quem já migrou. -->
-
-- `tasks` (módulo de referência)
-- `cash-closings`
+This backend is mid-migration to the hexagonal architecture below. Most of
+the code is still legacy — never imitate it. Read
+`docs/agents/project-status.md` before touching a module you're unsure
+about; it explains how to tell the new pattern from legacy and names the
+reference module.
 
 ## Stack
 
-Antes de escrever código, leia o `package.json` (e configs como `tsconfig.json`,
-`jest.config`, `.eslintrc`) para identificar framework, libs e convenções já em
-uso, e siga-as. Não introduza dependências novas sem me perguntar.
+Before writing code, read `package.json` (and configs like `tsconfig.json`,
+`jest.config`, `.eslintrc`) to identify the framework, libraries and
+conventions already in use, and follow them. Don't introduce new
+dependencies without asking me.
 
-## Arquitetura: hexagonal (ports & adapters)
+## Architecture: hexagonal (ports & adapters)
 
-Todo módulo novo segue esta estrutura, dentro de `src/modules/<modulo>/`:
+Every new module follows this structure, inside `src/modules/<module>/`:
 
 ```
 domain/
-  entities/      entidades e value objects — SEM dependência externa
-  ports/in/      input ports: interfaces dos use cases
-  ports/out/     output ports: interfaces de repos/gateways
-  services/      lógica de negócio pura
+  entities/      entities and value objects — NO external dependencies
+  ports/in/      input ports: use case interfaces
+  ports/out/     output ports: repo/gateway interfaces
+  services/      pure business logic
 application/
-  use-cases/     implementam os input ports, orquestram o domínio
+  use-cases/     implement the input ports, orchestrate the domain
 adapters/
-  in/            http, cli, consumers de eventos (chamam o domínio)
-  out/           implementações concretas: db, apis, filas
-<modulo>.module.ts   composition root: monta o módulo e injeta os adapters
-README.md            documentação do módulo (ver template abaixo)
+  in/            http, cli, event consumers (call the domain)
+  out/           concrete implementations: db, apis, queues
+<module>.module.ts   composition root: assembles the module and injects adapters
+README.md            module documentation (see docs/agents/module-readme-template.md)
 ```
 
-**Módulo de referência:** use `src/modules/tasks` como modelo de estrutura e
-estilo. Quando em dúvida sobre onde algo mora, copie o padrão dele. É a única
-referência de padrão — nunca use um módulo legado como modelo.
+**Reference module:** use `src/modules/tasks` as the model for structure and
+style. When in doubt about where something belongs, copy its pattern. It's
+the only pattern reference — never use a legacy module as a model.
 
-### Regras de dependência (inegociáveis)
+### Dependency rules (non-negotiable)
 
-1. **`domain/` não importa de `adapters/` nem de libs de infra.** Nada de
-   client de banco, SDK HTTP, ORM etc. dentro de `domain/`. Se o domínio precisa
-   de algo externo, ele declara um **output port** (interface) e alguém de fora
-   implementa.
-2. **Dependências cruzam por interface, nunca por implementação concreta.** Use
-   cases recebem os output ports pelo construtor (injeção de dependência).
-3. **O composition root (`<modulo>.module.ts`) é o único lugar que conhece os
-   adapters concretos.** É lá que se "pluga" qual implementação entra. Em teste,
-   plugam-se fakes no lugar.
+1. **`domain/` doesn't import from `adapters/` or infra libraries.** No DB
+   client, HTTP SDK, ORM etc. inside `domain/`. If the domain needs something
+   external, it declares an **output port** (interface) and something
+   outside implements it.
+2. **Dependencies cross via interface, never via concrete implementation.**
+   Use cases receive output ports through the constructor (dependency
+   injection).
+3. **The composition root (`<module>.module.ts`) is the only place that
+   knows the concrete adapters.** That's where you "plug in" which
+   implementation goes in. In tests, fakes get plugged in instead.
 
-As setas de dependência apontam sempre para o domínio.
+Dependency arrows always point toward the domain.
 
-## Antes de alterar um módulo (comportamento padrão, sem eu pedir)
+## Before changing a module (default behavior, without me asking)
 
-1. **Identifique o padrão do módulo.** Consulte a lista "Módulos já no padrão
-   novo" e o campo `Status` do README. Se for **legado**: não estenda nem replique
-   o padrão antigo. Faça a alteração mínima pedida e, se a mudança for grande,
-   sugira migrar o módulo para o padrão novo antes (ver "Refactor de módulos
-   legados"). Pergunte-me antes de iniciar uma migração.
-2. **Leia o `README.md` do módulo** antes de qualquer mudança. Preste atenção
-   especial à seção "Decisões de design" — não desfaça escolhas propositais.
-3. Identifique se a mudança toca domínio, ports ou adapters, e respeite as
-   regras de dependência acima.
+1. **Identify the module's pattern.** Check the module's own README `Status`
+   field (see `docs/agents/project-status.md` for what new-pattern vs legacy
+   means). If **legacy**: don't extend or replicate the old pattern. Make
+   the minimal requested change, and if the change is large, suggest
+   migrating the module to the new pattern first (see
+   `docs/agents/legacy-module-refactor.md`). Ask me before starting a
+   migration.
+2. **Read the module's `README.md`** before any change. Pay special
+   attention to the "Design decisions" section — don't undo deliberate
+   choices. If the change touches a domain concept or a decision that
+   crosses more than one module, also check `CONTEXT.md` and `docs/adr/` at
+   the repo root.
+3. Identify whether the change touches domain, ports or adapters, and
+   respect the dependency rules above.
 
-## Depois de alterar um módulo (comportamento padrão, sem eu pedir)
+## After changing a module (default behavior, without me asking)
 
-1. **Rode os testes do módulo** e garanta que passam antes de considerar a
-   tarefa concluída. Se um hook não tiver rodado, rode com o comando da seção
-   "Como testar" do README do módulo.
-2. **Atualize o `README.md`** se a mudança alterou ports, adapters, conceitos do
-   domínio ou alguma decisão de design. Doc desatualizada é pior que doc nenhuma.
-3. Toda lógica nova de domínio/use case vem com teste unitário (com fakes dos
-   output ports). Adapter novo vem com teste de integração quando aplicável.
+1. **Run the module's tests** and make sure they pass before considering the
+   task done. If a hook didn't run, run the command from the module
+   README's "How to test" section.
+2. **Update the `README.md`** if the change altered ports, adapters, or a
+   domain concept / design decision **local to this module**. Outdated docs
+   are worse than no docs.
+   If the domain concept is used by more than one module, or the decision is
+   architectural (hard to reverse, would surprise a future reader, or came
+   from a real trade-off between alternatives), record it in `CONTEXT.md` /
+   `docs/adr/` instead of the README — see `docs/agents/domain.md`.
+3. All new domain/use-case logic ships with a unit test (with fakes for the
+   output ports). New adapters ship with an integration test where
+   applicable.
 
-## Testes
+## Tests
 
 - Runner: **Jest**.
-- Domínio e use cases: testes rápidos, isolados, usando fakes dos output ports.
-  Não suba banco nem rede para testar regra de negócio.
-- Adapters: testes de integração separados.
+- Domain and use cases: fast, isolated tests using fakes for the output
+  ports. Don't spin up a DB or network to test business rules.
+- Adapters: separate integration tests.
 
-## Documentação de módulo — template do README.md
+## Module documentation — README template
 
-Todo módulo tem um `README.md` na raiz da sua pasta seguindo exatamente este
-formato:
+Every module has a `README.md` following a fixed template. See
+`docs/agents/module-readme-template.md` before creating or updating one.
 
-```markdown
-# Módulo: <nome>
+## Refactoring legacy modules
 
-> Status: ativo | em refactor | legado
-> Última atualização: <data>
+Refactors are gradual, module by module, never a big bang. See
+`docs/agents/legacy-module-refactor.md` before starting one — ask me first.
 
----
+## Agent skills
 
-## O que é e para que serve (perspectiva de negócio)
+### Issue tracker
 
-Contexto do problema real — quem usa, em que momento, porquê existe.
+Issues and specs live as local markdown files under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
 
-**O problema que resolve:**
-A dor concreta sem este módulo (1-3 frases).
+### Domain docs
 
-**O fluxo do ponto de vista do negócio:**
-
-```
-Ator A                              Ator B
-──────────────────────              ──────────────────────
-1. Faz X
-2. Confirma Y                   →   3. Vê Z
-                                    4. Aprova ou rejeita
-```
-
-**Conceitos-chave para o negócio:**
-
-- **Termo A** — definição em linguagem não-técnica.
-- **Termo B** — definição em linguagem não-técnica.
-
----
-
-## Propósito técnico
-
-O que resolve tecnicamente (2-3 frases). O que é e o que NÃO é responsabilidade dele.
-
-## Conceitos do domínio
-
-Entidades / value objects principais e regras de negócio invariantes.
-
-## Ports
-
-### Entrada (use cases)
-
-- `NomeDoUseCase` — o que faz, quando é chamado.
-
-### Saída (dependências do domínio)
-
-- `NomeDoRepo` / `NomeGateway` — o que o domínio espera dessa interface.
-
-## Adapters
-
-### Entrada
-
-- `HttpController` → expõe os use cases via REST em `/rota`.
-
-### Saída
-
-- `PostgresXRepo` → implementa `NomeDoRepo` usando <tecnologia>.
-
-## Decisões de design (ADR resumido)
-
-Decisões não óbvias e o PORQUÊ.
-
-## Como testar
-
-- Domínio/use cases: `<comando>` (rápido, com fakes).
-- Adapters: `<comando de integração>`.
-
-## Pontos de atenção / dívidas conhecidas
-
-O que ainda não está ideal (sobretudo em módulos legados).
-```
-
-## Refactor de módulos legados
-
-O refactor é **gradual**, módulo a módulo, nunca um big-bang. Ao migrar um
-módulo antigo para este padrão: marque o `README` como `em refactor`, cubra com
-testes antes de mover código, e migre por camadas (extrair domínio → definir
-ports → mover infra para adapters). Não altere o comportamento externo do módulo
-durante o refactor sem me avisar.
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.

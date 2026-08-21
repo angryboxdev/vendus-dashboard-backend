@@ -3,7 +3,7 @@
 > Status: em discussão — Variant A escolhida (linha core/plugin fechada em §3);
 > decisões 2, 4 e 6 fechadas (§6); 3, 5 e 7 ainda abertas;
 > nenhuma decisão implementada
-> Última atualização: 2026-08-20
+> Última atualização: 2026-08-21
 > Nota: escrito em inglês por pedido; traduzir se for para o padrão do repo.
 
 ---
@@ -33,7 +33,7 @@ Nothing here is decided. The open decisions are listed at the end.
 The business logic is largely generic (cash closings, bank reconciliation, supplier
 invoices, HR, DRE). The pizzeria-specific part is a thin, contained slice.
 
-### 1.1 Why `getSupabaseServiceRole` exists (and why it spread)
+<!-- ### 1.1 Why `getSupabaseServiceRole` exists (and why it spread)
 
 It was not arbitrary. Migrations `028_hr_angrybox`, `032_hr_shift_attendance` and
 `035_app_users` do this:
@@ -54,7 +54,7 @@ have used the anon client. The service role leaked into them anyway (7 modules +
 
 **Takeaway:** the HR pattern is the correct baseline for the whole schema. Deny by
 default, then add real policies keyed on `org_id`. The rest of the schema is the
-anomaly, not HR.
+anomaly, not HR. -->
 
 ---
 
@@ -101,6 +101,20 @@ separately and files its own accounts; `dre_receita_bruta` or supplier invoices 
 never be mixed across two NIFs. The legal entity is a hard accounting boundary, so
 it is the natural isolation boundary.
 
+**The test is one NIF, not one brand** — "chain" and "franchise" are different
+shapes and only the first collapses into a single org:
+
+| Real-world shape | Model |
+|---|---|
+| One company operating 12 stores it owns (one NIF) | 1 org, 12 locations |
+| A franchisee company operating 3 branded stores (one NIF) | 1 org, 3 locations |
+| A franchise brand with 500 franchisees (500 NIFs) | 500 orgs — the brand is not an org |
+
+A brand is not a tenant. If it were, one org would mix the DRE, supplier invoices and
+VAT of hundreds of unrelated legal entities, and one franchisee's accountant would
+see another's numbers. Location is an *operational* split — which drawer, which
+shift, which stock — and carries no separate accounts.
+
 **Franchise case:** a franchisor with 8 franchisees (8 NIFs) wanting consolidated
 reporting should be handled later as a *read-only overlay* — a `group_id` on orgs
 plus cross-org aggregate queries for group admins — not as a third isolation level.
@@ -113,7 +127,7 @@ per-tenant schemas means running every migration N times and fighting the Supaba
 setup. Shared DB with a mandatory `org_id` is right until a customer contract
 demands physical isolation.
 
-### 2.5 How tenant context flows
+### 2.5 How tenant context flows (to refine)
 
 Explicitly, in the use case input DTO — **not** via `AsyncLocalStorage` or a global.
 
@@ -139,6 +153,46 @@ RLS alone will not save us — 72 call sites use the service role and bypass it.
 2. **Real RLS policies** as the backstop, using an `org_id` claim in the JWT — added
    in the same `custom_access_token_hook` that already injects `app_role`.
 3. **Storage paths** prefixed by org for HR documents and invoice PDFs.
+
+---
+
+### 2.7 The tenant root tables
+
+`org_id` and `location_id` are foreign keys — something has to hold the rows they
+point at. Two new tables, and they are the **first migration of the whole effort**:
+phase 3 cannot backfill Angrybox's `org_id` before an Angrybox org row exists, and
+decision 2 (§2.2) makes the same true of `location_id`.
+
+Note: the schema below is still not confirmed.
+```
+organizations                        ← the tenant root, one row per legal entity (§2.3)
+  id            uuid pk              ← this id IS the org_id everything references
+  name, nif (unique), address, email ← replaces src/config/company.ts
+  slug, status, created_at
+
+locations                            ← one row per store / operating unit
+  id            uuid pk
+  org_id        → organizations
+  name, code, address, is_active, created_at
+  unique (org_id, code)
+```
+
+**`organizations` is the one table with no `org_id`** — its `id` *is* the org id.
+That is the sole exception to §2.4's "every table" rule, alongside schema-migration
+metadata. `locations` carries `org_id` like everything else.
+
+**Identity vs configuration.** `organizations` holds the *legal identity* — the NIF,
+the name and address that print on invoices and DRE headers. Mutable per-org
+configuration (branding, plan, feature flags) lives in `org_settings` (§4), and
+integration credentials in their own encrypted table. The split is not ceremony: a
+feature-flag toggle should not write to the same row as a fiscal identifier, and the
+two are read on completely different paths.
+
+**Seeding Angrybox:** one org row from `config/company.ts`, one location row. That
+single location is what phase 3's `location_id` backfill points at.
+
+**RLS on these two** is where the membership table of phase 4 pays off: a user may
+read an org only if they hold a role in it. Until phase 4 lands, deny-by-default.
 
 ---
 
@@ -345,8 +399,9 @@ Replaces environment variables and hardcoded config:
 
 - `ENV.API_KEY` (Vendus) → output port `IntegrationCredentialsPort.vendusFor(orgId)`,
   backed by an encrypted per-org table.
-- `src/config/company.ts` (name, NIF, address, email) → `org_settings`.
-- Branding, plan and feature flags → `org_settings`.
+- `src/config/company.ts` (name, NIF, address, email) → the `organizations` row
+  itself (§2.7), not `org_settings` — it is legal identity, not configuration.
+- Branding, plan and feature flags → `org_settings`, 1:1 with the org.
 
 ---
 
@@ -355,7 +410,7 @@ Replaces environment variables and hardcoded config:
 | Phase | Work | Risk | Spec |
 |---|---|---|---|
 | 0 | Settle core-vs-plugin line (Variant A or B) — **done, §3** | Design only | — |
-| 1 | Company profile table — replaces `config/company.ts` | Low, independent | A |
+| 1 | Tenant root tables: `organizations` + `locations` (§2.7); seed the Angrybox rows; org identity replaces `config/company.ts` | Low, independent | A |
 | 2 | Auth + RLS review; deny-by-default baseline | Low, independent | audit → A, policies → B |
 | 3 | Add `org_id` to all 46 tables and `location_id` to the operational ones, backfill Angrybox, then `NOT NULL` + composite indexes | Mechanical, big | A |
 | 4 | `org_id` claim in JWT hook + `AuthPayload`; membership table with org-scoped roles | Medium | B |
@@ -388,7 +443,7 @@ phase 11 is not one piece of work at all.
 
 | Spec | Phases | Done means | Needs first |
 |---|---|---|---|
-| **A — Org & location foundation** | 1, 3 (+ phase 2's audit) | No table lacks `org_id`; operational tables carry `location_id`; Angrybox backfilled; app behaves identically | — |
+| **A — Org & location foundation** | 1, 3 (+ phase 2's audit) | `organizations`/`locations` exist and hold the Angrybox rows; no other table lacks `org_id`; operational tables carry `location_id`; everything backfilled; app behaves identically | — |
 | **B — Isolation & auth** | 2 (policies), 4, 5 | A user of org A provably cannot read org B, through both RLS and the scoped helper | Open decision 3 |
 | **C — Per-org configuration** | 6, 7 | `config/company.ts` and `ENV.API_KEY` are deleted; crons run per org | A, B |
 | **D — Sales ledger** | 9, then 8, with 10 folded in | Core owns revenue: DRE and analytics read the ledger, not the Vendus API | Open decision 5 (and 7) |
@@ -413,12 +468,25 @@ This document stays the standing architecture reference. Specs point here for th
 *why* and carry only the *what* and the acceptance criteria — duplicating the
 rationale into a spec forks it, and then one of the two copies rots.
 
+### 5.2 Why on top of this repo, and not a new one
+
+Asked after the first review: is it cleaner to rebuild in a fresh repo? **Decided:
+on top of this one.**
+
+**Risk of this path:** a half-finished migration, `org_id` present but not enforced,
+which looks like isolation without being it. Mitigation: land §2.6's
+`dependency-cruiser` ban on raw `.from()` early, so half-migrated is a build failure.
+
 ---
 
 ## 6. Open decisions
 
 Decided items are struck through and kept for the record; the reasoning stays where
 it belongs (§2–§3) and is only summarized here.
+
+> Decisions 1, 2, 4 and 6 are also recorded as ADRs — `docs/adr/0001` through
+> `0004`. The ADR is the short pointer other docs and skills read; this section
+> keeps the full reasoning.
 
 1. ~~**Variant A or B**~~ — **decided: A**, with the seam described in §3 and the
    `financial-base`/`bank-*`/`payable-entries` modules kept free of restaurant
