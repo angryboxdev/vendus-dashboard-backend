@@ -113,7 +113,7 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
         res.status(404).json(null);
         return;
       }
-      const occ = occs[0];
+      const occ = occs[0]!;
       const rec = await ports.getRecurrence.execute(occ.recurrenceId);
       res.json({ occurrence: occ, recurrenceName: rec.name });
     } catch (err) {
@@ -317,7 +317,7 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
         return;
       }
       const result = await ports.uploadRecurrenceDocument.execute({
-        recurrenceId: req.params.id,
+        recurrenceId: req.params.id as string,
         buffer: req.file.buffer,
         filename: req.file.originalname,
         mimeType: req.file.mimetype,
@@ -346,7 +346,7 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
         return;
       }
       const result = await ports.uploadOccurrenceDocument.execute({
-        occurrenceId: req.params.occId,
+        occurrenceId: req.params.occId as string,
         buffer: req.file.buffer,
         filename: req.file.originalname,
         mimeType: req.file.mimetype,
