@@ -43,5 +43,17 @@ coverage. Not enough to be a performance test.
 ## Done when
 
 - [ ] `supabase db reset` produces a database the app runs against with no manual steps
+      (each seed file was verified individually and in full 01→05 sequence via a
+      rollback-wrapped transaction against the live local DB — all applied cleanly
+      with no FK/constraint errors. Not run through an actual `supabase db reset`
+      by this agent, per the task's instructions to avoid racing the sibling
+      agent's migration work on the shared DB; the orchestrator will do that
+      final check.)
 - [ ] Every module's main list endpoint returns non-empty data against it
-- [ ] No real employee, customer or supplier data appears in any fixture
+      (row counts landed in the 2-12 range per table across financial, HR,
+      stock, CRM and invoices/pizzas areas — see agent report for the full
+      breakdown. Not confirmed against the actual running app/API, only via
+      direct SQL counts.)
+- [x] No real employee, customer or supplier data appears in any fixture
+      (all names, NIFs, IBANs, addresses, emails and phone numbers in
+      `supabase/seeds/*.sql` are invented; no real Angrybox data used)

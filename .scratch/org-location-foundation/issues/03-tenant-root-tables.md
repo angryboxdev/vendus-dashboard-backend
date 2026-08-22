@@ -62,7 +62,18 @@ adds the membership-based ones (§2.7).
 
 ## Done when
 
-- [ ] Both tables exist with the shape above
-- [ ] Exactly one organization row and one location row, with fixed UUIDs
-- [ ] RLS enabled, zero policies, on both
+- [x] Both tables exist with the shape above
+- [x] Exactly one organization row and one location row, with fixed UUIDs
+- [x] RLS enabled, zero policies, on both
 - [ ] `supabase db reset` reproduces them
+
+Verified by applying `supabase/migrations/20260822143602_tenant_root_tables.sql`
+directly against the shared local DB inside a `BEGIN;`/`ROLLBACK;` transaction
+(via `docker exec ... psql`, since `psql`/`supabase db reset` weren't safe to
+run here — a sibling agent is using the same local DB for ticket 02). Confirmed:
+table shapes, constraints (`organizations_nif_key`, `locations_org_id_code_key`,
+`locations_org_id_fkey`), exactly one row per table with the fixed UUIDs, RLS
+enabled (`relrowsecurity = t`) with zero rows in `pg_policies`. Rolled back
+cleanly, so the shared DB was left untouched. The last box (`supabase db reset`
+reproducing this from a fresh DB, alongside ticket 02's migration) is left for
+the orchestrator's final integration reset.
