@@ -260,6 +260,11 @@ being wrong is a legal problem.
 `src/modules/financial-base/adapters/in/financial-base.controller.ts:86-88`,
 printing `name`, `nif`, `address`. `email` is never read.
 
+"Replaces" here means *table-sourced*, not *tenant-aware*: identity still
+resolves through a constant `DEFAULT_ORG_ID`. That is the whole point — the port
+is already `findById(orgId)`, so spec C changes where the argument comes from and
+nothing else.
+
 The org id comes from a single `DEFAULT_ORG_ID` constant in the composition
 root, which spec C deletes when auth supplies the real one. Spec C's
 done-criterion narrows accordingly to *"`ENV.API_KEY` deleted, `DEFAULT_ORG_ID`
