@@ -26,6 +26,7 @@ export type CrmContactStatus =
 export type CrmContactResponse = "Positivo" | "Neutro" | "Negativo" | "Sem Resposta";
 export type CrmOrderStatus = "concluído" | "cancelado";
 export type CrmSeg07Path = "A" | "B";
+export type CrmMetricsSource = "crm_orders" | "eatz_snapshot" | "none";
 
 // ─── Entidades ────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,14 @@ export type CrmCustomer = {
   seg07Path: CrmSeg07Path | null;
   registeredAt: string;      // YYYY-MM-DD
   manualFollowupDate: string | null; // YYYY-MM-DD — override manual da data de follow-up
+  eatzRegisteredAt: string | null;
+  eatzLastOrderDate: string | null;
+  eatzOrderCount: number | null;
+  eatzTotalSpent: number | null;
+  eatzAvgTicket: number | null;
+  eatzSegment: "Novo" | "Inativo" | "Recorrente" | null;
+  eatzMarketingOptIn: boolean | null;
+  eatzSnapshotAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -58,6 +67,7 @@ export type CrmCustomerEnriched = CrmCustomer & {
   firstOrderDate: string | null;
   lastOrderDate: string | null;
   daysSinceLastOrder: number | null;
+  metricsSource: CrmMetricsSource;
   tags: string[];
   nextFollowUp: CrmNextFollowUp | null;
 };

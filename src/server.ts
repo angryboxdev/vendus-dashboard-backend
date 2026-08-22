@@ -22,6 +22,7 @@ import { createBankAccountsModule } from "./modules/bank-accounts/bank-accounts.
 import { createBankStatementsModule } from "./modules/bank-statements/bank-statements.module.js";
 import { createAirMenuModule } from "./modules/air-menu/air-menu.module.js";
 import { createVendusModule } from "./modules/vendus/vendus.module.js";
+import { createCrmModule } from "./modules/crm/crm.module.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { crmRoutes } from "./routes/crmRoutes.js";
@@ -110,6 +111,8 @@ app.use("/api/hr", hrAuditRoutes);
 app.use("/api/hr", hrLeaveRoutes);
 
 // CRM: acessível a managers+
+const crmModule = createCrmModule();
+app.use("/api", requireMinRole("manager"), crmModule.router);
 app.use("/api", requireMinRole("manager"), crmRoutes);
 
 // Financial base module (hexagonal)

@@ -1,5 +1,11 @@
 import type { CrmContact, CrmCustomer, CrmNextFollowUp, CrmOrder, CrmParams, CrmSegment } from "./crmTypes.js";
 
+export type CrmFallbackOrderMetrics = {
+  orderCount: number;
+  ltv: number;
+  lastOrderDate: string | null;
+};
+
 // ─── Utilitários de data ──────────────────────────────────────────────────────
 
 /** Adiciona N dias a uma string YYYY-MM-DD */
@@ -80,13 +86,15 @@ function followUp(
  * @param orders    Pedidos concluídos, ordenados por data
  * @param contacts  Log de contactos
  * @param params    Parâmetros lidos da BD
+ * @param fallbackMetrics Snapshot externo usado apenas se não existirem pedidos CRM
  */
 export function calculateNextFollowUp(
   customer: CrmCustomer,
   segment: CrmSegment,
   orders: CrmOrder[],
   contacts: CrmContact[],
-  params: CrmParams
+  params: CrmParams,
+  fallbackMetrics?: CrmFallbackOrderMetrics
 ): CrmNextFollowUp | null {
   if (segment === "INATIVO") return null;
 
@@ -94,8 +102,23 @@ export function calculateNextFollowUp(
     .filter((o) => o.status === "concluído")
     .sort((a, b) => a.orderDate.localeCompare(b.orderDate));
 
-  const firstOrderDate = completedOrders[0]?.orderDate ?? null;
-  const lastOrderDate = completedOrders[completedOrders.length - 1]?.orderDate ?? null;
+  const hasCrmOrders = completedOrders.length > 0;
+  const orderCount = hasCrmOrders
+    ? completedOrders.length
+    : (fallbackMetrics?.orderCount ?? 0);
+  const ltv = hasCrmOrders
+    ? completedOrders.reduce((sum, order) => sum + order.amount, 0)
+    : (fallbackMetrics?.ltv ?? 0);
+  // O export eatz só fornece a data do último pedido. Para um único pedido,
+  // essa data também é necessariamente a data do primeiro pedido.
+  const firstOrderDate = hasCrmOrders
+    ? (completedOrders[0]?.orderDate ?? null)
+    : orderCount === 1
+      ? (fallbackMetrics?.lastOrderDate ?? null)
+      : null;
+  const lastOrderDate = hasCrmOrders
+    ? (completedOrders[completedOrders.length - 1]?.orderDate ?? null)
+    : (fallbackMetrics?.lastOrderDate ?? null);
 
   switch (segment) {
     case "SEG-01":
@@ -108,22 +131,29 @@ export function calculateNextFollowUp(
       return seg03FollowUp(lastOrderDate, contacts, params);
 
     case "SEG-04":
-      return seg04FollowUp(lastOrderDate, contacts, params, completedOrders.length, orders.reduce((s, o) => s + (o.status === "concluído" ? o.amount : 0), 0));
+      return seg04FollowUp(lastOrderDate, contacts, params, orderCount, ltv);
 
     case "SEG-05":
       return seg05FollowUp(
         lastOrderDate,
         contacts,
         params,
-        completedOrders.length,
-        orders.reduce((s, o) => s + (o.status === "concluído" ? o.amount : 0), 0)
+        orderCount,
+        ltv
       );
 
     case "SEG-06":
       return seg06FollowUp(lastOrderDate, contacts, params);
 
     case "SEG-07":
-      return seg07FollowUp(customer.registeredAt, customer.seg07Path, contacts, params);
+      return seg07FollowUp(
+        !hasCrmOrders && customer.eatzRegisteredAt
+          ? customer.eatzRegisteredAt
+          : customer.registeredAt,
+        customer.seg07Path,
+        contacts,
+        params
+      );
 
     default:
       return null;

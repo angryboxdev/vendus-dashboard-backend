@@ -1,6 +1,7 @@
 import { getSupabaseServiceRole } from "../infra/supabaseClient.js";
 import { calculateSegment } from "../domain/crmSegmentEngine.js";
 import { calculateNextFollowUp } from "../domain/crmFollowUpEngine.js";
+import { resolveCrmMetrics } from "../domain/crmMetrics.js";
 import { loadParams } from "./crmParameterService.js";
 import { listOrders, getOrderSummary } from "./crmOrderService.js";
 import { listContactsByCustomer } from "./crmContactService.js";
@@ -37,13 +38,21 @@ type Row = {
   referred_by: string | null;
   seg07_path: string | null;
   manual_followup_date: string | null;
+  eatz_registered_at: string | null;
+  eatz_last_order_date: string | null;
+  eatz_order_count: number | null;
+  eatz_total_spent: number | null;
+  eatz_avg_ticket: number | null;
+  eatz_segment: string | null;
+  eatz_marketing_opt_in: boolean | null;
+  eatz_snapshot_at: string | null;
   registered_at: string;
   created_at: string;
   updated_at: string;
 };
 
 const SELECT =
-  "id, first_name, last_name, email, phone, preferred_channel, birthday, how_found, opt_in, notes, inactive, referred_by, seg07_path, manual_followup_date, registered_at, created_at, updated_at";
+  "id, first_name, last_name, email, phone, preferred_channel, birthday, how_found, opt_in, notes, inactive, referred_by, seg07_path, manual_followup_date, eatz_registered_at, eatz_last_order_date, eatz_order_count, eatz_total_spent, eatz_avg_ticket, eatz_segment, eatz_marketing_opt_in, eatz_snapshot_at, registered_at, created_at, updated_at";
 
 function rowToCustomer(row: Row): CrmCustomer {
   return {
@@ -61,6 +70,14 @@ function rowToCustomer(row: Row): CrmCustomer {
     referredBy: row.referred_by,
     seg07Path: (row.seg07_path as CrmSeg07Path) ?? null,
     manualFollowupDate: row.manual_followup_date ?? null,
+    eatzRegisteredAt: row.eatz_registered_at,
+    eatzLastOrderDate: row.eatz_last_order_date,
+    eatzOrderCount: row.eatz_order_count === null ? null : Number(row.eatz_order_count),
+    eatzTotalSpent: row.eatz_total_spent === null ? null : Number(row.eatz_total_spent),
+    eatzAvgTicket: row.eatz_avg_ticket === null ? null : Number(row.eatz_avg_ticket),
+    eatzSegment: row.eatz_segment as CrmCustomer["eatzSegment"],
+    eatzMarketingOptIn: row.eatz_marketing_opt_in,
+    eatzSnapshotAt: row.eatz_snapshot_at,
     registeredAt: row.registered_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -98,18 +115,25 @@ export async function enrichCustomer(customer: CrmCustomer): Promise<CrmCustomer
 
   const tags = ((tagsResult.data as { tag_name: string }[]) ?? []).map((r) => r.tag_name);
 
+  const metrics = resolveCrmMetrics(summary, {
+    orderCount: customer.eatzOrderCount,
+    totalSpent: customer.eatzTotalSpent,
+    avgTicket: customer.eatzAvgTicket,
+    lastOrderDate: customer.eatzLastOrderDate,
+  });
+
   const today = new Date().toISOString().slice(0, 10);
-  const daysSinceLast = summary.lastOrderDate
+  const daysSinceLast = metrics.lastOrderDate
     ? Math.round(
         (new Date(today + "T12:00:00Z").getTime() -
-          new Date(summary.lastOrderDate + "T12:00:00Z").getTime()) /
+          new Date(metrics.lastOrderDate + "T12:00:00Z").getTime()) /
           86400000
       )
     : null;
 
   const segment = calculateSegment(
-    summary.orderCount,
-    summary.ltv,
+    metrics.orderCount,
+    metrics.ltv,
     daysSinceLast,
     customer.inactive,
     params
@@ -120,7 +144,14 @@ export async function enrichCustomer(customer: CrmCustomer): Promise<CrmCustomer
     segment,
     orders,
     contacts,
-    params
+    params,
+    metrics.source === "eatz_snapshot"
+      ? {
+          orderCount: metrics.orderCount,
+          ltv: metrics.ltv,
+          lastOrderDate: metrics.lastOrderDate,
+        }
+      : undefined
   );
 
   // Reclamação tem prioridade máxima — sobrepõe qualquer follow-up calculado
@@ -201,12 +232,13 @@ export async function enrichCustomer(customer: CrmCustomer): Promise<CrmCustomer
   return {
     ...customer,
     segment,
-    orderCount: summary.orderCount,
-    ltv: summary.ltv,
-    avgTicket: summary.orderCount > 0 ? summary.ltv / summary.orderCount : 0,
-    firstOrderDate: summary.firstOrderDate,
-    lastOrderDate: summary.lastOrderDate,
+    orderCount: metrics.orderCount,
+    ltv: metrics.ltv,
+    avgTicket: metrics.avgTicket,
+    firstOrderDate: metrics.firstOrderDate,
+    lastOrderDate: metrics.lastOrderDate,
     daysSinceLastOrder: daysSinceLast,
+    metricsSource: metrics.source,
     tags,
     nextFollowUp,
   };
