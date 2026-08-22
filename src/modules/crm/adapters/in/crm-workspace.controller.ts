@@ -34,7 +34,7 @@ export class CrmWorkspaceController {
     const one = (value: unknown) => typeof value === "string" ? value : undefined;
     const result = await this.service.listCustomers({ search: one(req.query.search), status: one(req.query.status) as any,
       activity: one(req.query.activity) as any, tags: one(req.query.tags)?.split(",").filter(Boolean) ?? [], tagMode: one(req.query.tagMode) as any,
-      lastActionType: one(req.query.lastActionType), nextActionType: one(req.query.nextActionType), followUpFrom: one(req.query.followUpFrom),
+      lastActionType: one(req.query.lastActionType), nextActionType: one(req.query.nextActionType), lastScriptCode: one(req.query.lastScriptCode), followUpFrom: one(req.query.followUpFrom),
       followUpTo: one(req.query.followUpTo), followUpState: one(req.query.followUpState) as any, sortBy: one(req.query.sortBy) as any,
       sortDirection: one(req.query.sortDirection) as any, page: Number(one(req.query.page) ?? 1), pageSize: Number(one(req.query.pageSize) ?? 10) });
     res.json(result);

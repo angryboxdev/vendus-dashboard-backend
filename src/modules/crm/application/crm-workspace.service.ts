@@ -6,7 +6,8 @@ const querySchema = z.object({
   search: z.string().optional(), status: z.enum(["new", "recurring", "vip"]).optional(),
   activity: z.enum(["active", "inactive"]).optional(), tags: z.array(z.string()).default([]),
   tagMode: z.enum(["any", "all"]).default("any"), lastActionType: z.string().optional(),
-  nextActionType: z.string().optional(), followUpFrom: z.string().optional(), followUpTo: z.string().optional(),
+  nextActionType: z.string().optional(), lastScriptCode: z.string().optional(),
+  followUpFrom: z.string().optional(), followUpTo: z.string().optional(),
   followUpState: z.enum(["overdue", "today", "upcoming", "none"]).optional(),
   sortBy: z.enum(["name", "customerId", "status", "orderCount", "lastOrderDate", "lastAction", "followUpDate"]).default("name"),
   sortDirection: z.enum(["asc", "desc"]).default("asc"),
@@ -84,6 +85,7 @@ export class CrmWorkspaceService {
       if (query.tags.length) { const names = new Set(item.tags.map((tag) => tag!.name)); const matches = query.tags.map((tag) => names.has(tag)); if (query.tagMode === "all" ? matches.some((v) => !v) : matches.every((v) => !v)) return false; }
       if (query.lastActionType && item.lastAction?.typeCode !== query.lastActionType) return false;
       if (query.nextActionType && item.nextAction?.typeCode !== query.nextActionType) return false;
+      if (query.lastScriptCode && item.lastScript?.code !== query.lastScriptCode) return false;
       const follow = item.followUpDate?.slice(0, 10) ?? null;
       if (query.followUpFrom && (!follow || follow < query.followUpFrom)) return false;
       if (query.followUpTo && (!follow || follow > query.followUpTo)) return false;

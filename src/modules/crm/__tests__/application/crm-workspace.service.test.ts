@@ -191,6 +191,20 @@ describe("CrmWorkspaceService.listCustomers", () => {
     expect(all.items.map((item) => item.id)).toEqual(["C001"]);
   });
 
+  it("filtra pelo último script enviado, e não por qualquer script histórico", async () => {
+    const customers = [baseCustomer({ id: "C001" }), baseCustomer({ id: "C002", firstName: "Bia" })];
+    const contacts = [
+      { id: "ct1", customerId: "C001", contactedAt: "2026-08-18T10:00:00.000Z", channel: "WhatsApp" as const, scriptCode: "S1", direction: "Enviado" as const, status: null, response: null, notes: null, segmentAtTime: null, tagsAdded: [], tagsRemoved: [], createdAt: "2026-08-18" },
+      { id: "ct2", customerId: "C001", contactedAt: "2026-08-20T10:00:00.000Z", channel: "WhatsApp" as const, scriptCode: "S2", direction: "Enviado" as const, status: null, response: null, notes: null, segmentAtTime: null, tagsAdded: [], tagsRemoved: [], createdAt: "2026-08-20" },
+      { id: "ct3", customerId: "C002", contactedAt: "2026-08-19T10:00:00.000Z", channel: "Email" as const, scriptCode: "S1", direction: "Enviado" as const, status: null, response: null, notes: null, segmentAtTime: null, tagsAdded: [], tagsRemoved: [], createdAt: "2026-08-19" },
+    ];
+    const service = new CrmWorkspaceService(fakeRepository(dataset({ customers, contacts })));
+
+    const result = await service.listCustomers({ lastScriptCode: "S1" });
+
+    expect(result.items.map((item) => item.id)).toEqual(["C002"]);
+  });
+
   it("filtra follow-ups vencidos, de hoje, futuros e ausentes", async () => {
     const customers = ["C001", "C002", "C003", "C004"].map((id) => baseCustomer({ id, firstName: id }));
     const actions = [

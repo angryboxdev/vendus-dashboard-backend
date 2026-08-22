@@ -152,6 +152,7 @@ Parâmetros de `GET /crm/customer-table`:
 - Estado: `status` e `activity`.
 - Tags: `tags` separadas por vírgula e `tagMode=any|all`.
 - Ações: `lastActionType` e `nextActionType`.
+- Script temporário: `lastScriptCode`, comparado com o contacto enviado mais recente que possui script.
 - Follow-up: `followUpFrom`, `followUpTo` e `followUpState`.
 - Ordenação: `sortBy` e `sortDirection`.
 - Paginação: `page` e `pageSize`; padrão 10, máximo 100.
