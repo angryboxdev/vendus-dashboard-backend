@@ -2,8 +2,8 @@
 
 > Status: em discussão — Variant A escolhida (linha core/plugin fechada em §3);
 > decisões 2, 4 e 6 fechadas (§6); 3, 5 e 7 ainda abertas;
-> nenhuma decisão implementada
-> Última atualização: 2026-08-21
+> spec A escrita (`.scratch/org-location-foundation/`) — nada implementado
+> Última atualização: 2026-08-22
 > Nota: escrito em inglês por pedido; traduzir se for para o padrão do repo.
 
 ---
@@ -22,10 +22,10 @@ Nothing here is decided. The open decisions are listed at the end.
 
 | Signal | Reality |
 |---|---|
-| Tables | 46 across 72 migrations — **zero** have a tenant column |
+| Tables | 52 — 48 with a `CREATE TABLE` across 80 migrations, plus 4 (`suppliers`, `invoices`, `invoice_lines`, `classification_rules`) that exist only in production; **zero** have a tenant column |
 | Auth | Supabase JWT via JWKS, `app_role` claim injected by `custom_access_token_hook`, fallback lookup in `app_users` |
 | RLS | Enabled in 15 migrations, but policies are `"Allow read for anon"` — decorative |
-| DB access | 72 call sites use `getSupabaseServiceRole()` (bypasses RLS) vs 31 on the anon client |
+| DB access | 76 call sites use `getSupabaseServiceRole()` (bypasses RLS) vs 31 on the anon client — the 31 are all in `src/services/*` |
 | Vendus integration | `src/infra/vendusClient.ts` reads one global `ENV.API_KEY` |
 | Company identity | Hardcoded in `src/config/company.ts` |
 | Vertical coupling | 35 files touch pizza/Angrybox concepts (`pizzas`, `pizza_recipes`, `preparations`) |
@@ -77,12 +77,25 @@ They are the same thing here: `org_id` **is** the tenant id.
 | Angrybox today | 1 | 1 |
 | Second customer | 1 | possibly 3 |
 
-`org_id` goes on every table (isolation). `location_id` goes only on operational
-tables (`cash_closings`, `stock_movements`, `hr_work_shifts`, invoices) where
-"which store" is a real question.
+`org_id` goes on every table (isolation). `location_id` goes where the row is the
+grain at which "which store" is answered — either the **event grain** (something
+happened at a place: `cash_closings`, `stock_movements`, `hr_work_shifts`,
+`hr_shift_attendance`, all `NOT NULL`) or the **allocation grain** (a cost is
+assigned to a place: `invoice_lines`, **nullable**). It does *not* go on the
+entity or document that spans stores — `invoices`, `stock_items`,
+`hr_employees`, `bank_accounts`, `suppliers`, `channels`, `cost_center_*`.
+
+The two flavours are deliberate. An event happened *somewhere*, so `NOT NULL` is
+honest. An allocation may legitimately be absent: a cost can belong to the
+organization and to no store — digital marketing, the accountant's fee — so
+`NULL` on `invoice_lines.location_id` is a real state, not missing data.
+
+An invoice header stays org-level: it is addressed to the NIF, paid once and
+reconciled once. Splitting an electricity bill across three stores is line work,
+exactly as assigning `cost_center_category_id` already is.
 
 Modelling both now matters because retrofitting a second level later means touching
-all 46 tables twice.
+all 52 tables twice.
 
 **Decided: `location` ships in v1** — real rows, not a single placeholder row per
 org. Operational tables get `location_id NOT NULL` in the same pass as `org_id`
@@ -145,7 +158,7 @@ correct under CLAUDE.md's dependency rules — it is not an infra leak.
 
 ### 2.6 Enforcement: defence in depth
 
-RLS alone will not save us — 72 call sites use the service role and bypass it.
+RLS alone will not save us — 76 call sites use the service role and bypass it.
 
 1. **A scoped query helper** that cannot be constructed without an `orgId`. Every
    out-adapter goes through it; raw `.from()` banned outside it, enforced by
@@ -160,22 +173,33 @@ RLS alone will not save us — 72 call sites use the service role and bypass it.
 
 `org_id` and `location_id` are foreign keys — something has to hold the rows they
 point at. Two new tables, and they are the **first migration of the whole effort**:
-phase 3 cannot backfill Angrybox's `org_id` before an Angrybox org row exists, and
-decision 2 (§2.2) makes the same true of `location_id`.
+phase 3's column defaults reference the Angrybox org id, so the row has to exist
+first — and decision 2 (§2.2) makes the same true of `location_id`.
 
-Note: the schema below is still not confirmed.
+Schema confirmed in spec A (issue 03):
 ```
 organizations                        ← the tenant root, one row per legal entity (§2.3)
   id            uuid pk              ← this id IS the org_id everything references
-  name, nif (unique), address, email ← replaces src/config/company.ts
-  slug, status, created_at
+  name, nif (not null unique)        ← replaces src/config/company.ts
+  address, email
+  created_at, updated_at
 
 locations                            ← one row per store / operating unit
   id            uuid pk
   org_id        → organizations
-  name, code, address, is_active, created_at
+  name, code, address
+  timezone      not null default 'Europe/Lisbon'
+  is_active, created_at, updated_at
   unique (org_id, code)
 ```
+
+**No `slug`, no `status`.** Nothing in v1 reads either, and both are one-line
+additions later against a single row — `slug` serves white-label subdomains
+(phase 11), and `status`'s only real consumer is an RLS predicate, which spec B
+will design. **`timezone` is on `locations`, not `organizations`:** the service
+day closes ~2am (§3.4), so the day boundary follows the store's wall clock, and
+Portugal spans three offsets. `render.yaml` already carries a comment telling a
+human to hand-edit the cron twice a year for DST.
 
 **`organizations` is the one table with no `org_id`** — its `id` *is* the org id.
 That is the sole exception to §2.4's "every table" rule, alongside schema-migration
@@ -412,10 +436,10 @@ Replaces environment variables and hardcoded config:
 | 0 | Settle core-vs-plugin line (Variant A or B) — **done, §3** | Design only | — |
 | 1 | Tenant root tables: `organizations` + `locations` (§2.7); seed the Angrybox rows; org identity replaces `config/company.ts` | Low, independent | A |
 | 2 | Auth + RLS review; deny-by-default baseline | Low, independent | audit → A, policies → B |
-| 3 | Add `org_id` to all 46 tables and `location_id` to the operational ones, backfill Angrybox, then `NOT NULL` + composite indexes | Mechanical, big | A |
+| 3 | Add `org_id` to all 51 tables and `location_id` to the event/allocation ones, as **one migration**. No backfill pass — `ADD COLUMN … NOT NULL DEFAULT <const>` is metadata-only in PG11+. Composite indexes move to B | Mechanical, big | A |
 | 4 | `org_id` claim in JWT hook + `AuthPayload`; membership table with org-scoped roles | Medium | B |
 | 5 | Scoped query helper + migrate adapters module by module (start with `cash-closings`, already hexagonal) | Steady | B |
-| 6 | Per-org credentials & settings; remove `config/company.ts` and `ENV.API_KEY` | Medium | C |
+| 6 | Per-org credentials & settings; remove `ENV.API_KEY` and the `DEFAULT_ORG_ID` constant (`config/company.ts` is already gone — phase 1) | Medium | C |
 | 7 | Crons fan out per org | Small, easy to get wrong | C |
 | 8 | Sales ledger: `sales_documents`/`sales_lines` + `SalesSourcePort`; move analytics out of `vendus`; manual-entry adapter (v1 scope) | Medium, unblocks POS #2 | D |
 | 9 | De-pizza-fy: `product_variants`, per-org category table, rename recipes/preparations; migrate `vendus_product_mapping` to `variant_id` | Mechanical, touches 35 files | D |
@@ -443,9 +467,9 @@ phase 11 is not one piece of work at all.
 
 | Spec | Phases | Done means | Needs first |
 |---|---|---|---|
-| **A — Org & location foundation** | 1, 3 (+ phase 2's audit) | `organizations`/`locations` exist and hold the Angrybox rows; no other table lacks `org_id`; operational tables carry `location_id`; everything backfilled; app behaves identically | — |
+| **A — Org & location foundation** | 1, 3 (+ phase 2's audit) | `supabase db reset` rebuilds the schema from the repo and `db diff --linked` shows no drift; `organizations`/`locations` hold the Angrybox rows; no other table lacks `org_id`; event tables carry `location_id`; invoice PDFs read the org identity from the row; the four unprotected HR tables have RLS; app behaves identically | — |
 | **B — Isolation & auth** | 2 (policies), 4, 5 | A user of org A provably cannot read org B, through both RLS and the scoped helper | Open decision 3 |
-| **C — Per-org configuration** | 6, 7 | `config/company.ts` and `ENV.API_KEY` are deleted; crons run per org | A, B |
+| **C — Per-org configuration** | 6, 7 | `ENV.API_KEY` and `DEFAULT_ORG_ID` are deleted; crons run per org | A, B |
 | **D — Sales ledger** | 9, then 8, with 10 folded in | Core owns revenue: DRE and analytics read the ledger, not the Vendus API | Open decision 5 (and 7) |
 
 Three notes on why the grouping is not simply "one spec per phase":
@@ -459,6 +483,15 @@ Three notes on why the grouping is not simply "one spec per phase":
   policies key on it. Audit in A, policies in B.
 - **Phase 10 folds into D** rather than standing alone: it is three columns on
   `channels`, a table spec D already touches.
+
+**Spec A defers six items into spec B, behind a hard gate: no second
+`organizations` row until they land.** Each is something that cannot bite while
+one organization exists, and that is cheaper or safer done later — composite
+foreign keys; composite `(org_id, …)` indexes; dropping the `org_id`/`location_id`
+column defaults; restructuring the four CRM text primary keys (`crm_customers.id`
+is `'C001'`, so every tenant's first customer collides); the kiosk PIN fix (the
+only one with a frontend contract change); and storage path org-prefixing. Full
+table in `.scratch/org-location-foundation/spec.md`.
 
 **Write one spec at a time, just ahead of the work.** Specs B and D are exactly the
 ones open decisions 3, 5 and 7 reshape; writing all four now means writing two of
@@ -543,14 +576,20 @@ Deadlines, in order: **3 before phase 5's first module** (i.e. before spec B is
 written), 5 before phase 8 and 7 before phase 10 (both inside spec D; 7 stays cheap
 even after, as long as the ledger carries `channel_id`). See §5.1 for the specs.
 
-Not tracked as an open decision but needed before phase 3 starts: **the order in
-which the 46 tables and their modules get touched**, aligned with the existing
-legacy→hexagonal migration so each module is opened once rather than twice.
+~~Not tracked as an open decision but needed before phase 3 starts: the order in
+which the 46 tables and their modules get touched.~~ **Resolved: this is a spec B
+question, not a spec A one.** The concern is about *code*, and spec A opens no
+module's code — the column defaults (§5.1) keep every existing write working
+untouched, so the schema pass and the adapter migration are independent. Module
+ordering, aligned with the legacy→hexagonal migration, belongs to phase 5.
 
 ---
 
 ## 7. Related
 
+- `.scratch/org-location-foundation/` — spec A and its issues
+- `docs/adr/0005` — `org_id` denormalized on every table
+- `docs/adr/0006` — schema baselined; historical migrations archived
 - `CLAUDE.md` — architecture rules (hexagonal, ports & adapters, module docs)
 - `src/modules/tasks` — reference module for the new pattern
 - `docs/FINANCIAL_SYSTEM_PLAN.md` — financial system roadmap

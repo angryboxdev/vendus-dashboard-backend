@@ -23,4 +23,8 @@ architectural concept), Company, Account.
 A physical store or operating unit belonging to one Organization. The
 operational boundary — cash drawer, register, shift, stock and daily closing
 all belong to a location, not directly to the organization.
+Not everything is attributable to one: a cost can belong to the Organization
+and to no store — digital marketing, the accountant's fee, group insurance.
+"Which store" is a question with a legitimate empty answer, so an unallocated
+cost is a real state and not missing data.
 _Avoid_: Store, Branch.
