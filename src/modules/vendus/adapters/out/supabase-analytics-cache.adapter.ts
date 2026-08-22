@@ -32,7 +32,7 @@ export class SupabaseAnalyticsCacheAdapter implements AnalyticsCachePort {
     try {
       const sb = getSupabaseServiceRole();
       if (!sb) return;
-      await sb.from("analytics_monthly_cache").upsert(rows);
+      await sb.from("analytics_monthly_cache").upsert(rows, { onConflict: "org_id,year,month" });
     } catch (e) {
       console.error("[SupabaseAnalyticsCacheAdapter] saveMonths failed (non-fatal):", e);
     }

@@ -341,7 +341,7 @@ async function saveCachedMonths(rows: CachedMonthRow[]): Promise<void> {
   try {
     const sb = getSupabaseServiceRole();
     if (!sb) return;
-    await sb.from("analytics_monthly_cache").upsert(rows);
+    await sb.from("analytics_monthly_cache").upsert(rows, { onConflict: "org_id,year,month" });
   } catch (e) {
     console.error("[analytics cache] save failed (non-fatal):", e);
   }
