@@ -39,3 +39,10 @@ export class SupplierNotFoundError extends Error {
     this.name = "SupplierNotFoundError";
   }
 }
+
+export class OrganizationNotFoundError extends Error {
+  constructor(orgId: string) {
+    super(`Organização "${orgId}" não encontrada`);
+    this.name = "OrganizationNotFoundError";
+  }
+}

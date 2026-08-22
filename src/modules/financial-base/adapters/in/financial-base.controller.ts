@@ -1,6 +1,6 @@
 import { Router } from "express";
 import PDFDocument from "pdfkit";
-import { COMPANY } from "../../../../config/company.js";
+import type { OrganizationIdentity } from "../../domain/entities/organization-identity.js";
 import {
   CostCenterGroupNotFoundError,
   CostCenterGroupCodeAlreadyExistsError,
@@ -35,6 +35,7 @@ import type {
 import type { GetSupplierStatementPort } from "../../domain/ports/in/supplier-statement.ports.js";
 import type { SupplierStatementDTO } from "../../domain/ports/in/supplier-statement.ports.js";
 import type { ListChannelsPort } from "../../domain/ports/in/channel.ports.js";
+import type { GetOrganizationIdentityPort } from "../../domain/ports/in/organization-identity.ports.js";
 
 // ── Helpers de formatação ─────────────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 // ── Geração de PDF ────────────────────────────────────────────────────────────
 
-function buildStatementPdf(data: SupplierStatementDTO): Promise<Buffer> {
+function buildStatementPdf(data: SupplierStatementDTO, organization: OrganizationIdentity): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 40, size: "A4" });
@@ -83,9 +84,9 @@ function buildStatementPdf(data: SupplierStatementDTO): Promise<Buffer> {
       .text("Extrato de Fornecedor", 40, 40);
 
     doc.fontSize(9).fillColor(gray).font("Helvetica")
-      .text(COMPANY.name || "—", 40, 66)
-      .text(`NIF: ${COMPANY.nif || "—"}`, 40, 78)
-      .text(COMPANY.address || "", 40, 90);
+      .text(organization.name || "—", 40, 66)
+      .text(`NIF: ${organization.nif || "—"}`, 40, 78)
+      .text(organization.address || "", 40, 90);
 
     // Período (canto direito)
     const periodLabel = (() => {
@@ -240,6 +241,8 @@ export class FinancialBaseController {
     private readonly getSupplierDetail: GetSupplierDetailPort,
     private readonly getSupplierStatement: GetSupplierStatementPort,
     private readonly listChannels: ListChannelsPort,
+    private readonly getOrganizationIdentity: GetOrganizationIdentityPort,
+    private readonly orgId: string,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -650,13 +653,16 @@ export class FinancialBaseController {
           return;
         }
 
-        const data = await this.getSupplierStatement.execute({
-          id: req.params["id"] as string,
-          ...(startDate && { startDate }),
-          ...(endDate && { endDate }),
-        });
+        const [data, organization] = await Promise.all([
+          this.getSupplierStatement.execute({
+            id: req.params["id"] as string,
+            ...(startDate && { startDate }),
+            ...(endDate && { endDate }),
+          }),
+          this.getOrganizationIdentity.execute({ orgId: this.orgId }),
+        ]);
 
-        const pdf = await buildStatementPdf(data);
+        const pdf = await buildStatementPdf(data, organization);
 
         const filename = `extrato-${data.supplier.name.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase()}.pdf`;
         res.set({

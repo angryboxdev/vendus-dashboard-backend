@@ -74,9 +74,54 @@ Leave alone every constraint whose leading columns are already org-determined �
 
 ## Done when
 
-- [ ] One migration file, applying in one transaction
-- [ ] `select table_name from information_schema.tables t where table_schema='public' and not exists (select 1 from information_schema.columns c where c.table_name=t.table_name and c.column_name='org_id')` returns only `organizations`
-- [ ] The five `location_id` columns exist with the right nullability
-- [ ] `invoice_lines.location_id` is entirely `NULL`
-- [ ] The nine constraints from D6 are org-scoped; the carve-outs are untouched
-- [ ] `supabase db reset` rebuilds from zero
+- [x] One migration file, applying in one transaction
+      (`supabase/migrations/20260822150000_tenancy_schema_pass.sql`; the
+      Supabase CLI wraps each migration file in its own transaction)
+- [x] `select table_name from information_schema.tables t where table_schema='public' and not exists (select 1 from information_schema.columns c where c.table_name=t.table_name and c.column_name='org_id')` returns only `organizations`
+      (verified after `supabase db reset`)
+- [x] The five `location_id` columns exist with the right nullability
+      (`cash_closings`, `stock_movements`, `hr_work_shifts`,
+      `hr_shift_attendance` NOT NULL; `invoice_lines` nullable — verified via
+      `information_schema.columns`)
+- [x] `invoice_lines.location_id` is entirely `NULL` (verified: 0/8 seeded rows non-null)
+- [x] The nine constraints from D6 are org-scoped; the carve-outs are untouched
+      (verified via `pg_constraint`/`pg_indexes` — see note below on one
+      discrepancy)
+- [x] `supabase db reset` rebuilds from zero (twice — once standalone, once
+      again after a concurrently-landed ticket-05 RLS migration appeared,
+      confirming the full chain still resets cleanly)
+
+### Notes for whoever reconciles `spec.md` next
+
+- **Table inventory was stale against the live schema.** The baseline
+  (`20260822141653_remote_schema.sql`) has 55 tables besides
+  `organizations`/`locations`, not the 52 spec.md's "Table inventory" lists.
+  Four in active use were missing from that list —
+  `cost_centers`, `crm_action_types`, `crm_customer_actions`,
+  `payable_entries` (the last is heavily used: payable-entries,
+  payable-recurrences, invoices, bank-statements, financial-obligations
+  modules) — and one listed table, `dre_receita_bruta`, doesn't exist in
+  production (only in `supabase/migrations/_archive/`, never applied). This
+  migration followed the ticket's own unconditional Done-when check — every
+  table except `organizations` gets `org_id` — so it covers the four extra
+  tables and skips the nonexistent one. Full detail in the migration file's
+  header comment.
+- **D6's `supplier_article_mappings` note is partly stale too.** Only one
+  unique constraint exists on that table
+  (`supplier_article_mappings_supplier_item_unique` on
+  `(supplier_normalized, stock_item_id)`); the second one D6 describes,
+  `(supplier_normalized, description_normalized)`, doesn't exist as a unique
+  constraint — description matching runs through a plain (non-unique) GIN
+  index, left untouched per the no-index-rewrites carve-out.
+- Verified against the local stack only — `supabase db diff --linked` and
+  `db push --dry-run` (next in the Verification section) were not run; this
+  agent has no linked-project credentials in this environment.
+- App smoke test was done at the Supabase-client level (service-role
+  select/insert against `channels`, `stock_items`, `cash_closings`,
+  `invoice_lines`, `payable_entries` — confirming defaults fill in, the
+  rewritten `(org_id, code)` constraint rejects a same-org duplicate, and
+  `location_id` behaves per D4/D5), not through the HTTP API — a full
+  authenticated request against the local stack hit a pre-existing, unrelated
+  local GoTrue defect (`relation "identities" does not exist`) in this
+  environment's `auth` schema, not something this migration touches.
+  Full HTTP-level smoke verification is ticket 08's job.

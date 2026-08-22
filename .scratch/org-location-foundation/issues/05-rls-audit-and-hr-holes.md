@@ -53,7 +53,33 @@ audit output; §5.1 says the audit is what settles the decision.
 
 ## Done when
 
-- [ ] The inventory covers all 52 tables and is committed
-- [ ] RLS is enabled with zero policies on the four HR tables
-- [ ] Every HR endpoint still works against the local stack (it should — service role bypasses RLS)
-- [ ] The open-decision-3 finding is written into the audit output
+- [x] The inventory covers all 52 tables and is committed
+      (covers the true 57 — see the note in `05-rls-inventory.md` on why
+      `spec.md`'s "52" undercounts against the live schema, same discrepancy
+      issue 06 independently found)
+- [x] RLS is enabled with zero policies on the four HR tables
+      (`hr_leave_requests`, `hr_leave_balances`, `hr_audit_logs` via
+      `supabase/migrations/20260822160000_hr_rls_deny_by_default.sql`;
+      `hr_employee_documents` was already enabled, undocumented, before this
+      issue — see inventory)
+- [x] Every HR endpoint still works against the local stack (it should — service role bypasses RLS)
+      (verified at the service-layer: `hrLeaveService`/`hrAuditService` read
+      and write normally against the local stack after the migration; anon key
+      gets denied, service role key doesn't)
+- [x] The open-decision-3 finding is written into the audit output
+
+## Comments
+
+The "Audit findings (already gathered)" section above turned out to be stale —
+confirmed and superseded by `05-rls-inventory.md`, which is the actual
+deliverable this issue's Work item 1 asks for. Short version: the live schema
+(readable for the first time via issue 01's baseline, not the migration file
+trail) shows 55 of 57 tables already have RLS enabled with zero policies —
+including `invoices`, `payable_entries`, `bank_movements`, `bank_accounts`,
+`suppliers`, `cash_closings`, `crm_customers`, all named above as
+"unprotected." They aren't. See the inventory file for the full table and the
+open-decision-3 write-up. Verified locally via `supabase db reset`, direct
+`pg_class`/`pg_policies` checks, REST calls with both keys, and running the
+real HR service code against the local stack. Full test suite (137/137,
+1169 tests) and `tsc --noEmit` both clean — neither can detect a change like
+this one (D11), so both are "nothing else moved," not correctness evidence.
