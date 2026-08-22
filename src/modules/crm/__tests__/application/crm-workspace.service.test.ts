@@ -91,6 +91,25 @@ describe("CrmWorkspaceService.listCustomers", () => {
     expect(result.items).toHaveLength(10);
   });
 
+  it("oculta clientes com recusa explícita de marketing no CRM ou na eatz", async () => {
+    const customers = [
+      baseCustomer({ id: "C001", optIn: "Pendente", eatzMarketingOptIn: null }),
+      baseCustomer({ id: "C002", optIn: "Sim", eatzMarketingOptIn: true }),
+      baseCustomer({ id: "C003", optIn: "Não", eatzMarketingOptIn: true }),
+      baseCustomer({ id: "C004", optIn: "Pendente", eatzMarketingOptIn: false }),
+      baseCustomer({ id: "C005", optIn: "Sim", eatzMarketingOptIn: false }),
+    ];
+    const service = new CrmWorkspaceService(fakeRepository(dataset({ customers })));
+
+    const result = await service.listCustomers(
+      { sortBy: "customerId" },
+      new Date("2026-08-22T12:00:00.000Z"),
+    );
+
+    expect(result.total).toBe(2);
+    expect(result.items.map((item) => item.id)).toEqual(["C001", "C002"]);
+  });
+
   it("usa o snapshot eatz quando não existem pedidos concluídos no CRM", async () => {
     const customer = baseCustomer({
       eatzOrderCount: 3,

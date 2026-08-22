@@ -19,6 +19,9 @@ export type CustomerTableItem = ReturnType<typeof buildItem>;
 function numberParam(params: Record<string, string>, key: string, fallback: number) {
   const parsed = Number(params[key]); return Number.isFinite(parsed) ? parsed : fallback;
 }
+function isVisibleInCustomerTable(customer: WorkspaceDataset["customers"][number]) {
+  return customer.optIn !== "Não" && customer.eatzMarketingOptIn !== false;
+}
 function effectiveMetrics(customer: WorkspaceDataset["customers"][number], orders: WorkspaceDataset["orders"]) {
   const completed = orders.filter((order) => order.customerId === customer.id && order.status === "concluído");
   if (completed.length) {
@@ -73,7 +76,8 @@ export class CrmWorkspaceService {
   async listCustomers(raw: CustomerTableQuery, now = new Date()) {
     const query = querySchema.parse(raw); const dataset = await this.repository.loadDataset();
     const today = now.toISOString().slice(0, 10); const search = query.search?.trim().toLocaleLowerCase("pt-PT");
-    let items = dataset.customers.map((customer) => buildItem(dataset, customer, today)).filter((item) => {
+    let items = dataset.customers.filter(isVisibleInCustomerTable)
+      .map((customer) => buildItem(dataset, customer, today)).filter((item) => {
       if (search && !`${item.id} ${item.fullName} ${item.phone ?? ""}`.toLocaleLowerCase("pt-PT").includes(search)) return false;
       if (query.status && item.status.relationship !== query.status) return false;
       if (query.activity && item.status.inactive !== (query.activity === "inactive")) return false;

@@ -33,6 +33,7 @@ Utilizador do CRM                         Sistema
 - **Última ação** — ação concluída mais recentemente na timeline nova.
 - **Histórico de ações** — ações concluídas ou canceladas, carregadas sob demanda.
 - **Tag** — classificação criada pelo utilizador e atribuível a um ou vários clientes.
+- **Elegibilidade para marketing** — clientes com recusa explícita no CRM ou na eatz permanecem preservados no banco e no histórico, mas não aparecem na tabela operacional.
 - **Snapshot eatz** — fotografia histórica da plataforma externa, usada quando o CRM ainda não possui pedidos concluídos.
 - **Último script** — informação temporária derivada de contactos enviados; não é uma ação.
 
@@ -56,6 +57,12 @@ Para cada cliente:
 4. Sem nenhuma das fontes, as métricas são zero e a origem é `none`.
 
 O read model informa a origem em `metricsSource`: `crm_orders`, `eatz_snapshot` ou `none`.
+
+### Visibilidade na tabela
+
+- Uma recusa explícita em qualquer fonte prevalece: `opt_in = 'Não'` ou `eatz_marketing_opt_in = false` exclui o cliente da tabela operacional.
+- Consentimento `Pendente` continua visível quando não existe recusa registrada na eatz.
+- A exclusão é apenas de apresentação: cliente, pedidos, contatos, tags e ações continuam preservados e o detalhe permanece acessível por ID.
 
 ### Estado do cliente
 
@@ -187,6 +194,7 @@ As migrations são preparadas pelo projeto, mas aplicadas manualmente pelo respo
 - **Código do tipo imutável e label mutável:** preserva referências e permite renomear o catálogo sem reescrever ações.
 - **Histórico sob demanda:** evita aumentar o payload principal da tabela.
 - **Read model montado na aplicação:** mantém regras testáveis sem Express ou Supabase.
+- **Recusa de marketing não apaga histórico:** clientes sem consentimento ficam fora da tabela operacional, mas seus dados comerciais não são removidos.
 - **IDs em massa limitados:** controllers impõem limites de 100 ações e 1.000 clientes para evitar comandos acidentais sem limite.
 
 ## Como testar
@@ -200,7 +208,7 @@ Cobertura unitária atual:
 - Regras e limites do estado do cliente.
 - Precedência CRM/eatz e exclusão de pedidos cancelados.
 - Seleção da última/próxima ação e independência do legado.
-- Pesquisa, tags, follow-up, ordenação e paginação.
+- Pesquisa, tags, follow-up, ordenação, paginação e exclusão de recusas de marketing.
 - Normalização de tipos/tags e cursor do histórico.
 
 ## Pontos de atenção / dívidas conhecidas
