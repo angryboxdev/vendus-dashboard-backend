@@ -1,0 +1,24 @@
+-- Drop app_users: the contract half of expand-contract (D4). org_members
+-- (20260825120000_org_members_and_token_hook.sql) has been the only source
+-- the token hook reads since issue 02, the auth middleware fallback stopped
+-- reading app_users in issue 03, and user administration stopped reading it
+-- in issue 04. The provisioning script (issue 05) never read it. Nothing in
+-- src/ references app_users any more, so nothing is left depending on it.
+--
+-- A role is no longer a global property of a person (ADR-0003) -- it is held
+-- per-organization, in org_members. A table that still carried a global
+-- `role` column would be a second, stale answer to "what may this person
+-- do", which is the exact ambiguity ADR-0003 removes. See
+-- .scratch/tenant-identity/spec.md D4 and issue 06.
+--
+-- This also drops the `org_id` column spec A (20260822150000_tenancy_schema_
+-- pass.sql) added to app_users. That inventory treated app_users as subject
+-- to the "every table gets org_id" rule; a single org_id on a user cannot
+-- express a many-to-many membership, so the column goes with the table
+-- rather than being carried forward.
+--
+-- No other table holds a foreign key into app_users, so this needs no
+-- CASCADE. Its own RLS policies, grants and the auth.users FK are dropped
+-- along with the table.
+
+drop table public.app_users;

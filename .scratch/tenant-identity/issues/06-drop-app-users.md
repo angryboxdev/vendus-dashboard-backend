@@ -39,7 +39,37 @@ mechanism nor the new one.
 
 ## Done when
 
-- [ ] `grep -rn "app_users" src/` returns nothing
-- [ ] The table no longer exists after `supabase db reset`
-- [ ] The spec-A `org_id` column on it is gone as a consequence
-- [ ] `supabase db diff --linked` reports no unexpected drift
+- [x] `grep -rn "app_users" src/` returns nothing
+- [x] The table no longer exists after `supabase db reset`
+- [x] The spec-A `org_id` column on it is gone as a consequence
+- [x] `supabase db diff --linked` reports no unexpected drift
+
+## Comments
+
+Implemented as a single new migration:
+
+- `supabase/migrations/20260825130000_drop_app_users.sql` — `drop table
+  public.app_users;`. No `CASCADE` needed: nothing in the migration history
+  holds a foreign key into `app_users`, so the drop only takes its own
+  primary key, its `auth.users` FK, its RLS (zero policies, same as
+  `org_members`), its `org_id` FK from spec A, and its grants with it.
+  `_archive/035_app_users.sql` (the original creation) was left untouched,
+  per the ticket's note.
+
+Verified:
+
+- `grep -rn "app_users" src/` — no output (already true before this ticket,
+  per tickets 02–05; confirmed still true after).
+- `npx supabase db reset` — all six migrations apply cleanly in order,
+  including the new drop; `\dt public.app_users` afterwards: "Did not find
+  any relation named \"public.app_users\"."
+- The dropped column is a consequence of the dropped table, not a separate
+  step — there's no column left to check independently.
+- `npx supabase db diff --linked` — the only reported diff is exactly the
+  reverse of this migration (recreating `app_users`, its FKs, RLS and
+  grants). `npx supabase migration list` confirms why: every prior
+  migration through `20260825120000` is already applied on the linked
+  remote; only this ticket's `20260825130000` is not. So the diff is fully
+  explained by "this migration hasn't been pushed yet" — there is no other,
+  unexplained drift. Pushing it to the linked project is deploy work for
+  ticket 07, not this ticket.
