@@ -1,7 +1,7 @@
 # Spec B1 — Tenant identity
 
 > Status: ready-for-agent
-> Última atualização: 2026-08-24
+> Última atualização: 2026-08-25
 > Architecture reference: `docs/MULTI_TENANCY_SAAS_DESIGN.md` (§2.5, §2.6, §6 items 3 and 4)
 > ADRs: `docs/adr/0003` (roles are org-scoped), `docs/adr/0007` (app-level scoping is the boundary)
 > Predecessor: `.scratch/org-location-foundation/` (spec A, merged)
@@ -516,7 +516,7 @@ land.**
 | Org-claim RLS policies and the credential change; storage path prefixing (spec A item 6) | Additive per D2; policies are per-table so they can be tightened one at a time | before org #2 |
 | Composite foreign keys, composite indexes, the CRM text primary keys (spec A items 1, 2, 4) | Cross-organization divergence is impossible while one organization exists | before org #2 |
 | Seed template data at provisioning — channels, cost centre groups and categories, stock categories, public holidays | Angrybox is already seeded; the need appears with the first new organization | before org #2 |
-| Multi-organization login and org switching — an active-organization preference, a switch endpoint, a session refresh, a switcher in the UI | The schema is already many-to-many, so this is additive. D5 refuses ambiguity in the meantime rather than mis-answering it | first genuinely multi-organization person, which a second organization does *not* by itself imply |
+| Multi-organization login and org switching — expected to be **URL-based**: the front end routes under `/o/<org-id>/…`, so switching is a navigation rather than a stored active-organization preference plus a session refresh. That shape is the only one where two tabs can sit on two organizations without fighting, and it keeps deep links unambiguous. The front end claims the URL shape now, using the organization id; a human-readable slug is deferred with this row, since `organizations` deliberately has no slug column (spec A D9) and the route can canonicalize id → slug when one exists | The schema is already many-to-many, so this is additive. D5 refuses ambiguity in the meantime rather than mis-answering it. The URL segment is a routing key, never an authorization input: the claim stays the source of truth and a mismatched segment redirects to the session's organization rather than erroring | first genuinely multi-organization person, which a second organization does *not* by itself imply |
 | Role taxonomy rework, including renaming the role values and whatever claim carries them | Orthogonal to scoping, per ADR-0003 | when a second customer's access needs are known |
 
 ### Corrections to the architecture document
@@ -547,13 +547,26 @@ reader exists specifically so that the two deploys need not be simultaneous.
 
 | # | Title | Blocked by |
 |---|---|---|
-| 01 | `org_members` table; drop `app_users`; grants for the token hook | — |
-| 02 | Token hook injects organization and org-scoped role; SQL verification of 0/1/2 memberships | 01 |
+| 01 | Front end: tolerant claim reader, org-scoped role type, organization on the session user | — |
+| 02 | `org_members` table, backfill, grants; token hook injects organization and org-scoped role; SQL verification of 0/1/2 memberships | 01 |
 | 03 | Auth payload gains `orgId`; middleware becomes injectable; membership fallback; unit tests | 02 |
 | 04 | User administration becomes organization-scoped | 03 |
-| 05 | Organization provisioning script | 01 |
-| 06 | Front end: tolerant claim reader, org-scoped role type, organization on the session user | — (ships first) |
-| 07 | Smoke verification and the deploy-order runbook | 04, 05, 06 |
+| 05 | Organization provisioning script | 02 |
+| 06 | Drop `app_users` | 04, 05 |
+| 07 | Smoke verification and the deploy-order runbook | 06 |
+
+Two things differ from the ordering this table carried while the spec was being
+written, both settled when the issues were broken out:
+
+- **`app_users` is dropped last, not first.** Creating `org_members` beside it
+  and removing it once nothing reads it is expand–contract, and it buys a real
+  property: between issues 02 and 03 the back end finds no `app_role` claim and
+  degrades to its existing `app_users` lookup, so sessions keep working. Drop it
+  up front and that window is a total lockout instead.
+- **The front end is a real blocker, not a footnote.** D9's step 1 has to be
+  deployed before the hook migration runs, and the risk table calls that the one
+  failure users would notice. Encoding it as a blocking edge keeps it out of the
+  category of things remembered at deploy time.
 
 ### Risks
 
