@@ -148,19 +148,17 @@ Jobs:
       commands above (plus `migration list`) and a **local-only** `db reset`.
       This must have happened in an earlier turn on this branch. Worth
       double-checking with whoever ran it.
-- [ ] Re-run the module smoke checks against staging — **deliberately not
-      done.** `supabase status` shows the linked project is `angry-box-dev`
-      (ref `oobplqewonmitnesvlsl`), created **today** — separate from
-      `Angry Box DRE` (ref `frbxmerhgnvhocwpuzrq`, created Feb 2026, not
-      linked), which is the far more likely candidate for real production.
-      That strongly suggests `angry-box-dev` is a disposable staging clone
-      created for exactly this spec's work, not the live database — but I
-      have no explicit doc confirming that, and running write smoke checks
-      (creating suppliers, invoices, employees, etc., same as the local sweep
-      above) against a live hosted project is an outward-facing, hard-to-undo
-      action I'm not treating as pre-authorized. **Needs a human call before
-      anyone runs this**, either way — confirm `angry-box-dev` is safe to
-      write into, or point at the right project.
+- [x] Confirm `angry-box-dev` (ref `oobplqewonmitnesvlsl`) is staging, not
+      production. Confirmed directly by the project owner: `angry-box-dev` is
+      a disposable staging clone; real production is `Angry Box DRE` (ref
+      `frbxmerhgnvhocwpuzrq`, created Feb 2026). The 4 migrations (baseline +
+      3 tenancy/RLS) are pushed and applied to `angry-box-dev`.
+- [ ] Re-run the module smoke checks against staging — **still not done.**
+      The migration push to `angry-box-dev` above is schema-only; the
+      read/write HTTP sweep (creating suppliers, invoices, employees, etc.,
+      same as the local sweep above, driven through the real routes) has not
+      been re-run against it. Still open before treating staging as a real
+      rehearsal of production.
 
 ## Done when
 
