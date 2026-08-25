@@ -27,21 +27,21 @@ Run the app against a full `supabase db reset` with every migration and seed
 applied, driving real HTTP round trips with a real GoTrue-issued JWT — the
 method spec A's issue 08 established. Not the Supabase client directly.
 
-- [ ] An existing Angrybox user signs in and their session resolves, with the
+- [x] An existing Angrybox user signs in and their session resolves, with the
       organization present
-- [ ] The user listing returns only that organization's members
-- [ ] Creating, re-roling and removing a user behave as D8 describes, including
+- [x] The user listing returns only that organization's members
+- [x] Creating, re-roling and removing a user behave as D8 describes, including
       removal deleting the account only on the last membership
-- [ ] An operation naming a real user outside the caller's organization is
+- [x] An operation naming a real user outside the caller's organization is
       refused as not found
-- [ ] The provisioning script produces a usable second organization, and its
+- [x] The provisioning script produces a usable second organization, and its
       admin signs in — the only way to exercise the multi-organization paths at
       all, since production has one
-- [ ] With two organizations live: neither admin's user listing shows the
+- [x] With two organizations live: neither admin's user listing shows the
       other's members, and neither can re-role or remove across the boundary
-- [ ] A user given a membership in **both** organizations is refused at login,
+- [x] A user given a membership in **both** organizations is refused at login,
       distinguishably from a bad password, in the response and in the logs
-- [ ] An HR viewer's restricted access behaves exactly as it did before
+- [x] An HR viewer's restricted access behaves exactly as it did before
 
 Record the findings in this file under `## Comments`, as a deliverable.
 
@@ -70,7 +70,8 @@ B2, and building it before the helper exists means building it against nothing.
 
 ## Done when
 
-- [ ] Every smoke box above is checked, with findings recorded in this file
-- [ ] The deploy-order runbook exists outside `.scratch/`, with its reasons
-- [ ] The deferred register's organization #2 gate is discoverable from the
+- [x] Every smoke box above is checked, with findings recorded in this file
+- [x] The deploy-order runbook exists outside `.scratch/`, with its reasons
+      (`docs/DEPLOY_TENANT_IDENTITY.md`)
+- [x] The deferred register's organization #2 gate is discoverable from the
       runbook — production must not get a second organization yet
