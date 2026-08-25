@@ -25,7 +25,7 @@ authRoutes.get("/me", (req: Request, res: Response) => {
   res.json({
     id: req.auth!.sub,
     email: req.auth!.email,
-    role: req.auth!.app_role,
+    role: req.auth!.orgRole,
   });
 });
 
