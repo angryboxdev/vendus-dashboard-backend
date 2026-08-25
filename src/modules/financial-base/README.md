@@ -96,6 +96,10 @@ gerir contas a pagar (módulo `payable-entries`).
   (sugestão de classificação para novas faturas).
 - **Channel** — canal com `id`, `code`, `name`, `sortOrder`, `isActive`.
   Apenas `reconstitute()` (sem `create()` — os canais vêm do seed da migration).
+- **OrganizationIdentity** — identidade legal da organização (`id`, `name`,
+  `nif`, `address`, `email`) lida da tabela `organizations` (tenant root,
+  fora deste módulo). Apenas `reconstitute()`. `email` nunca é lido pelo
+  extrato PDF, mas faz parte da linha e é mantido para não truncar o shape.
 
 ## Ports
 
@@ -130,6 +134,9 @@ gerir contas a pagar (módulo `payable-entries`).
 **Canais**
 - `ListChannelsPort` — lista canais com filtro opcional `isActive?`.
 
+**Identidade da organização**
+- `GetOrganizationIdentityPort` — por `orgId`; lança `OrganizationNotFoundError`.
+
 ### Saída (dependências do domínio)
 
 - `CostCenterGroupRepositoryPort` — `save`, `findById`, `findByCode`, `findAll`, `update`.
@@ -137,6 +144,9 @@ gerir contas a pagar (módulo `payable-entries`).
 - `SupplierRepositoryPort` — `save`, `findById`, `findAll`, `update`.
 - `SupplierInvoiceStatsPort` — `getSummariesForSuppliers(ids)`, `listInvoicesBySupplier(id, filter?)`. Lê da tabela `invoices` para agregar dados financeiros por fornecedor. `SupplierInvoiceRow` inclui `totalWithoutVat`, `vatAmount`, `totalWithVat`; `filter` aceita `startDate?`/`endDate?`.
 - `ChannelRepositoryPort` — `findAll(isActive?)`, `findById`.
+- `OrganizationIdentityPort` — `findById(orgId)`. Assinatura já pensada para
+  a spec C, que passa a receber o `orgId` do pedido em vez do
+  `DEFAULT_ORG_ID` fixo (ver decisão de design abaixo).
 
 ## Adapters
 
@@ -152,6 +162,7 @@ gerir contas a pagar (módulo `payable-entries`).
 - `SupabaseSupplierRepository` → implementa `SupplierRepositoryPort` na tabela `suppliers`.
 - `SupabaseSupplierInvoiceStatsAdapter` → implementa `SupplierInvoiceStatsPort` lendo da tabela `invoices`. Agrega stats em TypeScript após fetch por `supplier_id`. **Atenção:** a tabela `invoices` guarda valores monetários em cêntimos (inteiros); o adapter divide por 100 ao mapear para euros — consistente com o módulo `invoices`.
 - `SupabaseChannelRepository` → implementa `ChannelRepositoryPort` na tabela `channels` (read-only; canais geridos por migration).
+- `SupabaseOrganizationIdentityRepository` → implementa `OrganizationIdentityPort` na tabela `organizations` (tenant root; read-only aqui).
 
 ## Rotas REST
 
@@ -247,6 +258,11 @@ suppliers (
 );
 ```
 
+`organizations` é a tabela raiz de tenant (migration
+`20260822143602_tenant_root_tables.sql`, fora deste módulo) — este módulo só
+a lê, através de `SupabaseOrganizationIdentityRepository`. Shape completo em
+`.scratch/org-location-foundation/spec.md` D9.
+
 ## Decisões de design (ADR resumido)
 
 ### Dois níveis, não um — hierarquia Grupo + Subcategoria
@@ -294,9 +310,23 @@ futuro forem necessários tipos dinâmicos, migra-se para entidade separada.
 
 O endpoint `GET /suppliers/:id/statement-pdf` devolve `application/pdf` gerado com `pdfkit`.
 A alternativa (geração no browser com `@react-pdf/renderer`) foi descartada por adicionar
-~200 KB ao bundle e produzir documentos menos consistentes. Os dados da empresa (nome, NIF,
-morada) estão em `src/config/company.ts` — ficheiro simples de constantes, sem tabela nem
-env var, alterável quando os dados mudarem.
+~200 KB ao bundle e produzir documentos menos consistentes.
+
+### Identidade da organização lida da tabela `organizations`, não de `config/company.ts`
+
+O cabeçalho do extrato (nome, NIF, morada) já foi um ficheiro de constantes
+(`src/config/company.ts`), removido nesta migração. Agora é lido através de
+`OrganizationIdentityPort.findById(orgId)` (`GetOrganizationIdentityUseCase`),
+implementado por `SupabaseOrganizationIdentityRepository` sobre a tabela
+`organizations` (ver spec A, `docs/MULTI_TENANCY_SAAS_DESIGN.md` §2, D9/D10).
+
+`orgId` ainda não vem do pedido — não há tenant na cadeia de autenticação até
+a spec C. Até lá resolve-se por uma constante `DEFAULT_ORG_ID`, definida e
+usada apenas em `financial-base.module.ts` (composition root), apontando para
+a linha da Angrybox seeded em `20260822143602_tenant_root_tables.sql`. A
+assinatura do port já é `findById(orgId)` — a spec C troca apenas a origem do
+argumento (do `orgId` fixo para o do pedido autenticado) e apaga a constante;
+nada aqui é reescrito nessa altura.
 
 ### Supplier migrado de `defaultCostCenterId` para `defaultCostCenterGroupId` + `defaultCostCenterCategoryId`
 

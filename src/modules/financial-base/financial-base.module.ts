@@ -7,6 +7,7 @@ import { SupabaseCostCenterCategoryRepository } from "./adapters/out/supabase-co
 import { SupabaseSupplierRepository } from "./adapters/out/supabase-supplier.repository.js";
 import { SupabaseSupplierInvoiceStatsAdapter } from "./adapters/out/supabase-supplier-invoice-stats.adapter.js";
 import { SupabaseChannelRepository } from "./adapters/out/supabase-channel.repository.js";
+import { SupabaseOrganizationIdentityRepository } from "./adapters/out/supabase-organization-identity.repository.js";
 
 import { ListCostCenterGroupsUseCase } from "./application/use-cases/list-cost-center-groups.use-case.js";
 import { GetCostCenterGroupUseCase } from "./application/use-cases/get-cost-center-group.use-case.js";
@@ -31,8 +32,21 @@ import { GetSuppliersKpisUseCase } from "./application/use-cases/get-suppliers-k
 import { GetSupplierDetailUseCase } from "./application/use-cases/get-supplier-detail.use-case.js";
 import { GetSupplierStatementUseCase } from "./application/use-cases/get-supplier-statement.use-case.js";
 import { ListChannelsUseCase } from "./application/use-cases/list-channels.use-case.js";
+import { GetOrganizationIdentityUseCase } from "./application/use-cases/get-organization-identity.use-case.js";
 
 import { FinancialBaseController } from "./adapters/in/financial-base.controller.js";
+
+/**
+ * Org identity ainda não é resolvida a partir do pedido — não há `orgId` no
+ * caminho do request até a autenticação multi-tenant chegar (spec C). Até lá,
+ * a Angrybox é a única organização e este é o único lugar onde o id fixo
+ * aparece; a linha seeded correspondente vive na migration
+ * `20260822143602_tenant_root_tables.sql`. Spec C apaga esta constante e passa
+ * a alimentar `GetOrganizationIdentityPort` com o `orgId` do pedido — a
+ * assinatura do port já é `findById(orgId)`, então essa troca é a única
+ * mudança necessária.
+ */
+const DEFAULT_ORG_ID = "b6999cff-79b2-4583-b8b4-a744b3ace748";
 
 /**
  * Composition root do módulo financial-base.
@@ -50,6 +64,7 @@ export function createFinancialBaseModule(): { router: Router; createSupplier: C
   const supplierRepository = new SupabaseSupplierRepository(supabase);
   const supplierInvoiceStats = new SupabaseSupplierInvoiceStatsAdapter(supabase);
   const channelRepository = new SupabaseChannelRepository(supabase);
+  const organizationIdentityRepository = new SupabaseOrganizationIdentityRepository(supabase);
 
   // Use cases — grupos de centros de custo
   const listCostCenterGroups = new ListCostCenterGroupsUseCase(groupRepository);
@@ -76,6 +91,9 @@ export function createFinancialBaseModule(): { router: Router; createSupplier: C
 
   // Use cases — canais
   const listChannels = new ListChannelsUseCase(channelRepository);
+
+  // Use cases — identidade da organização
+  const getOrganizationIdentity = new GetOrganizationIdentityUseCase(organizationIdentityRepository);
 
   // Use cases — fornecedores
   const createSupplier = new CreateSupplierUseCase(supplierRepository);
@@ -114,6 +132,8 @@ export function createFinancialBaseModule(): { router: Router; createSupplier: C
     getSupplierDetail,
     getSupplierStatement,
     listChannels,
+    getOrganizationIdentity,
+    DEFAULT_ORG_ID,
   );
 
   return { router: controller.router, createSupplier };
