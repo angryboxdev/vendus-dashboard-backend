@@ -1,9 +1,10 @@
 # Multi-tenancy & White-label — Análise de Arquitetura
 
 > Status: em discussão — Variant A escolhida (linha core/plugin fechada em §3);
-> decisões 2, 4 e 6 fechadas (§6); 3, 5 e 7 ainda abertas;
-> spec A escrita (`.scratch/org-location-foundation/`) — nada implementado
-> Última atualização: 2026-08-22
+> decisões 2, 3, 4 e 6 fechadas (§6); 5 e 7 ainda abertas;
+> spec A implementada (`.scratch/org-location-foundation/`);
+> spec B dividida em B1/B2 — B1 escrita (`.scratch/tenant-identity/`)
+> Última atualização: 2026-08-24
 > Nota: escrito em inglês por pedido; traduzir se for para o padrão do repo.
 
 ---
@@ -468,8 +469,9 @@ phase 11 is not one piece of work at all.
 | Spec | Phases | Done means | Needs first |
 |---|---|---|---|
 | **A — Org & location foundation** | 1, 3 (+ phase 2's audit) | `supabase db reset` rebuilds the schema from the repo and `db diff --linked` shows no drift; `organizations`/`locations` hold the Angrybox rows; no other table lacks `org_id`; event tables carry `location_id`; invoice PDFs read the org identity from the row; the four unprotected HR tables have RLS; app behaves identically | — |
-| **B — Isolation & auth** | 2 (policies), 4, 5 | A user of org A provably cannot read org B, through both RLS and the scoped helper | Open decision 3 |
-| **C — Per-org configuration** | 6, 7 | `ENV.API_KEY` and `DEFAULT_ORG_ID` are deleted; crons run per org | A, B |
+| **B1 — Tenant identity** | 4 | Every request and job carries a verified `org_id`; roles are org-scoped; user admin is org-scoped | A |
+| **B2 — Scoped access** | 5 | A user of org A provably cannot read org B; the helper is the only DB construction site; column defaults dropped | B1 |
+| **C — Per-org configuration** | 6, 7 | `ENV.API_KEY` is deleted; crons run per org | A, B1, B2 |
 | **D — Sales ledger** | 9, then 8, with 10 folded in | Core owns revenue: DRE and analytics read the ledger, not the Vendus API | Open decision 5 (and 7) |
 
 Three notes on why the grouping is not simply "one spec per phase":
@@ -529,17 +531,19 @@ it belongs (§2–§3) and is only summarized here.
    use cases are location-aware from day one rather than assuming one row per org.
    Consequence: every operational use case input DTO carries `locationId` next to
    `orgId`, and "which store" becomes a filter in cash closings, stock and reports.
-3. **Does RLS become the real boundary**, or does app-level scoping carry it with RLS
-   as backstop only? — **still open**, to be decided after digging into the actual
-   policy surface. Blocks nothing up to phase 4, but it forks phase 5: the scoped
-   query helper is worth building under either answer, yet *what it wraps* differs.
-   If RLS is the real boundary the helper wraps a per-request client carrying the
-   user's JWT and the 72 service-role call sites convert; if RLS is a backstop the
-   helper keeps the service role and only makes `orgId` structurally unavoidable.
-   Since phase 5 migrates adapters module by module, deciding this midway means
-   re-migrating the modules already moved. Decide it before `cash-closings` (the
-   first module) goes through — phase 2 will by then have shown how much real policy
-   surface exists.
+3. ~~**Does RLS become the real boundary?**~~ — **decided: no. App-level scoping is
+   the boundary; RLS lands later as an additive net** (ADR-0007). This is a
+   thick-backend system — the frontend imports Supabase in three files, all for auth,
+   and issues zero queries — so the browser never meets the database, which is the
+   condition that makes RLS mandatory in a BaaS architecture. Two facts settled it:
+   the service role **bypasses policies entirely**, so "RLS as backstop" described a
+   net that does not exist; and four route groups plus both crons have no user, so
+   `auth.uid()`-keyed policies would need a privileged second path for the
+   cash-closing submit. The eventual net is the **org-claim** variant — the backend
+   authenticates as a non-privileged role declaring its org, policies read
+   `org_id = current_org()` — which works with no logged-in user and compares an
+   indexed column to a constant. Deferred behind the org-#2 gate; cheap **only if**
+   the helper becomes the sole DB construction site, which is B2's done-criteria.
 4. ~~**Are roles org-scoped?**~~ — **decided: yes, the role model changes** (§2.6,
    phase 4). A role is no longer a global property of a user: it is a property of the
    pair (user, org), so the model becomes a membership — `org_members (org_id,
@@ -568,13 +572,21 @@ it belongs (§2–§3) and is only summarized here.
 
 ### Remaining before implementation
 
-3, 5 and 7 are the ones still to settle. None of them blocks phases 1–4: the
-company profile table, the RLS deny-by-default baseline, the `org_id`/`location_id`
-schema pass and the auth/membership rework are all independent of the three.
+5 and 7 are the ones still to settle, and both live inside spec D. Neither blocks
+phases 1–5: the company profile table, the RLS deny-by-default baseline, the
+`org_id`/`location_id` schema pass, the auth/membership rework and the scoped
+helper are all independent of them.
 
-Deadlines, in order: **3 before phase 5's first module** (i.e. before spec B is
-written), 5 before phase 8 and 7 before phase 10 (both inside spec D; 7 stays cheap
-even after, as long as the ledger carries `channel_id`). See §5.1 for the specs.
+Deadlines: 5 before phase 8, 7 before phase 10 (7 stays cheap even after, as long
+as the ledger carries `channel_id`). See §5.1 for the specs.
+
+**Two corrections found while writing spec B1.** Spec C cannot delete
+`DEFAULT_ORG_ID`: the user-less paths (kiosk, KDS, AirMenu webhook and SSE, cron)
+are its last consumer, so the device-identity spec deletes it — §5.1's table above
+is corrected accordingly. And §2.6 point 1 cannot lean on `dependency-cruiser` as
+configured: there is no npm script and no CI workflow, and it runs only from an
+agent hook scoped to `src/modules/<module>`, so it never sees the 192 `.from(`
+calls in `src/services`. Wiring it over `src/**` is a B2 done-criterion.
 
 ~~Not tracked as an open decision but needed before phase 3 starts: the order in
 which the 46 tables and their modules get touched.~~ **Resolved: this is a spec B
@@ -588,6 +600,8 @@ ordering, aligned with the legacy→hexagonal migration, belongs to phase 5.
 ## 7. Related
 
 - `.scratch/org-location-foundation/` — spec A and its issues
+- `.scratch/tenant-identity/` — spec B1 and its issues
+- `docs/adr/0007` — app-level scoping is the tenant boundary; RLS deferred
 - `docs/adr/0005` — `org_id` denormalized on every table
 - `docs/adr/0006` — schema baselined; historical migrations archived
 - `CLAUDE.md` — architecture rules (hexagonal, ports & adapters, module docs)

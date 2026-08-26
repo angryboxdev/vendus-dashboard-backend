@@ -14,6 +14,8 @@
     "stock:adjust-from-lines:dev": "tsx src/jobs/runStockAdjustmentFromLines.ts",
     "stock:adjust-excluded-sales": "node dist/jobs/runStockAdjustmentFromLines.js",
     "stock:adjust-excluded-sales:dev": "tsx src/jobs/runStockAdjustmentFromLines.ts",
+    "org:provision": "node dist/jobs/runOrganizationProvisioning.js",
+    "org:provision:dev": "tsx src/jobs/runOrganizationProvisioning.ts",
     "test": "jest --config jest.config.cjs",
     "test:tasks": "jest --config jest.config.cjs --testPathPattern=src/modules/tasks"
   },
