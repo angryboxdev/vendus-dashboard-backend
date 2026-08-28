@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { BankLogoKey, StatementFormat } from "../../entities/bank.js";
 import type { BankAccountType, CheckingAccountType } from "../../entities/bank-account.js";
 
@@ -58,6 +59,7 @@ export interface BankDetailDto extends BankDto {
 // ─── Create Bank ──────────────────────────────────────────────────────────────
 
 export interface CreateBankCommand {
+  organizationId: OrganizationId;
   name: string;
   logoKey: BankLogoKey;
   color: string;
@@ -72,19 +74,29 @@ export interface CreateBankPort {
 
 // ─── List Banks ───────────────────────────────────────────────────────────────
 
+export interface ListBanksQuery {
+  organizationId: OrganizationId;
+}
+
 export interface ListBanksPort {
-  execute(): Promise<BankSummaryDto[]>;
+  execute(query: ListBanksQuery): Promise<BankSummaryDto[]>;
 }
 
 // ─── Get Bank ─────────────────────────────────────────────────────────────────
 
+export interface GetBankQuery {
+  organizationId: OrganizationId;
+  id: string;
+}
+
 export interface GetBankPort {
-  execute(id: string): Promise<BankDetailDto | null>;
+  execute(query: GetBankQuery): Promise<BankDetailDto | null>;
 }
 
 // ─── Update Bank ──────────────────────────────────────────────────────────────
 
 export interface UpdateBankCommand {
+  organizationId: OrganizationId;
   id: string;
   name?: string;
   logoKey?: BankLogoKey;
@@ -100,13 +112,19 @@ export interface UpdateBankPort {
 
 // ─── Delete Bank ──────────────────────────────────────────────────────────────
 
+export interface DeleteBankCommand {
+  organizationId: OrganizationId;
+  id: string;
+}
+
 export interface DeleteBankPort {
-  execute(id: string): Promise<void>;
+  execute(command: DeleteBankCommand): Promise<void>;
 }
 
 // ─── Create Bank Account ──────────────────────────────────────────────────────
 
 export interface CreateBankAccountCommand {
+  organizationId: OrganizationId;
   bankId: string;
   type: BankAccountType;
   nickname?: string | null;
@@ -125,19 +143,30 @@ export interface CreateBankAccountPort {
 
 // ─── List Bank Accounts ───────────────────────────────────────────────────────
 
+export interface ListBankAccountsQuery {
+  organizationId: OrganizationId;
+  bankId: string;
+}
+
 export interface ListBankAccountsPort {
-  execute(bankId: string): Promise<BankAccountDto[]>;
+  execute(query: ListBankAccountsQuery): Promise<BankAccountDto[]>;
 }
 
 // ─── Get Bank Account ─────────────────────────────────────────────────────────
 
+export interface GetBankAccountQuery {
+  organizationId: OrganizationId;
+  id: string;
+}
+
 export interface GetBankAccountPort {
-  execute(id: string): Promise<BankAccountDto | null>;
+  execute(query: GetBankAccountQuery): Promise<BankAccountDto | null>;
 }
 
 // ─── Update Bank Account ──────────────────────────────────────────────────────
 
 export interface UpdateBankAccountCommand {
+  organizationId: OrganizationId;
   id: string;
   nickname?: string | null;
   iban?: string | null;
@@ -156,6 +185,11 @@ export interface UpdateBankAccountPort {
 
 // ─── Delete Bank Account ──────────────────────────────────────────────────────
 
+export interface DeleteBankAccountCommand {
+  organizationId: OrganizationId;
+  id: string;
+}
+
 export interface DeleteBankAccountPort {
-  execute(id: string): Promise<void>;
+  execute(command: DeleteBankAccountCommand): Promise<void>;
 }

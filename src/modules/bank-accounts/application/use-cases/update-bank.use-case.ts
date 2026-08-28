@@ -21,10 +21,10 @@ export class UpdateBankUseCase implements UpdateBankPort {
   constructor(private readonly repo: BankRepositoryPort) {}
 
   async execute(command: UpdateBankCommand): Promise<BankDto> {
-    const bank = await this.repo.findById(command.id);
+    const bank = await this.repo.findById(command.organizationId, command.id);
     if (!bank) throw new BankNotFoundError(command.id);
     const updated = bank.update(command);
-    await this.repo.update(updated);
+    await this.repo.update(command.organizationId, updated);
     return toDto(updated);
   }
 }

@@ -34,10 +34,10 @@ export class CreateBankAccountUseCase implements CreateBankAccountPort {
   ) {}
 
   async execute(command: CreateBankAccountCommand): Promise<BankAccountDto> {
-    const bank = await this.bankRepo.findById(command.bankId);
+    const bank = await this.bankRepo.findById(command.organizationId, command.bankId);
     if (!bank) throw new BankNotFoundError(command.bankId);
     const account = BankAccount.create(command);
-    await this.accountRepo.save(account);
+    await this.accountRepo.save(command.organizationId, account);
     return toDto(account);
   }
 }

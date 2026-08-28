@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import { Bank, type BankLogoKey, type StatementFormat } from "../../domain/entities/bank.js";
 import type { BankRepositoryPort } from "../../domain/ports/out/bank-repository.port.js";
 
@@ -16,11 +17,16 @@ function toEntity(row: Record<string, unknown>): Bank {
   });
 }
 
+/**
+ * Never holds a `SupabaseClient` — receives the scoped-query factory at
+ * composition time (D2) and builds a scoped helper per call, per the
+ * pattern this module establishes (see the module README's Ports section).
+ */
 export class SupabaseBankRepository implements BankRepositoryPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async save(bank: Bank): Promise<void> {
-    const { error } = await this.supabase.from("banks").insert({
+  async save(organizationId: OrganizationId, bank: Bank): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("banks").insert({
       id: bank.id,
       name: bank.name,
       logo_key: bank.logoKey,
@@ -34,29 +40,29 @@ export class SupabaseBankRepository implements BankRepositoryPort {
     if (error) throw new Error(error.message);
   }
 
-  async findById(id: string): Promise<Bank | null> {
-    const { data, error } = await this.supabase
-      .from("banks")
+  async findById(organizationId: OrganizationId, id: string): Promise<Bank | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("banks")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async findAll(): Promise<Bank[]> {
-    const { data, error } = await this.supabase
-      .from("banks")
+  async findAll(organizationId: OrganizationId): Promise<Bank[]> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("banks")
       .select("*")
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toEntity(r));
   }
 
-  async update(bank: Bank): Promise<void> {
-    const { error } = await this.supabase
-      .from("banks")
+  async update(organizationId: OrganizationId, bank: Bank): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("banks")
       .update({
         name: bank.name,
         logo_key: bank.logoKey,
@@ -70,9 +76,8 @@ export class SupabaseBankRepository implements BankRepositoryPort {
     if (error) throw new Error(error.message);
   }
 
-  async delete(id: string): Promise<void> {
-    const { error } = await this.supabase.from("banks").delete().eq("id", id);
+  async delete(organizationId: OrganizationId, id: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("banks").delete().eq("id", id);
     if (error) throw new Error(error.message);
   }
-
 }

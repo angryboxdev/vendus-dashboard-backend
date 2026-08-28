@@ -1,7 +1,7 @@
 # Módulo: bank-accounts
 
 > Status: ativo
-> Última atualização: 2026-07-25
+> Última atualização: 2026-08-28
 
 ---
 
@@ -70,24 +70,85 @@ Gere bancos e contas bancárias como entidades de domínio independentes. Fornec
 
 ---
 
+## Isolamento por organização (spec B2)
+
+Este módulo foi o piloto da spec B2 (`.scratch/scoped-access/spec.md`,
+D1/D2, ADR-0008) — o primeiro módulo hexagonal completo convertido para
+passar a organização explicitamente por todo o caminho, em vez de confiar
+num client Supabase sem filtro. As decisões de estilo abaixo são as que os
+outros dezoito módulos a converter (ver `.scratch/scoped-access/issues/`)
+copiam.
+
+- **Output ports**: `organizationId: OrganizationId` é sempre o **primeiro
+  parâmetro, separado**, em todos os métodos — nunca um campo dentro de um
+  objecto de filtro (D2 é explícito quanto a isto: misturar os dois torna a
+  tenancy um campo de negócio como outro qualquer, em vez de "só podes ver
+  isto").
+- **Input ports (use cases)**: `organizationId` viaja como **campo dentro do
+  objecto de comando/query** que o `execute()` já recebia. Um port que antes
+  recebia um primitivo isolado (`execute(id: string)`, `execute(bankId: string)`,
+  `execute()`) passou a receber um objecto com esse campo mais
+  `organizationId` — nomeado `<Verbo><Entidade>Command` para escritas e
+  `<Verbo><Entidade>Query` para leituras (ex.: `GetBankQuery = { organizationId, id }`,
+  `DeleteBankCommand = { organizationId, id }`). Isto mantém uma única forma
+  de chamar qualquer use case — um objecto — em vez de dois estilos
+  (posicional vs. objecto) consoante o port já tivesse campos ou não.
+- **Controller**: lê de `req.auth!.orgId` (populado pelo middleware de auth a
+  partir do claim verificado) e coloca-o no comando/query — nunca do body ou
+  de params, para não ser um valor que o cliente possa escolher.
+- **Adapters**: recebem o `ScopedQueryFactory` (`createScopedQuery`) no
+  construtor, não um `SupabaseClient`, e chamam `this.scopedQuery(organizationId).table(...)`
+  por operação — ver `SupabaseBankRepository`/`SupabaseBankAccountRepository`.
+- **Domínio**: as entities (`Bank`, `BankAccount`) não ganharam um campo
+  `organizationId` — a organização é uma preocupação de acesso/query, não um
+  invariante de negócio da entidade, tal como em `locations`.
+
+### Ponte cross-módulo temporária (bank-statements)
+
+`createBankAccountsModule()` expunha `accountRepo` directamente (o próprio
+`SupabaseBankAccountRepository`) para o módulo bank-statements o injectar
+como o seu `BankAccountReadPort` — compatibilidade estrutural, sem port
+dedicado. Essa forma partiu quando `findByAccountNumber`/`findById` ganharam
+`organizationId` como primeiro parâmetro: bank-statements ainda não foi
+convertido (ticket 09, bloqueado por este) e não tem uma organização de
+pedido para passar no seu próprio composition root.
+
+`BankAccountCrossModuleReadAdapter` (`adapters/out/bank-account-cross-module-read.adapter.ts`)
+é a ponte: envolve o repositório já escopado e responde à forma antiga e
+sem organização usando `UNATTENDED_SCOPE.organizationId`. Não é uma segunda
+porta de escape — toda a query por trás continua a passar pelo helper — é
+apenas fixada numa organização em vez da do chamador, o que hoje é um no-op
+porque só existe uma organização (o "hard gate" da spec.md sobre provisionar
+uma segunda). O ticket 09 elimina este ficheiro assim que bank-statements
+passar a ter a sua própria organização de pedido para passar directamente.
+
+---
+
 ## Ports
 
 ### Entrada (use cases)
 
-- `CreateBankPort` — cria banco.
-- `ListBanksPort` — lista bancos com contagem de contas.
-- `GetBankPort` — detalhe banco + todas as suas contas.
-- `UpdateBankPort` — actualiza campos do banco.
-- `DeleteBankPort` — elimina banco (rejeita se tiver contas).
-- `CreateBankAccountPort` — cria conta/cartão (valida que banco existe).
-- `GetBankAccountPort` — detalhe de uma conta.
-- `UpdateBankAccountPort` — actualiza campos da conta.
-- `DeleteBankAccountPort` — elimina conta (rejeita se tiver extratos importados).
+- `CreateBankPort` — cria banco. `CreateBankCommand` inclui `organizationId`.
+- `ListBanksPort` — lista bancos com contagem de contas. `ListBanksQuery = { organizationId }`.
+- `GetBankPort` — detalhe banco + todas as suas contas. `GetBankQuery = { organizationId, id }`.
+- `UpdateBankPort` — actualiza campos do banco. `UpdateBankCommand` inclui `organizationId`.
+- `DeleteBankPort` — elimina banco (rejeita se tiver contas). `DeleteBankCommand = { organizationId, id }`.
+- `CreateBankAccountPort` — cria conta/cartão (valida que banco existe). `CreateBankAccountCommand` inclui `organizationId`.
+- `ListBankAccountsPort` — lista contas de um banco. `ListBankAccountsQuery = { organizationId, bankId }`.
+- `GetBankAccountPort` — detalhe de uma conta. `GetBankAccountQuery = { organizationId, id }`.
+- `UpdateBankAccountPort` — actualiza campos da conta. `UpdateBankAccountCommand` inclui `organizationId`.
+- `DeleteBankAccountPort` — elimina conta (rejeita se tiver extratos importados). `DeleteBankAccountCommand = { organizationId, id }`.
 
 ### Saída (dependências do domínio)
 
-- `BankRepositoryPort` — save, findById, findAll, update, delete, countAccounts.
-- `BankAccountRepositoryPort` — save, findById, findByBankId, findByAccountNumber, update, delete, countStatements.
+- `BankRepositoryPort` — `save(organizationId, bank)`, `findById(organizationId, id)`,
+  `findAll(organizationId)`, `update(organizationId, bank)`, `delete(organizationId, id)`.
+- `BankAccountRepositoryPort` — `save(organizationId, account)`, `findById(organizationId, id)`,
+  `findByBankId(organizationId, bankId)`, `findByAccountNumber(organizationId, raw)`,
+  `update(organizationId, account)`, `delete(organizationId, id)`,
+  `countStatements(organizationId, accountId)`.
+
+Em ambos, `organizationId` é sempre o primeiro parâmetro do método (D2).
 
 ---
 
@@ -99,8 +160,9 @@ Gere bancos e contas bancárias como entidades de domínio independentes. Fornec
 
 ### Saída
 
-- `SupabaseBankRepository` → tabela `banks`.
-- `SupabaseBankAccountRepository` → tabela `bank_accounts`.
+- `SupabaseBankRepository` → tabela `banks`, via `ScopedQueryFactory` (D2) — não guarda um `SupabaseClient`.
+- `SupabaseBankAccountRepository` → tabela `bank_accounts` (e `bank_statement_imports` em `countStatements`), via `ScopedQueryFactory`.
+- `BankAccountCrossModuleReadAdapter` → ponte temporária para bank-statements, ver secção abaixo.
 
 ### Rotas
 
@@ -122,9 +184,14 @@ DELETE /api/bank-accounts/:accountId                   eliminar conta (409 se ti
 
 ## Cross-módulo: bank-statements
 
-O módulo expõe `accountRepo` (instância de `SupabaseBankAccountRepository`) via `createBankAccountsModule()`. Este repositório é structuralmente compatível com o `BankAccountReadPort` de bank-statements (ambos têm `findByAccountNumber` e `findById` com tipos estruturalmente compatíveis). O server.ts injeta este repo no `createBankStatementsModule(bankAccountRead)`.
+O módulo expõe `accountRepo` via `createBankAccountsModule()` — hoje uma
+instância de `BankAccountCrossModuleReadAdapter`, não o `SupabaseBankAccountRepository`
+directamente (ver "Ponte cross-módulo temporária" acima: a conversão deste
+ticket para `organizationId` explícito quebrou a compatibilidade estrutural
+anterior com o `BankAccountReadPort` de bank-statements). O server.ts injecta
+este adapter em `createBankStatementsModule(bankAccountRead)`.
 
-O banco-statements também tem um fallback `SupabaseBankAccountReadAdapter` que consulta directamente a tabela `bank_accounts` — usado se o módulo for instanciado sem a injecção.
+O bank-statements também tem um fallback `SupabaseBankAccountReadAdapter` que consulta directamente a tabela `bank_accounts` — usado se o módulo for instanciado sem a injecção. Esse fallback ainda usa um `SupabaseClient` sem escopo — fica por conversão do ticket 09.
 
 ## Decisões de design (ADR resumido)
 
@@ -134,7 +201,7 @@ O banco-statements também tem um fallback `SupabaseBankAccountReadAdapter` que 
 
 **`countAccounts` e `countStatements` no repositório** — a regra "não eliminar se tiver dependentes" é simples o suficiente para resolver com um count no repositório, sem necessidade de lista completa.
 
-**Exposição de `accountRepo` em vez de port separado** — o `SupabaseBankAccountRepository` é estruturalmente compatível com o `BankAccountReadPort` (TypeScript structural typing). Evita criar um adapter wrapper desnecessário.
+**Exposição de `accountRepo` em vez de port separado** — historicamente o `SupabaseBankAccountRepository` era estruturalmente compatível com o `BankAccountReadPort` (TypeScript structural typing), evitando um adapter wrapper. A spec B2 (D2) acabou com isso ao dar a `BankAccountRepositoryPort` um primeiro parâmetro `organizationId` que o port de bank-statements não tem — ver "Ponte cross-módulo temporária" acima para o adapter que assumiu esse papel entretanto.
 
 ## Como testar
 
@@ -148,3 +215,4 @@ npx jest --testPathPattern=src/modules/bank-accounts
 - Parsers para CGD, BPI, Santander ainda não existem — o campo `statementFormat` reserva os valores mas o controller de bank-statements continua a usar apenas millennium_bcp_csv e generic_xlsx.
 - Não há validação de formato IBAN (apenas normalização de whitespace/casing). Validação formal poderia ser adicionada no domínio.
 - `GET /api/bank-accounts/banks` faz N queries para contar contas (uma por banco). Para volumes grandes, considerar uma query com JOIN ou COUNT GROUP BY.
+- `BankAccountCrossModuleReadAdapter` fixa a organização de bank-statements em `UNATTENDED_SCOPE` em vez da do pedido — inofensivo enquanto só existir uma organização, mas é dívida deliberada que o ticket 09 (spec B2) fecha. Ver "Ponte cross-módulo temporária" acima.

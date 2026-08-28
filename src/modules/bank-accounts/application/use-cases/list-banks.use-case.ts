@@ -1,6 +1,11 @@
 import type { BankRepositoryPort } from "../../domain/ports/out/bank-repository.port.js";
 import type { BankAccountRepositoryPort } from "../../domain/ports/out/bank-account-repository.port.js";
-import type { ListBanksPort, BankSummaryDto, AccountPreviewDto } from "../../domain/ports/in/bank-accounts.ports.js";
+import type {
+  ListBanksPort,
+  ListBanksQuery,
+  BankSummaryDto,
+  AccountPreviewDto,
+} from "../../domain/ports/in/bank-accounts.ports.js";
 import type { Bank } from "../../domain/entities/bank.js";
 import type { BankAccount } from "../../domain/entities/bank-account.js";
 
@@ -33,10 +38,10 @@ export class ListBanksUseCase implements ListBanksPort {
     private readonly accountRepo: BankAccountRepositoryPort,
   ) {}
 
-  async execute(): Promise<BankSummaryDto[]> {
-    const banks = await this.repo.findAll();
+  async execute(query: ListBanksQuery): Promise<BankSummaryDto[]> {
+    const banks = await this.repo.findAll(query.organizationId);
     const accountsByBank = await Promise.all(
-      banks.map((b) => this.accountRepo.findByBankId(b.id)),
+      banks.map((b) => this.accountRepo.findByBankId(query.organizationId, b.id)),
     );
     return banks.map((bank: Bank, i) => {
       const accounts = accountsByBank[i] ?? [];

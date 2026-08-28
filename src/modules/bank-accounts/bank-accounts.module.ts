@@ -1,9 +1,10 @@
 import type { Router } from "express";
-import { getSupabaseServiceRole } from "../../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 
 // Adapters out
 import { SupabaseBankRepository } from "./adapters/out/supabase-bank.repository.js";
 import { SupabaseBankAccountRepository } from "./adapters/out/supabase-bank-account.repository.js";
+import { BankAccountCrossModuleReadAdapter } from "./adapters/out/bank-account-cross-module-read.adapter.js";
 
 // Use cases
 import { CreateBankUseCase } from "./application/use-cases/create-bank.use-case.js";
@@ -19,26 +20,28 @@ import { DeleteBankAccountUseCase } from "./application/use-cases/delete-bank-ac
 // Adapter in
 import { BankAccountsController } from "./adapters/in/bank-accounts.controller.js";
 
-// Cross-module: exposes account lookup for bank-statements import auto-linking
-import type { BankAccountRepositoryPort } from "./domain/ports/out/bank-account-repository.port.js";
-
 /**
- * Composition root for the bank-accounts module.
+ * Composition root for the bank-accounts module (spec B2 ticket 02 — the
+ * pilot for the scoped-access pattern; see the module README's Ports
+ * section for the house style this establishes).
+ *
+ * Only this file knows the concrete adapters. Following D2, adapters don't
+ * construct their own `ScopedQuery`: they receive the `createScopedQuery`
+ * factory injected here, and build a scoped helper per call.
  *
  * Exposes:
- *  - router  : Express router mounted at /api
- *  - accountRepo : raw repo reference shared with bank-statements for cross-module lookup
+ *  - router     : Express router mounted at /api
+ *  - accountRepo: cross-module read access for bank-statements' auto-linking
+ *                 (see `BankAccountCrossModuleReadAdapter` — a temporary
+ *                 bridge, deleted by ticket 09)
  */
 export function createBankAccountsModule(): {
   router: Router;
-  accountRepo: BankAccountRepositoryPort;
+  accountRepo: BankAccountCrossModuleReadAdapter;
 } {
-  const supabase = getSupabaseServiceRole();
-  if (!supabase) throw new Error("Supabase service role client is not configured");
-
   // Adapters out
-  const bankRepo = new SupabaseBankRepository(supabase);
-  const accountRepo = new SupabaseBankAccountRepository(supabase);
+  const bankRepo = new SupabaseBankRepository(createScopedQuery);
+  const accountRepo = new SupabaseBankAccountRepository(createScopedQuery);
 
   // Use cases
   const createBank = new CreateBankUseCase(bankRepo);
@@ -64,5 +67,5 @@ export function createBankAccountsModule(): {
     deleteBankAccount
   );
 
-  return { router: controller.router, accountRepo };
+  return { router: controller.router, accountRepo: new BankAccountCrossModuleReadAdapter(accountRepo) };
 }
