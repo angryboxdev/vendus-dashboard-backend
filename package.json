@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "npm run check && tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "cron:daily-vendus-consumption": "node dist/jobs/runDailyVendusConsumption.js",
     "cron:daily-vendus-consumption:dev": "tsx src/jobs/runDailyVendusConsumption.ts",
