@@ -1,6 +1,8 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { OccurrenceDTO } from "./occurrence.ports.js";
 
 export interface GenerateBatchCommand {
+  organizationId: OrganizationId;
   year: number;
   month: number; // 1-based
 }

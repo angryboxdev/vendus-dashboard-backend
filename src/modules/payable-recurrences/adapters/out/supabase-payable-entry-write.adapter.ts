@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import type { PayableEntryWritePort, CreatePayableData } from "../../domain/ports/out/payable-entry-write.port.js";
 
 /**
@@ -11,13 +12,13 @@ import type { PayableEntryWritePort, CreatePayableData } from "../../domain/port
  *  - invoice_id: null    (a ligação à fatura é gerida pela ocorrência)
  */
 export class SupabasePayableEntryWriteAdapter implements PayableEntryWritePort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async create(data: CreatePayableData): Promise<{ id: string }> {
+  async create(organizationId: OrganizationId, data: CreatePayableData): Promise<{ id: string }> {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    const { error } = await this.supabase.from("payable_entries").insert({
+    const { error } = await this.scopedQuery(organizationId).table("payable_entries").insert({
       id,
       source: "recurrence",
       invoice_id: null,

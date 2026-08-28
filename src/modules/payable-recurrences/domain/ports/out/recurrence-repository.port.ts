@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { Recurrence, RecurrenceStatus, RecurrenceType } from "../../entities/recurrence.js";
 
 export interface RecurrenceFilter {
@@ -7,8 +8,8 @@ export interface RecurrenceFilter {
 }
 
 export interface RecurrenceRepositoryPort {
-  save(recurrence: Recurrence): Promise<void>;
-  update(recurrence: Recurrence): Promise<void>;
-  findById(id: string): Promise<Recurrence | null>;
-  findAll(filter?: RecurrenceFilter): Promise<Recurrence[]>;
+  save(organizationId: OrganizationId, recurrence: Recurrence): Promise<void>;
+  update(organizationId: OrganizationId, recurrence: Recurrence): Promise<void>;
+  findById(organizationId: OrganizationId, id: string): Promise<Recurrence | null>;
+  findAll(organizationId: OrganizationId, filter?: RecurrenceFilter): Promise<Recurrence[]>;
 }

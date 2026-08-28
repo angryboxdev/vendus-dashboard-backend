@@ -1,7 +1,11 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateRecurrenceUseCase } from "../../application/use-cases/create-recurrence.use-case.js";
 import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js";
 
+const organizationId = mintOrganizationId("org-a");
+
 const BASE_CMD = {
+  organizationId,
   name: "Renda da loja",
   supplierName: "Proprietário Lda",
   type: "fixed_contract" as const,
@@ -27,7 +31,7 @@ describe("CreateRecurrenceUseCase", () => {
     expect(dto.type).toBe("fixed_contract");
     expect(dto.requireInvoice).toBe(false);
 
-    const saved = await repo.findById(dto.id);
+    const saved = await repo.findById(organizationId, dto.id);
     expect(saved).not.toBeNull();
   });
 
@@ -41,7 +45,7 @@ describe("CreateRecurrenceUseCase", () => {
   it("propaga erro de domínio sem persistir", async () => {
     const { repo, useCase } = make();
     await expect(useCase.execute({ ...BASE_CMD, name: "" })).rejects.toThrow("Recurrence name is required");
-    expect(await repo.findAll()).toHaveLength(0);
+    expect(await repo.findAll(organizationId)).toHaveLength(0);
   });
 
   it("força requireInvoice=true para variable_invoice", async () => {

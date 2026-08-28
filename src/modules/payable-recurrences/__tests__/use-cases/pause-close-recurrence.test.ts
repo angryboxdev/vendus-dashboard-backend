@@ -1,3 +1,4 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateRecurrenceUseCase } from "../../application/use-cases/create-recurrence.use-case.js";
 import { PauseRecurrenceUseCase } from "../../application/use-cases/pause-recurrence.use-case.js";
 import { ResumeRecurrenceUseCase } from "../../application/use-cases/resume-recurrence.use-case.js";
@@ -5,7 +6,10 @@ import { CloseRecurrenceUseCase } from "../../application/use-cases/close-recurr
 import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js";
 import { RecurrenceNotFoundError, RecurrenceClosedError, RecurrenceAlreadyPausedError } from "../../domain/errors.js";
 
+const organizationId = mintOrganizationId("org-a");
+
 const BASE_CMD = {
+  organizationId,
   name: "Contabilidade",
   supplierName: "Contabilista Lda",
   type: "recurring_service" as const,
@@ -30,41 +34,50 @@ describe("Pause / Resume / Close recurrence use cases", () => {
   it("pausa uma recorrência activa", async () => {
     const { create, pause } = make();
     const dto = await create.execute(BASE_CMD);
-    const paused = await pause.execute(dto.id);
+    const paused = await pause.execute({ organizationId, id: dto.id });
     expect(paused.status).toBe("paused");
   });
 
   it("retoma uma recorrência pausada", async () => {
     const { create, pause, resume } = make();
     const dto = await create.execute(BASE_CMD);
-    await pause.execute(dto.id);
-    const resumed = await resume.execute(dto.id);
+    await pause.execute({ organizationId, id: dto.id });
+    const resumed = await resume.execute({ organizationId, id: dto.id });
     expect(resumed.status).toBe("active");
   });
 
   it("fecha uma recorrência activa", async () => {
     const { create, close } = make();
     const dto = await create.execute(BASE_CMD);
-    const closed = await close.execute(dto.id);
+    const closed = await close.execute({ organizationId, id: dto.id });
     expect(closed.status).toBe("closed");
   });
 
   it("lança RecurrenceNotFoundError para id inexistente", async () => {
     const { pause } = make();
-    await expect(pause.execute("nao-existe")).rejects.toThrow(RecurrenceNotFoundError);
+    await expect(pause.execute({ organizationId, id: "nao-existe" })).rejects.toThrow(RecurrenceNotFoundError);
+  });
+
+  it("lança RecurrenceNotFoundError para uma recorrência que pertence a outra organização", async () => {
+    const { create, pause } = make();
+    const dto = await create.execute(BASE_CMD);
+    const otherOrganizationId = mintOrganizationId("org-b");
+    await expect(pause.execute({ organizationId: otherOrganizationId, id: dto.id })).rejects.toThrow(
+      RecurrenceNotFoundError,
+    );
   });
 
   it("lança RecurrenceAlreadyPausedError ao pausar de novo", async () => {
     const { create, pause } = make();
     const dto = await create.execute(BASE_CMD);
-    await pause.execute(dto.id);
-    await expect(pause.execute(dto.id)).rejects.toThrow(RecurrenceAlreadyPausedError);
+    await pause.execute({ organizationId, id: dto.id });
+    await expect(pause.execute({ organizationId, id: dto.id })).rejects.toThrow(RecurrenceAlreadyPausedError);
   });
 
   it("lança RecurrenceClosedError ao fechar encerrada", async () => {
     const { create, close } = make();
     const dto = await create.execute(BASE_CMD);
-    await close.execute(dto.id);
-    await expect(close.execute(dto.id)).rejects.toThrow(RecurrenceClosedError);
+    await close.execute({ organizationId, id: dto.id });
+    await expect(close.execute({ organizationId, id: dto.id })).rejects.toThrow(RecurrenceClosedError);
   });
 });

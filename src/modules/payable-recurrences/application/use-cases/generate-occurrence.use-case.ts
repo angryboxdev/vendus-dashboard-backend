@@ -14,11 +14,15 @@ export class GenerateOccurrenceUseCase implements GenerateOccurrencePort {
   ) {}
 
   async execute(command: GenerateOccurrenceCommand): Promise<OccurrenceDTO> {
-    const recurrence = await this.recurrenceRepo.findById(command.recurrenceId);
+    const recurrence = await this.recurrenceRepo.findById(command.organizationId, command.recurrenceId);
     if (!recurrence) throw new RecurrenceNotFoundError(command.recurrenceId);
 
     const period = this.generator.toPeriod(command.year, command.month);
-    const existing = await this.occurrenceRepo.findByRecurrenceAndPeriod(command.recurrenceId, period);
+    const existing = await this.occurrenceRepo.findByRecurrenceAndPeriod(
+      command.organizationId,
+      command.recurrenceId,
+      period,
+    );
     if (existing) throw new OccurrenceAlreadyExistsError(command.recurrenceId, period);
 
     const occurrence = this.generator.generateForMonth(recurrence, command.year, command.month);
@@ -28,7 +32,7 @@ export class GenerateOccurrenceUseCase implements GenerateOccurrencePort {
       );
     }
 
-    await this.occurrenceRepo.save(occurrence);
+    await this.occurrenceRepo.save(command.organizationId, occurrence);
     return toOccurrenceDTO(occurrence);
   }
 }

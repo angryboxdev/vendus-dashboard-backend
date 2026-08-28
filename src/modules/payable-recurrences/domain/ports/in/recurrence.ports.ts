@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type {
   RecurrenceType,
   RecurrenceFrequency,
@@ -35,6 +36,7 @@ export interface RecurrenceDTO {
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 export interface CreateRecurrenceCommand {
+  organizationId: OrganizationId;
   name: string;
   supplierId?: string | null;
   supplierName: string;
@@ -54,6 +56,7 @@ export interface CreateRecurrenceCommand {
 }
 
 export interface UpdateRecurrenceCommand {
+  organizationId: OrganizationId;
   id: string;
   name?: string;
   supplierId?: string | null;
@@ -70,6 +73,30 @@ export interface UpdateRecurrenceCommand {
   notes?: string | null;
 }
 
+export interface PauseRecurrenceCommand {
+  organizationId: OrganizationId;
+  id: string;
+}
+
+export interface ResumeRecurrenceCommand {
+  organizationId: OrganizationId;
+  id: string;
+}
+
+export interface CloseRecurrenceCommand {
+  organizationId: OrganizationId;
+  id: string;
+}
+
+export interface ListRecurrencesQuery extends RecurrenceFilter {
+  organizationId: OrganizationId;
+}
+
+export interface GetRecurrenceQuery {
+  organizationId: OrganizationId;
+  id: string;
+}
+
 // ── Input ports ───────────────────────────────────────────────────────────────
 
 export interface CreateRecurrencePort {
@@ -81,21 +108,21 @@ export interface UpdateRecurrencePort {
 }
 
 export interface PauseRecurrencePort {
-  execute(id: string): Promise<RecurrenceDTO>;
+  execute(command: PauseRecurrenceCommand): Promise<RecurrenceDTO>;
 }
 
 export interface ResumeRecurrencePort {
-  execute(id: string): Promise<RecurrenceDTO>;
+  execute(command: ResumeRecurrenceCommand): Promise<RecurrenceDTO>;
 }
 
 export interface CloseRecurrencePort {
-  execute(id: string): Promise<RecurrenceDTO>;
+  execute(command: CloseRecurrenceCommand): Promise<RecurrenceDTO>;
 }
 
 export interface ListRecurrencesPort {
-  execute(filter?: RecurrenceFilter): Promise<RecurrenceDTO[]>;
+  execute(query: ListRecurrencesQuery): Promise<RecurrenceDTO[]>;
 }
 
 export interface GetRecurrencePort {
-  execute(id: string): Promise<RecurrenceDTO>;
+  execute(query: GetRecurrenceQuery): Promise<RecurrenceDTO>;
 }
