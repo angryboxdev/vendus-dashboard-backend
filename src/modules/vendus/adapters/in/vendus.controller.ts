@@ -80,13 +80,18 @@ export class VendusController {
     /**
      * GET /api/vendus/analytics/historical?year=2026&month=8
      * Total anual, histórico, gráfico de crescimento, comparações.
-     * Cache-aware para meses imutáveis.
+     * Cache-aware para meses imutáveis — o único endpoint do módulo que toca
+     * o Supabase, daí ser o único a ler `organizationId` de `req.auth`
+     * (D2; nunca do body/params, para não ser um valor escolhido pelo cliente).
      */
     this.router.get("/vendus/analytics/historical", async (req, res) => {
       const params = parseYearMonth(req as any, res as any);
       if (!params) return;
       try {
-        const data = await this.getAnalyticsHistorical.execute(params);
+        const data = await this.getAnalyticsHistorical.execute({
+          ...params,
+          organizationId: req.auth!.orgId,
+        });
         res.json(data);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Erro interno";

@@ -37,9 +37,9 @@ work (§3.3). Do not start it here.
 
 ## Done when
 
-- [ ] Every output port method in the module takes the organization explicitly
-- [ ] Every query in the module is built through the helper
-- [ ] The module imports no Supabase client and no Supabase package
-- [ ] Existing tests pass with the organization threaded through
-- [ ] Request and response shapes are unchanged
-- [ ] The module README's Ports section reflects the new signatures
+- [x] Every output port method in the module takes the organization explicitly
+- [x] Every query in the module is built through the helper
+- [x] The module imports no Supabase client and no Supabase package
+- [x] Existing tests pass with the organization threaded through
+- [x] Request and response shapes are unchanged
+- [x] The module README's Ports section reflects the new signatures

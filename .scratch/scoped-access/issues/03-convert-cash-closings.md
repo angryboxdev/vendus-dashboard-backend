@@ -58,14 +58,14 @@ or closing screens. No column default dropped.
 
 ## Done when
 
-- [ ] Every `cash-closings` output port method takes the organization explicitly
-- [ ] Every query in the module is built through the helper
-- [ ] The public routes resolve organization and location from the unattended scope
-- [ ] The closing write supplies a location explicitly rather than relying on the
+- [x] Every `cash-closings` output port method takes the organization explicitly
+- [x] Every query in the module is built through the helper
+- [x] The public routes resolve organization and location from the unattended scope
+- [x] The closing write supplies a location explicitly rather than relying on the
       column default
-- [ ] The PIN lookup is organization-scoped
-- [ ] The managed routes take the organization from the auth payload
-- [ ] The dead route file and its service are converted, not deleted
-- [ ] The module imports no Supabase client and no Supabase package
-- [ ] Existing tests pass; the closing flow behaves identically end to end
-- [ ] The module README reflects the new signatures and the unattended-path rule
+- [x] The PIN lookup is organization-scoped
+- [x] The managed routes take the organization from the auth payload
+- [x] The dead route file and its service are converted, not deleted
+- [x] The module imports no Supabase client and no Supabase package
+- [x] Existing tests pass; the closing flow behaves identically end to end
+- [x] The module README reflects the new signatures and the unattended-path rule
