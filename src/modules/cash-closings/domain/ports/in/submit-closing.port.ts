@@ -1,7 +1,16 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { CashClosingDto } from "./shared-dto.js";
 import type { DrawerDenominations } from "../../entities/cash-closing.js";
 
 export interface SubmitClosingCommand {
+  /** Rota pública sem sessão (D14): fornecido pelo controller a partir do unattended scope. */
+  organizationId: OrganizationId;
+  /**
+   * Loja a que este fecho pertence (D3/D4). Campo de comando, não escopo —
+   * fornecido explicitamente pelo unattended scope (D14), nunca pelo cliente
+   * (o kiosk não tem identidade de dispositivo) nem pelo default da coluna.
+   */
+  locationId: string;
   employeeId: string;
   closingDate: string;
   tpa: number;

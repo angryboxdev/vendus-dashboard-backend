@@ -10,7 +10,10 @@ export class VerifyPinUseCase implements VerifyPinPort {
 
   async execute(command: VerifyPinCommand): Promise<VerifyPinResult> {
     const pinHash = this.hashPin(command.pin);
-    const employee = await this.employeeRepository.findActiveByPinHash(pinHash);
+    const employee = await this.employeeRepository.findActiveByPinHash(
+      command.organizationId,
+      pinHash,
+    );
     if (!employee) throw new InvalidPinError();
     return { employeeId: employee.id, fullName: employee.fullName };
   }

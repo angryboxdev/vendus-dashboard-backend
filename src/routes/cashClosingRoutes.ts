@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { requireAuth, requireMinRole } from "../middleware/auth.js";
+import { UNATTENDED_SCOPE } from "../infra/scoped-db/unattended-scope.js";
 import {
   verifyPin,
   submitClosing,
@@ -21,6 +22,8 @@ function jsonError(res: Response, status: number, message: string) {
 }
 
 // ---------- Public endpoints (no auth) ----------
+// No authenticated user (D14): organization/location come from the
+// unattended scope, never from the request.
 
 /** POST /api/cash-closings/verify-pin */
 cashClosingPublicRoutes.post("/cash-closings/verify-pin", async (req: Request, res: Response) => {
@@ -30,7 +33,7 @@ cashClosingPublicRoutes.post("/cash-closings/verify-pin", async (req: Request, r
       jsonError(res, 400, "PIN inválido (4 dígitos)");
       return;
     }
-    const result = await verifyPin(pin);
+    const result = await verifyPin(UNATTENDED_SCOPE.organizationId, pin);
     res.json(result);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro interno";
@@ -57,7 +60,7 @@ cashClosingPublicRoutes.post("/cash-closings/submit", async (req: Request, res: 
       return Math.round(n * 100) / 100;
     };
 
-    const closing = await submitClosing({
+    const closing = await submitClosing(UNATTENDED_SCOPE.organizationId, UNATTENDED_SCOPE.locationId, {
       employeeId,
       closingDate,
       tpa: toNum(tpa, "tpa"),
@@ -115,7 +118,7 @@ cashClosingRoutes.get(
       if (date) listParams.date = date;
       if (status) listParams.status = status as CashClosingStatus;
       if (employeeId) listParams.employeeId = employeeId;
-      const result = await listClosings(listParams);
+      const result = await listClosings(req.auth!.orgId, listParams);
       res.json(result);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Erro interno";
@@ -131,7 +134,7 @@ cashClosingRoutes.get(
   requireMinRole("manager"),
   async (req: Request, res: Response) => {
     try {
-      const closing = await getClosing(req.params.id as string);
+      const closing = await getClosing(req.auth!.orgId, req.params.id as string);
       res.json(closing);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Erro interno";
@@ -163,7 +166,7 @@ cashClosingRoutes.patch(
       if (b.cashOut != null) patch.cashOut = Number(b.cashOut);
       if (b.cashDrawerOpen != null) patch.cashDrawerOpen = Number(b.cashDrawerOpen);
       if (b.cashDrawerTotal != null) patch.cashDrawerTotal = Number(b.cashDrawerTotal);
-      const updated = await patchClosing(req.params.id as string, patch);
+      const updated = await patchClosing(req.auth!.orgId, req.params.id as string, patch);
       res.json(updated);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Erro interno";

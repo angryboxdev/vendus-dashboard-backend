@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import { CashClosing, type CashClosingStatus, type DrawerDenominations } from "../../domain/entities/cash-closing.js";
 import type {
   CashClosingRepositoryPort,
@@ -12,6 +13,7 @@ function toEntity(row: Record<string, unknown>): CashClosing {
     employeeId: row.employee_id as string,
     employeeName:
       (row.hr_employees as { full_name?: string } | null)?.full_name ?? "",
+    locationId: row.location_id as string,
     tpa: Number(row.tpa),
     uber: Number(row.uber),
     glovo: Number(row.glovo),
@@ -38,14 +40,25 @@ function toEntity(row: Record<string, unknown>): CashClosing {
   });
 }
 
+/**
+ * Never holds a `SupabaseClient` — receives the scoped-query factory at
+ * composition time (D2) and builds a scoped helper per call, per the
+ * pattern the pilot module established (see the module README's Ports
+ * section).
+ *
+ * `location_id` is stamped explicitly on `save()` from `closing.locationId`
+ * (D3/D4) rather than left to the column default, and is never touched by
+ * `update()` — it is immutable after submission, like `drawer_denominations`.
+ */
 export class SupabaseCashClosingRepository implements CashClosingRepositoryPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async save(closing: CashClosing): Promise<void> {
-    const { error } = await this.supabase.from("cash_closings").insert({
+  async save(organizationId: OrganizationId, closing: CashClosing): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("cash_closings").insert({
       id: closing.id,
       closing_date: closing.closingDate,
       employee_id: closing.employeeId,
+      location_id: closing.locationId,
       tpa: closing.tpa,
       uber: closing.uber,
       glovo: closing.glovo,
@@ -72,9 +85,9 @@ export class SupabaseCashClosingRepository implements CashClosingRepositoryPort 
     if (error) throw new Error(error.message);
   }
 
-  async findById(id: string): Promise<CashClosing | null> {
-    const { data, error } = await this.supabase
-      .from("cash_closings")
+  async findById(organizationId: OrganizationId, id: string): Promise<CashClosing | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("cash_closings")
       .select("*, hr_employees(full_name)")
       .eq("id", id)
       .maybeSingle();
@@ -82,14 +95,15 @@ export class SupabaseCashClosingRepository implements CashClosingRepositoryPort 
     if (error) throw new Error(error.message);
     if (!data) return null;
 
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
   async list(
+    organizationId: OrganizationId,
     filter: ClosingListFilter,
   ): Promise<{ closings: CashClosing[]; total: number }> {
-    let q = this.supabase
-      .from("cash_closings")
+    let q = this.scopedQuery(organizationId)
+      .table("cash_closings")
       .select("*, hr_employees(full_name)", { count: "exact" })
       .order("closing_date", { ascending: false })
       .order("submitted_at", { ascending: false });
@@ -110,14 +124,14 @@ export class SupabaseCashClosingRepository implements CashClosingRepositoryPort 
     if (error) throw new Error(error.message);
 
     return {
-      closings: (data ?? []).map((r) => toEntity(r as Record<string, unknown>)),
+      closings: ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toEntity(r)),
       total: count ?? 0,
     };
   }
 
-  async update(closing: CashClosing): Promise<void> {
-    const { error } = await this.supabase
-      .from("cash_closings")
+  async update(organizationId: OrganizationId, closing: CashClosing): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("cash_closings")
       .update({
         tpa: closing.tpa,
         uber: closing.uber,
@@ -142,11 +156,12 @@ export class SupabaseCashClosingRepository implements CashClosingRepositoryPort 
   }
 
   async existsForEmployeeOnDate(
+    organizationId: OrganizationId,
     employeeId: string,
     closingDate: string,
   ): Promise<boolean> {
-    const { data, error } = await this.supabase
-      .from("cash_closings")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("cash_closings")
       .select("id")
       .eq("employee_id", employeeId)
       .eq("closing_date", closingDate)
@@ -156,9 +171,9 @@ export class SupabaseCashClosingRepository implements CashClosingRepositoryPort 
     return data != null;
   }
 
-  async existsForSession(sessionOpenedAt: string): Promise<boolean> {
-    const { data, error } = await this.supabase
-      .from("cash_closings")
+  async existsForSession(organizationId: OrganizationId, sessionOpenedAt: string): Promise<boolean> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("cash_closings")
       .select("id")
       .eq("session_opened_at", sessionOpenedAt)
       .maybeSingle();

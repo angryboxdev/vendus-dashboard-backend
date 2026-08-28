@@ -6,6 +6,7 @@ export interface CashClosingDto {
   closingDate: string;
   employeeId: string;
   employeeName: string;
+  locationId: string;
   tpa: number;
   uber: number;
   glovo: number;

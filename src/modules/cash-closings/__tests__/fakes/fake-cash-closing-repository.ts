@@ -1,22 +1,33 @@
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { CashClosing } from "../../domain/entities/cash-closing.js";
 import type {
   CashClosingRepositoryPort,
   ClosingListFilter,
 } from "../../domain/ports/out/cash-closing-repository.port.js";
 
+function key(organizationId: OrganizationId, id: string): string {
+  return `${organizationId}:${id}`;
+}
+
 export class FakeCashClosingRepository implements CashClosingRepositoryPort {
   private readonly store = new Map<string, CashClosing>();
 
-  async save(closing: CashClosing): Promise<void> {
-    this.store.set(closing.id, closing);
+  async save(organizationId: OrganizationId, closing: CashClosing): Promise<void> {
+    this.store.set(key(organizationId, closing.id), closing);
   }
 
-  async findById(id: string): Promise<CashClosing | null> {
-    return this.store.get(id) ?? null;
+  async findById(organizationId: OrganizationId, id: string): Promise<CashClosing | null> {
+    return this.store.get(key(organizationId, id)) ?? null;
   }
 
-  async list(filter: ClosingListFilter): Promise<{ closings: CashClosing[]; total: number }> {
-    let items = Array.from(this.store.values());
+  async list(
+    organizationId: OrganizationId,
+    filter: ClosingListFilter,
+  ): Promise<{ closings: CashClosing[]; total: number }> {
+    const prefix = `${organizationId}:`;
+    let items = Array.from(this.store.entries())
+      .filter(([k]) => k.startsWith(prefix))
+      .map(([, c]) => c);
 
     if (filter.from) {
       items = items.filter((c) => c.closingDate >= filter.from!);
@@ -39,23 +50,29 @@ export class FakeCashClosingRepository implements CashClosingRepositoryPort {
     return { closings: items.slice(offset, offset + limit), total };
   }
 
-  async update(closing: CashClosing): Promise<void> {
-    this.store.set(closing.id, closing);
+  async update(organizationId: OrganizationId, closing: CashClosing): Promise<void> {
+    this.store.set(key(organizationId, closing.id), closing);
   }
 
-  async existsForEmployeeOnDate(employeeId: string, closingDate: string): Promise<boolean> {
-    return Array.from(this.store.values()).some(
-      (c) => c.employeeId === employeeId && c.closingDate === closingDate,
+  async existsForEmployeeOnDate(
+    organizationId: OrganizationId,
+    employeeId: string,
+    closingDate: string,
+  ): Promise<boolean> {
+    const prefix = `${organizationId}:`;
+    return Array.from(this.store.entries()).some(
+      ([k, c]) => k.startsWith(prefix) && c.employeeId === employeeId && c.closingDate === closingDate,
     );
   }
 
-  async existsForSession(sessionOpenedAt: string): Promise<boolean> {
-    return Array.from(this.store.values()).some(
-      (c) => c.sessionOpenedAt === sessionOpenedAt,
+  async existsForSession(organizationId: OrganizationId, sessionOpenedAt: string): Promise<boolean> {
+    const prefix = `${organizationId}:`;
+    return Array.from(this.store.entries()).some(
+      ([k, c]) => k.startsWith(prefix) && c.sessionOpenedAt === sessionOpenedAt,
     );
   }
 
-  /** Utilitário de teste: devolve todos os fechos. */
+  /** Utilitário de teste: devolve todos os fechos (de todas as organizações). */
   findAll(): CashClosing[] {
     return Array.from(this.store.values());
   }

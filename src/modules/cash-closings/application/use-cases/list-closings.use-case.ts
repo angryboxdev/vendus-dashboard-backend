@@ -19,7 +19,7 @@ export class ListClosingsUseCase implements ListClosingsPort {
       offset: query.offset,
     };
 
-    const { closings, total } = await this.closingRepository.list(filter);
+    const { closings, total } = await this.closingRepository.list(query.organizationId, filter);
     return { closings: closings.map(toDto), total };
   }
 }

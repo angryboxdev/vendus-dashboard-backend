@@ -1,5 +1,6 @@
 import { ENV } from "../config/env.js";
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import { fetchAllDocuments } from "./documentsService.js";
 import { vendusGet } from "../infra/vendusClient.js";
 import type { VendusDetailedDocument } from "../domain/types.js";
@@ -12,6 +13,7 @@ export type CashClosing = {
   closingDate: string;
   employeeId: string;
   employeeName: string;
+  locationId: string;
   tpa: number;
   uber: number;
   glovo: number;
@@ -77,21 +79,13 @@ export type ListClosingsParams = {
   offset?: number;
 };
 
-function requireSupabase() {
-  if (!isHrSupabaseConfigured()) {
-    throw new Error("Supabase não configurado");
-  }
-  const sb = getSupabaseServiceRole();
-  if (!sb) throw new Error("Supabase indisponível");
-  return sb;
-}
-
 function mapRow(row: Record<string, unknown>): CashClosing {
   return {
     id: row.id as string,
     closingDate: row.closing_date as string,
     employeeId: row.employee_id as string,
     employeeName: (row.hr_employees as { full_name?: string } | null)?.full_name ?? "",
+    locationId: row.location_id as string,
     tpa: Number(row.tpa),
     uber: Number(row.uber),
     glovo: Number(row.glovo),
@@ -113,14 +107,17 @@ function mapRow(row: Record<string, unknown>): CashClosing {
   };
 }
 
-export async function verifyPin(pin: string): Promise<VerifyPinResult> {
+/**
+ * Rota pública sem sessão (D14): o chamador (`cashClosingRoutes.ts`) passa o
+ * unattended scope, não um valor vindo do request.
+ */
+export async function verifyPin(organizationId: OrganizationId, pin: string): Promise<VerifyPinResult> {
   if (!ENV.HR_KIOSK_HMAC_SECRET) {
     throw new Error("PIN de kiosk não configurado no servidor");
   }
   const pinHash = hashPin(ENV.HR_KIOSK_HMAC_SECRET, pin);
-  const sb = requireSupabase();
-  const { data, error } = await sb
-    .from("hr_employees")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_employees")
     .select("id, full_name")
     .eq("kiosk_pin_hash", pinHash)
     .eq("status", "active")
@@ -129,9 +126,10 @@ export async function verifyPin(pin: string): Promise<VerifyPinResult> {
   if (error) throw new Error(error.message);
   if (!data) throw new Error("PIN inválido ou funcionário inativo");
 
+  const row = data as unknown as Record<string, unknown>;
   return {
-    employeeId: data.id as string,
-    fullName: data.full_name as string,
+    employeeId: row.id as string,
+    fullName: row.full_name as string,
   };
 }
 
@@ -139,6 +137,9 @@ export async function verifyPin(pin: string): Promise<VerifyPinResult> {
  * Obtém o total de vendas Vendus para um dia.
  * Replica a lógica do monthly-summary: busca FS+NC, identifica quais FS foram
  * anulados por NC (via related_docs) e exclui-os antes de somar.
+ *
+ * Não toca a base de dados (chama a API Vendus directamente) — não precisa
+ * de organização.
  */
 export async function getVendusTotal(date: string): Promise<number> {
   const { documents } = await fetchAllDocuments(date, date, "FS,FT,NC", 100);
@@ -167,12 +168,20 @@ export async function getVendusTotal(date: string): Promise<number> {
   return Math.round(total * 100) / 100;
 }
 
-export async function submitClosing(body: SubmitClosingBody): Promise<CashClosing> {
-  const sb = requireSupabase();
-
+/**
+ * Rota pública sem sessão (D14): `organizationId` e `locationId` vêm do
+ * unattended scope no chamador, nunca do request — o kiosk não tem
+ * identidade de dispositivo. `location_id` é escrito explicitamente
+ * (D3/D4), não deixado ao default da coluna.
+ */
+export async function submitClosing(
+  organizationId: OrganizationId,
+  locationId: string,
+  body: SubmitClosingBody,
+): Promise<CashClosing> {
   // Verify employee exists
-  const { data: emp, error: empErr } = await sb
-    .from("hr_employees")
+  const { data: emp, error: empErr } = await createScopedQuery(organizationId)
+    .table("hr_employees")
     .select("id, full_name")
     .eq("id", body.employeeId)
     .eq("status", "active")
@@ -181,8 +190,8 @@ export async function submitClosing(body: SubmitClosingBody): Promise<CashClosin
   if (!emp) throw new Error("Funcionário não encontrado");
 
   // Prevent duplicate on same date
-  const { data: existing } = await sb
-    .from("cash_closings")
+  const { data: existing } = await createScopedQuery(organizationId)
+    .table("cash_closings")
     .select("id")
     .eq("employee_id", body.employeeId)
     .eq("closing_date", body.closingDate)
@@ -204,11 +213,12 @@ export async function submitClosing(body: SubmitClosingBody): Promise<CashClosin
     // intentionally silent
   }
 
-  const { data, error } = await sb
-    .from("cash_closings")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("cash_closings")
     .insert({
       closing_date: body.closingDate,
       employee_id: body.employeeId,
+      location_id: locationId,
       tpa: body.tpa,
       uber: body.uber,
       glovo: body.glovo,
@@ -229,15 +239,15 @@ export async function submitClosing(body: SubmitClosingBody): Promise<CashClosin
     .single();
 
   if (error) throw new Error(error.message);
-  return mapRow(data as Record<string, unknown>);
+  return mapRow(data as unknown as Record<string, unknown>);
 }
 
 export async function listClosings(
+  organizationId: OrganizationId,
   params: ListClosingsParams = {},
 ): Promise<{ closings: CashClosing[]; total: number }> {
-  const sb = requireSupabase();
-  let q = sb
-    .from("cash_closings")
+  let q = createScopedQuery(organizationId)
+    .table("cash_closings")
     .select("*, hr_employees(full_name)", { count: "exact" })
     .order("closing_date", { ascending: false })
     .order("submitted_at", { ascending: false });
@@ -251,24 +261,26 @@ export async function listClosings(
   const { data, error, count } = await q;
   if (error) throw new Error(error.message);
   return {
-    closings: (data ?? []).map((r) => mapRow(r as Record<string, unknown>)),
+    closings: ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => mapRow(r)),
     total: count ?? 0,
   };
 }
 
-export async function getClosing(id: string): Promise<CashClosing> {
-  const sb = requireSupabase();
-  const { data, error } = await sb
-    .from("cash_closings")
+export async function getClosing(organizationId: OrganizationId, id: string): Promise<CashClosing> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("cash_closings")
     .select("*, hr_employees(full_name)")
     .eq("id", id)
     .single();
   if (error) throw new Error(error.message);
-  return mapRow(data as Record<string, unknown>);
+  return mapRow(data as unknown as Record<string, unknown>);
 }
 
-export async function patchClosing(id: string, body: PatchClosingBody): Promise<CashClosing> {
-  const sb = requireSupabase();
+export async function patchClosing(
+  organizationId: OrganizationId,
+  id: string,
+  body: PatchClosingBody,
+): Promise<CashClosing> {
   const update: Record<string, unknown> = {};
 
   if (body.status != null) {
@@ -293,7 +305,7 @@ export async function patchClosing(id: string, body: PatchClosingBody): Promise<
     (f) => body[f as keyof PatchClosingBody] != null,
   );
   if (hasNumericChange) {
-    const current = await getClosing(id);
+    const current = await getClosing(organizationId, id);
     const tpa = body.tpa ?? current.tpa;
     const uber = body.uber ?? current.uber;
     const glovo = body.glovo ?? current.glovo;
@@ -307,12 +319,12 @@ export async function patchClosing(id: string, body: PatchClosingBody): Promise<
       cashDrawerTotal > 100 ? Math.round((cashDrawerTotal - 100) * 100) / 100 : 0;
   }
 
-  const { data, error } = await sb
-    .from("cash_closings")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("cash_closings")
     .update(update)
     .eq("id", id)
     .select("*, hr_employees(full_name)")
     .single();
   if (error) throw new Error(error.message);
-  return mapRow(data as Record<string, unknown>);
+  return mapRow(data as unknown as Record<string, unknown>);
 }

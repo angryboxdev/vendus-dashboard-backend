@@ -26,17 +26,24 @@ export class SubmitClosingUseCase implements SubmitClosingPort {
   }
 
   async execute(command: SubmitClosingCommand): Promise<CashClosingDto> {
-    const employee = await this.employeeRepository.findActiveById(command.employeeId);
+    const employee = await this.employeeRepository.findActiveById(
+      command.organizationId,
+      command.employeeId,
+    );
     if (!employee) throw new EmployeeNotFoundError(command.employeeId);
 
     const sessionOpenedAt = command.sessionOpenedAt ?? null;
 
     // Duplicate check: modo sessions usa a sessão como chave; modo legado usa employee+date.
     if (sessionOpenedAt) {
-      const isDuplicate = await this.closingRepository.existsForSession(sessionOpenedAt);
+      const isDuplicate = await this.closingRepository.existsForSession(
+        command.organizationId,
+        sessionOpenedAt,
+      );
       if (isDuplicate) throw new DuplicateClosingError(command.employeeId, command.closingDate);
     } else {
       const isDuplicate = await this.closingRepository.existsForEmployeeOnDate(
+        command.organizationId,
         command.employeeId,
         command.closingDate,
       );
@@ -74,6 +81,7 @@ export class SubmitClosingUseCase implements SubmitClosingPort {
     const closing = CashClosing.create({
       employeeId: command.employeeId,
       employeeName: employee.fullName,
+      locationId: command.locationId,
       closingDate: command.closingDate,
       tpa: command.tpa,
       uber: command.uber,
@@ -94,7 +102,7 @@ export class SubmitClosingUseCase implements SubmitClosingPort {
       airMenuBolt,
     });
 
-    await this.closingRepository.save(closing);
+    await this.closingRepository.save(command.organizationId, closing);
     return toDto(closing);
   }
 }
@@ -105,6 +113,7 @@ export function toDto(closing: CashClosing): CashClosingDto {
     closingDate: closing.closingDate,
     employeeId: closing.employeeId,
     employeeName: closing.employeeName,
+    locationId: closing.locationId,
     tpa: closing.tpa,
     uber: closing.uber,
     glovo: closing.glovo,

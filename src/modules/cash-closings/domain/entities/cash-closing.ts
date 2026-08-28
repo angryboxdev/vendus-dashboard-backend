@@ -24,6 +24,14 @@ export interface CashClosingProps {
   closingDate: string;
   employeeId: string;
   employeeName: string;
+  /**
+   * Loja a que este fecho pertence (spec B2 D3/D4). Campo de comando, não de
+   * escopo — a gaveta/venda pertence fisicamente a uma loja, mas não é usado
+   * para filtrar leituras (D3: o manager vê todas as lojas da organização).
+   * Fornecido explicitamente na submissão (D14: vem do unattended scope, já
+   * que o kiosk é uma rota pública sem sessão) — nunca do default da coluna.
+   */
+  locationId: string;
   tpa: number;
   uber: number;
   glovo: number;
@@ -85,6 +93,7 @@ export class CashClosing {
   readonly closingDate: string;
   readonly employeeId: string;
   readonly employeeName: string;
+  readonly locationId: string;
   readonly tpa: number;
   readonly uber: number;
   readonly glovo: number;
@@ -118,6 +127,7 @@ export class CashClosing {
     this.closingDate = props.closingDate;
     this.employeeId = props.employeeId;
     this.employeeName = props.employeeName;
+    this.locationId = props.locationId;
     this.tpa = props.tpa;
     this.uber = props.uber;
     this.glovo = props.glovo;
@@ -160,6 +170,7 @@ export class CashClosing {
   static create(params: {
     employeeId: string;
     employeeName: string;
+    locationId: string;
     closingDate: string;
     tpa: number;
     uber: number;
@@ -194,6 +205,7 @@ export class CashClosing {
       closingDate: params.closingDate,
       employeeId: params.employeeId,
       employeeName: params.employeeName,
+      locationId: params.locationId,
       tpa: params.tpa,
       uber: params.uber,
       glovo: params.glovo,
@@ -262,6 +274,7 @@ export class CashClosing {
       closingDate: this.closingDate,
       employeeId: this.employeeId,
       employeeName: this.employeeName,
+      locationId: this.locationId,
       tpa, uber, glovo, bolt, eatz, cashSales,
       cashIn, cashOut, cashDrawerOpen, cashDrawerTotal,
       totalCalculated,
@@ -286,6 +299,7 @@ export class CashClosing {
       closingDate: this.closingDate,
       employeeId: this.employeeId,
       employeeName: this.employeeName,
+      locationId: this.locationId,
       tpa: this.tpa,
       uber: this.uber,
       glovo: this.glovo,
