@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { CashClosing, CashClosingStatus } from "../../entities/cash-closing.js";
 
 export interface ClosingListFilter {
@@ -10,11 +11,18 @@ export interface ClosingListFilter {
 }
 
 export interface CashClosingRepositoryPort {
-  save(closing: CashClosing): Promise<void>;
-  findById(id: string): Promise<CashClosing | null>;
-  list(filter: ClosingListFilter): Promise<{ closings: CashClosing[]; total: number }>;
-  update(closing: CashClosing): Promise<void>;
-  existsForEmployeeOnDate(employeeId: string, closingDate: string): Promise<boolean>;
+  save(organizationId: OrganizationId, closing: CashClosing): Promise<void>;
+  findById(organizationId: OrganizationId, id: string): Promise<CashClosing | null>;
+  list(
+    organizationId: OrganizationId,
+    filter: ClosingListFilter,
+  ): Promise<{ closings: CashClosing[]; total: number }>;
+  update(organizationId: OrganizationId, closing: CashClosing): Promise<void>;
+  existsForEmployeeOnDate(
+    organizationId: OrganizationId,
+    employeeId: string,
+    closingDate: string,
+  ): Promise<boolean>;
   /** Modo sessions: verifica se já existe um fecho para esta sessão Vendus. */
-  existsForSession(sessionOpenedAt: string): Promise<boolean>;
+  existsForSession(organizationId: OrganizationId, sessionOpenedAt: string): Promise<boolean>;
 }

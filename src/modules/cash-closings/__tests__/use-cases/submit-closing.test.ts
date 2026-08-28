@@ -1,9 +1,12 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { SubmitClosingUseCase } from "../../application/use-cases/submit-closing.use-case.js";
 import { FakeCashClosingRepository } from "../fakes/fake-cash-closing-repository.js";
 import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
 import { FakeVendusRegisterSessionsGateway } from "../fakes/fake-vendus-register-sessions-gateway.js";
 import { FakeAirMenuDeliveryGateway } from "../fakes/fake-air-menu-delivery-gateway.js";
 import { DuplicateClosingError, EmployeeNotFoundError } from "../../domain/errors.js";
+
+const organizationId = mintOrganizationId("org-a");
 
 function makeUseCase() {
   const closingRepo = new FakeCashClosingRepository();
@@ -23,6 +26,8 @@ function makeUseCaseWithAirMenu() {
 }
 
 const baseCommand = {
+  organizationId,
+  locationId: "loc-1",
   employeeId: "emp-1",
   closingDate: "2026-06-10",
   tpa: 200,
@@ -40,12 +45,13 @@ const baseCommand = {
 describe("SubmitClosingUseCase", () => {
   it("persiste o fecho e devolve DTO correcto", async () => {
     const { closingRepo, employeeRepo, useCase } = makeUseCase();
-    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
 
     const result = await useCase.execute(baseCommand);
 
     expect(result.status).toBe("pending");
     expect(result.employeeName).toBe("Ana Silva");
+    expect(result.locationId).toBe("loc-1");
     expect(result.totalCalculated).toBe(410);
     expect(result.vendusCalculated).toBe(310); // 200 + 10 + 100
     expect(result.airMenuCalculated).toBe(100); // 50 + 30 + 20
@@ -61,9 +67,17 @@ describe("SubmitClosingUseCase", () => {
     await expect(useCase.execute(baseCommand)).rejects.toThrow(EmployeeNotFoundError);
   });
 
+  it("lança EmployeeNotFoundError para funcionário registado noutra organização", async () => {
+    const { employeeRepo, useCase } = makeUseCase();
+    const otherOrganizationId = mintOrganizationId("org-b");
+    employeeRepo.addEmployee(otherOrganizationId, { id: "emp-1", fullName: "Ana Silva" });
+
+    await expect(useCase.execute(baseCommand)).rejects.toThrow(EmployeeNotFoundError);
+  });
+
   it("lança DuplicateClosingError para fecho duplicado no mesmo dia", async () => {
     const { employeeRepo, useCase } = makeUseCase();
-    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
 
     await useCase.execute(baseCommand);
     await expect(useCase.execute(baseCommand)).rejects.toThrow(DuplicateClosingError);
@@ -71,7 +85,7 @@ describe("SubmitClosingUseCase", () => {
 
   it("vendusTotal fica null quando não há sessionOpenedAt", async () => {
     const { employeeRepo, useCase } = makeUseCase();
-    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
 
     const result = await useCase.execute(baseCommand); // sem sessionOpenedAt
     expect(result.vendusTotal).toBeNull();
@@ -80,7 +94,7 @@ describe("SubmitClosingUseCase", () => {
 
   it("passa drawerDenominations ao DTO quando fornecido", async () => {
     const { employeeRepo, useCase } = makeUseCase();
-    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
     const denoms = {
       notes50: 1, notes20: 2, notes10: 0, notes5: 1,
       coins200: 3, coins100: 2, coins50: 1, coins20: 0, coins10: 0, coins1: 5,
@@ -93,7 +107,7 @@ describe("SubmitClosingUseCase", () => {
 
   it("drawerDenominations fica null no DTO quando não fornecido", async () => {
     const { employeeRepo, useCase } = makeUseCase();
-    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
 
     const result = await useCase.execute(baseCommand);
 
@@ -102,7 +116,7 @@ describe("SubmitClosingUseCase", () => {
 
   it("campos AirMenu ficam null quando gateway não configurado", async () => {
     const { employeeRepo, useCase } = makeUseCase();
-    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
 
     const result = await useCase.execute(baseCommand);
 
@@ -111,9 +125,21 @@ describe("SubmitClosingUseCase", () => {
     expect(result.airMenuBolt).toBeNull();
   });
 
+  it("não bloqueia como duplicado um fecho com o mesmo employeeId/data noutra organização", async () => {
+    const { closingRepo, employeeRepo, useCase } = makeUseCase();
+    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    await useCase.execute(baseCommand);
+
+    const otherOrganizationId = mintOrganizationId("org-b");
+    employeeRepo.addEmployee(otherOrganizationId, { id: "emp-1", fullName: "Ana Silva (org B)" });
+    await useCase.execute({ ...baseCommand, organizationId: otherOrganizationId });
+
+    expect(closingRepo.findAll()).toHaveLength(2);
+  });
+
   it("permite que o mesmo funcionário submeta em datas diferentes", async () => {
     const { closingRepo, employeeRepo, useCase } = makeUseCase();
-    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
 
     await useCase.execute({ ...baseCommand, closingDate: "2026-06-10" });
     await useCase.execute({ ...baseCommand, closingDate: "2026-06-11" });
@@ -137,6 +163,8 @@ describe("SubmitClosingUseCase — modo sessions", () => {
   }
 
   const sessionCommand = {
+    organizationId,
+    locationId: "loc-1",
     employeeId: "emp-1",
     closingDate: "2026-06-07",
     tpa: 100, uber: 0, glovo: 0, bolt: 0, eatz: 0,
@@ -146,7 +174,7 @@ describe("SubmitClosingUseCase — modo sessions", () => {
 
   it("usa o total da sessão como vendusTotal", async () => {
     const { employeeRepo, useCase } = makeUseCaseWithSessions();
-    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
 
     const result = await useCase.execute({ ...sessionCommand, sessionOpenedAt: SESSION_1 });
 
@@ -156,8 +184,8 @@ describe("SubmitClosingUseCase — modo sessions", () => {
 
   it("permite dois fechos no mesmo dia se forem sessões distintas", async () => {
     const { closingRepo, employeeRepo, useCase } = makeUseCaseWithSessions();
-    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
-    employeeRepo.addEmployee({ id: "emp-2", fullName: "Bruno Costa" });
+    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    employeeRepo.addEmployee(organizationId, { id: "emp-2", fullName: "Bruno Costa" });
 
     await useCase.execute({ ...sessionCommand, employeeId: "emp-1", sessionOpenedAt: SESSION_1 });
     await useCase.execute({ ...sessionCommand, employeeId: "emp-2", sessionOpenedAt: SESSION_2 });
@@ -167,7 +195,7 @@ describe("SubmitClosingUseCase — modo sessions", () => {
 
   it("lança DuplicateClosingError se a sessão já foi fechada", async () => {
     const { employeeRepo, useCase } = makeUseCaseWithSessions();
-    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
 
     await useCase.execute({ ...sessionCommand, sessionOpenedAt: SESSION_1 });
     await expect(
@@ -177,7 +205,7 @@ describe("SubmitClosingUseCase — modo sessions", () => {
 
   it("vendusTotal fica null se a API de sessões falhar (best-effort)", async () => {
     const { employeeRepo, sessionsGateway, useCase } = makeUseCaseWithSessions();
-    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
     sessionsGateway.shouldFail = true;
 
     const result = await useCase.execute({ ...sessionCommand, sessionOpenedAt: SESSION_1 });
@@ -188,6 +216,8 @@ describe("SubmitClosingUseCase — modo sessions", () => {
 
 describe("SubmitClosingUseCase — totais AirMenu", () => {
   const baseCmd = {
+    organizationId,
+    locationId: "loc-1",
     employeeId: "emp-1",
     closingDate: "2026-08-01",
     tpa: 200,
@@ -204,7 +234,7 @@ describe("SubmitClosingUseCase — totais AirMenu", () => {
 
   it("popula airMenuUber/Glovo/Bolt a partir do gateway", async () => {
     const { employeeRepo, airMenuGateway, useCase } = makeUseCaseWithAirMenu();
-    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
     airMenuGateway.setTotals("2026-08-01", { uber: 48.20, glovo: 30.00, bolt: 21.50 });
 
     const result = await useCase.execute(baseCmd);
@@ -217,7 +247,7 @@ describe("SubmitClosingUseCase — totais AirMenu", () => {
 
   it("airMenuUber/Glovo/Bolt ficam null se o gateway falhar (best-effort)", async () => {
     const { employeeRepo, airMenuGateway, useCase } = makeUseCaseWithAirMenu();
-    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
     airMenuGateway.shouldFail = true;
 
     const result = await useCase.execute(baseCmd);
@@ -231,7 +261,7 @@ describe("SubmitClosingUseCase — totais AirMenu", () => {
 
   it("totais AirMenu não afectam totalCalculated", async () => {
     const { employeeRepo, airMenuGateway, useCase } = makeUseCaseWithAirMenu();
-    employeeRepo.addEmployee({ id: "emp-1", fullName: "Ana Silva" });
+    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
     airMenuGateway.setTotals("2026-08-01", { uber: 9999, glovo: 9999, bolt: 9999 });
 
     const result = await useCase.execute(baseCmd);

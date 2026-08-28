@@ -1,5 +1,5 @@
 import type { Router } from "express";
-import { getSupabaseServiceRole } from "../../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import { ENV } from "../../config/env.js";
 import { hashPin } from "../../utils/kiosk.js";
 
@@ -28,10 +28,14 @@ export interface CashClosingsModule {
 }
 
 /**
- * Composition root do módulo cash-closings.
+ * Composition root do módulo cash-closings (spec B2 ticket 03 — o módulo que
+ * exercita a decisão de location e de unattended scope; ver a secção Ports
+ * do README do módulo).
  *
- * Único lugar que conhece as implementações concretas dos adapters.
- * Os use cases e o domínio apenas conhecem interfaces (ports).
+ * Único lugar que conhece as implementações concretas dos adapters. Seguindo
+ * D2, os adapters não constroem o seu próprio `ScopedQuery`: recebem o
+ * factory `createScopedQuery` injectado aqui e constroem um helper escopado
+ * por chamada.
  *
  * @param vendusGateway  - VendusGatewayPort do módulo vendus (injectado pelo servidor).
  *   Usado para buscar movimentos de caixa e documentos ao calcular sessões.
@@ -42,12 +46,9 @@ export function createCashClosingsModule(
   vendusGateway: VendusGatewayPort,
   airMenuSummary?: GetSummaryPort,
 ): CashClosingsModule {
-  const supabase = getSupabaseServiceRole();
-  if (!supabase) throw new Error("Supabase service role não configurado");
-
   // Adapters de saída
-  const closingRepository = new SupabaseCashClosingRepository(supabase);
-  const employeeRepository = new SupabaseEmployeeRepository(supabase);
+  const closingRepository = new SupabaseCashClosingRepository(createScopedQuery);
+  const employeeRepository = new SupabaseEmployeeRepository(createScopedQuery);
   const sessionsGateway = new VendusRegisterSessionsGateway(ENV.VENDUS_REGISTER_ID, vendusGateway);
 
   const airMenuGateway =

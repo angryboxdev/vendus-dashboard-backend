@@ -23,7 +23,10 @@ export class GetAvailableSessionsUseCase implements GetAvailableSessionsPort {
 
     const result = await Promise.all(
       sessions.map(async (s): Promise<RegisterSessionDto> => {
-        const alreadySubmitted = await this.closingRepository.existsForSession(s.openedAt);
+        const alreadySubmitted = await this.closingRepository.existsForSession(
+          query.organizationId,
+          s.openedAt,
+        );
         return { ...s, alreadySubmitted };
       }),
     );

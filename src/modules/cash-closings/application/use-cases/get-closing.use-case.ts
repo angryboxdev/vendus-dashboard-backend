@@ -8,7 +8,7 @@ export class GetClosingUseCase implements GetClosingPort {
   constructor(private readonly closingRepository: CashClosingRepositoryPort) {}
 
   async execute(query: GetClosingQuery): Promise<CashClosingDto> {
-    const closing = await this.closingRepository.findById(query.id);
+    const closing = await this.closingRepository.findById(query.organizationId, query.id);
     if (!closing) throw new ClosingNotFoundError(query.id);
     return toDto(closing);
   }
