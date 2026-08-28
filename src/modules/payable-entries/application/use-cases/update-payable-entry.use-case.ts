@@ -11,7 +11,7 @@ export class UpdatePayableEntryUseCase implements UpdatePayableEntryPort {
   constructor(private readonly repo: PayableEntryRepositoryPort) {}
 
   async execute(command: UpdatePayableEntryCommand): Promise<PayableEntryDTO> {
-    const entry = await this.repo.findById(command.id);
+    const entry = await this.repo.findById(command.organizationId, command.id);
     if (!entry) throw new PayableEntryNotFoundError(command.id);
 
     const updated = entry.update({
@@ -25,7 +25,7 @@ export class UpdatePayableEntryUseCase implements UpdatePayableEntryPort {
       ...(command.notes !== undefined && { notes: command.notes }),
     });
 
-    await this.repo.update(updated);
+    await this.repo.update(command.organizationId, updated);
     return toDTO(updated);
   }
 }

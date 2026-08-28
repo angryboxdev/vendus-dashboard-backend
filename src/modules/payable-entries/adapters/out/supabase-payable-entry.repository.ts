@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import { PayableEntry, type PayableStatus, type RecurrenceType } from "../../domain/entities/payable-entry.js";
 import type { PayableEntryFilter, PayableEntryRepositoryPort } from "../../domain/ports/out/payable-entry-repository.port.js";
 
@@ -22,11 +23,17 @@ function toEntity(row: Record<string, unknown>): PayableEntry {
   });
 }
 
+/**
+ * Never holds a `SupabaseClient` — receives the scoped-query factory at
+ * composition time (D2) and builds a scoped helper per call, per the
+ * pattern established by the bank-accounts pilot (see the module README's
+ * Ports section).
+ */
 export class SupabasePayableEntryRepository implements PayableEntryRepositoryPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async save(entry: PayableEntry): Promise<void> {
-    const { error } = await this.supabase.from("payable_entries").insert({
+  async save(organizationId: OrganizationId, entry: PayableEntry): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("payable_entries").insert({
       id: entry.id,
       invoice_id: entry.invoiceId,
       supplier_id: entry.supplierId,
@@ -46,20 +53,20 @@ export class SupabasePayableEntryRepository implements PayableEntryRepositoryPor
     if (error) throw new Error(error.message);
   }
 
-  async findById(id: string): Promise<PayableEntry | null> {
-    const { data, error } = await this.supabase
-      .from("payable_entries")
+  async findById(organizationId: OrganizationId, id: string): Promise<PayableEntry | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("payable_entries")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async findAll(filter?: PayableEntryFilter): Promise<PayableEntry[]> {
-    let q = this.supabase
-      .from("payable_entries")
+  async findAll(organizationId: OrganizationId, filter?: PayableEntryFilter): Promise<PayableEntry[]> {
+    let q = this.scopedQuery(organizationId)
+      .table("payable_entries")
       .select("*")
       .order("due_date", { ascending: true });
 
@@ -71,12 +78,12 @@ export class SupabasePayableEntryRepository implements PayableEntryRepositoryPor
 
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toEntity(r));
   }
 
-  async update(entry: PayableEntry): Promise<void> {
-    const { error } = await this.supabase
-      .from("payable_entries")
+  async update(organizationId: OrganizationId, entry: PayableEntry): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("payable_entries")
       .update({
         invoice_id: entry.invoiceId,
         supplier_id: entry.supplierId,
@@ -96,8 +103,11 @@ export class SupabasePayableEntryRepository implements PayableEntryRepositoryPor
     if (error) throw new Error(error.message);
   }
 
-  async delete(id: string): Promise<void> {
-    const { error } = await this.supabase.from("payable_entries").delete().eq("id", id);
+  async delete(organizationId: OrganizationId, id: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("payable_entries")
+      .delete()
+      .eq("id", id);
     if (error) throw new Error(error.message);
   }
 }

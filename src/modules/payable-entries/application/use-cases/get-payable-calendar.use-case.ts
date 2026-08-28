@@ -13,7 +13,7 @@ export class GetPayableCalendarUseCase implements GetPayableCalendarPort {
   constructor(private readonly repo: PayableEntryRepositoryPort) {}
 
   async execute(command: GetPayableCalendarCommand): Promise<PayableCalendarDayDTO[]> {
-    const entries = await this.repo.findAll({
+    const entries = await this.repo.findAll(command.organizationId, {
       from: new Date(command.from),
       to: new Date(command.to),
     });
