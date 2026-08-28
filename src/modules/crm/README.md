@@ -1,7 +1,7 @@
 # Módulo: CRM
 
 > Status: em refactor
-> Última atualização: 2026-08-22
+> Última atualização: 2026-08-28
 
 ---
 
@@ -101,24 +101,41 @@ Os valores padrão são, respectivamente, 21, 30 e 60 dias. A comparação é �
 
 ## Ports
 
+O módulo não tem ainda a forma hexagonal completa (não há `domain/ports/in/`
+nem use cases próprios) — é um `CrmWorkspaceService` a orquestrar directamente
+um único port de saída. A spec B2 (D2, ticket `07-convert-crm-module`) não
+completa essa migração de passagem: acrescenta a organização à estrutura que
+já existe, tal como estabelecido pelo ticket 02 (`bank-accounts`).
+
+**A organização é o primeiro parâmetro explícito em todo o método do
+`CrmWorkspaceService` e do `CrmWorkspaceRepositoryPort`**, tipado como
+`OrganizationId` (`src/kernel/organization-id.ts`) — nunca dobrado dentro de
+um objecto de input já existente.
+
 ### Entrada (casos de uso da aplicação)
 
-Expostos por `CrmWorkspaceService`:
+Expostos por `CrmWorkspaceService`, todos com `organizationId: OrganizationId`
+como primeiro parâmetro:
 
-- `listCustomers` — constrói, filtra, ordena e pagina o read model da tabela.
-- `listTags` / `createTag` — consulta e amplia o catálogo de tags.
-- `listActionTypes` / `createActionType` / `updateActionType` — gerencia tipos de ação.
-- `createActions` — agenda ações individuais ou em massa.
-- `completeAction` / `completeActions` — conclui uma ou várias pendências.
-- `listCustomerActions` — devolve próxima ação e histórico paginado por cursor.
-- `updateTags` — adiciona e remove tags de vários clientes.
-- `setInactive` — altera o indicador manual de inatividade.
+- `listCustomers(organizationId, query, now?)` — constrói, filtra, ordena e pagina o read model da tabela.
+- `listTags(organizationId)` / `createTag(organizationId, input)` — consulta e amplia o catálogo de tags.
+- `listActionTypes(organizationId)` / `createActionType(organizationId, input)` / `updateActionType(organizationId, code, input)` — gerencia tipos de ação.
+- `createActions(organizationId, input)` — agenda ações individuais ou em massa.
+- `completeAction(organizationId, id, completedAt)` / `completeActions(organizationId, actions)` — conclui uma ou várias pendências.
+- `listCustomerActions(organizationId, customerId, cursor, limit)` — devolve próxima ação e histórico paginado por cursor.
+- `updateTags(organizationId, customerIds, add, remove)` — adiciona e remove tags de vários clientes.
+- `setInactive(organizationId, customerIds, inactive)` — altera o indicador manual de inatividade.
+
+`CrmWorkspaceController` lê `organizationId` de `req.auth!.orgId` (populado
+pelo middleware de auth a partir da claim verificada) e injecta-o em cada
+chamada — nunca do corpo ou da query string do pedido.
 
 ### Saída (dependências do domínio/aplicação)
 
-`CrmWorkspaceRepositoryPort` define:
+`CrmWorkspaceRepositoryPort` define, também com `organizationId` como
+primeiro parâmetro em cada método:
 
-- `loadDataset` — carrega clientes, pedidos, contactos, ações, tags, scripts e parâmetros necessários ao read model.
+- `loadDataset(organizationId)` — carrega clientes, pedidos, contactos, ações, tags, scripts e parâmetros necessários ao read model.
 - Operações de catálogo para tags e tipos de ação.
 - Persistência e conclusão de ações.
 - Consulta paginada do histórico.
@@ -159,7 +176,8 @@ Parâmetros de `GET /crm/customer-table`:
 
 ### Saída
 
-`SupabaseCrmWorkspaceRepository` implementa o port usando service role e acessa:
+`SupabaseCrmWorkspaceRepository` acessa, todas as queries construídas através
+do `ScopedQuery` (spec B2 D1/D2, `src/infra/scoped-db/`):
 
 - `crm_customers`
 - `crm_orders`
@@ -171,7 +189,12 @@ Parâmetros de `GET /crm/customer-table`:
 - `crm_scripts`
 - `crm_parameters`
 
-`crm.module.ts` é o composition root: obtém o client Supabase, cria repository, service e controller. Nenhuma outra camada instancia o adapter concreto.
+O adapter nunca guarda um `SupabaseClient`: recebe o factory
+`createScopedQuery` (`ScopedQueryFactory`) injectado pelo composition root e
+constrói um helper escopado por chamada — por isso não aparece na lista de
+violações da regra `supabase-so-no-scoped-db`. `crm.module.ts` é o
+composition root: cria repository (com o factory), service e controller.
+Nenhuma outra camada instancia o adapter concreto.
 
 ## Migrations relacionadas
 
@@ -188,6 +211,14 @@ As migrations são preparadas pelo projeto, mas aplicadas manualmente pelo respo
 
 ## Decisões de design (ADR resumido)
 
+- **Organização como primeiro parâmetro, não dobrada num input existente
+  (spec B2 D2, ADR-0008):** `organizationId` entra como argumento explícito
+  em cada método do service e do repository port, tal como estabelecido pelo
+  ticket 02 (`bank-accounts`). O módulo continua "em refactor" (sem
+  `domain/ports/in/` nem use cases próprios) — este ticket acrescenta a
+  organização à estrutura existente, sem completar a migração hexagonal
+  (ver Notes do ticket `07-convert-crm-module`: "Convert what exists", não
+  "Finish the refactor").
 - **Estado composto em vez de enum único:** relacionamento e inatividade respondem a perguntas diferentes e podem coexistir.
 - **Pedidos CRM têm precedência sobre eatz:** o snapshot é fallback histórico, não uma segunda fonte acumulada.
 - **Timeline nova sem backfill:** contactos, scripts e follow-ups antigos tinham semânticas diferentes e gerariam dados falsos em “Última ação”.

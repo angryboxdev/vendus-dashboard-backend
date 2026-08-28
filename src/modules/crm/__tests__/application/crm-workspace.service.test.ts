@@ -1,3 +1,4 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CrmWorkspaceService } from "../../application/crm-workspace.service.js";
 import type {
   ActionRow,
@@ -5,6 +6,8 @@ import type {
   CustomerRow,
   WorkspaceDataset,
 } from "../../domain/ports/out/crm-workspace-repository.port.js";
+
+const orgId = mintOrganizationId("org-test");
 
 const baseCustomer = (overrides: Partial<CustomerRow> = {}): CustomerRow => ({
   id: "C001",
@@ -66,13 +69,13 @@ function fakeRepository(seed: WorkspaceDataset): jest.Mocked<CrmWorkspaceReposit
   return {
     loadDataset: jest.fn().mockResolvedValue(seed),
     listActionTypes: jest.fn().mockResolvedValue([]),
-    createActionType: jest.fn(async (input) => ({ ...input, system: false })),
-    updateActionType: jest.fn(async (code, input) => ({ code, color: input.color ?? "#64748b", active: true, system: false, name: input.name })),
+    createActionType: jest.fn(async (_organizationId, input) => ({ ...input, system: false })),
+    updateActionType: jest.fn(async (_organizationId, code, input) => ({ code, color: input.color ?? "#64748b", active: true, system: false, name: input.name })),
     createActions: jest.fn().mockResolvedValue([]),
-    completeAction: jest.fn(async (id, completedAt) => action({ id, status: "completed", completedAt })),
+    completeAction: jest.fn(async (_organizationId, id, completedAt) => action({ id, status: "completed", completedAt })),
     completeActions: jest.fn().mockResolvedValue([]),
     listCustomerActions: jest.fn().mockResolvedValue({ pending: null, history: [], total: 0 }),
-    createTag: jest.fn(async (input) => ({ ...input, active: true })),
+    createTag: jest.fn(async (_organizationId, input) => ({ ...input, active: true })),
     updateTags: jest.fn().mockResolvedValue(undefined),
     setInactive: jest.fn().mockResolvedValue(undefined),
   };
@@ -85,7 +88,7 @@ describe("CrmWorkspaceService.listCustomers", () => {
     );
     const service = new CrmWorkspaceService(fakeRepository(dataset({ customers })));
 
-    const result = await service.listCustomers({}, new Date("2026-08-22T12:00:00.000Z"));
+    const result = await service.listCustomers(orgId, {}, new Date("2026-08-22T12:00:00.000Z"));
 
     expect(result).toMatchObject({ total: 12, page: 1, pageSize: 10 });
     expect(result.items).toHaveLength(10);
@@ -102,6 +105,7 @@ describe("CrmWorkspaceService.listCustomers", () => {
     const service = new CrmWorkspaceService(fakeRepository(dataset({ customers })));
 
     const result = await service.listCustomers(
+      orgId,
       { sortBy: "customerId" },
       new Date("2026-08-22T12:00:00.000Z"),
     );
@@ -119,7 +123,7 @@ describe("CrmWorkspaceService.listCustomers", () => {
     });
     const service = new CrmWorkspaceService(fakeRepository(dataset({ customers: [customer] })));
 
-    const { items } = await service.listCustomers({}, new Date("2026-08-22T12:00:00.000Z"));
+    const { items } = await service.listCustomers(orgId, {}, new Date("2026-08-22T12:00:00.000Z"));
 
     expect(items[0]).toMatchObject({
       orderCount: 3,
@@ -140,7 +144,7 @@ describe("CrmWorkspaceService.listCustomers", () => {
       ],
     })));
 
-    const { items } = await service.listCustomers({}, new Date("2026-08-22T12:00:00.000Z"));
+    const { items } = await service.listCustomers(orgId, {}, new Date("2026-08-22T12:00:00.000Z"));
 
     expect(items[0]).toMatchObject({ orderCount: 2, ltv: 50, avgTicket: 25, lastOrderDate: "2026-08-12", metricsSource: "crm_orders" });
   });
@@ -161,7 +165,7 @@ describe("CrmWorkspaceService.listCustomers", () => {
       scripts: [{ code: "S1", name: "Boas-vindas" }],
     })));
 
-    const { items } = await service.listCustomers({}, new Date("2026-08-22T12:00:00.000Z"));
+    const { items } = await service.listCustomers(orgId, {}, new Date("2026-08-22T12:00:00.000Z"));
 
     expect(items[0]?.lastAction?.id).toBe("completed-last");
     expect(items[0]?.nextAction?.id).toBe("pending-next");
@@ -184,8 +188,8 @@ describe("CrmWorkspaceService.listCustomers", () => {
     });
     const service = new CrmWorkspaceService(fakeRepository(seed));
 
-    const any = await service.listCustomers({ tags: ["vip-local", "feedback"], tagMode: "any" });
-    const all = await service.listCustomers({ tags: ["vip-local", "feedback"], tagMode: "all" });
+    const any = await service.listCustomers(orgId, { tags: ["vip-local", "feedback"], tagMode: "any" });
+    const all = await service.listCustomers(orgId, { tags: ["vip-local", "feedback"], tagMode: "all" });
 
     expect(any.items.map((item) => item.id)).toEqual(["C001", "C002"]);
     expect(all.items.map((item) => item.id)).toEqual(["C001"]);
@@ -200,7 +204,7 @@ describe("CrmWorkspaceService.listCustomers", () => {
     ];
     const service = new CrmWorkspaceService(fakeRepository(dataset({ customers, contacts })));
 
-    const result = await service.listCustomers({ lastScriptCode: "S1" });
+    const result = await service.listCustomers(orgId, { lastScriptCode: "S1" });
 
     expect(result.items.map((item) => item.id)).toEqual(["C002"]);
   });
@@ -215,18 +219,18 @@ describe("CrmWorkspaceService.listCustomers", () => {
     const service = new CrmWorkspaceService(fakeRepository(dataset({ customers, actions })));
     const now = new Date("2026-08-22T12:00:00.000Z");
 
-    await expect(service.listCustomers({ followUpState: "overdue" }, now)).resolves.toMatchObject({ items: [{ id: "C001" }] });
-    await expect(service.listCustomers({ followUpState: "today" }, now)).resolves.toMatchObject({ items: [{ id: "C002" }] });
-    await expect(service.listCustomers({ followUpState: "upcoming" }, now)).resolves.toMatchObject({ items: [{ id: "C003" }] });
-    await expect(service.listCustomers({ followUpState: "none" }, now)).resolves.toMatchObject({ items: [{ id: "C004" }] });
+    await expect(service.listCustomers(orgId, { followUpState: "overdue" }, now)).resolves.toMatchObject({ items: [{ id: "C001" }] });
+    await expect(service.listCustomers(orgId, { followUpState: "today" }, now)).resolves.toMatchObject({ items: [{ id: "C002" }] });
+    await expect(service.listCustomers(orgId, { followUpState: "upcoming" }, now)).resolves.toMatchObject({ items: [{ id: "C003" }] });
+    await expect(service.listCustomers(orgId, { followUpState: "none" }, now)).resolves.toMatchObject({ items: [{ id: "C004" }] });
   });
 
   it("ordena códigos de cliente numericamente", async () => {
     const customers = ["C010", "C002", "C001"].map((id) => baseCustomer({ id, firstName: id }));
     const service = new CrmWorkspaceService(fakeRepository(dataset({ customers })));
 
-    const asc = await service.listCustomers({ sortBy: "customerId", sortDirection: "asc" });
-    const desc = await service.listCustomers({ sortBy: "customerId", sortDirection: "desc" });
+    const asc = await service.listCustomers(orgId, { sortBy: "customerId", sortDirection: "asc" });
+    const desc = await service.listCustomers(orgId, { sortBy: "customerId", sortDirection: "desc" });
 
     expect(asc.items.map((item) => item.id)).toEqual(["C001", "C002", "C010"]);
     expect(desc.items.map((item) => item.id)).toEqual(["C010", "C002", "C001"]);
@@ -236,7 +240,7 @@ describe("CrmWorkspaceService.listCustomers", () => {
     const repository = fakeRepository(dataset());
     const service = new CrmWorkspaceService(repository);
 
-    await expect(service.listCustomers({ pageSize: 101 })).rejects.toThrow();
+    await expect(service.listCustomers(orgId, { pageSize: 101 })).rejects.toThrow();
     expect(repository.loadDataset).not.toHaveBeenCalled();
   });
 });
@@ -246,25 +250,25 @@ describe("CrmWorkspaceService commands", () => {
     const repository = fakeRepository(dataset());
     const service = new CrmWorkspaceService(repository);
 
-    await service.createActionType({ name: "  Reunião Pós-venda  ", color: "#123456", active: true });
+    await service.createActionType(orgId, { name: "  Reunião Pós-venda  ", color: "#123456", active: true });
 
-    expect(repository.createActionType).toHaveBeenCalledWith({ code: "reuniao_pos_venda", name: "  Reunião Pós-venda  ", color: "#123456", active: true });
+    expect(repository.createActionType).toHaveBeenCalledWith(orgId, { code: "reuniao_pos_venda", name: "  Reunião Pós-venda  ", color: "#123456", active: true });
   });
 
   it("rejeita nomes que não produzem código de tipo ou tag", () => {
     const service = new CrmWorkspaceService(fakeRepository(dataset()));
 
-    expect(() => service.createActionType({ name: "!!!", color: "#123456", active: true })).toThrow("Nome do tipo de ação inválido");
-    expect(() => service.createTag({ label: "---" })).toThrow("Nome da tag inválido");
+    expect(() => service.createActionType(orgId, { name: "!!!", color: "#123456", active: true })).toThrow("Nome do tipo de ação inválido");
+    expect(() => service.createTag(orgId, { label: "---" })).toThrow("Nome da tag inválido");
   });
 
   it("normaliza tag e aplica cor e categoria padrão", async () => {
     const repository = fakeRepository(dataset());
     const service = new CrmWorkspaceService(repository);
 
-    await service.createTag({ label: "  Cliente Próximo  " });
+    await service.createTag(orgId, { label: "  Cliente Próximo  " });
 
-    expect(repository.createTag).toHaveBeenCalledWith({ name: "cliente-proximo", label: "Cliente Próximo", color: "#6b7280", category: "geral" });
+    expect(repository.createTag).toHaveBeenCalledWith(orgId, { name: "cliente-proximo", label: "Cliente Próximo", color: "#6b7280", category: "geral" });
   });
 
   it("calcula o próximo cursor a partir do offset e do tamanho da página", async () => {
@@ -276,9 +280,9 @@ describe("CrmWorkspaceService commands", () => {
     });
     const service = new CrmWorkspaceService(repository);
 
-    const result = await service.listCustomerActions("C001", "2", 2);
+    const result = await service.listCustomerActions(orgId, "C001", "2", 2);
 
-    expect(repository.listCustomerActions).toHaveBeenCalledWith("C001", 2, 2);
+    expect(repository.listCustomerActions).toHaveBeenCalledWith(orgId, "C001", 2, 2);
     expect(result.nextCursor).toBe("4");
   });
 
@@ -287,8 +291,8 @@ describe("CrmWorkspaceService commands", () => {
     repository.listCustomerActions.mockResolvedValue({ pending: null, history: [action({ status: "completed" })], total: 1 });
     const service = new CrmWorkspaceService(repository);
 
-    await expect(service.listCustomerActions("C001", undefined, 20)).resolves.toMatchObject({ nextCursor: null });
-    await expect(service.listCustomerActions("C001", "-1", 20)).rejects.toThrow("Cursor de histórico inválido");
-    await expect(service.listCustomerActions("C001", "abc", 20)).rejects.toThrow("Cursor de histórico inválido");
+    await expect(service.listCustomerActions(orgId, "C001", undefined, 20)).resolves.toMatchObject({ nextCursor: null });
+    await expect(service.listCustomerActions(orgId, "C001", "-1", 20)).rejects.toThrow("Cursor de histórico inválido");
+    await expect(service.listCustomerActions(orgId, "C001", "abc", 20)).rejects.toThrow("Cursor de histórico inválido");
   });
 });

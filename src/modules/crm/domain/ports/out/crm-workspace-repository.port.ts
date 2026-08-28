@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 export type CustomerRow = {
   id: string; firstName: string; lastName: string | null; phone: string | null;
   email: string | null; preferredChannel: "WhatsApp" | "Email" | "SMS"; birthday: string | null;
@@ -31,15 +33,15 @@ export type CreateActionInput = {
 };
 
 export interface CrmWorkspaceRepositoryPort {
-  loadDataset(): Promise<WorkspaceDataset>;
-  listActionTypes(): Promise<ActionTypeRow[]>;
-  createActionType(input: Omit<ActionTypeRow, "system">): Promise<ActionTypeRow>;
-  updateActionType(code: string, input: { name: string; color?: string | undefined }): Promise<ActionTypeRow>;
-  createActions(input: CreateActionInput): Promise<ActionRow[]>;
-  completeAction(id: string, completedAt: string): Promise<ActionRow>;
-  completeActions(actions: { id: string; completedAt: string }[]): Promise<ActionRow[]>;
-  listCustomerActions(customerId: string, limit: number, offset: number): Promise<{ pending: ActionRow | null; history: ActionRow[]; total: number }>;
-  createTag(input: { name: string; label: string; color: string; category: string }): Promise<TagRow>;
-  updateTags(customerIds: string[], add: string[], remove: string[]): Promise<void>;
-  setInactive(customerIds: string[], inactive: boolean): Promise<void>;
+  loadDataset(organizationId: OrganizationId): Promise<WorkspaceDataset>;
+  listActionTypes(organizationId: OrganizationId): Promise<ActionTypeRow[]>;
+  createActionType(organizationId: OrganizationId, input: Omit<ActionTypeRow, "system">): Promise<ActionTypeRow>;
+  updateActionType(organizationId: OrganizationId, code: string, input: { name: string; color?: string | undefined }): Promise<ActionTypeRow>;
+  createActions(organizationId: OrganizationId, input: CreateActionInput): Promise<ActionRow[]>;
+  completeAction(organizationId: OrganizationId, id: string, completedAt: string): Promise<ActionRow>;
+  completeActions(organizationId: OrganizationId, actions: { id: string; completedAt: string }[]): Promise<ActionRow[]>;
+  listCustomerActions(organizationId: OrganizationId, customerId: string, limit: number, offset: number): Promise<{ pending: ActionRow | null; history: ActionRow[]; total: number }>;
+  createTag(organizationId: OrganizationId, input: { name: string; label: string; color: string; category: string }): Promise<TagRow>;
+  updateTags(organizationId: OrganizationId, customerIds: string[], add: string[], remove: string[]): Promise<void>;
+  setInactive(organizationId: OrganizationId, customerIds: string[], inactive: boolean): Promise<void>;
 }
