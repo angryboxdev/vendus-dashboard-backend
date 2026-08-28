@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 /**
  * Cross-module output port — declarado aqui, implementado por adapter Supabase
  * que acede directamente à tabela payable_entries (sem importar o módulo payable-entries).
@@ -14,5 +16,5 @@ export interface CreatePayableData {
 }
 
 export interface PayableEntryWritePort {
-  create(data: CreatePayableData): Promise<{ id: string }>;
+  create(organizationId: OrganizationId, data: CreatePayableData): Promise<{ id: string }>;
 }

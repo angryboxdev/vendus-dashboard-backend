@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import {
   Recurrence,
   type RecurrenceType,
@@ -60,37 +61,45 @@ function toRow(r: Recurrence): Record<string, unknown> {
   };
 }
 
+/**
+ * Never holds a `SupabaseClient` — receives the scoped-query factory at
+ * composition time (D2) and builds a scoped helper per call, per the
+ * pattern established by the bank-accounts module (spec B2 ticket 02; see
+ * this module's README Ports section).
+ */
 export class SupabaseRecurrenceRepository implements RecurrenceRepositoryPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async save(recurrence: Recurrence): Promise<void> {
-    const { error } = await this.supabase.from("recurring_contracts").insert(toRow(recurrence));
+  async save(organizationId: OrganizationId, recurrence: Recurrence): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("recurring_contracts")
+      .insert(toRow(recurrence));
     if (error) throw new Error(error.message);
   }
 
-  async update(recurrence: Recurrence): Promise<void> {
+  async update(organizationId: OrganizationId, recurrence: Recurrence): Promise<void> {
     const { id, created_at, ...rest } = toRow(recurrence);
-    const { error } = await this.supabase
-      .from("recurring_contracts")
+    const { error } = await this.scopedQuery(organizationId)
+      .table("recurring_contracts")
       .update(rest)
       .eq("id", id);
     if (error) throw new Error(error.message);
   }
 
-  async findById(id: string): Promise<Recurrence | null> {
-    const { data, error } = await this.supabase
-      .from("recurring_contracts")
+  async findById(organizationId: OrganizationId, id: string): Promise<Recurrence | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("recurring_contracts")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async findAll(filter?: RecurrenceFilter): Promise<Recurrence[]> {
-    let q = this.supabase
-      .from("recurring_contracts")
+  async findAll(organizationId: OrganizationId, filter?: RecurrenceFilter): Promise<Recurrence[]> {
+    let q = this.scopedQuery(organizationId)
+      .table("recurring_contracts")
       .select("*")
       .order("name", { ascending: true });
 
@@ -100,6 +109,6 @@ export class SupabaseRecurrenceRepository implements RecurrenceRepositoryPort {
 
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return (data ?? []).map((r) => toEntity(r as unknown as Record<string, unknown>));
   }
 }

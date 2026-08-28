@@ -1,6 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Router } from "express";
-import { getSupabaseServiceRole } from "../../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 
 // Adapters out
 import { SupabaseRecurrenceRepository } from "./adapters/out/supabase-recurrence.repository.js";
@@ -43,21 +42,23 @@ export interface PayableRecurrencesModule {
 }
 
 /**
- * Composition root do módulo payable-recurrences.
+ * Composition root do módulo payable-recurrences (spec B2 ticket 06; ver a
+ * secção Ports do README do módulo, e o padrão estabelecido em bank-accounts,
+ * spec B2 ticket 02).
  *
- * Único lugar que conhece as implementações concretas dos adapters.
- * Todos os use cases e o domínio operam apenas contra interfaces (ports).
+ * Único lugar que conhece as implementações concretas dos adapters. Seguindo
+ * D2, os adapters não constroem o seu próprio `ScopedQuery`: recebem o
+ * factory `createScopedQuery` injectado aqui e constroem um helper escopado
+ * por chamada. Todos os use cases e o domínio operam apenas contra
+ * interfaces (ports).
  */
-export function createPayableRecurrencesModule(supabase?: SupabaseClient): PayableRecurrencesModule {
-  const client = supabase ?? getSupabaseServiceRole();
-  if (!client) throw new Error("Supabase service role não configurado");
-
+export function createPayableRecurrencesModule(): PayableRecurrencesModule {
   // Adapters de saída
-  const recurrenceRepo = new SupabaseRecurrenceRepository(client);
-  const occurrenceRepo = new SupabaseOccurrenceRepository(client);
-  const invoiceRead = new SupabaseInvoiceReadAdapter(client);
+  const recurrenceRepo = new SupabaseRecurrenceRepository(createScopedQuery);
+  const occurrenceRepo = new SupabaseOccurrenceRepository(createScopedQuery);
+  const invoiceRead = new SupabaseInvoiceReadAdapter(createScopedQuery);
   const documentStorage = new SupabaseRecurrenceDocumentStorageAdapter();
-  const bankMovementLinkRead = new SupabaseBankMovementLinkReadAdapter(client);
+  const bankMovementLinkRead = new SupabaseBankMovementLinkReadAdapter(createScopedQuery);
 
   // Controller
   const router = createRecurrenceRouter({

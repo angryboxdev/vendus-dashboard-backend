@@ -18,15 +18,16 @@ export class GenerateBatchOccurrencesUseCase implements GenerateBatchOccurrences
   ) {}
 
   async execute(command: GenerateBatchCommand): Promise<BatchGenerationResult> {
+    const { organizationId } = command;
     const period = this.generator.toPeriod(command.year, command.month);
-    const activeRecurrences = await this.recurrenceRepo.findAll({ status: "active" });
+    const activeRecurrences = await this.recurrenceRepo.findAll(organizationId, { status: "active" });
 
     const generated: OccurrenceDTO[] = [];
     let skippedAlreadyExists = 0;
     let skippedOutOfScope = 0;
 
     for (const recurrence of activeRecurrences) {
-      const existing = await this.occurrenceRepo.findByRecurrenceAndPeriod(recurrence.id, period);
+      const existing = await this.occurrenceRepo.findByRecurrenceAndPeriod(organizationId, recurrence.id, period);
       if (existing) {
         skippedAlreadyExists++;
         continue;
@@ -38,7 +39,7 @@ export class GenerateBatchOccurrencesUseCase implements GenerateBatchOccurrences
         continue;
       }
 
-      await this.occurrenceRepo.save(occurrence);
+      await this.occurrenceRepo.save(organizationId, occurrence);
       generated.push(toOccurrenceDTO(occurrence));
     }
 

@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { OccurrenceStatus, OccurrencePaymentMethod } from "../../entities/recurrence-occurrence.js";
 import type { OccurrenceFilter } from "../out/occurrence-repository.port.js";
 import type { LinkedBankMovement } from "../out/bank-movement-link-read.port.js";
@@ -30,22 +31,43 @@ export interface OccurrenceDTO {
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 export interface GenerateOccurrenceCommand {
+  organizationId: OrganizationId;
   recurrenceId: string;
   year: number;
   month: number; // 1-based
 }
 
 export interface LinkInvoiceCommand {
+  organizationId: OrganizationId;
   occurrenceId: string;
   invoiceId: string;
 }
 
 export interface MarkOccurrenceAsPaidCommand {
+  organizationId: OrganizationId;
   occurrenceId: string;
   paidAt?: string;                         // YYYY-MM-DD, defaults to today
   paymentMethod?: OccurrencePaymentMethod;
   paymentBankAccountId?: string;
   paymentNotes?: string;
+}
+
+export interface CancelOccurrenceCommand {
+  organizationId: OrganizationId;
+  id: string;
+}
+
+export interface ListOccurrencesQuery extends OccurrenceFilter {
+  organizationId: OrganizationId;
+}
+
+export interface GetOccurrenceQuery {
+  organizationId: OrganizationId;
+  id: string;
+}
+
+export interface GetLinkedInvoiceIdsQuery {
+  organizationId: OrganizationId;
 }
 
 // ── Input ports ───────────────────────────────────────────────────────────────
@@ -55,11 +77,11 @@ export interface GenerateOccurrencePort {
 }
 
 export interface ListOccurrencesPort {
-  execute(filter?: OccurrenceFilter): Promise<OccurrenceDTO[]>;
+  execute(query: ListOccurrencesQuery): Promise<OccurrenceDTO[]>;
 }
 
 export interface GetOccurrencePort {
-  execute(id: string): Promise<OccurrenceDTO>;
+  execute(query: GetOccurrenceQuery): Promise<OccurrenceDTO>;
 }
 
 export interface LinkInvoiceToOccurrencePort {
@@ -71,11 +93,11 @@ export interface MarkOccurrenceAsPaidPort {
 }
 
 export interface CancelOccurrencePort {
-  execute(id: string): Promise<void>;
+  execute(command: CancelOccurrenceCommand): Promise<void>;
 }
 
 export interface GetLinkedInvoiceIdsPort {
-  execute(): Promise<string[]>;
+  execute(query: GetLinkedInvoiceIdsQuery): Promise<string[]>;
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────
@@ -84,6 +106,10 @@ export interface RecurrenceSummaryDTO {
   awaitingInvoiceCount: number;
 }
 
+export interface GetRecurrenceSummaryQuery {
+  organizationId: OrganizationId;
+}
+
 export interface GetRecurrenceSummaryPort {
-  execute(): Promise<RecurrenceSummaryDTO>;
+  execute(query: GetRecurrenceSummaryQuery): Promise<RecurrenceSummaryDTO>;
 }

@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 /**
  * Cross-module output port — declarado aqui, implementado por adapter Supabase
  * que acede directamente à tabela invoices (sem importar o módulo invoices).
@@ -15,5 +17,5 @@ export interface InvoiceSnapshot {
 }
 
 export interface InvoiceReadPort {
-  findById(id: string): Promise<InvoiceSnapshot | null>;
+  findById(organizationId: OrganizationId, id: string): Promise<InvoiceSnapshot | null>;
 }

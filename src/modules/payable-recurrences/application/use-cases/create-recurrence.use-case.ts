@@ -26,7 +26,7 @@ export class CreateRecurrenceUseCase implements CreateRecurrencePort {
       ...(command.notes !== undefined && { notes: command.notes }),
     });
 
-    await this.repo.save(recurrence);
+    await this.repo.save(command.organizationId, recurrence);
     return toRecurrenceDTO(recurrence);
   }
 }

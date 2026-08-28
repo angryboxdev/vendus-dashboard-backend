@@ -1,7 +1,7 @@
 # Módulo: payable-recurrences
 
 > Status: ativo
-> Última atualização: 2026-08-21
+> Última atualização: 2026-08-28
 
 ---
 
@@ -176,44 +176,97 @@ ao mês pedido.
 
 ---
 
+## Isolamento por organização (spec B2)
+
+Este módulo foi convertido na spec B2, ticket 06 (`.scratch/scoped-access/spec.md`,
+D2, D7, D13), seguindo à letra o padrão que o módulo `bank-accounts` (ticket 02,
+pilot) estabeleceu — ver o README daquele módulo para a justificação de design.
+Resumo aplicado aqui:
+
+- **Output ports**: `organizationId: OrganizationId` é sempre o **primeiro
+  parâmetro, separado**, em todos os métodos — incluindo os ports cross-módulo
+  (`InvoiceReadPort`, `PayableEntryWritePort`, `BankMovementLinkReadPort`), que
+  leem/escrevem tabelas de outros módulos mas continuam a passar pelo mesmo
+  helper escopado.
+- **Input ports (use cases)**: `organizationId` viaja como **campo dentro do
+  objecto de comando/query**. Um port que antes recebia um primitivo isolado
+  (`execute(id: string)`, `execute()`) passou a receber um objecto nomeado
+  `<Verbo><Entidade>Command`/`Query` com esse campo mais `organizationId` — ex.:
+  `GetRecurrenceQuery = { organizationId, id }`, `CancelOccurrenceCommand =
+  { organizationId, id }`. `ListRecurrencesQuery`/`ListOccurrencesQuery`
+  estendem o filtro de negócio já existente (`RecurrenceFilter`/
+  `OccurrenceFilter`) com `organizationId` como campo próprio, não aninhado.
+  Os quatro use cases de documento (sem port formal) seguem o mesmo padrão:
+  `UploadRecurrenceDocumentCommand`, `DeleteRecurrenceDocumentCommand`, etc.
+- **Controller**: lê de `req.auth!.orgId` e coloca-o em cada comando/query —
+  nunca do body ou de params.
+- **Adapters**: recebem o `ScopedQueryFactory` (`createScopedQuery`) no
+  construtor, não um `SupabaseClient`, e chamam
+  `this.scopedQuery(organizationId).table(...)` por operação — ver
+  `SupabaseRecurrenceRepository`/`SupabaseOccurrenceRepository` e os dois
+  adapters cross-módulo (`SupabaseInvoiceReadAdapter`,
+  `SupabaseBankMovementLinkReadAdapter`).
+- **Geração em lote** (`GenerateBatchOccurrencesUseCase`): chama
+  `occurrenceRepo.save(organizationId, …)` uma vez por ocorrência gerada; cada
+  chamada passa pelo mesmo helper escopado, que stampa `org_id`, pelo que
+  nenhuma linha do lote carrega um campo de organização escrito à mão.
+- **`DocumentStoragePort` é a única excepção deliberada** — `store`/`delete`
+  não ganharam `organizationId`. O wrapper `objectStorage` que este adapter já
+  chamava (desde o ticket 01) foi desenhado sem parâmetro de organização e sem
+  prefixação de caminho (D17): re-prefixar os caminhos existentes fica para
+  quando essa migração acontecer, não antes. Ver o comentário em
+  `src/infra/scoped-db/object-storage.ts`.
+- **`PayableEntryWritePort`/`SupabasePayableEntryWriteAdapter`** ganharam
+  `organizationId` como qualquer outro output port, mas continuam por ligar a
+  qualquer use case (dívida pré-existente ao ticket 06, ver "Pontos de
+  atenção" abaixo) — nenhum comportamento novo foi acrescentado.
+- **Domínio**: as entities (`Recurrence`, `RecurrenceOccurrence`) não ganharam
+  um campo `organizationId` — é uma preocupação de acesso, não um invariante
+  de negócio da entidade.
+
+---
+
 ## Ports
 
 ### Entrada (use cases)
 
 **Recorrências:**
-- `CreateRecurrencePort` — cria nova recorrência.
-- `UpdateRecurrencePort` — edita campos (não altera ocorrências existentes).
-- `PauseRecurrencePort` — pausa recorrência activa.
-- `ResumeRecurrencePort` — retoma recorrência pausada.
-- `CloseRecurrencePort` — encerra recorrência definitivamente.
-- `ListRecurrencesPort` — lista com filtros opcionais (status, type, supplierId).
-- `GetRecurrencePort` — detalhe de uma recorrência.
+- `CreateRecurrencePort` — cria nova recorrência. `CreateRecurrenceCommand` inclui `organizationId`.
+- `UpdateRecurrencePort` — edita campos (não altera ocorrências existentes). `UpdateRecurrenceCommand = { organizationId, id, ... }`.
+- `PauseRecurrencePort` — pausa recorrência activa. `PauseRecurrenceCommand = { organizationId, id }`.
+- `ResumeRecurrencePort` — retoma recorrência pausada. `ResumeRecurrenceCommand = { organizationId, id }`.
+- `CloseRecurrencePort` — encerra recorrência definitivamente. `CloseRecurrenceCommand = { organizationId, id }`.
+- `ListRecurrencesPort` — lista com filtros opcionais (status, type, supplierId). `ListRecurrencesQuery = { organizationId, status?, type?, supplierId? }`.
+- `GetRecurrencePort` — detalhe de uma recorrência. `GetRecurrenceQuery = { organizationId, id }`.
 
 **Ocorrências:**
-- `GenerateOccurrencePort` — gera ocorrência para um mês específico. Se `autoCreatePayable=true`, cria conta a pagar imediatamente.
-- `ListOccurrencesPort` — lista com filtros (recurrenceId, period, status). Cada DTO inclui `linkedBankMovement` (ou `null`) carregado em batch via `BankMovementLinkReadPort`.
-- `GetOccurrencePort` — detalhe de uma ocorrência. Inclui `linkedBankMovement` (ou `null`) via `BankMovementLinkReadPort`.
-- `LinkInvoiceToOccurrencePort` — vincula fatura à ocorrência e regista valor real.
-- `MarkOccurrenceAsPaidPort` — marca ocorrência como paga (directamente ou após fatura vinculada).
-- `CancelOccurrencePort` — cancela ocorrência (não permite cancelar `paid`).
-- `GenerateBatchOccurrencesPort` — gera ocorrências para todas as recorrências activas num mês; silencia duplicados (`skippedAlreadyExists`) e fora de scope (`skippedOutOfScope`).
-- `GetRecurrenceSummaryPort` — retorna contagem de ocorrências por estado relevante (ex: `awaitingInvoiceCount`).
-- `GetLinkedInvoiceIdsPort` — retorna todos os invoice IDs já vinculados a ocorrências (usado para filtrar faturas disponíveis no UI).
+- `GenerateOccurrencePort` — gera ocorrência para um mês específico. Se `autoCreatePayable=true`, cria conta a pagar imediatamente. `GenerateOccurrenceCommand` inclui `organizationId`.
+- `ListOccurrencesPort` — lista com filtros (recurrenceId, period, status). Cada DTO inclui `linkedBankMovement` (ou `null`) carregado em batch via `BankMovementLinkReadPort`. `ListOccurrencesQuery = { organizationId, recurrenceId?, period?, status?, invoiceId? }`.
+- `GetOccurrencePort` — detalhe de uma ocorrência. Inclui `linkedBankMovement` (ou `null`) via `BankMovementLinkReadPort`. `GetOccurrenceQuery = { organizationId, id }`.
+- `LinkInvoiceToOccurrencePort` — vincula fatura à ocorrência e regista valor real. `LinkInvoiceCommand` inclui `organizationId`.
+- `MarkOccurrenceAsPaidPort` — marca ocorrência como paga (directamente ou após fatura vinculada). `MarkOccurrenceAsPaidCommand` inclui `organizationId`.
+- `CancelOccurrencePort` — cancela ocorrência (não permite cancelar `paid`). `CancelOccurrenceCommand = { organizationId, id }`.
+- `GenerateBatchOccurrencesPort` — gera ocorrências para todas as recorrências activas num mês; silencia duplicados (`skippedAlreadyExists`) e fora de scope (`skippedOutOfScope`). `GenerateBatchCommand` inclui `organizationId`.
+- `GetRecurrenceSummaryPort` — retorna contagem de ocorrências por estado relevante (ex: `awaitingInvoiceCount`). `GetRecurrenceSummaryQuery = { organizationId }`.
+- `GetLinkedInvoiceIdsPort` — retorna todos os invoice IDs já vinculados a ocorrências (usado para filtrar faturas disponíveis no UI). `GetLinkedInvoiceIdsQuery = { organizationId }`.
 
 **Documentos (sem interface de port formal — use cases concretos injetados directamente):**
-- `UploadRecurrenceDocumentUseCase` — faz upload para `recurrence-documents` e actualiza `documentUrl` da recorrência.
-- `DeleteRecurrenceDocumentUseCase` — remove do storage e limpa `documentUrl`.
-- `UploadOccurrenceDocumentUseCase` — faz upload para `recurrence-documents` e actualiza `documentUrl` da ocorrência.
-- `DeleteOccurrenceDocumentUseCase` — remove do storage e limpa `documentUrl`.
+- `UploadRecurrenceDocumentUseCase` — faz upload para `recurrence-documents` e actualiza `documentUrl` da recorrência. `UploadRecurrenceDocumentCommand = { organizationId, recurrenceId, buffer, filename, mimeType }`.
+- `DeleteRecurrenceDocumentUseCase` — remove do storage e limpa `documentUrl`. `DeleteRecurrenceDocumentCommand = { organizationId, recurrenceId }`.
+- `UploadOccurrenceDocumentUseCase` — faz upload para `recurrence-documents` e actualiza `documentUrl` da ocorrência. `UploadOccurrenceDocumentCommand = { organizationId, occurrenceId, buffer, filename, mimeType }`.
+- `DeleteOccurrenceDocumentUseCase` — remove do storage e limpa `documentUrl`. `DeleteOccurrenceDocumentCommand = { organizationId, occurrenceId }`.
 
 ### Saída (dependências do domínio)
 
-- `RecurrenceRepositoryPort` — persistência de recorrências.
-- `OccurrenceRepositoryPort` — persistência de ocorrências; inclui `findByRecurrenceAndPeriod` para o check de duplicados.
-- `PayableEntryWritePort` — cross-módulo: criar conta a pagar em `payable_entries`.
-- `InvoiceReadPort` — cross-módulo: ler dados mínimos de uma fatura para vincular.
-- `DocumentStoragePort` — armazenamento de ficheiros (contrato base, faturas mensais).
-- `BankMovementLinkReadPort` — cross-módulo: dado um conjunto de `occurrenceIds`, devolve um `Map<occurrenceId, LinkedBankMovement>` com data, montante e descrição do movimento bancário que justificou cada ocorrência. Usado por `ListOccurrencesUseCase` e `GetOccurrenceUseCase` para enriquecer o DTO com `linkedBankMovement`. O adapter concreto lê directamente `bank_movements` sem importar código de `bank-statements`.
+Em todos, `organizationId` é sempre o primeiro parâmetro do método (D2) —
+excepto `DocumentStoragePort`, ver secção acima.
+
+- `RecurrenceRepositoryPort` — `save(organizationId, recurrence)`, `update(organizationId, recurrence)`, `findById(organizationId, id)`, `findAll(organizationId, filter?)`.
+- `OccurrenceRepositoryPort` — `save`, `update`, `delete`, `findById`, `findAll`, `findByRecurrenceAndPeriod`, `countByStatus`, `findLinkedInvoiceIds` — todos com `organizationId` como primeiro parâmetro. Inclui `findByRecurrenceAndPeriod` para o check de duplicados.
+- `PayableEntryWritePort` — cross-módulo: `create(organizationId, data)`, cria conta a pagar em `payable_entries`.
+- `InvoiceReadPort` — cross-módulo: `findById(organizationId, id)`, ler dados mínimos de uma fatura para vincular.
+- `DocumentStoragePort` — `store(buffer, filename, mimeType)`, `delete(url)` — armazenamento de ficheiros (contrato base, faturas mensais). **Não** tem `organizationId` (ver secção "Isolamento por organização" acima).
+- `BankMovementLinkReadPort` — cross-módulo: `findByOccurrenceIds(organizationId, occurrenceIds)`, devolve um `Map<occurrenceId, LinkedBankMovement>` com data, montante e descrição do movimento bancário que justificou cada ocorrência. Usado por `ListOccurrencesUseCase` e `GetOccurrenceUseCase` para enriquecer o DTO com `linkedBankMovement`. O adapter concreto lê directamente `bank_movements` sem importar código de `bank-statements`.
 
 ---
 
@@ -225,12 +278,17 @@ ao mês pedido.
 
 ### Saída
 
-- `SupabaseRecurrenceRepository` → implementa `RecurrenceRepositoryPort` na tabela `recurring_contracts`.
-- `SupabaseOccurrenceRepository` → implementa `OccurrenceRepositoryPort` na tabela `recurring_occurrences`.
-- `SupabasePayableEntryWriteAdapter` → cross-módulo, acede directamente à tabela `payable_entries`.
-- `SupabaseInvoiceReadAdapter` → cross-módulo, acede directamente à tabela `invoices`.
-- `SupabaseRecurrenceDocumentStorageAdapter` → implementa `DocumentStoragePort` no bucket Supabase Storage `recurrence-documents`. Não recebe `SupabaseClient` no construtor: delega para o wrapper `objectStorage` de `src/infra/scoped-db/` (spec B2 ticket 01/D10) — esse folder é o único lugar em `src/**` autorizado a importar `@supabase/supabase-js`.
-- `SupabaseBankMovementLinkReadAdapter` → cross-módulo; lê `bank_movements WHERE matched_entity_type = 'recurrence_occurrence' AND matched_entity_id IN (...)` directamente, sem importar código de `bank-statements`. Implementa `BankMovementLinkReadPort`.
+Todos os adapters de tabela recebem o `ScopedQueryFactory` (`createScopedQuery`)
+no construtor — nenhum guarda um `SupabaseClient` — e chamam
+`this.scopedQuery(organizationId).table(...)` por operação (D2, spec B2
+ticket 06).
+
+- `SupabaseRecurrenceRepository` → implementa `RecurrenceRepositoryPort` na tabela `recurring_contracts`, via `ScopedQueryFactory`.
+- `SupabaseOccurrenceRepository` → implementa `OccurrenceRepositoryPort` na tabela `recurring_occurrences`, via `ScopedQueryFactory`.
+- `SupabasePayableEntryWriteAdapter` → cross-módulo, acede directamente à tabela `payable_entries`, via `ScopedQueryFactory`.
+- `SupabaseInvoiceReadAdapter` → cross-módulo, acede directamente à tabela `invoices`, via `ScopedQueryFactory`.
+- `SupabaseRecurrenceDocumentStorageAdapter` → implementa `DocumentStoragePort` no bucket Supabase Storage `recurrence-documents`. Não recebe `SupabaseClient` nem `ScopedQueryFactory` no construtor: delega para o wrapper `objectStorage` de `src/infra/scoped-db/` (spec B2 ticket 01/D10), que é deliberadamente não-escopado (D17) — esse folder é o único lugar em `src/**` autorizado a importar `@supabase/supabase-js`.
+- `SupabaseBankMovementLinkReadAdapter` → cross-módulo; lê `bank_movements WHERE matched_entity_type = 'recurrence_occurrence' AND matched_entity_id IN (...)` via `ScopedQueryFactory`, sem importar código de `bank-statements`. Implementa `BankMovementLinkReadPort`.
 
 ---
 
@@ -345,7 +403,7 @@ Esta informação é exibida no frontend como coluna "Banco" na lista de ocorrê
 - Todos os módulos financeiros: `npx jest --testPathPattern="payable-recurrences|payable-entries" --no-coverage`.
 - Adapters Supabase: requerem instância real — testar manualmente contra ambiente de desenvolvimento.
 
-**Cobertura atual:** 16 suites, 155+ testes, 0 falhos. Todos os 20 use cases cobertos. Inclui testes de enriquecimento `linkedBankMovement` via `FakeBankMovementLinkReadAdapter`.
+**Cobertura atual:** 15 suites, 161+ testes, 0 falhos. Todos os 20 use cases cobertos. Inclui testes de enriquecimento `linkedBankMovement` via `FakeBankMovementLinkReadAdapter` e testes de isolamento cross-organização (spec B2) nos fluxos de leitura/escrita por id.
 
 ---
 
@@ -357,3 +415,9 @@ Esta informação é exibida no frontend como coluna "Banco" na lista de ocorrê
 - **Bucket único para dois níveis:** `recurrence-documents` armazena tanto documentos
   base de recorrências como documentos de ocorrências. Se no futuro for necessário
   controlo de acesso diferenciado, poderá ser necessário separar em dois buckets.
+- **`PayableEntryWritePort`/`SupabasePayableEntryWriteAdapter` não estão ligados a
+  nenhum use case** — dívida pré-existente ao ticket 06 (a criação automática de
+  conta a pagar descrita em D4/`autoCreatePayable` não está implementada em
+  `GenerateOccurrenceUseCase`, apesar do que a Fase 2 do `TRACKER.md` regista). O
+  ticket 06 deu-lhe `organizationId` como a qualquer outro output port, por
+  consistência, mas não o ligou nem alterou o seu comportamento.

@@ -1,3 +1,4 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateRecurrenceUseCase } from "../../application/use-cases/create-recurrence.use-case.js";
 import { CloseRecurrenceUseCase } from "../../application/use-cases/close-recurrence.use-case.js";
 import { UploadRecurrenceDocumentUseCase } from "../../application/use-cases/upload-recurrence-document.use-case.js";
@@ -10,9 +11,12 @@ import { FakeOccurrenceRepository } from "../fakes/fake-occurrence-repository.js
 import { FakeDocumentStorage } from "../fakes/fake-document-storage.js";
 import { RecurrenceNotFoundError, OccurrenceNotFoundError, RecurrenceClosedError } from "../../domain/errors.js";
 
+const organizationId = mintOrganizationId("org-a");
+
 const FAKE_BUFFER = Buffer.from("fake-pdf-content");
 
 const BASE_REC = {
+  organizationId,
   name: "Renda",
   supplierName: "Proprietário Lda",
   type: "fixed_contract" as const,
@@ -49,6 +53,7 @@ describe("UploadRecurrenceDocumentUseCase", () => {
     expect(rec.documentUrl).toBeNull();
 
     const updated = await uploadRec.execute({
+      organizationId,
       recurrenceId: rec.id,
       buffer: FAKE_BUFFER,
       filename: "contrato.pdf",
@@ -65,6 +70,7 @@ describe("UploadRecurrenceDocumentUseCase", () => {
     const rec = await createRec.execute(BASE_REC);
 
     const first = await uploadRec.execute({
+      organizationId,
       recurrenceId: rec.id,
       buffer: FAKE_BUFFER,
       filename: "v1.pdf",
@@ -72,6 +78,7 @@ describe("UploadRecurrenceDocumentUseCase", () => {
     });
 
     await uploadRec.execute({
+      organizationId,
       recurrenceId: rec.id,
       buffer: FAKE_BUFFER,
       filename: "v2.pdf",
@@ -86,17 +93,45 @@ describe("UploadRecurrenceDocumentUseCase", () => {
   it("lança RecurrenceNotFoundError para id inexistente", async () => {
     const { uploadRec } = make();
     await expect(
-      uploadRec.execute({ recurrenceId: "nao-existe", buffer: FAKE_BUFFER, filename: "f.pdf", mimeType: "application/pdf" }),
+      uploadRec.execute({
+        organizationId,
+        recurrenceId: "nao-existe",
+        buffer: FAKE_BUFFER,
+        filename: "f.pdf",
+        mimeType: "application/pdf",
+      }),
+    ).rejects.toThrow(RecurrenceNotFoundError);
+  });
+
+  it("lança RecurrenceNotFoundError para uma recorrência que pertence a outra organização", async () => {
+    const { createRec, uploadRec } = make();
+    const rec = await createRec.execute(BASE_REC);
+    const otherOrganizationId = mintOrganizationId("org-b");
+
+    await expect(
+      uploadRec.execute({
+        organizationId: otherOrganizationId,
+        recurrenceId: rec.id,
+        buffer: FAKE_BUFFER,
+        filename: "f.pdf",
+        mimeType: "application/pdf",
+      }),
     ).rejects.toThrow(RecurrenceNotFoundError);
   });
 
   it("lança RecurrenceClosedError ao fazer upload numa recorrência fechada", async () => {
     const { createRec, closeRec, uploadRec } = make();
     const rec = await createRec.execute(BASE_REC);
-    await closeRec.execute(rec.id);
+    await closeRec.execute({ organizationId, id: rec.id });
 
     await expect(
-      uploadRec.execute({ recurrenceId: rec.id, buffer: FAKE_BUFFER, filename: "f.pdf", mimeType: "application/pdf" }),
+      uploadRec.execute({
+        organizationId,
+        recurrenceId: rec.id,
+        buffer: FAKE_BUFFER,
+        filename: "f.pdf",
+        mimeType: "application/pdf",
+      }),
     ).rejects.toThrow(RecurrenceClosedError);
   });
 });
@@ -105,9 +140,15 @@ describe("DeleteRecurrenceDocumentUseCase", () => {
   it("remove o documento e limpa documentUrl", async () => {
     const { createRec, uploadRec, deleteRec, storage } = make();
     const rec = await createRec.execute(BASE_REC);
-    await uploadRec.execute({ recurrenceId: rec.id, buffer: FAKE_BUFFER, filename: "f.pdf", mimeType: "application/pdf" });
+    await uploadRec.execute({
+      organizationId,
+      recurrenceId: rec.id,
+      buffer: FAKE_BUFFER,
+      filename: "f.pdf",
+      mimeType: "application/pdf",
+    });
 
-    const updated = await deleteRec.execute(rec.id);
+    const updated = await deleteRec.execute({ organizationId, recurrenceId: rec.id });
 
     expect(updated.documentUrl).toBeNull();
     expect(storage.deleted).toHaveLength(1);
@@ -117,7 +158,7 @@ describe("DeleteRecurrenceDocumentUseCase", () => {
     const { createRec, deleteRec, storage } = make();
     const rec = await createRec.execute(BASE_REC);
 
-    const updated = await deleteRec.execute(rec.id);
+    const updated = await deleteRec.execute({ organizationId, recurrenceId: rec.id });
 
     expect(updated.documentUrl).toBeNull();
     expect(storage.deleted).toHaveLength(0); // nada a apagar
@@ -125,7 +166,9 @@ describe("DeleteRecurrenceDocumentUseCase", () => {
 
   it("lança RecurrenceNotFoundError para id inexistente", async () => {
     const { deleteRec } = make();
-    await expect(deleteRec.execute("nao-existe")).rejects.toThrow(RecurrenceNotFoundError);
+    await expect(deleteRec.execute({ organizationId, recurrenceId: "nao-existe" })).rejects.toThrow(
+      RecurrenceNotFoundError,
+    );
   });
 });
 
@@ -135,10 +178,11 @@ describe("UploadOccurrenceDocumentUseCase", () => {
   it("faz upload e persiste a URL no documentUrl da ocorrência", async () => {
     const { createRec, generateOcc, uploadOcc, storage } = make();
     const rec = await createRec.execute(BASE_REC);
-    const occ = await generateOcc.execute({ recurrenceId: rec.id, year: 2026, month: 7 });
+    const occ = await generateOcc.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 7 });
     expect(occ.documentUrl).toBeNull();
 
     const updated = await uploadOcc.execute({
+      organizationId,
       occurrenceId: occ.id,
       buffer: FAKE_BUFFER,
       filename: "fatura-julho.pdf",
@@ -152,9 +196,10 @@ describe("UploadOccurrenceDocumentUseCase", () => {
   it("substitui documento anterior ao fazer novo upload", async () => {
     const { createRec, generateOcc, uploadOcc, storage } = make();
     const rec = await createRec.execute(BASE_REC);
-    const occ = await generateOcc.execute({ recurrenceId: rec.id, year: 2026, month: 7 });
+    const occ = await generateOcc.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 7 });
 
     const first = await uploadOcc.execute({
+      organizationId,
       occurrenceId: occ.id,
       buffer: FAKE_BUFFER,
       filename: "v1.pdf",
@@ -162,6 +207,7 @@ describe("UploadOccurrenceDocumentUseCase", () => {
     });
 
     await uploadOcc.execute({
+      organizationId,
       occurrenceId: occ.id,
       buffer: FAKE_BUFFER,
       filename: "v2.pdf",
@@ -175,7 +221,13 @@ describe("UploadOccurrenceDocumentUseCase", () => {
   it("lança OccurrenceNotFoundError para id inexistente", async () => {
     const { uploadOcc } = make();
     await expect(
-      uploadOcc.execute({ occurrenceId: "nao-existe", buffer: FAKE_BUFFER, filename: "f.pdf", mimeType: "application/pdf" }),
+      uploadOcc.execute({
+        organizationId,
+        occurrenceId: "nao-existe",
+        buffer: FAKE_BUFFER,
+        filename: "f.pdf",
+        mimeType: "application/pdf",
+      }),
     ).rejects.toThrow(OccurrenceNotFoundError);
   });
 });
@@ -184,10 +236,16 @@ describe("DeleteOccurrenceDocumentUseCase", () => {
   it("remove o documento e limpa documentUrl da ocorrência", async () => {
     const { createRec, generateOcc, uploadOcc, deleteOcc, storage } = make();
     const rec = await createRec.execute(BASE_REC);
-    const occ = await generateOcc.execute({ recurrenceId: rec.id, year: 2026, month: 7 });
-    await uploadOcc.execute({ occurrenceId: occ.id, buffer: FAKE_BUFFER, filename: "f.pdf", mimeType: "application/pdf" });
+    const occ = await generateOcc.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 7 });
+    await uploadOcc.execute({
+      organizationId,
+      occurrenceId: occ.id,
+      buffer: FAKE_BUFFER,
+      filename: "f.pdf",
+      mimeType: "application/pdf",
+    });
 
-    const updated = await deleteOcc.execute(occ.id);
+    const updated = await deleteOcc.execute({ organizationId, occurrenceId: occ.id });
 
     expect(updated.documentUrl).toBeNull();
     expect(storage.deleted).toHaveLength(1);
@@ -196,9 +254,9 @@ describe("DeleteOccurrenceDocumentUseCase", () => {
   it("não falha se documentUrl já é null (idempotente)", async () => {
     const { createRec, generateOcc, deleteOcc, storage } = make();
     const rec = await createRec.execute(BASE_REC);
-    const occ = await generateOcc.execute({ recurrenceId: rec.id, year: 2026, month: 7 });
+    const occ = await generateOcc.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 7 });
 
-    const updated = await deleteOcc.execute(occ.id);
+    const updated = await deleteOcc.execute({ organizationId, occurrenceId: occ.id });
 
     expect(updated.documentUrl).toBeNull();
     expect(storage.deleted).toHaveLength(0);
@@ -206,6 +264,8 @@ describe("DeleteOccurrenceDocumentUseCase", () => {
 
   it("lança OccurrenceNotFoundError para id inexistente", async () => {
     const { deleteOcc } = make();
-    await expect(deleteOcc.execute("nao-existe")).rejects.toThrow(OccurrenceNotFoundError);
+    await expect(deleteOcc.execute({ organizationId, occurrenceId: "nao-existe" })).rejects.toThrow(
+      OccurrenceNotFoundError,
+    );
   });
 });
