@@ -44,7 +44,7 @@ export class GetAnalyticsHistoricalUseCase implements GetAnalyticsHistoricalPort
 
   async execute(params: GetAnalyticsHistoricalParams): Promise<AnalyticsHistoricalResponse> {
     const startedAt = Date.now();
-    const { year, month } = params;
+    const { organizationId, year, month } = params;
     const now = DateTime.now().setZone(LISBON);
     const isCurrentMonth = now.year === year && now.month === month;
 
@@ -55,7 +55,7 @@ export class GetAnalyticsHistoricalUseCase implements GetAnalyticsHistoricalPort
 
     // Load cache
     const allYearsToCheck = [...pastYears, ...(currentYearCompleteMonths.length > 0 ? [year] : [])];
-    const cachedRows = await this.cache.getMonths(allYearsToCheck);
+    const cachedRows = await this.cache.getMonths(organizationId, allYearsToCheck);
 
     // Build cache map
     const cacheByYear = new Map<number, Map<number, CachedMonthRow>>();
@@ -127,7 +127,7 @@ export class GetAnalyticsHistoricalUseCase implements GetAnalyticsHistoricalPort
       computeAndCache(year, m, freshCurrentYearDocs);
     }
 
-    void this.cache.saveMonths(toSave);
+    void this.cache.saveMonths(organizationId, toSave);
 
     // Annual = complete months cached + current month fresh
     let annualGrossCents = sumGrossCents(currentMonthDocs);

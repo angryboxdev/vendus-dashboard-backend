@@ -1,7 +1,7 @@
 # Módulo: vendus
 
 > Status: ativo
-> Última atualização: 2026-08-07
+> Última atualização: 2026-08-28
 
 ---
 
@@ -98,22 +98,61 @@ Carregado de `GET /products/` da Vendus. Indexado por `reference` (primário) e 
 
 ---
 
+## Isolamento por organização (spec B2)
+
+Este módulo converteu para a spec B2 (`.scratch/scoped-access/spec.md`,
+D2/D7, ADR-0008) seguindo o padrão que `bank-accounts` (ticket 02) definiu —
+mas quase todo o módulo fica **fora** desse padrão, deliberadamente: o
+módulo fala sobretudo com a API HTTP do Vendus, não com o Supabase. D2
+escopa o parâmetro `organizationId` a **queries construídas contra o
+Supabase**; um gateway HTTP para um sistema externo não é uma dessas
+queries, e adicionar-lhe `organizationId` seria inventar um parâmetro sem
+significado (o Vendus não sabe o que é uma organização).
+
+O único ponto do módulo que constrói uma query Supabase é o cache de
+analytics mensais (2 métodos, `analytics_monthly_cache`). É por isso o
+único port de saída, o único port de entrada e o único adapter que ganharam
+`organizationId`:
+
+- **`AnalyticsCachePort`** (saída) — `organizationId: OrganizationId` é o
+  **primeiro parâmetro, separado**, em `getMonths` e `saveMonths` (D2 — nunca
+  um campo dentro de um objecto de filtro).
+- **`GetAnalyticsHistoricalPort`** (entrada) — o único use case que chama o
+  `AnalyticsCachePort`, por isso o único cujo `GetAnalyticsHistoricalParams`
+  ganhou um campo `organizationId`. Os outros cinco use cases (`GetSummaryPort`,
+  `GetAnalyticsCurrentPort`, `GetDocumentDetailPort`, `ListDocumentsPort`,
+  `GetSelfConsumptionPort`) não tocam o Supabase e mantêm as suas assinaturas
+  inalteradas.
+- **Controller** — só a rota `/vendus/analytics/historical` lê
+  `req.auth!.orgId` e coloca-o no query object; as restantes rotas não
+  precisam de organização nenhuma. Nunca lido do body/params, para não ser um
+  valor que o cliente possa escolher.
+- **`SupabaseAnalyticsCacheAdapter`** — recebe o `ScopedQueryFactory`
+  (`createScopedQuery`) no construtor em vez de resolver o cliente Supabase
+  internamente, e chama `this.scopedQuery(organizationId).table("analytics_monthly_cache")`
+  por operação. Os outros dois adapters de saída (`VendusHttpGateway`,
+  `VendusProductCatalogAdapter`) não mudam — nunca seguraram um `SupabaseClient`.
+- **Domínio**: nenhuma entity ganhou um campo `organizationId` — é uma
+  preocupação de acesso/query, não um invariante de negócio.
+
+---
+
 ## Ports
 
 ### Entrada (use cases)
 
-- `GetAnalyticsCurrentPort` — `execute(year, month)` → métricas rápidas do mês (list docs apenas, sem channel).
-- `GetAnalyticsHistoricalPort` — `execute(year, month)` → totais históricos, gráfico 6 meses, comparações (cache-aware).
-- `GetSummaryPort` — `execute({ since, until })` → `{ documents, analytics }` completos com channel. **Exposto via composition root para injeção noutros módulos.**
-- `GetDocumentDetailPort` — `execute(id)` → documento detalhado + channel + has_drinks. Títulos de itens normalizados (S/L).
-- `ListDocumentsPort` — `execute(params)` → lista de documentos sem detail (rápida).
-- `GetSelfConsumptionPort` — `execute({ since, until })` → registos de autoconsumo normalizados + analytics (byEmployee, byCategory, topProducts).
+- `GetAnalyticsCurrentPort` — `execute(year, month)` → métricas rápidas do mês (list docs apenas, sem channel). Sem organização — não toca o Supabase.
+- `GetAnalyticsHistoricalPort` — `execute({ organizationId, year, month })` → totais históricos, gráfico 6 meses, comparações (cache-aware). `organizationId` viaja dentro do `GetAnalyticsHistoricalParams` que já existia — único use case do módulo que precisa dele (ver secção acima).
+- `GetSummaryPort` — `execute({ since, until })` → `{ documents, analytics }` completos com channel. Sem organização — não toca o Supabase. **Exposto via composition root para injeção noutros módulos.**
+- `GetDocumentDetailPort` — `execute(id)` → documento detalhado + channel + has_drinks. Títulos de itens normalizados (S/L). Sem organização — não toca o Supabase.
+- `ListDocumentsPort` — `execute(params)` → lista de documentos sem detail (rápida). Sem organização — não toca o Supabase.
+- `GetSelfConsumptionPort` — `execute({ since, until })` → registos de autoconsumo normalizados + analytics (byEmployee, byCategory, topProducts). Sem organização — não toca o Supabase.
 
 ### Saída (dependências do domínio)
 
-- `VendusGatewayPort` — `listDocuments`, `fetchDetail` — HTTP para a API Vendus.
-- `VendusProductCatalogPort` — `getProducts()` → catálogo em Map com cache.
-- `AnalyticsCachePort` — `getMonths`, `saveMonths` — cache de meses imutáveis.
+- `VendusGatewayPort` — `listDocuments`, `fetchDetail` — HTTP para a API Vendus. Sem organização — gateway externo, fora do escopo de D2.
+- `VendusProductCatalogPort` — `getProducts()` → catálogo em Map com cache em memória. Sem organização — mesmo motivo.
+- `AnalyticsCachePort` — `getMonths(organizationId, years)`, `saveMonths(organizationId, rows)` — cache de meses imutáveis. `organizationId` é sempre o primeiro parâmetro (D2) — único port de saída do módulo que constrói queries Supabase.
 
 ---
 
@@ -136,7 +175,7 @@ Carregado de `GET /products/` da Vendus. Indexado por `reference` (primário) e 
 
 - `VendusHttpGateway` — implementa `VendusGatewayPort` via `vendusClient.ts` (infra partilhada).
 - `VendusProductCatalogAdapter` — implementa `VendusProductCatalogPort`. Fetch paginado de `/products/`, TTL cache 10 min, mapeia category_id → Category via `VENDUS_CATEGORY_MAP`.
-- `SupabaseAnalyticsCacheAdapter` — implementa `AnalyticsCachePort`. Lê/escreve tabela `analytics_monthly_cache`. Falhas são não-fatais.
+- `SupabaseAnalyticsCacheAdapter` — implementa `AnalyticsCachePort`, via `ScopedQueryFactory` (D2) — não guarda um `SupabaseClient`. Lê/escreve tabela `analytics_monthly_cache`. Falhas são não-fatais.
 
 ---
 
