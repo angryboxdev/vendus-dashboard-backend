@@ -6,7 +6,7 @@
  * Serve para qualquer cenário de ajuste manual em que queiras o cálculo por receita
  * (ex.: compensar vendas antes de uma contagem, corrigir um lote, simular devolução, etc.).
  */
-import { getSupabase, isSupabaseConfigured } from "../infra/supabaseClient.js";
+import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
 import { lisbonDayEndUtcIso } from "../utils/lisbonDayInstants.js";
 import {
   getAllConsumptionMappingsMap,

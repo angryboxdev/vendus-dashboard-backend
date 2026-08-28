@@ -1,5 +1,5 @@
 import type { AnalyticsCachePort, CachedMonthRow } from "../../domain/ports/out/analytics-cache.port.js";
-import { getSupabaseServiceRole } from "../../../../infra/supabaseClient.js";
+import { getSupabaseServiceRole } from "../../../../infra/scoped-db/supabase-client.js";
 
 /**
  * Persiste métricas mensais Vendus na tabela `analytics_monthly_cache` do Supabase.

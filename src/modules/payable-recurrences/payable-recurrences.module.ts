@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Router } from "express";
-import { getSupabaseServiceRole } from "../../infra/supabaseClient.js";
+import { getSupabaseServiceRole } from "../../infra/scoped-db/supabase-client.js";
 
 // Adapters out
 import { SupabaseRecurrenceRepository } from "./adapters/out/supabase-recurrence.repository.js";
@@ -56,7 +56,7 @@ export function createPayableRecurrencesModule(supabase?: SupabaseClient): Payab
   const recurrenceRepo = new SupabaseRecurrenceRepository(client);
   const occurrenceRepo = new SupabaseOccurrenceRepository(client);
   const invoiceRead = new SupabaseInvoiceReadAdapter(client);
-  const documentStorage = new SupabaseRecurrenceDocumentStorageAdapter(client);
+  const documentStorage = new SupabaseRecurrenceDocumentStorageAdapter();
   const bankMovementLinkRead = new SupabaseBankMovementLinkReadAdapter(client);
 
   // Controller

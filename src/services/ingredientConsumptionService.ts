@@ -1,4 +1,4 @@
-import { getSupabase, isSupabaseConfigured } from "../infra/supabaseClient.js";
+import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
 
 import { ENV } from "../config/env.js";
 import type { StockItemType } from "../domain/stockTypes.js";

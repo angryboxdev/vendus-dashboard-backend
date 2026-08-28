@@ -4,7 +4,7 @@ import type {
   ShiftCreateBody,
   ShiftUpdateBody,
 } from "../domain/hrTypes.js";
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/supabaseClient.js";
+import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
 import { formatHrTimeForApi, normalizeTimeForPg } from "../utils/hrTime.js";
 import { REPORT_TIMEZONE } from "../utils/lisbonDayInstants.js";
 import { DateTime } from "luxon";

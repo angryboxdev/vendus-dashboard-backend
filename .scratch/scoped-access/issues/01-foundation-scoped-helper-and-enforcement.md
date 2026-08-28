@@ -1,6 +1,6 @@
 # 01 — Foundation: branded organization type, scoped query helper, enforcement, locations endpoint
 
-Status: ready-for-agent
+Status: done
 Blocked by: —
 Spec: `../spec.md` (D1, D2, D5 partial, D6, D7, D10, D11, D15, D18), ADR-0007
 
@@ -99,23 +99,23 @@ ticket 20.
 
 ## Done when
 
-- [ ] The organization type cannot be produced from a bare string except through
+- [x] The organization type cannot be produced from a bare string except through
       the mint function
-- [ ] The helper cannot be constructed without an organization
-- [ ] A select through the helper carries the organization filter
-- [ ] An update carries it, and composes with a later filter on an identifier
+- [x] The helper cannot be constructed without an organization
+- [x] A select through the helper carries the organization filter
+- [x] An update carries it, and composes with a later filter on an identifier
       rather than replacing it
-- [ ] A delete carries it
-- [ ] An insert body is stamped with it
-- [ ] A table whose organization key is its own primary key is filtered on that key
-- [ ] A table absent from the registry does not compile
-- [ ] Exactly one named unscoped function exists, and no general unscoped query
+- [x] A delete carries it
+- [x] An insert body is stamped with it
+- [x] A table whose organization key is its own primary key is filtered on that key
+- [x] A table absent from the registry does not compile
+- [x] Exactly one named unscoped function exists, and no general unscoped query
       surface exists
-- [ ] The Supabase client is imported only inside the helper's folder, plus the
+- [x] The Supabase client is imported only inside the helper's folder, plus the
       provisioning job exempted by name
-- [ ] `npm run check` runs the type check, tests and dependency rules, and the
+- [x] `npm run check` runs the type check, tests and dependency rules, and the
       build command runs it
-- [ ] The agent hook runs the dependency rules over the whole source tree
-- [ ] The locations endpoint returns the caller's organization's locations, and is
+- [x] The agent hook runs the dependency rules over the whole source tree
+- [x] The locations endpoint returns the caller's organization's locations, and is
       built through the helper
-- [ ] The existing suite still passes and the deploy still succeeds
+- [x] The existing suite still passes and the deploy still succeeds

@@ -1,5 +1,5 @@
 import type { Router } from "express";
-import { getSupabaseServiceRole } from "../../infra/supabaseClient.js";
+import { getSupabaseServiceRole } from "../../infra/scoped-db/supabase-client.js";
 import { ENV } from "../../config/env.js";
 import { hashPin } from "../../utils/kiosk.js";
 

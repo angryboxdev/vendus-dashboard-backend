@@ -9,7 +9,7 @@ import {
   type JobRole,
   type WeeklySchedule,
 } from "../domain/hrTypes.js";
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/supabaseClient.js";
+import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
 import { hashPin } from "../utils/kiosk.js";
 
 type Row = {

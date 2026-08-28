@@ -10,7 +10,7 @@ import {
   SUPPLIER_INVOICE_IMPORT_CREATED_BY,
 } from "../domain/supplierInvoiceImportTypes.js";
 import { ENV } from "../config/env.js";
-import { getSupabase, isSupabaseConfigured } from "../infra/supabaseClient.js";
+import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
 import { extractInvoiceWithOpenAI } from "./openaiInvoiceExtractService.js";
 import { lisbonDayEndUtcIso } from "../utils/lisbonDayInstants.js";
 import { updateStockItem } from "./stockItemService.js";

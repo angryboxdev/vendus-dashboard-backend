@@ -229,7 +229,7 @@ ao mês pedido.
 - `SupabaseOccurrenceRepository` → implementa `OccurrenceRepositoryPort` na tabela `recurring_occurrences`.
 - `SupabasePayableEntryWriteAdapter` → cross-módulo, acede directamente à tabela `payable_entries`.
 - `SupabaseInvoiceReadAdapter` → cross-módulo, acede directamente à tabela `invoices`.
-- `SupabaseRecurrenceDocumentStorageAdapter` → implementa `DocumentStoragePort` no bucket Supabase Storage `recurrence-documents`.
+- `SupabaseRecurrenceDocumentStorageAdapter` → implementa `DocumentStoragePort` no bucket Supabase Storage `recurrence-documents`. Não recebe `SupabaseClient` no construtor: delega para o wrapper `objectStorage` de `src/infra/scoped-db/` (spec B2 ticket 01/D10) — esse folder é o único lugar em `src/**` autorizado a importar `@supabase/supabase-js`.
 - `SupabaseBankMovementLinkReadAdapter` → cross-módulo; lê `bank_movements WHERE matched_entity_type = 'recurrence_occurrence' AND matched_entity_id IN (...)` directamente, sem importar código de `bank-statements`. Implementa `BankMovementLinkReadPort`.
 
 ---

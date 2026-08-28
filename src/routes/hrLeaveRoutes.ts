@@ -17,7 +17,7 @@ import {
   updateLeaveRequest,
   type LeaveType,
 } from "../services/hrLeaveService.js";
-import { getSupabaseServiceRole } from "../infra/supabaseClient.js";
+import { getSupabaseServiceRole } from "../infra/scoped-db/supabase-client.js";
 import type { WeeklySchedule } from "../domain/hrTypes.js";
 
 export const hrLeaveRoutes = Router();

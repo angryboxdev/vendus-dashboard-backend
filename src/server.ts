@@ -29,6 +29,7 @@ import { crmRoutes } from "./routes/crmRoutes.js";
 import { runDailyVendusConsumptionJob } from "./services/dailyVendusConsumptionJobService.js";
 import { populateAuth, requireAuth, requireMinRole } from "./middleware/auth.js";
 import { authRoutes } from "./routes/authRoutes.js";
+import { createLocationsModule } from "./modules/locations/locations.module.js";
 
 const app = express();
 
@@ -94,6 +95,10 @@ app.use(requireAuth);
 
 // Admin-only: user management
 app.use("/api/auth", requireMinRole("admin"), authRoutes);
+
+// Locations module (hexagonal) — org-scoped read, any authenticated role (D15)
+const locationsModule = createLocationsModule();
+app.use("/api", locationsModule.router);
 
 // Manager+: financial, stock, documents, reports, pizza, preparations, analytics
 app.use("/api", requireMinRole("manager"), analyticsRoutes);

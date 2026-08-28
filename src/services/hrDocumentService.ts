@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/supabaseClient.js";
+import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
 
 export type DocumentType = "contract" | "id_card" | "nif" | "iban" | "other";
 

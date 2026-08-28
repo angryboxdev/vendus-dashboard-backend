@@ -4,7 +4,7 @@ import type {
   ShiftAttendanceStatus,
   ShiftAttendanceUpsertBody,
 } from "../domain/hrTypes.js";
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/supabaseClient.js";
+import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
 import { formatHrTimeForApi, normalizeTimeForPg } from "../utils/hrTime.js";
 
 type AttendanceRow = {

@@ -1,5 +1,5 @@
 import { ENV } from "../config/env.js";
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/supabaseClient.js";
+import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
 import { fetchAllDocuments } from "./documentsService.js";
 import { vendusGet } from "../infra/vendusClient.js";
 import type { VendusDetailedDocument } from "../domain/types.js";

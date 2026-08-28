@@ -1,6 +1,6 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { ENV } from "../config/env.js";
-import { getSupabaseServiceRole } from "../infra/supabaseClient.js";
+import { listMembershipsForUser } from "../infra/scoped-db/membership-lookup.js";
 import {
   createAuthMiddleware,
   type AppRole,
@@ -61,18 +61,19 @@ const verifyTokenViaJwks: TokenVerifier = async (token) => {
   }
 };
 
-/** Membership fallback against `org_members`, pointed at by D10/ticket 03. */
+/**
+ * Membership fallback against `org_members`, applying D5's unambiguity rule
+ * on top of the one unscoped door (D10) — `listMembershipsForUser` reads
+ * every row for the user with no organization filter, because no
+ * organization is known yet; this function is what collapses that to
+ * "exactly one, or refuse".
+ */
 const lookupMembershipInDb: MembershipLookup = async (userId) => {
-  const sb = getSupabaseServiceRole();
-  if (!sb) return null;
-  const { data, error } = await sb
-    .from("org_members")
-    .select("org_id, role")
-    .eq("user_id", userId);
-  if (error || !data || data.length !== 1) return null;
-  const row = data[0] as { org_id?: string; role?: string };
-  if (!row.org_id || !isAppRole(row.role)) return null;
-  return { orgId: row.org_id, role: row.role };
+  const rows = await listMembershipsForUser(userId);
+  if (rows.length !== 1) return null;
+  const row = rows[0]!;
+  if (!row.organizationId || !isAppRole(row.role)) return null;
+  return { orgId: row.organizationId, role: row.role };
 };
 
 const defaultAuthMiddleware = createAuthMiddleware({

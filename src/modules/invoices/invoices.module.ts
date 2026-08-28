@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getSupabaseServiceRole } from "../../infra/supabaseClient.js";
+import { getSupabaseServiceRole } from "../../infra/scoped-db/supabase-client.js";
 import { SupabaseInvoiceRepository } from "./adapters/out/supabase-invoice.repository.js";
 import { SupabaseInvoiceLineRepository } from "./adapters/out/supabase-invoice-line.repository.js";
 import { SupabaseClassificationRuleRepository } from "./adapters/out/supabase-classification-rule.repository.js";
@@ -56,7 +56,7 @@ export function createInvoicesModule(
   const categoryReader = new SupabaseCostCenterCategoryReaderAdapter(client);
   const payableWrite = new SupabasePayableEntryWriteAdapter(client);
   const occurrenceSync = new SupabaseOccurrenceSyncAdapter(client);
-  const storage = new SupabaseDocumentStorageAdapter(client);
+  const storage = new SupabaseDocumentStorageAdapter();
   const reconciliationCleanup = new SupabaseInvoiceReconciliationCleanupAdapter(client);
   const supplierLookup = new SupabaseSupplierLookupAdapter(client);
   const supplierHint = new SupabaseSupplierHintAdapter(client);

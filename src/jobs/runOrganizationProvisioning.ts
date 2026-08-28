@@ -49,7 +49,7 @@
 import "../config/env.js";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
-import { getSupabaseServiceRole } from "../infra/supabaseClient.js";
+import { getSupabaseServiceRole } from "../infra/scoped-db/supabase-client.js";
 import {
   provisionOrganization,
   DuplicateOrganizationNifError,
