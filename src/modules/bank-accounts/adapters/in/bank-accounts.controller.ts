@@ -53,11 +53,13 @@ export class BankAccountsController {
 
     /**
      * GET /bank-accounts/banks
-     * Returns all banks with account counts.
+     * Returns all banks with account counts, scoped to the caller's
+     * organization. Mounted below the global `requireAuth` in server.ts,
+     * so `req.auth` is always set.
      */
-    this.router.get("/bank-accounts/banks", async (_req, res) => {
+    this.router.get("/bank-accounts/banks", async (req, res) => {
       try {
-        const banks = await this.listBanks.execute();
+        const banks = await this.listBanks.execute({ organizationId: req.auth!.orgId });
         res.json(banks);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
@@ -76,6 +78,7 @@ export class BankAccountsController {
           return;
         }
         const bank = await this.createBank.execute({
+          organizationId: req.auth!.orgId,
           name: body["name"] as string,
           logoKey: body["logoKey"] as import("../../domain/entities/bank.js").BankLogoKey,
           color: body["color"] as string,
@@ -95,7 +98,10 @@ export class BankAccountsController {
      */
     this.router.get("/bank-accounts/banks/:bankId", async (req, res) => {
       try {
-        const detail = await this.getBank.execute(req.params["bankId"]!);
+        const detail = await this.getBank.execute({
+          organizationId: req.auth!.orgId,
+          id: req.params["bankId"]!,
+        });
         if (!detail) {
           res.status(404).json({ error: "Bank not found" });
           return;
@@ -113,7 +119,13 @@ export class BankAccountsController {
     this.router.patch("/bank-accounts/banks/:bankId", async (req, res) => {
       try {
         const body = req.body as Record<string, unknown>;
-        const bank = await this.updateBank.execute({ id: req.params["bankId"]!, ...body as object });
+        // Trusted fields spread last so a body containing `organizationId`
+        // or `id` can never override the caller's own values.
+        const bank = await this.updateBank.execute({
+          ...body as object,
+          organizationId: req.auth!.orgId,
+          id: req.params["bankId"]!,
+        });
         res.json(bank);
       } catch (e) {
         if (e instanceof BankNotFoundError) {
@@ -130,7 +142,7 @@ export class BankAccountsController {
      */
     this.router.delete("/bank-accounts/banks/:bankId", async (req, res) => {
       try {
-        await this.deleteBank.execute(req.params["bankId"]!);
+        await this.deleteBank.execute({ organizationId: req.auth!.orgId, id: req.params["bankId"]! });
         res.status(204).send();
       } catch (e) {
         if (e instanceof BankNotFoundError) {
@@ -158,6 +170,7 @@ export class BankAccountsController {
           return;
         }
         const account = await this.createBankAccount.execute({
+          organizationId: req.auth!.orgId,
           bankId: req.params["bankId"]!,
           type: body["type"] as import("../../domain/entities/bank-account.js").BankAccountType,
           nickname: (body["nickname"] as string | undefined) ?? null,
@@ -185,7 +198,10 @@ export class BankAccountsController {
      */
     this.router.get("/bank-accounts/:accountId", async (req, res) => {
       try {
-        const account = await this.getBankAccount.execute(req.params["accountId"]!);
+        const account = await this.getBankAccount.execute({
+          organizationId: req.auth!.orgId,
+          id: req.params["accountId"]!,
+        });
         if (!account) {
           res.status(404).json({ error: "Bank account not found" });
           return;
@@ -203,11 +219,14 @@ export class BankAccountsController {
     this.router.patch("/bank-accounts/:accountId", async (req, res) => {
       try {
         const body = req.body as Record<string, unknown>;
+        // Trusted fields spread last so a body containing `organizationId`
+        // or `id` can never override the caller's own values.
         const account = await this.updateBankAccount.execute({
-          id: req.params["accountId"]!,
           ...body as object,
           ...(body["creditLimitCents"] != null ? { creditLimitCents: Number(body["creditLimitCents"]) } : {}),
           ...(body["billingCycleDay"] != null ? { billingCycleDay: Number(body["billingCycleDay"]) } : {}),
+          organizationId: req.auth!.orgId,
+          id: req.params["accountId"]!,
         });
         res.json(account);
       } catch (e) {
@@ -225,7 +244,10 @@ export class BankAccountsController {
      */
     this.router.delete("/bank-accounts/:accountId", async (req, res) => {
       try {
-        await this.deleteBankAccount.execute(req.params["accountId"]!);
+        await this.deleteBankAccount.execute({
+          organizationId: req.auth!.orgId,
+          id: req.params["accountId"]!,
+        });
         res.status(204).send();
       } catch (e) {
         if (e instanceof BankAccountNotFoundError) {

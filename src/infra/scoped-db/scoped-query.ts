@@ -68,11 +68,17 @@ export class ScopedQuery {
        * of being parsed from the column list — callers already cast the
        * result to their own row shape (see e.g. the reference module's
        * repositories), so this loses nothing in practice.
+       *
+       * `options` forwards straight to the native `select` (`head`/`count`)
+       * so a converted call site that only wants a row count — e.g.
+       * `.select("id", { count: "exact", head: true })` — keeps working
+       * unchanged, per D1's "counts ... keep working unchanged" (bank-accounts,
+       * spec B2 ticket 02, was the first converted call site to need this).
        */
-      select(columns?: string) {
+      select(columns?: string, options?: { head?: boolean; count?: "exact" | "planned" | "estimated" }) {
         return client
           .from(name)
-          .select(columns)
+          .select(columns, options)
           .eq(entry.organizationColumn, organizationId);
       },
 

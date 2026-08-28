@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import {
   BankAccount,
   type BankAccountType,
@@ -25,11 +26,16 @@ function toEntity(row: Record<string, unknown>): BankAccount {
   });
 }
 
+/**
+ * Never holds a `SupabaseClient` — receives the scoped-query factory at
+ * composition time (D2) and builds a scoped helper per call, per the
+ * pattern this module establishes (see the module README's Ports section).
+ */
 export class SupabaseBankAccountRepository implements BankAccountRepositoryPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async save(account: BankAccount): Promise<void> {
-    const { error } = await this.supabase.from("bank_accounts").insert({
+  async save(organizationId: OrganizationId, account: BankAccount): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("bank_accounts").insert({
       id: account.id,
       bank_id: account.bankId,
       type: account.type,
@@ -48,46 +54,49 @@ export class SupabaseBankAccountRepository implements BankAccountRepositoryPort 
     if (error) throw new Error(error.message);
   }
 
-  async findById(id: string): Promise<BankAccount | null> {
-    const { data, error } = await this.supabase
-      .from("bank_accounts")
+  async findById(organizationId: OrganizationId, id: string): Promise<BankAccount | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("bank_accounts")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async findByBankId(bankId: string): Promise<BankAccount[]> {
-    const { data, error } = await this.supabase
-      .from("bank_accounts")
+  async findByBankId(organizationId: OrganizationId, bankId: string): Promise<BankAccount[]> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("bank_accounts")
       .select("*")
       .eq("bank_id", bankId)
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toEntity(r));
   }
 
-  async findByAccountNumber(raw: string): Promise<BankAccount | null> {
+  async findByAccountNumber(
+    organizationId: OrganizationId,
+    raw: string,
+  ): Promise<BankAccount | null> {
     const normalised = raw.trim().replace(/\s+/g, "").toUpperCase();
     // Try IBAN first, then account_number — case-insensitive via ilike
-    const { data, error } = await this.supabase
-      .from("bank_accounts")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("bank_accounts")
       .select("*")
       .or(`iban.ilike.${normalised},account_number.ilike.${normalised}`)
       .eq("is_active", true)
       .limit(1);
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) return null;
-    const account = toEntity(data[0] as Record<string, unknown>);
+    const account = toEntity(data[0] as unknown as Record<string, unknown>);
     // Double-check with the domain logic (handles whitespace in stored values)
     return account.matchesAccountNumber(raw) ? account : null;
   }
 
-  async update(account: BankAccount): Promise<void> {
-    const { error } = await this.supabase
-      .from("bank_accounts")
+  async update(organizationId: OrganizationId, account: BankAccount): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("bank_accounts")
       .update({
         nickname: account.nickname,
         iban: account.iban,
@@ -104,14 +113,17 @@ export class SupabaseBankAccountRepository implements BankAccountRepositoryPort 
     if (error) throw new Error(error.message);
   }
 
-  async delete(id: string): Promise<void> {
-    const { error } = await this.supabase.from("bank_accounts").delete().eq("id", id);
+  async delete(organizationId: OrganizationId, id: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("bank_accounts")
+      .delete()
+      .eq("id", id);
     if (error) throw new Error(error.message);
   }
 
-  async countStatements(accountId: string): Promise<number> {
-    const { count, error } = await this.supabase
-      .from("bank_statement_imports")
+  async countStatements(organizationId: OrganizationId, accountId: string): Promise<number> {
+    const { count, error } = await this.scopedQuery(organizationId)
+      .table("bank_statement_imports")
       .select("id", { count: "exact", head: true })
       .eq("bank_account_id", accountId);
     if (error) throw new Error(error.message);

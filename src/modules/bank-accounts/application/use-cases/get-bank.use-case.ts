@@ -1,6 +1,6 @@
 import type { BankRepositoryPort } from "../../domain/ports/out/bank-repository.port.js";
 import type { BankAccountRepositoryPort } from "../../domain/ports/out/bank-account-repository.port.js";
-import type { GetBankPort, BankDetailDto } from "../../domain/ports/in/bank-accounts.ports.js";
+import type { GetBankPort, GetBankQuery, BankDetailDto } from "../../domain/ports/in/bank-accounts.ports.js";
 import type { BankAccount } from "../../domain/entities/bank-account.js";
 
 function accountToDto(a: BankAccount) {
@@ -28,10 +28,11 @@ export class GetBankUseCase implements GetBankPort {
     private readonly accountRepo: BankAccountRepositoryPort
   ) {}
 
-  async execute(id: string): Promise<BankDetailDto | null> {
-    const bank = await this.bankRepo.findById(id);
+  async execute(query: GetBankQuery): Promise<BankDetailDto | null> {
+    const { organizationId, id } = query;
+    const bank = await this.bankRepo.findById(organizationId, id);
     if (!bank) return null;
-    const accounts = await this.accountRepo.findByBankId(id);
+    const accounts = await this.accountRepo.findByBankId(organizationId, id);
     return {
       id: bank.id,
       name: bank.name,

@@ -1,6 +1,6 @@
 import type { BankRepositoryPort } from "../../domain/ports/out/bank-repository.port.js";
 import type { BankAccountRepositoryPort } from "../../domain/ports/out/bank-account-repository.port.js";
-import type { DeleteBankPort } from "../../domain/ports/in/bank-accounts.ports.js";
+import type { DeleteBankCommand, DeleteBankPort } from "../../domain/ports/in/bank-accounts.ports.js";
 import { BankNotFoundError, BankHasAccountsError } from "../../domain/errors.js";
 
 export class DeleteBankUseCase implements DeleteBankPort {
@@ -9,11 +9,12 @@ export class DeleteBankUseCase implements DeleteBankPort {
     private readonly accountRepo: BankAccountRepositoryPort,
   ) {}
 
-  async execute(id: string): Promise<void> {
-    const bank = await this.repo.findById(id);
+  async execute(command: DeleteBankCommand): Promise<void> {
+    const { organizationId, id } = command;
+    const bank = await this.repo.findById(organizationId, id);
     if (!bank) throw new BankNotFoundError(id);
-    const accounts = await this.accountRepo.findByBankId(id);
+    const accounts = await this.accountRepo.findByBankId(organizationId, id);
     if (accounts.length > 0) throw new BankHasAccountsError(id);
-    await this.repo.delete(id);
+    await this.repo.delete(organizationId, id);
   }
 }

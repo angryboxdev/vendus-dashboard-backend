@@ -14,6 +14,7 @@ import { TABLE_REGISTRY } from "../table-registry.js";
 interface RecordedFrom {
   table: string;
   selectColumns?: string;
+  selectOptions?: unknown;
   insertValues?: unknown;
   upsertValues?: unknown;
   upsertOptions?: unknown;
@@ -31,8 +32,9 @@ function fakeSupabaseClient() {
       froms.push(record);
 
       const builder = {
-        select(columns?: string) {
+        select(columns?: string, options?: unknown) {
           record.selectColumns = columns;
+          record.selectOptions = options;
           return builder;
         },
         insert(values: unknown) {
@@ -86,6 +88,15 @@ describe("ScopedQuery", () => {
     expect(froms[0]?.table).toBe("stock_items");
     expect(froms[0]?.selectColumns).toBe("id, name");
     expect(froms[0]?.eqCalls).toEqual([["org_id", "org-a"]]);
+  });
+
+  it("a select forwards head/count options to the native builder", () => {
+    const { client, froms } = fakeSupabaseClient();
+    const scoped = ScopedQuery.create(orgA, client);
+
+    scoped.table("stock_items").select("id", { count: "exact", head: true });
+
+    expect(froms[0]?.selectOptions).toEqual({ count: "exact", head: true });
   });
 
   it("an update carries the organization filter and composes with a later identifier filter", () => {

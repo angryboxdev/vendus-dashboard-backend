@@ -21,7 +21,7 @@ export class CreateBankUseCase implements CreateBankPort {
 
   async execute(command: CreateBankCommand): Promise<BankDto> {
     const bank = Bank.create(command);
-    await this.repo.save(bank);
+    await this.repo.save(command.organizationId, bank);
     return toDto(bank);
   }
 }

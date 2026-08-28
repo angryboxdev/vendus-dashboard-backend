@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach } from "@jest/globals";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateBankUseCase } from "../../application/use-cases/create-bank.use-case.js";
 import { FakeBankRepository } from "../fakes/fake-bank-repository.js";
 
 describe("CreateBankUseCase", () => {
+  const organizationId = mintOrganizationId("org-a");
   let repo: FakeBankRepository;
   let useCase: CreateBankUseCase;
 
@@ -13,6 +15,7 @@ describe("CreateBankUseCase", () => {
 
   it("creates and persists a bank", async () => {
     const result = await useCase.execute({
+      organizationId,
       name: "Millennium BCP",
       logoKey: "millennium_bcp",
       color: "#1A5276",
@@ -22,12 +25,13 @@ describe("CreateBankUseCase", () => {
     expect(result.id).toBeDefined();
     expect(result.name).toBe("Millennium BCP");
     expect(result.bic).toBeNull();
-    const stored = await repo.findById(result.id);
+    const stored = await repo.findById(organizationId, result.id);
     expect(stored).not.toBeNull();
   });
 
   it("persists optional BIC", async () => {
     const result = await useCase.execute({
+      organizationId,
       name: "CGD",
       logoKey: "cgd",
       color: "#003F7F",
@@ -41,6 +45,7 @@ describe("CreateBankUseCase", () => {
   it("rejects invalid hex color", async () => {
     await expect(
       useCase.execute({
+        organizationId,
         name: "Test",
         logoKey: "other",
         color: "red",

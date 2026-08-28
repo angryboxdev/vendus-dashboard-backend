@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "@jest/globals";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateBankAccountUseCase } from "../../application/use-cases/create-bank-account.use-case.js";
 import { FakeBankRepository } from "../fakes/fake-bank-repository.js";
 import { FakeBankAccountRepository } from "../fakes/fake-bank-account-repository.js";
@@ -15,6 +16,7 @@ function makeBank() {
 }
 
 describe("CreateBankAccountUseCase", () => {
+  const organizationId = mintOrganizationId("org-a");
   let bankRepo: FakeBankRepository;
   let accountRepo: FakeBankAccountRepository;
   let useCase: CreateBankAccountUseCase;
@@ -25,11 +27,12 @@ describe("CreateBankAccountUseCase", () => {
     accountRepo = new FakeBankAccountRepository();
     useCase = new CreateBankAccountUseCase(bankRepo, accountRepo);
     bank = makeBank();
-    await bankRepo.save(bank);
+    await bankRepo.save(organizationId, bank);
   });
 
   it("creates a checking account under an existing bank", async () => {
     const result = await useCase.execute({
+      organizationId,
       bankId: bank.id,
       type: "account",
       iban: "PT50000201231234567890154",
@@ -43,6 +46,7 @@ describe("CreateBankAccountUseCase", () => {
 
   it("creates a credit card", async () => {
     const result = await useCase.execute({
+      organizationId,
       bankId: bank.id,
       type: "credit_card",
       lastFourDigits: "4242",
@@ -55,13 +59,20 @@ describe("CreateBankAccountUseCase", () => {
 
   it("throws BankNotFoundError for unknown bank", async () => {
     await expect(
-      useCase.execute({ bankId: "unknown", type: "account" })
+      useCase.execute({ organizationId, bankId: "unknown", type: "account" })
+    ).rejects.toThrow("Bank not found");
+  });
+
+  it("throws BankNotFoundError when the bank belongs to another organization", async () => {
+    const otherOrganizationId = mintOrganizationId("org-b");
+    await expect(
+      useCase.execute({ organizationId: otherOrganizationId, bankId: bank.id, type: "account" })
     ).rejects.toThrow("Bank not found");
   });
 
   it("throws on invalid lastFourDigits", async () => {
     await expect(
-      useCase.execute({ bankId: bank.id, type: "credit_card", lastFourDigits: "12" })
+      useCase.execute({ organizationId, bankId: bank.id, type: "credit_card", lastFourDigits: "12" })
     ).rejects.toThrow("4 digits");
   });
 });
