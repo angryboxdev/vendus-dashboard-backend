@@ -3,7 +3,7 @@ import type {
   PaymentCreateBody,
   PaymentUpdateBody,
 } from "../domain/hrTypes.js";
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/supabaseClient.js";
+import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
 import { DateTime } from "luxon";
 import { REPORT_TIMEZONE } from "../utils/lisbonDayInstants.js";
 

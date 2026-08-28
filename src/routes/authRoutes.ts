@@ -1,8 +1,10 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { getSupabaseServiceRole } from "../infra/supabaseClient.js";
+import { authAdmin } from "../infra/scoped-db/auth-admin.js";
+import { listMembershipsForUser } from "../infra/scoped-db/membership-lookup.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 
 export const authRoutes = Router();
 
@@ -22,6 +24,32 @@ const updateUserSchema = z.object({
 });
 
 /**
+ * `org_members` row shapes read through the scoped-query helper.
+ *
+ * The helper's `select()` is deliberately typed as a plain `string`, not a
+ * literal (see `ScopedQuery`'s own doc comment for why), so the builder
+ * can't parse a row shape from the column list and its result types as the
+ * client's untyped fallback. Every read below casts through one of these two
+ * shapes instead of repeating the cast inline at each call site.
+ */
+interface MembershipRow {
+  role: string;
+  created_at: string;
+  updated_at: string;
+}
+interface MembershipRowWithUserId extends MembershipRow {
+  user_id: string;
+}
+
+function asMembershipRow(data: unknown): MembershipRow {
+  return data as MembershipRow;
+}
+
+function asMembershipRowsWithUserId(data: unknown): MembershipRowWithUserId[] {
+  return (data as MembershipRowWithUserId[] | null) ?? [];
+}
+
+/**
  * Resolves emails for a set of `auth.users` ids via the paginated admin user
  * listing. PostgREST cannot join into the `auth` schema, so the user listing
  * below joins `org_members` against this in memory (D4/ticket 04). A
@@ -29,16 +57,13 @@ const updateUserSchema = z.object({
  * case — but this still walks every page until every id is found or the
  * listing is exhausted, rather than assuming one page is enough.
  */
-async function resolveEmailsById(
-  supabase: SupabaseClient,
-  ids: Set<string>,
-): Promise<Map<string, string>> {
+async function resolveEmailsById(ids: Set<string>): Promise<Map<string, string>> {
   const emailsById = new Map<string, string>();
   const perPage = 1000;
   let page = 1;
 
   while (emailsById.size < ids.size) {
-    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+    const { data, error } = await authAdmin.listUsers(page, perPage);
     if (error) throw new Error(error.message);
 
     for (const user of data.users) {
@@ -53,23 +78,19 @@ async function resolveEmailsById(
 }
 
 /**
- * Membership row for (orgId, userId), or null when the user is not a member
- * of that organization — including when the identifier doesn't exist at all.
- * Callers turn null into a generic 404 so a guessed id reveals nothing (D8).
+ * Membership row for the caller's organization and the given user, or null
+ * when the user is not a member of that organization — including when the
+ * identifier doesn't exist at all. Callers turn null into a generic 404 so a
+ * guessed id reveals nothing (D8).
  */
-async function findMembership(
-  supabase: SupabaseClient,
-  orgId: string,
-  userId: string,
-): Promise<{ role: string; created_at: string; updated_at: string } | null> {
-  const { data, error } = await supabase
-    .from("org_members")
+async function findMembership(orgId: OrganizationId, userId: string): Promise<MembershipRow | null> {
+  const { data, error } = await createScopedQuery(orgId)
+    .table("org_members")
     .select("role, created_at, updated_at")
-    .eq("org_id", orgId)
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return data ?? null;
+  return data ? asMembershipRow(data) : null;
 }
 
 // GET /api/auth/me — utilizador autenticado actual
@@ -84,19 +105,16 @@ authRoutes.get("/me", (req: Request, res: Response) => {
 // GET /api/auth/users — lista utilizadores da organização do chamador
 authRoutes.get("/users", async (req: Request, res: Response) => {
   try {
-    const supabase = getSupabaseServiceRole();
-    if (!supabase) { jsonError(res, 503, "Supabase indisponível"); return; }
-
-    const { data: members, error } = await supabase
-      .from("org_members")
+    const { data, error } = await createScopedQuery(req.auth!.orgId)
+      .table("org_members")
       .select("user_id, role, created_at, updated_at")
-      .eq("org_id", req.auth!.orgId)
       .order("created_at", { ascending: true });
 
     if (error) { jsonError(res, 500, error.message); return; }
-    if (!members || members.length === 0) { res.json([]); return; }
+    const members = asMembershipRowsWithUserId(data);
+    if (members.length === 0) { res.json([]); return; }
 
-    const emailsById = await resolveEmailsById(supabase, new Set(members.map((m) => m.user_id)));
+    const emailsById = await resolveEmailsById(new Set(members.map((m) => m.user_id)));
 
     res.json(
       members.map((m) => ({
@@ -121,11 +139,9 @@ authRoutes.post("/users", async (req: Request, res: Response) => {
       return;
     }
     const { email, password, role } = parsed.data;
-    const supabase = getSupabaseServiceRole();
-    if (!supabase) { jsonError(res, 503, "Supabase indisponível"); return; }
 
     // Criar na Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+    const { data: authData, error: authError } = await authAdmin.createUser({
       email,
       password,
       email_confirm: true,
@@ -138,19 +154,20 @@ authRoutes.post("/users", async (req: Request, res: Response) => {
 
     const userId = authData.user.id;
 
-    // Criar a membership na organização do chamador
-    const { data, error } = await supabase
-      .from("org_members")
-      .insert({ org_id: req.auth!.orgId, user_id: userId, role })
+    // Criar a membership na organização do chamador — stamped pelo helper.
+    const { data: inserted, error } = await createScopedQuery(req.auth!.orgId)
+      .table("org_members")
+      .insert({ user_id: userId, role })
       .select("role, created_at, updated_at")
       .single();
 
     if (error) {
       // Tentar limpar o utilizador criado no Auth para não deixar órfãos
-      await supabase.auth.admin.deleteUser(userId);
+      await authAdmin.deleteUser(userId);
       jsonError(res, 500, error.message);
       return;
     }
+    const data = asMembershipRow(inserted);
     res.status(201).json({
       id: userId,
       email,
@@ -177,33 +194,31 @@ authRoutes.patch("/users/:id", async (req: Request, res: Response) => {
       jsonError(res, 400, "Indica role e/ou password para actualizar");
       return;
     }
-    const supabase = getSupabaseServiceRole();
-    if (!supabase) { jsonError(res, 503, "Supabase indisponível"); return; }
 
     // Não-membro comporta-se como inexistente, real ou não (D8).
-    const membership = await findMembership(supabase, req.auth!.orgId, id);
+    const membership = await findMembership(req.auth!.orgId, id);
     if (!membership) { jsonError(res, 404, "Utilizador não encontrado"); return; }
 
     // Actualizar password se fornecida
     if (password) {
-      const { error: pwError } = await supabase.auth.admin.updateUserById(id, { password });
+      const { error: pwError } = await authAdmin.updateUserPassword(id, password);
       if (pwError) { jsonError(res, 500, pwError.message); return; }
     }
 
-    const { data: authUser, error: authUserError } = await supabase.auth.admin.getUserById(id);
+    const { data: authUser, error: authUserError } = await authAdmin.getUserById(id);
     if (authUserError || !authUser.user) { jsonError(res, 404, "Utilizador não encontrado"); return; }
 
-    // Actualizar role se fornecido
+    // Actualizar role se fornecido — filtrado e stamped pelo helper.
     if (role) {
-      const { data, error } = await supabase
-        .from("org_members")
+      const { data: updated, error } = await createScopedQuery(req.auth!.orgId)
+        .table("org_members")
         .update({ role, updated_at: new Date().toISOString() })
-        .eq("org_id", req.auth!.orgId)
         .eq("user_id", id)
         .select("role, created_at, updated_at")
         .single();
 
       if (error) { jsonError(res, 500, error.message); return; }
+      const data = asMembershipRow(updated);
       res.json({
         id,
         email: authUser.user.email ?? "",
@@ -239,30 +254,26 @@ authRoutes.delete("/users/:id", async (req: Request, res: Response) => {
       return;
     }
 
-    const supabase = getSupabaseServiceRole();
-    if (!supabase) { jsonError(res, 503, "Supabase indisponível"); return; }
-
     // Não-membro comporta-se como inexistente, real ou não (D8).
-    const membership = await findMembership(supabase, req.auth!.orgId, id);
+    const membership = await findMembership(req.auth!.orgId, id);
     if (!membership) { jsonError(res, 404, "Utilizador não encontrado"); return; }
 
-    const { error: deleteMembershipError } = await supabase
-      .from("org_members")
+    const { error: deleteMembershipError } = await createScopedQuery(req.auth!.orgId)
+      .table("org_members")
       .delete()
-      .eq("org_id", req.auth!.orgId)
       .eq("user_id", id);
     if (deleteMembershipError) { jsonError(res, 500, deleteMembershipError.message); return; }
 
-    // Só elimina a conta se esta era a última membership da pessoa —
-    // revogar aqui não pode tocar no acesso noutra organização (D8/spec §removal rule).
-    const { count, error: countError } = await supabase
-      .from("org_members")
-      .select("user_id", { count: "exact", head: true })
-      .eq("user_id", id);
-    if (countError) { jsonError(res, 500, countError.message); return; }
+    // Só elimina a conta se esta era a última membership da pessoa — em
+    // QUALQUER organização, não só na do chamador — revogar aqui não pode
+    // tocar no acesso a outra organização (D8/spec §removal rule). Esta é a
+    // segunda consumidora do único primitivo unscoped (D10): saber se a
+    // pessoa pertence a alguma organização é inerentemente uma pergunta
+    // cross-tenant.
+    const remaining = await listMembershipsForUser(id);
 
-    if (!count) {
-      const { error: deleteUserError } = await supabase.auth.admin.deleteUser(id);
+    if (remaining.length === 0) {
+      const { error: deleteUserError } = await authAdmin.deleteUser(id);
       if (deleteUserError) {
         const status = deleteUserError.message.toLowerCase().includes("not found") ? 404 : 500;
         jsonError(res, status, deleteUserError.message);

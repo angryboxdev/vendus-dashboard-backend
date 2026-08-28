@@ -1,4 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
+import { mintOrganizationId, type OrganizationId } from "../kernel/organization-id.js";
 
 /**
  * The auth middleware factory, decoupled from any concrete I/O (D10).
@@ -7,7 +8,10 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
  * seam meant to be unit-tested with fakes, and importing either of those
  * here would drag real network/DB machinery (and `jose`'s ESM-only build)
  * into that test. The real collaborators are wired in `auth.ts`, which
- * imports from this file rather than the other way around.
+ * imports from this file rather than the other way around. Importing the
+ * kernel's `OrganizationId`/`mintOrganizationId` is safe here — the kernel
+ * itself imports nothing (D7) — and this is one of the spec's exactly two
+ * mint call sites.
  */
 
 export type AppRole = "admin" | "manager" | "hr_viewer";
@@ -16,8 +20,8 @@ export type AppRole = "admin" | "manager" | "hr_viewer";
 export interface AuthPayload {
   sub: string;
   email: string;
-  /** Verified organization this request is acting for (D11). */
-  orgId: string;
+  /** Verified organization this request is acting for (D11/D7). */
+  orgId: OrganizationId;
   /** Role held within `orgId` — org-scoped, per ADR-0003. */
   orgRole: AppRole;
 }
@@ -108,7 +112,7 @@ export async function resolveAuth(
       payload: {
         sub: claims.sub,
         email: claims.email,
-        orgId: claims.orgId,
+        orgId: mintOrganizationId(claims.orgId),
         orgRole: claims.role,
       },
     };
@@ -124,7 +128,7 @@ export async function resolveAuth(
     payload: {
       sub: claims.sub,
       email: claims.email,
-      orgId: membership.orgId,
+      orgId: mintOrganizationId(membership.orgId),
       orgRole: membership.role,
     },
   };

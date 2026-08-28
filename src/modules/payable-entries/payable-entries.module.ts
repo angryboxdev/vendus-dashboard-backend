@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Router } from "express";
-import { getSupabaseServiceRole } from "../../infra/supabaseClient.js";
+import { getSupabaseServiceRole } from "../../infra/scoped-db/supabase-client.js";
 import { SupabasePayableEntryRepository } from "./adapters/out/supabase-payable-entry.repository.js";
 import { SupabaseInvoiceReadAdapter } from "./adapters/out/supabase-invoice-read.adapter.js";
 import { CreatePayableEntryUseCase } from "./application/use-cases/create-payable-entry.use-case.js";

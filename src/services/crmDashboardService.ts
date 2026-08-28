@@ -1,4 +1,4 @@
-import { getSupabaseServiceRole } from "../infra/supabaseClient.js";
+import { getSupabaseServiceRole } from "../infra/scoped-db/supabase-client.js";
 import { listCustomers, enrichCustomer } from "./crmCustomerService.js";
 import type { CrmCustomerEnriched } from "../domain/crmTypes.js";
 

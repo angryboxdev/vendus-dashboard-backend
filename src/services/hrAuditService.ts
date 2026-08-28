@@ -4,7 +4,7 @@
  * never breaks the main operation.
  */
 
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/supabaseClient.js";
+import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
 
 export type AuditEntityType = "employee" | "shift" | "payment" | "attendance";
 

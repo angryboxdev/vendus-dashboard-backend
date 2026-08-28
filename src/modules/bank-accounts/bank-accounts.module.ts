@@ -1,5 +1,5 @@
 import type { Router } from "express";
-import { getSupabaseServiceRole } from "../../infra/supabaseClient.js";
+import { getSupabaseServiceRole } from "../../infra/scoped-db/supabase-client.js";
 
 // Adapters out
 import { SupabaseBankRepository } from "./adapters/out/supabase-bank.repository.js";

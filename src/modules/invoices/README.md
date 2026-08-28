@@ -185,7 +185,7 @@ reconciliação ou relatórios financeiros.
 - **`FinancialBaseSupplierCreateAdapter`** → delega criação de fornecedor ao financial-base.
 - `SupabaseClassificationRuleRepository` → tabela `classification_rules`.
 - `SupabasePayableEntryWriteAdapter` → tabela `payable_entries`.
-- **`SupabaseDocumentStorageAdapter`** → bucket Supabase Storage `invoice-documents`.
+- **`SupabaseDocumentStorageAdapter`** → bucket Supabase Storage `invoice-documents`. Não recebe `SupabaseClient` no construtor: delega para o wrapper `objectStorage` de `src/infra/scoped-db/` (spec B2 ticket 01/D10) — esse folder é o único lugar em `src/**` autorizado a importar `@supabase/supabase-js`.
 - **`SupabaseSupplierLookupAdapter`** → tabela `suppliers` (NIF + defaults).
 - **`OpenAiExtractionAdapter`** → GPT-4o Vision, devolve JSON estruturado.
 

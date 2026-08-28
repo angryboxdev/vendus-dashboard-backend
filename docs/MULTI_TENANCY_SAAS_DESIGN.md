@@ -47,7 +47,8 @@ alter table public.hr_employees enable row level security;
 RLS enabled with **zero policies** means deny-everything in Postgres. That was a
 deliberate privacy lock: salary and employee data must be unreachable with the anon
 key the browser holds. The service role was the only key that fits — hence the
-comment *"usar só no servidor para módulo RH"* in `src/infra/supabaseClient.ts`.
+comment *"usar só no servidor para módulo RH"* in `src/infra/scoped-db/supabase-client.ts`
+(moved there from `src/infra/supabaseClient.ts` by spec B2 ticket 01, D10).
 
 Every other table got `"Allow read for anon"` — wide open — so those modules *could*
 have used the anon client. The service role leaked into them anyway (7 modules +

@@ -1,4 +1,4 @@
-import { getSupabaseServiceRole } from "../infra/supabaseClient.js";
+import { getSupabaseServiceRole } from "../infra/scoped-db/supabase-client.js";
 import type {
   ContactCreateBody,
   CrmContact,

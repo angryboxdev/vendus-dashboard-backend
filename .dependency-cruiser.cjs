@@ -44,10 +44,50 @@ module.exports = {
       from: {},
       to: { circular: true },
     },
+    {
+      name: "kernel-e-puro",
+      comment:
+        "O shared kernel (src/kernel) não importa nada do resto de src/** — " +
+        "isto é o que o impede de se tornar uma gaveta de miscelânea " +
+        "(spec B2 ticket 01, D7).",
+      severity: "error",
+      from: { path: "^src/kernel" },
+      to: { path: "^src/(?!kernel)" },
+    },
+    {
+      name: "supabase-so-no-scoped-db",
+      comment:
+        "Só o folder do scoped-query helper (src/infra/scoped-db) pode importar " +
+        "o cliente Supabase — o pacote @supabase/supabase-js ou o factory interno " +
+        "(src/infra/scoped-db/supabase-client.ts). Um ficheiro que não consegue " +
+        "obter um client não consegue construir uma query sem organização, " +
+        "independentemente de aliasing, re-export ou uma chain montada em vários " +
+        "statements (ADR-0007/0008, spec B2 D10). Excepção por nome, não por " +
+        "folder: runOrganizationProvisioning cria a organização que o escopiaria " +
+        "e é inatingível a partir do request path (spec B1 D7) — os outros dois " +
+        "jobs escrevem dados de tenant e passam pelo helper como tudo o resto. " +
+        "Ships at warn: reporta centenas de violações no dia 1 (os 371 sites que " +
+        "ainda não foram convertidos); promovido a error no ticket 20, a zero " +
+        "violações.",
+      severity: "warn",
+      from: {
+        path: "^src",
+        pathNot: ["^src/infra/scoped-db", "^src/jobs/runOrganizationProvisioning\\.ts$"],
+      },
+      to: {
+        path: "(^src/infra/scoped-db/supabase-client\\.ts$|node_modules/@supabase/supabase-js)",
+      },
+    },
   ],
   options: {
     doNotFollow: { path: "node_modules" },
     tsConfig: { fileName: "tsconfig.json" },
     enhancedResolveOptions: { extensions: [".ts", ".tsx", ".js"] },
+    // Sem isto, um `import type { SupabaseClient } from "@supabase/supabase-js"`
+    // — a forma como a maioria dos adapters hexagonais tipa o client injectado
+    // — desaparece antes da compilação (verbatimModuleSyntax) e nunca aparece
+    // como aresta de dependência. A regra `supabase-so-no-scoped-db` depende
+    // de o ver.
+    tsPreCompilationDeps: true,
   },
 };

@@ -1,4 +1,4 @@
-import { getSupabaseServiceRole } from "../infra/supabaseClient.js";
+import { getSupabaseServiceRole } from "../infra/scoped-db/supabase-client.js";
 import { calculateSegment } from "../domain/crmSegmentEngine.js";
 import { calculateNextFollowUp } from "../domain/crmFollowUpEngine.js";
 import { resolveCrmMetrics } from "../domain/crmMetrics.js";

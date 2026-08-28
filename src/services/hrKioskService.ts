@@ -1,7 +1,7 @@
 import { DateTime } from "luxon";
 import { ENV } from "../config/env.js";
 import { type KioskScanBody, type KioskScanResult } from "../domain/hrTypes.js";
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/supabaseClient.js";
+import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
 import { formatHrTimeForApi, normalizeTimeForPg } from "../utils/hrTime.js";
 import { generateDailyToken, hashPin, verifyDailyToken } from "../utils/kiosk.js";
 import { REPORT_TIMEZONE } from "../utils/lisbonDayInstants.js";

@@ -1,4 +1,4 @@
-import { getSupabase, isSupabaseConfigured } from "../infra/supabaseClient.js";
+import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
 import type { PizzaSize } from "../domain/pizzaTypes.js";
 
 /** Erro do Supabase ao ler mapeamento (rede/URL); não é a API Vendus. */

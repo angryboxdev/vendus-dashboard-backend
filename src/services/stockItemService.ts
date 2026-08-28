@@ -5,7 +5,7 @@ import type {
   StockItemType,
   StockItemUpdateBody,
 } from "../domain/stockTypes.js";
-import { getSupabase, isSupabaseConfigured } from "../infra/supabaseClient.js";
+import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
 
 type Row = {
   id: string;

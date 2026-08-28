@@ -48,11 +48,14 @@ function run(label, cmd) {
 
 let problems = "";
 
-// 1) Fronteiras da arquitetura (domain não pode importar de adapters/infra).
+// 1) Fronteiras da arquitetura (domain não pode importar de adapters/infra) —
+//    corre sobre TODA a árvore de código-fonte, não só o módulo alterado
+//    (spec B2 ticket 01/D18): regras como `supabase-so-no-scoped-db` só fazem
+//    sentido vistas globalmente, e escopar isto a um módulo nunca as veria.
 problems +=
   run(
     "Lint de fronteiras (dependency-cruiser)",
-    `npx depcruise src/modules/${moduleName} --config .dependency-cruiser.cjs`,
+    `npx depcruise src --config .dependency-cruiser.cjs`,
   ) || "";
 
 // 2) Testes do módulo afetado.

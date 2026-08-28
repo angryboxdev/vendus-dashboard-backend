@@ -19,7 +19,7 @@ import {
 } from "../services/dreCustosVariaveisService.js";
 
 import { Router } from "express";
-import { isSupabaseConfigured } from "../infra/supabaseClient.js";
+import { isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
 import { getDreKpis } from "../services/dreKpisService.js";
 import { getReceitaBruta } from "../services/dreReceitaBrutaService.js";
 

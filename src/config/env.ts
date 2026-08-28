@@ -1,5 +1,5 @@
-import dotenv from "dotenv";
-dotenv.config();
+import { config as loadDotenv } from "dotenv";
+loadDotenv();
 
 function must<T>(value: T | undefined | null, name: string): T {
   if (value === undefined || value === null || value === "") {

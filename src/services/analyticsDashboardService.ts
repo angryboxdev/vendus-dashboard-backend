@@ -3,7 +3,7 @@ import { fetchAllDocuments } from "./documentsService.js";
 import { ENV } from "../config/env.js";
 import type { VendusDocument } from "../domain/types.js";
 import { toCents, fromCents } from "../utils/numbers.js";
-import { getSupabaseServiceRole } from "../infra/supabaseClient.js";
+import { getSupabaseServiceRole } from "../infra/scoped-db/supabase-client.js";
 
 const LISBON = "Europe/Lisbon";
 const PER_PAGE = 200;
