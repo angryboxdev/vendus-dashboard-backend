@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import {
   RecurrenceOccurrence,
   type OccurrenceStatus,
@@ -50,45 +51,55 @@ function toRow(o: RecurrenceOccurrence): Record<string, unknown> {
   };
 }
 
+/**
+ * Never holds a `SupabaseClient` — receives the scoped-query factory at
+ * composition time (D2) and builds a scoped helper per call. Batch
+ * generation (`GenerateBatchOccurrencesUseCase`) calls `save` once per
+ * generated occurrence, each going through this same scoped helper, so every
+ * row in the "bulk" is stamped by the helper rather than by a hand-written
+ * `org_id` field on the row (see `toRow` above, which never sets one).
+ */
 export class SupabaseOccurrenceRepository implements OccurrenceRepositoryPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async save(occurrence: RecurrenceOccurrence): Promise<void> {
-    const { error } = await this.supabase.from("recurring_occurrences").insert(toRow(occurrence));
+  async save(organizationId: OrganizationId, occurrence: RecurrenceOccurrence): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("recurring_occurrences")
+      .insert(toRow(occurrence));
     if (error) throw new Error(error.message);
   }
 
-  async delete(id: string): Promise<void> {
-    const { error } = await this.supabase
-      .from("recurring_occurrences")
+  async delete(organizationId: OrganizationId, id: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("recurring_occurrences")
       .delete()
       .eq("id", id);
     if (error) throw new Error(error.message);
   }
 
-  async update(occurrence: RecurrenceOccurrence): Promise<void> {
+  async update(organizationId: OrganizationId, occurrence: RecurrenceOccurrence): Promise<void> {
     const { id, created_at, recurrence_id, ...rest } = toRow(occurrence);
-    const { error } = await this.supabase
-      .from("recurring_occurrences")
+    const { error } = await this.scopedQuery(organizationId)
+      .table("recurring_occurrences")
       .update(rest)
       .eq("id", id);
     if (error) throw new Error(error.message);
   }
 
-  async findById(id: string): Promise<RecurrenceOccurrence | null> {
-    const { data, error } = await this.supabase
-      .from("recurring_occurrences")
+  async findById(organizationId: OrganizationId, id: string): Promise<RecurrenceOccurrence | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("recurring_occurrences")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async findAll(filter?: OccurrenceFilter): Promise<RecurrenceOccurrence[]> {
-    let q = this.supabase
-      .from("recurring_occurrences")
+  async findAll(organizationId: OrganizationId, filter?: OccurrenceFilter): Promise<RecurrenceOccurrence[]> {
+    let q = this.scopedQuery(organizationId)
+      .table("recurring_occurrences")
       .select("*")
       .order("due_date", { ascending: true });
 
@@ -99,38 +110,42 @@ export class SupabaseOccurrenceRepository implements OccurrenceRepositoryPort {
 
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return (data ?? []).map((r) => toEntity(r as unknown as Record<string, unknown>));
   }
 
-  async findByRecurrenceAndPeriod(recurrenceId: string, period: string): Promise<RecurrenceOccurrence | null> {
-    const { data, error } = await this.supabase
-      .from("recurring_occurrences")
+  async findByRecurrenceAndPeriod(
+    organizationId: OrganizationId,
+    recurrenceId: string,
+    period: string,
+  ): Promise<RecurrenceOccurrence | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("recurring_occurrences")
       .select("*")
       .eq("recurrence_id", recurrenceId)
       .eq("period", period)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async findLinkedInvoiceIds(): Promise<string[]> {
-    const { data, error } = await this.supabase
-      .from("recurring_occurrences")
+  async findLinkedInvoiceIds(organizationId: OrganizationId): Promise<string[]> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("recurring_occurrences")
       .select("invoice_id")
       .not("invoice_id", "is", null);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => r.invoice_id as string);
+    return ((data ?? []) as unknown as { invoice_id: string }[]).map((r) => r.invoice_id);
   }
 
-  async countByStatus(): Promise<Partial<Record<OccurrenceStatus, number>>> {
-    const { data, error } = await this.supabase
-      .from("recurring_occurrences")
+  async countByStatus(organizationId: OrganizationId): Promise<Partial<Record<OccurrenceStatus, number>>> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("recurring_occurrences")
       .select("status");
     if (error) throw new Error(error.message);
     const counts: Partial<Record<OccurrenceStatus, number>> = {};
-    for (const row of data ?? []) {
-      const s = row.status as OccurrenceStatus;
+    for (const row of (data ?? []) as unknown as { status: OccurrenceStatus }[]) {
+      const s = row.status;
       counts[s] = (counts[s] ?? 0) + 1;
     }
     return counts;

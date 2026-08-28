@@ -12,7 +12,7 @@ export class MarkOccurrenceAsPaidUseCase implements MarkOccurrenceAsPaidPort {
   constructor(private readonly occurrenceRepo: OccurrenceRepositoryPort) {}
 
   async execute(command: MarkOccurrenceAsPaidCommand): Promise<OccurrenceDTO> {
-    const occurrence = await this.occurrenceRepo.findById(command.occurrenceId);
+    const occurrence = await this.occurrenceRepo.findById(command.organizationId, command.occurrenceId);
     if (!occurrence) throw new OccurrenceNotFoundError(command.occurrenceId);
 
     const paidAt = command.paidAt ? new Date(command.paidAt) : new Date();
@@ -23,7 +23,7 @@ export class MarkOccurrenceAsPaidUseCase implements MarkOccurrenceAsPaidPort {
       command.paymentNotes ?? null,
     );
 
-    await this.occurrenceRepo.update(paid);
+    await this.occurrenceRepo.update(command.organizationId, paid);
     return toOccurrenceDTO(paid);
   }
 }

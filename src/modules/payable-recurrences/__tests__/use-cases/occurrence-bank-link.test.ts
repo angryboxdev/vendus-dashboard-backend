@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from "@jest/globals";
+import { describe, it, expect } from "@jest/globals";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateRecurrenceUseCase } from "../../application/use-cases/create-recurrence.use-case.js";
 import { GenerateOccurrenceUseCase } from "../../application/use-cases/generate-occurrence.use-case.js";
 import { ListOccurrencesUseCase } from "../../application/use-cases/list-occurrences.use-case.js";
@@ -7,7 +8,10 @@ import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js
 import { FakeOccurrenceRepository } from "../fakes/fake-occurrence-repository.js";
 import { FakeBankMovementLinkReadAdapter } from "../fakes/fake-bank-movement-link-read.js";
 
+const organizationId = mintOrganizationId("org-a");
+
 const BASE_CMD = {
+  organizationId,
   name: "Renda",
   supplierName: "Proprietário Lda",
   type: "fixed_contract" as const,
@@ -44,32 +48,32 @@ describe("OccurrenceDTO — linkedBankMovement", () => {
     it("linkedBankMovement é null quando não há movimento bancário vinculado", async () => {
       const { create, generate, list } = make();
       const rec = await create.execute(BASE_CMD);
-      await generate.execute({ recurrenceId: rec.id, year: 2026, month: 8 });
+      await generate.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 8 });
 
-      const [dto] = await list.execute({ recurrenceId: rec.id });
+      const [dto] = await list.execute({ organizationId, recurrenceId: rec.id });
       expect(dto!.linkedBankMovement).toBeNull();
     });
 
     it("linkedBankMovement é preenchido quando o movimento existe", async () => {
       const { create, generate, list, bankLinkRead } = make();
       const rec = await create.execute(BASE_CMD);
-      const occ = await generate.execute({ recurrenceId: rec.id, year: 2026, month: 8 });
+      const occ = await generate.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 8 });
 
-      bankLinkRead.seedLink(occ.id, BANK_LINK);
+      bankLinkRead.seedLink(organizationId, occ.id, BANK_LINK);
 
-      const [dto] = await list.execute({ recurrenceId: rec.id });
+      const [dto] = await list.execute({ organizationId, recurrenceId: rec.id });
       expect(dto!.linkedBankMovement).toEqual(BANK_LINK);
     });
 
     it("enriquece apenas as ocorrências que têm link — as restantes ficam null", async () => {
       const { create, generate, list, bankLinkRead } = make();
       const rec = await create.execute(BASE_CMD);
-      const occ1 = await generate.execute({ recurrenceId: rec.id, year: 2026, month: 7 });
-      const occ2 = await generate.execute({ recurrenceId: rec.id, year: 2026, month: 8 });
+      const occ1 = await generate.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 7 });
+      const occ2 = await generate.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 8 });
 
-      bankLinkRead.seedLink(occ1.id, BANK_LINK);
+      bankLinkRead.seedLink(organizationId, occ1.id, BANK_LINK);
 
-      const dtos = await list.execute({ recurrenceId: rec.id });
+      const dtos = await list.execute({ organizationId, recurrenceId: rec.id });
       const dto1 = dtos.find((d) => d.id === occ1.id)!;
       const dto2 = dtos.find((d) => d.id === occ2.id)!;
 
@@ -79,7 +83,7 @@ describe("OccurrenceDTO — linkedBankMovement", () => {
 
     it("retorna lista vazia sem chamar o port desnecessariamente", async () => {
       const { list } = make();
-      const result = await list.execute({});
+      const result = await list.execute({ organizationId });
       expect(result).toHaveLength(0);
     });
   });
@@ -88,20 +92,20 @@ describe("OccurrenceDTO — linkedBankMovement", () => {
     it("linkedBankMovement é null quando não há link", async () => {
       const { create, generate, get } = make();
       const rec = await create.execute(BASE_CMD);
-      const occ = await generate.execute({ recurrenceId: rec.id, year: 2026, month: 8 });
+      const occ = await generate.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 8 });
 
-      const dto = await get.execute(occ.id);
+      const dto = await get.execute({ organizationId, id: occ.id });
       expect(dto.linkedBankMovement).toBeNull();
     });
 
     it("linkedBankMovement é preenchido com dados do movimento bancário", async () => {
       const { create, generate, get, bankLinkRead } = make();
       const rec = await create.execute(BASE_CMD);
-      const occ = await generate.execute({ recurrenceId: rec.id, year: 2026, month: 8 });
+      const occ = await generate.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 8 });
 
-      bankLinkRead.seedLink(occ.id, BANK_LINK);
+      bankLinkRead.seedLink(organizationId, occ.id, BANK_LINK);
 
-      const dto = await get.execute(occ.id);
+      const dto = await get.execute({ organizationId, id: occ.id });
       expect(dto.linkedBankMovement).not.toBeNull();
       expect(dto.linkedBankMovement!.id).toBe("mov-1");
       expect(dto.linkedBankMovement!.bookingDate).toBe("2026-08-05");

@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import type { InvoiceReadPort, InvoiceSnapshot } from "../../domain/ports/out/invoice-read.port.js";
 
 /**
@@ -8,11 +9,11 @@ import type { InvoiceReadPort, InvoiceSnapshot } from "../../domain/ports/out/in
  * Campos lidos: id, supplier_id, supplier_name, total_with_vat, due_date.
  */
 export class SupabaseInvoiceReadAdapter implements InvoiceReadPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async findById(id: string): Promise<InvoiceSnapshot | null> {
-    const { data, error } = await this.supabase
-      .from("invoices")
+  async findById(organizationId: OrganizationId, id: string): Promise<InvoiceSnapshot | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("invoices")
       .select("id, supplier_id, supplier_name, total_with_vat, due_date, status, paid_at")
       .eq("id", id)
       .maybeSingle();
@@ -20,7 +21,7 @@ export class SupabaseInvoiceReadAdapter implements InvoiceReadPort {
     if (error) throw new Error(error.message);
     if (!data) return null;
 
-    const row = data as Record<string, unknown>;
+    const row = data as unknown as Record<string, unknown>;
     return {
       id: row.id as string,
       supplierId: (row.supplier_id as string | null) ?? null,

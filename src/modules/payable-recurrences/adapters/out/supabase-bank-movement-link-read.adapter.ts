@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import type {
   BankMovementLinkReadPort,
   LinkedBankMovement,
@@ -13,13 +14,16 @@ interface BankMovementRow {
 }
 
 export class SupabaseBankMovementLinkReadAdapter implements BankMovementLinkReadPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async findByOccurrenceIds(occurrenceIds: string[]): Promise<Map<string, LinkedBankMovement>> {
+  async findByOccurrenceIds(
+    organizationId: OrganizationId,
+    occurrenceIds: string[],
+  ): Promise<Map<string, LinkedBankMovement>> {
     if (occurrenceIds.length === 0) return new Map();
 
-    const { data, error } = await this.supabase
-      .from("bank_movements")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("bank_movements")
       .select("id, matched_entity_id, booking_date, amount, description")
       .eq("matched_entity_type", "recurrence_occurrence")
       .in("matched_entity_id", occurrenceIds);
@@ -27,7 +31,7 @@ export class SupabaseBankMovementLinkReadAdapter implements BankMovementLinkRead
     if (error) throw new Error(error.message);
 
     const result = new Map<string, LinkedBankMovement>();
-    for (const row of (data ?? []) as BankMovementRow[]) {
+    for (const row of (data ?? []) as unknown as BankMovementRow[]) {
       result.set(row.matched_entity_id, {
         id: row.id,
         bookingDate: row.booking_date.slice(0, 10),

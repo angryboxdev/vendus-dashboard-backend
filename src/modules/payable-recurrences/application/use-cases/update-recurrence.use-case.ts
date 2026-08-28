@@ -7,7 +7,7 @@ export class UpdateRecurrenceUseCase implements UpdateRecurrencePort {
   constructor(private readonly repo: RecurrenceRepositoryPort) {}
 
   async execute(command: UpdateRecurrenceCommand): Promise<RecurrenceDTO> {
-    const recurrence = await this.repo.findById(command.id);
+    const recurrence = await this.repo.findById(command.organizationId, command.id);
     if (!recurrence) throw new RecurrenceNotFoundError(command.id);
 
     const updated = recurrence.update({
@@ -26,7 +26,7 @@ export class UpdateRecurrenceUseCase implements UpdateRecurrencePort {
       ...(command.notes !== undefined && { notes: command.notes }),
     });
 
-    await this.repo.update(updated);
+    await this.repo.update(command.organizationId, updated);
     return toRecurrenceDTO(updated);
   }
 }

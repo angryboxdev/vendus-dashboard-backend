@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 /**
  * Output port — cross-module read access to bank_movements to check if any bank movement
  * has been justified against a recurrence occurrence.
@@ -17,5 +19,8 @@ export interface BankMovementLinkReadPort {
    * Returns a map of occurrenceId → LinkedBankMovement for the given occurrence IDs.
    * Occurrences with no linked movement are absent from the map.
    */
-  findByOccurrenceIds(occurrenceIds: string[]): Promise<Map<string, LinkedBankMovement>>;
+  findByOccurrenceIds(
+    organizationId: OrganizationId,
+    occurrenceIds: string[],
+  ): Promise<Map<string, LinkedBankMovement>>;
 }

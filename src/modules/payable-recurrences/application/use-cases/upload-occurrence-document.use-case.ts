@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { OccurrenceRepositoryPort } from "../../domain/ports/out/occurrence-repository.port.js";
 import type { DocumentStoragePort } from "../../domain/ports/out/document-storage.port.js";
 import type { OccurrenceDTO } from "../../domain/ports/in/occurrence.ports.js";
@@ -5,6 +6,7 @@ import { OccurrenceNotFoundError } from "../../domain/errors.js";
 import { toOccurrenceDTO } from "./shared.js";
 
 export interface UploadOccurrenceDocumentCommand {
+  organizationId: OrganizationId;
   occurrenceId: string;
   buffer: Buffer;
   filename: string;
@@ -18,7 +20,7 @@ export class UploadOccurrenceDocumentUseCase {
   ) {}
 
   async execute(command: UploadOccurrenceDocumentCommand): Promise<OccurrenceDTO> {
-    const occurrence = await this.repo.findById(command.occurrenceId);
+    const occurrence = await this.repo.findById(command.organizationId, command.occurrenceId);
     if (!occurrence) throw new OccurrenceNotFoundError(command.occurrenceId);
 
     if (occurrence.documentUrl) {
@@ -27,7 +29,7 @@ export class UploadOccurrenceDocumentUseCase {
 
     const url = await this.storage.store(command.buffer, command.filename, command.mimeType);
     const updated = occurrence.setDocumentUrl(url);
-    await this.repo.update(updated);
+    await this.repo.update(command.organizationId, updated);
     return toOccurrenceDTO(updated);
   }
 }

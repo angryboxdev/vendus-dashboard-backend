@@ -1,8 +1,11 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateRecurrenceUseCase } from "../../application/use-cases/create-recurrence.use-case.js";
 import { GenerateOccurrenceUseCase } from "../../application/use-cases/generate-occurrence.use-case.js";
 import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js";
 import { FakeOccurrenceRepository } from "../fakes/fake-occurrence-repository.js";
 import { OccurrenceAlreadyExistsError, RecurrenceNotFoundError } from "../../domain/errors.js";
+
+const organizationId = mintOrganizationId("org-a");
 
 function make() {
   const recurrenceRepo = new FakeRecurrenceRepository();
@@ -16,6 +19,7 @@ function make() {
 }
 
 const VARIABLE_CMD = {
+  organizationId,
   name: "Energia - Gold Energy",
   supplierName: "Gold Energy",
   type: "variable_invoice" as const,
@@ -27,6 +31,7 @@ const VARIABLE_CMD = {
 };
 
 const FIXED_CMD = {
+  organizationId,
   name: "Renda da loja",
   supplierName: "Proprietário Lda",
   type: "fixed_contract" as const,
@@ -40,7 +45,7 @@ describe("GenerateOccurrenceUseCase", () => {
   it("gera ocorrência para variável (requireInvoice=true) → status awaiting_invoice", async () => {
     const { create, generate } = make();
     const rec = await create.execute(VARIABLE_CMD);
-    const occ = await generate.execute({ recurrenceId: rec.id, year: 2026, month: 9 });
+    const occ = await generate.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 9 });
 
     expect(occ.period).toBe("2026-09");
     expect(occ.status).toBe("awaiting_invoice");
@@ -51,7 +56,7 @@ describe("GenerateOccurrenceUseCase", () => {
   it("gera ocorrência para fixed (requireInvoice=false) → status forecast", async () => {
     const { create, generate } = make();
     const rec = await create.execute(FIXED_CMD);
-    const occ = await generate.execute({ recurrenceId: rec.id, year: 2026, month: 9 });
+    const occ = await generate.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 9 });
 
     expect(occ.status).toBe("forecast");
     expect(occ.paidAt).toBeNull();
@@ -60,30 +65,39 @@ describe("GenerateOccurrenceUseCase", () => {
   it("lança OccurrenceAlreadyExistsError se ocorrência já existe para esse período", async () => {
     const { create, generate } = make();
     const rec = await create.execute(VARIABLE_CMD);
-    await generate.execute({ recurrenceId: rec.id, year: 2026, month: 9 });
-    await expect(generate.execute({ recurrenceId: rec.id, year: 2026, month: 9 }))
+    await generate.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 9 });
+    await expect(generate.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 9 }))
       .rejects.toThrow(OccurrenceAlreadyExistsError);
   });
 
   it("lança RecurrenceNotFoundError para id inexistente", async () => {
     const { generate } = make();
-    await expect(generate.execute({ recurrenceId: "nao-existe", year: 2026, month: 9 }))
+    await expect(generate.execute({ organizationId, recurrenceId: "nao-existe", year: 2026, month: 9 }))
       .rejects.toThrow(RecurrenceNotFoundError);
+  });
+
+  it("lança RecurrenceNotFoundError para uma recorrência que pertence a outra organização", async () => {
+    const { create, generate } = make();
+    const rec = await create.execute(FIXED_CMD);
+    const otherOrganizationId = mintOrganizationId("org-b");
+    await expect(
+      generate.execute({ organizationId: otherOrganizationId, recurrenceId: rec.id, year: 2026, month: 9 }),
+    ).rejects.toThrow(RecurrenceNotFoundError);
   });
 
   it("lança erro se recorrência está fora de scope (mês antes de startDate)", async () => {
     const { create, generate } = make();
     const rec = await create.execute({ ...VARIABLE_CMD, startDate: "2026-10-01" });
-    await expect(generate.execute({ recurrenceId: rec.id, year: 2026, month: 9 }))
+    await expect(generate.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 9 }))
       .rejects.toThrow(/not active or out of scope/);
   });
 
   it("persiste a ocorrência no repositório", async () => {
     const { create, generate, occurrenceRepo } = make();
     const rec = await create.execute(VARIABLE_CMD);
-    const occ = await generate.execute({ recurrenceId: rec.id, year: 2026, month: 9 });
+    const occ = await generate.execute({ organizationId, recurrenceId: rec.id, year: 2026, month: 9 });
 
-    const saved = await occurrenceRepo.findById(occ.id);
+    const saved = await occurrenceRepo.findById(organizationId, occ.id);
     expect(saved).not.toBeNull();
     expect(saved!.period).toBe("2026-09");
   });

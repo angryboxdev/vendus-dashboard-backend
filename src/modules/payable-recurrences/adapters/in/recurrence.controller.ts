@@ -87,15 +87,20 @@ function handleError(res: import("express").Response, err: unknown): void {
   res.status(500).json({ error: "Internal server error" });
 }
 
+/**
+ * Mounted below the global `requireAuth` in server.ts, so `req.auth` is
+ * always set — every route below reads the organization from
+ * `req.auth!.orgId` (the verified claim, never from the body or params).
+ */
 export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   const router = Router();
 
   // ── Occurrence routes (specific paths must come before /:id) ────────────────
 
   // GET /payable-recurrences/occurrences/linked-invoice-ids
-  router.get("/payable-recurrences/occurrences/linked-invoice-ids", async (_req, res) => {
+  router.get("/payable-recurrences/occurrences/linked-invoice-ids", async (req, res) => {
     try {
-      const ids = await ports.getLinkedInvoiceIds.execute();
+      const ids = await ports.getLinkedInvoiceIds.execute({ organizationId: req.auth!.orgId });
       res.json(ids);
     } catch (err) {
       handleError(res, err);
@@ -105,16 +110,17 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   // GET /payable-recurrences/occurrences/by-invoice/:invoiceId
   router.get("/payable-recurrences/occurrences/by-invoice/:invoiceId", async (req, res) => {
     try {
-      const filter: import("../../domain/ports/out/occurrence-repository.port.js").OccurrenceFilter = {
+      const organizationId = req.auth!.orgId;
+      const occs = await ports.listOccurrences.execute({
+        organizationId,
         invoiceId: req.params.invoiceId,
-      };
-      const occs = await ports.listOccurrences.execute(filter);
+      });
       if (occs.length === 0) {
         res.status(404).json(null);
         return;
       }
       const occ = occs[0]!;
-      const rec = await ports.getRecurrence.execute(occ.recurrenceId);
+      const rec = await ports.getRecurrence.execute({ organizationId, id: occ.recurrenceId });
       res.json({ occurrence: occ, recurrenceName: rec.name });
     } catch (err) {
       handleError(res, err);
@@ -124,7 +130,7 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   // GET /payable-recurrences/occurrences/:occId
   router.get("/payable-recurrences/occurrences/:occId", async (req, res) => {
     try {
-      const occ = await ports.getOccurrence.execute(req.params.occId);
+      const occ = await ports.getOccurrence.execute({ organizationId: req.auth!.orgId, id: req.params.occId });
       res.json(occ);
     } catch (err) {
       handleError(res, err);
@@ -141,6 +147,7 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
         paymentNotes?: string;
       };
       const cmd: Parameters<MarkOccurrenceAsPaidPort["execute"]>[0] = {
+        organizationId: req.auth!.orgId,
         occurrenceId: req.params.occId,
       };
       if (paidAt !== undefined) cmd.paidAt = paidAt;
@@ -161,6 +168,7 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
     try {
       const { invoiceId } = req.body as { invoiceId: string };
       const occ = await ports.linkInvoiceToOccurrence.execute({
+        organizationId: req.auth!.orgId,
         occurrenceId: req.params.occId,
         invoiceId,
       });
@@ -173,7 +181,7 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   // DELETE /payable-recurrences/occurrences/:occId
   router.delete("/payable-recurrences/occurrences/:occId", async (req, res) => {
     try {
-      await ports.cancelOccurrence.execute(req.params.occId);
+      await ports.cancelOccurrence.execute({ organizationId: req.auth!.orgId, id: req.params.occId });
       res.status(204).send();
     } catch (err) {
       handleError(res, err);
@@ -183,9 +191,9 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   // ── Recurrence collection routes ────────────────────────────────────────────
 
   // GET /payable-recurrences/summary  (must be before /:id)
-  router.get("/payable-recurrences/summary", async (_req, res) => {
+  router.get("/payable-recurrences/summary", async (req, res) => {
     try {
-      const summary = await ports.getRecurrenceSummary.execute();
+      const summary = await ports.getRecurrenceSummary.execute({ organizationId: req.auth!.orgId });
       res.json(summary);
     } catch (err) {
       handleError(res, err);
@@ -196,11 +204,13 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   router.get("/payable-recurrences", async (req, res) => {
     try {
       const q = req.query as Record<string, string | undefined>;
-      const filter: import("../../domain/ports/out/recurrence-repository.port.js").RecurrenceFilter = {};
-      if (q.status) filter.status = q.status as RecurrenceStatus;
-      if (q.type) filter.type = q.type as RecurrenceType;
-      if (q.supplierId) filter.supplierId = q.supplierId;
-      const recurrences = await ports.listRecurrences.execute(filter);
+      const query: import("../../domain/ports/in/recurrence.ports.js").ListRecurrencesQuery = {
+        organizationId: req.auth!.orgId,
+      };
+      if (q.status) query.status = q.status as RecurrenceStatus;
+      if (q.type) query.type = q.type as RecurrenceType;
+      if (q.supplierId) query.supplierId = q.supplierId;
+      const recurrences = await ports.listRecurrences.execute(query);
       res.json(recurrences);
     } catch (err) {
       handleError(res, err);
@@ -210,9 +220,10 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   // POST /payable-recurrences
   router.post("/payable-recurrences", async (req, res) => {
     try {
-      const rec = await ports.createRecurrence.execute(
-        req.body as Parameters<CreateRecurrencePort["execute"]>[0],
-      );
+      const rec = await ports.createRecurrence.execute({
+        ...(req.body as object),
+        organizationId: req.auth!.orgId,
+      } as Parameters<CreateRecurrencePort["execute"]>[0]);
       res.status(201).json(rec);
     } catch (err) {
       handleError(res, err);
@@ -224,7 +235,7 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   // GET /payable-recurrences/:id
   router.get("/payable-recurrences/:id", async (req, res) => {
     try {
-      const rec = await ports.getRecurrence.execute(req.params.id);
+      const rec = await ports.getRecurrence.execute({ organizationId: req.auth!.orgId, id: req.params.id });
       res.json(rec);
     } catch (err) {
       handleError(res, err);
@@ -234,8 +245,11 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   // PATCH /payable-recurrences/:id
   router.patch("/payable-recurrences/:id", async (req, res) => {
     try {
+      // Trusted fields spread last so a body containing `organizationId` or
+      // `id` can never override the caller's own values.
       const rec = await ports.updateRecurrence.execute({
         ...(req.body as object),
+        organizationId: req.auth!.orgId,
         id: req.params.id,
       });
       res.json(rec);
@@ -247,7 +261,7 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   // PATCH /payable-recurrences/:id/pause
   router.patch("/payable-recurrences/:id/pause", async (req, res) => {
     try {
-      const rec = await ports.pauseRecurrence.execute(req.params.id);
+      const rec = await ports.pauseRecurrence.execute({ organizationId: req.auth!.orgId, id: req.params.id });
       res.json(rec);
     } catch (err) {
       handleError(res, err);
@@ -257,7 +271,7 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   // PATCH /payable-recurrences/:id/resume
   router.patch("/payable-recurrences/:id/resume", async (req, res) => {
     try {
-      const rec = await ports.resumeRecurrence.execute(req.params.id);
+      const rec = await ports.resumeRecurrence.execute({ organizationId: req.auth!.orgId, id: req.params.id });
       res.json(rec);
     } catch (err) {
       handleError(res, err);
@@ -267,7 +281,7 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   // PATCH /payable-recurrences/:id/close
   router.patch("/payable-recurrences/:id/close", async (req, res) => {
     try {
-      const rec = await ports.closeRecurrence.execute(req.params.id);
+      const rec = await ports.closeRecurrence.execute({ organizationId: req.auth!.orgId, id: req.params.id });
       res.json(rec);
     } catch (err) {
       handleError(res, err);
@@ -280,12 +294,13 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   router.get("/payable-recurrences/:id/occurrences", async (req, res) => {
     try {
       const q = req.query as Record<string, string | undefined>;
-      const filter: import("../../domain/ports/out/occurrence-repository.port.js").OccurrenceFilter = {
+      const query: import("../../domain/ports/in/occurrence.ports.js").ListOccurrencesQuery = {
+        organizationId: req.auth!.orgId,
         recurrenceId: req.params.id,
       };
-      if (q.period) filter.period = q.period;
-      if (q.status) filter.status = q.status as OccurrenceStatus;
-      const occs = await ports.listOccurrences.execute(filter);
+      if (q.period) query.period = q.period;
+      if (q.status) query.status = q.status as OccurrenceStatus;
+      const occs = await ports.listOccurrences.execute(query);
       res.json(occs);
     } catch (err) {
       handleError(res, err);
@@ -297,6 +312,7 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
     try {
       const { year, month } = req.body as { year: number; month: number };
       const occ = await ports.generateOccurrence.execute({
+        organizationId: req.auth!.orgId,
         recurrenceId: req.params.id,
         year: Number(year),
         month: Number(month),
@@ -317,6 +333,7 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
         return;
       }
       const result = await ports.uploadRecurrenceDocument.execute({
+        organizationId: req.auth!.orgId,
         recurrenceId: req.params.id as string,
         buffer: req.file.buffer,
         filename: req.file.originalname,
@@ -331,7 +348,10 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   // DELETE /payable-recurrences/:id/document
   router.delete("/payable-recurrences/:id/document", async (req, res) => {
     try {
-      const result = await ports.deleteRecurrenceDocument.execute(req.params.id);
+      const result = await ports.deleteRecurrenceDocument.execute({
+        organizationId: req.auth!.orgId,
+        recurrenceId: req.params.id,
+      });
       res.json(result);
     } catch (err) {
       handleError(res, err);
@@ -346,6 +366,7 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
         return;
       }
       const result = await ports.uploadOccurrenceDocument.execute({
+        organizationId: req.auth!.orgId,
         occurrenceId: req.params.occId as string,
         buffer: req.file.buffer,
         filename: req.file.originalname,
@@ -360,7 +381,10 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   // DELETE /payable-recurrences/occurrences/:occId/document
   router.delete("/payable-recurrences/occurrences/:occId/document", async (req, res) => {
     try {
-      const result = await ports.deleteOccurrenceDocument.execute(req.params.occId);
+      const result = await ports.deleteOccurrenceDocument.execute({
+        organizationId: req.auth!.orgId,
+        occurrenceId: req.params.occId,
+      });
       res.json(result);
     } catch (err) {
       handleError(res, err);
@@ -374,6 +398,7 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
     try {
       const { year, month } = req.body as { year: number; month: number };
       const result = await ports.generateBatch.execute({
+        organizationId: req.auth!.orgId,
         year: Number(year),
         month: Number(month),
       });
