@@ -1,11 +1,15 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreatePayableEntryUseCase } from "../../application/use-cases/create-payable-entry.use-case.js";
 import { CancelPayableEntryUseCase } from "../../application/use-cases/cancel-payable-entry.use-case.js";
 import { FakePayableEntryRepository } from "../fakes/fake-payable-entry-repository.js";
 import { PayableEntry } from "../../domain/entities/payable-entry.js";
 import { PayableEntryNotFoundError } from "../../domain/errors.js";
 
+const organizationId = mintOrganizationId("org-a");
+
 async function createEntry(repo: FakePayableEntryRepository) {
   return new CreatePayableEntryUseCase(repo).execute({
+    organizationId,
     supplierName: "EDP",
     description: "Eletricidade julho",
     amount: 10000,
@@ -19,7 +23,7 @@ describe("CancelPayableEntryUseCase", () => {
     const created = await createEntry(repo);
     const uc = new CancelPayableEntryUseCase(repo);
 
-    const dto = await uc.execute(created.id);
+    const dto = await uc.execute({ organizationId, id: created.id });
     expect(dto.status).toBe("cancelled");
     expect(dto.id).toBe(created.id);
   });
@@ -43,25 +47,34 @@ describe("CancelPayableEntryUseCase", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    await repo.save(entry);
+    await repo.save(organizationId, entry);
 
-    const dto = await new CancelPayableEntryUseCase(repo).execute(entry.id);
+    const dto = await new CancelPayableEntryUseCase(repo).execute({ organizationId, id: entry.id });
     expect(dto.status).toBe("cancelled");
   });
 
   it("persists the cancelled status in the repository", async () => {
     const repo = new FakePayableEntryRepository();
     const created = await createEntry(repo);
-    await new CancelPayableEntryUseCase(repo).execute(created.id);
+    await new CancelPayableEntryUseCase(repo).execute({ organizationId, id: created.id });
 
-    const saved = await repo.findById(created.id);
+    const saved = await repo.findById(organizationId, created.id);
     expect(saved!.status).toBe("cancelled");
   });
 
   it("throws PayableEntryNotFoundError for unknown id", async () => {
     const repo = new FakePayableEntryRepository();
     await expect(
-      new CancelPayableEntryUseCase(repo).execute("does-not-exist"),
+      new CancelPayableEntryUseCase(repo).execute({ organizationId, id: "does-not-exist" }),
+    ).rejects.toThrow(PayableEntryNotFoundError);
+  });
+
+  it("throws PayableEntryNotFoundError when the entry belongs to another organization", async () => {
+    const repo = new FakePayableEntryRepository();
+    const created = await createEntry(repo);
+    const otherOrganizationId = mintOrganizationId("org-b");
+    await expect(
+      new CancelPayableEntryUseCase(repo).execute({ organizationId: otherOrganizationId, id: created.id }),
     ).rejects.toThrow(PayableEntryNotFoundError);
   });
 
@@ -69,10 +82,10 @@ describe("CancelPayableEntryUseCase", () => {
     const repo = new FakePayableEntryRepository();
     const created = await createEntry(repo);
     const uc = new CancelPayableEntryUseCase(repo);
-    await uc.execute(created.id);
+    await uc.execute({ organizationId, id: created.id });
 
     // domain cancel() is idempotent; no error should be thrown
-    const dto = await uc.execute(created.id);
+    const dto = await uc.execute({ organizationId, id: created.id });
     expect(dto.status).toBe("cancelled");
   });
 });

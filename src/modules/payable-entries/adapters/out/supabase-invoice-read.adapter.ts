@@ -1,17 +1,20 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import type { InvoiceSnapshot, InvoiceReadPort } from "../../domain/ports/out/invoice-read.port.js";
 
 /**
  * Adapter de leitura de faturas para o módulo payable-entries.
- * Acede directamente à tabela `invoices` do Supabase — sem importar
- * nenhum código do módulo invoices, mantendo os módulos independentes.
+ * Acede directamente à tabela `invoices` — sem importar nenhum código do
+ * módulo invoices, mantendo os módulos independentes. Nunca guarda um
+ * `SupabaseClient`: recebe o `ScopedQueryFactory` no construtor (D2) e
+ * constrói um helper escopado por chamada.
  */
 export class SupabaseInvoiceReadAdapter implements InvoiceReadPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async findById(id: string): Promise<InvoiceSnapshot | null> {
-    const { data, error } = await this.supabase
-      .from("invoices")
+  async findById(organizationId: OrganizationId, id: string): Promise<InvoiceSnapshot | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("invoices")
       .select("id, supplier_id, supplier_name, invoice_number, due_date, total_with_vat, status")
       .eq("id", id)
       .maybeSingle();
@@ -19,7 +22,7 @@ export class SupabaseInvoiceReadAdapter implements InvoiceReadPort {
     if (error) throw new Error(error.message);
     if (!data) return null;
 
-    const row = data as Record<string, unknown>;
+    const row = data as unknown as Record<string, unknown>;
     return {
       id: row.id as string,
       supplierId: (row.supplier_id as string | null) ?? null,
@@ -31,9 +34,9 @@ export class SupabaseInvoiceReadAdapter implements InvoiceReadPort {
     };
   }
 
-  async markPaid(invoiceId: string, paidAt: Date): Promise<void> {
-    const { error } = await this.supabase
-      .from("invoices")
+  async markPaid(organizationId: OrganizationId, invoiceId: string, paidAt: Date): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("invoices")
       .update({
         status: "paid",
         paid_at: paidAt.toISOString().slice(0, 10),

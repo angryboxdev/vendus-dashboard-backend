@@ -22,7 +22,7 @@ export class CreatePayableEntryUseCase implements CreatePayableEntryPort {
       ...(command.recurrence !== undefined && { recurrence: command.recurrence }),
       ...(command.notes !== undefined && { notes: command.notes }),
     });
-    await this.repo.save(entry);
+    await this.repo.save(command.organizationId, entry);
     return toDTO(entry);
   }
 }

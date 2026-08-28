@@ -1,9 +1,12 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreatePayableEntryUseCase } from "../../application/use-cases/create-payable-entry.use-case.js";
 import { MarkPayableAsPaidUseCase } from "../../application/use-cases/mark-payable-as-paid.use-case.js";
 import { FakePayableEntryRepository } from "../fakes/fake-payable-entry-repository.js";
 import { FakeInvoiceRead } from "../fakes/fake-invoice-read.js";
 import { PayableEntry } from "../../domain/entities/payable-entry.js";
 import { PayableEntryNotFoundError } from "../../domain/errors.js";
+
+const organizationId = mintOrganizationId("org-a");
 
 function makeUseCase(
   repo: FakePayableEntryRepository,
@@ -14,7 +17,7 @@ function makeUseCase(
 
 async function createEntry(repo: FakePayableEntryRepository) {
   const uc = new CreatePayableEntryUseCase(repo);
-  return uc.execute({ supplierName: "X", description: "Y", amount: 1000, dueDate: "2026-07-01" });
+  return uc.execute({ organizationId, supplierName: "X", description: "Y", amount: 1000, dueDate: "2026-07-01" });
 }
 
 describe("MarkPayableAsPaidUseCase", () => {
@@ -23,7 +26,7 @@ describe("MarkPayableAsPaidUseCase", () => {
     const created = await createEntry(repo);
     const { uc } = makeUseCase(repo);
 
-    const paid = await uc.execute({ id: created.id, paidAt: "2026-07-05" });
+    const paid = await uc.execute({ organizationId, id: created.id, paidAt: "2026-07-05" });
     expect(paid.status).toBe("paid");
     expect(paid.paidAt).toBe("2026-07-05");
   });
@@ -33,7 +36,7 @@ describe("MarkPayableAsPaidUseCase", () => {
     const created = await createEntry(repo);
     const { uc } = makeUseCase(repo);
 
-    const paid = await uc.execute({ id: created.id });
+    const paid = await uc.execute({ organizationId, id: created.id });
     expect(paid.status).toBe("paid");
     expect(paid.paidAt).toBe(new Date().toISOString().slice(0, 10));
   });
@@ -41,15 +44,15 @@ describe("MarkPayableAsPaidUseCase", () => {
   it("throws when entry is not found", async () => {
     const repo = new FakePayableEntryRepository();
     const { uc } = makeUseCase(repo);
-    await expect(uc.execute({ id: "missing" })).rejects.toThrow(PayableEntryNotFoundError);
+    await expect(uc.execute({ organizationId, id: "missing" })).rejects.toThrow(PayableEntryNotFoundError);
   });
 
   it("throws when entry is already paid", async () => {
     const repo = new FakePayableEntryRepository();
     const created = await createEntry(repo);
     const { uc } = makeUseCase(repo);
-    await uc.execute({ id: created.id });
-    await expect(uc.execute({ id: created.id })).rejects.toThrow("already paid");
+    await uc.execute({ organizationId, id: created.id });
+    await expect(uc.execute({ organizationId, id: created.id })).rejects.toThrow("already paid");
   });
 
   it("syncs linked invoice as paid when invoiceId is set", async () => {
@@ -75,9 +78,9 @@ describe("MarkPayableAsPaidUseCase", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    await repo.save(entry);
+    await repo.save(organizationId, entry);
 
-    await uc.execute({ id: entry.id, paidAt: "2026-07-10" });
+    await uc.execute({ organizationId, id: entry.id, paidAt: "2026-07-10" });
     expect(invoiceGateway.markedPaid).toHaveLength(1);
     expect(invoiceGateway.markedPaid[0]!.invoiceId).toBe("inv-123");
   });
@@ -87,8 +90,17 @@ describe("MarkPayableAsPaidUseCase", () => {
     const invoiceGateway = new FakeInvoiceRead();
     const created = await createEntry(repo); // sem invoiceId
     const { uc } = makeUseCase(repo, invoiceGateway);
-    await uc.execute({ id: created.id });
+    await uc.execute({ organizationId, id: created.id });
     expect(invoiceGateway.markedPaid).toHaveLength(0);
   });
 
+  it("throws PayableEntryNotFoundError when the entry belongs to another organization", async () => {
+    const repo = new FakePayableEntryRepository();
+    const created = await createEntry(repo);
+    const { uc } = makeUseCase(repo);
+    const otherOrganizationId = mintOrganizationId("org-b");
+    await expect(
+      uc.execute({ organizationId: otherOrganizationId, id: created.id }),
+    ).rejects.toThrow(PayableEntryNotFoundError);
+  });
 });

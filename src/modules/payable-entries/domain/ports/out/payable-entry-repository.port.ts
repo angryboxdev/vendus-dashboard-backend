@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { PayableEntry, PayableStatus } from "../../entities/payable-entry.js";
 
 export interface PayableEntryFilter {
@@ -9,9 +10,9 @@ export interface PayableEntryFilter {
 }
 
 export interface PayableEntryRepositoryPort {
-  save(entry: PayableEntry): Promise<void>;
-  findById(id: string): Promise<PayableEntry | null>;
-  findAll(filter?: PayableEntryFilter): Promise<PayableEntry[]>;
-  update(entry: PayableEntry): Promise<void>;
-  delete(id: string): Promise<void>;
+  save(organizationId: OrganizationId, entry: PayableEntry): Promise<void>;
+  findById(organizationId: OrganizationId, id: string): Promise<PayableEntry | null>;
+  findAll(organizationId: OrganizationId, filter?: PayableEntryFilter): Promise<PayableEntry[]>;
+  update(organizationId: OrganizationId, entry: PayableEntry): Promise<void>;
+  delete(organizationId: OrganizationId, id: string): Promise<void>;
 }

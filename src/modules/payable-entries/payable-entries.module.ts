@@ -1,6 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Router } from "express";
-import { getSupabaseServiceRole } from "../../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import { SupabasePayableEntryRepository } from "./adapters/out/supabase-payable-entry.repository.js";
 import { SupabaseInvoiceReadAdapter } from "./adapters/out/supabase-invoice-read.adapter.js";
 import { CreatePayableEntryUseCase } from "./application/use-cases/create-payable-entry.use-case.js";
@@ -19,18 +18,20 @@ export interface PayableEntriesModule {
 }
 
 /**
- * Composition root do módulo payable-entries.
+ * Composition root do módulo payable-entries (spec B2 ticket 05 — segue o
+ * padrão estabelecido pelo piloto `bank-accounts`, ver a secção Ports do
+ * README deste módulo).
  *
- * Único lugar que conhece as implementações concretas dos adapters.
- * Todos os use cases e o domínio operam apenas contra interfaces (ports).
+ * Único lugar que conhece as implementações concretas dos adapters. Os
+ * adapters não constroem o seu próprio `ScopedQuery`: recebem aqui o
+ * factory `createScopedQuery` (D2) e constroem um helper escopado por
+ * chamada. Todos os use cases e o domínio operam apenas contra interfaces
+ * (ports).
  */
-export function createPayableEntriesModule(supabase?: SupabaseClient): PayableEntriesModule {
-  const client = supabase ?? getSupabaseServiceRole();
-  if (!client) throw new Error("Supabase service role não configurado");
-
+export function createPayableEntriesModule(): PayableEntriesModule {
   // Adapters de saída
-  const payableRepo = new SupabasePayableEntryRepository(client);
-  const invoiceRead = new SupabaseInvoiceReadAdapter(client);
+  const payableRepo = new SupabasePayableEntryRepository(createScopedQuery);
+  const invoiceRead = new SupabaseInvoiceReadAdapter(createScopedQuery);
 
   // Use cases
   const router = createPayableEntryRouter({
