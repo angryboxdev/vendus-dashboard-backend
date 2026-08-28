@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { OrganizationId } from "../../../kernel/organization-id.js";
 import { calculateCustomerStatus, type CustomerStatusThresholds } from "../domain/customer-status.js";
 import type { ActionRow, CrmWorkspaceRepositoryPort, WorkspaceDataset } from "../domain/ports/out/crm-workspace-repository.port.js";
 
@@ -74,8 +75,8 @@ function buildItem(dataset: WorkspaceDataset, customer: WorkspaceDataset["custom
 export class CrmWorkspaceService {
   constructor(private readonly repository: CrmWorkspaceRepositoryPort) {}
 
-  async listCustomers(raw: CustomerTableQuery, now = new Date()) {
-    const query = querySchema.parse(raw); const dataset = await this.repository.loadDataset();
+  async listCustomers(organizationId: OrganizationId, raw: CustomerTableQuery, now = new Date()) {
+    const query = querySchema.parse(raw); const dataset = await this.repository.loadDataset(organizationId);
     const today = now.toISOString().slice(0, 10); const search = query.search?.trim().toLocaleLowerCase("pt-PT");
     let items = dataset.customers.filter(isVisibleInCustomerTable)
       .map((customer) => buildItem(dataset, customer, today)).filter((item) => {
@@ -108,31 +109,31 @@ export class CrmWorkspaceService {
     return { items: items.slice(start, start + query.pageSize), total, page: query.page, pageSize: query.pageSize };
   }
 
-  listTags = async () => (await this.repository.loadDataset()).tags;
-  listActionTypes = () => this.repository.listActionTypes();
-  createActionType(input: { code?: string | undefined; name: string; color: string; active: boolean }) {
+  listTags = async (organizationId: OrganizationId) => (await this.repository.loadDataset(organizationId)).tags;
+  listActionTypes = (organizationId: OrganizationId) => this.repository.listActionTypes(organizationId);
+  createActionType(organizationId: OrganizationId, input: { code?: string | undefined; name: string; color: string; active: boolean }) {
     const code = input.code ?? input.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/(^_|_$)/g, "");
     if (!code) throw new Error("Nome do tipo de ação inválido");
-    return this.repository.createActionType({ ...input, code });
+    return this.repository.createActionType(organizationId, { ...input, code });
   }
-  updateActionType(code: string, input: { name: string; color?: string | undefined }) {
-    return this.repository.updateActionType(code, { ...input, name: input.name.trim() });
+  updateActionType(organizationId: OrganizationId, code: string, input: { name: string; color?: string | undefined }) {
+    return this.repository.updateActionType(organizationId, code, { ...input, name: input.name.trim() });
   }
-  createActions = (input: Parameters<CrmWorkspaceRepositoryPort["createActions"]>[0]) => this.repository.createActions(input);
-  completeAction(id: string, completedAt: string) { return this.repository.completeAction(id, completedAt); }
-  completeActions(actions: { id: string; completedAt: string }[]) { return this.repository.completeActions(actions); }
-  async listCustomerActions(customerId: string, cursor: string | undefined, limit: number) {
+  createActions = (organizationId: OrganizationId, input: Parameters<CrmWorkspaceRepositoryPort["createActions"]>[1]) => this.repository.createActions(organizationId, input);
+  completeAction(organizationId: OrganizationId, id: string, completedAt: string) { return this.repository.completeAction(organizationId, id, completedAt); }
+  completeActions(organizationId: OrganizationId, actions: { id: string; completedAt: string }[]) { return this.repository.completeActions(organizationId, actions); }
+  async listCustomerActions(organizationId: OrganizationId, customerId: string, cursor: string | undefined, limit: number) {
     const offset = cursor ? Number(cursor) : 0;
     if (!Number.isInteger(offset) || offset < 0) throw new Error("Cursor de histórico inválido");
-    const result = await this.repository.listCustomerActions(customerId, limit, offset);
+    const result = await this.repository.listCustomerActions(organizationId, customerId, limit, offset);
     const nextOffset = offset + result.history.length;
     return { ...result, nextCursor: nextOffset < result.total ? String(nextOffset) : null };
   }
-  createTag(input: { label: string; color?: string | undefined; category?: string | undefined }) {
+  createTag(organizationId: OrganizationId, input: { label: string; color?: string | undefined; category?: string | undefined }) {
     const name = input.label.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     if (!name) throw new Error("Nome da tag inválido");
-    return this.repository.createTag({ name, label: input.label.trim(), color: input.color ?? "#6b7280", category: input.category ?? "geral" });
+    return this.repository.createTag(organizationId, { name, label: input.label.trim(), color: input.color ?? "#6b7280", category: input.category ?? "geral" });
   }
-  updateTags(customerIds: string[], add: string[], remove: string[]) { return this.repository.updateTags(customerIds, add, remove); }
-  setInactive(customerIds: string[], inactive: boolean) { return this.repository.setInactive(customerIds, inactive); }
+  updateTags(organizationId: OrganizationId, customerIds: string[], add: string[], remove: string[]) { return this.repository.updateTags(organizationId, customerIds, add, remove); }
+  setInactive(organizationId: OrganizationId, customerIds: string[], inactive: boolean) { return this.repository.setInactive(organizationId, customerIds, inactive); }
 }
