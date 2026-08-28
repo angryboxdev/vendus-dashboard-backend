@@ -1,7 +1,7 @@
 # Módulo: cash-closings
 
 > Status: ativo
-> Última atualização: 2026-08-14
+> Última atualização: 2026-08-28
 
 ---
 
@@ -93,7 +93,9 @@ middleware global), nem pelo agendamento de notificações.
 ## Conceitos do domínio
 
 - **CashClosing** — entidade principal; imutável após criação, alterada via
-  `review()` que devolve nova instância. Guarda os montantes declarados por canal
+  `review()` que devolve nova instância. Guarda `locationId` (a loja a que o
+  fecho pertence — spec B2 D3/D4; ver "Isolamento por organização" abaixo) e
+  os montantes declarados por canal
   (TPA, Uber, Glovo, Bolt, Eatz, dinheiro), os totais de referência AirMenu
   (`airMenuUber/Glovo/Bolt`), movimento de caixa (entradas/saídas, gaveta
   início/fim), a contagem física de denominações (`drawerDenominations`)
@@ -115,63 +117,128 @@ middleware global), nem pelo agendamento de notificações.
   (identificado por `sessionOpenedAt`). Permite dois fechos no mesmo dia se
   forem sessões distintas (ex: turno manhã + turno tarde).
 
+## Isolamento por organização (spec B2)
+
+Este é o módulo que a spec B2 converteu em segundo lugar, de propósito
+(`.scratch/scoped-access/spec.md`, D3/D4/D6/D14, ADR-0009): é o único módulo
+que junta uma tabela com localização, uma rota de escrita pública sem
+autenticação e um chamador sem qualquer payload de auth. As decisões de
+estilo do módulo piloto (`bank-accounts`, ver o seu README) aplicam-se aqui
+também — `organizationId` como primeiro parâmetro separado em todo output
+port, como campo dentro do comando/query em todo input port, adapters a
+receber `ScopedQueryFactory` em vez de `SupabaseClient`. O que este módulo
+acrescenta:
+
+- **As rotas públicas usam o unattended scope, não o request (D14).**
+  `verify-pin`, `submit` e `sessions` não têm utilizador autenticado — o
+  kiosk e o ecrã de fecho são páginas públicas na mesma aplicação, sem build
+  separado nem identidade de dispositivo. O controller preenche
+  `organizationId` (e, no submit, `locationId`) a partir de
+  `UNATTENDED_SCOPE` (`src/infra/scoped-db/unattended-scope.ts`), nunca do
+  body ou de `req.auth`. As rotas geridas (`list`, `get`, `patch`) continuam
+  a ler `req.auth!.orgId` como qualquer módulo autenticado.
+- **`locationId` é um campo de comando, não um escopo (D7).** Ao contrário de
+  `organizationId`, não ganhou um tipo próprio nem viaja como parâmetro
+  separado nos output ports — é uma propriedade normal da entidade
+  `CashClosing` e do `CashClosingDto`, escrita explicitamente por
+  `SupabaseCashClosingRepository.save()` a partir de `closing.locationId`.
+  Nunca é o default da coluna, e nunca é actualizado por `update()` — é
+  imutável após submissão, tal como `drawerDenominations`.
+- **O lookup de PIN passou a ser escopado à organização (`EmployeeRepositoryPort.findActiveByPinHash`).**
+  Antes procurava em todos os funcionários da base de dados; correcto por
+  construção enquanto existe uma organização. Continua correcto por
+  construção depois de escopado — o risco de colisão de PIN de 4 dígitos
+  *entre* organizações é o item diferido de spec A, não é resolvido aqui.
+- **O par legado morto foi convertido, não apagado (D9).** `src/routes/cashClosingRoutes.ts`
+  (não montado em `server.ts`) e `src/services/cashClosingService.ts` (só
+  importado por essa rota) replicam exactamente as mesmas regras — rotas
+  públicas a partir do `UNATTENDED_SCOPE`, rotas geridas a partir de
+  `req.auth!.orgId` — e passaram de `getSupabaseServiceRole()` directo para
+  `createScopedQuery(organizationId)`. Ficam scoped porque manter uma
+  excepção "código morto não precisa" é o primeiro item de uma allowlist que
+  cresce; nada monta estas rotas hoje.
+
 ## Ports
 
 ### Entrada (use cases)
 
-- `VerifyPinPort` — verifica o PIN de 4 dígitos do funcionário; devolve
-  `{ employeeId, fullName }` ou lança `InvalidPinError`.
+- `VerifyPinPort` — verifica o PIN de 4 dígitos do funcionário dentro da
+  organização; devolve `{ employeeId, fullName }` ou lança `InvalidPinError`.
+  `VerifyPinCommand = { organizationId, pin }` — `organizationId` vem do
+  unattended scope (rota pública, D14).
 - `SubmitClosingPort` — funcionário submete o fecho com `sessionOpenedAt`; usa
   o total da sessão Vendus e impede duplicado por sessão. `vendusTotal` é
   best-effort: fica `null` se a API Vendus estiver indisponível.
+  `SubmitClosingCommand` inclui `organizationId` e `locationId`, ambos vindos
+  do unattended scope (D14) — nunca do cliente, mesmo que o body os inclua.
 - `GetAvailableSessionsPort` — lista sessões Vendus para uma data, anotando quais
   já têm fecho submetido no nosso sistema. Usado pelo kiosk antes de submeter.
+  `GetAvailableSessionsQuery = { organizationId, date }`, `organizationId` do
+  unattended scope.
 - `ListClosingsPort` — lista fechos com filtros opcionais: `from`/`to` (intervalo
   de datas), `date` (atalho para `from=to=date`), `status`, `employeeId`,
-  paginação `limit`/`offset`.
+  paginação `limit`/`offset`. `ListClosingsQuery` inclui `organizationId`,
+  vindo de `req.auth!.orgId` (rota gerida).
 - `GetClosingPort` — detalhe de um fecho por ID; lança `ClosingNotFoundError`.
+  `GetClosingQuery = { organizationId, id }`, `organizationId` de `req.auth!.orgId`.
 - `ReviewClosingPort` — manager aprova/rejeita e/ou edita valores; recalcula
   `totalCalculated`, `vendusCalculated`, `airMenuCalculated` e `sangriaAmount`
   se campos numéricos mudarem; define `reviewedAt` se `status` mudar. Nunca
-  altera `drawerDenominations` nem `airMenuUber/Glovo/Bolt` (imutáveis após submissão).
+  altera `drawerDenominations`, `airMenuUber/Glovo/Bolt` nem `locationId`
+  (imutáveis após submissão). `ReviewClosingCommand` inclui `organizationId`,
+  de `req.auth!.orgId`.
 - `GetAirMenuTotalsPort` — consulta os totais AirMenu para uma data sem submeter
   fecho. Usado pelo kiosk no step de revisão (pré-submissão). Devolve `null` se
-  o gateway não estiver configurado ou falhar (best-effort).
+  o gateway não estiver configurado ou falhar (best-effort). Não toca a base
+  de dados (só a API AirMenu via `AirMenuDeliveryGatewayPort`), por isso não
+  ganhou `organizationId`.
 
 ### Saída (dependências do domínio)
 
-- `CashClosingRepositoryPort` — `save`, `findById`, `list`, `update`,
-  `existsForEmployeeOnDate`, `existsForSession`.
-- `EmployeeRepositoryPort` — `findActiveByPinHash`, `findActiveById`.
+- `CashClosingRepositoryPort` — `save(organizationId, closing)`,
+  `findById(organizationId, id)`, `list(organizationId, filter)`,
+  `update(organizationId, closing)`,
+  `existsForEmployeeOnDate(organizationId, employeeId, closingDate)`,
+  `existsForSession(organizationId, sessionOpenedAt)`. `organizationId` é
+  sempre o primeiro parâmetro (D2).
+- `EmployeeRepositoryPort` — `findActiveByPinHash(organizationId, pinHash)`,
+  `findActiveById(organizationId, id)`.
 - `VendusRegisterSessionsGatewayPort` — `getSessionsForDate(date)`, `getSessionTotal(date, openedAt)`.
+  Chama a API Vendus, não a base de dados — sem `organizationId`.
 - `AirMenuDeliveryGatewayPort` — `getDeliveryTotalsForDate(date)` → `{ uber, glovo, bolt }`.
-  Opcional: se não configurado, os campos AirMenu ficam null.
+  Opcional: se não configurado, os campos AirMenu ficam null. Chama o módulo
+  air-menu via port, não a base de dados — sem `organizationId`.
 
 ## Adapters
 
 ### Entrada
 
 - `CashClosingController` — expõe dois `Router` Express:
-  - `publicRouter` → rotas sem auth:
+  - `publicRouter` → rotas sem auth (D14: `organizationId`/`locationId` vêm de
+    `UNATTENDED_SCOPE`, nunca do request):
     - `POST /cash-closings/verify-pin`
     - `POST /cash-closings/submit` — aceita `sessionOpenedAt?` e `drawerDenominations?`
     - `GET /cash-closings/sessions?date=` — lista sessões Vendus com flag `alreadySubmitted`
     - `GET /cash-closings/airmenu-totals?date=` — totais AirMenu pré-submissão (best-effort; `null` se indisponível)
   - `managedRouter` → rotas com `requireAuth + requireMinRole("manager")`:
     `GET /cash-closings`, `GET /cash-closings/:id`, `PATCH /cash-closings/:id`.
+    `organizationId` vem de `req.auth!.orgId`.
 
 ### Saída
 
 - `SupabaseCashClosingRepository` — implementa `CashClosingRepositoryPort`
-  usando Supabase (service role). Faz join com `hr_employees` para popular
-  `employeeName`. Persiste `drawer_denominations` como JSONB e `air_menu_uber/glovo/bolt`
-  como numeric nullable; nenhum destes campos é atualizado no `update()` (imutáveis
-  após submissão).
+  via `ScopedQueryFactory` (D2) — não guarda um `SupabaseClient`. Faz join com
+  `hr_employees` para popular `employeeName`. Persiste `drawer_denominations`
+  como JSONB e `air_menu_uber/glovo/bolt` como numeric nullable; `save()`
+  escreve `location_id` explicitamente a partir de `closing.locationId`
+  (D3/D4, nunca o default da coluna); nenhum destes campos (nem `location_id`)
+  é atualizado no `update()` (imutáveis após submissão).
 - `AirMenuDeliveryGateway` — implementa `AirMenuDeliveryGatewayPort`. Recebe
   `GetSummaryPort` (do módulo air-menu) e `enterpriseId` (env `AIRMENU_CLOSING_ENTERPRISE_ID`).
   Chama `getSummary` com `startOfDay/endOfDay` para a data do fecho e lê
   `analytics.byPlatform` para extrair os totais por plataforma (NCs já descontadas).
-- `SupabaseEmployeeRepository` — implementa `EmployeeRepositoryPort` usando Supabase.
+- `SupabaseEmployeeRepository` — implementa `EmployeeRepositoryPort` via
+  `ScopedQueryFactory`.
 - `VendusRegisterSessionsGateway` — implementa `VendusRegisterSessionsGatewayPort`;
   chama `GET /registers/{id}/movements/` em paralelo com `GET /documents/` (FS+FT+NC)
   para calcular totais correctos por sessão. Instanciado com `registerId`
@@ -213,6 +280,12 @@ AirMenu) para produzir a diferença AirMenu. `totalCalculated` = `vendusCalculat
 airMenuCalculated` — soma de todos os campos declarados pelo funcionário.
 `vendusCalculated` e `airMenuCalculated` são campos derivados calculados no construtor
 da entidade; `airMenuTotal` é calculado no `toDto()` do use case e não é persistido.
+
+**`locationId` é imutável após submissão e vem sempre do unattended scope, nunca do cliente.**
+O kiosk é uma página pública sem identidade de dispositivo (spec B2 D14): não
+há como validar uma loja que o cliente alegasse. O `review()` preserva
+`this.locationId` e o repositório não o inclui no `update()`, tal como
+`drawerDenominations`.
 
 **`drawerDenominations` é imutável após submissão.**
 A contagem física de notas e moedas é auditoria — representa o que o funcionário

@@ -1,4 +1,8 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 export interface VerifyPinCommand {
+  /** Rota pública sem sessão (D14): fornecido pelo controller a partir do unattended scope. */
+  organizationId: OrganizationId;
   pin: string;
 }
 

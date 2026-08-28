@@ -8,7 +8,7 @@ export class ReviewClosingUseCase implements ReviewClosingPort {
   constructor(private readonly closingRepository: CashClosingRepositoryPort) {}
 
   async execute(command: ReviewClosingCommand): Promise<CashClosingDto> {
-    const existing = await this.closingRepository.findById(command.id);
+    const existing = await this.closingRepository.findById(command.organizationId, command.id);
     if (!existing) throw new ClosingNotFoundError(command.id);
 
     const updated = existing.review({
@@ -27,7 +27,7 @@ export class ReviewClosingUseCase implements ReviewClosingPort {
       notes: command.notes,
     });
 
-    await this.closingRepository.update(updated);
+    await this.closingRepository.update(command.organizationId, updated);
     return toDto(updated);
   }
 }

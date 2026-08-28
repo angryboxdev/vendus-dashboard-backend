@@ -4,6 +4,7 @@ function makeClosing(overrides?: Partial<Parameters<typeof CashClosing.create>[0
   return CashClosing.create({
     employeeId: "emp-1",
     employeeName: "Ana Silva",
+    locationId: "loc-1",
     closingDate: "2026-06-10",
     tpa: 200,
     uber: 50,

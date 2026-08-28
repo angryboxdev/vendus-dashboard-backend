@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { requireAuth, requireMinRole } from "../../../../middleware/auth.js";
+import { UNATTENDED_SCOPE } from "../../../../infra/scoped-db/unattended-scope.js";
 import type { DrawerDenominations } from "../../domain/entities/cash-closing.js";
 import type { VerifyPinPort } from "../../domain/ports/in/verify-pin.port.js";
 import type { SubmitClosingPort } from "../../domain/ports/in/submit-closing.port.js";
@@ -46,6 +47,12 @@ export class CashClosingController {
     this.registerManagedRoutes();
   }
 
+  /**
+   * These routes have no authenticated user — the kiosk and the closing
+   * screen are public, unauthenticated pages (D14). Organization (and, for
+   * submit, location) come from the unattended scope, never from the
+   * request: an unauthenticated URL cannot be trusted to carry either.
+   */
   private registerPublicRoutes(): void {
     /** POST /api/cash-closings/verify-pin */
     this.publicRouter.post(
@@ -57,7 +64,10 @@ export class CashClosingController {
             jsonError(res, 400, "PIN inválido (4 dígitos)");
             return;
           }
-          const result = await this.verifyPin.execute({ pin });
+          const result = await this.verifyPin.execute({
+            organizationId: UNATTENDED_SCOPE.organizationId,
+            pin,
+          });
           res.json(result);
         } catch (e: unknown) {
           if (e instanceof InvalidPinError) {
@@ -108,6 +118,8 @@ export class CashClosingController {
           }
 
           const closing = await this.submitClosing.execute({
+            organizationId: UNATTENDED_SCOPE.organizationId,
+            locationId: UNATTENDED_SCOPE.locationId,
             employeeId,
             closingDate,
             tpa: toNum(tpa, "tpa"),
@@ -175,7 +187,10 @@ export class CashClosingController {
             jsonError(res, 400, "date obrigatório (YYYY-MM-DD)");
             return;
           }
-          const sessions = await this.getAvailableSessions.execute({ date });
+          const sessions = await this.getAvailableSessions.execute({
+            organizationId: UNATTENDED_SCOPE.organizationId,
+            date,
+          });
           res.json(sessions);
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : "Erro interno";
@@ -186,6 +201,7 @@ export class CashClosingController {
 
   }
 
+  /** These routes require an authenticated manager; organization comes from the auth payload as normal. */
   private registerManagedRoutes(): void {
     /** GET /api/cash-closings */
     this.managedRouter.get(
@@ -198,6 +214,7 @@ export class CashClosingController {
             req.query as Record<string, string | undefined>;
 
           const result = await this.listClosings.execute({
+            organizationId: req.auth!.orgId,
             date,
             from,
             to,
@@ -223,6 +240,7 @@ export class CashClosingController {
       async (req: Request, res: Response) => {
         try {
           const closing = await this.getClosing.execute({
+            organizationId: req.auth!.orgId,
             id: req.params.id as string,
           });
           res.json(closing);
@@ -246,6 +264,7 @@ export class CashClosingController {
         try {
           const b = req.body as Record<string, unknown>;
           const updated = await this.reviewClosing.execute({
+            organizationId: req.auth!.orgId,
             id: req.params.id as string,
             status: b.status != null ? (b.status as CashClosingStatus) : undefined,
             managerNotes:

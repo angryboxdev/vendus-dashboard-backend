@@ -1,7 +1,10 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { CashClosingStatus } from "../../entities/cash-closing.js";
 import type { CashClosingDto } from "./shared-dto.js";
 
 export interface ListClosingsQuery {
+  /** Rota gerida (manager+): fornecido pelo controller a partir do auth payload. */
+  organizationId: OrganizationId;
   /** Intervalo de datas (YYYY-MM-DD). Usado por week view e month view. */
   from?: string | undefined;
   to?: string | undefined;

@@ -1,7 +1,10 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { CashClosingStatus } from "../../entities/cash-closing.js";
 import type { CashClosingDto } from "./shared-dto.js";
 
 export interface ReviewClosingCommand {
+  /** Rota gerida (manager+): fornecido pelo controller a partir do auth payload. */
+  organizationId: OrganizationId;
   id: string;
   status?: CashClosingStatus | undefined;
   managerNotes?: string | null | undefined;
