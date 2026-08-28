@@ -11,7 +11,7 @@ export class GetCostCenterCategoryUseCase implements GetCostCenterCategoryPort {
   constructor(private readonly repository: CostCenterCategoryRepositoryPort) {}
 
   async execute(command: GetCostCenterCategoryCommand): Promise<CostCenterCategoryDTO> {
-    const category = await this.repository.findById(command.id);
+    const category = await this.repository.findById(command.organizationId, command.id);
     if (!category) throw new CostCenterCategoryNotFoundError(command.id);
     return toCostCenterCategoryDTO(category);
   }

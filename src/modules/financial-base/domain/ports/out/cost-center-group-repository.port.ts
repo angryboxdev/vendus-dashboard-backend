@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { CostCenterGroup } from "../../entities/cost-center-group.js";
 
 export interface CostCenterGroupFilter {
@@ -5,9 +6,9 @@ export interface CostCenterGroupFilter {
 }
 
 export interface CostCenterGroupRepositoryPort {
-  save(group: CostCenterGroup): Promise<void>;
-  findById(id: string): Promise<CostCenterGroup | null>;
-  findByCode(code: string): Promise<CostCenterGroup | null>;
-  findAll(filter?: CostCenterGroupFilter): Promise<CostCenterGroup[]>;
-  update(group: CostCenterGroup): Promise<void>;
+  save(organizationId: OrganizationId, group: CostCenterGroup): Promise<void>;
+  findById(organizationId: OrganizationId, id: string): Promise<CostCenterGroup | null>;
+  findByCode(organizationId: OrganizationId, code: string): Promise<CostCenterGroup | null>;
+  findAll(organizationId: OrganizationId, filter?: CostCenterGroupFilter): Promise<CostCenterGroup[]>;
+  update(organizationId: OrganizationId, group: CostCenterGroup): Promise<void>;
 }

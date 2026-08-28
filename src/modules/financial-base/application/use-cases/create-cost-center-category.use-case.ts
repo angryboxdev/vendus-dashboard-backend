@@ -19,10 +19,10 @@ export class CreateCostCenterCategoryUseCase implements CreateCostCenterCategory
   ) {}
 
   async execute(command: CreateCostCenterCategoryCommand): Promise<CostCenterCategoryDTO> {
-    const group = await this.groupRepository.findById(command.groupId);
+    const group = await this.groupRepository.findById(command.organizationId, command.groupId);
     if (!group) throw new CostCenterGroupNotFoundError(command.groupId);
 
-    const existing = await this.categoryRepository.findByCode(command.code);
+    const existing = await this.categoryRepository.findByCode(command.organizationId, command.code);
     if (existing) throw new CostCenterCategoryCodeAlreadyExistsError(command.code);
 
     const category = CostCenterCategory.create({
@@ -38,7 +38,7 @@ export class CreateCostCenterCategoryUseCase implements CreateCostCenterCategory
       description: command.description ?? null,
     });
 
-    await this.categoryRepository.save(category);
+    await this.categoryRepository.save(command.organizationId, category);
     return toCostCenterCategoryDTO(category);
   }
 }

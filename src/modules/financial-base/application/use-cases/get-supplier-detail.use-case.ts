@@ -25,12 +25,12 @@ export class GetSupplierDetailUseCase implements GetSupplierDetailPort {
   ) {}
 
   async execute(command: GetSupplierDetailCommand): Promise<SupplierDetailDTO> {
-    const supplier = await this.supplierRepository.findById(command.id);
+    const supplier = await this.supplierRepository.findById(command.organizationId, command.id);
     if (!supplier) throw new SupplierNotFoundError(command.id);
 
     const [summaries, invoices] = await Promise.all([
-      this.invoiceStats.getSummariesForSuppliers([supplier.id]),
-      this.invoiceStats.listInvoicesBySupplier(supplier.id),
+      this.invoiceStats.getSummariesForSuppliers(command.organizationId, [supplier.id]),
+      this.invoiceStats.listInvoicesBySupplier(command.organizationId, supplier.id),
     ]);
 
     const summary = summaries[0];

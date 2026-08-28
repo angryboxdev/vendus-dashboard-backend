@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import { CostCenterGroup } from "../../domain/entities/cost-center-group.js";
 import type {
   CostCenterGroupFilter,
@@ -18,11 +19,16 @@ function toEntity(row: Record<string, unknown>): CostCenterGroup {
   });
 }
 
+/**
+ * Nunca guarda um `SupabaseClient` — recebe o factory `createScopedQuery`
+ * (`ScopedQueryFactory`) injectado pelo composition root e constrói um
+ * `ScopedQuery` por chamada (D2).
+ */
 export class SupabaseCostCenterGroupRepository implements CostCenterGroupRepositoryPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async save(group: CostCenterGroup): Promise<void> {
-    const { error } = await this.supabase.from("cost_center_groups").insert({
+  async save(organizationId: OrganizationId, group: CostCenterGroup): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("cost_center_groups").insert({
       id: group.id,
       code: group.code,
       name: group.name,
@@ -35,31 +41,34 @@ export class SupabaseCostCenterGroupRepository implements CostCenterGroupReposit
     if (error) throw new Error(error.message);
   }
 
-  async findById(id: string): Promise<CostCenterGroup | null> {
-    const { data, error } = await this.supabase
-      .from("cost_center_groups")
+  async findById(organizationId: OrganizationId, id: string): Promise<CostCenterGroup | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("cost_center_groups")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async findByCode(code: string): Promise<CostCenterGroup | null> {
-    const { data, error } = await this.supabase
-      .from("cost_center_groups")
+  async findByCode(organizationId: OrganizationId, code: string): Promise<CostCenterGroup | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("cost_center_groups")
       .select("*")
       .eq("code", code.trim().toUpperCase())
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async findAll(filter?: CostCenterGroupFilter): Promise<CostCenterGroup[]> {
-    let q = this.supabase
-      .from("cost_center_groups")
+  async findAll(
+    organizationId: OrganizationId,
+    filter?: CostCenterGroupFilter,
+  ): Promise<CostCenterGroup[]> {
+    let q = this.scopedQuery(organizationId)
+      .table("cost_center_groups")
       .select("*")
       .order("sort_order", { ascending: true });
 
@@ -67,12 +76,12 @@ export class SupabaseCostCenterGroupRepository implements CostCenterGroupReposit
 
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toEntity(r));
   }
 
-  async update(group: CostCenterGroup): Promise<void> {
-    const { error } = await this.supabase
-      .from("cost_center_groups")
+  async update(organizationId: OrganizationId, group: CostCenterGroup): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("cost_center_groups")
       .update({
         name: group.name,
         description: group.description,

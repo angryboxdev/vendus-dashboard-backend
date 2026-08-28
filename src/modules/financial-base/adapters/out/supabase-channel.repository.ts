@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import { Channel } from "../../domain/entities/channel.js";
 import type { ChannelRepositoryPort } from "../../domain/ports/out/channel-repository.port.js";
 
@@ -14,12 +15,17 @@ function toEntity(row: Record<string, unknown>): Channel {
   });
 }
 
+/**
+ * Nunca guarda um `SupabaseClient` — recebe o factory `createScopedQuery`
+ * (`ScopedQueryFactory`) injectado pelo composition root e constrói um
+ * `ScopedQuery` por chamada (D2).
+ */
 export class SupabaseChannelRepository implements ChannelRepositoryPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async findAll(isActive?: boolean): Promise<Channel[]> {
-    let query = this.supabase
-      .from("channels")
+  async findAll(organizationId: OrganizationId, isActive?: boolean): Promise<Channel[]> {
+    let query = this.scopedQuery(organizationId)
+      .table("channels")
       .select("*")
       .order("sort_order", { ascending: true });
 
@@ -29,17 +35,17 @@ export class SupabaseChannelRepository implements ChannelRepositoryPort {
 
     const { data, error } = await query;
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toEntity(r));
   }
 
-  async findById(id: string): Promise<Channel | null> {
-    const { data, error } = await this.supabase
-      .from("channels")
+  async findById(organizationId: OrganizationId, id: string): Promise<Channel | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("channels")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 }

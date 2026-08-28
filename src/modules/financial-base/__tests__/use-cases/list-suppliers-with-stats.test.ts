@@ -1,7 +1,10 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { ListSuppliersWithStatsUseCase } from "../../application/use-cases/list-suppliers-with-stats.use-case.js";
 import { FakeSupplierRepository } from "../fakes/fake-supplier-repository.js";
 import { FakeSupplierInvoiceStats } from "../fakes/fake-supplier-invoice-stats.js";
 import { Supplier } from "../../domain/entities/supplier.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 describe("ListSuppliersWithStatsUseCase", () => {
   it("devolve lista vazia quando não há fornecedores", async () => {
@@ -10,17 +13,17 @@ describe("ListSuppliersWithStatsUseCase", () => {
       new FakeSupplierInvoiceStats(),
     );
 
-    const result = await useCase.execute();
+    const result = await useCase.execute({ organizationId: ORG_ID });
 
     expect(result).toEqual([]);
   });
 
   it("inclui stats zeradas para fornecedores sem faturas", async () => {
     const repo = new FakeSupplierRepository();
-    await repo.save(Supplier.create({ name: "Makro" }));
+    await repo.save(ORG_ID, Supplier.create({ name: "Makro" }));
 
     const useCase = new ListSuppliersWithStatsUseCase(repo, new FakeSupplierInvoiceStats());
-    const result = await useCase.execute();
+    const result = await useCase.execute({ organizationId: ORG_ID });
 
     expect(result).toHaveLength(1);
     expect(result[0]!.stats.invoiceCount).toBe(0);
@@ -34,8 +37,8 @@ describe("ListSuppliersWithStatsUseCase", () => {
 
     const s1 = Supplier.create({ name: "Makro" });
     const s2 = Supplier.create({ name: "Meta" });
-    await repo.save(s1);
-    await repo.save(s2);
+    await repo.save(ORG_ID, s1);
+    await repo.save(ORG_ID, s2);
 
     statsPort.seed({
       supplierId: s1.id,
@@ -57,7 +60,7 @@ describe("ListSuppliersWithStatsUseCase", () => {
     });
 
     const useCase = new ListSuppliersWithStatsUseCase(repo, statsPort);
-    const result = await useCase.execute();
+    const result = await useCase.execute({ organizationId: ORG_ID });
 
     const makro = result.find((r) => r.name === "Makro")!;
     const meta = result.find((r) => r.name === "Meta")!;
@@ -70,11 +73,11 @@ describe("ListSuppliersWithStatsUseCase", () => {
 
   it("aplica filtro de status", async () => {
     const repo = new FakeSupplierRepository();
-    await repo.save(Supplier.create({ name: "Ativo" }));
-    await repo.save(Supplier.create({ name: "Inativo" }).deactivate());
+    await repo.save(ORG_ID, Supplier.create({ name: "Ativo" }));
+    await repo.save(ORG_ID, Supplier.create({ name: "Inativo" }).deactivate());
 
     const useCase = new ListSuppliersWithStatsUseCase(repo, new FakeSupplierInvoiceStats());
-    const result = await useCase.execute({ status: "active" });
+    const result = await useCase.execute({ organizationId: ORG_ID, status: "active" });
 
     expect(result).toHaveLength(1);
     expect(result[0]!.name).toBe("Ativo");
@@ -82,11 +85,11 @@ describe("ListSuppliersWithStatsUseCase", () => {
 
   it("aplica filtro de pesquisa por nome", async () => {
     const repo = new FakeSupplierRepository();
-    await repo.save(Supplier.create({ name: "Makro Portugal" }));
-    await repo.save(Supplier.create({ name: "Meta Platforms" }));
+    await repo.save(ORG_ID, Supplier.create({ name: "Makro Portugal" }));
+    await repo.save(ORG_ID, Supplier.create({ name: "Meta Platforms" }));
 
     const useCase = new ListSuppliersWithStatsUseCase(repo, new FakeSupplierInvoiceStats());
-    const result = await useCase.execute({ search: "makro" });
+    const result = await useCase.execute({ organizationId: ORG_ID, search: "makro" });
 
     expect(result).toHaveLength(1);
     expect(result[0]!.name).toBe("Makro Portugal");

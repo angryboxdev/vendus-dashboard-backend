@@ -11,11 +11,11 @@ export class ToggleCostCenterCategoryStatusUseCase implements ToggleCostCenterCa
   constructor(private readonly repository: CostCenterCategoryRepositoryPort) {}
 
   async execute(command: ToggleCostCenterCategoryStatusCommand): Promise<CostCenterCategoryDTO> {
-    const category = await this.repository.findById(command.id);
+    const category = await this.repository.findById(command.organizationId, command.id);
     if (!category) throw new CostCenterCategoryNotFoundError(command.id);
 
     const updated = command.isActive ? category.activate() : category.deactivate();
-    await this.repository.update(updated);
+    await this.repository.update(command.organizationId, updated);
     return toCostCenterCategoryDTO(updated);
   }
 }

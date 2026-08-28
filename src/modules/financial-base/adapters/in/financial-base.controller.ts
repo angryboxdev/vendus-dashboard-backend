@@ -26,7 +26,6 @@ import type { UpdateSupplierPort } from "../../domain/ports/in/supplier.ports.js
 import type { ToggleSupplierStatusPort } from "../../domain/ports/in/supplier.ports.js";
 import type { ListSuppliersPort } from "../../domain/ports/in/supplier.ports.js";
 import type { GetSupplierPort } from "../../domain/ports/in/supplier.ports.js";
-import type { SupplierFilter } from "../../domain/ports/out/supplier-repository.port.js";
 import type {
   GetSuppliersKpisPort,
   GetSupplierDetailPort,
@@ -242,7 +241,6 @@ export class FinancialBaseController {
     private readonly getSupplierStatement: GetSupplierStatementPort,
     private readonly listChannels: ListChannelsPort,
     private readonly getOrganizationIdentity: GetOrganizationIdentityPort,
-    private readonly orgId: string,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -258,7 +256,9 @@ export class FinancialBaseController {
     this.router.get("/financial-base/cost-center-groups", async (req, res) => {
       try {
         const { isActive } = req.query as Record<string, string | undefined>;
-        const command: Parameters<typeof this.listCostCenterGroups.execute>[0] = {};
+        const command: Parameters<typeof this.listCostCenterGroups.execute>[0] = {
+          organizationId: req.auth!.orgId,
+        };
         if (isActive === "true") command.isActive = true;
         else if (isActive === "false") command.isActive = false;
         const results = await this.listCostCenterGroups.execute(command);
@@ -281,7 +281,10 @@ export class FinancialBaseController {
      */
     this.router.get("/financial-base/cost-center-groups/:id", async (req, res) => {
       try {
-        const result = await this.getCostCenterGroup.execute({ id: req.params["id"] as string });
+        const result = await this.getCostCenterGroup.execute({
+          organizationId: req.auth!.orgId,
+          id: req.params["id"] as string,
+        });
         res.json(result);
       } catch (e) {
         if (e instanceof CostCenterGroupNotFoundError) {
@@ -308,6 +311,7 @@ export class FinancialBaseController {
           return;
         }
         const result = await this.createCostCenterGroup.execute({
+          organizationId: req.auth!.orgId,
           code: body.code as string,
           name: body.name as string,
           description: (body.description as string | null | undefined) ?? null,
@@ -335,6 +339,7 @@ export class FinancialBaseController {
         if ("description" in body) data.description = (body.description as string | null) ?? null;
         if (body.sortOrder !== undefined) data.sortOrder = Number(body.sortOrder);
         const result = await this.updateCostCenterGroup.execute({
+          organizationId: req.auth!.orgId,
           id: req.params["id"] as string,
           data,
         });
@@ -360,6 +365,7 @@ export class FinancialBaseController {
           return;
         }
         const result = await this.toggleCostCenterGroupStatus.execute({
+          organizationId: req.auth!.orgId,
           id: req.params["id"] as string,
           isActive: body.isActive,
         });
@@ -382,7 +388,9 @@ export class FinancialBaseController {
     this.router.get("/financial-base/cost-center-categories", async (req, res) => {
       try {
         const { groupId, isActive } = req.query as Record<string, string | undefined>;
-        const command: Parameters<typeof this.listCostCenterCategories.execute>[0] = {};
+        const command: Parameters<typeof this.listCostCenterCategories.execute>[0] = {
+          organizationId: req.auth!.orgId,
+        };
         if (groupId) command.groupId = groupId;
         if (isActive === "true") command.isActive = true;
         else if (isActive === "false") command.isActive = false;
@@ -399,6 +407,7 @@ export class FinancialBaseController {
     this.router.get("/financial-base/cost-center-categories/:id", async (req, res) => {
       try {
         const result = await this.getCostCenterCategory.execute({
+          organizationId: req.auth!.orgId,
           id: req.params["id"] as string,
         });
         res.json(result);
@@ -448,6 +457,7 @@ export class FinancialBaseController {
           return;
         }
         const result = await this.createCostCenterCategory.execute({
+          organizationId: req.auth!.orgId,
           groupId: body.groupId as string,
           code: body.code as string,
           name: body.name as string,
@@ -496,6 +506,7 @@ export class FinancialBaseController {
           data.requiresAllocation = body.requiresAllocation as boolean;
         if ("description" in body) data.description = (body.description as string | null) ?? null;
         const result = await this.updateCostCenterCategory.execute({
+          organizationId: req.auth!.orgId,
           id: req.params["id"] as string,
           data,
         });
@@ -525,6 +536,7 @@ export class FinancialBaseController {
           return;
         }
         const result = await this.toggleCostCenterCategoryStatus.execute({
+          organizationId: req.auth!.orgId,
           id: req.params["id"] as string,
           isActive: body.isActive,
         });
@@ -542,9 +554,9 @@ export class FinancialBaseController {
      * POST /financial-base/cost-centers/seed
      * Popula os 7 grupos e 28 subcategorias padrão (idempotente).
      */
-    this.router.post("/financial-base/cost-centers/seed", async (_req, res) => {
+    this.router.post("/financial-base/cost-centers/seed", async (req, res) => {
       try {
-        const result = await this.seedDefaultCostCenters.execute();
+        const result = await this.seedDefaultCostCenters.execute(req.auth!.orgId);
         res.json(result);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
@@ -561,7 +573,7 @@ export class FinancialBaseController {
       try {
         const { isActive } = req.query as Record<string, string | undefined>;
         const filter = isActive === "true" ? true : isActive === "false" ? false : undefined;
-        const results = await this.listChannels.execute(filter);
+        const results = await this.listChannels.execute(req.auth!.orgId, filter);
         res.json(results);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
@@ -578,9 +590,10 @@ export class FinancialBaseController {
     this.router.get("/financial-base/suppliers", async (req, res) => {
       try {
         const { status, search, includeStats } = req.query as Record<string, string | undefined>;
+        const organizationId = req.auth!.orgId;
 
         if (includeStats === "true") {
-          const command: Parameters<typeof this.listSuppliersWithStats.execute>[0] = {};
+          const command: Parameters<typeof this.listSuppliersWithStats.execute>[0] = { organizationId };
           if (status === "active" || status === "inactive") command.status = status;
           if (search) command.search = search;
           const results = await this.listSuppliersWithStats.execute(command);
@@ -588,10 +601,10 @@ export class FinancialBaseController {
           return;
         }
 
-        const filter: SupplierFilter = {};
-        if (status === "active" || status === "inactive") filter.status = status;
-        if (search) filter.search = search;
-        const results = await this.listSuppliers.execute(filter);
+        const command: Parameters<typeof this.listSuppliers.execute>[0] = { organizationId };
+        if (status === "active" || status === "inactive") command.status = status;
+        if (search) command.search = search;
+        const results = await this.listSuppliers.execute(command);
         res.json(results);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
@@ -603,9 +616,9 @@ export class FinancialBaseController {
      * KPIs globais: total ativos, inativos, com pendências e total faturado.
      * DEVE ficar registado ANTES de /:id para evitar que "kpis" seja interpretado como id.
      */
-    this.router.get("/financial-base/suppliers/kpis", async (_req, res) => {
+    this.router.get("/financial-base/suppliers/kpis", async (req, res) => {
       try {
-        const result = await this.getSuppliersKpis.execute();
+        const result = await this.getSuppliersKpis.execute(req.auth!.orgId);
         res.json(result);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
@@ -620,6 +633,7 @@ export class FinancialBaseController {
     this.router.get("/financial-base/suppliers/:id/detail", async (req, res) => {
       try {
         const result = await this.getSupplierDetail.execute({
+          organizationId: req.auth!.orgId,
           id: req.params["id"] as string,
         });
         res.json(result);
@@ -640,6 +654,7 @@ export class FinancialBaseController {
     this.router.get("/financial-base/suppliers/:id/statement-pdf", async (req, res) => {
       try {
         const { startDate: startStr, endDate: endStr } = req.query as Record<string, string | undefined>;
+        const organizationId = req.auth!.orgId;
 
         const startDate = startStr ? new Date(startStr) : undefined;
         const endDate = endStr ? new Date(endStr) : undefined;
@@ -655,11 +670,12 @@ export class FinancialBaseController {
 
         const [data, organization] = await Promise.all([
           this.getSupplierStatement.execute({
+            organizationId,
             id: req.params["id"] as string,
             ...(startDate && { startDate }),
             ...(endDate && { endDate }),
           }),
-          this.getOrganizationIdentity.execute({ orgId: this.orgId }),
+          this.getOrganizationIdentity.execute({ organizationId }),
         ]);
 
         const pdf = await buildStatementPdf(data, organization);
@@ -685,7 +701,10 @@ export class FinancialBaseController {
      */
     this.router.get("/financial-base/suppliers/:id", async (req, res) => {
       try {
-        const result = await this.getSupplier.execute({ id: req.params["id"] as string });
+        const result = await this.getSupplier.execute({
+          organizationId: req.auth!.orgId,
+          id: req.params["id"] as string,
+        });
         res.json(result);
       } catch (e) {
         if (e instanceof SupplierNotFoundError) {
@@ -710,6 +729,7 @@ export class FinancialBaseController {
           return;
         }
         const result = await this.createSupplier.execute({
+          organizationId: req.auth!.orgId,
           name: body.name as string,
           nif: (body.nif as string | null | undefined) ?? null,
           email: (body.email as string | null | undefined) ?? null,
@@ -755,6 +775,7 @@ export class FinancialBaseController {
             body.paymentTermsDays != null ? Number(body.paymentTermsDays) : null;
         if ("notes" in body) data.notes = (body.notes as string | null) ?? null;
         const result = await this.updateSupplier.execute({
+          organizationId: req.auth!.orgId,
           id: req.params["id"] as string,
           data,
         });
@@ -780,6 +801,7 @@ export class FinancialBaseController {
           return;
         }
         const result = await this.toggleSupplierStatus.execute({
+          organizationId: req.auth!.orgId,
           id: req.params["id"] as string,
           status: body.status,
         });

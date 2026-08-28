@@ -12,7 +12,7 @@ export class CreateCostCenterGroupUseCase implements CreateCostCenterGroupPort {
   constructor(private readonly repository: CostCenterGroupRepositoryPort) {}
 
   async execute(command: CreateCostCenterGroupCommand): Promise<CostCenterGroupDTO> {
-    const existing = await this.repository.findByCode(command.code);
+    const existing = await this.repository.findByCode(command.organizationId, command.code);
     if (existing) throw new CostCenterGroupCodeAlreadyExistsError(command.code);
 
     const group = CostCenterGroup.create({
@@ -22,7 +22,7 @@ export class CreateCostCenterGroupUseCase implements CreateCostCenterGroupPort {
       sortOrder: command.sortOrder ?? 0,
     });
 
-    await this.repository.save(group);
+    await this.repository.save(command.organizationId, group);
     return toCostCenterGroupDTO(group);
   }
 }

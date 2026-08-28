@@ -24,7 +24,7 @@ export class CreateSupplierUseCase implements CreateSupplierPort {
       notes: command.notes ?? null,
     });
 
-    await this.repository.save(supplier);
+    await this.repository.save(command.organizationId, supplier);
     return toSupplierDTO(supplier);
   }
 }

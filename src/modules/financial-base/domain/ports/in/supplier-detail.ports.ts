@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { SupplierDTO } from "./supplier.ports.js";
 
 // ---- KPIs globais da listagem ----
@@ -12,7 +13,7 @@ export interface SuppliersKpisDTO {
 }
 
 export interface GetSuppliersKpisPort {
-  execute(): Promise<SuppliersKpisDTO>;
+  execute(organizationId: OrganizationId): Promise<SuppliersKpisDTO>;
 }
 
 // ---- Estatísticas por fornecedor ----
@@ -33,12 +34,13 @@ export interface SupplierWithStatsDTO extends SupplierDTO {
 }
 
 export interface ListSuppliersWithStatsCommand {
+  organizationId: OrganizationId;
   status?: "active" | "inactive";
   search?: string;
 }
 
 export interface ListSuppliersWithStatsPort {
-  execute(command?: ListSuppliersWithStatsCommand): Promise<SupplierWithStatsDTO[]>;
+  execute(command: ListSuppliersWithStatsCommand): Promise<SupplierWithStatsDTO[]>;
 }
 
 // ---- Detalhe completo do fornecedor ----
@@ -62,6 +64,7 @@ export interface SupplierDetailDTO extends SupplierDTO {
 }
 
 export interface GetSupplierDetailCommand {
+  organizationId: OrganizationId;
   id: string;
 }
 

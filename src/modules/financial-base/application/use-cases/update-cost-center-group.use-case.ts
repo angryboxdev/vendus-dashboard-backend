@@ -11,11 +11,11 @@ export class UpdateCostCenterGroupUseCase implements UpdateCostCenterGroupPort {
   constructor(private readonly repository: CostCenterGroupRepositoryPort) {}
 
   async execute(command: UpdateCostCenterGroupCommand): Promise<CostCenterGroupDTO> {
-    const group = await this.repository.findById(command.id);
+    const group = await this.repository.findById(command.organizationId, command.id);
     if (!group) throw new CostCenterGroupNotFoundError(command.id);
 
     const updated = group.update(command.data);
-    await this.repository.update(updated);
+    await this.repository.update(command.organizationId, updated);
     return toCostCenterGroupDTO(updated);
   }
 }
