@@ -113,9 +113,32 @@ ticket 20.
       surface exists
 - [x] The Supabase client is imported only inside the helper's folder, plus the
       provisioning job exempted by name
-- [x] `npm run check` runs the type check, tests and dependency rules, and the
-      build command runs it
+- [x] `npm run check` runs the type check, tests and dependency rules — but
+      see Comments: it is **not** wired into `npm run build` (reverted after a
+      broken staging deploy)
 - [x] The agent hook runs the dependency rules over the whole source tree
 - [x] The locations endpoint returns the caller's organization's locations, and is
       built through the helper
 - [x] The existing suite still passes and the deploy still succeeds
+
+## Comments
+
+`build: "npm run check && tsc ..."` broke a real deploy: `Error: Cannot find
+module 'jest-util'`. `npm run check` runs Jest, and `jest`/`jest-util` are
+devDependencies; the deploy environment's `npm ci` runs with `NODE_ENV=production`
+(standard npm behavior, not Render-specific — see
+https://github.com/npm/npm/issues/6803), which omits devDependencies, so
+Jest's own internals were never installed by the time `build` tried to run
+them.
+
+Fix: reverted `build` to `tsc -p tsconfig.build.json` only. `npm run check`
+still exists and still runs typecheck + tests + `lint:deps`, but nothing
+currently invokes it on deploy — there's no CI workflow in this repo yet, so
+enforcement of the dependency-cruiser rule right now is: the agent hook
+(`.claude/hooks/run-checks.mjs`, runs `depcruise src` over the whole tree on
+every edit) plus manual `npm run check`. The original "wire it into the
+build command so a violation fails the deploy" goal is not fully met — a bad
+dependency-cruiser rule or a broken test would no longer fail a Render
+deploy by itself. Revisit when this repo gets a CI workflow (run `npm run
+check` there, gate deploy on it) rather than re-coupling it to `npm run
+build`.
