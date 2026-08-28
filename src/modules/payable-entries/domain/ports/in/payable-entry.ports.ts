@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { PayableStatus, RecurrenceType } from "../../entities/payable-entry.js";
 import type { PayableSummary, PayableCalendarDay } from "../../services/payable-summary.service.js";
 
@@ -32,6 +33,7 @@ export interface PayableCalendarDayDTO {
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 export interface CreatePayableEntryCommand {
+  organizationId: OrganizationId;
   supplierId?: string | null;
   supplierName: string;
   description: string;
@@ -45,6 +47,7 @@ export interface CreatePayableEntryCommand {
 
 
 export interface UpdatePayableEntryCommand {
+  organizationId: OrganizationId;
   id: string;
   supplierName?: string;
   description?: string;
@@ -57,11 +60,18 @@ export interface UpdatePayableEntryCommand {
 }
 
 export interface MarkPayableAsPaidCommand {
+  organizationId: OrganizationId;
   id: string;
   paidAt?: string; // YYYY-MM-DD — defaults to today
 }
 
+export interface CancelPayableEntryCommand {
+  organizationId: OrganizationId;
+  id: string;
+}
+
 export interface ListPayableEntriesFilter {
+  organizationId: OrganizationId;
   supplierId?: string;
   costCenterId?: string;
   status?: PayableStatus;
@@ -69,7 +79,18 @@ export interface ListPayableEntriesFilter {
   to?: string;   // YYYY-MM-DD
 }
 
+export interface GetPayableEntryQuery {
+  organizationId: OrganizationId;
+  id: string;
+}
+
+export interface DeletePayableEntryCommand {
+  organizationId: OrganizationId;
+  id: string;
+}
+
 export interface GetPayableCalendarCommand {
+  organizationId: OrganizationId;
   from: string; // YYYY-MM-DD
   to: string;   // YYYY-MM-DD
 }
@@ -90,23 +111,23 @@ export interface MarkPayableAsPaidPort {
 }
 
 export interface CancelPayableEntryPort {
-  execute(id: string): Promise<PayableEntryDTO>;
+  execute(command: CancelPayableEntryCommand): Promise<PayableEntryDTO>;
 }
 
 export interface ListPayableEntriesPort {
-  execute(filter?: ListPayableEntriesFilter): Promise<PayableEntryDTO[]>;
+  execute(filter: ListPayableEntriesFilter): Promise<PayableEntryDTO[]>;
 }
 
 export interface GetPayableEntryPort {
-  execute(id: string): Promise<PayableEntryDTO>;
+  execute(query: GetPayableEntryQuery): Promise<PayableEntryDTO>;
 }
 
 export interface DeletePayableEntryPort {
-  execute(id: string): Promise<void>;
+  execute(command: DeletePayableEntryCommand): Promise<void>;
 }
 
 export interface GetPayableSummaryPort {
-  execute(filter?: ListPayableEntriesFilter): Promise<PayableSummaryDTO>;
+  execute(filter: ListPayableEntriesFilter): Promise<PayableSummaryDTO>;
 }
 
 export interface GetPayableCalendarPort {

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type {
   CreatePayableEntryPort,
   UpdatePayableEntryPort,
@@ -61,7 +62,7 @@ export function createPayableEntryRouter(ports: PayableEntryPorts): Router {
   // GET /payable-entries/summary
   router.get("/payable-entries/summary", async (req, res) => {
     try {
-      const filter = buildFilter(req.query as Record<string, string | undefined>);
+      const filter = buildFilter(req.query as Record<string, string | undefined>, req.auth!.orgId);
       const summary = await ports.getPayableSummary.execute(filter);
       res.json(summary);
     } catch (err) {
@@ -77,7 +78,7 @@ export function createPayableEntryRouter(ports: PayableEntryPorts): Router {
         res.status(400).json({ error: "Query params 'from' and 'to' are required (YYYY-MM-DD)" });
         return;
       }
-      const days = await ports.getPayableCalendar.execute({ from, to });
+      const days = await ports.getPayableCalendar.execute({ organizationId: req.auth!.orgId, from, to });
       res.json(days);
     } catch (err) {
       handleError(res, err);
@@ -87,7 +88,7 @@ export function createPayableEntryRouter(ports: PayableEntryPorts): Router {
   // GET /payable-entries
   router.get("/payable-entries", async (req, res) => {
     try {
-      const filter = buildFilter(req.query as Record<string, string | undefined>);
+      const filter = buildFilter(req.query as Record<string, string | undefined>, req.auth!.orgId);
       const entries = await ports.listPayableEntries.execute(filter);
       res.json(entries);
     } catch (err) {
@@ -98,7 +99,10 @@ export function createPayableEntryRouter(ports: PayableEntryPorts): Router {
   // GET /payable-entries/:id
   router.get("/payable-entries/:id", async (req, res) => {
     try {
-      const entry = await ports.getPayableEntry.execute(req.params.id);
+      const entry = await ports.getPayableEntry.execute({
+        organizationId: req.auth!.orgId,
+        id: req.params.id,
+      });
       res.json(entry);
     } catch (err) {
       handleError(res, err);
@@ -108,9 +112,12 @@ export function createPayableEntryRouter(ports: PayableEntryPorts): Router {
   // POST /payable-entries
   router.post("/payable-entries", async (req, res) => {
     try {
-      const entry = await ports.createPayableEntry.execute(
-        req.body as Parameters<CreatePayableEntryPort["execute"]>[0],
-      );
+      // Trusted field spread last so a body containing `organizationId`
+      // can never override the caller's own value.
+      const entry = await ports.createPayableEntry.execute({
+        ...(req.body as object),
+        organizationId: req.auth!.orgId,
+      } as Parameters<CreatePayableEntryPort["execute"]>[0]);
       res.status(201).json(entry);
     } catch (err) {
       handleError(res, err);
@@ -120,8 +127,11 @@ export function createPayableEntryRouter(ports: PayableEntryPorts): Router {
   // PATCH /payable-entries/:id
   router.patch("/payable-entries/:id", async (req, res) => {
     try {
+      // Trusted fields spread last so a body containing `organizationId`
+      // or `id` can never override the caller's own values.
       const entry = await ports.updatePayableEntry.execute({
         ...(req.body as object),
+        organizationId: req.auth!.orgId,
         id: req.params.id,
       });
       res.json(entry);
@@ -134,7 +144,10 @@ export function createPayableEntryRouter(ports: PayableEntryPorts): Router {
   router.patch("/payable-entries/:id/paid", async (req, res) => {
     try {
       const { paidAt } = req.body as { paidAt?: string };
-      const cmd: Parameters<MarkPayableAsPaidPort["execute"]>[0] = { id: req.params.id };
+      const cmd: Parameters<MarkPayableAsPaidPort["execute"]>[0] = {
+        organizationId: req.auth!.orgId,
+        id: req.params.id,
+      };
       if (paidAt !== undefined) cmd.paidAt = paidAt;
       const entry = await ports.markPayableAsPaid.execute(cmd);
       res.json(entry);
@@ -146,7 +159,10 @@ export function createPayableEntryRouter(ports: PayableEntryPorts): Router {
   // PATCH /payable-entries/:id/cancel
   router.patch("/payable-entries/:id/cancel", async (req, res) => {
     try {
-      const entry = await ports.cancelPayableEntry.execute(req.params.id);
+      const entry = await ports.cancelPayableEntry.execute({
+        organizationId: req.auth!.orgId,
+        id: req.params.id,
+      });
       res.json(entry);
     } catch (err) {
       handleError(res, err);
@@ -156,7 +172,10 @@ export function createPayableEntryRouter(ports: PayableEntryPorts): Router {
   // DELETE /payable-entries/:id
   router.delete("/payable-entries/:id", async (req, res) => {
     try {
-      await ports.deletePayableEntry.execute(req.params.id);
+      await ports.deletePayableEntry.execute({
+        organizationId: req.auth!.orgId,
+        id: req.params.id,
+      });
       res.status(204).send();
     } catch (err) {
       handleError(res, err);
@@ -166,8 +185,11 @@ export function createPayableEntryRouter(ports: PayableEntryPorts): Router {
   return router;
 }
 
-function buildFilter(q: Record<string, string | undefined>): ListPayableEntriesFilter {
-  const filter: ListPayableEntriesFilter = {};
+function buildFilter(
+  q: Record<string, string | undefined>,
+  organizationId: OrganizationId,
+): ListPayableEntriesFilter {
+  const filter: ListPayableEntriesFilter = { organizationId };
   if (q.supplierId) filter.supplierId = q.supplierId;
   if (q.costCenterId) filter.costCenterId = q.costCenterId;
   if (q.status) filter.status = q.status as PayableStatus;

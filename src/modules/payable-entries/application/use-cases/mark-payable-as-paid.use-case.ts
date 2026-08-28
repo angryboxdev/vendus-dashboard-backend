@@ -15,17 +15,17 @@ export class MarkPayableAsPaidUseCase implements MarkPayableAsPaidPort {
   ) {}
 
   async execute(command: MarkPayableAsPaidCommand): Promise<PayableEntryDTO> {
-    const entry = await this.repo.findById(command.id);
+    const entry = await this.repo.findById(command.organizationId, command.id);
     if (!entry) throw new PayableEntryNotFoundError(command.id);
 
     const paidAt = command.paidAt ? new Date(command.paidAt) : new Date();
     const paid = entry.markPaid(paidAt);
 
-    await this.repo.update(paid);
+    await this.repo.update(command.organizationId, paid);
 
     // Sincronizar fatura ligada, se existir
     if (paid.invoiceId) {
-      await this.invoiceGateway.markPaid(paid.invoiceId, paidAt);
+      await this.invoiceGateway.markPaid(command.organizationId, paid.invoiceId, paidAt);
     }
 
     return toDTO(paid);

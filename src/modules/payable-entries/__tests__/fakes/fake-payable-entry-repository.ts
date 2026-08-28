@@ -1,19 +1,27 @@
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { PayableEntry } from "../../domain/entities/payable-entry.js";
 import type { PayableEntryFilter, PayableEntryRepositoryPort } from "../../domain/ports/out/payable-entry-repository.port.js";
+
+function key(organizationId: OrganizationId, id: string): string {
+  return `${organizationId}:${id}`;
+}
 
 export class FakePayableEntryRepository implements PayableEntryRepositoryPort {
   private store = new Map<string, PayableEntry>();
 
-  async save(entry: PayableEntry): Promise<void> {
-    this.store.set(entry.id, entry);
+  async save(organizationId: OrganizationId, entry: PayableEntry): Promise<void> {
+    this.store.set(key(organizationId, entry.id), entry);
   }
 
-  async findById(id: string): Promise<PayableEntry | null> {
-    return this.store.get(id) ?? null;
+  async findById(organizationId: OrganizationId, id: string): Promise<PayableEntry | null> {
+    return this.store.get(key(organizationId, id)) ?? null;
   }
 
-  async findAll(filter?: PayableEntryFilter): Promise<PayableEntry[]> {
-    let result = [...this.store.values()];
+  async findAll(organizationId: OrganizationId, filter?: PayableEntryFilter): Promise<PayableEntry[]> {
+    const prefix = `${organizationId}:`;
+    let result = [...this.store.entries()]
+      .filter(([k]) => k.startsWith(prefix))
+      .map(([, entry]) => entry);
     if (filter?.supplierId) result = result.filter((e) => e.supplierId === filter.supplierId);
     if (filter?.costCenterId) result = result.filter((e) => e.costCenterId === filter.costCenterId);
     if (filter?.status) result = result.filter((e) => e.status === filter.status);
@@ -28,11 +36,11 @@ export class FakePayableEntryRepository implements PayableEntryRepositoryPort {
     return result.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
   }
 
-  async update(entry: PayableEntry): Promise<void> {
-    this.store.set(entry.id, entry);
+  async update(organizationId: OrganizationId, entry: PayableEntry): Promise<void> {
+    this.store.set(key(organizationId, entry.id), entry);
   }
 
-  async delete(id: string): Promise<void> {
-    this.store.delete(id);
+  async delete(organizationId: OrganizationId, id: string): Promise<void> {
+    this.store.delete(key(organizationId, id));
   }
 }

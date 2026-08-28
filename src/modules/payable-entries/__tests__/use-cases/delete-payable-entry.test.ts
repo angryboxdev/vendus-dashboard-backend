@@ -1,3 +1,4 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreatePayableEntryUseCase } from "../../application/use-cases/create-payable-entry.use-case.js";
 import { CancelPayableEntryUseCase } from "../../application/use-cases/cancel-payable-entry.use-case.js";
 import { MarkPayableAsPaidUseCase } from "../../application/use-cases/mark-payable-as-paid.use-case.js";
@@ -9,8 +10,11 @@ import {
   PayableEntryCannotDeleteError,
 } from "../../domain/errors.js";
 
+const organizationId = mintOrganizationId("org-a");
+
 async function createEntry(repo: FakePayableEntryRepository) {
   return new CreatePayableEntryUseCase(repo).execute({
+    organizationId,
     supplierName: "NOS",
     description: "Internet julho",
     amount: 4500,
@@ -22,18 +26,18 @@ describe("DeletePayableEntryUseCase", () => {
   it("deletes a cancelled entry and removes it from the repository", async () => {
     const repo = new FakePayableEntryRepository();
     const created = await createEntry(repo);
-    await new CancelPayableEntryUseCase(repo).execute(created.id);
+    await new CancelPayableEntryUseCase(repo).execute({ organizationId, id: created.id });
 
-    await new DeletePayableEntryUseCase(repo).execute(created.id);
+    await new DeletePayableEntryUseCase(repo).execute({ organizationId, id: created.id });
 
-    const found = await repo.findById(created.id);
+    const found = await repo.findById(organizationId, created.id);
     expect(found).toBeNull();
   });
 
   it("throws PayableEntryNotFoundError for unknown id", async () => {
     const repo = new FakePayableEntryRepository();
     await expect(
-      new DeletePayableEntryUseCase(repo).execute("does-not-exist"),
+      new DeletePayableEntryUseCase(repo).execute({ organizationId, id: "does-not-exist" }),
     ).rejects.toThrow(PayableEntryNotFoundError);
   });
 
@@ -42,7 +46,7 @@ describe("DeletePayableEntryUseCase", () => {
     const created = await createEntry(repo); // status: pending
 
     await expect(
-      new DeletePayableEntryUseCase(repo).execute(created.id),
+      new DeletePayableEntryUseCase(repo).execute({ organizationId, id: created.id }),
     ).rejects.toThrow(PayableEntryCannotDeleteError);
   });
 
@@ -50,11 +54,12 @@ describe("DeletePayableEntryUseCase", () => {
     const repo = new FakePayableEntryRepository();
     const created = await createEntry(repo);
     await new MarkPayableAsPaidUseCase(repo, new FakeInvoiceRead()).execute({
+      organizationId,
       id: created.id,
     });
 
     await expect(
-      new DeletePayableEntryUseCase(repo).execute(created.id),
+      new DeletePayableEntryUseCase(repo).execute({ organizationId, id: created.id }),
     ).rejects.toThrow(PayableEntryCannotDeleteError);
   });
 });

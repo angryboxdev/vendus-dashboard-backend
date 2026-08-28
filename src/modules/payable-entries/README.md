@@ -1,7 +1,7 @@
 # Módulo: payable-entries
 
 > Status: ativo
-> Última atualização: 2026-06-17
+> Última atualização: 2026-08-28
 
 ---
 
@@ -86,24 +86,68 @@ Não é responsável por conciliação bancária (módulo `bank-statements`) nem
 
 **PayableSummaryService** — serviço de domínio puro que calcula KPIs (totalDue, totalOverdue, dueSoon7Days, paidThisMonth) e agrupa entradas por dia para a vista calendário.
 
+---
+
+## Isolamento por organização (spec B2)
+
+Este módulo segue o padrão estabelecido pelo piloto `bank-accounts` (ticket 02
+da spec `.scratch/scoped-access/spec.md`, D2, ADR-0008) — a organização passa
+explicitamente por todo o caminho, em vez de confiar num client Supabase sem
+filtro. O README de `bank-accounts` documenta o estilo completo; aqui fica o
+resumo aplicado a este módulo:
+
+- **Output ports**: `organizationId: OrganizationId` é sempre o **primeiro
+  parâmetro, separado**, em todos os métodos de `PayableEntryRepositoryPort` e
+  `InvoiceReadPort` — nunca um campo dentro de um objecto de filtro (D2).
+- **Input ports (use cases)**: `organizationId` viaja como **campo dentro do
+  objecto de comando/query** que o `execute()` já recebia. Um port que antes
+  recebia um primitivo isolado (`execute(id: string)`, `execute(filter?: ...)`)
+  passou a receber sempre um objecto obrigatório com esse campo mais
+  `organizationId` — `CancelPayableEntryCommand`, `GetPayableEntryQuery` e
+  `DeletePayableEntryCommand` são novos por essa razão; `ListPayableEntriesFilter`
+  deixou de ser opcional porque passou a exigir `organizationId`.
+- **Controller**: lê de `req.auth!.orgId` (populado pelo middleware de auth a
+  partir do claim verificado) e coloca-o no comando/query — nunca do body ou
+  de params. Nos endpoints de escrita, o campo é espalhado **depois** do
+  corpo do pedido (`{ ...req.body, organizationId: req.auth!.orgId, id: ... }`)
+  para que um payload com `organizationId` nunca sobreponha o valor do
+  chamador.
+- **Adapters**: recebem o `ScopedQueryFactory` (`createScopedQuery`) no
+  construtor, não um `SupabaseClient`, e chamam
+  `this.scopedQuery(organizationId).table(...)` por operação — ver
+  `SupabasePayableEntryRepository`/`SupabaseInvoiceReadAdapter`.
+- **Domínio**: a entity `PayableEntry` não ganhou um campo `organizationId` —
+  a organização é uma preocupação de acesso/query, não um invariante de
+  negócio da entidade.
+
+O `InvoiceReadPort` deste módulo é independente do `PayableEntryWritePort`
+que o módulo `invoices` declara para o sentido inverso (ver D3 abaixo) — cada
+um tem o seu próprio adapter Supabase e a sua própria conversão B2, feita no
+ticket do respectivo módulo.
+
 ## Ports
 
 ### Entrada (use cases)
 
-- `CreatePayableEntryPort` — cria entrada manual (sem fatura).
-- `UpdatePayableEntryPort` — edita campos de uma entrada não cancelada.
-- `MarkPayableAsPaidPort` — marca como paga, regista `paidAt`.
-- `CancelPayableEntryPort` — cancela uma entrada não paga.
-- `ListPayableEntriesPort` — lista com filtros: período, CC, fornecedor, status.
-- `GetPayableEntryPort` — detalhe de uma entrada.
-- `DeletePayableEntryPort` — elimina (apenas se `cancelled`).
-- `GetPayableSummaryPort` — KPIs agregados.
-- `GetPayableCalendarPort` — entradas agrupadas por dia (para vista calendário).
+- `CreatePayableEntryPort` — cria entrada manual (sem fatura). `CreatePayableEntryCommand` inclui `organizationId`.
+- `UpdatePayableEntryPort` — edita campos de uma entrada não cancelada. `UpdatePayableEntryCommand` inclui `organizationId`.
+- `MarkPayableAsPaidPort` — marca como paga, regista `paidAt`. `MarkPayableAsPaidCommand` inclui `organizationId`.
+- `CancelPayableEntryPort` — cancela uma entrada não paga. `CancelPayableEntryCommand = { organizationId, id }`.
+- `ListPayableEntriesPort` — lista com filtros: período, CC, fornecedor, status. `ListPayableEntriesFilter` inclui `organizationId` (obrigatório) mais os filtros opcionais.
+- `GetPayableEntryPort` — detalhe de uma entrada. `GetPayableEntryQuery = { organizationId, id }`.
+- `DeletePayableEntryPort` — elimina (apenas se `cancelled`). `DeletePayableEntryCommand = { organizationId, id }`.
+- `GetPayableSummaryPort` — KPIs agregados. Recebe `ListPayableEntriesFilter` (mesmo tipo do list, incluindo `organizationId`).
+- `GetPayableCalendarPort` — entradas agrupadas por dia (para vista calendário). `GetPayableCalendarCommand` inclui `organizationId`.
 
 ### Saída (dependências do domínio)
 
-- `PayableEntryRepositoryPort` — persistência das entradas.
-- `InvoiceReadPort` — leitura de dados mínimos de uma fatura (id, fornecedor, valor, vencimento) e marcação de pagamento. Declarado aqui; o adapter concreto acede directamente à tabela `invoices`.
+- `PayableEntryRepositoryPort` — `save(organizationId, entry)`, `findById(organizationId, id)`,
+  `findAll(organizationId, filter?)`, `update(organizationId, entry)`, `delete(organizationId, id)`.
+- `InvoiceReadPort` — `findById(organizationId, id)`, `markPaid(organizationId, invoiceId, paidAt)`.
+  Leitura de dados mínimos de uma fatura (id, fornecedor, valor, vencimento) e marcação de
+  pagamento. Declarado aqui; o adapter concreto acede directamente à tabela `invoices`.
+
+Em ambos, `organizationId` é sempre o primeiro parâmetro do método (D2).
 
 ## Adapters
 
@@ -113,8 +157,8 @@ Não é responsável por conciliação bancária (módulo `bank-statements`) nem
 
 ### Saída
 
-- `SupabasePayableEntryRepository` → implementa `PayableEntryRepositoryPort` na tabela `payable_entries`.
-- `SupabaseInvoiceReadAdapter` → implementa `InvoiceReadPort` lendo directamente da tabela `invoices` (sem importar o módulo `invoices`).
+- `SupabasePayableEntryRepository` → tabela `payable_entries`, via `ScopedQueryFactory` (D2) — não guarda um `SupabaseClient`.
+- `SupabaseInvoiceReadAdapter` → tabela `invoices` (sem importar o módulo `invoices`), via `ScopedQueryFactory`.
 
 ## Rotas
 

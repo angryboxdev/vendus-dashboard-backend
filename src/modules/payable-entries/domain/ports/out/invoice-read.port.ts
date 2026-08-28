@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 /**
  * Output port de leitura/escrita de faturas para o módulo payable-entries.
  * Declarado aqui para manter independência — o adapter concreto acede
@@ -15,7 +17,7 @@ export interface InvoiceSnapshot {
 }
 
 export interface InvoiceReadPort {
-  findById(id: string): Promise<InvoiceSnapshot | null>;
+  findById(organizationId: OrganizationId, id: string): Promise<InvoiceSnapshot | null>;
   /** Marca a fatura como paga quando o payable ligado é pago. */
-  markPaid(invoiceId: string, paidAt: Date): Promise<void>;
+  markPaid(organizationId: OrganizationId, invoiceId: string, paidAt: Date): Promise<void>;
 }
