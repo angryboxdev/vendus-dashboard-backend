@@ -1,8 +1,11 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { GetSupplierStatementUseCase } from "../../application/use-cases/get-supplier-statement.use-case.js";
 import { FakeSupplierRepository } from "../fakes/fake-supplier-repository.js";
 import { FakeSupplierInvoiceStats } from "../fakes/fake-supplier-invoice-stats.js";
 import { Supplier } from "../../domain/entities/supplier.js";
 import { SupplierNotFoundError } from "../../domain/errors.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 const makeInvoice = (overrides: {
   id: string;
@@ -30,16 +33,18 @@ describe("GetSupplierStatementUseCase", () => {
       new FakeSupplierRepository(),
       new FakeSupplierInvoiceStats(),
     );
-    await expect(useCase.execute({ id: "inexistente" })).rejects.toThrow(SupplierNotFoundError);
+    await expect(
+      useCase.execute({ organizationId: ORG_ID, id: "inexistente" }),
+    ).rejects.toThrow(SupplierNotFoundError);
   });
 
   it("devolve extrato vazio quando não há faturas", async () => {
     const repo = new FakeSupplierRepository();
     const s = Supplier.create({ name: "Makro" });
-    await repo.save(s);
+    await repo.save(ORG_ID, s);
 
     const useCase = new GetSupplierStatementUseCase(repo, new FakeSupplierInvoiceStats());
-    const result = await useCase.execute({ id: s.id });
+    const result = await useCase.execute({ organizationId: ORG_ID, id: s.id });
 
     expect(result.supplier.name).toBe("Makro");
     expect(result.invoices).toHaveLength(0);
@@ -51,7 +56,7 @@ describe("GetSupplierStatementUseCase", () => {
     const repo = new FakeSupplierRepository();
     const statsPort = new FakeSupplierInvoiceStats();
     const s = Supplier.create({ name: "Makro" });
-    await repo.save(s);
+    await repo.save(ORG_ID, s);
 
     const jan = makeInvoice({ id: "i1", invoiceNumber: "F001", invoiceDate: new Date("2026-01-10"), status: "paid", totalWithVat: 500, paidAt: new Date("2026-01-20") });
     const feb = makeInvoice({ id: "i2", invoiceNumber: "F002", invoiceDate: new Date("2026-02-15"), status: "pending", totalWithVat: 300 });
@@ -65,6 +70,7 @@ describe("GetSupplierStatementUseCase", () => {
     // Filtra apenas Jan–Fev (exclui Mar)
     const useCase = new GetSupplierStatementUseCase(repo, statsPort);
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       id: s.id,
       startDate: new Date("2026-01-01"),
       endDate: new Date("2026-02-28"),
@@ -82,7 +88,7 @@ describe("GetSupplierStatementUseCase", () => {
     const repo = new FakeSupplierRepository();
     const statsPort = new FakeSupplierInvoiceStats();
     const s = Supplier.create({ name: "Fornecedor A" });
-    await repo.save(s);
+    await repo.save(ORG_ID, s);
 
     statsPort.seed(
       { supplierId: s.id, invoiceCount: 1, totalBilled: 100, totalPaid: 100, totalPending: 0, lastInvoiceDate: new Date("2026-06-01"), lastPaymentDate: new Date("2026-06-10") },
@@ -90,7 +96,7 @@ describe("GetSupplierStatementUseCase", () => {
     );
 
     const useCase = new GetSupplierStatementUseCase(repo, statsPort);
-    const result = await useCase.execute({ id: s.id });
+    const result = await useCase.execute({ organizationId: ORG_ID, id: s.id });
 
     expect(result.invoices).toHaveLength(1);
     expect(result.stats.totalBilled).toBe(100);
@@ -101,7 +107,7 @@ describe("GetSupplierStatementUseCase", () => {
     const repo = new FakeSupplierRepository();
     const statsPort = new FakeSupplierInvoiceStats();
     const s = Supplier.create({ name: "Fornecedor B" });
-    await repo.save(s);
+    await repo.save(ORG_ID, s);
 
     statsPort.seed(
       { supplierId: s.id, invoiceCount: 0, totalBilled: 0, totalPaid: 0, totalPending: 0, lastInvoiceDate: null, lastPaymentDate: null },
@@ -112,7 +118,7 @@ describe("GetSupplierStatementUseCase", () => {
     );
 
     const useCase = new GetSupplierStatementUseCase(repo, statsPort);
-    const result = await useCase.execute({ id: s.id });
+    const result = await useCase.execute({ organizationId: ORG_ID, id: s.id });
 
     // Fatura cancelada aparece na lista
     expect(result.invoices).toHaveLength(2);
@@ -127,7 +133,7 @@ describe("GetSupplierStatementUseCase", () => {
     const repo = new FakeSupplierRepository();
     const statsPort = new FakeSupplierInvoiceStats();
     const s = Supplier.create({ name: "Fornecedor C" });
-    await repo.save(s);
+    await repo.save(ORG_ID, s);
 
     statsPort.seed(
       { supplierId: s.id, invoiceCount: 0, totalBilled: 0, totalPaid: 0, totalPending: 0, lastInvoiceDate: null, lastPaymentDate: null },
@@ -135,7 +141,7 @@ describe("GetSupplierStatementUseCase", () => {
     );
 
     const useCase = new GetSupplierStatementUseCase(repo, statsPort);
-    const result = await useCase.execute({ id: s.id });
+    const result = await useCase.execute({ organizationId: ORG_ID, id: s.id });
 
     expect(result.stats.invoiceCount).toBe(1);
     expect(result.stats.totalBilled).toBe(400);
@@ -147,7 +153,7 @@ describe("GetSupplierStatementUseCase", () => {
     const repo = new FakeSupplierRepository();
     const statsPort = new FakeSupplierInvoiceStats();
     const s = Supplier.create({ name: "Fornecedor D" });
-    await repo.save(s);
+    await repo.save(ORG_ID, s);
 
     statsPort.seed(
       { supplierId: s.id, invoiceCount: 0, totalBilled: 0, totalPaid: 0, totalPending: 0, lastInvoiceDate: null, lastPaymentDate: null },
@@ -158,7 +164,7 @@ describe("GetSupplierStatementUseCase", () => {
     );
 
     const useCase = new GetSupplierStatementUseCase(repo, statsPort);
-    const result = await useCase.execute({ id: s.id, startDate: new Date("2026-04-01") });
+    const result = await useCase.execute({ organizationId: ORG_ID, id: s.id, startDate: new Date("2026-04-01") });
 
     expect(result.invoices).toHaveLength(1);
     expect(result.invoices[0]!.invoiceNumber).toBe("F002");

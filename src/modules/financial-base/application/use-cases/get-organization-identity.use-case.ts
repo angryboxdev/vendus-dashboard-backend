@@ -10,8 +10,8 @@ export class GetOrganizationIdentityUseCase implements GetOrganizationIdentityPo
   constructor(private readonly repository: OrganizationIdentityPort) {}
 
   async execute(command: GetOrganizationIdentityCommand): Promise<OrganizationIdentity> {
-    const organization = await this.repository.findById(command.orgId);
-    if (!organization) throw new OrganizationNotFoundError(command.orgId);
+    const organization = await this.repository.findById(command.organizationId);
+    if (!organization) throw new OrganizationNotFoundError(command.organizationId);
     return organization;
   }
 }

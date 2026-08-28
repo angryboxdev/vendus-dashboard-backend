@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import { Supplier, type SupplierStatus } from "../../domain/entities/supplier.js";
 import type {
   SupplierFilter,
@@ -24,11 +25,16 @@ function toEntity(row: Record<string, unknown>): Supplier {
   });
 }
 
+/**
+ * Nunca guarda um `SupabaseClient` — recebe o factory `createScopedQuery`
+ * (`ScopedQueryFactory`) injectado pelo composition root e constrói um
+ * `ScopedQuery` por chamada (D2).
+ */
 export class SupabaseSupplierRepository implements SupplierRepositoryPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async save(supplier: Supplier): Promise<void> {
-    const { error } = await this.supabase.from("suppliers").insert({
+  async save(organizationId: OrganizationId, supplier: Supplier): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("suppliers").insert({
       id: supplier.id,
       name: supplier.name,
       nif: supplier.nif,
@@ -47,20 +53,20 @@ export class SupabaseSupplierRepository implements SupplierRepositoryPort {
     if (error) throw new Error(error.message);
   }
 
-  async findById(id: string): Promise<Supplier | null> {
-    const { data, error } = await this.supabase
-      .from("suppliers")
+  async findById(organizationId: OrganizationId, id: string): Promise<Supplier | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("suppliers")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async findAll(filter?: SupplierFilter): Promise<Supplier[]> {
-    let q = this.supabase
-      .from("suppliers")
+  async findAll(organizationId: OrganizationId, filter?: SupplierFilter): Promise<Supplier[]> {
+    let q = this.scopedQuery(organizationId)
+      .table("suppliers")
       .select("*")
       .order("name", { ascending: true });
 
@@ -69,12 +75,12 @@ export class SupabaseSupplierRepository implements SupplierRepositoryPort {
 
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toEntity(r));
   }
 
-  async update(supplier: Supplier): Promise<void> {
-    const { error } = await this.supabase
-      .from("suppliers")
+  async update(organizationId: OrganizationId, supplier: Supplier): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("suppliers")
       .update({
         name: supplier.name,
         nif: supplier.nif,

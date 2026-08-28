@@ -103,6 +103,15 @@ gerir contas a pagar (módulo `payable-entries`).
 
 ## Ports
 
+Todos os ports — entrada e saída — recebem a organização como parâmetro
+explícito, usando o tipo `OrganizationId` (`src/kernel/`), seguindo o padrão
+da spec B2 (D2/D7): nos ports de entrada é o primeiro campo do `command`
+(ou o primeiro parâmetro posicional, nos poucos ports sem `command` — ver
+"Padrão de conversão B2" abaixo); nos ports de saída é sempre o primeiro
+parâmetro posicional. Os controllers lêem-na de `req.auth.orgId` (verificada
+pelo middleware de autenticação); não há mais nenhuma organização fixa neste
+módulo.
+
 ### Entrada (use cases)
 
 **Grupos de centros de custo**
@@ -118,7 +127,7 @@ gerir contas a pagar (módulo `payable-entries`).
 - `CreateCostCenterCategoryPort` — valida grupo existe + código único; lança erros relevantes.
 - `UpdateCostCenterCategoryPort` — actualiza campos editáveis.
 - `ToggleCostCenterCategoryStatusPort` — activa/desactiva.
-- `SeedDefaultCostCentersPort` — popula os 7 grupos e 28 subcategorias padrão; idempotente.
+- `SeedDefaultCostCentersPort` — `execute(organizationId)`; popula os 7 grupos e 28 subcategorias padrão; idempotente.
 
 **Fornecedores**
 - `CreateSupplierPort` — cria um novo fornecedor.
@@ -127,42 +136,45 @@ gerir contas a pagar (módulo `payable-entries`).
 - `ListSuppliersPort` — lista com filtros `status?` e `search?` (resposta básica, sem stats).
 - `ListSuppliersWithStatsPort` — lista com filtros + agregados financeiros por fornecedor (invoiceCount, totalBilled, totalPaid, totalPending).
 - `GetSupplierPort` — obtém um fornecedor por id; lança `SupplierNotFoundError`.
-- `GetSuppliersKpisPort` — KPIs globais da listagem: totalActive, totalInactive, totalWithPending, totalBilledAll.
+- `GetSuppliersKpisPort` — `execute(organizationId)`; KPIs globais da listagem: totalActive, totalInactive, totalWithPending, totalBilledAll.
 - `GetSupplierDetailPort` — detalhe completo: dados base + resumo financeiro + lista de faturas.
 - `GetSupplierStatementPort` — dados filtrados por período (startDate?, endDate?) para geração de extrato PDF.
 
 **Canais**
-- `ListChannelsPort` — lista canais com filtro opcional `isActive?`.
+- `ListChannelsPort` — `execute(organizationId, isActive?)`; lista canais com filtro opcional `isActive?`. Sem `command` — a organização é o primeiro parâmetro posicional porque o port já não tinha um objecto de comando antes desta conversão, e criar um só para carregar `organizationId` seria ceremónia sem outro campo para acompanhá-la.
 
 **Identidade da organização**
-- `GetOrganizationIdentityPort` — por `orgId`; lança `OrganizationNotFoundError`.
+- `GetOrganizationIdentityPort` — `execute({ organizationId })`; lança `OrganizationNotFoundError`. Já não recebe um `orgId` à parte — a organização a procurar *é* a organização do pedido (ver port de saída abaixo).
 
 ### Saída (dependências do domínio)
 
-- `CostCenterGroupRepositoryPort` — `save`, `findById`, `findByCode`, `findAll`, `update`.
-- `CostCenterCategoryRepositoryPort` — `save`, `findById`, `findByCode`, `findByGroupId`, `findAll`, `update`.
-- `SupplierRepositoryPort` — `save`, `findById`, `findAll`, `update`.
-- `SupplierInvoiceStatsPort` — `getSummariesForSuppliers(ids)`, `listInvoicesBySupplier(id, filter?)`. Lê da tabela `invoices` para agregar dados financeiros por fornecedor. `SupplierInvoiceRow` inclui `totalWithoutVat`, `vatAmount`, `totalWithVat`; `filter` aceita `startDate?`/`endDate?`.
-- `ChannelRepositoryPort` — `findAll(isActive?)`, `findById`.
-- `OrganizationIdentityPort` — `findById(orgId)`. Assinatura já pensada para
-  a spec C, que passa a receber o `orgId` do pedido em vez do
-  `DEFAULT_ORG_ID` fixo (ver decisão de design abaixo).
+- `CostCenterGroupRepositoryPort` — `save(organizationId, group)`, `findById(organizationId, id)`, `findByCode(organizationId, code)`, `findAll(organizationId, filter?)`, `update(organizationId, group)`.
+- `CostCenterCategoryRepositoryPort` — `save(organizationId, category)`, `findById(organizationId, id)`, `findByCode(organizationId, code)`, `findByGroupId(organizationId, groupId)`, `findAll(organizationId, filter?)`, `update(organizationId, category)`.
+- `SupplierRepositoryPort` — `save(organizationId, supplier)`, `findById(organizationId, id)`, `findAll(organizationId, filter?)`, `update(organizationId, supplier)`.
+- `SupplierInvoiceStatsPort` — `getSummariesForSuppliers(organizationId, ids)`, `listInvoicesBySupplier(organizationId, id, filter?)`. Lê da tabela `invoices` para agregar dados financeiros por fornecedor. `SupplierInvoiceRow` inclui `totalWithoutVat`, `vatAmount`, `totalWithVat`; `filter` aceita `startDate?`/`endDate?`.
+- `ChannelRepositoryPort` — `findAll(organizationId, isActive?)`, `findById(organizationId, id)`.
+- `OrganizationIdentityPort` — `findById(organizationId)`. Um único parâmetro: a tabela `organizations` está registada no `TABLE_REGISTRY` (`src/infra/scoped-db/`) com a sua própria PK (`id`) como coluna de organização, pelo que escopar por `organizationId` já é a própria consulta — não há um id de organização separado a passar (ver decisão de design abaixo).
 
 ## Adapters
 
 ### Entrada
 
 - `FinancialBaseController` → expõe todos os use cases via REST em `/api/financial-base/...`
-  (requer role `manager`).
+  (requer role `manager`). Todas as rotas lêem a organização de `req.auth!.orgId`.
 
 ### Saída
 
-- `SupabaseCostCenterGroupRepository` → implementa `CostCenterGroupRepositoryPort` na tabela `cost_center_groups`.
-- `SupabaseCostCenterCategoryRepository` → implementa `CostCenterCategoryRepositoryPort` na tabela `cost_center_categories`.
-- `SupabaseSupplierRepository` → implementa `SupplierRepositoryPort` na tabela `suppliers`.
-- `SupabaseSupplierInvoiceStatsAdapter` → implementa `SupplierInvoiceStatsPort` lendo da tabela `invoices`. Agrega stats em TypeScript após fetch por `supplier_id`. **Atenção:** a tabela `invoices` guarda valores monetários em cêntimos (inteiros); o adapter divide por 100 ao mapear para euros — consistente com o módulo `invoices`.
-- `SupabaseChannelRepository` → implementa `ChannelRepositoryPort` na tabela `channels` (read-only; canais geridos por migration).
-- `SupabaseOrganizationIdentityRepository` → implementa `OrganizationIdentityPort` na tabela `organizations` (tenant root; read-only aqui).
+- `SupabaseCostCenterGroupRepository` → implementa `CostCenterGroupRepositoryPort` na tabela `cost_center_groups`, via `ScopedQuery`.
+- `SupabaseCostCenterCategoryRepository` → implementa `CostCenterCategoryRepositoryPort` na tabela `cost_center_categories`, via `ScopedQuery`.
+- `SupabaseSupplierRepository` → implementa `SupplierRepositoryPort` na tabela `suppliers`, via `ScopedQuery`.
+- `SupabaseSupplierInvoiceStatsAdapter` → implementa `SupplierInvoiceStatsPort` lendo da tabela `invoices`, via `ScopedQuery`. Agrega stats em TypeScript após fetch por `supplier_id`. **Atenção:** a tabela `invoices` guarda valores monetários em cêntimos (inteiros); o adapter divide por 100 ao mapear para euros — consistente com o módulo `invoices`.
+- `SupabaseChannelRepository` → implementa `ChannelRepositoryPort` na tabela `channels` (read-only; canais geridos por migration), via `ScopedQuery`.
+- `SupabaseOrganizationIdentityRepository` → implementa `OrganizationIdentityPort` na tabela `organizations` (tenant root; read-only aqui), via `ScopedQuery`.
+
+Nenhum destes adapters guarda um `SupabaseClient` — todos recebem o factory
+`createScopedQuery` (`ScopedQueryFactory`) injectado pelo composition root
+(`financial-base.module.ts`) e constroem um `ScopedQuery` escopado por
+chamada (D2). O módulo não importa `@supabase/supabase-js` em lado nenhum.
 
 ## Rotas REST
 
@@ -315,18 +327,46 @@ A alternativa (geração no browser com `@react-pdf/renderer`) foi descartada po
 ### Identidade da organização lida da tabela `organizations`, não de `config/company.ts`
 
 O cabeçalho do extrato (nome, NIF, morada) já foi um ficheiro de constantes
-(`src/config/company.ts`), removido nesta migração. Agora é lido através de
-`OrganizationIdentityPort.findById(orgId)` (`GetOrganizationIdentityUseCase`),
-implementado por `SupabaseOrganizationIdentityRepository` sobre a tabela
-`organizations` (ver spec A, `docs/MULTI_TENANCY_SAAS_DESIGN.md` §2, D9/D10).
+(`src/config/company.ts`), removido na migração da spec A. Agora é lido
+através de `OrganizationIdentityPort.findById(organizationId)`
+(`GetOrganizationIdentityUseCase`), implementado por
+`SupabaseOrganizationIdentityRepository` sobre a tabela `organizations` (ver
+spec A, `docs/MULTI_TENANCY_SAAS_DESIGN.md` §2, D9/D10).
 
-`orgId` ainda não vem do pedido — não há tenant na cadeia de autenticação até
-a spec C. Até lá resolve-se por uma constante `DEFAULT_ORG_ID`, definida e
-usada apenas em `financial-base.module.ts` (composition root), apontando para
-a linha da Angrybox seeded em `20260822143602_tenant_root_tables.sql`. A
-assinatura do port já é `findById(orgId)` — a spec C troca apenas a origem do
-argumento (do `orgId` fixo para o do pedido autenticado) e apaga a constante;
-nada aqui é reescrito nessa altura.
+Até à conversão da spec B2 (ticket 08), `orgId` vinha de uma constante local
+`DEFAULT_ORG_ID`, definida em `financial-base.module.ts`, apontando para a
+linha da Angrybox seeded em `20260822143602_tenant_root_tables.sql` — o
+módulo já precisava de uma organização antes de existir uma no pedido. Essa
+constante **já não existe**: nos caminhos autenticados, `organizationId` vem
+de `req.auth.orgId` (a claim verificada, spec B1); o único caminho deste
+módulo sem utilizador autenticado — o `FinancialBaseSupplierCreateAdapter`
+usado pelo módulo `invoices`, ainda não convertido pela spec B2 — usa o
+`UNATTENDED_SCOPE` (`src/infra/scoped-db/unattended-scope.ts`, D6) até esse
+módulo ser convertido (ticket 10).
+
+### Organização como parâmetro explícito (spec B2, D2/D7)
+
+Este módulo foi o oitavo convertido pela spec B2 (`.scratch/scoped-access/spec.md`,
+ticket 08). Não havia ainda nenhum módulo hexagonal convertido pelo seu
+pilot (`bank-accounts`, ticket 02, ainda não feito quando este ticket
+correu) — o padrão abaixo foi derivado directamente da spec e do único
+precedente concreto que já existia, o módulo `locations` (ticket 01):
+
+- **Ports de saída**: `organizationId: OrganizationId` como primeiro
+  parâmetro de cada método, seguido dos parâmetros de negócio.
+- **Ports de entrada com `command`**: `organizationId` é o primeiro campo
+  do `command`. Nos poucos casos sem `command` (`ListChannelsPort`,
+  `GetSuppliersKpisPort`, `SeedDefaultCostCentersPort`), `organizationId` é
+  o primeiro parâmetro posicional — criar um `command` só para um campo
+  seria ceremónia.
+- **Adapters**: recebem `ScopedQueryFactory` (`src/infra/scoped-db/scoped-query.js`)
+  no construtor em vez de `SupabaseClient`, e constroem um `ScopedQuery`
+  por chamada (`this.scopedQuery(organizationId).table(name)...`). Nenhum
+  adapter deste módulo guarda ou importa `SupabaseClient`.
+- **Controller**: lê `req.auth!.orgId` em cada rota e inclui-o no `command`
+  (ou passa-o como argumento posicional, nos ports acima).
+- **Composition root**: injecta `createScopedQuery` nos adapters em vez de
+  `getSupabaseServiceRole()`.
 
 ### Supplier migrado de `defaultCostCenterId` para `defaultCostCenterGroupId` + `defaultCostCenterCategoryId`
 

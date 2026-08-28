@@ -1,7 +1,9 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { SupplierDTO } from "./supplier.ports.js";
 import type { SupplierInvoiceRowDTO, SupplierStatsDTO } from "./supplier-detail.ports.js";
 
 export interface GetSupplierStatementCommand {
+  organizationId: OrganizationId;
   id: string;
   startDate?: Date;
   endDate?: Date;

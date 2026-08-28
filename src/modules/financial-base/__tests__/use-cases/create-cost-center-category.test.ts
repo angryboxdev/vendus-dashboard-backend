@@ -1,3 +1,4 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateCostCenterGroupUseCase } from "../../application/use-cases/create-cost-center-group.use-case.js";
 import { CreateCostCenterCategoryUseCase } from "../../application/use-cases/create-cost-center-category.use-case.js";
 import { FakeCostCenterGroupRepository } from "../fakes/fake-cost-center-group-repository.js";
@@ -7,13 +8,15 @@ import {
   CostCenterCategoryCodeAlreadyExistsError,
 } from "../../domain/errors.js";
 
+const ORG_ID = mintOrganizationId("org-test");
+
 describe("CreateCostCenterCategoryUseCase", () => {
   async function makeUseCases() {
     const groupRepo = new FakeCostCenterGroupRepository();
     const categoryRepo = new FakeCostCenterCategoryRepository();
     const createGroup = new CreateCostCenterGroupUseCase(groupRepo);
     const createCategory = new CreateCostCenterCategoryUseCase(groupRepo, categoryRepo);
-    const group = await createGroup.execute({ code: "OPD", name: "Operação Direta" });
+    const group = await createGroup.execute({ organizationId: ORG_ID, code: "OPD", name: "Operação Direta" });
     return { categoryRepo, createCategory, group };
   }
 
@@ -21,6 +24,7 @@ describe("CreateCostCenterCategoryUseCase", () => {
     const { categoryRepo, createCategory, group } = await makeUseCases();
 
     const result = await createCategory.execute({
+      organizationId: ORG_ID,
       groupId: group.id,
       code: "OPD.01",
       name: "CMV / Ingredientes",
@@ -43,6 +47,7 @@ describe("CreateCostCenterCategoryUseCase", () => {
 
     await expect(
       createCategory.execute({
+        organizationId: ORG_ID,
         groupId: "grupo-inexistente",
         code: "OPD.01",
         name: "CMV",
@@ -58,6 +63,7 @@ describe("CreateCostCenterCategoryUseCase", () => {
     const { createCategory, group } = await makeUseCases();
 
     await createCategory.execute({
+      organizationId: ORG_ID,
       groupId: group.id,
       code: "OPD.01",
       name: "CMV / Ingredientes",
@@ -69,6 +75,7 @@ describe("CreateCostCenterCategoryUseCase", () => {
 
     await expect(
       createCategory.execute({
+        organizationId: ORG_ID,
         groupId: group.id,
         code: "OPD.01",
         name: "Duplicado",

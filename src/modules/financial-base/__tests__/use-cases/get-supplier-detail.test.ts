@@ -1,8 +1,11 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { GetSupplierDetailUseCase } from "../../application/use-cases/get-supplier-detail.use-case.js";
 import { FakeSupplierRepository } from "../fakes/fake-supplier-repository.js";
 import { FakeSupplierInvoiceStats } from "../fakes/fake-supplier-invoice-stats.js";
 import { Supplier } from "../../domain/entities/supplier.js";
 import { SupplierNotFoundError } from "../../domain/errors.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 describe("GetSupplierDetailUseCase", () => {
   it("lança SupplierNotFoundError para id inexistente", async () => {
@@ -11,16 +14,18 @@ describe("GetSupplierDetailUseCase", () => {
       new FakeSupplierInvoiceStats(),
     );
 
-    await expect(useCase.execute({ id: "inexistente" })).rejects.toThrow(SupplierNotFoundError);
+    await expect(
+      useCase.execute({ organizationId: ORG_ID, id: "inexistente" }),
+    ).rejects.toThrow(SupplierNotFoundError);
   });
 
   it("devolve stats zeradas e lista vazia quando não há faturas", async () => {
     const repo = new FakeSupplierRepository();
     const s = Supplier.create({ name: "Makro" });
-    await repo.save(s);
+    await repo.save(ORG_ID, s);
 
     const useCase = new GetSupplierDetailUseCase(repo, new FakeSupplierInvoiceStats());
-    const result = await useCase.execute({ id: s.id });
+    const result = await useCase.execute({ organizationId: ORG_ID, id: s.id });
 
     expect(result.id).toBe(s.id);
     expect(result.name).toBe("Makro");
@@ -36,7 +41,7 @@ describe("GetSupplierDetailUseCase", () => {
     const statsPort = new FakeSupplierInvoiceStats();
 
     const s = Supplier.create({ name: "Makro", nif: "500123456" });
-    await repo.save(s);
+    await repo.save(ORG_ID, s);
 
     const lastInvoiceDate = new Date("2026-01-15");
     const lastPaymentDate = new Date("2026-01-20");
@@ -80,7 +85,7 @@ describe("GetSupplierDetailUseCase", () => {
     );
 
     const useCase = new GetSupplierDetailUseCase(repo, statsPort);
-    const result = await useCase.execute({ id: s.id });
+    const result = await useCase.execute({ organizationId: ORG_ID, id: s.id });
 
     expect(result.nif).toBe("500123456");
     expect(result.stats.invoiceCount).toBe(2);

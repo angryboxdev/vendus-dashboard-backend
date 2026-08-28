@@ -11,7 +11,7 @@ export class GetSupplierUseCase implements GetSupplierPort {
   constructor(private readonly repository: SupplierRepositoryPort) {}
 
   async execute(command: GetSupplierCommand): Promise<SupplierDTO> {
-    const supplier = await this.repository.findById(command.id);
+    const supplier = await this.repository.findById(command.organizationId, command.id);
     if (!supplier) throw new SupplierNotFoundError(command.id);
     return toSupplierDTO(supplier);
   }

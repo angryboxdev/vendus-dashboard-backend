@@ -1,5 +1,5 @@
 import type { Router } from "express";
-import { getSupabaseServiceRole } from "../../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import type { CreateSupplierPort } from "./domain/ports/in/supplier.ports.js";
 
 import { SupabaseCostCenterGroupRepository } from "./adapters/out/supabase-cost-center-group.repository.js";
@@ -37,34 +37,28 @@ import { GetOrganizationIdentityUseCase } from "./application/use-cases/get-orga
 import { FinancialBaseController } from "./adapters/in/financial-base.controller.js";
 
 /**
- * Org identity ainda não é resolvida a partir do pedido — não há `orgId` no
- * caminho do request até a autenticação multi-tenant chegar (spec C). Até lá,
- * a Angrybox é a única organização e este é o único lugar onde o id fixo
- * aparece; a linha seeded correspondente vive na migration
- * `20260822143602_tenant_root_tables.sql`. Spec C apaga esta constante e passa
- * a alimentar `GetOrganizationIdentityPort` com o `orgId` do pedido — a
- * assinatura do port já é `findById(orgId)`, então essa troca é a única
- * mudança necessária.
- */
-const DEFAULT_ORG_ID = "b6999cff-79b2-4583-b8b4-a744b3ace748";
-
-/**
  * Composition root do módulo financial-base.
  *
  * Único lugar que conhece as implementações concretas dos adapters.
  * Use cases e domínio apenas conhecem interfaces (ports).
+ *
+ * Segue D2: os adapters de saída não guardam um `SupabaseClient` — recebem o
+ * factory `createScopedQuery` injectado aqui e constroem um `ScopedQuery`
+ * escopado por chamada. A organização já não é resolvida por uma constante
+ * fixa deste módulo (o antigo `DEFAULT_ORG_ID`) — chega como parâmetro
+ * explícito em cada porta, vinda do `orgId` da claim verificada
+ * (`req.auth.orgId`) nos caminhos autenticados, e do `UNATTENDED_SCOPE`
+ * (`src/infra/scoped-db/unattended-scope.ts`, D6) em qualquer caminho sem
+ * utilizador.
  */
 export function createFinancialBaseModule(): { router: Router; createSupplier: CreateSupplierPort } {
-  const supabase = getSupabaseServiceRole();
-  if (!supabase) throw new Error("Supabase service role não configurado");
-
   // Adapters de saída
-  const groupRepository = new SupabaseCostCenterGroupRepository(supabase);
-  const categoryRepository = new SupabaseCostCenterCategoryRepository(supabase);
-  const supplierRepository = new SupabaseSupplierRepository(supabase);
-  const supplierInvoiceStats = new SupabaseSupplierInvoiceStatsAdapter(supabase);
-  const channelRepository = new SupabaseChannelRepository(supabase);
-  const organizationIdentityRepository = new SupabaseOrganizationIdentityRepository(supabase);
+  const groupRepository = new SupabaseCostCenterGroupRepository(createScopedQuery);
+  const categoryRepository = new SupabaseCostCenterCategoryRepository(createScopedQuery);
+  const supplierRepository = new SupabaseSupplierRepository(createScopedQuery);
+  const supplierInvoiceStats = new SupabaseSupplierInvoiceStatsAdapter(createScopedQuery);
+  const channelRepository = new SupabaseChannelRepository(createScopedQuery);
+  const organizationIdentityRepository = new SupabaseOrganizationIdentityRepository(createScopedQuery);
 
   // Use cases — grupos de centros de custo
   const listCostCenterGroups = new ListCostCenterGroupsUseCase(groupRepository);
@@ -133,7 +127,6 @@ export function createFinancialBaseModule(): { router: Router; createSupplier: C
     getSupplierStatement,
     listChannels,
     getOrganizationIdentity,
-    DEFAULT_ORG_ID,
   );
 
   return { router: controller.router, createSupplier };

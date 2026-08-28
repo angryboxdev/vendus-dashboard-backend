@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import { CostCenterCategory, type FinancialType } from "../../domain/entities/cost-center-category.js";
 import type {
   CostCenterCategoryFilter,
@@ -24,11 +25,16 @@ function toEntity(row: Record<string, unknown>): CostCenterCategory {
   });
 }
 
+/**
+ * Nunca guarda um `SupabaseClient` — recebe o factory `createScopedQuery`
+ * (`ScopedQueryFactory`) injectado pelo composition root e constrói um
+ * `ScopedQuery` por chamada (D2).
+ */
 export class SupabaseCostCenterCategoryRepository implements CostCenterCategoryRepositoryPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async save(category: CostCenterCategory): Promise<void> {
-    const { error } = await this.supabase.from("cost_center_categories").insert({
+  async save(organizationId: OrganizationId, category: CostCenterCategory): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("cost_center_categories").insert({
       id: category.id,
       group_id: category.groupId,
       code: category.code,
@@ -47,41 +53,44 @@ export class SupabaseCostCenterCategoryRepository implements CostCenterCategoryR
     if (error) throw new Error(error.message);
   }
 
-  async findById(id: string): Promise<CostCenterCategory | null> {
-    const { data, error } = await this.supabase
-      .from("cost_center_categories")
+  async findById(organizationId: OrganizationId, id: string): Promise<CostCenterCategory | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("cost_center_categories")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async findByCode(code: string): Promise<CostCenterCategory | null> {
-    const { data, error } = await this.supabase
-      .from("cost_center_categories")
+  async findByCode(organizationId: OrganizationId, code: string): Promise<CostCenterCategory | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("cost_center_categories")
       .select("*")
       .eq("code", code.trim().toUpperCase())
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async findByGroupId(groupId: string): Promise<CostCenterCategory[]> {
-    const { data, error } = await this.supabase
-      .from("cost_center_categories")
+  async findByGroupId(organizationId: OrganizationId, groupId: string): Promise<CostCenterCategory[]> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("cost_center_categories")
       .select("*")
       .eq("group_id", groupId)
       .order("code", { ascending: true });
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toEntity(r));
   }
 
-  async findAll(filter?: CostCenterCategoryFilter): Promise<CostCenterCategory[]> {
-    let q = this.supabase
-      .from("cost_center_categories")
+  async findAll(
+    organizationId: OrganizationId,
+    filter?: CostCenterCategoryFilter,
+  ): Promise<CostCenterCategory[]> {
+    let q = this.scopedQuery(organizationId)
+      .table("cost_center_categories")
       .select("*")
       .order("code", { ascending: true });
 
@@ -90,12 +99,12 @@ export class SupabaseCostCenterCategoryRepository implements CostCenterCategoryR
 
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toEntity(r));
   }
 
-  async update(category: CostCenterCategory): Promise<void> {
-    const { error } = await this.supabase
-      .from("cost_center_categories")
+  async update(organizationId: OrganizationId, category: CostCenterCategory): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("cost_center_categories")
       .update({
         name: category.name,
         financial_type: category.financialType,

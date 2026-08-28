@@ -1,8 +1,9 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { OrganizationIdentity } from "../../entities/organization-identity.js";
 
 // ---- Get ----
 export interface GetOrganizationIdentityCommand {
-  orgId: string;
+  organizationId: OrganizationId;
 }
 
 export interface GetOrganizationIdentityPort {

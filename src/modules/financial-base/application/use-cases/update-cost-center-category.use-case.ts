@@ -11,11 +11,11 @@ export class UpdateCostCenterCategoryUseCase implements UpdateCostCenterCategory
   constructor(private readonly repository: CostCenterCategoryRepositoryPort) {}
 
   async execute(command: UpdateCostCenterCategoryCommand): Promise<CostCenterCategoryDTO> {
-    const category = await this.repository.findById(command.id);
+    const category = await this.repository.findById(command.organizationId, command.id);
     if (!category) throw new CostCenterCategoryNotFoundError(command.id);
 
     const updated = category.update(command.data);
-    await this.repository.update(updated);
+    await this.repository.update(command.organizationId, updated);
     return toCostCenterCategoryDTO(updated);
   }
 }

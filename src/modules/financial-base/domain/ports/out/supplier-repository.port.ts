@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { Supplier } from "../../entities/supplier.js";
 
 export interface SupplierFilter {
@@ -6,8 +7,8 @@ export interface SupplierFilter {
 }
 
 export interface SupplierRepositoryPort {
-  save(supplier: Supplier): Promise<void>;
-  findById(id: string): Promise<Supplier | null>;
-  findAll(filter?: SupplierFilter): Promise<Supplier[]>;
-  update(supplier: Supplier): Promise<void>;
+  save(organizationId: OrganizationId, supplier: Supplier): Promise<void>;
+  findById(organizationId: OrganizationId, id: string): Promise<Supplier | null>;
+  findAll(organizationId: OrganizationId, filter?: SupplierFilter): Promise<Supplier[]>;
+  update(organizationId: OrganizationId, supplier: Supplier): Promise<void>;
 }

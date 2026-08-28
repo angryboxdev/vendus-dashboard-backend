@@ -11,11 +11,11 @@ export class ToggleCostCenterGroupStatusUseCase implements ToggleCostCenterGroup
   constructor(private readonly repository: CostCenterGroupRepositoryPort) {}
 
   async execute(command: ToggleCostCenterGroupStatusCommand): Promise<CostCenterGroupDTO> {
-    const group = await this.repository.findById(command.id);
+    const group = await this.repository.findById(command.organizationId, command.id);
     if (!group) throw new CostCenterGroupNotFoundError(command.id);
 
     const updated = command.isActive ? group.activate() : group.deactivate();
-    await this.repository.update(updated);
+    await this.repository.update(command.organizationId, updated);
     return toCostCenterGroupDTO(updated);
   }
 }

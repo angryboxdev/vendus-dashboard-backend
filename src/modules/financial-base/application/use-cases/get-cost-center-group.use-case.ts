@@ -11,7 +11,7 @@ export class GetCostCenterGroupUseCase implements GetCostCenterGroupPort {
   constructor(private readonly repository: CostCenterGroupRepositoryPort) {}
 
   async execute(command: GetCostCenterGroupCommand): Promise<CostCenterGroupDTO> {
-    const group = await this.repository.findById(command.id);
+    const group = await this.repository.findById(command.organizationId, command.id);
     if (!group) throw new CostCenterGroupNotFoundError(command.id);
     return toCostCenterGroupDTO(group);
   }

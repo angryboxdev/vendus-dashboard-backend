@@ -1,8 +1,10 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { GetCostCenterCategoryUseCase } from "../../application/use-cases/get-cost-center-category.use-case.js";
 import { FakeCostCenterCategoryRepository } from "../fakes/fake-cost-center-category-repository.js";
 import { CostCenterCategory } from "../../domain/entities/cost-center-category.js";
 import { CostCenterCategoryNotFoundError } from "../../domain/errors.js";
 
+const ORG_ID = mintOrganizationId("org-test");
 const GROUP_ID = "group-uuid-123";
 
 function makeCategory(code: string) {
@@ -21,10 +23,10 @@ describe("GetCostCenterCategoryUseCase", () => {
   it("devolve a categoria pelo id", async () => {
     const repo = new FakeCostCenterCategoryRepository();
     const cat = makeCategory("OPD.01");
-    await repo.save(cat);
+    await repo.save(ORG_ID, cat);
 
     const useCase = new GetCostCenterCategoryUseCase(repo);
-    const result = await useCase.execute({ id: cat.id });
+    const result = await useCase.execute({ organizationId: ORG_ID, id: cat.id });
 
     expect(result.id).toBe(cat.id);
     expect(result.code).toBe("OPD.01");
@@ -35,6 +37,8 @@ describe("GetCostCenterCategoryUseCase", () => {
     const repo = new FakeCostCenterCategoryRepository();
     const useCase = new GetCostCenterCategoryUseCase(repo);
 
-    await expect(useCase.execute({ id: "nao-existe" })).rejects.toThrow(CostCenterCategoryNotFoundError);
+    await expect(
+      useCase.execute({ organizationId: ORG_ID, id: "nao-existe" }),
+    ).rejects.toThrow(CostCenterCategoryNotFoundError);
   });
 });

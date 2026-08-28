@@ -16,15 +16,16 @@ export class ListSuppliersWithStatsUseCase implements ListSuppliersWithStatsPort
     private readonly invoiceStats: SupplierInvoiceStatsPort,
   ) {}
 
-  async execute(command?: ListSuppliersWithStatsCommand): Promise<SupplierWithStatsDTO[]> {
+  async execute(command: ListSuppliersWithStatsCommand): Promise<SupplierWithStatsDTO[]> {
     const filter: SupplierFilter = {};
-    if (command?.status) filter.status = command.status;
-    if (command?.search) filter.search = command.search;
+    if (command.status) filter.status = command.status;
+    if (command.search) filter.search = command.search;
 
-    const suppliers = await this.supplierRepository.findAll(filter);
+    const suppliers = await this.supplierRepository.findAll(command.organizationId, filter);
     if (suppliers.length === 0) return [];
 
     const summaries = await this.invoiceStats.getSummariesForSuppliers(
+      command.organizationId,
       suppliers.map((s) => s.id),
     );
     const statsMap = new Map(summaries.map((s) => [s.supplierId, s]));

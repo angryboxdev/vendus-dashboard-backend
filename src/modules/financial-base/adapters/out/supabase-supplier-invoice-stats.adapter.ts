@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import type {
   SupplierInvoiceFilter,
   SupplierInvoiceRow,
@@ -14,14 +15,22 @@ const EXCLUDED_FROM_BILLED = new Set(["cancelled", "draft_ai", "pending_review"]
 // Statuses que representam valores em aberto (a pagar)
 const PENDING_STATUSES = new Set(["pending", "overdue", "partial"]);
 
+/**
+ * Nunca guarda um `SupabaseClient` — recebe o factory `createScopedQuery`
+ * (`ScopedQueryFactory`) injectado pelo composition root e constrói um
+ * `ScopedQuery` por chamada (D2).
+ */
 export class SupabaseSupplierInvoiceStatsAdapter implements SupplierInvoiceStatsPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async getSummariesForSuppliers(supplierIds: string[]): Promise<SupplierInvoiceStats[]> {
+  async getSummariesForSuppliers(
+    organizationId: OrganizationId,
+    supplierIds: string[],
+  ): Promise<SupplierInvoiceStats[]> {
     if (supplierIds.length === 0) return [];
 
-    const { data, error } = await this.supabase
-      .from("invoices")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("invoices")
       .select("supplier_id, total_with_vat, status, invoice_date, paid_at")
       .in("supplier_id", supplierIds);
 
@@ -43,7 +52,7 @@ export class SupabaseSupplierInvoiceStatsAdapter implements SupplierInvoiceStats
       ]),
     );
 
-    for (const row of (data ?? []) as Array<{
+    for (const row of (data ?? []) as unknown as Array<{
       supplier_id: string;
       total_with_vat: number;
       status: string;
@@ -80,9 +89,13 @@ export class SupabaseSupplierInvoiceStatsAdapter implements SupplierInvoiceStats
     return Array.from(statsMap.values());
   }
 
-  async listInvoicesBySupplier(supplierId: string, filter?: SupplierInvoiceFilter): Promise<SupplierInvoiceRow[]> {
-    let query = this.supabase
-      .from("invoices")
+  async listInvoicesBySupplier(
+    organizationId: OrganizationId,
+    supplierId: string,
+    filter?: SupplierInvoiceFilter,
+  ): Promise<SupplierInvoiceRow[]> {
+    let query = this.scopedQuery(organizationId)
+      .table("invoices")
       .select(
         "id, invoice_number, invoice_date, due_date, subtotal_without_vat, total_vat, total_with_vat, status, paid_at, attachment_url",
       )
@@ -102,7 +115,7 @@ export class SupabaseSupplierInvoiceStatsAdapter implements SupplierInvoiceStats
     const { data, error } = await query;
     if (error) throw new Error(error.message);
 
-    return (data ?? []).map((row) => ({
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => ({
       id: row.id as string,
       invoiceNumber: row.invoice_number as string,
       invoiceDate: new Date(row.invoice_date as string),
