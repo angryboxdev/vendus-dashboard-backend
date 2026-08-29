@@ -1,12 +1,7 @@
-import { getSupabaseServiceRole } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import { listCustomers, enrichCustomer } from "./crmCustomerService.js";
 import type { CrmCustomerEnriched } from "../domain/crmTypes.js";
-
-function getDb() {
-  const db = getSupabaseServiceRole();
-  if (!db) throw new Error("Supabase não configurado");
-  return db;
-}
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -39,20 +34,20 @@ export type BirthdayEntry = {
   birthday: string;  // MM-DD
 };
 
-export async function getDashboard(): Promise<DashboardData> {
+export async function getDashboard(organizationId: OrganizationId): Promise<DashboardData> {
   const t = today();
   const in3 = addDays(t, 3);
   const weekEnd = addDays(t, 7);
 
   // Carregar todos os clientes activos
-  const rawCustomers = await listCustomers({ inactive: false, limit: 500 });
+  const rawCustomers = await listCustomers(organizationId, { inactive: false, limit: 500 });
 
   // Enriquecer em paralelo (lotes de 20 para não sobrecarregar)
   const enriched: CrmCustomerEnriched[] = [];
   const batchSize = 20;
   for (let i = 0; i < rawCustomers.length; i += batchSize) {
     const batch = rawCustomers.slice(i, i + batchSize);
-    const results = await Promise.all(batch.map((c) => enrichCustomer(c)));
+    const results = await Promise.all(batch.map((c) => enrichCustomer(organizationId, c)));
     enriched.push(...results);
   }
 
@@ -104,26 +99,26 @@ export async function getDashboard(): Promise<DashboardData> {
   }
 
   // ── Contactos esta semana vs semana anterior ──────────────────────────────
-  const db = getDb();
+  const scoped = createScopedQuery(organizationId);
   const thisWeekStart = addDays(t, -6);
   const prevWeekStart = addDays(t, -13);
   const prevWeekEnd   = addDays(t, -7);
 
   const [thisWeekRes, prevWeekRes] = await Promise.all([
-    db.from("crm_contacts")
+    scoped.table("crm_contacts")
       .select("status, response")
       .gte("contacted_at", thisWeekStart)
       .lte("contacted_at", t + "T23:59:59Z")
       .eq("direction", "Enviado"),
-    db.from("crm_contacts")
+    scoped.table("crm_contacts")
       .select("status, response")
       .gte("contacted_at", prevWeekStart)
       .lte("contacted_at", prevWeekEnd + "T23:59:59Z")
       .eq("direction", "Enviado"),
   ]);
 
-  const thisWeekContacts = (thisWeekRes.data as { status: string; response: string | null }[]) ?? [];
-  const prevWeekContacts = (prevWeekRes.data as { status: string; response: string | null }[]) ?? [];
+  const thisWeekContacts = (thisWeekRes.data as unknown as { status: string; response: string | null }[]) ?? [];
+  const prevWeekContacts = (prevWeekRes.data as unknown as { status: string; response: string | null }[]) ?? [];
 
   const responseRate     = calcResponseRate(thisWeekContacts);
   const prevResponseRate = calcResponseRate(prevWeekContacts);

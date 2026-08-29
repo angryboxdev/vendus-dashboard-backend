@@ -22,9 +22,9 @@ export const crmRoutes = Router();
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
-crmRoutes.get("/crm/dashboard", async (_req, res) => {
+crmRoutes.get("/crm/dashboard", async (req, res) => {
   try {
-    const data = await getDashboard();
+    const data = await getDashboard(req.auth!.orgId);
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -36,7 +36,7 @@ crmRoutes.get("/crm/dashboard", async (_req, res) => {
 crmRoutes.get("/crm/customers", async (req, res) => {
   try {
     const q = req.query as Record<string, string>;
-    const filters: Parameters<typeof listCustomers>[0] = {};
+    const filters: Parameters<typeof listCustomers>[1] = {};
     if (q.segment) filters.segment = q.segment;
     if (q.tag)     filters.tag     = q.tag;
     if (q.optIn)   filters.optIn   = q.optIn;
@@ -46,13 +46,13 @@ crmRoutes.get("/crm/customers", async (req, res) => {
     if (q.inactive === "false") filters.inactive = false;
     if (q.limit)  filters.limit  = parseInt(q.limit, 10);
     if (q.offset) filters.offset = parseInt(q.offset, 10);
-    const customers = await listCustomers(filters);
+    const customers = await listCustomers(req.auth!.orgId, filters);
     if (q.enriched === "true") {
       const batchSize = 20;
       const enrichedList = [];
       for (let i = 0; i < customers.length; i += batchSize) {
         const batch = customers.slice(i, i + batchSize);
-        const results = await Promise.all(batch.map((c) => enrichCustomer(c)));
+        const results = await Promise.all(batch.map((c) => enrichCustomer(req.auth!.orgId, c)));
         enrichedList.push(...results);
       }
       // Filter by segment after enrichment if requested
@@ -73,7 +73,7 @@ crmRoutes.post("/crm/customers", async (req, res) => {
       res.status(400).json({ error: parsed.error.flatten() });
       return;
     }
-    const customer = await createCustomer(parsed.data);
+    const customer = await createCustomer(req.auth!.orgId, parsed.data);
     res.status(201).json(customer);
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -82,7 +82,7 @@ crmRoutes.post("/crm/customers", async (req, res) => {
 
 crmRoutes.get("/crm/customers/:id", async (req, res) => {
   try {
-    const customer = await getCustomerEnriched(req.params.id);
+    const customer = await getCustomerEnriched(req.auth!.orgId, req.params.id);
     if (!customer) { res.status(404).json({ error: "Cliente não encontrado" }); return; }
     res.json(customer);
   } catch (err) {
@@ -92,7 +92,7 @@ crmRoutes.get("/crm/customers/:id", async (req, res) => {
 
 crmRoutes.patch("/crm/customers/:id", async (req, res) => {
   try {
-    const customer = await updateCustomer(req.params.id, req.body as Record<string, unknown>);
+    const customer = await updateCustomer(req.auth!.orgId, req.params.id, req.body as Record<string, unknown>);
     if (!customer) { res.status(404).json({ error: "Cliente não encontrado" }); return; }
     res.json(customer);
   } catch (err) {
@@ -103,7 +103,7 @@ crmRoutes.patch("/crm/customers/:id", async (req, res) => {
 crmRoutes.post("/crm/customers/:id/tags", async (req, res) => {
   try {
     const { add = [], remove = [] } = req.body as { add?: string[]; remove?: string[] };
-    const tags = await updateCustomerTags(req.params.id, add, remove);
+    const tags = await updateCustomerTags(req.auth!.orgId, req.params.id, add, remove);
     res.json({ tags });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -114,7 +114,7 @@ crmRoutes.post("/crm/customers/:id/tags", async (req, res) => {
 
 crmRoutes.get("/crm/customers/:id/orders", async (req, res) => {
   try {
-    const orders = await listOrders(req.params.id.toUpperCase());
+    const orders = await listOrders(req.auth!.orgId, req.params.id.toUpperCase());
     res.json(orders);
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -128,7 +128,7 @@ crmRoutes.post("/crm/customers/:id/orders", async (req, res) => {
       res.status(400).json({ error: parsed.error.flatten() });
       return;
     }
-    const order = await createOrder(req.params.id.toUpperCase(), parsed.data);
+    const order = await createOrder(req.auth!.orgId, req.params.id.toUpperCase(), parsed.data);
     res.status(201).json(order);
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -137,7 +137,7 @@ crmRoutes.post("/crm/customers/:id/orders", async (req, res) => {
 
 crmRoutes.patch("/crm/orders/:orderId", async (req, res) => {
   try {
-    const order = await updateOrder(req.params.orderId, req.body as Record<string, unknown>);
+    const order = await updateOrder(req.auth!.orgId, req.params.orderId, req.body as Record<string, unknown>);
     res.json(order);
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -149,7 +149,7 @@ crmRoutes.patch("/crm/orders/:orderId", async (req, res) => {
 crmRoutes.get("/crm/contacts", async (req, res) => {
   try {
     const q = req.query as Record<string, string>;
-    const filters: Parameters<typeof listContacts>[0] = {};
+    const filters: Parameters<typeof listContacts>[1] = {};
     if (q.customerId)  filters.customerId  = q.customerId;
     if (q.scriptCode)  filters.scriptCode  = q.scriptCode;
     if (q.channel)     filters.channel     = q.channel;
@@ -158,7 +158,7 @@ crmRoutes.get("/crm/contacts", async (req, res) => {
     if (q.status)      filters.status      = q.status;
     if (q.limit)       filters.limit       = parseInt(q.limit, 10);
     if (q.offset)      filters.offset      = parseInt(q.offset, 10);
-    const contacts = await listContacts(filters);
+    const contacts = await listContacts(req.auth!.orgId, filters);
     res.json(contacts);
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -172,7 +172,7 @@ crmRoutes.post("/crm/contacts", async (req, res) => {
       res.status(400).json({ error: parsed.error.flatten() });
       return;
     }
-    const contact = await createContact(parsed.data);
+    const contact = await createContact(req.auth!.orgId, parsed.data);
     res.status(201).json(contact);
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -181,7 +181,7 @@ crmRoutes.post("/crm/contacts", async (req, res) => {
 
 crmRoutes.patch("/crm/contacts/:id", async (req, res) => {
   try {
-    const contact = await updateContact(req.params.id, req.body as Record<string, unknown>);
+    const contact = await updateContact(req.auth!.orgId, req.params.id, req.body as Record<string, unknown>);
     res.json(contact);
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -193,7 +193,7 @@ crmRoutes.patch("/crm/contacts/:id", async (req, res) => {
 crmRoutes.get("/crm/scripts", async (req, res) => {
   try {
     const includeInactive = req.query.includeInactive === "true";
-    const scripts = await listScripts(includeInactive);
+    const scripts = await listScripts(req.auth!.orgId, includeInactive);
     res.json(scripts);
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -202,7 +202,7 @@ crmRoutes.get("/crm/scripts", async (req, res) => {
 
 crmRoutes.get("/crm/scripts/:code", async (req, res) => {
   try {
-    const script = await getScript(req.params.code);
+    const script = await getScript(req.auth!.orgId, req.params.code);
     if (!script) { res.status(404).json({ error: "Script não encontrado" }); return; }
 
     // Se vier customerFirstName no query, renderiza o texto
@@ -224,7 +224,7 @@ crmRoutes.get("/crm/scripts/:code", async (req, res) => {
 
 crmRoutes.patch("/crm/scripts/:code", async (req, res) => {
   try {
-    const script = await updateScript(req.params.code, req.body as Record<string, unknown>);
+    const script = await updateScript(req.auth!.orgId, req.params.code, req.body as Record<string, unknown>);
     if (!script) { res.status(404).json({ error: "Script não encontrado" }); return; }
     res.json(script);
   } catch (err) {
@@ -234,9 +234,9 @@ crmRoutes.patch("/crm/scripts/:code", async (req, res) => {
 
 // ─── Parâmetros ───────────────────────────────────────────────────────────────
 
-crmRoutes.get("/crm/parameters", async (_req, res) => {
+crmRoutes.get("/crm/parameters", async (req, res) => {
   try {
-    const params = await listParameters();
+    const params = await listParameters(req.auth!.orgId);
     res.json(params);
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -250,7 +250,7 @@ crmRoutes.patch("/crm/parameters/:key", async (req, res) => {
       res.status(400).json({ error: "Campo 'value' obrigatório" });
       return;
     }
-    const param = await updateParameter(req.params.key, String(value));
+    const param = await updateParameter(req.auth!.orgId, req.params.key, String(value));
     res.json(param);
   } catch (err) {
     res.status(500).json({ error: String(err) });

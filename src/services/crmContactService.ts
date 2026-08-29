@@ -1,4 +1,5 @@
-import { getSupabaseServiceRole } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery, type ScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import type {
   ContactCreateBody,
   CrmContact,
@@ -7,12 +8,6 @@ import type {
   CrmContactStatus,
   CrmChannel,
 } from "../domain/crmTypes.js";
-
-function getDb() {
-  const db = getSupabaseServiceRole();
-  if (!db) throw new Error("Supabase não configurado");
-  return db;
-}
 
 type Row = {
   id: string;
@@ -56,46 +51,51 @@ const SELECT_BASE =
   "id, customer_id, contacted_at, channel, script_code, direction, status, response, notes, segment_at_time, created_at";
 
 /** Lista contactos de um cliente (mais recentes primeiro) */
-export async function listContactsByCustomer(customerId: string): Promise<CrmContact[]> {
-  const db = getDb();
+export async function listContactsByCustomer(
+  organizationId: OrganizationId,
+  customerId: string
+): Promise<CrmContact[]> {
+  const scoped = createScopedQuery(organizationId);
 
   // Tentar com colunas de tags (requer migration 054); fallback sem elas
-  const full = await db
-    .from("crm_contacts")
+  const full = await scoped
+    .table("crm_contacts")
     .select(SELECT)
     .eq("customer_id", customerId)
     .order("contacted_at", { ascending: false });
 
   if (!full.error) {
-    return ((full.data as Row[]) ?? []).map(rowToContact);
+    return ((full.data as unknown as Row[]) ?? []).map(rowToContact);
   }
 
   // Fallback: sem colunas tags_added/tags_removed (migration ainda não aplicada)
-  const base = await db
-    .from("crm_contacts")
+  const base = await scoped
+    .table("crm_contacts")
     .select(SELECT_BASE)
     .eq("customer_id", customerId)
     .order("contacted_at", { ascending: false });
 
   if (base.error) throw new Error(base.error.message);
-  return ((base.data as Omit<Row, "tags_added" | "tags_removed">[]) ?? []).map((r) =>
+  return ((base.data as unknown as Omit<Row, "tags_added" | "tags_removed">[]) ?? []).map((r) =>
     rowToContact({ ...r, tags_added: [], tags_removed: [] })
   );
 }
 
 /** Lista global de contactos com filtros opcionais */
-export async function listContacts(filters: {
-  customerId?: string;
-  scriptCode?: string;
-  channel?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  status?: string;
-  limit?: number;
-  offset?: number;
-}): Promise<CrmContact[]> {
-  const db = getDb();
-  let q = db.from("crm_contacts").select(SELECT);
+export async function listContacts(
+  organizationId: OrganizationId,
+  filters: {
+    customerId?: string;
+    scriptCode?: string;
+    channel?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }
+): Promise<CrmContact[]> {
+  let q = createScopedQuery(organizationId).table("crm_contacts").select(SELECT);
 
   if (filters.customerId) q = q.eq("customer_id", filters.customerId);
   if (filters.scriptCode) q = q.eq("script_code", filters.scriptCode);
@@ -109,12 +109,15 @@ export async function listContacts(filters: {
 
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  return ((data as Row[]) ?? []).map(rowToContact);
+  return ((data as unknown as Row[]) ?? []).map(rowToContact);
 }
 
 /** Regista um contacto e aplica tags ao cliente (se indicadas) */
-export async function createContact(body: ContactCreateBody): Promise<CrmContact> {
-  const db = getDb();
+export async function createContact(
+  organizationId: OrganizationId,
+  body: ContactCreateBody
+): Promise<CrmContact> {
+  const scoped = createScopedQuery(organizationId);
 
   // Normalizar timestamp (omitido → agora)
   const rawAt = body.contactedAt ?? new Date().toISOString();
@@ -133,14 +136,14 @@ export async function createContact(body: ContactCreateBody): Promise<CrmContact
   };
 
   // Tentar com colunas de tags; se falhar (migration não aplicada), repetir sem elas
-  let result = await db.from("crm_contacts").insert({
+  let result = await scoped.table("crm_contacts").insert({
     ...insertPayload,
     tags_added:  body.tagsToAdd ?? [],
     tags_removed: body.tagsToRemove ?? [],
   }).select(SELECT).single();
 
   if (result.error) {
-    result = await db.from("crm_contacts").insert(insertPayload).select(SELECT_BASE).single();
+    result = await scoped.table("crm_contacts").insert(insertPayload).select(SELECT_BASE).single();
   }
 
   const { data, error } = result;
@@ -149,51 +152,50 @@ export async function createContact(body: ContactCreateBody): Promise<CrmContact
 
   // Aplicar tags
   if ((body.tagsToAdd?.length ?? 0) > 0 || (body.tagsToRemove?.length ?? 0) > 0) {
-    await applyTagChanges(db, body.customerId, body.tagsToAdd ?? [], body.tagsToRemove ?? []);
+    await applyTagChanges(scoped, body.customerId, body.tagsToAdd ?? [], body.tagsToRemove ?? []);
   }
 
-  return rowToContact(data as Row);
+  return rowToContact(data as unknown as Row);
 }
 
 /** Edita status/resposta/notas de um contacto */
 export async function updateContact(
+  organizationId: OrganizationId,
   id: string,
   patch: Partial<Pick<CrmContact, "status" | "response" | "notes" | "channel">>
 ): Promise<CrmContact> {
-  const db = getDb();
   const dbPatch: Record<string, unknown> = {};
   if (patch.status   !== undefined) dbPatch.status   = patch.status;
   if (patch.response !== undefined) dbPatch.response = patch.response;
   if (patch.notes    !== undefined) dbPatch.notes    = patch.notes;
   if (patch.channel  !== undefined) dbPatch.channel  = patch.channel;
 
-  const { data, error } = await db
-    .from("crm_contacts")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("crm_contacts")
     .update(dbPatch)
     .eq("id", id)
     .select(SELECT)
     .single();
 
   if (error) throw new Error(error.message);
-  return rowToContact(data as Row);
+  return rowToContact(data as unknown as Row);
 }
 
 async function applyTagChanges(
-  db: ReturnType<typeof getSupabaseServiceRole>,
+  scoped: ScopedQuery,
   customerId: string,
   toAdd: string[],
   toRemove: string[]
 ) {
-  if (!db) return;
   if (toAdd.length > 0) {
-    await db.from("crm_customer_tags").upsert(
+    await scoped.table("crm_customer_tags").upsert(
       toAdd.map((tag) => ({ customer_id: customerId, tag_name: tag })),
       { onConflict: "customer_id,tag_name" }
     );
   }
   if (toRemove.length > 0) {
-    await db
-      .from("crm_customer_tags")
+    await scoped
+      .table("crm_customer_tags")
       .delete()
       .eq("customer_id", customerId)
       .in("tag_name", toRemove);

@@ -1,4 +1,5 @@
-import { getSupabaseServiceRole } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import { calculateSegment } from "../domain/crmSegmentEngine.js";
 import { calculateNextFollowUp } from "../domain/crmFollowUpEngine.js";
 import { resolveCrmMetrics } from "../domain/crmMetrics.js";
@@ -16,12 +17,6 @@ import type {
   CrmSeg07Path,
   CrmSegment,
 } from "../domain/crmTypes.js";
-
-function getDb() {
-  const db = getSupabaseServiceRole();
-  if (!db) throw new Error("Supabase não configurado");
-  return db;
-}
 
 type Row = {
   id: string;
@@ -85,35 +80,37 @@ function rowToCustomer(row: Row): CrmCustomer {
 }
 
 /** Gera o próximo ID sequencial (C001, C002, ...) */
-async function nextCustomerId(): Promise<string> {
-  const db = getDb();
-  const { data } = await db
-    .from("crm_customers")
+async function nextCustomerId(organizationId: OrganizationId): Promise<string> {
+  const { data } = await createScopedQuery(organizationId)
+    .table("crm_customers")
     .select("id")
     .order("id", { ascending: false })
     .limit(1)
     .single();
 
   if (!data) return "C001";
-  const last = (data as { id: string }).id;
+  const last = (data as unknown as { id: string }).id;
   const num = parseInt(last.replace("C", ""), 10);
   return "C" + String(num + 1).padStart(3, "0");
 }
 
 /** Enriquece um cliente com métricas calculadas e próximo follow-up */
-export async function enrichCustomer(customer: CrmCustomer): Promise<CrmCustomerEnriched> {
+export async function enrichCustomer(
+  organizationId: OrganizationId,
+  customer: CrmCustomer
+): Promise<CrmCustomerEnriched> {
   const [params, summary, orders, contacts, tagsResult] = await Promise.all([
-    loadParams(),
-    getOrderSummary(customer.id),
-    listOrders(customer.id),
-    listContactsByCustomer(customer.id).catch(() => []),
-    getDb()
-      .from("crm_customer_tags")
+    loadParams(organizationId),
+    getOrderSummary(organizationId, customer.id),
+    listOrders(organizationId, customer.id),
+    listContactsByCustomer(organizationId, customer.id).catch(() => []),
+    createScopedQuery(organizationId)
+      .table("crm_customer_tags")
       .select("tag_name")
       .eq("customer_id", customer.id),
   ]);
 
-  const tags = ((tagsResult.data as { tag_name: string }[]) ?? []).map((r) => r.tag_name);
+  const tags = ((tagsResult.data as unknown as { tag_name: string }[]) ?? []).map((r) => r.tag_name);
 
   const metrics = resolveCrmMetrics(summary, {
     orderCount: customer.eatzOrderCount,
@@ -245,18 +242,21 @@ export async function enrichCustomer(customer: CrmCustomer): Promise<CrmCustomer
 }
 
 /** Lista de clientes com filtros */
-export async function listCustomers(filters: {
-  segment?: string;
-  tag?: string;
-  optIn?: string;
-  channel?: string;
-  search?: string;
-  inactive?: boolean;
-  limit?: number;
-  offset?: number;
-}): Promise<CrmCustomer[]> {
-  const db = getDb();
-  let q = db.from("crm_customers").select(SELECT);
+export async function listCustomers(
+  organizationId: OrganizationId,
+  filters: {
+    segment?: string;
+    tag?: string;
+    optIn?: string;
+    channel?: string;
+    search?: string;
+    inactive?: boolean;
+    limit?: number;
+    offset?: number;
+  }
+): Promise<CrmCustomer[]> {
+  const scoped = createScopedQuery(organizationId);
+  let q = scoped.table("crm_customers").select(SELECT);
 
   if (filters.inactive !== undefined) q = q.eq("inactive", filters.inactive);
   else q = q.eq("inactive", false); // por defeito excluir inativos
@@ -277,11 +277,11 @@ export async function listCustomers(filters: {
 
   // Filtro por tag: via subquery
   if (filters.tag) {
-    const tagRes = await db
-      .from("crm_customer_tags")
+    const tagRes = await scoped
+      .table("crm_customer_tags")
       .select("customer_id")
       .eq("tag_name", filters.tag);
-    const ids = ((tagRes.data as { customer_id: string }[]) ?? []).map((r) => r.customer_id);
+    const ids = ((tagRes.data as unknown as { customer_id: string }[]) ?? []).map((r) => r.customer_id);
     if (ids.length === 0) return [];
     q = q.in("id", ids);
   }
@@ -291,37 +291,41 @@ export async function listCustomers(filters: {
 
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  return ((data as Row[]) ?? []).map(rowToCustomer);
+  return ((data as unknown as Row[]) ?? []).map(rowToCustomer);
 }
 
 /** Detalhe de um cliente (sem enriquecer) */
-export async function getCustomer(id: string): Promise<CrmCustomer | null> {
-  const db = getDb();
-  const { data, error } = await db
-    .from("crm_customers")
+export async function getCustomer(organizationId: OrganizationId, id: string): Promise<CrmCustomer | null> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("crm_customers")
     .select(SELECT)
     .eq("id", id.toUpperCase())
     .maybeSingle();
 
   if (error) throw new Error(error.message);
   if (!data) return null;
-  return rowToCustomer(data as Row);
+  return rowToCustomer(data as unknown as Row);
 }
 
 /** Detalhe enriquecido de um cliente */
-export async function getCustomerEnriched(id: string): Promise<CrmCustomerEnriched | null> {
-  const customer = await getCustomer(id);
+export async function getCustomerEnriched(
+  organizationId: OrganizationId,
+  id: string
+): Promise<CrmCustomerEnriched | null> {
+  const customer = await getCustomer(organizationId, id);
   if (!customer) return null;
-  return enrichCustomer(customer);
+  return enrichCustomer(organizationId, customer);
 }
 
 /** Cria cliente (gera ID sequencial) */
-export async function createCustomer(body: CustomerCreateBody): Promise<CrmCustomer> {
-  const db = getDb();
-  const id = await nextCustomerId();
+export async function createCustomer(
+  organizationId: OrganizationId,
+  body: CustomerCreateBody
+): Promise<CrmCustomer> {
+  const id = await nextCustomerId(organizationId);
 
-  const { data, error } = await db
-    .from("crm_customers")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("crm_customers")
     .insert({
       id,
       first_name:        body.firstName.trim(),
@@ -341,15 +345,15 @@ export async function createCustomer(body: CustomerCreateBody): Promise<CrmCusto
     .single();
 
   if (error) throw new Error(error.message);
-  return rowToCustomer(data as Row);
+  return rowToCustomer(data as unknown as Row);
 }
 
 /** Atualiza campos editáveis de um cliente */
 export async function updateCustomer(
+  organizationId: OrganizationId,
   id: string,
   body: CustomerUpdateBody
 ): Promise<CrmCustomer | null> {
-  const db = getDb();
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
   if (body.firstName        !== undefined) patch.first_name        = body.firstName.trim();
@@ -366,57 +370,60 @@ export async function updateCustomer(
   if (body.seg07Path             !== undefined) patch.seg07_path           = body.seg07Path ?? null;
   if (body.manualFollowupDate    !== undefined) patch.manual_followup_date = body.manualFollowupDate ?? null;
 
-  const { data, error } = await db
-    .from("crm_customers")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("crm_customers")
     .update(patch)
     .eq("id", id.toUpperCase())
     .select(SELECT)
     .single();
 
   if (error) throw new Error(error.message);
-  return rowToCustomer(data as Row);
+  return rowToCustomer(data as unknown as Row);
 }
 
 /** Adiciona/remove tags de um cliente */
 export async function updateCustomerTags(
+  organizationId: OrganizationId,
   customerId: string,
   toAdd: string[],
   toRemove: string[]
 ): Promise<string[]> {
-  const db = getDb();
+  const scoped = createScopedQuery(organizationId);
 
   if (toAdd.length > 0) {
-    await db.from("crm_customer_tags").upsert(
+    await scoped.table("crm_customer_tags").upsert(
       toAdd.map((tag) => ({ customer_id: customerId.toUpperCase(), tag_name: tag })),
       { onConflict: "customer_id,tag_name" }
     );
   }
   if (toRemove.length > 0) {
-    await db
-      .from("crm_customer_tags")
+    await scoped
+      .table("crm_customer_tags")
       .delete()
       .eq("customer_id", customerId.toUpperCase())
       .in("tag_name", toRemove);
   }
 
-  const { data } = await db
-    .from("crm_customer_tags")
+  const { data } = await scoped
+    .table("crm_customer_tags")
     .select("tag_name")
     .eq("customer_id", customerId.toUpperCase());
 
-  return ((data as { tag_name: string }[]) ?? []).map((r) => r.tag_name);
+  return ((data as unknown as { tag_name: string }[]) ?? []).map((r) => r.tag_name);
 }
 
 /** Recalcula e guarda o segmento de todos os clientes (cron diário) */
-export async function recalculateAllSegments(): Promise<{ updated: number }> {
+export async function recalculateAllSegments(
+  organizationId: OrganizationId
+): Promise<{ updated: number }> {
   const [customers] = await Promise.all([
-    listCustomers({}),
+    listCustomers(organizationId, {}),
   ]);
 
   let updated = 0;
   for (const customer of customers) {
     try {
-      await enrichCustomer(customer); // apenas recalcula — o segmento é sempre calculado on-the-fly
+      await enrichCustomer(organizationId, customer); // apenas recalcula — o segmento é sempre calculado on-the-fly
       updated++;
     } catch {
       // continuar para o próximo
