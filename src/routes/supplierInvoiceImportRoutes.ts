@@ -33,7 +33,7 @@ supplierInvoiceImportRoutes.post(
         return;
       }
       const mime = file.mimetype || "application/octet-stream";
-      const result = await createSupplierInvoiceImport({
+      const result = await createSupplierInvoiceImport(req.auth!.orgId, {
         buffer: file.buffer,
         fileName: file.originalname || "invoice",
         mime,
@@ -56,7 +56,7 @@ supplierInvoiceImportRoutes.get(
         res.status(400).json({ error: "id obrigatório" });
         return;
       }
-      const result = await getSupplierInvoiceImport(id);
+      const result = await getSupplierInvoiceImport(req.auth!.orgId, id);
       res.json(result);
     } catch (e: unknown) {
       const message =
@@ -82,7 +82,7 @@ supplierInvoiceImportRoutes.patch(
         return;
       }
       const body = req.body as UpdateSupplierInvoiceImportBody;
-      const result = await updateSupplierInvoiceImport(id, body ?? {});
+      const result = await updateSupplierInvoiceImport(req.auth!.orgId, id, body ?? {});
       res.json(result);
     } catch (e: unknown) {
       const message =
@@ -102,8 +102,8 @@ supplierInvoiceImportRoutes.post(
         res.status(400).json({ error: "id obrigatório" });
         return;
       }
-      const body = req.body as ConfirmSupplierInvoiceImportBody;
-      const result = await confirmSupplierInvoiceImport(id, body ?? {});
+      const body = (req.body ?? {}) as ConfirmSupplierInvoiceImportBody;
+      const result = await confirmSupplierInvoiceImport(req.auth!.orgId, id, body);
       res.json(result);
     } catch (e: unknown) {
       const message =

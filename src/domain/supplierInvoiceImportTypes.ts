@@ -85,6 +85,12 @@ export type ConfirmSupplierInvoiceImportBody = {
    * Se omitido, usa a data de hoje (dia em que se confirma a fatura).
    */
   movement_date?: string | null;
+  /**
+   * Loja onde os movimentos de stock são registados. Obrigatório: os
+   * movimentos gerados por esta confirmação não podem depender do valor por
+   * omissão da coluna (D4).
+   */
+  location_id: string;
   /** Ajustes por linha antes de aplicar (opcional). */
   lines?: Array<{
     line_id: string;
