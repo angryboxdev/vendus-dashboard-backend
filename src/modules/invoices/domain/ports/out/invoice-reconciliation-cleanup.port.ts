@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 /**
  * Output port para limpeza de vínculos de reconciliação bancária
  * associados a uma fatura eliminada.
@@ -12,11 +14,11 @@ export interface InvoiceReconciliationCleanupPort {
    * Chamado antes de eliminar a fatura para que movimentos bancários
    * não fiquem com referências a faturas inexistentes.
    */
-  removeLinksForInvoice(invoiceId: string): Promise<void>;
+  removeLinksForInvoice(organizationId: OrganizationId, invoiceId: string): Promise<void>;
 
   /**
    * Actualiza o entity_label dos links do tipo "invoice" para o invoiceId dado
    * quando o número da fatura muda.
    */
-  renumberLinksForInvoice(invoiceId: string, newLabel: string): Promise<void>;
+  renumberLinksForInvoice(organizationId: OrganizationId, invoiceId: string, newLabel: string): Promise<void>;
 }

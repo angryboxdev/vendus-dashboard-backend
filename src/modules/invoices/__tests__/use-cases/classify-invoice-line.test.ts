@@ -6,6 +6,9 @@ import { FakeCostCenterCategoryReader } from "../fakes/fake-cost-center-category
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import { InvoiceNotFoundError, InvoiceLineNotFoundError, ChannelRequiredError } from "../../domain/errors.js";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 describe("ClassifyInvoiceLineUseCase", () => {
   let invoiceRepo: FakeInvoiceRepository;
@@ -49,12 +52,13 @@ describe("ClassifyInvoiceLineUseCase", () => {
       requiresAllocation: false,
     });
     useCase = new ClassifyInvoiceLineUseCase(invoiceRepo, lineRepo, ruleRepo, categoryReader);
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([line]);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [line]);
   });
 
   it("classifica a linha com tipo", async () => {
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       classify: { type: "stock_purchase" },
@@ -64,6 +68,7 @@ describe("ClassifyInvoiceLineUseCase", () => {
 
   it("classifica a linha com costCenterCategoryId", async () => {
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       classify: { costCenterCategoryId: "cat-cmv" },
@@ -73,6 +78,7 @@ describe("ClassifyInvoiceLineUseCase", () => {
 
   it("classifica com tipo e costCenterCategoryId em conjunto", async () => {
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       classify: { type: "stock_purchase", costCenterCategoryId: "cat-cmv" },
@@ -83,24 +89,26 @@ describe("ClassifyInvoiceLineUseCase", () => {
 
   it("guarda regra com costCenterCategoryId e descriptionPattern quando saveAsRule=true", async () => {
     await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       classify: { costCenterCategoryId: "cat-cmv" },
       saveAsRule: true,
     });
-    const rule = await ruleRepo.findBySupplierIdAndDescription("supplier-1", "Farinha T55");
+    const rule = await ruleRepo.findBySupplierIdAndDescription(ORG_ID, "supplier-1", "Farinha T55");
     expect(rule!.defaultCostCenterCategoryId).toBe("cat-cmv");
     expect(rule!.descriptionPattern).toBe("Farinha T55");
   });
 
   it("cria regra com tipo e descriptionPattern quando saveAsRule=true", async () => {
     await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       classify: { type: "stock_purchase" },
       saveAsRule: true,
     });
-    const rule = await ruleRepo.findBySupplierIdAndDescription("supplier-1", "Farinha T55");
+    const rule = await ruleRepo.findBySupplierIdAndDescription(ORG_ID, "supplier-1", "Farinha T55");
     expect(rule).not.toBeNull();
     expect(rule!.defaultLineType).toBe("stock_purchase");
     expect(rule!.descriptionPattern).toBe("Farinha T55");
@@ -109,23 +117,26 @@ describe("ClassifyInvoiceLineUseCase", () => {
 
   it("incrementa confidenceBoost quando regra já existe para mesma descrição", async () => {
     await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       classify: { type: "stock_purchase" },
       saveAsRule: true,
     });
     await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       classify: { type: "stock_purchase" },
       saveAsRule: true,
     });
-    const rule = await ruleRepo.findBySupplierIdAndDescription("supplier-1", "Farinha T55");
+    const rule = await ruleRepo.findBySupplierIdAndDescription(ORG_ID, "supplier-1", "Farinha T55");
     expect(rule!.confidenceBoost).toBe(20);
   });
 
   it("herda financialType e flags da subcategoria ao classificar com costCenterCategoryId", async () => {
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       classify: { costCenterCategoryId: "cat-cmv" },
@@ -150,6 +161,7 @@ describe("ClassifyInvoiceLineUseCase", () => {
     });
     await expect(
       useCase.execute({
+        organizationId: ORG_ID,
         invoiceId: inv.id,
         lineId: line.id,
         classify: { costCenterCategoryId: "cat-mkt05" },
@@ -168,6 +180,7 @@ describe("ClassifyInvoiceLineUseCase", () => {
       requiresAllocation: false,
     });
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       classify: { costCenterCategoryId: "cat-mkt05", channelId: "ch-uber" },
@@ -179,6 +192,7 @@ describe("ClassifyInvoiceLineUseCase", () => {
 
   it("DTO expõe dreValue e cashflowValue calculados", async () => {
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       classify: { costCenterCategoryId: "cat-cmv" },
@@ -199,24 +213,25 @@ describe("ClassifyInvoiceLineUseCase", () => {
       requiresAllocation: false,
     });
     await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       classify: { costCenterCategoryId: "cat-mkt05", channelId: "ch-uber" },
       saveAsRule: true,
     });
-    const rule = await ruleRepo.findBySupplierIdAndDescription("supplier-1", "Farinha T55");
+    const rule = await ruleRepo.findBySupplierIdAndDescription(ORG_ID, "supplier-1", "Farinha T55");
     expect(rule!.channelId).toBe("ch-uber");
   });
 
   it("throws InvoiceNotFoundError se fatura não existe", async () => {
     await expect(
-      useCase.execute({ invoiceId: "no", lineId: line.id, classify: {} }),
+      useCase.execute({ organizationId: ORG_ID, invoiceId: "no", lineId: line.id, classify: {} }),
     ).rejects.toThrow(InvoiceNotFoundError);
   });
 
   it("throws InvoiceLineNotFoundError se linha não existe", async () => {
     await expect(
-      useCase.execute({ invoiceId: inv.id, lineId: "no", classify: {} }),
+      useCase.execute({ organizationId: ORG_ID, invoiceId: inv.id, lineId: "no", classify: {} }),
     ).rejects.toThrow(InvoiceLineNotFoundError);
   });
 });

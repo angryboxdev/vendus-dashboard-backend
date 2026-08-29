@@ -17,18 +17,18 @@ export class MarkInvoicePaidUseCase implements MarkInvoicePaidPort {
   ) {}
 
   async execute(command: MarkInvoicePaidCommand): Promise<InvoiceDTO> {
-    const existing = await this.invoiceRepo.findById(command.id);
+    const existing = await this.invoiceRepo.findById(command.organizationId, command.id);
     if (!existing) throw new InvoiceNotFoundError(command.id);
 
     const paidAt = command.paidAt ? new Date(command.paidAt) : new Date();
     const updated = existing.markPaid(paidAt, command.bankAccountId, command.paymentMethod, command.paymentNotes);
-    await this.invoiceRepo.update(updated);
+    await this.invoiceRepo.update(command.organizationId, updated);
 
     // Sincronizar conta a pagar ligada, se existir
-    await this.payableWrite.markPaidByInvoiceId(updated.id, paidAt);
+    await this.payableWrite.markPaidByInvoiceId(command.organizationId, updated.id, paidAt);
 
     // Sincronizar ocorrência recorrente vinculada, se existir
-    await this.occurrenceSync.markPaidByInvoiceId(updated.id, paidAt);
+    await this.occurrenceSync.markPaidByInvoiceId(command.organizationId, updated.id, paidAt);
 
     return toInvoiceDTO(updated);
   }

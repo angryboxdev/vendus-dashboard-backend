@@ -88,9 +88,9 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   const router = Router();
 
   // GET /invoices/lines — all invoice lines (for CC analytics)
-  router.get("/invoices/lines", async (_req, res) => {
+  router.get("/invoices/lines", async (req, res) => {
     try {
-      const lines = await ports.listInvoiceLines.execute();
+      const lines = await ports.listInvoiceLines.execute(req.auth!.orgId);
       res.json(lines);
     } catch (err) {
       handleError(res, err);
@@ -101,7 +101,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   router.get("/invoices", async (req, res) => {
     try {
       const { supplierId, costCenterId, status, reconciliationStatus, from, to, isDirectDebit, search } = req.query as Record<string, string | undefined>;
-      const filter: Parameters<typeof ports.listInvoices.execute>[0] = {};
+      const filter: Parameters<typeof ports.listInvoices.execute>[1] = {};
       if (supplierId !== undefined) filter.supplierId = supplierId;
       if (costCenterId !== undefined) filter.costCenterId = costCenterId;
       if (status !== undefined) filter.status = status as InvoiceStatus;
@@ -110,7 +110,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
       if (to !== undefined) filter.to = to;
       if (isDirectDebit !== undefined) filter.isDirectDebit = isDirectDebit === "true";
       if (search !== undefined) filter.search = search;
-      const invoices = await ports.listInvoices.execute(filter);
+      const invoices = await ports.listInvoices.execute(req.auth!.orgId, filter);
       res.json(invoices);
     } catch (err) {
       handleError(res, err);
@@ -120,7 +120,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   // GET /invoices/:id
   router.get("/invoices/:id", async (req, res) => {
     try {
-      const invoice = await ports.getInvoice.execute(req.params.id);
+      const invoice = await ports.getInvoice.execute(req.auth!.orgId, req.params.id);
       res.json(invoice);
     } catch (err) {
       handleError(res, err);
@@ -130,7 +130,10 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   // POST /invoices
   router.post("/invoices", async (req, res) => {
     try {
-      const invoice = await ports.createInvoice.execute(req.body as Parameters<CreateInvoicePort["execute"]>[0]);
+      const invoice = await ports.createInvoice.execute({
+        ...(req.body as object),
+        organizationId: req.auth!.orgId,
+      } as Parameters<CreateInvoicePort["execute"]>[0]);
       res.status(201).json(invoice);
     } catch (err) {
       handleError(res, err);
@@ -140,7 +143,11 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   // PATCH /invoices/:id
   router.patch("/invoices/:id", async (req, res) => {
     try {
-      const invoice = await ports.updateInvoice.execute({ ...req.body as object, id: req.params.id });
+      const invoice = await ports.updateInvoice.execute({
+        ...req.body as object,
+        organizationId: req.auth!.orgId,
+        id: req.params.id,
+      });
       res.json(invoice);
     } catch (err) {
       handleError(res, err);
@@ -151,7 +158,10 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   router.patch("/invoices/:id/paid", async (req, res) => {
     try {
       const { paidAt, bankAccountId, paymentMethod, paymentNotes } = req.body as { paidAt?: string; bankAccountId?: string | null; paymentMethod?: string | null; paymentNotes?: string | null };
-      const paidCmd: Parameters<typeof ports.markInvoicePaid.execute>[0] = { id: req.params.id };
+      const paidCmd: Parameters<typeof ports.markInvoicePaid.execute>[0] = {
+        organizationId: req.auth!.orgId,
+        id: req.params.id,
+      };
       if (paidAt !== undefined) paidCmd.paidAt = paidAt;
       if (bankAccountId !== undefined) paidCmd.bankAccountId = bankAccountId;
       if (paymentMethod !== undefined) paidCmd.paymentMethod = paymentMethod;
@@ -167,7 +177,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   router.patch("/invoices/:id/line-detail-mode", async (req, res) => {
     try {
       const { mode } = req.body as { mode: LineDetailMode };
-      const invoice = await ports.setLineDetailMode.execute({ id: req.params.id, mode });
+      const invoice = await ports.setLineDetailMode.execute({ organizationId: req.auth!.orgId, id: req.params.id, mode });
       res.json(invoice);
     } catch (err) {
       handleError(res, err);
@@ -178,7 +188,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   router.patch("/invoices/:id/status", async (req, res) => {
     try {
       const { status } = req.body as { status: InvoiceStatus };
-      const invoice = await ports.setInvoiceStatus.execute({ id: req.params.id, status });
+      const invoice = await ports.setInvoiceStatus.execute({ organizationId: req.auth!.orgId, id: req.params.id, status });
       res.json(invoice);
     } catch (err) {
       handleError(res, err);
@@ -188,7 +198,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   // DELETE /invoices/:id
   router.delete("/invoices/:id", async (req, res) => {
     try {
-      await ports.deleteInvoice.execute(req.params.id);
+      await ports.deleteInvoice.execute(req.auth!.orgId, req.params.id);
       res.status(204).send();
     } catch (err) {
       handleError(res, err);
@@ -209,8 +219,10 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
         vatRate: number;
         vatAmount: number;
         totalWithVat: number;
+        locationId?: string | null;
       };
       const line = await ports.addInvoiceLine.execute({
+        organizationId: req.auth!.orgId,
         invoiceId: req.params.invoiceId,
         ...body,
       });
@@ -223,7 +235,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   // PATCH /invoices/:invoiceId/lines/:lineId — edit line values
   router.patch("/invoices/:invoiceId/lines/:lineId", async (req, res) => {
     try {
-      const { description, quantity, unit, unitCostWithoutVat, vatRate, vatAmount, totalWithVat } =
+      const { description, quantity, unit, unitCostWithoutVat, vatRate, vatAmount, totalWithVat, locationId } =
         req.body as {
           description?: string;
           quantity?: number;
@@ -232,8 +244,10 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
           vatRate?: number;
           vatAmount?: number;
           totalWithVat?: number;
+          locationId?: string | null;
         };
       const cmd: Parameters<typeof ports.updateInvoiceLine.execute>[0] = {
+        organizationId: req.auth!.orgId,
         invoiceId: req.params.invoiceId,
         lineId: req.params.lineId,
       };
@@ -244,6 +258,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
       if (vatRate !== undefined) cmd.vatRate = vatRate;
       if (vatAmount !== undefined) cmd.vatAmount = vatAmount;
       if (totalWithVat !== undefined) cmd.totalWithVat = totalWithVat;
+      if (locationId !== undefined) cmd.locationId = locationId;
       const line = await ports.updateInvoiceLine.execute(cmd);
       res.json(line);
     } catch (err) {
@@ -254,7 +269,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   // DELETE /invoices/:invoiceId/lines/:lineId
   router.delete("/invoices/:invoiceId/lines/:lineId", async (req, res) => {
     try {
-      await ports.deleteInvoiceLine.execute(req.params.invoiceId, req.params.lineId);
+      await ports.deleteInvoiceLine.execute(req.auth!.orgId, req.params.invoiceId, req.params.lineId);
       res.status(204).send();
     } catch (err) {
       handleError(res, err);
@@ -269,6 +284,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
         saveAsRule?: boolean;
       };
       const classifyCmd: Parameters<typeof ports.classifyInvoiceLine.execute>[0] = {
+        organizationId: req.auth!.orgId,
         invoiceId: req.params.invoiceId,
         lineId: req.params.lineId,
         classify,
@@ -285,7 +301,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   router.get("/invoices/suggest-classification/:supplierId", async (req, res) => {
     try {
       const { description } = req.query as { description?: string };
-      const result = await ports.suggestLineClassification.execute(req.params.supplierId, description);
+      const result = await ports.suggestLineClassification.execute(req.auth!.orgId, req.params.supplierId, description);
       res.json(result ?? null);
     } catch (err) {
       handleError(res, err);
@@ -293,9 +309,9 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   });
 
   // GET /invoices/alerts
-  router.get("/invoices/alerts", async (_req, res) => {
+  router.get("/invoices/alerts", async (req, res) => {
     try {
-      const alerts = await ports.getInvoiceAlerts.execute();
+      const alerts = await ports.getInvoiceAlerts.execute(req.auth!.orgId);
       res.json(alerts);
     } catch (err) {
       handleError(res, err);
@@ -310,6 +326,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
         return;
       }
       const result = await ports.importInvoice.execute({
+        organizationId: req.auth!.orgId,
         fileBuffer: req.file.buffer,
         filename: req.file.originalname,
         mimeType: req.file.mimetype,
@@ -325,6 +342,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
     try {
       const invoice = await ports.confirmImportedInvoice.execute({
         ...(req.body as object),
+        organizationId: req.auth!.orgId,
         id: req.params.id,
       });
       res.json(invoice);
@@ -334,9 +352,9 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   });
 
   // POST /invoices/process-direct-debits — processa débitos diretos vencidos
-  router.post("/invoices/process-direct-debits", async (_req, res) => {
+  router.post("/invoices/process-direct-debits", async (req, res) => {
     try {
-      const result = await ports.processDirectDebits.execute();
+      const result = await ports.processDirectDebits.execute(req.auth!.orgId);
       res.json(result);
     } catch (err) {
       handleError(res, err);

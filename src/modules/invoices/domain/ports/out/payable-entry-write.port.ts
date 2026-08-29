@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 /**
  * Output port para criação/actualização de contas a pagar a partir do módulo invoices.
  * Declarado aqui para manter independência — o adapter concreto acede
@@ -10,24 +12,27 @@ export interface PayableEntryWritePort {
    * Chamado automaticamente quando uma fatura é criada com dueDate.
    * Não cria se já existir uma entrada com o mesmo invoiceId.
    */
-  createForInvoice(data: {
-    invoiceId: string;
-    supplierId: string | null;
-    supplierName: string;
-    invoiceNumber: string;
-    dueDate: Date;
-    amount: number; // cents — totalWithVat da fatura
-  }): Promise<void>;
+  createForInvoice(
+    organizationId: OrganizationId,
+    data: {
+      invoiceId: string;
+      supplierId: string | null;
+      supplierName: string;
+      invoiceNumber: string;
+      dueDate: Date;
+      amount: number; // cents — totalWithVat da fatura
+    },
+  ): Promise<void>;
 
   /** Marca como pago o payable ligado a esta fatura, se existir. */
-  markPaidByInvoiceId(invoiceId: string, paidAt: Date): Promise<void>;
+  markPaidByInvoiceId(organizationId: OrganizationId, invoiceId: string, paidAt: Date): Promise<void>;
 
   /** Cancela o payable ligado a esta fatura, se existir e não estiver pago. */
-  cancelByInvoiceId(invoiceId: string): Promise<void>;
+  cancelByInvoiceId(organizationId: OrganizationId, invoiceId: string): Promise<void>;
 
   /**
    * Actualiza a description do payable ligado a esta fatura quando o número da fatura muda.
    * Apenas actualiza entradas não canceladas.
    */
-  renumberByInvoiceId(invoiceId: string, newInvoiceNumber: string): Promise<void>;
+  renumberByInvoiceId(organizationId: OrganizationId, invoiceId: string, newInvoiceNumber: string): Promise<void>;
 }

@@ -21,6 +21,14 @@ interface InvoiceLineProps {
   affectsDre: boolean;
   affectsCashflow: boolean;
   affectsProfitability: boolean;
+  /**
+   * Loja a que este custo é alocado (spec B2 D3/D4/D5) — nullable: um custo
+   * pode pertencer à organização inteira e a nenhuma loja em particular, o
+   * que é um estado real, não a ausência de um dado. Opcional na escrita: o
+   * frontend só começa a enviá-lo a partir do ticket 19; até lá fica ausente
+   * na prática e permanece null.
+   */
+  locationId: string | null;
   // Campos herdados da subcategoria ao classificar (Fase 2 adiciona a lógica de herança)
   financialType: string | null;
   channelId: string | null;
@@ -68,6 +76,7 @@ export class InvoiceLine {
   readonly affectsDre: boolean;
   readonly affectsCashflow: boolean;
   readonly affectsProfitability: boolean;
+  readonly locationId: string | null;
   readonly financialType: string | null;
   readonly channelId: string | null;
   readonly requiresChannel: boolean;
@@ -96,6 +105,7 @@ export class InvoiceLine {
     this.affectsDre = props.affectsDre;
     this.affectsCashflow = props.affectsCashflow;
     this.affectsProfitability = props.affectsProfitability;
+    this.locationId = props.locationId;
     this.financialType = props.financialType;
     this.channelId = props.channelId;
     this.requiresChannel = props.requiresChannel;
@@ -123,6 +133,7 @@ export class InvoiceLine {
     affectsDre?: boolean;
     affectsCashflow?: boolean;
     affectsProfitability?: boolean;
+    locationId?: string | null;
   }): InvoiceLine {
     return new InvoiceLine({
       id: crypto.randomUUID(),
@@ -144,6 +155,7 @@ export class InvoiceLine {
       affectsDre: props.affectsDre ?? true,
       affectsCashflow: props.affectsCashflow ?? true,
       affectsProfitability: props.affectsProfitability ?? false,
+      locationId: props.locationId ?? null,
       financialType: null,
       channelId: null,
       requiresChannel: false,
@@ -190,6 +202,7 @@ export class InvoiceLine {
     vatRate?: number;
     vatAmount?: number;
     totalWithVat?: number;
+    locationId?: string | null;
   }): InvoiceLine {
     const p = this.toProps();
     if (data.description !== undefined) p.description = data.description.trim();
@@ -199,6 +212,7 @@ export class InvoiceLine {
     if (data.vatRate !== undefined) p.vatRate = data.vatRate;
     if (data.vatAmount !== undefined) p.vatAmount = data.vatAmount;
     if (data.totalWithVat !== undefined) p.totalWithVat = data.totalWithVat;
+    if (data.locationId !== undefined) p.locationId = data.locationId;
     return new InvoiceLine(p);
   }
 
@@ -227,6 +241,7 @@ export class InvoiceLine {
       affectsDre: this.affectsDre,
       affectsCashflow: this.affectsCashflow,
       affectsProfitability: this.affectsProfitability,
+      locationId: this.locationId,
       financialType: this.financialType,
       channelId: this.channelId,
       requiresChannel: this.requiresChannel,

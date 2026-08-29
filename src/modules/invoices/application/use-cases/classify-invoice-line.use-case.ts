@@ -21,10 +21,10 @@ export class ClassifyInvoiceLineUseCase implements ClassifyInvoiceLinePort {
   ) {}
 
   async execute(command: ClassifyInvoiceLineCommand): Promise<InvoiceLineDTO> {
-    const invoice = await this.invoiceRepo.findById(command.invoiceId);
+    const invoice = await this.invoiceRepo.findById(command.organizationId, command.invoiceId);
     if (!invoice) throw new InvoiceNotFoundError(command.invoiceId);
 
-    const lines = await this.lineRepo.findByInvoiceId(command.invoiceId);
+    const lines = await this.lineRepo.findByInvoiceId(command.organizationId, command.invoiceId);
     const line = lines.find((l) => l.id === command.lineId);
     if (!line) throw new InvoiceLineNotFoundError(command.lineId);
 
@@ -32,7 +32,7 @@ export class ClassifyInvoiceLineUseCase implements ClassifyInvoiceLinePort {
 
     let classified: InvoiceLine;
     if (costCenterCategoryId !== undefined && costCenterCategoryId !== null) {
-      const category = await this.categoryReader.findById(costCenterCategoryId);
+      const category = await this.categoryReader.findById(command.organizationId, costCenterCategoryId);
       if (!category) throw new Error(`Subcategoria não encontrada: ${costCenterCategoryId}`);
       classified = line.classifyFromCategory(category, channelId);
       if (type !== undefined || stockItemId !== undefined) {
@@ -49,10 +49,14 @@ export class ClassifyInvoiceLineUseCase implements ClassifyInvoiceLinePort {
       classified = line.classify(data);
     }
 
-    await this.lineRepo.updateLine(classified);
+    await this.lineRepo.updateLine(command.organizationId, classified);
 
     if (command.saveAsRule && invoice.supplierId) {
-      const existing = await this.ruleRepo.findBySupplierIdAndDescription(invoice.supplierId, classified.description);
+      const existing = await this.ruleRepo.findBySupplierIdAndDescription(
+        command.organizationId,
+        invoice.supplierId,
+        classified.description,
+      );
       if (existing) {
         const updated = existing.update({
           defaultCostCenterCategoryId: classified.costCenterCategoryId ?? existing.defaultCostCenterCategoryId,
@@ -60,7 +64,7 @@ export class ClassifyInvoiceLineUseCase implements ClassifyInvoiceLinePort {
           channelId: classified.channelId ?? existing.channelId,
           confidenceBoost: Math.min(existing.confidenceBoost + 10, 100),
         });
-        await this.ruleRepo.update(updated);
+        await this.ruleRepo.update(command.organizationId, updated);
       } else {
         const rule = ClassificationRule.create({
           supplierId: invoice.supplierId,
@@ -70,7 +74,7 @@ export class ClassifyInvoiceLineUseCase implements ClassifyInvoiceLinePort {
           channelId: classified.channelId,
           confidenceBoost: 10,
         });
-        await this.ruleRepo.save(rule);
+        await this.ruleRepo.save(command.organizationId, rule);
       }
     }
 

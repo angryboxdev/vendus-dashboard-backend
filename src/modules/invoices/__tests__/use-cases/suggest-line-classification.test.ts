@@ -1,6 +1,9 @@
 import { SuggestLineClassificationUseCase } from "../../application/use-cases/suggest-line-classification.use-case.js";
 import { FakeClassificationRuleRepository } from "../fakes/fake-classification-rule-repository.js";
 import { ClassificationRule } from "../../domain/entities/classification-rule.js";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 describe("SuggestLineClassificationUseCase", () => {
   let ruleRepo: FakeClassificationRuleRepository;
@@ -12,7 +15,7 @@ describe("SuggestLineClassificationUseCase", () => {
   });
 
   it("retorna null quando não existe regra para o fornecedor", async () => {
-    const result = await useCase.execute("supplier-desconhecido");
+    const result = await useCase.execute(ORG_ID, "supplier-desconhecido");
     expect(result).toBeNull();
   });
 
@@ -22,8 +25,8 @@ describe("SuggestLineClassificationUseCase", () => {
       descriptionPattern: "Taxa de Serviço",
       defaultCostCenterCategoryId: "cat-opd",
     });
-    await ruleRepo.save(rule);
-    const result = await useCase.execute("supplier-1", "Ingredientes");
+    await ruleRepo.save(ORG_ID, rule);
+    const result = await useCase.execute(ORG_ID, "supplier-1", "Ingredientes");
     expect(result).toBeNull();
   });
 
@@ -33,9 +36,9 @@ describe("SuggestLineClassificationUseCase", () => {
       defaultLineType: "stock_purchase",
       defaultCostCenterId: "cc-ope",
     });
-    await ruleRepo.save(rule);
+    await ruleRepo.save(ORG_ID, rule);
 
-    const result = await useCase.execute("supplier-1");
+    const result = await useCase.execute(ORG_ID, "supplier-1");
     expect(result).not.toBeNull();
     expect(result!.lineType).toBe("stock_purchase");
     expect(result!.costCenterId).toBe("cc-ope");
@@ -48,9 +51,9 @@ describe("SuggestLineClassificationUseCase", () => {
       defaultLineType: "operational_expense",
     });
     const boosted = rule.update({ confidenceBoost: 10 });
-    await ruleRepo.save(boosted);
+    await ruleRepo.save(ORG_ID, boosted);
 
-    const result = await useCase.execute("supplier-2");
+    const result = await useCase.execute(ORG_ID, "supplier-2");
     // 0.5 + (10 / 100) * 0.5 = 0.55
     expect(result!.confidenceScore).toBeCloseTo(0.55);
   });
@@ -61,9 +64,9 @@ describe("SuggestLineClassificationUseCase", () => {
       defaultLineType: "stock_purchase",
       confidenceBoost: 100,
     });
-    await ruleRepo.save(rule);
+    await ruleRepo.save(ORG_ID, rule);
 
-    const result = await useCase.execute("supplier-3");
+    const result = await useCase.execute(ORG_ID, "supplier-3");
     // 0.5 + (100 / 100) * 0.5 = 1.0
     expect(result!.confidenceScore).toBeCloseTo(1.0);
   });
@@ -74,9 +77,9 @@ describe("SuggestLineClassificationUseCase", () => {
       defaultLineType: "stock_purchase",
       defaultCategory: "Ingredientes",
     });
-    await ruleRepo.save(rule);
+    await ruleRepo.save(ORG_ID, rule);
 
-    const result = await useCase.execute("supplier-4");
+    const result = await useCase.execute(ORG_ID, "supplier-4");
     expect(result!.category).toBe("Ingredientes");
   });
 
@@ -85,9 +88,9 @@ describe("SuggestLineClassificationUseCase", () => {
       supplierId: "supplier-5",
       defaultCostCenterCategoryId: "cat-cmv",
     });
-    await ruleRepo.save(rule);
+    await ruleRepo.save(ORG_ID, rule);
 
-    const result = await useCase.execute("supplier-5");
+    const result = await useCase.execute(ORG_ID, "supplier-5");
     expect(result!.costCenterCategoryId).toBe("cat-cmv");
   });
 
@@ -102,10 +105,10 @@ describe("SuggestLineClassificationUseCase", () => {
       defaultCostCenterCategoryId: "cat-opd04",
       channelId: "ch-uber",
     });
-    await ruleRepo.save(generic);
-    await ruleRepo.save(specific);
+    await ruleRepo.save(ORG_ID, generic);
+    await ruleRepo.save(ORG_ID, specific);
 
-    const result = await useCase.execute("supplier-uber", "Taxa de Serviço Uber Eats");
+    const result = await useCase.execute(ORG_ID, "supplier-uber", "Taxa de Serviço Uber Eats");
     expect(result!.costCenterCategoryId).toBe("cat-opd04");
     expect(result!.channelId).toBe("ch-uber");
   });
@@ -120,10 +123,10 @@ describe("SuggestLineClassificationUseCase", () => {
       descriptionPattern: "Taxa de Serviço",
       defaultCostCenterCategoryId: "cat-opd04",
     });
-    await ruleRepo.save(generic);
-    await ruleRepo.save(specific);
+    await ruleRepo.save(ORG_ID, generic);
+    await ruleRepo.save(ORG_ID, specific);
 
-    const result = await useCase.execute("supplier-uber", "Outro custo qualquer");
+    const result = await useCase.execute(ORG_ID, "supplier-uber", "Outro custo qualquer");
     expect(result!.costCenterCategoryId).toBe("cat-generic");
   });
 
@@ -138,10 +141,10 @@ describe("SuggestLineClassificationUseCase", () => {
       descriptionPattern: "Taxa de Publicidade",
       defaultCostCenterCategoryId: "cat-mkt05",
     });
-    await ruleRepo.save(short);
-    await ruleRepo.save(long);
+    await ruleRepo.save(ORG_ID, short);
+    await ruleRepo.save(ORG_ID, long);
 
-    const result = await useCase.execute("supplier-uber", "Taxa de Publicidade Glovo");
+    const result = await useCase.execute(ORG_ID, "supplier-uber", "Taxa de Publicidade Glovo");
     expect(result!.costCenterCategoryId).toBe("cat-mkt05");
   });
 
@@ -152,9 +155,9 @@ describe("SuggestLineClassificationUseCase", () => {
       defaultCostCenterCategoryId: "cat-mkt05",
       channelId: "ch-glovo",
     });
-    await ruleRepo.save(rule);
+    await ruleRepo.save(ORG_ID, rule);
 
-    const result = await useCase.execute("supplier-glovo", "Custos de publicidade Glovo");
+    const result = await useCase.execute(ORG_ID, "supplier-glovo", "Custos de publicidade Glovo");
     expect(result!.channelId).toBe("ch-glovo");
   });
 });

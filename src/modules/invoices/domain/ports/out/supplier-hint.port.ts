@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { SupplierSummary } from "./supplier-lookup.port.js";
 
 /**
@@ -7,12 +8,12 @@ import type { SupplierSummary } from "./supplier-lookup.port.js";
  */
 export interface SupplierHintPort {
   /** Procura hint por nome normalizado (match exacto). */
-  findByNormalizedName(normalizedName: string): Promise<SupplierSummary | null>;
+  findByNormalizedName(organizationId: OrganizationId, normalizedName: string): Promise<SupplierSummary | null>;
 
   /**
    * Persiste (ou incrementa contador de) uma associação nome→fornecedor.
    * @param normalizedName Nome já normalizado via normalizeSupplierName().
    * @param supplierId     ID do fornecedor confirmado pelo utilizador.
    */
-  save(normalizedName: string, supplierId: string): Promise<void>;
+  save(organizationId: OrganizationId, normalizedName: string, supplierId: string): Promise<void>;
 }

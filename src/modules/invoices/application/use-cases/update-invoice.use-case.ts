@@ -20,17 +20,17 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
   ) {}
 
   async execute(command: UpdateInvoiceCommand): Promise<InvoiceDTO> {
-    const existing = await this.invoiceRepo.findById(command.id);
+    const existing = await this.invoiceRepo.findById(command.organizationId, command.id);
     if (!existing) throw new InvoiceNotFoundError(command.id);
 
     // Validar duplicado se o número da fatura for alterado
     if (command.invoiceNumber !== undefined && command.invoiceNumber !== existing.invoiceNumber) {
       const nif = existing.supplierNifSnapshot;
       if (nif) {
-        const dup = await this.invoiceRepo.findDuplicateByNif(command.invoiceNumber, nif, command.id);
+        const dup = await this.invoiceRepo.findDuplicateByNif(command.organizationId, command.invoiceNumber, nif, command.id);
         if (dup) throw new DuplicateInvoiceError(command.invoiceNumber, existing.supplierName);
       } else if (existing.supplierId) {
-        const dup = await this.invoiceRepo.findDuplicate(command.invoiceNumber, existing.supplierId, command.id);
+        const dup = await this.invoiceRepo.findDuplicate(command.organizationId, command.invoiceNumber, existing.supplierId, command.id);
         if (dup) throw new DuplicateInvoiceError(command.invoiceNumber, existing.supplierName);
       }
     }
@@ -58,17 +58,18 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     if (command.currency !== undefined) data.currency = command.currency;
 
     const updated = existing.update(data);
-    await this.invoiceRepo.update(updated);
+    await this.invoiceRepo.update(command.organizationId, updated);
 
     // Propagar costCenterCategoryId às linhas sempre que o campo for explicitamente enviado
     if (command.costCenterCategoryId !== undefined) {
-      await this.lineRepo.updateCostCenterCategoryForInvoice(updated.id, updated.costCenterCategoryId);
+      await this.lineRepo.updateCostCenterCategoryForInvoice(command.organizationId, updated.id, updated.costCenterCategoryId);
     }
 
     // Propagar novo número às tabelas denormalizadas (payable_entries e bank_movement_entity_links)
     if (command.invoiceNumber !== undefined && command.invoiceNumber !== existing.invoiceNumber) {
-      await this.payableWrite.renumberByInvoiceId(updated.id, updated.invoiceNumber);
+      await this.payableWrite.renumberByInvoiceId(command.organizationId, updated.id, updated.invoiceNumber);
       await this.reconciliationCleanup.renumberLinksForInvoice(
+        command.organizationId,
         updated.id,
         `${updated.supplierName} — ${updated.invoiceNumber}`,
       );

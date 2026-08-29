@@ -3,6 +3,9 @@ import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceNotFoundError, LineDetailModeError, LinesTotalMismatchError } from "../../domain/errors.js";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 /** Cria uma fatura em modo detalhado com os totais fornecidos */
 function makeDetailedInvoice(props: {
@@ -32,9 +35,10 @@ describe("AddInvoiceLineUseCase", () => {
 
   it("adds a line and returns its DTO when totals match", async () => {
     const invoice = makeDetailedInvoice({ subtotalWithoutVat: 5000, totalVat: 300, totalWithVat: 5300 });
-    await invoiceRepo.save(invoice);
+    await invoiceRepo.save(ORG_ID, invoice);
 
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       description: "Farinha T55",
       quantity: 50,
@@ -53,9 +57,10 @@ describe("AddInvoiceLineUseCase", () => {
 
   it("defaults type to 'other' when not provided", async () => {
     const invoice = makeDetailedInvoice({ subtotalWithoutVat: 1000, totalVat: 230, totalWithVat: 1230 });
-    await invoiceRepo.save(invoice);
+    await invoiceRepo.save(ORG_ID, invoice);
 
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       description: "Produto",
       quantity: 1,
@@ -70,9 +75,10 @@ describe("AddInvoiceLineUseCase", () => {
 
   it("persists the explicit type when provided", async () => {
     const invoice = makeDetailedInvoice({ subtotalWithoutVat: 8500, totalVat: 510, totalWithVat: 9010 });
-    await invoiceRepo.save(invoice);
+    await invoiceRepo.save(ORG_ID, invoice);
 
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       description: "Energia",
       type: "operational_expense",
@@ -88,9 +94,10 @@ describe("AddInvoiceLineUseCase", () => {
 
   it("persists costCenterCategoryId when provided", async () => {
     const invoice = makeDetailedInvoice({ subtotalWithoutVat: 2000, totalVat: 120, totalWithVat: 2120 });
-    await invoiceRepo.save(invoice);
+    await invoiceRepo.save(ORG_ID, invoice);
 
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       description: "Farinha",
       costCenterCategoryId: "cat-cmv",
@@ -106,9 +113,10 @@ describe("AddInvoiceLineUseCase", () => {
 
   it("persists unit when provided", async () => {
     const invoice = makeDetailedInvoice({ subtotalWithoutVat: 3000, totalVat: 180, totalWithVat: 3180 });
-    await invoiceRepo.save(invoice);
+    await invoiceRepo.save(ORG_ID, invoice);
 
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       description: "Óleo",
       unit: "L",
@@ -124,9 +132,10 @@ describe("AddInvoiceLineUseCase", () => {
 
   it("stores the line in the repository", async () => {
     const invoice = makeDetailedInvoice({ subtotalWithoutVat: 5000, totalVat: 300, totalWithVat: 5300 });
-    await invoiceRepo.save(invoice);
+    await invoiceRepo.save(ORG_ID, invoice);
 
     await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       description: "Sal",
       quantity: 100,
@@ -136,7 +145,7 @@ describe("AddInvoiceLineUseCase", () => {
       totalWithVat: 5300,
     });
 
-    const stored = await lineRepo.findByInvoiceId(invoice.id);
+    const stored = await lineRepo.findByInvoiceId(ORG_ID, invoice.id);
     expect(stored).toHaveLength(1);
     expect(stored[0]!.description).toBe("Sal");
   });
@@ -144,9 +153,10 @@ describe("AddInvoiceLineUseCase", () => {
   it("can add multiple lines when their sum matches the invoice total", async () => {
     // Fatura: 2460 total = 1230 linha A + 1230 linha B
     const invoice = makeDetailedInvoice({ subtotalWithoutVat: 2000, totalVat: 460, totalWithVat: 2460 });
-    await invoiceRepo.save(invoice);
+    await invoiceRepo.save(ORG_ID, invoice);
 
     await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       description: "Linha A",
       quantity: 1,
@@ -156,6 +166,7 @@ describe("AddInvoiceLineUseCase", () => {
       totalWithVat: 1230,
     });
     await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       description: "Linha B",
       quantity: 1,
@@ -165,14 +176,15 @@ describe("AddInvoiceLineUseCase", () => {
       totalWithVat: 1230,
     });
 
-    const stored = await lineRepo.findByInvoiceId(invoice.id);
+    const stored = await lineRepo.findByInvoiceId(ORG_ID, invoice.id);
     expect(stored).toHaveLength(2);
   });
 
   it("throws InvoiceNotFoundError when invoice does not exist", async () => {
     await expect(
       useCase.execute({
-        invoiceId: "invoice-inexistente",
+      organizationId: ORG_ID,
+      invoiceId: "invoice-inexistente",
         description: "Produto",
         quantity: 1,
         unitCostWithoutVat: 1000,
@@ -195,11 +207,12 @@ describe("AddInvoiceLineUseCase", () => {
       totalWithVat: 1230,
       // lineDetailMode defaults to "simple"
     });
-    await invoiceRepo.save(invoice);
+    await invoiceRepo.save(ORG_ID, invoice);
 
     await expect(
       useCase.execute({
-        invoiceId: invoice.id,
+      organizationId: ORG_ID,
+      invoiceId: invoice.id,
         description: "Linha",
         quantity: 1,
         unitCostWithoutVat: 1000,
@@ -214,11 +227,12 @@ describe("AddInvoiceLineUseCase", () => {
 
   it("throws LinesTotalMismatchError when a single line exceeds the invoice total", async () => {
     const invoice = makeDetailedInvoice({ subtotalWithoutVat: 1000, totalVat: 230, totalWithVat: 1230 });
-    await invoiceRepo.save(invoice);
+    await invoiceRepo.save(ORG_ID, invoice);
 
     await expect(
       useCase.execute({
-        invoiceId: invoice.id,
+      organizationId: ORG_ID,
+      invoiceId: invoice.id,
         description: "Linha",
         quantity: 1,
         unitCostWithoutVat: 2000,
@@ -231,10 +245,11 @@ describe("AddInvoiceLineUseCase", () => {
 
   it("throws LinesTotalMismatchError when second line would exceed invoice total", async () => {
     const invoice = makeDetailedInvoice({ subtotalWithoutVat: 1000, totalVat: 230, totalWithVat: 1230 });
-    await invoiceRepo.save(invoice);
+    await invoiceRepo.save(ORG_ID, invoice);
 
     // Primeira linha adiciona 615 — metade do total
     await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       description: "Linha A",
       quantity: 1,
@@ -246,6 +261,7 @@ describe("AddInvoiceLineUseCase", () => {
 
     // Segunda linha também 615 — soma ficaria 1230, OK
     await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       description: "Linha B",
       quantity: 1,
@@ -258,7 +274,8 @@ describe("AddInvoiceLineUseCase", () => {
     // Terceira linha — excederia o total
     await expect(
       useCase.execute({
-        invoiceId: invoice.id,
+      organizationId: ORG_ID,
+      invoiceId: invoice.id,
         description: "Linha C — excesso",
         quantity: 1,
         unitCostWithoutVat: 500,
@@ -271,10 +288,11 @@ describe("AddInvoiceLineUseCase", () => {
 
   it("accepts a line within the 1-cent rounding tolerance", async () => {
     const invoice = makeDetailedInvoice({ subtotalWithoutVat: 999, totalVat: 230, totalWithVat: 1229 });
-    await invoiceRepo.save(invoice);
+    await invoiceRepo.save(ORG_ID, invoice);
 
     // totalWithVat da linha = 1230, fatura = 1229 → diferença = 1 cêntimo (dentro da tolerância)
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       description: "Linha com arredondamento",
       quantity: 1,
@@ -293,10 +311,11 @@ describe("AddInvoiceLineUseCase", () => {
     // Caso de faturas importadas por IA: os campos derivados (vatAmount, subtotal) podem
     // ter arredondamentos diferentes dos valores cabeçalho. Só totalWithVat é validado.
     const invoice = makeDetailedInvoice({ subtotalWithoutVat: 10000, totalVat: 1000, totalWithVat: 11000 });
-    await invoiceRepo.save(invoice);
+    await invoiceRepo.save(ORG_ID, invoice);
 
     // vatAmount=1500 excede totalVat=1000, mas totalWithVat=11000 está dentro do limite
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       description: "Linha com IVA discrepante",
       quantity: 1,

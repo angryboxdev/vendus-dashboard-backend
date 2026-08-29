@@ -5,6 +5,7 @@ import type { DocumentStoragePort } from "../../domain/ports/out/document-storag
 import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry-write.port.js";
 import type { InvoiceReconciliationCleanupPort } from "../../domain/ports/out/invoice-reconciliation-cleanup.port.js";
 import { InvoiceNotFoundError } from "../../domain/errors.js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 
 export class DeleteInvoiceUseCase implements DeleteInvoicePort {
   constructor(
@@ -15,18 +16,18 @@ export class DeleteInvoiceUseCase implements DeleteInvoicePort {
     private readonly reconciliationCleanup: InvoiceReconciliationCleanupPort,
   ) {}
 
-  async execute(id: string): Promise<void> {
-    const existing = await this.invoiceRepo.findById(id);
+  async execute(organizationId: OrganizationId, id: string): Promise<void> {
+    const existing = await this.invoiceRepo.findById(organizationId, id);
     if (!existing) throw new InvoiceNotFoundError(id);
 
     const attachmentUrl = existing.attachmentUrl;
 
     // Limpar dependências antes de apagar a fatura
-    await this.lineRepo.deleteByInvoiceId(id);
-    await this.reconciliationCleanup.removeLinksForInvoice(id);
-    await this.payableWrite.cancelByInvoiceId(id);
+    await this.lineRepo.deleteByInvoiceId(organizationId, id);
+    await this.reconciliationCleanup.removeLinksForInvoice(organizationId, id);
+    await this.payableWrite.cancelByInvoiceId(organizationId, id);
 
-    await this.invoiceRepo.delete(id);
+    await this.invoiceRepo.delete(organizationId, id);
 
     if (attachmentUrl) {
       await this.storage.delete(attachmentUrl);

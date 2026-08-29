@@ -3,6 +3,7 @@ import type {
   InvoiceAlertsDTO,
 } from "../../domain/ports/in/invoice.ports.js";
 import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 
 const VALUE_DISCREPANCY_MARGIN_CENTS = 2;
 const LOW_AI_CONFIDENCE_THRESHOLD = 0.7;
@@ -24,12 +25,12 @@ function isSameDay(a: Date, b: Date): boolean {
 export class GetInvoiceAlertsUseCase implements GetInvoiceAlertsPort {
   constructor(private readonly invoiceRepo: InvoiceRepositoryPort) {}
 
-  async execute(): Promise<InvoiceAlertsDTO> {
+  async execute(organizationId: OrganizationId): Promise<InvoiceAlertsDTO> {
     const today = startOfDay(new Date());
     const in7Days = new Date(today);
     in7Days.setDate(in7Days.getDate() + 7);
 
-    const all = await this.invoiceRepo.findAll();
+    const all = await this.invoiceRepo.findAll(organizationId);
 
     // Invoices that still need to be paid
     const unpaid = all.filter(

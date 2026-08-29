@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry-write.port.js";
 
 export class FakePayableEntryWrite implements PayableEntryWritePort {
@@ -6,19 +7,22 @@ export class FakePayableEntryWrite implements PayableEntryWritePort {
   cancelled: string[] = [];
   renumbered: Array<{ invoiceId: string; newInvoiceNumber: string }> = [];
 
-  async createForInvoice(data: Parameters<PayableEntryWritePort["createForInvoice"]>[0]): Promise<void> {
+  async createForInvoice(
+    _organizationId: OrganizationId,
+    data: Parameters<PayableEntryWritePort["createForInvoice"]>[1],
+  ): Promise<void> {
     this.created.push({ invoiceId: data.invoiceId, amount: data.amount, dueDate: data.dueDate });
   }
 
-  async markPaidByInvoiceId(invoiceId: string, paidAt: Date): Promise<void> {
+  async markPaidByInvoiceId(_organizationId: OrganizationId, invoiceId: string, paidAt: Date): Promise<void> {
     this.markedPaid.push({ invoiceId, paidAt });
   }
 
-  async cancelByInvoiceId(invoiceId: string): Promise<void> {
+  async cancelByInvoiceId(_organizationId: OrganizationId, invoiceId: string): Promise<void> {
     this.cancelled.push(invoiceId);
   }
 
-  async renumberByInvoiceId(invoiceId: string, newInvoiceNumber: string): Promise<void> {
+  async renumberByInvoiceId(_organizationId: OrganizationId, invoiceId: string, newInvoiceNumber: string): Promise<void> {
     this.renumbered.push({ invoiceId, newInvoiceNumber });
   }
 }

@@ -1,18 +1,25 @@
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { Invoice } from "../../domain/entities/invoice.js";
 import type { InvoiceFilter, InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
 
+/**
+ * A organização é apenas mais um parâmetro (D2) — este fake modela uma única
+ * organização de cada vez, tal como as suítes que o usam; a filtragem por
+ * organização é responsabilidade do helper (`ScopedQuery`), coberta pelos
+ * seus próprios testes, não deste fake.
+ */
 export class FakeInvoiceRepository implements InvoiceRepositoryPort {
   private store = new Map<string, Invoice>();
 
-  async save(invoice: Invoice): Promise<void> {
+  async save(_organizationId: OrganizationId, invoice: Invoice): Promise<void> {
     this.store.set(invoice.id, invoice);
   }
 
-  async findById(id: string): Promise<Invoice | null> {
+  async findById(_organizationId: OrganizationId, id: string): Promise<Invoice | null> {
     return this.store.get(id) ?? null;
   }
 
-  async findAll(filter?: InvoiceFilter): Promise<Invoice[]> {
+  async findAll(_organizationId: OrganizationId, filter?: InvoiceFilter): Promise<Invoice[]> {
     let result = [...this.store.values()];
     if (filter?.supplierId) result = result.filter((i) => i.supplierId === filter.supplierId);
     if (filter?.status) result = result.filter((i) => i.status === filter.status);
@@ -37,15 +44,20 @@ export class FakeInvoiceRepository implements InvoiceRepositoryPort {
     return result.sort((a, b) => b.invoiceDate.getTime() - a.invoiceDate.getTime());
   }
 
-  async update(invoice: Invoice): Promise<void> {
+  async update(_organizationId: OrganizationId, invoice: Invoice): Promise<void> {
     this.store.set(invoice.id, invoice);
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(_organizationId: OrganizationId, id: string): Promise<void> {
     this.store.delete(id);
   }
 
-  async findDuplicate(invoiceNumber: string, supplierId: string, excludeId?: string): Promise<Invoice | null> {
+  async findDuplicate(
+    _organizationId: OrganizationId,
+    invoiceNumber: string,
+    supplierId: string,
+    excludeId?: string,
+  ): Promise<Invoice | null> {
     for (const inv of this.store.values()) {
       if (inv.invoiceNumber === invoiceNumber && inv.supplierId === supplierId && inv.status !== "cancelled") {
         if (excludeId && inv.id === excludeId) continue;
@@ -55,7 +67,12 @@ export class FakeInvoiceRepository implements InvoiceRepositoryPort {
     return null;
   }
 
-  async findDuplicateByNif(invoiceNumber: string, supplierNif: string, excludeId?: string): Promise<Invoice | null> {
+  async findDuplicateByNif(
+    _organizationId: OrganizationId,
+    invoiceNumber: string,
+    supplierNif: string,
+    excludeId?: string,
+  ): Promise<Invoice | null> {
     for (const inv of this.store.values()) {
       if (inv.invoiceNumber === invoiceNumber && inv.supplierNifSnapshot === supplierNif && inv.status !== "cancelled") {
         if (excludeId && inv.id === excludeId) continue;
@@ -65,7 +82,7 @@ export class FakeInvoiceRepository implements InvoiceRepositoryPort {
     return null;
   }
 
-  async findPendingDirectDebits(): Promise<Invoice[]> {
+  async findPendingDirectDebits(_organizationId: OrganizationId): Promise<Invoice[]> {
     const today = new Date();
     today.setHours(23, 59, 59, 999);
     return [...this.store.values()].filter(

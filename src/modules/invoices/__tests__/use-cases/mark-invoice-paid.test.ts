@@ -4,6 +4,9 @@ import { FakePayableEntryWrite } from "../fakes/fake-payable-entry-write.js";
 import { FakeOccurrenceSync } from "../fakes/fake-occurrence-sync.js";
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceNotFoundError } from "../../domain/errors.js";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 const makeInvoice = () =>
   Invoice.create({
@@ -30,9 +33,9 @@ describe("MarkInvoicePaidUseCase", () => {
 
   it("marks invoice as paid with provided date and sets reconciliation to pending", async () => {
     const inv = makeInvoice();
-    await invoiceRepo.save(inv);
+    await invoiceRepo.save(ORG_ID, inv);
 
-    const dto = await useCase.execute({ id: inv.id, paidAt: "2026-06-15" });
+    const dto = await useCase.execute({ organizationId: ORG_ID, id: inv.id, paidAt: "2026-06-15" });
     expect(dto.status).toBe("paid");
     expect(dto.paidAt).toBe("2026-06-15");
     expect(dto.reconciliationStatus).toBe("pending_reconciliation");
@@ -40,51 +43,51 @@ describe("MarkInvoicePaidUseCase", () => {
 
   it("stores bankAccountId when provided", async () => {
     const inv = makeInvoice();
-    await invoiceRepo.save(inv);
+    await invoiceRepo.save(ORG_ID, inv);
 
-    const dto = await useCase.execute({ id: inv.id, bankAccountId: "bank-xyz" });
+    const dto = await useCase.execute({ organizationId: ORG_ID, id: inv.id, bankAccountId: "bank-xyz" });
     expect(dto.paymentBankAccountId).toBe("bank-xyz");
   });
 
   it("defaults paidAt to today when not provided", async () => {
     const inv = makeInvoice();
-    await invoiceRepo.save(inv);
+    await invoiceRepo.save(ORG_ID, inv);
 
-    const dto = await useCase.execute({ id: inv.id });
+    const dto = await useCase.execute({ organizationId: ORG_ID, id: inv.id });
     expect(dto.status).toBe("paid");
     expect(dto.paidAt).not.toBeNull();
   });
 
   it("throws InvoiceNotFoundError if invoice does not exist", async () => {
-    await expect(useCase.execute({ id: "nonexistent" })).rejects.toThrow(InvoiceNotFoundError);
+    await expect(useCase.execute({ organizationId: ORG_ID, id: "nonexistent" })).rejects.toThrow(InvoiceNotFoundError);
   });
 
   it("throws if invoice is cancelled", async () => {
     const inv = makeInvoice().cancel();
-    await invoiceRepo.save(inv);
-    await expect(useCase.execute({ id: inv.id })).rejects.toThrow();
+    await invoiceRepo.save(ORG_ID, inv);
+    await expect(useCase.execute({ organizationId: ORG_ID, id: inv.id })).rejects.toThrow();
   });
 
   it("stores paymentMethod when provided", async () => {
     const inv = makeInvoice();
-    await invoiceRepo.save(inv);
+    await invoiceRepo.save(ORG_ID, inv);
 
-    const dto = await useCase.execute({ id: inv.id, paymentMethod: "bank_transfer" });
+    const dto = await useCase.execute({ organizationId: ORG_ID, id: inv.id, paymentMethod: "bank_transfer" });
     expect(dto.paymentMethod).toBe("bank_transfer");
   });
 
   it("stores paymentNotes when provided", async () => {
     const inv = makeInvoice();
-    await invoiceRepo.save(inv);
+    await invoiceRepo.save(ORG_ID, inv);
 
-    const dto = await useCase.execute({ id: inv.id, paymentNotes: "Pago via homebanking" });
+    const dto = await useCase.execute({ organizationId: ORG_ID, id: inv.id, paymentNotes: "Pago via homebanking" });
     expect(dto.paymentNotes).toBe("Pago via homebanking");
   });
 
   it("syncs the linked payable entry as paid", async () => {
     const inv = makeInvoice();
-    await invoiceRepo.save(inv);
-    await useCase.execute({ id: inv.id, paidAt: "2026-07-05" });
+    await invoiceRepo.save(ORG_ID, inv);
+    await useCase.execute({ organizationId: ORG_ID, id: inv.id, paidAt: "2026-07-05" });
     expect(payableWrite.markedPaid).toHaveLength(1);
     expect(payableWrite.markedPaid[0]!.invoiceId).toBe(inv.id);
     expect(payableWrite.markedPaid[0]!.paidAt).toEqual(new Date("2026-07-05"));

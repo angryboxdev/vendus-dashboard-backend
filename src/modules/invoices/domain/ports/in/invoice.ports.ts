@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type {
   InvoiceStatus,
   InvoiceLineType,
@@ -30,6 +31,8 @@ export interface InvoiceLineDTO {
   channelId: string | null;
   requiresChannel: boolean;
   requiresAllocation: boolean;
+  /** Loja a que este custo é alocado; null quando o custo é da organização inteira (D3/D4). */
+  locationId: string | null;
   /** Valor para DRE/Rentabilidade: totalWithVat − vatAmount (sem IVA) */
   dreValue: number;
   /** Valor para Fluxo de Caixa: totalWithVat (com IVA) */
@@ -156,9 +159,12 @@ export interface CreateInvoiceLineCommand {
   affectsDre?: boolean;
   affectsCashflow?: boolean;
   affectsProfitability?: boolean;
+  /** Loja a que este custo é alocado (spec B2 D4) — opcional; ausente/null = custo da organização. */
+  locationId?: string | null;
 }
 
 export interface CreateInvoiceCommand {
+  organizationId: OrganizationId;
   supplierId?: string | null;
   supplierName: string;
   invoiceNumber: string;
@@ -182,6 +188,7 @@ export interface CreateInvoiceCommand {
 }
 
 export interface UpdateInvoiceCommand {
+  organizationId: OrganizationId;
   id: string;
   supplierId?: string | null;
   supplierName?: string;
@@ -206,6 +213,7 @@ export interface UpdateInvoiceCommand {
 }
 
 export interface MarkInvoicePaidCommand {
+  organizationId: OrganizationId;
   id: string;
   paidAt?: string; // YYYY-MM-DD — defaults to today
   bankAccountId?: string | null;
@@ -214,16 +222,19 @@ export interface MarkInvoicePaidCommand {
 }
 
 export interface SetLineDetailModeCommand {
+  organizationId: OrganizationId;
   id: string;
   mode: LineDetailMode;
 }
 
 export interface SetInvoiceStatusCommand {
+  organizationId: OrganizationId;
   id: string;
   status: InvoiceStatus;
 }
 
 export interface ClassifyInvoiceLineCommand {
+  organizationId: OrganizationId;
   invoiceId: string;
   lineId: string;
   classify: {
@@ -256,6 +267,7 @@ export interface SuggestClassificationResult {
 }
 
 export interface ImportInvoiceCommand {
+  organizationId: OrganizationId;
   fileBuffer: Buffer;
   filename: string;
   mimeType: string;
@@ -274,6 +286,7 @@ export interface NewSupplierCommand {
 }
 
 export interface ConfirmImportedInvoiceCommand {
+  organizationId: OrganizationId;
   id: string;
   supplierId?: string | null;
   /** Criar novo fornecedor com os dados da fatura — se presente, supplierId é ignorado */
@@ -303,6 +316,7 @@ export interface ConfirmImportedInvoiceCommand {
 }
 
 export interface AddInvoiceLineCommand {
+  organizationId: OrganizationId;
   invoiceId: string;
   description: string;
   type?: InvoiceLineType;
@@ -316,6 +330,8 @@ export interface AddInvoiceLineCommand {
   affectsDre?: boolean;
   affectsCashflow?: boolean;
   affectsProfitability?: boolean;
+  /** Loja a que este custo é alocado (spec B2 D4) — opcional; ausente/null = custo da organização. */
+  locationId?: string | null;
 }
 
 // ── Input ports ───────────────────────────────────────────────────────────────
@@ -345,23 +361,27 @@ export interface ClassifyInvoiceLinePort {
 }
 
 export interface ListInvoicesPort {
-  execute(filter?: ListInvoicesFilter): Promise<InvoiceDTO[]>;
+  execute(organizationId: OrganizationId, filter?: ListInvoicesFilter): Promise<InvoiceDTO[]>;
 }
 
 export interface ListInvoiceLinesPort {
-  execute(): Promise<InvoiceLineDTO[]>;
+  execute(organizationId: OrganizationId): Promise<InvoiceLineDTO[]>;
 }
 
 export interface GetInvoicePort {
-  execute(id: string): Promise<InvoiceDTO>;
+  execute(organizationId: OrganizationId, id: string): Promise<InvoiceDTO>;
 }
 
 export interface DeleteInvoicePort {
-  execute(id: string): Promise<void>;
+  execute(organizationId: OrganizationId, id: string): Promise<void>;
 }
 
 export interface SuggestLineClassificationPort {
-  execute(supplierId: string, description?: string): Promise<SuggestClassificationResult | null>;
+  execute(
+    organizationId: OrganizationId,
+    supplierId: string,
+    description?: string,
+  ): Promise<SuggestClassificationResult | null>;
 }
 
 export interface ImportInvoicePort {
@@ -373,11 +393,11 @@ export interface ConfirmImportedInvoicePort {
 }
 
 export interface GetInvoiceAlertsPort {
-  execute(): Promise<InvoiceAlertsDTO>;
+  execute(organizationId: OrganizationId): Promise<InvoiceAlertsDTO>;
 }
 
 export interface ProcessDirectDebitsPort {
-  execute(): Promise<{ processed: number }>;
+  execute(organizationId: OrganizationId): Promise<{ processed: number }>;
 }
 
 export interface SetLineDetailModePort {
@@ -385,6 +405,7 @@ export interface SetLineDetailModePort {
 }
 
 export interface UpdateInvoiceLineCommand {
+  organizationId: OrganizationId;
   invoiceId: string;
   lineId: string;
   description?: string;
@@ -394,6 +415,8 @@ export interface UpdateInvoiceLineCommand {
   vatRate?: number;
   vatAmount?: number;
   totalWithVat?: number;
+  /** Loja a que este custo é alocado (spec B2 D4) — opcional; ausente = não altera; null = desaloca. */
+  locationId?: string | null;
 }
 
 export interface UpdateInvoiceLinePort {
@@ -401,5 +424,5 @@ export interface UpdateInvoiceLinePort {
 }
 
 export interface DeleteInvoiceLinePort {
-  execute(invoiceId: string, lineId: string): Promise<void>;
+  execute(organizationId: OrganizationId, invoiceId: string, lineId: string): Promise<void>;
 }

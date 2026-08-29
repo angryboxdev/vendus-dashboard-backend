@@ -7,6 +7,9 @@ import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository
 import { FakePayableEntryWrite } from "../fakes/fake-payable-entry-write.js";
 import { FakeSupplierCreatePort } from "../fakes/fake-supplier-create.port.js";
 import { FakeSupplierHintPort } from "../fakes/fake-supplier-hint.port.js";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 function makeDraftInvoice(overrides: Partial<Parameters<typeof Invoice.createFromImport>[0]> = {}): Invoice {
   return Invoice.createFromImport({
@@ -45,9 +48,9 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
   it("transitions draft_ai to pending", async () => {
     const draft = makeDraftInvoice();
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
-    const result = await useCase.execute({ id: draft.id });
+    const result = await useCase.execute({ organizationId: ORG_ID, id: draft.id });
 
     expect(result.status).toBe("pending");
     expect(result.requiresReview).toBe(false);
@@ -55,9 +58,10 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
   it("applies user corrections to the invoice fields", async () => {
     const draft = makeDraftInvoice({ invoiceNumber: "" });
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       id: draft.id,
       invoiceNumber: "MKR-2026-0421",
       supplierId: "sup-1",
@@ -71,9 +75,9 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
   it("creates payable entry when saveAsPayable is true and dueDate is set", async () => {
     const draft = makeDraftInvoice();
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
-    await useCase.execute({ id: draft.id, saveAsPayable: true });
+    await useCase.execute({ organizationId: ORG_ID, id: draft.id, saveAsPayable: true });
 
     expect(payableWrite.created).toHaveLength(1);
     expect(payableWrite.created[0].invoiceId).toBe(draft.id);
@@ -82,27 +86,28 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
   it("does not create payable entry when saveAsPayable is false", async () => {
     const draft = makeDraftInvoice();
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
-    await useCase.execute({ id: draft.id, saveAsPayable: false });
+    await useCase.execute({ organizationId: ORG_ID, id: draft.id, saveAsPayable: false });
 
     expect(payableWrite.created).toHaveLength(0);
   });
 
   it("does not create payable entry when dueDate is missing", async () => {
     const draft = makeDraftInvoice({ dueDate: null });
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
-    await useCase.execute({ id: draft.id, saveAsPayable: true });
+    await useCase.execute({ organizationId: ORG_ID, id: draft.id, saveAsPayable: true });
 
     expect(payableWrite.created).toHaveLength(0);
   });
 
   it("saves optional lines provided during confirmation", async () => {
     const draft = makeDraftInvoice();
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
     await useCase.execute({
+      organizationId: ORG_ID,
       id: draft.id,
       lines: [
         {
@@ -116,21 +121,21 @@ describe("ConfirmImportedInvoiceUseCase", () => {
       ],
     });
 
-    const lines = await lineRepo.findByInvoiceId(draft.id);
+    const lines = await lineRepo.findByInvoiceId(ORG_ID, draft.id);
     expect(lines).toHaveLength(1);
     expect(lines[0].description).toBe("Farinha T55 25kg");
   });
 
   it("throws InvoiceNotFoundError for unknown id", async () => {
-    await expect(useCase.execute({ id: "unknown" })).rejects.toThrow("not found");
+    await expect(useCase.execute({ organizationId: ORG_ID, id: "unknown" })).rejects.toThrow("not found");
   });
 
   it("throws when trying to confirm an already confirmed (pending) invoice", async () => {
     const draft = makeDraftInvoice();
-    await invoiceRepo.save(draft);
-    await useCase.execute({ id: draft.id });
+    await invoiceRepo.save(ORG_ID, draft);
+    await useCase.execute({ organizationId: ORG_ID, id: draft.id });
 
-    await expect(useCase.execute({ id: draft.id })).rejects.toThrow("Cannot confirm");
+    await expect(useCase.execute({ organizationId: ORG_ID, id: draft.id })).rejects.toThrow("Cannot confirm");
   });
 
   it("lança DuplicateInvoiceError ao confirmar quando já existe outra fatura com mesmo número e NIF", async () => {
@@ -148,22 +153,22 @@ describe("ConfirmImportedInvoiceUseCase", () => {
       aiConfidence: 0.95,
       requiresReview: false,
     });
-    await invoiceRepo.save(existing);
+    await invoiceRepo.save(ORG_ID, existing);
 
     const draft = makeDraftInvoice({ invoiceNumber: "INV-2026-999" });
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
     await expect(
-      useCase.execute({ id: draft.id, invoiceNumber: "INV-2026-001", supplierNifSnapshot: "500123456" }),
+      useCase.execute({ organizationId: ORG_ID, id: draft.id, invoiceNumber: "INV-2026-001", supplierNifSnapshot: "500123456" }),
     ).rejects.toThrow(DuplicateInvoiceError);
   });
 
   it("não lança DuplicateInvoiceError ao confirmar a mesma fatura (excludeId correto)", async () => {
     const draft = makeDraftInvoice({ supplierNifSnapshot: "500123456" });
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
     await expect(
-      useCase.execute({ id: draft.id, supplierNifSnapshot: "500123456" }),
+      useCase.execute({ organizationId: ORG_ID, id: draft.id, supplierNifSnapshot: "500123456" }),
     ).resolves.toBeDefined();
   });
 
@@ -171,9 +176,10 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
   it("cria fornecedor novo quando newSupplier é fornecido e usa o ID retornado", async () => {
     const draft = makeDraftInvoice({ supplierId: undefined });
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       id: draft.id,
       newSupplier: {
         name: "Novo Fornecedor Lda",
@@ -188,9 +194,10 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
   it("newSupplier tem precedência sobre supplierId quando ambos são fornecidos", async () => {
     const draft = makeDraftInvoice();
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       id: draft.id,
       supplierId: "sup-existente",
       newSupplier: { name: "Novo Fornecedor Criado" },
@@ -206,7 +213,7 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
   it("propaga costCenterCategoryId às linhas existentes ao confirmar", async () => {
     const draft = makeDraftInvoice();
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
     // Pré-criar uma linha na fatura
     const line = InvoiceLine.create({
@@ -218,20 +225,21 @@ describe("ConfirmImportedInvoiceUseCase", () => {
       vatAmount: 230,
       totalWithVat: 1230,
     });
-    await lineRepo.saveAll([line]);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
     await useCase.execute({
+      organizationId: ORG_ID,
       id: draft.id,
       costCenterCategoryId: "cat-cmv",
     });
 
-    const lines = await lineRepo.findByInvoiceId(draft.id);
+    const lines = await lineRepo.findByInvoiceId(ORG_ID, draft.id);
     expect(lines[0].costCenterCategoryId).toBe("cat-cmv");
   });
 
   it("não propaga CC às linhas quando costCenterCategoryId é null (linha mantém o seu)", async () => {
     const draft = makeDraftInvoice();
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
     const line = InvoiceLine.create({
       invoiceId: draft.id,
@@ -243,12 +251,12 @@ describe("ConfirmImportedInvoiceUseCase", () => {
       totalWithVat: 1230,
       costCenterCategoryId: "cat-original",
     });
-    await lineRepo.saveAll([line]);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
     // Confirm sem especificar costCenterCategoryId — não deve sobrescrever
-    await useCase.execute({ id: draft.id });
+    await useCase.execute({ organizationId: ORG_ID, id: draft.id });
 
-    const lines = await lineRepo.findByInvoiceId(draft.id);
+    const lines = await lineRepo.findByInvoiceId(ORG_ID, draft.id);
     expect(lines[0].costCenterCategoryId).toBe("cat-original");
   });
 
@@ -256,9 +264,10 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
   it("confirma com isDirectDebit e directDebitDate — DTO inclui os campos", async () => {
     const draft = makeDraftInvoice({ dueDate: null });
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       id: draft.id,
       isDirectDebit: true,
       directDebitDate: "2026-09-05",
@@ -271,9 +280,9 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
   it("confirma sem isDirectDebit — DTO tem isDirectDebit=false por omissão", async () => {
     const draft = makeDraftInvoice();
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
-    const result = await useCase.execute({ id: draft.id });
+    const result = await useCase.execute({ organizationId: ORG_ID, id: draft.id });
 
     expect(result.isDirectDebit).toBe(false);
     expect(result.directDebitDate).toBeNull();
@@ -281,9 +290,10 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
   it("o DTO da fatura inclui costCenterCategoryId", async () => {
     const draft = makeDraftInvoice();
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       id: draft.id,
       costCenterCategoryId: "cat-pes",
     });
@@ -295,9 +305,9 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
   it("guarda hint nome→fornecedor ao confirmar com supplierId", async () => {
     const draft = makeDraftInvoice({ supplierName: "Makro Portugal SA" });
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
-    await useCase.execute({ id: draft.id, supplierId: "sup-1" });
+    await useCase.execute({ organizationId: ORG_ID, id: draft.id, supplierId: "sup-1" });
 
     // Nome normalizado (sem "SA", sem pontuação) deve estar guardado
     expect(supplierHint.saved.get("makro portugal")).toBe("sup-1");
@@ -305,9 +315,10 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
   it("guarda hint com ID do fornecedor recém-criado", async () => {
     const draft = makeDraftInvoice({ supplierId: undefined, supplierName: "Novo Fornecedor Lda" });
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
     await useCase.execute({
+      organizationId: ORG_ID,
       id: draft.id,
       newSupplier: { name: "Novo Fornecedor Lda", nif: "123456789" },
     });
@@ -318,10 +329,10 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
   it("não guarda hint quando nenhum fornecedor é atribuído", async () => {
     const draft = makeDraftInvoice({ supplierId: undefined });
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
     // Confirmar sem fornecer supplierId nem newSupplier
-    await useCase.execute({ id: draft.id });
+    await useCase.execute({ organizationId: ORG_ID, id: draft.id });
 
     expect(supplierHint.saved.size).toBe(0);
   });
@@ -330,9 +341,10 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
   it("define lineDetailMode como 'detailed' quando são fornecidas linhas na confirmação", async () => {
     const draft = makeDraftInvoice();
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       id: draft.id,
       lines: [
         {
@@ -351,18 +363,19 @@ describe("ConfirmImportedInvoiceUseCase", () => {
 
   it("mantém lineDetailMode 'simple' quando não são fornecidas linhas", async () => {
     const draft = makeDraftInvoice();
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
-    const result = await useCase.execute({ id: draft.id });
+    const result = await useCase.execute({ organizationId: ORG_ID, id: draft.id });
 
     expect(result.lineDetailMode).toBe("simple");
   });
 
   it("persiste lineDetailMode 'detailed' no repositório quando há linhas", async () => {
     const draft = makeDraftInvoice();
-    await invoiceRepo.save(draft);
+    await invoiceRepo.save(ORG_ID, draft);
 
     await useCase.execute({
+      organizationId: ORG_ID,
       id: draft.id,
       lines: [
         {
@@ -376,7 +389,7 @@ describe("ConfirmImportedInvoiceUseCase", () => {
       ],
     });
 
-    const saved = await invoiceRepo.findById(draft.id);
+    const saved = await invoiceRepo.findById(ORG_ID, draft.id);
     expect(saved?.lineDetailMode).toBe("detailed");
   });
 });

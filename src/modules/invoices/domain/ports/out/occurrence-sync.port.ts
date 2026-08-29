@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 /**
  * Output port para sincronização de ocorrências recorrentes a partir do módulo invoices.
  * Declarado aqui para manter independência — o adapter concreto acede
@@ -6,5 +8,5 @@
  */
 export interface OccurrenceSyncPort {
   /** Marca como paga a ocorrência vinculada a esta fatura, se existir e não estiver já paga/reconciliada/cancelada. */
-  markPaidByInvoiceId(invoiceId: string, paidAt: Date): Promise<void>;
+  markPaidByInvoiceId(organizationId: OrganizationId, invoiceId: string, paidAt: Date): Promise<void>;
 }

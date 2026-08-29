@@ -3,6 +3,9 @@ import { DuplicateInvoiceError } from "../../domain/errors.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
 import { FakePayableEntryWrite } from "../fakes/fake-payable-entry-write.js";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 describe("CreateInvoiceUseCase", () => {
   let invoiceRepo: FakeInvoiceRepository;
@@ -19,6 +22,7 @@ describe("CreateInvoiceUseCase", () => {
 
   it("creates and persists invoice with pending status", async () => {
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       supplierName: "Makro Portugal",
       invoiceNumber: "MKR-001",
       invoiceDate: "2026-06-01",
@@ -36,6 +40,7 @@ describe("CreateInvoiceUseCase", () => {
 
   it("creates invoice with lines", async () => {
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       supplierName: "EDP",
       invoiceNumber: "EDP-2026-001",
       invoiceDate: "2026-06-01",
@@ -63,6 +68,7 @@ describe("CreateInvoiceUseCase", () => {
 
   it("creates invoice with lines including costCenterCategoryId", async () => {
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       supplierName: "Makro",
       invoiceNumber: "MKR-002",
       invoiceDate: "2026-06-01",
@@ -90,6 +96,7 @@ describe("CreateInvoiceUseCase", () => {
 
   it("persists supplierId when provided", async () => {
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       supplierId: "supplier-abc",
       supplierName: "EDP",
       invoiceNumber: "EDP-001",
@@ -104,6 +111,7 @@ describe("CreateInvoiceUseCase", () => {
 
   it("invoiceDate is serialised as YYYY-MM-DD", async () => {
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       supplierName: "Test",
       invoiceNumber: "T-001",
       invoiceDate: "2026-05-15",
@@ -116,6 +124,7 @@ describe("CreateInvoiceUseCase", () => {
 
   it("auto-creates payable entry when invoice has dueDate", async () => {
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       supplierName: "EDP",
       invoiceNumber: "EDP-001",
       invoiceDate: "2026-07-01",
@@ -132,6 +141,7 @@ describe("CreateInvoiceUseCase", () => {
 
   it("does NOT create payable entry when invoice has no dueDate", async () => {
     await useCase.execute({
+      organizationId: ORG_ID,
       supplierName: "EDP",
       invoiceNumber: "EDP-002",
       invoiceDate: "2026-07-01",
@@ -144,6 +154,7 @@ describe("CreateInvoiceUseCase", () => {
 
   it("lança DuplicateInvoiceError quando já existe fatura com mesmo número e fornecedor", async () => {
     const cmd = {
+      organizationId: ORG_ID,
       supplierId: "sup-1",
       supplierName: "Makro",
       invoiceNumber: "MKR-001",
@@ -160,6 +171,7 @@ describe("CreateInvoiceUseCase", () => {
 
   it("DTO tem isDirectDebit=false e directDebitDate=null por omissão", async () => {
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       supplierName: "EDP",
       invoiceNumber: "EDP-DD-000",
       invoiceDate: "2026-06-01",
@@ -173,6 +185,7 @@ describe("CreateInvoiceUseCase", () => {
 
   it("persiste isDirectDebit e directDebitDate quando fornecidos", async () => {
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       supplierName: "EDP",
       invoiceNumber: "EDP-DD-001",
       invoiceDate: "2026-06-01",
@@ -188,6 +201,7 @@ describe("CreateInvoiceUseCase", () => {
 
   it("não lança erro de duplicado quando supplierId não está definido", async () => {
     const cmd = {
+      organizationId: ORG_ID,
       supplierName: "Makro",
       invoiceNumber: "MKR-001",
       invoiceDate: "2026-06-01",

@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 export interface NewSupplierData {
   name: string;
   nif?: string | null;
@@ -16,5 +18,5 @@ export interface CreatedSupplierRef {
 }
 
 export interface SupplierCreatePort {
-  create(data: NewSupplierData): Promise<CreatedSupplierRef>;
+  create(organizationId: OrganizationId, data: NewSupplierData): Promise<CreatedSupplierRef>;
 }

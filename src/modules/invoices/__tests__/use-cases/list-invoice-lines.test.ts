@@ -1,6 +1,9 @@
 import { ListInvoiceLinesUseCase } from "../../application/use-cases/list-invoice-lines.use-case.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 describe("ListInvoiceLinesUseCase", () => {
   let lineRepo: FakeInvoiceLineRepository;
@@ -12,7 +15,7 @@ describe("ListInvoiceLinesUseCase", () => {
   });
 
   it("returns empty array when no lines exist", async () => {
-    const result = await useCase.execute();
+    const result = await useCase.execute(ORG_ID);
     expect(result).toEqual([]);
   });
 
@@ -36,9 +39,9 @@ describe("ListInvoiceLinesUseCase", () => {
       vatAmount: 510,
       totalWithVat: 9010,
     });
-    await lineRepo.saveAll([lineA, lineB]);
+    await lineRepo.saveAll(ORG_ID, [lineA, lineB]);
 
-    const result = await useCase.execute();
+    const result = await useCase.execute(ORG_ID);
     expect(result).toHaveLength(2);
     expect(result.map((l) => l.description)).toEqual(
       expect.arrayContaining(["Farinha T55", "Energia"]),
@@ -56,9 +59,9 @@ describe("ListInvoiceLinesUseCase", () => {
       vatAmount: 120,
       totalWithVat: 2120,
     });
-    await lineRepo.saveAll([line]);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
-    const result = await useCase.execute();
+    const result = await useCase.execute(ORG_ID);
     expect(result[0]!.costCenterCategoryId).toBe("cat-cmv");
   });
 
@@ -81,9 +84,9 @@ describe("ListInvoiceLinesUseCase", () => {
       vatAmount: 115,
       totalWithVat: 615,
     });
-    await lineRepo.saveAll([lineA, lineB]);
+    await lineRepo.saveAll(ORG_ID, [lineA, lineB]);
 
-    const result = await useCase.execute();
+    const result = await useCase.execute(ORG_ID);
     const invIds = result.map((l) => l.invoiceId);
     expect(invIds).toEqual(expect.arrayContaining(["inv-A", "inv-B"]));
   });
@@ -98,9 +101,9 @@ describe("ListInvoiceLinesUseCase", () => {
       vatAmount: 460,
       totalWithVat: 2460,
     });
-    await lineRepo.saveAll([line]);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
-    const dto = (await useCase.execute())[0]!;
+    const dto = (await useCase.execute(ORG_ID))[0]!;
     expect(dto.unitCostWithoutVat).toBe(1000);
     expect(dto.vatRate).toBe(23);
     expect(dto.vatAmount).toBe(460);

@@ -4,6 +4,9 @@ import { FakeDocumentStoragePort } from "../fakes/fake-document-storage.port.js"
 import { FakeAiExtractionPort } from "../fakes/fake-ai-extraction.port.js";
 import { FakeSupplierLookupPort } from "../fakes/fake-supplier-lookup.port.js";
 import { FakeSupplierHintPort } from "../fakes/fake-supplier-hint.port.js";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 function makeBuffer(): Buffer {
   return Buffer.from("fake-pdf-content");
@@ -28,6 +31,7 @@ describe("ImportInvoiceUseCase", () => {
 
   it("stores the file and creates a draft_ai invoice", async () => {
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       fileBuffer: makeBuffer(),
       filename: "fatura.pdf",
       mimeType: "application/pdf",
@@ -52,6 +56,7 @@ describe("ImportInvoiceUseCase", () => {
     ]);
 
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       fileBuffer: makeBuffer(),
       filename: "fatura.pdf",
       mimeType: "application/pdf",
@@ -67,6 +72,7 @@ describe("ImportInvoiceUseCase", () => {
   it("sets no_supplier_match validation issue when NIF is not found", async () => {
     // supplierLookup is empty
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       fileBuffer: makeBuffer(),
       filename: "fatura.pdf",
       mimeType: "application/pdf",
@@ -90,6 +96,7 @@ describe("ImportInvoiceUseCase", () => {
     aiExtraction.setResult({ confidence: 0.5, dueDate: new Date("2026-07-01") });
 
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       fileBuffer: makeBuffer(),
       filename: "fatura.jpg",
       mimeType: "image/jpeg",
@@ -119,6 +126,7 @@ describe("ImportInvoiceUseCase", () => {
     });
 
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       fileBuffer: makeBuffer(),
       filename: "fatura.pdf",
       mimeType: "application/pdf",
@@ -141,6 +149,7 @@ describe("ImportInvoiceUseCase", () => {
     aiExtraction.setResult({ dueDate: null, confidence: 0.92 });
 
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       fileBuffer: makeBuffer(),
       filename: "fatura.pdf",
       mimeType: "application/pdf",
@@ -152,12 +161,13 @@ describe("ImportInvoiceUseCase", () => {
 
   it("persists the draft invoice in the repository", async () => {
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       fileBuffer: makeBuffer(),
       filename: "fatura.pdf",
       mimeType: "application/pdf",
     });
 
-    const saved = await invoiceRepo.findById(result.invoice.id);
+    const saved = await invoiceRepo.findById(ORG_ID, result.invoice.id);
     expect(saved).not.toBeNull();
     expect(saved?.status).toBe("draft_ai");
   });
@@ -177,6 +187,7 @@ describe("ImportInvoiceUseCase", () => {
     aiExtraction.setResult({ supplierNif: "500.123.456" });
 
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       fileBuffer: makeBuffer(),
       filename: "fatura.pdf",
       mimeType: "application/pdf",
@@ -202,6 +213,7 @@ describe("ImportInvoiceUseCase", () => {
     aiExtraction.setResult({ supplierNif: "999999999", supplierName: "Makro Portugal, SA" });
 
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       fileBuffer: makeBuffer(),
       filename: "fatura.pdf",
       mimeType: "application/pdf",
@@ -227,6 +239,7 @@ describe("ImportInvoiceUseCase", () => {
     aiExtraction.setResult({ supplierNif: "000000000", supplierName: "Makro Portugal S.A." });
 
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       fileBuffer: makeBuffer(),
       filename: "fatura.pdf",
       mimeType: "application/pdf",
@@ -251,6 +264,7 @@ describe("ImportInvoiceUseCase", () => {
     aiExtraction.setResult({ supplierNif: null, supplierName: "EDP Comercial SA" });
 
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       fileBuffer: makeBuffer(),
       filename: "fatura.pdf",
       mimeType: "application/pdf",
@@ -278,9 +292,10 @@ describe("ImportInvoiceUseCase", () => {
       aiConfidence: 0.95,
       requiresReview: false,
     });
-    await invoiceRepo.save(existing);
+    await invoiceRepo.save(ORG_ID, existing);
 
     const result = await useCase.execute({
+      organizationId: ORG_ID,
       fileBuffer: makeBuffer(),
       filename: "fatura.pdf",
       mimeType: "application/pdf",

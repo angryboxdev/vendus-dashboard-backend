@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import {
   Invoice,
   type InvoiceStatus,
@@ -89,37 +90,44 @@ function toRow(invoice: Invoice): Record<string, unknown> {
   };
 }
 
+/**
+ * Nunca guarda um `SupabaseClient` — recebe o factory `createScopedQuery`
+ * (`ScopedQueryFactory`) injectado pelo composition root e constrói um
+ * `ScopedQuery` por chamada (D2).
+ */
 export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async save(invoice: Invoice): Promise<void> {
-    const { error } = await this.supabase.from("invoices").insert(toRow(invoice));
+  async save(organizationId: OrganizationId, invoice: Invoice): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("invoices").insert(toRow(invoice));
     if (error) throw new Error(error.message);
   }
 
-  async findById(id: string): Promise<Invoice | null> {
-    const { data, error } = await this.supabase
-      .from("invoices")
+  async findById(organizationId: OrganizationId, id: string): Promise<Invoice | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("invoices")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async findAll(filter?: InvoiceFilter): Promise<Invoice[]> {
+  async findAll(organizationId: OrganizationId, filter?: InvoiceFilter): Promise<Invoice[]> {
     // Handle costCenterId filter via subquery on invoice_lines
     if (filter?.costCenterId) {
-      const { data: lineRows } = await this.supabase
-        .from("invoice_lines")
+      const { data: lineRows } = await this.scopedQuery(organizationId)
+        .table("invoice_lines")
         .select("invoice_id")
         .eq("cost_center_id", filter.costCenterId);
-      const ids = [...new Set((lineRows ?? []).map((r) => (r as Record<string, unknown>).invoice_id as string))];
+      const ids = [
+        ...new Set(((lineRows ?? []) as unknown as Record<string, unknown>[]).map((r) => r.invoice_id as string)),
+      ];
       if (ids.length === 0) return [];
 
-      let q = this.supabase
-        .from("invoices")
+      let q = this.scopedQuery(organizationId)
+        .table("invoices")
         .select("*")
         .in("id", ids)
         .order("invoice_date", { ascending: false });
@@ -135,11 +143,11 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
       }
       const { data, error } = await q;
       if (error) throw new Error(error.message);
-      return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+      return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toEntity(r));
     }
 
-    let q = this.supabase
-      .from("invoices")
+    let q = this.scopedQuery(organizationId)
+      .table("invoices")
       .select("*")
       .order("invoice_date", { ascending: false });
 
@@ -156,27 +164,32 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
 
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toEntity(r));
   }
 
-  async update(invoice: Invoice): Promise<void> {
+  async update(organizationId: OrganizationId, invoice: Invoice): Promise<void> {
     const row = toRow(invoice);
     const { id, created_at, ...updateFields } = row;
-    const { error } = await this.supabase
-      .from("invoices")
+    const { error } = await this.scopedQuery(organizationId)
+      .table("invoices")
       .update(updateFields)
       .eq("id", id);
     if (error) throw new Error(error.message);
   }
 
-  async delete(id: string): Promise<void> {
-    const { error } = await this.supabase.from("invoices").delete().eq("id", id);
+  async delete(organizationId: OrganizationId, id: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("invoices").delete().eq("id", id);
     if (error) throw new Error(error.message);
   }
 
-  async findDuplicate(invoiceNumber: string, supplierId: string, excludeId?: string): Promise<Invoice | null> {
-    let q = this.supabase
-      .from("invoices")
+  async findDuplicate(
+    organizationId: OrganizationId,
+    invoiceNumber: string,
+    supplierId: string,
+    excludeId?: string,
+  ): Promise<Invoice | null> {
+    let q = this.scopedQuery(organizationId)
+      .table("invoices")
       .select("*")
       .eq("invoice_number", invoiceNumber)
       .eq("supplier_id", supplierId)
@@ -186,24 +199,29 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
     const { data, error } = await q;
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) return null;
-    return toEntity(data[0] as Record<string, unknown>);
+    return toEntity(data[0] as unknown as Record<string, unknown>);
   }
 
-  async findPendingDirectDebits(): Promise<Invoice[]> {
+  async findPendingDirectDebits(organizationId: OrganizationId): Promise<Invoice[]> {
     const today = new Date().toISOString().slice(0, 10);
-    const { data, error } = await this.supabase
-      .from("invoices")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("invoices")
       .select("*")
       .eq("is_direct_debit", true)
       .lte("direct_debit_date", today)
       .not("status", "in", '("paid","cancelled")');
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toEntity(r));
   }
 
-  async findDuplicateByNif(invoiceNumber: string, supplierNif: string, excludeId?: string): Promise<Invoice | null> {
-    let q = this.supabase
-      .from("invoices")
+  async findDuplicateByNif(
+    organizationId: OrganizationId,
+    invoiceNumber: string,
+    supplierNif: string,
+    excludeId?: string,
+  ): Promise<Invoice | null> {
+    let q = this.scopedQuery(organizationId)
+      .table("invoices")
       .select("*")
       .eq("invoice_number", invoiceNumber)
       .eq("supplier_nif_snapshot", supplierNif)
@@ -213,6 +231,6 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
     const { data, error } = await q;
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) return null;
-    return toEntity(data[0] as Record<string, unknown>);
+    return toEntity(data[0] as unknown as Record<string, unknown>);
   }
 }
