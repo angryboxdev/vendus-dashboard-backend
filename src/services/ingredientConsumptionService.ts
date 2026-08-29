@@ -365,7 +365,7 @@ export async function getIngredientConsumption(
   });
 
   const products = response.products_overall ?? [];
-  const mappings = await getAllConsumptionMappingsMap();
+  const mappings = await getAllConsumptionMappingsMap(organizationId);
 
   const consumptionByStockId = new Map<string, number>();
   const matchedProducts: MatchedProductEntry[] = [];
@@ -390,11 +390,11 @@ export async function getIngredientConsumption(
     }
 
     if (mapping.type === "pizza") {
-      const recipes = await listPizzaRecipes(mapping.pizza_id);
+      const recipes = await listPizzaRecipes(organizationId, mapping.pizza_id);
       const activeRecipe = recipes.find((r) => r.is_active);
       if (!activeRecipe) continue;
 
-      const items = await listPizzaRecipeItems(activeRecipe.id);
+      const items = await listPizzaRecipeItems(organizationId, activeRecipe.id);
       const itemsForSize = items.filter((i) => i.size === mapping.pizza_size);
 
       for (const item of itemsForSize) {

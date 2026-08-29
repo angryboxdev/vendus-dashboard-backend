@@ -102,7 +102,7 @@ export async function computeConsumptionForProductLines(
   organizationId: OrganizationId,
   lines: StockAdjustmentLine[]
 ): Promise<Map<string, number>> {
-  const mappings = await getAllConsumptionMappingsMap();
+  const mappings = await getAllConsumptionMappingsMap(organizationId);
   const consumptionByStockId = new Map<string, number>();
 
   for (const line of lines) {
@@ -110,12 +110,12 @@ export async function computeConsumptionForProductLines(
     const q = Number(line.qty);
 
     if (mapping.type === "pizza") {
-      const recipes = await listPizzaRecipes(mapping.pizza_id);
+      const recipes = await listPizzaRecipes(organizationId, mapping.pizza_id);
       const activeRecipe = recipes.find((r) => r.is_active);
       if (!activeRecipe) {
         throw new Error(`Pizza sem receita ativa: pizza_id=${mapping.pizza_id}`);
       }
-      const items = await listPizzaRecipeItems(activeRecipe.id);
+      const items = await listPizzaRecipeItems(organizationId, activeRecipe.id);
       const itemsForSize = items.filter((i) => i.size === mapping.pizza_size);
       for (const item of itemsForSize) {
         if (item.stock_item_id) {
@@ -154,7 +154,7 @@ export async function computeConsumptionForProductLinesLenient(
   organizationId: OrganizationId,
   lines: StockAdjustmentLine[]
 ): Promise<{ map: Map<string, number>; skipped: string[] }> {
-  const mappings = await getAllConsumptionMappingsMap();
+  const mappings = await getAllConsumptionMappingsMap(organizationId);
   const consumptionByStockId = new Map<string, number>();
   const skipped: string[] = [];
 
@@ -164,13 +164,13 @@ export async function computeConsumptionForProductLinesLenient(
       const q = Number(line.qty);
 
       if (mapping.type === "pizza") {
-        const recipes = await listPizzaRecipes(mapping.pizza_id);
+        const recipes = await listPizzaRecipes(organizationId, mapping.pizza_id);
         const activeRecipe = recipes.find((r) => r.is_active);
         if (!activeRecipe) {
           skipped.push(`Pizza sem receita ativa: ${line.reference ?? line.title}`);
           continue;
         }
-        const items = await listPizzaRecipeItems(activeRecipe.id);
+        const items = await listPizzaRecipeItems(organizationId, activeRecipe.id);
         const itemsForSize = items.filter((i) => i.size === mapping.pizza_size);
         for (const item of itemsForSize) {
           if (item.stock_item_id) {
