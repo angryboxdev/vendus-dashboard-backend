@@ -43,7 +43,7 @@ analyticsRoutes.get("/analytics/historical", async (req, res) => {
   try {
     const params = parseYearMonth(req, res);
     if (!params) return;
-    const data = await buildAnalyticsHistorical(params);
+    const data = await buildAnalyticsHistorical(req.auth!.orgId, params);
     res.json(data);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
