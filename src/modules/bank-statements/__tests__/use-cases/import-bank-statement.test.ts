@@ -1,10 +1,14 @@
 import { describe, it, expect, beforeEach } from "@jest/globals";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { ImportBankStatementUseCase } from "../../application/use-cases/import-bank-statement.use-case.js";
 import { FakeBankStatementImportRepository } from "../fakes/fake-bank-statement-import-repository.js";
 import { FakeBankMovementRepository } from "../fakes/fake-bank-movement-repository.js";
 import type { ImportBankStatementCommand } from "../../domain/ports/in/bank-statement.ports.js";
 
+const organizationId = mintOrganizationId("org-a");
+
 const baseCommand: ImportBankStatementCommand = {
+  organizationId,
   bankName: "Millennium BCP",
   accountNumber: "PT123",
   periodStart: new Date("2026-06-30T00:00:00.000Z"),
@@ -78,8 +82,8 @@ describe("ImportBankStatementUseCase", () => {
     const bankAccountId = "bank-acc-xyz";
     await useCase.execute({ ...baseCommand, bankAccountId });
 
-    const allStatements = await statementRepo.findAll({});
-    const movements = await movementRepo.findByStatementId(allStatements[0].id);
+    const allStatements = await statementRepo.findAll(organizationId, {});
+    const movements = await movementRepo.findByStatementId(organizationId, allStatements[0].id);
 
     expect(movements).toHaveLength(2);
     expect(movements.every((m) => m.bankAccountId === bankAccountId)).toBe(true);
@@ -88,8 +92,8 @@ describe("ImportBankStatementUseCase", () => {
   it("sets bankAccountId to null on movements when not provided", async () => {
     await useCase.execute(baseCommand);
 
-    const allStatements = await statementRepo.findAll({});
-    const movements = await movementRepo.findByStatementId(allStatements[0].id);
+    const allStatements = await statementRepo.findAll(organizationId, {});
+    const movements = await movementRepo.findByStatementId(organizationId, allStatements[0].id);
 
     expect(movements.every((m) => m.bankAccountId === null)).toBe(true);
   });

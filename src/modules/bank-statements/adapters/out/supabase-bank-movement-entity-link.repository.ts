@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import type {
   BankMovementEntityLink,
   BankMovementEntityLinkRepositoryPort,
@@ -22,9 +23,9 @@ function mapRow(row: Record<string, unknown>): BankMovementEntityLink {
 export class SupabaseBankMovementEntityLinkRepository
   implements BankMovementEntityLinkRepositoryPort
 {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async saveAll(links: BankMovementEntityLink[]): Promise<void> {
+  async saveAll(organizationId: OrganizationId, links: BankMovementEntityLink[]): Promise<void> {
     if (links.length === 0) return;
     const rows = links.map((l) => ({
       id: l.id,
@@ -35,52 +36,57 @@ export class SupabaseBankMovementEntityLinkRepository
       allocated_amount_cents: l.allocatedAmountCents,
       entity_label: l.entityLabel,
     }));
-    const { error } = await this.supabase
-      .from("bank_movement_entity_links")
+    const { error } = await this.scopedQuery(organizationId)
+      .table("bank_movement_entity_links")
       .insert(rows);
     if (error) throw new Error(error.message);
   }
 
-  async findByMovementIds(movementIds: string[]): Promise<BankMovementEntityLink[]> {
+  async findByMovementIds(
+    organizationId: OrganizationId,
+    movementIds: string[]
+  ): Promise<BankMovementEntityLink[]> {
     if (movementIds.length === 0) return [];
-    const { data, error } = await this.supabase
-      .from("bank_movement_entity_links")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("bank_movement_entity_links")
       .select(SELECT_COLS)
       .in("movement_id", movementIds);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
+    return (data ?? []).map((row) => mapRow(row as unknown as Record<string, unknown>));
   }
 
   async findByEntityIds(
+    organizationId: OrganizationId,
     entityType: "invoice" | "payable_entry",
     entityIds: string[]
   ): Promise<BankMovementEntityLink[]> {
     if (entityIds.length === 0) return [];
-    const { data, error } = await this.supabase
-      .from("bank_movement_entity_links")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("bank_movement_entity_links")
       .select(SELECT_COLS)
       .eq("entity_type", entityType)
       .in("entity_id", entityIds);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
+    return (data ?? []).map((row) => mapRow(row as unknown as Record<string, unknown>));
   }
 
-  async deleteByMovementId(movementId: string): Promise<void> {
-    const { error } = await this.supabase
-      .from("bank_movement_entity_links")
+  async deleteByMovementId(organizationId: OrganizationId, movementId: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("bank_movement_entity_links")
       .delete()
       .eq("movement_id", movementId);
     if (error) throw new Error(error.message);
   }
 
   async findAllByEntityType(
+    organizationId: OrganizationId,
     entityType: "invoice" | "payable_entry"
   ): Promise<BankMovementEntityLink[]> {
-    const { data, error } = await this.supabase
-      .from("bank_movement_entity_links")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("bank_movement_entity_links")
       .select(SELECT_COLS)
       .eq("entity_type", entityType);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
+    return (data ?? []).map((row) => mapRow(row as unknown as Record<string, unknown>));
   }
 }

@@ -1,5 +1,5 @@
 import type { Router } from "express";
-import { getSupabaseServiceRole } from "../../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 
 // Adapters out
 import { SupabaseBankStatementImportRepository } from "./adapters/out/supabase-bank-statement-import.repository.js";
@@ -9,7 +9,6 @@ import { SupabaseInvoiceMatchReadAdapter } from "./adapters/out/supabase-invoice
 import { SupabasePayableEntryMatchReadAdapter } from "./adapters/out/supabase-payable-entry-match-read.adapter.js";
 import { SupabaseMovementMatchHintAdapter } from "./adapters/out/supabase-movement-match-hint.adapter.js";
 import { SupabaseBankMovementEntityLinkRepository } from "./adapters/out/supabase-bank-movement-entity-link.repository.js";
-import { SupabaseBankAccountReadAdapter } from "./adapters/out/supabase-bank-account-read.adapter.js";
 import { SupabaseInvoiceReconciliationWriteAdapter } from "./adapters/out/supabase-invoice-reconciliation-write.adapter.js";
 
 // Use cases
@@ -45,32 +44,36 @@ import { BankStatementController } from "./adapters/in/bank-statement.controller
 import type { BankAccountReadPort } from "./domain/ports/out/bank-account-read.port.js";
 
 /**
- * Composition root for the bank-statements module.
+ * Composition root for the bank-statements module (spec B2 ticket 09).
  *
- * Accepts an optional bankAccountRead port (injected from bank-accounts module)
- * to enable automatic account linking on import.
+ * Only this file knows the concrete adapters. Following D2, adapters don't
+ * construct their own `ScopedQuery`: they receive the `createScopedQuery`
+ * factory injected here, and build a scoped helper per call — see the
+ * module README's Ports section for the house style (established by
+ * ticket 02, `bank-accounts`) this module follows.
+ *
+ * `bankAccountRead` is required, not optional: it comes from
+ * bank-accounts' composition root (`createBankAccountsModule().accountRepo`,
+ * itself a `BankAccountRepositoryPort` that structurally satisfies this
+ * narrower port once both take `organizationId` first). This module holds
+ * no `SupabaseClient` of its own and cannot build a fallback adapter — the
+ * temporary fallback that used to query `bank_accounts` directly is gone
+ * (see the module README's Ports section for the cross-module note).
  */
-export function createBankStatementsModule(bankAccountRead?: BankAccountReadPort): { router: Router } {
-  const supabase = getSupabaseServiceRole();
-  if (!supabase) throw new Error("Supabase service role client is not configured");
-
+export function createBankStatementsModule(bankAccountRead: BankAccountReadPort): { router: Router } {
   // Adapters out
-  const statementRepo = new SupabaseBankStatementImportRepository(supabase);
-  const movementRepo = new SupabaseBankMovementRepository(supabase);
-  const ruleRepo = new SupabaseBankReconciliationRuleRepository(supabase);
-  const invoiceRead = new SupabaseInvoiceMatchReadAdapter(supabase);
-  const payableRead = new SupabasePayableEntryMatchReadAdapter(supabase);
-  const movementHint = new SupabaseMovementMatchHintAdapter(supabase);
-  const entityLinkRepo = new SupabaseBankMovementEntityLinkRepository(supabase);
-  const invoiceReconciliationWrite = new SupabaseInvoiceReconciliationWriteAdapter(supabase);
-  const occurrenceRead = new SupabaseOccurrenceMatchReadAdapter(supabase);
-
-  // Cross-module: fall back to direct Supabase adapter if not injected
-  const resolvedBankAccountRead: BankAccountReadPort =
-    bankAccountRead ?? new SupabaseBankAccountReadAdapter(supabase);
+  const statementRepo = new SupabaseBankStatementImportRepository(createScopedQuery);
+  const movementRepo = new SupabaseBankMovementRepository(createScopedQuery);
+  const ruleRepo = new SupabaseBankReconciliationRuleRepository(createScopedQuery);
+  const invoiceRead = new SupabaseInvoiceMatchReadAdapter(createScopedQuery);
+  const payableRead = new SupabasePayableEntryMatchReadAdapter(createScopedQuery);
+  const movementHint = new SupabaseMovementMatchHintAdapter(createScopedQuery);
+  const entityLinkRepo = new SupabaseBankMovementEntityLinkRepository(createScopedQuery);
+  const invoiceReconciliationWrite = new SupabaseInvoiceReconciliationWriteAdapter(createScopedQuery);
+  const occurrenceRead = new SupabaseOccurrenceMatchReadAdapter(createScopedQuery);
 
   // Use cases
-  const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo, resolvedBankAccountRead);
+  const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo, bankAccountRead);
   const listStatements = new ListBankStatementsUseCase(statementRepo);
   const getStatement = new GetBankStatementUseCase(statementRepo, movementRepo, entityLinkRepo);
   const reconcileMovement = new ReconcileMovementUseCase(movementRepo, movementHint, invoiceRead, payableRead, entityLinkRepo, invoiceReconciliationWrite);
@@ -90,9 +93,9 @@ export function createBankStatementsModule(bankAccountRead?: BankAccountReadPort
   const deleteStatement = new DeleteBankStatementUseCase(statementRepo);
   const updateBalances = new UpdateStatementBalancesUseCase(statementRepo);
   const findMovementCandidates = new FindMovementCandidatesUseCase(movementRepo, invoiceRead, payableRead, movementHint, entityLinkRepo);
-  const documentStorage = new SupabaseBankDocumentStorageAdapter(supabase);
+  const documentStorage = new SupabaseBankDocumentStorageAdapter();
   const uploadMovementDocument = new UploadMovementDocumentUseCase(movementRepo, documentStorage);
-  const linkStatementToAccount = new LinkStatementToAccountUseCase(statementRepo, resolvedBankAccountRead);
+  const linkStatementToAccount = new LinkStatementToAccountUseCase(statementRepo, bankAccountRead);
   const getAccountCalendar = new GetAccountCalendarUseCase(movementRepo);
   const getAccountMonthDetail = new GetAccountMonthDetailUseCase(movementRepo, entityLinkRepo);
   const getMovementsLinkedToInvoice = new GetMovementsLinkedToInvoiceUseCase(entityLinkRepo, movementRepo);

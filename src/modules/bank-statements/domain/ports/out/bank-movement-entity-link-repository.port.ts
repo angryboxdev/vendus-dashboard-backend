@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 export interface BankMovementEntityLink {
   id: string;
   movementId: string;
@@ -9,16 +11,23 @@ export interface BankMovementEntityLink {
 }
 
 export interface BankMovementEntityLinkRepositoryPort {
-  saveAll(links: BankMovementEntityLink[]): Promise<void>;
+  saveAll(organizationId: OrganizationId, links: BankMovementEntityLink[]): Promise<void>;
   /** Bulk load — returns all links for the given movement IDs. */
-  findByMovementIds(movementIds: string[]): Promise<BankMovementEntityLink[]>;
+  findByMovementIds(organizationId: OrganizationId, movementIds: string[]): Promise<BankMovementEntityLink[]>;
   /** Returns all links where entity_type matches and entity_id is in the given list. */
-  findByEntityIds(entityType: "invoice" | "payable_entry", entityIds: string[]): Promise<BankMovementEntityLink[]>;
+  findByEntityIds(
+    organizationId: OrganizationId,
+    entityType: "invoice" | "payable_entry",
+    entityIds: string[]
+  ): Promise<BankMovementEntityLink[]>;
   /** Deletes all entity links for a movement (used when re-reconciling). */
-  deleteByMovementId(movementId: string): Promise<void>;
+  deleteByMovementId(organizationId: OrganizationId, movementId: string): Promise<void>;
   /**
    * Returns ALL links for the given entity type (no ID filter).
    * Used to find partially-reconciled entities by open balance.
    */
-  findAllByEntityType(entityType: "invoice" | "payable_entry"): Promise<BankMovementEntityLink[]>;
+  findAllByEntityType(
+    organizationId: OrganizationId,
+    entityType: "invoice" | "payable_entry"
+  ): Promise<BankMovementEntityLink[]>;
 }

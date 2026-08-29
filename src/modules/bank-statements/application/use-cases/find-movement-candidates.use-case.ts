@@ -7,6 +7,7 @@ import type { MovementMatchHintPort } from "../../domain/ports/out/movement-matc
 import type { BankMovementEntityLinkRepositoryPort } from "../../domain/ports/out/bank-movement-entity-link-repository.port.js";
 import type {
   FindMovementCandidatesPort,
+  FindMovementCandidatesQuery,
   MovementCandidate,
 } from "../../domain/ports/in/bank-statement.ports.js";
 
@@ -83,8 +84,9 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
     private readonly linkRepo: BankMovementEntityLinkRepositoryPort,
   ) {}
 
-  async execute(movementId: string): Promise<MovementCandidate[]> {
-    const movement = await this.movementRepo.findById(movementId);
+  async execute(query: FindMovementCandidatesQuery): Promise<MovementCandidate[]> {
+    const { organizationId, movementId } = query;
+    const movement = await this.movementRepo.findById(organizationId, movementId);
     if (!movement) throw new MovementNotFoundError(movementId);
 
     const tolerance = Math.max(
@@ -97,12 +99,12 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
     // Resolve hint once — single DB lookup for this movement
     const normalizedDesc = normalizeBankDescription(movement.description);
     const hintSupplierId = normalizedDesc.length > 0
-      ? await this.hint.findSupplierByDescription(normalizedDesc)
+      ? await this.hint.findSupplierByDescription(organizationId, normalizedDesc)
       : null;
 
     const [invoiceCandidates, payableCandidates] = await Promise.all([
-      this.invoiceRead.findCandidates({ amountCents: movement.amount, dateFrom, dateTo, toleranceCents: tolerance }),
-      this.payableRead.findCandidates({ amountCents: movement.amount, dateFrom, dateTo, toleranceCents: tolerance }),
+      this.invoiceRead.findCandidates(organizationId, { amountCents: movement.amount, dateFrom, dateTo, toleranceCents: tolerance }),
+      this.payableRead.findCandidates(organizationId, { amountCents: movement.amount, dateFrom, dateTo, toleranceCents: tolerance }),
     ]);
 
     // Load existing allocations for all candidate entities to compute open balances.
@@ -110,8 +112,8 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
     const allInvoiceIds = invoiceCandidates.map((inv) => inv.id);
     const allPayableIds = payableCandidates.map((pe) => pe.id);
     const [invoiceLinks, payableLinks] = await Promise.all([
-      allInvoiceIds.length > 0 ? this.linkRepo.findByEntityIds("invoice", allInvoiceIds) : Promise.resolve([]),
-      allPayableIds.length > 0 ? this.linkRepo.findByEntityIds("payable_entry", allPayableIds) : Promise.resolve([]),
+      allInvoiceIds.length > 0 ? this.linkRepo.findByEntityIds(organizationId, "invoice", allInvoiceIds) : Promise.resolve([]),
+      allPayableIds.length > 0 ? this.linkRepo.findByEntityIds(organizationId, "payable_entry", allPayableIds) : Promise.resolve([]),
     ]);
 
     const invoiceCandidateIds = new Set(invoiceCandidates.map((inv) => inv.id));
@@ -130,7 +132,7 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
     // whose open balance falls within tolerance.
 
     const alreadyCandidateIds = new Set(invoiceCandidates.map((i) => i.id));
-    const allInvoiceLinks = await this.linkRepo.findAllByEntityType("invoice");
+    const allInvoiceLinks = await this.linkRepo.findAllByEntityType(organizationId, "invoice");
 
     // Aggregate total allocated per invoice from the links table
     // (amountCents in the link IS the invoice total at time of reconciliation)
@@ -152,7 +154,7 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
       .map(([id]) => id);
 
     const extraInvoices = partiallyMatchingIds.length > 0
-      ? await this.invoiceRead.findByIds(partiallyMatchingIds)
+      ? await this.invoiceRead.findByIds(organizationId, partiallyMatchingIds)
       : [];
 
     // Merge extras into invoiceCandidates list; update allocByEntity for them

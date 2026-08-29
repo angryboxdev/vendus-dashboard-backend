@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 /**
  * Output port — cross-module read access to payable entries for matching purposes.
  * The adapter accesses the payable_entries table directly via Supabase
@@ -19,13 +21,16 @@ export interface PayableEntryMatchReadPort {
    * Returns payable entries with amount within toleranceCents of amountCents,
    * whose dueDate falls between dateFrom and dateTo, and whose status is pending/overdue.
    */
-  findCandidates(opts: {
-    amountCents: number;
-    dateFrom: string; // YYYY-MM-DD
-    dateTo: string; // YYYY-MM-DD
-    toleranceCents?: number;
-  }): Promise<PayableEntryMatchCandidate[]>;
+  findCandidates(
+    organizationId: OrganizationId,
+    opts: {
+      amountCents: number;
+      dateFrom: string; // YYYY-MM-DD
+      dateTo: string; // YYYY-MM-DD
+      toleranceCents?: number;
+    }
+  ): Promise<PayableEntryMatchCandidate[]>;
 
   /** Returns payable entries by their IDs regardless of status or date — used when reconciling. */
-  findByIds(ids: string[]): Promise<PayableEntryMatchCandidate[]>;
+  findByIds(organizationId: OrganizationId, ids: string[]): Promise<PayableEntryMatchCandidate[]>;
 }

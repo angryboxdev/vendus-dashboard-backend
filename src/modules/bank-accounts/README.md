@@ -103,24 +103,25 @@ copiam.
   `organizationId` — a organização é uma preocupação de acesso/query, não um
   invariante de negócio da entidade, tal como em `locations`.
 
-### Ponte cross-módulo temporária (bank-statements)
+### Ponte cross-módulo (histórico, resolvida pelo ticket 09)
 
 `createBankAccountsModule()` expunha `accountRepo` directamente (o próprio
 `SupabaseBankAccountRepository`) para o módulo bank-statements o injectar
 como o seu `BankAccountReadPort` — compatibilidade estrutural, sem port
 dedicado. Essa forma partiu quando `findByAccountNumber`/`findById` ganharam
-`organizationId` como primeiro parâmetro: bank-statements ainda não foi
-convertido (ticket 09, bloqueado por este) e não tem uma organização de
-pedido para passar no seu próprio composition root.
+`organizationId` como primeiro parâmetro (este ticket): bank-statements
+ainda não estava convertido e não tinha uma organização de pedido para
+passar no seu próprio composition root.
 
-`BankAccountCrossModuleReadAdapter` (`adapters/out/bank-account-cross-module-read.adapter.ts`)
-é a ponte: envolve o repositório já escopado e responde à forma antiga e
-sem organização usando `UNATTENDED_SCOPE.organizationId`. Não é uma segunda
-porta de escape — toda a query por trás continua a passar pelo helper — é
-apenas fixada numa organização em vez da do chamador, o que hoje é um no-op
-porque só existe uma organização (o "hard gate" da spec.md sobre provisionar
-uma segunda). O ticket 09 elimina este ficheiro assim que bank-statements
-passar a ter a sua própria organização de pedido para passar directamente.
+Entretanto, um `BankAccountCrossModuleReadAdapter` temporário fixava a
+organização de bank-statements em `UNATTENDED_SCOPE` em vez da do chamador
+— inofensivo enquanto existisse uma só organização, mas dívida deliberada.
+**O ticket 09 eliminou esse ficheiro**: bank-statements agora tem a sua
+própria organização de pedido (de `req.auth!.orgId`, threaded pelo seu
+próprio controller/use cases) e chama `BankAccountRepositoryPort`
+directamente com ela, tal como qualquer outro consumidor convertido. A
+compatibilidade estrutural com o `BankAccountReadPort` de bank-statements
+voltou a valer, agora com `organizationId` explícito dos dois lados.
 
 ---
 
@@ -161,8 +162,7 @@ Em ambos, `organizationId` é sempre o primeiro parâmetro do método (D2).
 ### Saída
 
 - `SupabaseBankRepository` → tabela `banks`, via `ScopedQueryFactory` (D2) — não guarda um `SupabaseClient`.
-- `SupabaseBankAccountRepository` → tabela `bank_accounts` (e `bank_statement_imports` em `countStatements`), via `ScopedQueryFactory`.
-- `BankAccountCrossModuleReadAdapter` → ponte temporária para bank-statements, ver secção abaixo.
+- `SupabaseBankAccountRepository` → tabela `bank_accounts` (e `bank_statement_imports` em `countStatements`), via `ScopedQueryFactory`. Também exposta directamente ao módulo bank-statements como `accountRepo` (ver secção "Cross-módulo" abaixo).
 
 ### Rotas
 
@@ -184,14 +184,16 @@ DELETE /api/bank-accounts/:accountId                   eliminar conta (409 se ti
 
 ## Cross-módulo: bank-statements
 
-O módulo expõe `accountRepo` via `createBankAccountsModule()` — hoje uma
-instância de `BankAccountCrossModuleReadAdapter`, não o `SupabaseBankAccountRepository`
-directamente (ver "Ponte cross-módulo temporária" acima: a conversão deste
-ticket para `organizationId` explícito quebrou a compatibilidade estrutural
-anterior com o `BankAccountReadPort` de bank-statements). O server.ts injecta
-este adapter em `createBankStatementsModule(bankAccountRead)`.
-
-O bank-statements também tem um fallback `SupabaseBankAccountReadAdapter` que consulta directamente a tabela `bank_accounts` — usado se o módulo for instanciado sem a injecção. Esse fallback ainda usa um `SupabaseClient` sem escopo — fica por conversão do ticket 09.
+O módulo expõe `accountRepo` via `createBankAccountsModule()` — o próprio
+`SupabaseBankAccountRepository`, tipado como `BankAccountRepositoryPort`.
+bank-statements injecta-o directamente como o seu `BankAccountReadPort`
+(compatibilidade estrutural: ambos têm `organizationId` como primeiro
+parâmetro desde o ticket 09, e `BankAccountRepositoryPort` tem um
+sobreconjunto dos métodos que `BankAccountReadPort` pede, devolvendo
+`BankAccount`, que estruturalmente satisfaz `{ id: string }`). O server.ts
+injecta-o em `createBankStatementsModule(bankAccountRead)`, que agora exige
+este parâmetro (deixou de ter fallback próprio — ver README de
+bank-statements).
 
 ## Decisões de design (ADR resumido)
 
@@ -201,7 +203,7 @@ O bank-statements também tem um fallback `SupabaseBankAccountReadAdapter` que c
 
 **`countAccounts` e `countStatements` no repositório** — a regra "não eliminar se tiver dependentes" é simples o suficiente para resolver com um count no repositório, sem necessidade de lista completa.
 
-**Exposição de `accountRepo` em vez de port separado** — historicamente o `SupabaseBankAccountRepository` era estruturalmente compatível com o `BankAccountReadPort` (TypeScript structural typing), evitando um adapter wrapper. A spec B2 (D2) acabou com isso ao dar a `BankAccountRepositoryPort` um primeiro parâmetro `organizationId` que o port de bank-statements não tem — ver "Ponte cross-módulo temporária" acima para o adapter que assumiu esse papel entretanto.
+**Exposição de `accountRepo` em vez de port separado** — o `SupabaseBankAccountRepository` é estruturalmente compatível com o `BankAccountReadPort` de bank-statements (TypeScript structural typing), evitando um adapter wrapper dedicado. A conversão deste módulo para `organizationId` explícito (D2) quebrou essa compatibilidade temporariamente, até bank-statements ser convertido também (ticket 09) — ver "Ponte cross-módulo" acima para o histórico.
 
 ## Como testar
 
@@ -215,4 +217,3 @@ npx jest --testPathPattern=src/modules/bank-accounts
 - Parsers para CGD, BPI, Santander ainda não existem — o campo `statementFormat` reserva os valores mas o controller de bank-statements continua a usar apenas millennium_bcp_csv e generic_xlsx.
 - Não há validação de formato IBAN (apenas normalização de whitespace/casing). Validação formal poderia ser adicionada no domínio.
 - `GET /api/bank-accounts/banks` faz N queries para contar contas (uma por banco). Para volumes grandes, considerar uma query com JOIN ou COUNT GROUP BY.
-- `BankAccountCrossModuleReadAdapter` fixa a organização de bank-statements em `UNATTENDED_SCOPE` em vez da do pedido — inofensivo enquanto só existir uma organização, mas é dívida deliberada que o ticket 09 (spec B2) fecha. Ver "Ponte cross-módulo temporária" acima.

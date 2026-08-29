@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "@jest/globals";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { GetMovementsLinkedToInvoiceUseCase } from "../../application/use-cases/get-movements-linked-to-invoice.use-case.js";
 import { BankMovement } from "../../domain/entities/bank-movement.js";
 import { FakeBankMovementRepository } from "../fakes/fake-bank-movement-repository.js";
@@ -54,6 +55,7 @@ function makeLink(
 }
 
 describe("GetMovementsLinkedToInvoiceUseCase", () => {
+  const organizationId = mintOrganizationId("org-a");
   let movementRepo: FakeBankMovementRepository;
   let linkRepo: FakeBankMovementEntityLinkRepository;
   let useCase: GetMovementsLinkedToInvoiceUseCase;
@@ -65,16 +67,16 @@ describe("GetMovementsLinkedToInvoiceUseCase", () => {
   });
 
   it("returns empty array when no links exist for the invoice", async () => {
-    const result = await useCase.execute("inv-1");
+    const result = await useCase.execute({ organizationId, invoiceId: "inv-1" });
     expect(result).toHaveLength(0);
   });
 
   it("returns the movement linked to an invoice", async () => {
     const movement = makeMovement("mov-1", 10_000, "2026-07-15");
-    await movementRepo.saveBulk([movement]);
-    await linkRepo.saveAll([makeLink("mov-1", "inv-1", 10_000)]);
+    await movementRepo.saveBulk(organizationId, [movement]);
+    await linkRepo.saveAll(organizationId, [makeLink("mov-1", "inv-1", 10_000)]);
 
-    const result = await useCase.execute("inv-1");
+    const result = await useCase.execute({ organizationId, invoiceId: "inv-1" });
 
     expect(result).toHaveLength(1);
     expect(result[0]!.movementId).toBe("mov-1");
@@ -87,13 +89,13 @@ describe("GetMovementsLinkedToInvoiceUseCase", () => {
   it("returns multiple movements when invoice is partially reconciled across movements", async () => {
     const mov1 = makeMovement("mov-1", 5_000, "2026-07-10");
     const mov2 = makeMovement("mov-2", 5_000, "2026-07-20");
-    await movementRepo.saveBulk([mov1, mov2]);
-    await linkRepo.saveAll([
+    await movementRepo.saveBulk(organizationId, [mov1, mov2]);
+    await linkRepo.saveAll(organizationId, [
       makeLink("mov-1", "inv-1", 5_000, 10_000),
       makeLink("mov-2", "inv-1", 5_000, 10_000),
     ]);
 
-    const result = await useCase.execute("inv-1");
+    const result = await useCase.execute({ organizationId, invoiceId: "inv-1" });
 
     expect(result).toHaveLength(2);
     const ids = result.map((r) => r.movementId);
@@ -103,28 +105,28 @@ describe("GetMovementsLinkedToInvoiceUseCase", () => {
 
   it("returns correct allocatedAmountCents per movement (not the entity total)", async () => {
     const movement = makeMovement("mov-1", 30_000);
-    await movementRepo.saveBulk([movement]);
-    await linkRepo.saveAll([makeLink("mov-1", "inv-1", 30_000, 100_000)]);
+    await movementRepo.saveBulk(organizationId, [movement]);
+    await linkRepo.saveAll(organizationId, [makeLink("mov-1", "inv-1", 30_000, 100_000)]);
 
-    const result = await useCase.execute("inv-1");
+    const result = await useCase.execute({ organizationId, invoiceId: "inv-1" });
 
     expect(result[0]!.allocatedAmountCents).toBe(30_000);
   });
 
   it("does not return movements linked to a different invoice", async () => {
     const movement = makeMovement("mov-1", 10_000);
-    await movementRepo.saveBulk([movement]);
-    await linkRepo.saveAll([makeLink("mov-1", "inv-OTHER", 10_000)]);
+    await movementRepo.saveBulk(organizationId, [movement]);
+    await linkRepo.saveAll(organizationId, [makeLink("mov-1", "inv-OTHER", 10_000)]);
 
-    const result = await useCase.execute("inv-1");
+    const result = await useCase.execute({ organizationId, invoiceId: "inv-1" });
     expect(result).toHaveLength(0);
   });
 
   it("skips orphan links where the movement no longer exists", async () => {
     // Link exists but movement was deleted / never saved
-    await linkRepo.saveAll([makeLink("mov-ghost", "inv-1", 5_000)]);
+    await linkRepo.saveAll(organizationId, [makeLink("mov-ghost", "inv-1", 5_000)]);
 
-    const result = await useCase.execute("inv-1");
+    const result = await useCase.execute({ organizationId, invoiceId: "inv-1" });
     expect(result).toHaveLength(0);
   });
 });

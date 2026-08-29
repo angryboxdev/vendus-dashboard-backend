@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { BankStatementImport, StatementStatus } from "../../entities/bank-statement-import.js";
 
 export interface BankStatementImportFilter {
@@ -8,9 +9,9 @@ export interface BankStatementImportFilter {
 }
 
 export interface BankStatementImportRepositoryPort {
-  save(statement: BankStatementImport): Promise<void>;
-  findById(id: string): Promise<BankStatementImport | null>;
-  findAll(filter?: BankStatementImportFilter): Promise<BankStatementImport[]>;
-  update(statement: BankStatementImport): Promise<void>;
-  delete(id: string): Promise<void>;
+  save(organizationId: OrganizationId, statement: BankStatementImport): Promise<void>;
+  findById(organizationId: OrganizationId, id: string): Promise<BankStatementImport | null>;
+  findAll(organizationId: OrganizationId, filter?: BankStatementImportFilter): Promise<BankStatementImport[]>;
+  update(organizationId: OrganizationId, statement: BankStatementImport): Promise<void>;
+  delete(organizationId: OrganizationId, id: string): Promise<void>;
 }

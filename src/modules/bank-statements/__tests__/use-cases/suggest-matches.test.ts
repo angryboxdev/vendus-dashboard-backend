@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "@jest/globals";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { SuggestMatchesUseCase } from "../../application/use-cases/suggest-matches.use-case.js";
 import { BankStatementImport } from "../../domain/entities/bank-statement-import.js";
 import { BankMovement } from "../../domain/entities/bank-movement.js";
@@ -66,6 +67,7 @@ function makeInvoiceCandidate(overrides: Partial<InvoiceMatchCandidate> = {}): I
 }
 
 describe("SuggestMatchesUseCase", () => {
+  const organizationId = mintOrganizationId("org-a");
   let statementRepo: FakeBankStatementImportRepository;
   let movementRepo: FakeBankMovementRepository;
   let invoiceRead: FakeInvoiceMatchRead;
@@ -82,31 +84,33 @@ describe("SuggestMatchesUseCase", () => {
     hint = new FakeMovementMatchHint();
     useCase = new SuggestMatchesUseCase(statementRepo, movementRepo, invoiceRead, payableRead, hint);
     statement = makeStatement();
-    await statementRepo.save(statement);
+    await statementRepo.save(organizationId, statement);
   });
 
   it("throws StatementNotFoundError for unknown statement", async () => {
-    await expect(useCase.execute("not-found")).rejects.toThrow(StatementNotFoundError);
+    await expect(
+      useCase.execute({ organizationId, statementImportId: "not-found" })
+    ).rejects.toThrow(StatementNotFoundError);
   });
 
   it("returns empty array when no unresolved movements", async () => {
-    const result = await useCase.execute(statement.id);
+    const result = await useCase.execute({ organizationId, statementImportId: statement.id });
     expect(result).toHaveLength(0);
   });
 
   it("returns empty array when no candidates match", async () => {
-    await movementRepo.saveBulk([makeDebit(statement.id)]);
+    await movementRepo.saveBulk(organizationId, [makeDebit(statement.id)]);
 
-    const result = await useCase.execute(statement.id);
+    const result = await useCase.execute({ organizationId, statementImportId: statement.id });
     expect(result).toHaveLength(0);
   });
 
   it("creates a suggestion for matching invoice", async () => {
     const movement = makeDebit(statement.id);
-    await movementRepo.saveBulk([movement]);
-    invoiceRead.setcandidates([makeInvoiceCandidate()]);
+    await movementRepo.saveBulk(organizationId, [movement]);
+    invoiceRead.setcandidates(organizationId, [makeInvoiceCandidate()]);
 
-    const suggestions = await useCase.execute(statement.id);
+    const suggestions = await useCase.execute({ organizationId, statementImportId: statement.id });
     expect(suggestions).toHaveLength(1);
     expect(suggestions[0]!.entityType).toBe("invoice");
     expect(suggestions[0]!.entityId).toBe("inv-1");
@@ -116,41 +120,41 @@ describe("SuggestMatchesUseCase", () => {
 
   it("marks movement status as sugestao", async () => {
     const movement = makeDebit(statement.id);
-    await movementRepo.saveBulk([movement]);
-    invoiceRead.setcandidates([makeInvoiceCandidate()]);
+    await movementRepo.saveBulk(organizationId, [movement]);
+    invoiceRead.setcandidates(organizationId, [makeInvoiceCandidate()]);
 
-    await useCase.execute(statement.id);
+    await useCase.execute({ organizationId, statementImportId: statement.id });
 
-    const updated = await movementRepo.findById(movement.id);
+    const updated = await movementRepo.findById(organizationId, movement.id);
     expect(updated!.reconciliationStatus).toBe("sugestao");
     expect(updated!.matchedEntityId).toBe("inv-1");
   });
 
   it("skips already resolved movements", async () => {
     const resolved = makeDebit(statement.id).classify({ justificationType: "despesa_bancaria_automatica" });
-    await movementRepo.saveBulk([resolved]);
-    invoiceRead.setcandidates([makeInvoiceCandidate()]);
+    await movementRepo.saveBulk(organizationId, [resolved]);
+    invoiceRead.setcandidates(organizationId, [makeInvoiceCandidate()]);
 
-    const suggestions = await useCase.execute(statement.id);
+    const suggestions = await useCase.execute({ organizationId, statementImportId: statement.id });
     expect(suggestions).toHaveLength(0);
   });
 
   it("skips credits (only debits are matched)", async () => {
-    await movementRepo.saveBulk([makeCredit(statement.id)]);
-    invoiceRead.setcandidates([makeInvoiceCandidate({ totalWithVat: 50_000 })]);
+    await movementRepo.saveBulk(organizationId, [makeCredit(statement.id)]);
+    invoiceRead.setcandidates(organizationId, [makeInvoiceCandidate({ totalWithVat: 50_000 })]);
 
-    const suggestions = await useCase.execute(statement.id);
+    const suggestions = await useCase.execute({ organizationId, statementImportId: statement.id });
     expect(suggestions).toHaveLength(0);
   });
 
   it("does not claim the same entity for two movements", async () => {
     const m1 = makeDebit(statement.id, 12_000, "h1");
     const m2 = makeDebit(statement.id, 12_000, "h2");
-    await movementRepo.saveBulk([m1, m2]);
+    await movementRepo.saveBulk(organizationId, [m1, m2]);
     // Only one invoice candidate with totalWithVat = 12_000
-    invoiceRead.setcandidates([makeInvoiceCandidate({ id: "inv-unique" })]);
+    invoiceRead.setcandidates(organizationId, [makeInvoiceCandidate({ id: "inv-unique" })]);
 
-    const suggestions = await useCase.execute(statement.id);
+    const suggestions = await useCase.execute({ organizationId, statementImportId: statement.id });
     // The same invoice should not be suggested twice
     const entityIds = suggestions.map((s) => s.entityId);
     expect(new Set(entityIds).size).toBe(entityIds.length);
@@ -159,28 +163,28 @@ describe("SuggestMatchesUseCase", () => {
 
   it("skips movements already in sugestao status", async () => {
     const movement = makeDebit(statement.id).markAsSuggestion("invoice", "inv-old", 0.8);
-    await movementRepo.saveBulk([movement]);
-    invoiceRead.setcandidates([makeInvoiceCandidate({ id: "inv-new" })]);
+    await movementRepo.saveBulk(organizationId, [movement]);
+    invoiceRead.setcandidates(organizationId, [makeInvoiceCandidate({ id: "inv-new" })]);
 
-    const suggestions = await useCase.execute(statement.id);
+    const suggestions = await useCase.execute({ organizationId, statementImportId: statement.id });
     expect(suggestions).toHaveLength(0);
   });
 
   it("applies hint boost when description matches a known supplier", async () => {
     // movement description "PAGAMENTO EDP SA" → normalized contains "edp"
     // Pre-populate hint: "edp" → "sup-1"
-    hint.setHint("edp", "sup-1");
+    hint.setHint(organizationId, "edp", "sup-1");
 
     const movement = makeDebit(statement.id);
-    await movementRepo.saveBulk([movement]);
+    await movementRepo.saveBulk(organizationId, [movement]);
 
     // Two candidates: one for the hinted supplier (sup-1), one for another supplier
-    invoiceRead.setcandidates([
+    invoiceRead.setcandidates(organizationId, [
       makeInvoiceCandidate({ id: "inv-hinted", supplierId: "sup-1", supplierName: "EDP SA" }),
       makeInvoiceCandidate({ id: "inv-other", supplierId: "sup-9", supplierName: "OTHER SA" }),
     ]);
 
-    const suggestions = await useCase.execute(statement.id);
+    const suggestions = await useCase.execute({ organizationId, statementImportId: statement.id });
     // The hinted invoice should win
     expect(suggestions).toHaveLength(1);
     expect(suggestions[0]!.entityId).toBe("inv-hinted");

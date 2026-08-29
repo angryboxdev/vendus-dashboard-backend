@@ -9,7 +9,7 @@ export class ClassifyMovementUseCase implements ClassifyMovementPort {
   constructor(private readonly movementRepo: BankMovementRepositoryPort) {}
 
   async execute(command: ClassifyMovementCommand): Promise<void> {
-    const movement = await this.movementRepo.findById(command.movementId);
+    const movement = await this.movementRepo.findById(command.organizationId, command.movementId);
     if (!movement) throw new MovementNotFoundError(command.movementId);
 
     const updated = movement.classify({
@@ -26,6 +26,6 @@ export class ClassifyMovementUseCase implements ClassifyMovementPort {
       ...(command.vatIncluded !== undefined && { vatIncluded: command.vatIncluded }),
     });
 
-    await this.movementRepo.update(updated);
+    await this.movementRepo.update(command.organizationId, updated);
   }
 }

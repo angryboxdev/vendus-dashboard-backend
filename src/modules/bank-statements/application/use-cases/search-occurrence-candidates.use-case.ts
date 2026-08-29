@@ -9,13 +9,13 @@ export class SearchOccurrenceCandidatesUseCase implements SearchOccurrenceCandid
   constructor(private readonly occurrenceRead: OccurrenceMatchReadPort) {}
 
   async execute(query: SearchOccurrenceCandidatesQuery): Promise<OccurrenceCandidateDto[]> {
-    const opts: Parameters<typeof this.occurrenceRead.search>[0] = {
+    const opts: Parameters<typeof this.occurrenceRead.search>[1] = {
       limit: query.limit ?? 50,
     };
     if (query.q) opts.q = query.q;
     if (query.dateFrom) opts.dateFrom = query.dateFrom;
     if (query.dateTo) opts.dateTo = query.dateTo;
-    const results = await this.occurrenceRead.search(opts);
+    const results = await this.occurrenceRead.search(query.organizationId, opts);
 
     return results.map((o) => ({
       id: o.id,

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "@jest/globals";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CloseStatementUseCase } from "../../application/use-cases/close-statement.use-case.js";
 import { BankStatementImport } from "../../domain/entities/bank-statement-import.js";
 import { BankMovement } from "../../domain/entities/bank-movement.js";
@@ -42,6 +43,7 @@ function makeDebit(stmtId: string, hash: string, amount = 500) {
 }
 
 describe("CloseStatementUseCase", () => {
+  const organizationId = mintOrganizationId("org-a");
   let statementRepo: FakeBankStatementImportRepository;
   let movementRepo: FakeBankMovementRepository;
   let useCase: CloseStatementUseCase;
@@ -53,7 +55,9 @@ describe("CloseStatementUseCase", () => {
   });
 
   it("throws StatementNotFoundError for unknown id", async () => {
-    await expect(useCase.execute("not-found")).rejects.toThrow(StatementNotFoundError);
+    await expect(
+      useCase.execute({ organizationId, statementImportId: "not-found" })
+    ).rejects.toThrow(StatementNotFoundError);
   });
 
   it("throws StatementBalanceDifferenceError when diff != 0", async () => {
@@ -70,40 +74,44 @@ describe("CloseStatementUseCase", () => {
       calculatedClosingBalance: 148_000, // diff = 3_000 ≠ 0
       reconciliationProgress: 100,
     });
-    await statementRepo.save(stmt);
-    await expect(useCase.execute(stmt.id)).rejects.toThrow(StatementBalanceDifferenceError);
+    await statementRepo.save(organizationId, stmt);
+    await expect(
+      useCase.execute({ organizationId, statementImportId: stmt.id })
+    ).rejects.toThrow(StatementBalanceDifferenceError);
   });
 
   it("throws BlockingMovementsError when high-risk unjustified movements exist", async () => {
     const stmt = makeBalancedStatement();
-    await statementRepo.save(stmt);
+    await statementRepo.save(organizationId, stmt);
     // High-risk debit: 5000€ → risk = critical
     const m = makeDebit(stmt.id, "h1", 500_000);
-    await movementRepo.saveBulk([m]);
+    await movementRepo.saveBulk(organizationId, [m]);
 
-    await expect(useCase.execute(stmt.id)).rejects.toThrow(BlockingMovementsError);
+    await expect(
+      useCase.execute({ organizationId, statementImportId: stmt.id })
+    ).rejects.toThrow(BlockingMovementsError);
   });
 
   it("closes successfully when balance is 0 and no blocking movements", async () => {
     const stmt = makeBalancedStatement();
-    await statementRepo.save(stmt);
+    await statementRepo.save(organizationId, stmt);
     // Low-risk (< 50€) unjustified movement — not blocking
     const m = makeDebit(stmt.id, "h1", 100);
-    await movementRepo.saveBulk([m]);
+    await movementRepo.saveBulk(organizationId, [m]);
 
-    await useCase.execute(stmt.id);
+    await useCase.execute({ organizationId, statementImportId: stmt.id });
 
-    const closed = await statementRepo.findById(stmt.id);
+    const closed = await statementRepo.findById(organizationId, stmt.id);
     expect(closed?.status).toBe("closed");
   });
 
   it("closes successfully with no movements", async () => {
     const stmt = makeBalancedStatement();
-    await statementRepo.save(stmt);
+    await statementRepo.save(organizationId, stmt);
 
-    await useCase.execute(stmt.id);
+    await useCase.execute({ organizationId, statementImportId: stmt.id });
 
-    const closed = await statementRepo.findById(stmt.id);
+    const closed = await statementRepo.findById(organizationId, stmt.id);
     expect(closed?.status).toBe("closed");
   });
 });

@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type {
   JustificationType,
   MatchedEntityType,
@@ -19,6 +20,7 @@ export interface ParsedMovement {
 }
 
 export interface ImportBankStatementCommand {
+  organizationId: OrganizationId;
   /** If provided, links the import directly to this account (skips auto-detect). */
   bankAccountId?: string | null;
   bankName: string;
@@ -63,6 +65,10 @@ export interface ListBankStatementsFilter {
   to?: Date;
 }
 
+export interface ListBankStatementsQuery extends ListBankStatementsFilter {
+  organizationId: OrganizationId;
+}
+
 export interface BankStatementSummary {
   id: string;
   bankAccountId: string | null;
@@ -83,7 +89,7 @@ export interface BankStatementSummary {
 }
 
 export interface ListBankStatementsPort {
-  execute(filter?: ListBankStatementsFilter): Promise<BankStatementSummary[]>;
+  execute(query: ListBankStatementsQuery): Promise<BankStatementSummary[]>;
 }
 
 // ─── Get ──────────────────────────────────────────────────────────────────────
@@ -137,11 +143,14 @@ export interface GetBankStatementFilter {
   riskLevel?: RiskLevel;
 }
 
+export interface GetBankStatementQuery {
+  organizationId: OrganizationId;
+  id: string;
+  filter?: GetBankStatementFilter;
+}
+
 export interface GetBankStatementPort {
-  execute(
-    id: string,
-    filter?: GetBankStatementFilter
-  ): Promise<BankStatementDetail | null>;
+  execute(query: GetBankStatementQuery): Promise<BankStatementDetail | null>;
 }
 
 // ─── Reconcile movement ───────────────────────────────────────────────────────
@@ -156,6 +165,7 @@ export interface EntityLinkInput {
 }
 
 export interface ReconcileMovementCommand {
+  organizationId: OrganizationId;
   movementId: string;
   /** One or more entities to link to this movement. */
   entityLinks: EntityLinkInput[];
@@ -167,13 +177,19 @@ export interface ReconcileMovementPort {
 
 // ─── Unreconcile movement ──────────────────────────────────────────────────────
 
+export interface UnreconcileMovementCommand {
+  organizationId: OrganizationId;
+  movementId: string;
+}
+
 export interface UnreconcileMovementPort {
-  execute(movementId: string): Promise<void>;
+  execute(command: UnreconcileMovementCommand): Promise<void>;
 }
 
 // ─── Classify movement ────────────────────────────────────────────────────────
 
 export interface ClassifyMovementCommand {
+  organizationId: OrganizationId;
   movementId: string;
   justificationType: JustificationType;
   matchedEntityType?: MatchedEntityType;
@@ -200,8 +216,13 @@ export interface ApplyAutoRulesResult {
   reconciliationProgress: number;
 }
 
+export interface ApplyAutoRulesCommand {
+  organizationId: OrganizationId;
+  statementImportId: string;
+}
+
 export interface ApplyAutoRulesPort {
-  execute(statementImportId: string): Promise<ApplyAutoRulesResult>;
+  execute(command: ApplyAutoRulesCommand): Promise<ApplyAutoRulesResult>;
 }
 
 // ─── Suggest matches ──────────────────────────────────────────────────────────
@@ -214,13 +235,19 @@ export interface MatchSuggestion {
   confidence: number; // 0–1
 }
 
+export interface SuggestMatchesQuery {
+  organizationId: OrganizationId;
+  statementImportId: string;
+}
+
 export interface SuggestMatchesPort {
-  execute(statementImportId: string): Promise<MatchSuggestion[]>;
+  execute(query: SuggestMatchesQuery): Promise<MatchSuggestion[]>;
 }
 
 // ─── Create rule ──────────────────────────────────────────────────────────────
 
 export interface CreateReconciliationRuleCommand {
+  organizationId: OrganizationId;
   name: string;
   descriptionContains: string;
   movementType?: MovementType | null;
@@ -257,29 +284,50 @@ export interface CreateReconciliationRulePort {
 
 // ─── List rules ───────────────────────────────────────────────────────────────
 
+export interface ListReconciliationRulesQuery {
+  organizationId: OrganizationId;
+  activeOnly?: boolean;
+}
+
 export interface ListReconciliationRulesPort {
-  execute(activeOnly?: boolean): Promise<ReconciliationRuleDto[]>;
+  execute(query: ListReconciliationRulesQuery): Promise<ReconciliationRuleDto[]>;
 }
 
 // ─── Delete rule ──────────────────────────────────────────────────────────────
 
+export interface DeleteReconciliationRuleCommand {
+  organizationId: OrganizationId;
+  id: string;
+}
+
 export interface DeleteReconciliationRulePort {
-  execute(id: string): Promise<void>;
+  execute(command: DeleteReconciliationRuleCommand): Promise<void>;
 }
 
 // ─── Close statement ──────────────────────────────────────────────────────────
 
+export interface CloseStatementCommand {
+  organizationId: OrganizationId;
+  statementImportId: string;
+}
+
 export interface CloseStatementPort {
-  execute(statementImportId: string): Promise<void>;
+  execute(command: CloseStatementCommand): Promise<void>;
+}
+
+export interface DeleteBankStatementCommand {
+  organizationId: OrganizationId;
+  statementImportId: string;
 }
 
 export interface DeleteBankStatementPort {
-  execute(statementImportId: string): Promise<void>;
+  execute(command: DeleteBankStatementCommand): Promise<void>;
 }
 
 // ─── Upload movement document ─────────────────────────────────────────────────
 
 export interface UploadMovementDocumentCommand {
+  organizationId: OrganizationId;
   movementId: string;
   buffer: Buffer;
   filename: string;
@@ -290,14 +338,27 @@ export interface UploadMovementDocumentPort {
   execute(command: UploadMovementDocumentCommand): Promise<{ documentUrl: string }>;
 }
 
+export interface UpdateStatementBalancesCommand {
+  organizationId: OrganizationId;
+  statementImportId: string;
+  openingBalance: number;
+  closingBalance: number;
+}
+
 export interface UpdateStatementBalancesPort {
-  execute(statementImportId: string, openingBalance: number, closingBalance: number): Promise<void>;
+  execute(command: UpdateStatementBalancesCommand): Promise<void>;
 }
 
 // ─── Link statement to bank account ──────────────────────────────────────────
 
+export interface LinkStatementToAccountCommand {
+  organizationId: OrganizationId;
+  statementImportId: string;
+  bankAccountId: string;
+}
+
 export interface LinkStatementToAccountPort {
-  execute(statementImportId: string, bankAccountId: string): Promise<void>;
+  execute(command: LinkStatementToAccountCommand): Promise<void>;
 }
 
 // ─── Account calendar ─────────────────────────────────────────────────────────
@@ -314,6 +375,7 @@ export interface AccountMonthStat {
 }
 
 export interface GetAccountCalendarQuery {
+  organizationId: OrganizationId;
   bankAccountId: string;
   year: number;
 }
@@ -334,6 +396,7 @@ export interface DaySlot {
 }
 
 export interface GetAccountMonthDetailQuery {
+  organizationId: OrganizationId;
   bankAccountId: string;
   year: number;
   month: number; // 1–12
@@ -356,8 +419,13 @@ export interface MovementCandidate {
   confidence: number;
 }
 
+export interface FindMovementCandidatesQuery {
+  organizationId: OrganizationId;
+  movementId: string;
+}
+
 export interface FindMovementCandidatesPort {
-  execute(movementId: string): Promise<MovementCandidate[]>;
+  execute(query: FindMovementCandidatesQuery): Promise<MovementCandidate[]>;
 }
 
 // ─── Get movements linked to invoice ──────────────────────────────────────────
@@ -370,8 +438,13 @@ export interface InvoiceLinkedMovement {
   movementType: MovementType;
 }
 
+export interface GetMovementsLinkedToInvoiceQuery {
+  organizationId: OrganizationId;
+  invoiceId: string;
+}
+
 export interface GetMovementsLinkedToInvoicePort {
-  execute(invoiceId: string): Promise<InvoiceLinkedMovement[]>;
+  execute(query: GetMovementsLinkedToInvoiceQuery): Promise<InvoiceLinkedMovement[]>;
 }
 
 // ─── Search recurrence occurrence candidates ──────────────────────────────────
@@ -389,6 +462,7 @@ export interface OccurrenceCandidateDto {
 }
 
 export interface SearchOccurrenceCandidatesQuery {
+  organizationId: OrganizationId;
   q?: string;
   dateFrom?: string; // YYYY-MM-DD
   dateTo?: string;   // YYYY-MM-DD
@@ -401,11 +475,16 @@ export interface SearchOccurrenceCandidatesPort {
 
 // ─── Get open balances for multiple invoices ───────────────────────────────────
 
+export interface GetInvoiceOpenBalancesQuery {
+  organizationId: OrganizationId;
+  invoiceIds: string[];
+}
+
 /**
  * Returns the remaining open balance (cents) for each invoice ID.
  * Invoices with no links have an open balance equal to their totalWithVat.
  * Result key is the invoiceId.
  */
 export interface GetInvoiceOpenBalancesPort {
-  execute(invoiceIds: string[]): Promise<Record<string, number>>;
+  execute(query: GetInvoiceOpenBalancesQuery): Promise<Record<string, number>>;
 }

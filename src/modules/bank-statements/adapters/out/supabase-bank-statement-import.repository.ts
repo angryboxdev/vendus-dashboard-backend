@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import {
   BankStatementImport,
   type StatementStatus,
@@ -35,10 +36,10 @@ function toEntity(row: Record<string, unknown>): BankStatementImport {
 export class SupabaseBankStatementImportRepository
   implements BankStatementImportRepositoryPort
 {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async save(statement: BankStatementImport): Promise<void> {
-    const { error } = await this.supabase.from("bank_statement_imports").insert({
+  async save(organizationId: OrganizationId, statement: BankStatementImport): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("bank_statement_imports").insert({
       id: statement.id,
       bank_account_id: statement.bankAccountId,
       bank_name: statement.bankName,
@@ -61,20 +62,23 @@ export class SupabaseBankStatementImportRepository
     if (error) throw new Error(error.message);
   }
 
-  async findById(id: string): Promise<BankStatementImport | null> {
-    const { data, error } = await this.supabase
-      .from("bank_statement_imports")
+  async findById(organizationId: OrganizationId, id: string): Promise<BankStatementImport | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("bank_statement_imports")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async findAll(filter?: BankStatementImportFilter): Promise<BankStatementImport[]> {
-    let q = this.supabase
-      .from("bank_statement_imports")
+  async findAll(
+    organizationId: OrganizationId,
+    filter?: BankStatementImportFilter
+  ): Promise<BankStatementImport[]> {
+    let q = this.scopedQuery(organizationId)
+      .table("bank_statement_imports")
       .select("*")
       .order("period_start", { ascending: false });
 
@@ -85,20 +89,20 @@ export class SupabaseBankStatementImportRepository
 
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return (data ?? []).map((r) => toEntity(r as unknown as Record<string, unknown>));
   }
 
-  async delete(id: string): Promise<void> {
-    const { error } = await this.supabase
-      .from("bank_statement_imports")
+  async delete(organizationId: OrganizationId, id: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("bank_statement_imports")
       .delete()
       .eq("id", id);
     if (error) throw new Error(error.message);
   }
 
-  async update(statement: BankStatementImport): Promise<void> {
-    const { error } = await this.supabase
-      .from("bank_statement_imports")
+  async update(organizationId: OrganizationId, statement: BankStatementImport): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("bank_statement_imports")
       .update({
         bank_account_id: statement.bankAccountId,
         bank_name: statement.bankName,

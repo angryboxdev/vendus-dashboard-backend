@@ -30,7 +30,7 @@ export class CreateReconciliationRuleUseCase implements CreateReconciliationRule
 
   async execute(command: CreateReconciliationRuleCommand): Promise<ReconciliationRuleDto> {
     const rule = BankReconciliationRule.create(command);
-    await this.ruleRepo.save(rule);
+    await this.ruleRepo.save(command.organizationId, rule);
     return toDto(rule);
   }
 }

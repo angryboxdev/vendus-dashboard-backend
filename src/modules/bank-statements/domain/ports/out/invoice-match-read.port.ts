@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 /**
  * Output port — cross-module read access to invoices for matching purposes.
  * The adapter accesses the invoices table directly via Supabase
@@ -21,13 +23,16 @@ export interface InvoiceMatchReadPort {
    * whose invoiceDate or dueDate falls within the dateFrom–dateTo window,
    * and whose status is pending/unpaid.
    */
-  findCandidates(opts: {
-    amountCents: number;
-    dateFrom: string; // YYYY-MM-DD
-    dateTo: string; // YYYY-MM-DD
-    toleranceCents?: number;
-  }): Promise<InvoiceMatchCandidate[]>;
+  findCandidates(
+    organizationId: OrganizationId,
+    opts: {
+      amountCents: number;
+      dateFrom: string; // YYYY-MM-DD
+      dateTo: string; // YYYY-MM-DD
+      toleranceCents?: number;
+    }
+  ): Promise<InvoiceMatchCandidate[]>;
 
   /** Returns invoices by their IDs regardless of status or date — used when reconciling. */
-  findByIds(ids: string[]): Promise<InvoiceMatchCandidate[]>;
+  findByIds(organizationId: OrganizationId, ids: string[]): Promise<InvoiceMatchCandidate[]>;
 }

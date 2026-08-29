@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import {
   BankReconciliationRule,
 } from "../../domain/entities/bank-reconciliation-rule.js";
@@ -28,10 +29,10 @@ function toEntity(row: Record<string, unknown>): BankReconciliationRule {
 export class SupabaseBankReconciliationRuleRepository
   implements BankReconciliationRuleRepositoryPort
 {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async save(rule: BankReconciliationRule): Promise<void> {
-    const { error } = await this.supabase.from("bank_reconciliation_rules").insert({
+  async save(organizationId: OrganizationId, rule: BankReconciliationRule): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("bank_reconciliation_rules").insert({
       id: rule.id,
       name: rule.name,
       description_contains: rule.descriptionContains,
@@ -51,31 +52,31 @@ export class SupabaseBankReconciliationRuleRepository
     if (error) throw new Error(error.message);
   }
 
-  async findAll(activeOnly = false): Promise<BankReconciliationRule[]> {
-    let q = this.supabase
-      .from("bank_reconciliation_rules")
+  async findAll(organizationId: OrganizationId, activeOnly = false): Promise<BankReconciliationRule[]> {
+    let q = this.scopedQuery(organizationId)
+      .table("bank_reconciliation_rules")
       .select("*")
       .order("name", { ascending: true });
     if (activeOnly) q = q.eq("is_active", true);
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return (data ?? []).map((r) => toEntity(r as unknown as Record<string, unknown>));
   }
 
-  async findById(id: string): Promise<BankReconciliationRule | null> {
-    const { data, error } = await this.supabase
-      .from("bank_reconciliation_rules")
+  async findById(organizationId: OrganizationId, id: string): Promise<BankReconciliationRule | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("bank_reconciliation_rules")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async update(rule: BankReconciliationRule): Promise<void> {
-    const { error } = await this.supabase
-      .from("bank_reconciliation_rules")
+  async update(organizationId: OrganizationId, rule: BankReconciliationRule): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("bank_reconciliation_rules")
       .update({
         name: rule.name,
         description_contains: rule.descriptionContains,
@@ -95,9 +96,9 @@ export class SupabaseBankReconciliationRuleRepository
     if (error) throw new Error(error.message);
   }
 
-  async delete(id: string): Promise<void> {
-    const { error } = await this.supabase
-      .from("bank_reconciliation_rules")
+  async delete(organizationId: OrganizationId, id: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("bank_reconciliation_rules")
       .delete()
       .eq("id", id);
     if (error) throw new Error(error.message);

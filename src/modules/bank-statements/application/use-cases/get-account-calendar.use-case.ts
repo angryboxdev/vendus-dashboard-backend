@@ -14,14 +14,14 @@ function daysInMonth(year: number, month: number): number {
 export class GetAccountCalendarUseCase implements GetAccountCalendarPort {
   constructor(private readonly movementRepo: BankMovementRepositoryPort) {}
 
-  async execute({ bankAccountId, year }: GetAccountCalendarQuery): Promise<AccountMonthStat[]> {
+  async execute({ organizationId, bankAccountId, year }: GetAccountCalendarQuery): Promise<AccountMonthStat[]> {
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1; // 1–12
 
     const from = new Date(year, 0, 1);  // Jan 1
     const to = new Date(year, 11, 31);  // Dec 31
-    const movements = await this.movementRepo.findByAccountAndPeriod(bankAccountId, from, to);
+    const movements = await this.movementRepo.findByAccountAndPeriod(organizationId, bankAccountId, from, to);
 
     // Group by month
     const byMonth = new Map<number, typeof movements>();

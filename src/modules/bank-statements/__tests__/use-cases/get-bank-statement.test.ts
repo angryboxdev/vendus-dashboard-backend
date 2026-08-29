@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "@jest/globals";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { GetBankStatementUseCase } from "../../application/use-cases/get-bank-statement.use-case.js";
 import { BankStatementImport } from "../../domain/entities/bank-statement-import.js";
 import { BankMovement } from "../../domain/entities/bank-movement.js";
@@ -32,6 +33,7 @@ function makeDebit(statementImportId: string, amount = 5_000, hash = "hash-1") {
 }
 
 describe("GetBankStatementUseCase", () => {
+  const organizationId = mintOrganizationId("org-a");
   let statementRepo: FakeBankStatementImportRepository;
   let movementRepo: FakeBankMovementRepository;
   let linkRepo: FakeBankMovementEntityLinkRepository;
@@ -44,16 +46,16 @@ describe("GetBankStatementUseCase", () => {
     linkRepo = new FakeBankMovementEntityLinkRepository();
     useCase = new GetBankStatementUseCase(statementRepo, movementRepo, linkRepo);
     statement = makeStatement();
-    await statementRepo.save(statement);
+    await statementRepo.save(organizationId, statement);
   });
 
   it("returns null for unknown id", async () => {
-    const result = await useCase.execute("not-found");
+    const result = await useCase.execute({ organizationId, id: "not-found" });
     expect(result).toBeNull();
   });
 
   it("returns detail with empty movements list", async () => {
-    const result = await useCase.execute(statement.id);
+    const result = await useCase.execute({ organizationId, id: statement.id });
     expect(result).not.toBeNull();
     expect(result!.id).toBe(statement.id);
     expect(result!.movements).toHaveLength(0);
@@ -61,9 +63,9 @@ describe("GetBankStatementUseCase", () => {
 
   it("includes movement DTOs with all classification fields", async () => {
     const movement = makeDebit(statement.id);
-    await movementRepo.saveBulk([movement]);
+    await movementRepo.saveBulk(organizationId, [movement]);
 
-    const result = await useCase.execute(statement.id);
+    const result = await useCase.execute({ organizationId, id: statement.id });
     expect(result!.movements).toHaveLength(1);
     const dto = result!.movements[0]!;
     expect(dto.id).toBe(movement.id);
@@ -80,8 +82,8 @@ describe("GetBankStatementUseCase", () => {
 
   it("includes entity links for reconciled movements", async () => {
     const movement = makeDebit(statement.id);
-    await movementRepo.saveBulk([movement]);
-    await linkRepo.saveAll([
+    await movementRepo.saveBulk(organizationId, [movement]);
+    await linkRepo.saveAll(organizationId, [
       {
         id: "link-1",
         movementId: movement.id,
@@ -89,10 +91,11 @@ describe("GetBankStatementUseCase", () => {
         entityId: "inv-42",
         amountCents: 5_000,
         entityLabel: "Galp Energia — FT 2026/42",
+        allocatedAmountCents: 0,
       },
     ]);
 
-    const result = await useCase.execute(statement.id);
+    const result = await useCase.execute({ organizationId, id: statement.id });
     const dto = result!.movements[0]!;
     expect(dto.entityLinks).toHaveLength(1);
     expect(dto.entityLinks[0]!.entityId).toBe("inv-42");
@@ -111,9 +114,9 @@ describe("GetBankStatementUseCase", () => {
       movementType: "credit",
       deduplicationHash: "h2",
     });
-    await movementRepo.saveBulk([debit, credit]);
+    await movementRepo.saveBulk(organizationId, [debit, credit]);
 
-    const result = await useCase.execute(statement.id);
+    const result = await useCase.execute({ organizationId, id: statement.id });
     // openingBalance 100_000 - debit 5_000 + credit 10_000 = 105_000
     expect(result!.calculatedClosingBalance).toBe(105_000);
     expect(result!.balanceDifference).toBe(105_000 - 95_000); // 10_000
@@ -131,9 +134,9 @@ describe("GetBankStatementUseCase", () => {
       movementType: "credit",
       deduplicationHash: "h2",
     });
-    await movementRepo.saveBulk([debit, credit]);
+    await movementRepo.saveBulk(organizationId, [debit, credit]);
 
-    const result = await useCase.execute(statement.id);
+    const result = await useCase.execute({ organizationId, id: statement.id });
     // openingBalance=100_000, debit 5_000 → 95_000, credit 10_000 → 105_000
     expect(result!.movements[0]!.balanceAfter).toBe(95_000);
     expect(result!.movements[1]!.balanceAfter).toBe(105_000);
@@ -141,9 +144,9 @@ describe("GetBankStatementUseCase", () => {
 
   it("statusCounts reflects movement statuses", async () => {
     const debit = makeDebit(statement.id, 5_000, "h1");
-    await movementRepo.saveBulk([debit]);
+    await movementRepo.saveBulk(organizationId, [debit]);
 
-    const result = await useCase.execute(statement.id);
+    const result = await useCase.execute({ organizationId, id: statement.id });
     expect(result!.statusCounts.saida_nao_justificada).toBe(1);
   });
 });

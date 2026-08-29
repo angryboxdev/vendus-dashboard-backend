@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "@jest/globals";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { UploadMovementDocumentUseCase } from "../../application/use-cases/upload-movement-document.use-case.js";
 import { BankMovement } from "../../domain/entities/bank-movement.js";
 import { FakeBankMovementRepository } from "../fakes/fake-bank-movement-repository.js";
@@ -19,6 +20,7 @@ function makeMovement() {
 }
 
 describe("UploadMovementDocumentUseCase", () => {
+  const organizationId = mintOrganizationId("org-a");
   let repo: FakeBankMovementRepository;
   let storage: FakeDocumentStorage;
   let useCase: UploadMovementDocumentUseCase;
@@ -29,12 +31,13 @@ describe("UploadMovementDocumentUseCase", () => {
     storage = new FakeDocumentStorage();
     useCase = new UploadMovementDocumentUseCase(repo, storage);
     movement = makeMovement();
-    await repo.saveBulk([movement]);
+    await repo.saveBulk(organizationId, [movement]);
   });
 
   it("throws MovementNotFoundError for unknown id", async () => {
     await expect(
       useCase.execute({
+        organizationId,
         movementId: "not-found",
         buffer: Buffer.from("pdf"),
         filename: "fatura.pdf",
@@ -47,6 +50,7 @@ describe("UploadMovementDocumentUseCase", () => {
     storage.setNextUrl("https://storage.example.com/fatura.pdf");
 
     const result = await useCase.execute({
+      organizationId,
       movementId: movement.id,
       buffer: Buffer.from("pdf-content"),
       filename: "fatura.pdf",
@@ -58,6 +62,7 @@ describe("UploadMovementDocumentUseCase", () => {
 
   it("passes filename and mimeType to storage", async () => {
     await useCase.execute({
+      organizationId,
       movementId: movement.id,
       buffer: Buffer.from("img"),
       filename: "comprovativo.jpg",
@@ -70,17 +75,18 @@ describe("UploadMovementDocumentUseCase", () => {
   });
 
   it("does not change movement reconciliation status", async () => {
-    const before = await repo.findById(movement.id);
+    const before = await repo.findById(organizationId, movement.id);
     expect(before?.reconciliationStatus).toBe("saida_nao_justificada");
 
     await useCase.execute({
+      organizationId,
       movementId: movement.id,
       buffer: Buffer.from("pdf"),
       filename: "doc.pdf",
       mimeType: "application/pdf",
     });
 
-    const after = await repo.findById(movement.id);
+    const after = await repo.findById(organizationId, movement.id);
     expect(after?.reconciliationStatus).toBe("saida_nao_justificada");
   });
 });

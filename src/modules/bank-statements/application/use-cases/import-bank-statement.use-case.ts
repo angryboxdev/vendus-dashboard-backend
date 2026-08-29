@@ -38,12 +38,14 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
   ) {}
 
   async execute(command: ImportBankStatementCommand): Promise<ImportBankStatementResult> {
+    const { organizationId } = command;
+
     // 1. Resolve bank account linkage
     let resolvedBankAccountId: string | null = command.bankAccountId ?? null;
     let accountMatched = resolvedBankAccountId != null;
 
     if (!accountMatched && this.bankAccountRead && command.accountNumber) {
-      const match = await this.bankAccountRead.findByAccountNumber(command.accountNumber);
+      const match = await this.bankAccountRead.findByAccountNumber(organizationId, command.accountNumber);
       if (match) {
         resolvedBankAccountId = match.id;
         accountMatched = true;
@@ -64,7 +66,7 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
       closingBalance: command.closingBalance,
     });
 
-    await this.statementRepo.save(statement);
+    await this.statementRepo.save(organizationId, statement);
 
     // 3. Build movements, skipping duplicates
     const toSave: BankMovement[] = [];
@@ -95,7 +97,7 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
         raw.movementType
       );
 
-      const exists = await this.movementRepo.existsByHash(hash);
+      const exists = await this.movementRepo.existsByHash(organizationId, hash);
       if (exists) {
         skippedDuplicates++;
         continue;
@@ -118,7 +120,7 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
     }
 
     if (toSave.length > 0) {
-      await this.movementRepo.saveBulk(toSave);
+      await this.movementRepo.saveBulk(organizationId, toSave);
     }
 
     // 4. Compute stats and update statement
@@ -129,7 +131,7 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
       reconciliationProgress: stats.reconciliationProgress,
     });
 
-    await this.statementRepo.update(updated);
+    await this.statementRepo.update(organizationId, updated);
 
     return {
       id: updated.id,

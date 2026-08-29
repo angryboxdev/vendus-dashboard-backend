@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "@jest/globals";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { GetInvoiceOpenBalancesUseCase } from "../../application/use-cases/get-invoice-open-balances.use-case.js";
 import { FakeBankMovementEntityLinkRepository } from "../fakes/fake-bank-movement-entity-link-repository.js";
 import { FakeInvoiceMatchRead } from "../fakes/fake-invoice-match-read.js";
@@ -36,6 +37,7 @@ function makeLink(
 }
 
 describe("GetInvoiceOpenBalancesUseCase", () => {
+  const organizationId = mintOrganizationId("org-a");
   let linkRepo: FakeBankMovementEntityLinkRepository;
   let invoiceRead: FakeInvoiceMatchRead;
   let useCase: GetInvoiceOpenBalancesUseCase;
@@ -47,61 +49,61 @@ describe("GetInvoiceOpenBalancesUseCase", () => {
   });
 
   it("returns empty object for empty input", async () => {
-    const result = await useCase.execute([]);
+    const result = await useCase.execute({ organizationId, invoiceIds: [] });
     expect(result).toEqual({});
   });
 
   it("returns full totalWithVat as open balance when invoice has no links", async () => {
-    invoiceRead.setcandidates([makeInvoice("inv-1", 10_000)]);
+    invoiceRead.setcandidates(organizationId, [makeInvoice("inv-1", 10_000)]);
 
-    const result = await useCase.execute(["inv-1"]);
+    const result = await useCase.execute({ organizationId, invoiceIds: ["inv-1"] });
 
     expect(result["inv-1"]).toBe(10_000);
   });
 
   it("returns zero when invoice is fully allocated", async () => {
-    invoiceRead.setcandidates([makeInvoice("inv-1", 10_000)]);
-    await linkRepo.saveAll([makeLink("mov-1", "inv-1", 10_000)]);
+    invoiceRead.setcandidates(organizationId, [makeInvoice("inv-1", 10_000)]);
+    await linkRepo.saveAll(organizationId, [makeLink("mov-1", "inv-1", 10_000)]);
 
-    const result = await useCase.execute(["inv-1"]);
+    const result = await useCase.execute({ organizationId, invoiceIds: ["inv-1"] });
 
     expect(result["inv-1"]).toBe(0);
   });
 
   it("returns remaining open balance for a partially-allocated invoice", async () => {
-    invoiceRead.setcandidates([makeInvoice("inv-1", 10_000)]);
-    await linkRepo.saveAll([makeLink("mov-1", "inv-1", 3_000)]);
+    invoiceRead.setcandidates(organizationId, [makeInvoice("inv-1", 10_000)]);
+    await linkRepo.saveAll(organizationId, [makeLink("mov-1", "inv-1", 3_000)]);
 
-    const result = await useCase.execute(["inv-1"]);
+    const result = await useCase.execute({ organizationId, invoiceIds: ["inv-1"] });
 
     expect(result["inv-1"]).toBe(7_000);
   });
 
   it("aggregates allocations across multiple movements for the same invoice", async () => {
-    invoiceRead.setcandidates([makeInvoice("inv-1", 10_000)]);
-    await linkRepo.saveAll([
+    invoiceRead.setcandidates(organizationId, [makeInvoice("inv-1", 10_000)]);
+    await linkRepo.saveAll(organizationId, [
       makeLink("mov-1", "inv-1", 3_000),
       makeLink("mov-2", "inv-1", 4_000),
     ]);
 
-    const result = await useCase.execute(["inv-1"]);
+    const result = await useCase.execute({ organizationId, invoiceIds: ["inv-1"] });
 
     expect(result["inv-1"]).toBe(3_000); // 10_000 - 3_000 - 4_000
   });
 
   it("handles multiple invoices in a single call", async () => {
-    invoiceRead.setcandidates([
+    invoiceRead.setcandidates(organizationId, [
       makeInvoice("inv-1", 10_000),
       makeInvoice("inv-2", 20_000),
       makeInvoice("inv-3", 5_000),
     ]);
-    await linkRepo.saveAll([
+    await linkRepo.saveAll(organizationId, [
       makeLink("mov-1", "inv-1", 10_000), // fully allocated
       makeLink("mov-2", "inv-2", 8_000),  // partially allocated
       // inv-3 has no links → full balance
     ]);
 
-    const result = await useCase.execute(["inv-1", "inv-2", "inv-3"]);
+    const result = await useCase.execute({ organizationId, invoiceIds: ["inv-1", "inv-2", "inv-3"] });
 
     expect(result["inv-1"]).toBe(0);
     expect(result["inv-2"]).toBe(12_000);
@@ -110,10 +112,10 @@ describe("GetInvoiceOpenBalancesUseCase", () => {
 
   it("never returns a negative balance (clamps to 0)", async () => {
     // Over-allocated edge case
-    invoiceRead.setcandidates([makeInvoice("inv-1", 5_000)]);
-    await linkRepo.saveAll([makeLink("mov-1", "inv-1", 6_000)]);
+    invoiceRead.setcandidates(organizationId, [makeInvoice("inv-1", 5_000)]);
+    await linkRepo.saveAll(organizationId, [makeLink("mov-1", "inv-1", 6_000)]);
 
-    const result = await useCase.execute(["inv-1"]);
+    const result = await useCase.execute({ organizationId, invoiceIds: ["inv-1"] });
 
     expect(result["inv-1"]).toBe(0);
   });

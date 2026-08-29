@@ -1,25 +1,32 @@
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { BankMovement } from "../../domain/entities/bank-movement.js";
 import type {
   BankMovementFilter,
   BankMovementRepositoryPort,
 } from "../../domain/ports/out/bank-movement-repository.port.js";
 
+function key(organizationId: OrganizationId, id: string): string {
+  return `${organizationId}:${id}`;
+}
+
 export class FakeBankMovementRepository implements BankMovementRepositoryPort {
   private store = new Map<string, BankMovement>();
 
-  async saveBulk(movements: BankMovement[]): Promise<void> {
+  async saveBulk(organizationId: OrganizationId, movements: BankMovement[]): Promise<void> {
     for (const m of movements) {
-      this.store.set(m.id, m);
+      this.store.set(key(organizationId, m.id), m);
     }
   }
 
   async findByStatementId(
+    organizationId: OrganizationId,
     statementImportId: string,
     filter?: BankMovementFilter
   ): Promise<BankMovement[]> {
-    let results = [...this.store.values()].filter(
-      (m) => m.statementImportId === statementImportId
-    );
+    const prefix = `${organizationId}:`;
+    let results = [...this.store.entries()]
+      .filter(([k, m]) => k.startsWith(prefix) && m.statementImportId === statementImportId)
+      .map(([, m]) => m);
     if (filter?.reconciliationStatus) {
       results = results.filter((m) => m.reconciliationStatus === filter.reconciliationStatus);
     }
@@ -32,40 +39,47 @@ export class FakeBankMovementRepository implements BankMovementRepositoryPort {
     return results;
   }
 
-  async findById(id: string): Promise<BankMovement | null> {
-    return this.store.get(id) ?? null;
+  async findById(organizationId: OrganizationId, id: string): Promise<BankMovement | null> {
+    return this.store.get(key(organizationId, id)) ?? null;
   }
 
-  async findByIds(ids: string[]): Promise<BankMovement[]> {
+  async findByIds(organizationId: OrganizationId, ids: string[]): Promise<BankMovement[]> {
     return ids.flatMap((id) => {
-      const m = this.store.get(id);
+      const m = this.store.get(key(organizationId, id));
       return m ? [m] : [];
     });
   }
 
-  async update(movement: BankMovement): Promise<void> {
-    if (!this.store.has(movement.id)) {
+  async update(organizationId: OrganizationId, movement: BankMovement): Promise<void> {
+    const k = key(organizationId, movement.id);
+    if (!this.store.has(k)) {
       throw new Error(`Movement ${movement.id} not found`);
     }
-    this.store.set(movement.id, movement);
+    this.store.set(k, movement);
   }
 
   async findByAccountAndPeriod(
+    organizationId: OrganizationId,
     bankAccountId: string,
     from: Date,
     to: Date
   ): Promise<BankMovement[]> {
-    return [...this.store.values()].filter(
-      (m) =>
-        m.bankAccountId === bankAccountId &&
-        m.bookingDate >= from &&
-        m.bookingDate <= to
-    );
+    const prefix = `${organizationId}:`;
+    return [...this.store.entries()]
+      .filter(
+        ([k, m]) =>
+          k.startsWith(prefix) &&
+          m.bankAccountId === bankAccountId &&
+          m.bookingDate >= from &&
+          m.bookingDate <= to
+      )
+      .map(([, m]) => m);
   }
 
-  async existsByHash(deduplicationHash: string): Promise<boolean> {
-    return [...this.store.values()].some(
-      (m) => m.deduplicationHash === deduplicationHash
+  async existsByHash(organizationId: OrganizationId, deduplicationHash: string): Promise<boolean> {
+    const prefix = `${organizationId}:`;
+    return [...this.store.entries()].some(
+      ([k, m]) => k.startsWith(prefix) && m.deduplicationHash === deduplicationHash
     );
   }
 }
