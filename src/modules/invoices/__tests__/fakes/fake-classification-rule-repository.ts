@@ -1,17 +1,28 @@
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ClassificationRule } from "../../domain/entities/classification-rule.js";
 import type { ClassificationRuleRepositoryPort } from "../../domain/ports/out/classification-rule-repository.port.js";
 
+/**
+ * A organização é apenas mais um parâmetro (D2) — este fake modela uma única
+ * organização de cada vez, tal como as suítes que o usam; a filtragem por
+ * organização é responsabilidade do helper (`ScopedQuery`), coberta pelos
+ * seus próprios testes, não deste fake.
+ */
 export class FakeClassificationRuleRepository implements ClassificationRuleRepositoryPort {
   private store = new Map<string, ClassificationRule>();
 
-  async findBySupplierId(supplierId: string): Promise<ClassificationRule | null> {
+  async findBySupplierId(_organizationId: OrganizationId, supplierId: string): Promise<ClassificationRule | null> {
     for (const rule of this.store.values()) {
       if (rule.supplierId === supplierId) return rule;
     }
     return null;
   }
 
-  async findBySupplierIdAndDescription(supplierId: string, description?: string): Promise<ClassificationRule | null> {
+  async findBySupplierIdAndDescription(
+    _organizationId: OrganizationId,
+    supplierId: string,
+    description?: string,
+  ): Promise<ClassificationRule | null> {
     const rules = [...this.store.values()].filter((r) => r.supplierId === supplierId);
     if (description) {
       const desc = description.toLowerCase();
@@ -23,11 +34,11 @@ export class FakeClassificationRuleRepository implements ClassificationRuleRepos
     return rules.find((r) => r.descriptionPattern === null) ?? null;
   }
 
-  async save(rule: ClassificationRule): Promise<void> {
+  async save(_organizationId: OrganizationId, rule: ClassificationRule): Promise<void> {
     this.store.set(rule.id, rule);
   }
 
-  async update(rule: ClassificationRule): Promise<void> {
+  async update(_organizationId: OrganizationId, rule: ClassificationRule): Promise<void> {
     this.store.set(rule.id, rule);
   }
 }

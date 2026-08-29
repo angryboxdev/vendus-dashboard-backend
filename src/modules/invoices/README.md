@@ -1,7 +1,7 @@
 # Módulo: invoices
 
 > Status: ativo
-> Última atualização: 2026-08-18 (DeleteInvoiceLine; DeleteInvoice com cleanup de payable e reconciliação; UpdateInvoice com validação de duplicado e renumber; validação de linhas simplificada; ConfirmImport define lineDetailMode automaticamente)
+> Última atualização: 2026-08-29 (spec B2 ticket 10 — organização explícita em todas as portas de saída via `ScopedQuery`; `InvoiceLine` ganha `locationId` opcional e nullable)
 
 ---
 
@@ -136,6 +136,19 @@ reconciliação ou relatórios financeiros.
 
 ## Ports
 
+Spec B2 (ticket 10, ADR-0008): **todas as portas de entrada e saída recebem a
+organização como parâmetro explícito** — um `OrganizationId` (tipo nominal de
+`src/kernel/organization-id.ts`). Nos comandos-objeto é o campo
+`organizationId`; nas portas cujo `execute` já tomava argumentos primitivos
+(`GetInvoicePort`, `ListInvoicesPort`, `ListInvoiceLinesPort`,
+`DeleteInvoicePort`, `DeleteInvoiceLinePort`, `SuggestLineClassificationPort`,
+`GetInvoiceAlertsPort`, `ProcessDirectDebitsPort`), é o novo primeiro
+parâmetro posicional. O controller lê-o de `req.auth.orgId` (claim
+verificada); o cron de débitos diretos, que não tem pedido, usa o
+`UNATTENDED_SCOPE` (D6). Excepções deliberadas: `AiExtractionPort` e
+`DocumentStoragePort` não tomam organização — nunca tocam a base de dados
+(a IA e o storage-wrapper são discutidos em "Decisões de design").
+
 ### Entrada (use cases)
 
 - `CreateInvoiceUseCase` — criação manual com linhas opcionais; cria payable entry se dueDate presente.
@@ -144,8 +157,8 @@ reconciliação ou relatórios financeiros.
 - `MarkInvoiceReconciledUseCase` — transita `reconciliationStatus` de `pending_reconciliation` para `reconciled`. Requer fatura já paga.
 - `SetInvoiceStatusUseCase` — força estado arbitrário; cancela payable entry se `cancelled`.
 - `SetLineDetailModeUseCase` — alterna entre `simple` e `detailed`. Na transição `detailed → simple`, apaga todas as linhas da fatura (`deleteByInvoiceId`) — em modo simples a linha automática é derivada dos totais do cabeçalho, e linhas armazenadas ficariam ambíguas para analytics. A transição nunca é bloqueada por divergência de totais.
-- `AddInvoiceLineUseCase` — adiciona linha a fatura existente (requer `lineDetailMode=detailed`). Valida que a soma das linhas não excede `totalWithVat` da fatura (tolerância: 1 cêntimo).
-- `UpdateInvoiceLineUseCase` — actualiza valores de uma linha existente (descrição, quantidade, unidade, preço unitário, IVA, total). Requer `lineDetailMode=detailed`. Valida que a soma das linhas não excede `totalWithVat` da fatura (tolerância: 1 cêntimo).
+- `AddInvoiceLineUseCase` — adiciona linha a fatura existente (requer `lineDetailMode=detailed`). Valida que a soma das linhas não excede `totalWithVat` da fatura (tolerância: 1 cêntimo). Aceita `locationId` opcional (D4) — ver "Alocação de linha a uma loja" abaixo.
+- `UpdateInvoiceLineUseCase` — actualiza valores de uma linha existente (descrição, quantidade, unidade, preço unitário, IVA, total, `locationId`). Requer `lineDetailMode=detailed`. Valida que a soma das linhas não excede `totalWithVat` da fatura (tolerância: 1 cêntimo).
 - `DeleteInvoiceLineUseCase` — elimina uma linha de uma fatura em modo `detailed`. Requer `lineDetailMode=detailed`; lança `LineDetailModeError` caso contrário.
 - `ClassifyInvoiceLineUseCase` — classifica linha; quando `costCenterCategoryId` presente, herda automaticamente os campos da subcategoria via `CostCenterCategoryReaderPort`. Opcionalmente grava/actualiza `ClassificationRule` com `descriptionPattern` e `channelId`.
 - `SuggestLineClassificationUseCase` — sugestão de classificação por `supplierId` + `description?`; retorna `channelId` quando presente na regra.
@@ -155,21 +168,23 @@ reconciliação ou relatórios financeiros.
 - `GetInvoiceUseCase` — detalhe com linhas. Inclui sempre `classificationSummary` (ver abaixo). Quando `lineDetailMode=detailed`, o DTO inclui também `linesSummary = { subtotalWithoutVat, totalVat, totalWithVat, totalsMismatch }` com tolerância de 1 cêntimo.
 - `DeleteInvoiceUseCase` — remove fatura, linhas e ficheiro em storage (se tiver `attachmentUrl`). Antes de apagar: cancela o payable entry associado (`cancelByInvoiceId`) e remove os links de conciliação bancária (`removeLinksForInvoice`), actualizando os movimentos bancários afectados.
 - **`ImportInvoiceUseCase`** — armazena ficheiro, extrai dados via IA, procura fornecedor por NIF, aplica defaults, cria `Invoice` em `draft_ai`.
-- **`ConfirmImportedInvoiceUseCase`** — aplica correções do utilizador, transita `draft_ai`/`pending_review` → `pending`; salva linhas opcionais; cria payable entry se pedido. Suporta `newSupplier` (cria fornecedor via `SupplierCreatePort` antes de guardar) e propaga `costCenterCategoryId` para todas as linhas. Quando linhas são fornecidas, define automaticamente `lineDetailMode=detailed`.
+- **`ConfirmImportedInvoiceUseCase`** — aplica correções do utilizador, transita `draft_ai`/`pending_review` → `pending`; salva linhas opcionais (com `locationId` opcional por linha); cria payable entry se pedido. Suporta `newSupplier` (cria fornecedor via `SupplierCreatePort` antes de guardar) e propaga `costCenterCategoryId` para todas as linhas. Quando linhas são fornecidas, define automaticamente `lineDetailMode=detailed`.
 - **`GetInvoiceAlertsUseCase`** — devolve contagens e valores para os 8 tipos de alerta.
 
 ### Saída (dependências do domínio)
 
-- `InvoiceRepositoryPort` — CRUD de faturas + `findAll(filter?)` + `findPendingDirectDebits()`.
-- `InvoiceLineRepositoryPort` — `saveAll`, `save`, `findByInvoiceId`, `findAll`, `updateLine`, `deleteByInvoiceId`, `deleteLineById`, `updateCostCenterCategoryForInvoice` (bulk update do CC de todas as linhas).
-- `ClassificationRuleRepositoryPort` — `findBySupplierId`, `findBySupplierIdAndDescription`, `save`, `update`.
-- `CostCenterCategoryReaderPort` — `findById` (snapshot mínimo da subcategoria para herança; sem acoplamento ao módulo `financial-base`); `findManyByIds(ids)` (lookup batch para `classificationSummary` em `GetInvoice` e `ListInvoices`).
-- `PayableEntryWritePort` — cria/marca-pago/cancela/renumera entradas em `payable_entries`. Método `renumberByInvoiceId(invoiceId, newInvoiceNumber)` actualiza a `description` das entradas não canceladas quando o número da fatura muda.
-- `InvoiceReconciliationCleanupPort` — interface declarada no módulo `invoices` para evitar acoplamento ao módulo `bank-statements`. Dois métodos: `removeLinksForInvoice(invoiceId)` (remove links do tipo `invoice` e recalcula estado de conciliação dos movimentos afectados) e `renumberLinksForInvoice(invoiceId, newLabel)` (actualiza `entity_label` dos links quando o número da fatura muda).
-- **`AiExtractionPort`** — `extract(fileUrl, mimeType): Promise<AiExtractionResult>`.
-- **`DocumentStoragePort`** — `store(buffer, filename, mimeType): Promise<string>`.
-- **`SupplierLookupPort`** — `findByNif(nif)` + `findByName(query)`. Inclui defaults do fornecedor.
-- **`SupplierCreatePort`** — `create(data)` para criar fornecedor durante confirmação de importação.
+- `InvoiceRepositoryPort` — `save(organizationId, invoice)`, `findById(organizationId, id)`, `findAll(organizationId, filter?)`, `update(organizationId, invoice)`, `delete(organizationId, id)`, `findDuplicate(organizationId, invoiceNumber, supplierId, excludeId?)`, `findDuplicateByNif(organizationId, invoiceNumber, supplierNif, excludeId?)`, `findPendingDirectDebits(organizationId)`.
+- `InvoiceLineRepositoryPort` — `saveAll(organizationId, lines)`, `findAll(organizationId)`, `findByInvoiceId(organizationId, invoiceId)`, `updateLine(organizationId, line)`, `deleteByInvoiceId(organizationId, invoiceId)`, `deleteLineById(organizationId, lineId)`, `updateCostCenterCategoryForInvoice(organizationId, invoiceId, categoryId)` (bulk update do CC de todas as linhas).
+- `ClassificationRuleRepositoryPort` — `findBySupplierId(organizationId, supplierId)`, `findBySupplierIdAndDescription(organizationId, supplierId, description?)`, `save(organizationId, rule)`, `update(organizationId, rule)`.
+- `CostCenterCategoryReaderPort` — `findById(organizationId, id)` (snapshot mínimo da subcategoria para herança; sem acoplamento ao módulo `financial-base`); `findManyByIds(organizationId, ids)` (lookup batch para `classificationSummary` em `GetInvoice` e `ListInvoices`).
+- `PayableEntryWritePort` — `createForInvoice(organizationId, data)`, `markPaidByInvoiceId(organizationId, invoiceId, paidAt)`, `cancelByInvoiceId(organizationId, invoiceId)`, `renumberByInvoiceId(organizationId, invoiceId, newInvoiceNumber)` (actualiza a `description` das entradas não canceladas quando o número da fatura muda).
+- `InvoiceReconciliationCleanupPort` — interface declarada no módulo `invoices` para evitar acoplamento ao módulo `bank-statements`. Dois métodos: `removeLinksForInvoice(organizationId, invoiceId)` (remove links do tipo `invoice` e recalcula estado de conciliação dos movimentos afectados) e `renumberLinksForInvoice(organizationId, invoiceId, newLabel)` (actualiza `entity_label` dos links quando o número da fatura muda).
+- **`AiExtractionPort`** — `extract(fileUrl, mimeType): Promise<AiExtractionResult>`. Sem organização — nunca toca a base de dados.
+- **`DocumentStoragePort`** — `store(buffer, filename, mimeType): Promise<string>`. Sem organização, deliberadamente (ADR-0008/D17): o wrapper `objectStorage` (`src/infra/scoped-db/object-storage.ts`) não faz path-prefixing por organização — os objectos existentes vivem em paths sem prefixo, e prefixar quebraria todos os URLs já emitidos. Ganha organização se e quando essa migração acontecer.
+- **`SupplierLookupPort`** — `findByNif(organizationId, nif)` + `findByName(organizationId, query)` + `findAll(organizationId)`. Inclui defaults do fornecedor.
+- **`SupplierCreatePort`** — `create(organizationId, data)` para criar fornecedor durante confirmação de importação.
+- **`SupplierHintPort`** — `findByNormalizedName(organizationId, normalizedName)` + `save(organizationId, normalizedName, supplierId)`.
+- **`OccurrenceSyncPort`** — `markPaidByInvoiceId(organizationId, invoiceId, paidAt)`.
 
 ## Adapters
 
@@ -179,15 +194,24 @@ reconciliação ou relatórios financeiros.
 
 ### Saída
 
+Nenhum adapter guarda um `SupabaseClient`: todos (excepto os dois abaixo que
+não tocam a base de dados) recebem o factory `createScopedQuery`
+(`ScopedQueryFactory`, `src/infra/scoped-db/scoped-query.ts`) injectado pelo
+composition root e constroem um `ScopedQuery` escopado por chamada (D2). O
+módulo não importa `@supabase/supabase-js` em lado nenhum — só o folder
+`src/infra/scoped-db/` está autorizado a fazê-lo (D10).
+
 - `SupabaseInvoiceRepository` → tabela `invoices` (actualizado com novos campos).
-- `SupabaseInvoiceLineRepository` → tabela `invoice_lines`; inclui `updateCostCenterCategoryForInvoice` e `deleteLineById`.
+- `SupabaseInvoiceLineRepository` → tabela `invoice_lines`; inclui `updateCostCenterCategoryForInvoice`, `deleteLineById` e o mapeamento de `location_id` (nullable).
 - `SupabaseInvoiceReconciliationCleanupAdapter` → acede directamente às tabelas `bank_movement_entity_links` e `bank_movements` sem importar código do módulo `bank-statements`. Implementa `removeLinksForInvoice` (apaga links + recalcula status dos movimentos) e `renumberLinksForInvoice` (actualiza `entity_label`).
-- **`FinancialBaseSupplierCreateAdapter`** → delega criação de fornecedor ao financial-base.
+- **`FinancialBaseSupplierCreateAdapter`** → delega criação de fornecedor ao financial-base, passando adiante o `organizationId` recebido (já não usa o `UNATTENDED_SCOPE`, que era o stopgap antes desta conversão).
 - `SupabaseClassificationRuleRepository` → tabela `classification_rules`.
 - `SupabasePayableEntryWriteAdapter` → tabela `payable_entries`.
-- **`SupabaseDocumentStorageAdapter`** → bucket Supabase Storage `invoice-documents`. Não recebe `SupabaseClient` no construtor: delega para o wrapper `objectStorage` de `src/infra/scoped-db/` (spec B2 ticket 01/D10) — esse folder é o único lugar em `src/**` autorizado a importar `@supabase/supabase-js`.
+- **`SupabaseDocumentStorageAdapter`** → bucket Supabase Storage `invoice-documents`. Não recebe `SupabaseClient` nem organização no construtor: delega para o wrapper `objectStorage` de `src/infra/scoped-db/` (spec B2 ticket 01/D10/D17) — esse folder é o único lugar em `src/**` autorizado a importar `@supabase/supabase-js`, e o wrapper deliberadamente não faz path-prefixing por organização (ver Ports acima).
 - **`SupabaseSupplierLookupAdapter`** → tabela `suppliers` (NIF + defaults).
-- **`OpenAiExtractionAdapter`** → GPT-4o Vision, devolve JSON estruturado.
+- **`SupabaseSupplierHintAdapter`** → tabelas `supplier_import_hints` + `suppliers`.
+- **`SupabaseOccurrenceSyncAdapter`** → tabela `recurring_occurrences`, sem importar código do módulo `payable-recurrences`.
+- **`OpenAiExtractionAdapter`** → GPT-4o Vision, devolve JSON estruturado. Sem organização — não toca a base de dados.
 
 ## Endpoints
 
@@ -247,6 +271,8 @@ reconciliação ou relatórios financeiros.
 - **Cleanup de dependências ao apagar fatura**: `DeleteInvoiceUseCase` cancela o payable entry e remove os links de conciliação bancária antes de apagar a fatura e as linhas. Ordem garantida: (1) apagar linhas, (2) remover links de reconciliação + recalcular movimentos afectados, (3) cancelar payable entry, (4) apagar fatura, (5) apagar ficheiro em storage. `InvoiceReconciliationCleanupPort` é declarado no módulo `invoices` para evitar acoplamento ao módulo `bank-statements`; o adapter concreto acede directamente às tabelas `bank_movement_entity_links` e `bank_movements`.
 - **Renumber propagation no UpdateInvoice**: quando `invoiceNumber` muda, o use case actualiza a `description` do payable entry (via `renumberByInvoiceId`) e o `entity_label` dos links de conciliação bancária (via `renumberLinksForInvoice`). A propagação só ocorre quando o número realmente muda (não quando é omitido nem quando é igual ao actual).
 - **lineDetailMode automático no ConfirmImport**: quando o utilizador fornece linhas ao confirmar uma fatura importada, o use case define automaticamente `lineDetailMode=detailed` e persiste a fatura actualizada antes de criar o payable entry — garantindo que o DTO retornado reflecte o modo correcto.
+- **Alocação de linha a uma loja (`locationId`, spec B2 D3/D4/D5)**: `invoice_lines` é a única tabela location-bearing cujo `location_id` é **nullable** — todas as outras (event-grain: `cash_closings`, `stock_movements`, `hr_work_shifts`, `hr_shift_attendance`) exigem uma loja. Aqui, `null` é um estado real e não a ausência de um dado: um custo pode pertencer à organização inteira (ex: marketing central, serviços partilhados) e a nenhuma loja específica. Por isso o campo é opcional em todas as escritas de linha (`AddInvoiceLineUseCase`, `UpdateInvoiceLineUseCase`, linhas de `CreateInvoiceUseCase` e de `ConfirmImportedInvoiceUseCase`) e **nunca é defaultado** — ausente na escrita fica `null` na base de dados, não uma loja adivinhada. O cabeçalho da fatura (`invoices`) continua ao nível da organização; só a linha carrega a loja. O frontend só começa a enviar o campo no ticket 19 da spec B2 — até lá fica ausente na prática. Uma loja indicada por um caller que pertença a outra organização será rejeitada pela FK composta `(org_id, location_id)` quando essa migração aterrar (D5, ticket 21) — hoje ainda não há essa validação estrutural.
+- **Organização explícita em todas as portas de saída (spec B2 D1/D2/D7, ADR-0008)**: cada adapter deixou de guardar um `SupabaseClient` e passou a receber `createScopedQuery` (`ScopedQueryFactory`), construindo um `ScopedQuery` escopado por chamada. A organização (`OrganizationId`, tipo nominal — `src/kernel/organization-id.ts`) chega pelo `organizationId` do comando nos casos de uso baseados em objecto, e como primeiro parâmetro posicional nos que tomam argumentos primitivos. O controller lê-a de `req.auth.orgId`; o cron de débitos diretos (`POST /api/internal/cron/process-direct-debits`, sem sessão) usa o `UNATTENDED_SCOPE` nomeado em `src/infra/scoped-db/unattended-scope.ts` (D6). `AiExtractionPort` e `DocumentStoragePort` ficam de fora deliberadamente — nunca tocam a base de dados (a IA fala com a OpenAI; o storage delega no wrapper que também não é re-pathado por organização, D17).
 
 ## SQL — alterações às tabelas
 
@@ -301,6 +327,13 @@ alter table suppliers
 -- Bucket Supabase Storage
 -- Criar bucket "invoice-documents" com acesso público no painel Supabase Storage.
 ```
+
+`org_id` (NOT NULL, com default temporário) em `invoices` e `invoice_lines`, e
+`location_id` (nullable, sem default) em `invoice_lines`, já existem —
+adicionadas por `supabase/migrations/20260822150000_tenancy_schema_pass.sql`
+(spec B2's foundation), não por este ticket. Este ticket não altera o schema;
+apenas faz o código passar a escrever/ler através do `ScopedQuery` e a aceitar
+`locationId` nas escritas de linha.
 
 ## Como testar
 

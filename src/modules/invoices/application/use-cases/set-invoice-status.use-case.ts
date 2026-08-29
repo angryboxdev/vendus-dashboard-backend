@@ -15,17 +15,17 @@ export class SetInvoiceStatusUseCase implements SetInvoiceStatusPort {
   ) {}
 
   async execute(command: SetInvoiceStatusCommand): Promise<InvoiceDTO> {
-    const existing = await this.invoiceRepo.findById(command.id);
+    const existing = await this.invoiceRepo.findById(command.organizationId, command.id);
     if (!existing) throw new InvoiceNotFoundError(command.id);
 
     const updated = existing.setStatus(command.status);
-    await this.invoiceRepo.update(updated);
+    await this.invoiceRepo.update(command.organizationId, updated);
 
     // Sincronizar conta a pagar ligada consoante o novo status
     if (command.status === "cancelled") {
-      await this.payableWrite.cancelByInvoiceId(updated.id);
+      await this.payableWrite.cancelByInvoiceId(command.organizationId, updated.id);
     } else if (command.status === "paid") {
-      await this.payableWrite.markPaidByInvoiceId(updated.id, new Date());
+      await this.payableWrite.markPaidByInvoiceId(command.organizationId, updated.id, new Date());
     }
 
     return toInvoiceDTO(updated);

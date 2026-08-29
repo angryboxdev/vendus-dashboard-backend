@@ -23,7 +23,7 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
   ) {}
 
   async execute(command: ConfirmImportedInvoiceCommand): Promise<InvoiceDTO> {
-    const existing = await this.invoiceRepo.findById(command.id);
+    const existing = await this.invoiceRepo.findById(command.organizationId, command.id);
     if (!existing) throw new InvoiceNotFoundError(command.id);
 
     if (existing.status !== "draft_ai" && existing.status !== "pending_review") {
@@ -36,7 +36,7 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     let resolvedSupplierId = command.supplierId;
     let resolvedSupplierName = command.supplierName;
     if (command.newSupplier) {
-      const created = await this.supplierCreate.create(command.newSupplier);
+      const created = await this.supplierCreate.create(command.organizationId, command.newSupplier);
       resolvedSupplierId = created.id;
       resolvedSupplierName = resolvedSupplierName ?? created.name;
     }
@@ -71,11 +71,16 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
 
     // Duplicate check by NIF + invoice number — hard block, exclude this invoice itself
     if (confirmed.supplierNifSnapshot && confirmed.invoiceNumber) {
-      const duplicate = await this.invoiceRepo.findDuplicateByNif(confirmed.invoiceNumber, confirmed.supplierNifSnapshot, confirmed.id);
+      const duplicate = await this.invoiceRepo.findDuplicateByNif(
+        command.organizationId,
+        confirmed.invoiceNumber,
+        confirmed.supplierNifSnapshot,
+        confirmed.id,
+      );
       if (duplicate) throw new DuplicateInvoiceError(confirmed.invoiceNumber, confirmed.supplierName);
     }
 
-    await this.invoiceRepo.update(confirmed);
+    await this.invoiceRepo.update(command.organizationId, confirmed);
 
     // Guardar hint nome→fornecedor para importações futuras.
     // Usa o nome extraído pela IA (pre-confirm) para que nomes ligeiramente
@@ -83,7 +88,7 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     if (resolvedSupplierId && existing.supplierName) {
       const normalizedName = normalizeSupplierName(existing.supplierName);
       if (normalizedName.length > 0) {
-        await this.supplierHint.save(normalizedName, resolvedSupplierId);
+        await this.supplierHint.save(command.organizationId, normalizedName, resolvedSupplierId);
       }
     }
 
@@ -104,28 +109,33 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       if (lc.affectsDre !== undefined) lineProps.affectsDre = lc.affectsDre;
       if (lc.affectsCashflow !== undefined) lineProps.affectsCashflow = lc.affectsCashflow;
       if (lc.affectsProfitability !== undefined) lineProps.affectsProfitability = lc.affectsProfitability;
+      if (lc.locationId !== undefined) lineProps.locationId = lc.locationId;
       return InvoiceLine.create(lineProps);
     });
 
     if (lines.length > 0) {
-      await this.lineRepo.saveAll(lines);
+      await this.lineRepo.saveAll(command.organizationId, lines);
     }
 
     // Derivar lineDetailMode automaticamente: se há linhas confirmadas → detailed, caso contrário manter simple
     let finalInvoice = confirmed;
     if (lines.length > 0) {
       finalInvoice = confirmed.setLineDetailMode("detailed");
-      await this.invoiceRepo.update(finalInvoice);
+      await this.invoiceRepo.update(command.organizationId, finalInvoice);
     }
 
     // Propagar costCenterCategoryId da fatura para todas as linhas existentes
     if (finalInvoice.costCenterCategoryId !== null) {
-      await this.lineRepo.updateCostCenterCategoryForInvoice(finalInvoice.id, finalInvoice.costCenterCategoryId);
+      await this.lineRepo.updateCostCenterCategoryForInvoice(
+        command.organizationId,
+        finalInvoice.id,
+        finalInvoice.costCenterCategoryId,
+      );
     }
 
     // Create payable entry if explicitly requested and due date is set
     if (command.saveAsPayable && finalInvoice.dueDate) {
-      await this.payableWrite.createForInvoice({
+      await this.payableWrite.createForInvoice(command.organizationId, {
         invoiceId: finalInvoice.id,
         supplierId: finalInvoice.supplierId,
         supplierName: finalInvoice.supplierName,

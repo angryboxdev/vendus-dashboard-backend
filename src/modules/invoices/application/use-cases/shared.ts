@@ -154,6 +154,7 @@ export function toInvoiceLineDTO(line: InvoiceLine): InvoiceLineDTO {
     affectsDre: line.affectsDre,
     affectsCashflow: line.affectsCashflow,
     affectsProfitability: line.affectsProfitability,
+    locationId: line.locationId,
     financialType: line.financialType,
     channelId: line.channelId,
     requiresChannel: line.requiresChannel,

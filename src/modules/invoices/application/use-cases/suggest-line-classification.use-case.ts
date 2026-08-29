@@ -3,12 +3,17 @@ import type {
   SuggestClassificationResult,
 } from "../../domain/ports/in/invoice.ports.js";
 import type { ClassificationRuleRepositoryPort } from "../../domain/ports/out/classification-rule-repository.port.js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 
 export class SuggestLineClassificationUseCase implements SuggestLineClassificationPort {
   constructor(private readonly ruleRepo: ClassificationRuleRepositoryPort) {}
 
-  async execute(supplierId: string, description?: string): Promise<SuggestClassificationResult | null> {
-    const rule = await this.ruleRepo.findBySupplierIdAndDescription(supplierId, description);
+  async execute(
+    organizationId: OrganizationId,
+    supplierId: string,
+    description?: string,
+  ): Promise<SuggestClassificationResult | null> {
+    const rule = await this.ruleRepo.findBySupplierIdAndDescription(organizationId, supplierId, description);
     if (!rule) return null;
 
     // Base score 0.5 + up to 0.5 from confidence boost

@@ -1,5 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { getSupabaseServiceRole } from "../../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import { SupabaseInvoiceRepository } from "./adapters/out/supabase-invoice.repository.js";
 import { SupabaseInvoiceLineRepository } from "./adapters/out/supabase-invoice-line.repository.js";
 import { SupabaseClassificationRuleRepository } from "./adapters/out/supabase-classification-rule.repository.js";
@@ -40,26 +39,32 @@ export interface InvoicesModule {
   processDirectDebits: ProcessDirectDebitsPort;
 }
 
-export function createInvoicesModule(
-  createSupplierPort: CreateSupplierPort,
-  supabase?: SupabaseClient,
-): InvoicesModule {
-  const client = supabase ?? getSupabaseServiceRole();
-  if (!client) throw new Error("Supabase service role não configurado");
-
+/**
+ * Composition root do módulo invoices.
+ *
+ * Segue D2: os adapters de saída não guardam um `SupabaseClient` — recebem o
+ * factory `createScopedQuery` injectado aqui e constroem um `ScopedQuery`
+ * escopado por chamada. A organização já não é resolvida por nenhuma
+ * constante fixa deste módulo — chega como parâmetro explícito em cada
+ * porta, vinda do `orgId` da claim verificada (`req.auth.orgId`) nos
+ * caminhos autenticados; o cron de débitos diretos passa o
+ * `UNATTENDED_SCOPE` (`src/infra/scoped-db/unattended-scope.ts`, D6) porque
+ * não tem pedido nenhum.
+ */
+export function createInvoicesModule(createSupplierPort: CreateSupplierPort): InvoicesModule {
   const openaiApiKey = process.env.OPENAI_API_KEY;
   if (!openaiApiKey) throw new Error("OPENAI_API_KEY não configurado");
 
-  const invoiceRepo = new SupabaseInvoiceRepository(client);
-  const lineRepo = new SupabaseInvoiceLineRepository(client);
-  const ruleRepo = new SupabaseClassificationRuleRepository(client);
-  const categoryReader = new SupabaseCostCenterCategoryReaderAdapter(client);
-  const payableWrite = new SupabasePayableEntryWriteAdapter(client);
-  const occurrenceSync = new SupabaseOccurrenceSyncAdapter(client);
+  const invoiceRepo = new SupabaseInvoiceRepository(createScopedQuery);
+  const lineRepo = new SupabaseInvoiceLineRepository(createScopedQuery);
+  const ruleRepo = new SupabaseClassificationRuleRepository(createScopedQuery);
+  const categoryReader = new SupabaseCostCenterCategoryReaderAdapter(createScopedQuery);
+  const payableWrite = new SupabasePayableEntryWriteAdapter(createScopedQuery);
+  const occurrenceSync = new SupabaseOccurrenceSyncAdapter(createScopedQuery);
   const storage = new SupabaseDocumentStorageAdapter();
-  const reconciliationCleanup = new SupabaseInvoiceReconciliationCleanupAdapter(client);
-  const supplierLookup = new SupabaseSupplierLookupAdapter(client);
-  const supplierHint = new SupabaseSupplierHintAdapter(client);
+  const reconciliationCleanup = new SupabaseInvoiceReconciliationCleanupAdapter(createScopedQuery);
+  const supplierLookup = new SupabaseSupplierLookupAdapter(createScopedQuery);
+  const supplierHint = new SupabaseSupplierHintAdapter(createScopedQuery);
   const supplierCreate = new FinancialBaseSupplierCreateAdapter(createSupplierPort);
   const aiExtraction = new OpenAiExtractionAdapter(openaiApiKey);
 

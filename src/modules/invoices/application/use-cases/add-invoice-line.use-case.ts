@@ -15,7 +15,7 @@ export class AddInvoiceLineUseCase implements AddInvoiceLinePort {
   ) {}
 
   async execute(command: AddInvoiceLineCommand): Promise<InvoiceLineDTO> {
-    const invoice = await this.invoiceRepo.findById(command.invoiceId);
+    const invoice = await this.invoiceRepo.findById(command.organizationId, command.invoiceId);
     if (!invoice) throw new InvoiceNotFoundError(command.invoiceId);
 
     if (invoice.lineDetailMode === "simple") {
@@ -23,7 +23,7 @@ export class AddInvoiceLineUseCase implements AddInvoiceLinePort {
     }
 
     // Validar que a nova linha não fará a soma divergir dos totais da fatura
-    const existingLines = await this.lineRepo.findByInvoiceId(command.invoiceId);
+    const existingLines = await this.lineRepo.findByInvoiceId(command.organizationId, command.invoiceId);
     const newTotalWithVat = existingLines.reduce((sum, l) => sum + l.totalWithVat, 0) + command.totalWithVat;
 
     // Bloquear apenas quando a soma das linhas EXCEDE o total da fatura (além da tolerância).
@@ -47,9 +47,10 @@ export class AddInvoiceLineUseCase implements AddInvoiceLinePort {
     if (command.type !== undefined) createProps.type = command.type;
     if (command.costCenterCategoryId !== undefined) createProps.costCenterCategoryId = command.costCenterCategoryId;
     if (command.unit !== undefined) createProps.unit = command.unit;
+    if (command.locationId !== undefined) createProps.locationId = command.locationId;
     const line = InvoiceLine.create(createProps);
 
-    await this.lineRepo.saveAll([line]);
+    await this.lineRepo.saveAll(command.organizationId, [line]);
     return toInvoiceLineDTO(line);
   }
 }

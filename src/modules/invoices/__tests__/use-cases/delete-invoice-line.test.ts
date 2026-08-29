@@ -4,6 +4,9 @@ import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import { InvoiceNotFoundError, InvoiceLineNotFoundError, LineDetailModeError } from "../../domain/errors.js";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 function makeDetailedInvoice() {
   const inv = Invoice.create({
@@ -43,12 +46,12 @@ describe("DeleteInvoiceLineUseCase", () => {
   it("apaga a linha do repositório", async () => {
     const inv = makeDetailedInvoice();
     const line = makeLine(inv.id);
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([line]);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
-    await useCase.execute(inv.id, line.id);
+    await useCase.execute(ORG_ID, inv.id, line.id);
 
-    const remaining = await lineRepo.findByInvoiceId(inv.id);
+    const remaining = await lineRepo.findByInvoiceId(ORG_ID, inv.id);
     expect(remaining).toHaveLength(0);
   });
 
@@ -56,19 +59,19 @@ describe("DeleteInvoiceLineUseCase", () => {
     const inv = makeDetailedInvoice();
     const lineA = makeLine(inv.id);
     const lineB = makeLine(inv.id);
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([lineA, lineB]);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [lineA, lineB]);
 
-    await useCase.execute(inv.id, lineA.id);
+    await useCase.execute(ORG_ID, inv.id, lineA.id);
 
-    const remaining = await lineRepo.findByInvoiceId(inv.id);
+    const remaining = await lineRepo.findByInvoiceId(ORG_ID, inv.id);
     expect(remaining).toHaveLength(1);
     expect(remaining[0].id).toBe(lineB.id);
   });
 
   it("lança InvoiceNotFoundError para fatura inexistente", async () => {
     await expect(
-      useCase.execute("invoice-nao-existe", "line-qualquer"),
+      useCase.execute(ORG_ID, "invoice-nao-existe", "line-qualquer"),
     ).rejects.toThrow(InvoiceNotFoundError);
   });
 
@@ -83,21 +86,21 @@ describe("DeleteInvoiceLineUseCase", () => {
       // lineDetailMode defaults to "simple"
     });
     const line = makeLine(inv.id);
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([line]);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
     await expect(
-      useCase.execute(inv.id, line.id),
+      useCase.execute(ORG_ID, inv.id, line.id),
     ).rejects.toThrow(LineDetailModeError);
   });
 
   it("lança InvoiceLineNotFoundError quando a linha não pertence à fatura", async () => {
     const inv = makeDetailedInvoice();
-    await invoiceRepo.save(inv);
+    await invoiceRepo.save(ORG_ID, inv);
     // Nenhuma linha guardada
 
     await expect(
-      useCase.execute(inv.id, "line-nao-existe"),
+      useCase.execute(ORG_ID, inv.id, "line-nao-existe"),
     ).rejects.toThrow(InvoiceLineNotFoundError);
   });
 
@@ -105,12 +108,12 @@ describe("DeleteInvoiceLineUseCase", () => {
     const inv = makeDetailedInvoice();
     const outraFatura = makeDetailedInvoice();
     const lineDeOutra = makeLine(outraFatura.id);
-    await invoiceRepo.save(inv);
-    await invoiceRepo.save(outraFatura);
-    await lineRepo.saveAll([lineDeOutra]);
+    await invoiceRepo.save(ORG_ID, inv);
+    await invoiceRepo.save(ORG_ID, outraFatura);
+    await lineRepo.saveAll(ORG_ID, [lineDeOutra]);
 
     await expect(
-      useCase.execute(inv.id, lineDeOutra.id),
+      useCase.execute(ORG_ID, inv.id, lineDeOutra.id),
     ).rejects.toThrow(InvoiceLineNotFoundError);
   });
 });

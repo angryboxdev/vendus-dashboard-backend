@@ -7,6 +7,9 @@ import { FakeInvoiceReconciliationCleanup } from "../fakes/fake-invoice-reconcil
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import { InvoiceNotFoundError } from "../../domain/errors.js";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 describe("DeleteInvoiceUseCase", () => {
   let invoiceRepo: FakeInvoiceRepository;
@@ -34,11 +37,11 @@ describe("DeleteInvoiceUseCase", () => {
       totalVat: 23000,
       totalWithVat: 123000,
     });
-    await invoiceRepo.save(inv);
+    await invoiceRepo.save(ORG_ID, inv);
 
-    await useCase.execute(inv.id);
+    await useCase.execute(ORG_ID, inv.id);
 
-    const found = await invoiceRepo.findById(inv.id);
+    const found = await invoiceRepo.findById(ORG_ID, inv.id);
     expect(found).toBeNull();
   });
 
@@ -60,12 +63,12 @@ describe("DeleteInvoiceUseCase", () => {
       vatAmount: 23000,
       totalWithVat: 123000,
     });
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([line]);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
-    await useCase.execute(inv.id);
+    await useCase.execute(ORG_ID, inv.id);
 
-    const lines = await lineRepo.findByInvoiceId(inv.id);
+    const lines = await lineRepo.findByInvoiceId(ORG_ID, inv.id);
     expect(lines).toHaveLength(0);
   });
 
@@ -86,9 +89,9 @@ describe("DeleteInvoiceUseCase", () => {
       requiresReview: false,
       currency: "EUR",
     });
-    await invoiceRepo.save(inv);
+    await invoiceRepo.save(ORG_ID, inv);
 
-    await useCase.execute(inv.id);
+    await useCase.execute(ORG_ID, inv.id);
 
     expect(storage.deletedUrls).toContain("https://storage.example.com/invoices/doc.pdf");
   });
@@ -102,15 +105,15 @@ describe("DeleteInvoiceUseCase", () => {
       totalVat: 23000,
       totalWithVat: 123000,
     });
-    await invoiceRepo.save(inv);
+    await invoiceRepo.save(ORG_ID, inv);
 
-    await useCase.execute(inv.id);
+    await useCase.execute(ORG_ID, inv.id);
 
     expect(storage.deletedUrls).toHaveLength(0);
   });
 
   it("lança InvoiceNotFoundError para id inexistente", async () => {
-    await expect(useCase.execute("nao-existe")).rejects.toThrow(InvoiceNotFoundError);
+    await expect(useCase.execute(ORG_ID, "nao-existe")).rejects.toThrow(InvoiceNotFoundError);
   });
 
   it("cancela o payable associado antes de apagar a fatura", async () => {
@@ -122,9 +125,9 @@ describe("DeleteInvoiceUseCase", () => {
       totalVat: 23000,
       totalWithVat: 123000,
     });
-    await invoiceRepo.save(inv);
+    await invoiceRepo.save(ORG_ID, inv);
 
-    await useCase.execute(inv.id);
+    await useCase.execute(ORG_ID, inv.id);
 
     expect(payableWrite.cancelled).toContain(inv.id);
   });
@@ -138,9 +141,9 @@ describe("DeleteInvoiceUseCase", () => {
       totalVat: 23000,
       totalWithVat: 123000,
     });
-    await invoiceRepo.save(inv);
+    await invoiceRepo.save(ORG_ID, inv);
 
-    await useCase.execute(inv.id);
+    await useCase.execute(ORG_ID, inv.id);
 
     expect(reconciliationCleanup.removedInvoiceIds).toContain(inv.id);
   });

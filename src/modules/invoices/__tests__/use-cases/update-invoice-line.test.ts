@@ -9,6 +9,9 @@ import {
   LineDetailModeError,
   LinesTotalMismatchError,
 } from "../../domain/errors.js";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 const makeInvoice = (lineDetailMode: "simple" | "detailed" = "detailed") => {
   const inv = Invoice.create({
@@ -54,10 +57,11 @@ describe("UpdateInvoiceLineUseCase", () => {
   it("updates description of an existing line", async () => {
     const inv = makeInvoice();
     const line = makeLine(inv.id);
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([line]);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       description: "Serviço de limpeza exterior",
@@ -70,10 +74,11 @@ describe("UpdateInvoiceLineUseCase", () => {
   it("updates quantity, unitCost, vatRate and totals", async () => {
     const inv = makeInvoice();
     const line = makeLine(inv.id);
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([line]);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       quantity: 2,
@@ -90,40 +95,41 @@ describe("UpdateInvoiceLineUseCase", () => {
 
   it("throws InvoiceNotFoundError when invoice does not exist", async () => {
     await expect(
-      useCase.execute({ invoiceId: "nonexistent", lineId: "any" }),
+      useCase.execute({ organizationId: ORG_ID, invoiceId: "nonexistent", lineId: "any" }),
     ).rejects.toThrow(InvoiceNotFoundError);
   });
 
   it("throws LineDetailModeError when invoice is in simple mode", async () => {
     const inv = makeInvoice("simple");
     const line = makeLine(inv.id);
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([line]);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
     await expect(
-      useCase.execute({ invoiceId: inv.id, lineId: line.id, description: "x" }),
+      useCase.execute({ organizationId: ORG_ID, invoiceId: inv.id, lineId: line.id, description: "x" }),
     ).rejects.toThrow(LineDetailModeError);
   });
 
   it("throws InvoiceLineNotFoundError when line does not belong to invoice", async () => {
     const inv = makeInvoice();
-    await invoiceRepo.save(inv);
+    await invoiceRepo.save(ORG_ID, inv);
     // no lines saved
 
     await expect(
-      useCase.execute({ invoiceId: inv.id, lineId: "nonexistent-line" }),
+      useCase.execute({ organizationId: ORG_ID, invoiceId: inv.id, lineId: "nonexistent-line" }),
     ).rejects.toThrow(InvoiceLineNotFoundError);
   });
 
   it("throws LinesTotalMismatchError when updated total exceeds invoice total", async () => {
     const inv = makeInvoice();
     const line = makeLine(inv.id);
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([line]);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
     // totalWithVat=99999 far exceeds invoice.totalWithVat=12300
     await expect(
       useCase.execute({
+        organizationId: ORG_ID,
         invoiceId: inv.id,
         lineId: line.id,
         unitCostWithoutVat: 80000,
@@ -136,11 +142,12 @@ describe("UpdateInvoiceLineUseCase", () => {
   it("allows update within 1-cent tolerance", async () => {
     const inv = makeInvoice();
     const line = makeLine(inv.id);
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([line]);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
     // totalWithVat=12301 is invoice total (12300) + 1 cent — within tolerance
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       vatAmount: 2301,
@@ -153,16 +160,17 @@ describe("UpdateInvoiceLineUseCase", () => {
   it("persists the updated line in the repository", async () => {
     const inv = makeInvoice();
     const line = makeLine(inv.id);
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([line]);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
     await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       description: "Descrição actualizada",
     });
 
-    const persisted = await lineRepo.findByInvoiceId(inv.id);
+    const persisted = await lineRepo.findByInvoiceId(ORG_ID, inv.id);
     expect(persisted[0]?.description).toBe("Descrição actualizada");
   });
 
@@ -173,11 +181,12 @@ describe("UpdateInvoiceLineUseCase", () => {
     // diferentes dos totais cabeçalho — só totalWithVat é verificado.
     const inv = makeInvoice(); // totalWithVat=12300, totalVat=2300
     const line = makeLine(inv.id);
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([line]);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
     // vatAmount=3000 excede invoice.totalVat=2300, mas totalWithVat=12300 está dentro do limite
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       invoiceId: inv.id,
       lineId: line.id,
       vatAmount: 3000, // > invoice.totalVat

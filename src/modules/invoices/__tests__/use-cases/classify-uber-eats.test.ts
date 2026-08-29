@@ -15,7 +15,9 @@ import { FakeClassificationRuleRepository } from "../fakes/fake-classification-r
 import { FakeCostCenterCategoryReader } from "../fakes/fake-cost-center-category-reader.js";
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 
+const ORG_ID = mintOrganizationId("org-test");
 const SUPPLIER_UBER_EATS = "supplier-uber-eats";
 const CH_UBER_EATS = "ch-uber-eats";
 const CAT_OPD04 = "cat-opd04";
@@ -92,14 +94,15 @@ describe("Cenário Uber Eats — fatura com 2 linhas", () => {
     classifyUseCase = new ClassifyInvoiceLineUseCase(invoiceRepo, lineRepo, ruleRepo, categoryReader);
     suggestUseCase = new SuggestLineClassificationUseCase(ruleRepo);
 
-    await invoiceRepo.save(invoice);
-    await lineRepo.saveAll([lineServico, linePublicidade]);
+    await invoiceRepo.save(ORG_ID, invoice);
+    await lineRepo.saveAll(ORG_ID, [lineServico, linePublicidade]);
   });
 
   // ── Classificação individual ──────────────────────────────────────────────
 
   it("classifica Taxa de Serviço como OPD.04 com canal Uber Eats e herda financialType", async () => {
     const dto = await classifyUseCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       lineId: lineServico.id,
       classify: { costCenterCategoryId: CAT_OPD04, channelId: CH_UBER_EATS },
@@ -112,6 +115,7 @@ describe("Cenário Uber Eats — fatura com 2 linhas", () => {
 
   it("classifica Taxa de Publicidade como MKT.05 com canal Uber Eats e herda financialType", async () => {
     const dto = await classifyUseCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       lineId: linePublicidade.id,
       classify: { costCenterCategoryId: CAT_MKT05, channelId: CH_UBER_EATS },
@@ -125,6 +129,7 @@ describe("Cenário Uber Eats — fatura com 2 linhas", () => {
   it("lança erro ao classificar linha Uber Eats sem canal (requiresChannel=true)", async () => {
     await expect(
       classifyUseCase.execute({
+        organizationId: ORG_ID,
         invoiceId: invoice.id,
         lineId: lineServico.id,
         classify: { costCenterCategoryId: CAT_OPD04 },
@@ -136,11 +141,13 @@ describe("Cenário Uber Eats — fatura com 2 linhas", () => {
 
   it("dreValue usa valor sem IVA e cashflowValue usa valor total com IVA", async () => {
     const dtoServico = await classifyUseCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       lineId: lineServico.id,
       classify: { costCenterCategoryId: CAT_OPD04, channelId: CH_UBER_EATS },
     });
     const dtoPublicidade = await classifyUseCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       lineId: linePublicidade.id,
       classify: { costCenterCategoryId: CAT_MKT05, channelId: CH_UBER_EATS },
@@ -159,20 +166,22 @@ describe("Cenário Uber Eats — fatura com 2 linhas", () => {
 
   it("duas linhas criam duas regras separadas sem colisão", async () => {
     await classifyUseCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       lineId: lineServico.id,
       classify: { costCenterCategoryId: CAT_OPD04, channelId: CH_UBER_EATS },
       saveAsRule: true,
     });
     await classifyUseCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       lineId: linePublicidade.id,
       classify: { costCenterCategoryId: CAT_MKT05, channelId: CH_UBER_EATS },
       saveAsRule: true,
     });
 
-    const ruleServico = await ruleRepo.findBySupplierIdAndDescription(SUPPLIER_UBER_EATS, "Taxa de Serviço Uber Eats");
-    const rulePublicidade = await ruleRepo.findBySupplierIdAndDescription(SUPPLIER_UBER_EATS, "Taxa de Publicidade Uber Eats");
+    const ruleServico = await ruleRepo.findBySupplierIdAndDescription(ORG_ID, SUPPLIER_UBER_EATS, "Taxa de Serviço Uber Eats");
+    const rulePublicidade = await ruleRepo.findBySupplierIdAndDescription(ORG_ID, SUPPLIER_UBER_EATS, "Taxa de Publicidade Uber Eats");
 
     expect(ruleServico).not.toBeNull();
     expect(rulePublicidade).not.toBeNull();
@@ -187,13 +196,14 @@ describe("Cenário Uber Eats — fatura com 2 linhas", () => {
 
   it("suggest devolve OPD.04 + canal para 'Taxa de Serviço Uber Eats' após saveAsRule", async () => {
     await classifyUseCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       lineId: lineServico.id,
       classify: { costCenterCategoryId: CAT_OPD04, channelId: CH_UBER_EATS },
       saveAsRule: true,
     });
 
-    const suggestion = await suggestUseCase.execute(SUPPLIER_UBER_EATS, "Taxa de Serviço Uber Eats");
+    const suggestion = await suggestUseCase.execute(ORG_ID, SUPPLIER_UBER_EATS, "Taxa de Serviço Uber Eats");
     expect(suggestion).not.toBeNull();
     expect(suggestion!.costCenterCategoryId).toBe(CAT_OPD04);
     expect(suggestion!.channelId).toBe(CH_UBER_EATS);
@@ -201,13 +211,14 @@ describe("Cenário Uber Eats — fatura com 2 linhas", () => {
 
   it("suggest devolve MKT.05 + canal para 'Taxa de Publicidade Uber Eats' após saveAsRule", async () => {
     await classifyUseCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       lineId: linePublicidade.id,
       classify: { costCenterCategoryId: CAT_MKT05, channelId: CH_UBER_EATS },
       saveAsRule: true,
     });
 
-    const suggestion = await suggestUseCase.execute(SUPPLIER_UBER_EATS, "Taxa de Publicidade Uber Eats");
+    const suggestion = await suggestUseCase.execute(ORG_ID, SUPPLIER_UBER_EATS, "Taxa de Publicidade Uber Eats");
     expect(suggestion).not.toBeNull();
     expect(suggestion!.costCenterCategoryId).toBe(CAT_MKT05);
     expect(suggestion!.channelId).toBe(CH_UBER_EATS);
@@ -215,20 +226,22 @@ describe("Cenário Uber Eats — fatura com 2 linhas", () => {
 
   it("suggest não mistura as duas regras — OPD.04 para Serviço, MKT.05 para Publicidade", async () => {
     await classifyUseCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       lineId: lineServico.id,
       classify: { costCenterCategoryId: CAT_OPD04, channelId: CH_UBER_EATS },
       saveAsRule: true,
     });
     await classifyUseCase.execute({
+      organizationId: ORG_ID,
       invoiceId: invoice.id,
       lineId: linePublicidade.id,
       classify: { costCenterCategoryId: CAT_MKT05, channelId: CH_UBER_EATS },
       saveAsRule: true,
     });
 
-    const forServico = await suggestUseCase.execute(SUPPLIER_UBER_EATS, "Taxa de Serviço Uber Eats");
-    const forPublicidade = await suggestUseCase.execute(SUPPLIER_UBER_EATS, "Taxa de Publicidade Uber Eats");
+    const forServico = await suggestUseCase.execute(ORG_ID, SUPPLIER_UBER_EATS, "Taxa de Serviço Uber Eats");
+    const forPublicidade = await suggestUseCase.execute(ORG_ID, SUPPLIER_UBER_EATS, "Taxa de Publicidade Uber Eats");
 
     expect(forServico!.costCenterCategoryId).toBe(CAT_OPD04);
     expect(forPublicidade!.costCenterCategoryId).toBe(CAT_MKT05);

@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 export interface SupplierSummary {
   id: string;
   name: string;
@@ -8,8 +10,8 @@ export interface SupplierSummary {
 }
 
 export interface SupplierLookupPort {
-  findByNif(nif: string): Promise<SupplierSummary | null>;
-  findByName(query: string): Promise<SupplierSummary[]>;
+  findByNif(organizationId: OrganizationId, nif: string): Promise<SupplierSummary | null>;
+  findByName(organizationId: OrganizationId, query: string): Promise<SupplierSummary[]>;
   /** Devolve todos os fornecedores — usado para fuzzy matching em memória. */
-  findAll(): Promise<SupplierSummary[]>;
+  findAll(organizationId: OrganizationId): Promise<SupplierSummary[]>;
 }

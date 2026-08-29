@@ -6,6 +6,9 @@ import { FakeInvoiceReconciliationCleanup } from "../fakes/fake-invoice-reconcil
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import { InvoiceNotFoundError, DuplicateInvoiceError } from "../../domain/errors.js";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 const makeInvoice = () =>
   Invoice.create({
@@ -34,17 +37,18 @@ describe("UpdateInvoiceUseCase", () => {
 
   it("actualiza o nome do fornecedor", async () => {
     const inv = makeInvoice();
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
-    const dto = await useCase.execute({ id: inv.id, supplierName: "EDP" });
+    const dto = await useCase.execute({ organizationId: ORG_ID, id: inv.id, supplierName: "EDP" });
     expect(dto.supplierName).toBe("EDP");
   });
 
   it("actualiza número e data de fatura", async () => {
     const inv = makeInvoice();
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       id: inv.id,
       invoiceNumber: "MKR-002",
       invoiceDate: "2026-07-01",
@@ -55,9 +59,10 @@ describe("UpdateInvoiceUseCase", () => {
 
   it("actualiza valores monetários", async () => {
     const inv = makeInvoice();
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       id: inv.id,
       subtotalWithoutVat: 200000,
       totalVat: 46000,
@@ -70,27 +75,28 @@ describe("UpdateInvoiceUseCase", () => {
 
   it("persiste a alteração no repositório", async () => {
     const inv = makeInvoice();
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
-    await useCase.execute({ id: inv.id, supplierName: "NOS" });
+    await useCase.execute({ organizationId: ORG_ID, id: inv.id, supplierName: "NOS" });
 
-    const saved = await repo.findById(inv.id);
+    const saved = await repo.findById(ORG_ID, inv.id);
     expect(saved!.supplierName).toBe("NOS");
   });
 
   it("actualiza supplierNifSnapshot", async () => {
     const inv = makeInvoice();
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
-    const dto = await useCase.execute({ id: inv.id, supplierNifSnapshot: "500123456" });
+    const dto = await useCase.execute({ organizationId: ORG_ID, id: inv.id, supplierNifSnapshot: "500123456" });
     expect(dto.supplierNifSnapshot).toBe("500123456");
   });
 
   it("actualiza costCenterGroupId e financialType", async () => {
     const inv = makeInvoice();
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       id: inv.id,
       costCenterGroupId: "grp-ops",
       financialType: "fixed_opex",
@@ -101,9 +107,10 @@ describe("UpdateInvoiceUseCase", () => {
 
   it("actualiza flags financeiras (affectsDre, affectsCashflow, affectsProfitability)", async () => {
     const inv = makeInvoice();
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       id: inv.id,
       affectsDre: false,
       affectsCashflow: false,
@@ -116,7 +123,7 @@ describe("UpdateInvoiceUseCase", () => {
 
   it("lança InvoiceNotFoundError para id inexistente", async () => {
     await expect(
-      useCase.execute({ id: "nao-existe", supplierName: "X" }),
+      useCase.execute({ organizationId: ORG_ID, id: "nao-existe", supplierName: "X" }),
     ).rejects.toThrow(InvoiceNotFoundError);
   });
 
@@ -124,15 +131,15 @@ describe("UpdateInvoiceUseCase", () => {
 
   it("actualiza costCenterCategoryId na fatura", async () => {
     const inv = makeInvoice();
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
-    const dto = await useCase.execute({ id: inv.id, costCenterCategoryId: "cat-cmv" });
+    const dto = await useCase.execute({ organizationId: ORG_ID, id: inv.id, costCenterCategoryId: "cat-cmv" });
     expect(dto.costCenterCategoryId).toBe("cat-cmv");
   });
 
   it("propaga costCenterCategoryId às linhas existentes quando o campo é enviado", async () => {
     const inv = makeInvoice();
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
     const line = InvoiceLine.create({
       invoiceId: inv.id,
@@ -143,11 +150,11 @@ describe("UpdateInvoiceUseCase", () => {
       vatAmount: 1150,
       totalWithVat: 6150,
     });
-    await lineRepo.saveAll([line]);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
-    await useCase.execute({ id: inv.id, costCenterCategoryId: "cat-pes" });
+    await useCase.execute({ organizationId: ORG_ID, id: inv.id, costCenterCategoryId: "cat-pes" });
 
-    const lines = await lineRepo.findByInvoiceId(inv.id);
+    const lines = await lineRepo.findByInvoiceId(ORG_ID, inv.id);
     expect(lines[0].costCenterCategoryId).toBe("cat-pes");
   });
 
@@ -161,7 +168,7 @@ describe("UpdateInvoiceUseCase", () => {
       totalWithVat: 123000,
       costCenterCategoryId: "cat-original",
     });
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
     const line = InvoiceLine.create({
       invoiceId: inv.id,
@@ -173,11 +180,11 @@ describe("UpdateInvoiceUseCase", () => {
       totalWithVat: 6150,
       costCenterCategoryId: "cat-original",
     });
-    await lineRepo.saveAll([line]);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
-    await useCase.execute({ id: inv.id, costCenterCategoryId: null });
+    await useCase.execute({ organizationId: ORG_ID, id: inv.id, costCenterCategoryId: null });
 
-    const lines = await lineRepo.findByInvoiceId(inv.id);
+    const lines = await lineRepo.findByInvoiceId(ORG_ID, inv.id);
     expect(lines[0].costCenterCategoryId).toBeNull();
   });
 
@@ -185,9 +192,10 @@ describe("UpdateInvoiceUseCase", () => {
 
   it("actualiza isDirectDebit e directDebitDate", async () => {
     const inv = makeInvoice();
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
     const dto = await useCase.execute({
+      organizationId: ORG_ID,
       id: inv.id,
       isDirectDebit: true,
       directDebitDate: "2026-09-01",
@@ -207,16 +215,16 @@ describe("UpdateInvoiceUseCase", () => {
       isDirectDebit: true,
       directDebitDate: new Date("2026-08-01"),
     });
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
-    const dto = await useCase.execute({ id: inv.id, isDirectDebit: false, directDebitDate: null });
+    const dto = await useCase.execute({ organizationId: ORG_ID, id: inv.id, isDirectDebit: false, directDebitDate: null });
     expect(dto.isDirectDebit).toBe(false);
     expect(dto.directDebitDate).toBeNull();
   });
 
   it("não propaga CC quando costCenterCategoryId não é enviado no comando", async () => {
     const inv = makeInvoice();
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
     const line = InvoiceLine.create({
       invoiceId: inv.id,
@@ -228,12 +236,12 @@ describe("UpdateInvoiceUseCase", () => {
       totalWithVat: 6150,
       costCenterCategoryId: "cat-original",
     });
-    await lineRepo.saveAll([line]);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
     // Atualizar outros campos, sem enviar costCenterCategoryId
-    await useCase.execute({ id: inv.id, supplierName: "NOS" });
+    await useCase.execute({ organizationId: ORG_ID, id: inv.id, supplierName: "NOS" });
 
-    const lines = await lineRepo.findByInvoiceId(inv.id);
+    const lines = await lineRepo.findByInvoiceId(ORG_ID, inv.id);
     expect(lines[0].costCenterCategoryId).toBe("cat-original");
   });
 
@@ -255,11 +263,11 @@ describe("UpdateInvoiceUseCase", () => {
     };
     const existing = Invoice.createFromImport({ ...baseProps, invoiceNumber: "MKR-999", invoiceDate: new Date("2026-05-01") });
     const inv = Invoice.createFromImport({ ...baseProps, invoiceNumber: "MKR-001", invoiceDate: new Date("2026-06-01") });
-    await repo.save(existing);
-    await repo.save(inv);
+    await repo.save(ORG_ID, existing);
+    await repo.save(ORG_ID, inv);
 
     await expect(
-      useCase.execute({ id: inv.id, invoiceNumber: "MKR-999" }),
+      useCase.execute({ organizationId: ORG_ID, id: inv.id, invoiceNumber: "MKR-999" }),
     ).rejects.toThrow(DuplicateInvoiceError);
   });
 
@@ -282,20 +290,20 @@ describe("UpdateInvoiceUseCase", () => {
       totalVat: 23000,
       totalWithVat: 123000,
     });
-    await repo.save(existing);
-    await repo.save(inv);
+    await repo.save(ORG_ID, existing);
+    await repo.save(ORG_ID, inv);
 
     await expect(
-      useCase.execute({ id: inv.id, invoiceNumber: "MKR-999" }),
+      useCase.execute({ organizationId: ORG_ID, id: inv.id, invoiceNumber: "MKR-999" }),
     ).rejects.toThrow(DuplicateInvoiceError);
   });
 
   it("não lança erro de duplicado quando o número é o mesmo (sem alteração)", async () => {
     const inv = makeInvoice();
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
     await expect(
-      useCase.execute({ id: inv.id, invoiceNumber: "MKR-001", supplierName: "Makro PT" }),
+      useCase.execute({ organizationId: ORG_ID, id: inv.id, invoiceNumber: "MKR-001", supplierName: "Makro PT" }),
     ).resolves.toBeDefined();
   });
 
@@ -303,9 +311,9 @@ describe("UpdateInvoiceUseCase", () => {
 
   it("propaga novo número ao payable quando o invoiceNumber muda", async () => {
     const inv = makeInvoice();
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
-    await useCase.execute({ id: inv.id, invoiceNumber: "MKR-002" });
+    await useCase.execute({ organizationId: ORG_ID, id: inv.id, invoiceNumber: "MKR-002" });
 
     expect(payableWrite.renumbered).toHaveLength(1);
     expect(payableWrite.renumbered[0].invoiceId).toBe(inv.id);
@@ -315,9 +323,9 @@ describe("UpdateInvoiceUseCase", () => {
 
   it("propaga novo label aos links de reconciliação quando o invoiceNumber muda", async () => {
     const inv = makeInvoice();
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
-    await useCase.execute({ id: inv.id, invoiceNumber: "MKR-002" });
+    await useCase.execute({ organizationId: ORG_ID, id: inv.id, invoiceNumber: "MKR-002" });
 
     expect(reconciliationCleanup.renumbered).toHaveLength(1);
     expect(reconciliationCleanup.renumbered[0].invoiceId).toBe(inv.id);
@@ -326,9 +334,9 @@ describe("UpdateInvoiceUseCase", () => {
 
   it("não propaga renumber quando invoiceNumber não é enviado no comando", async () => {
     const inv = makeInvoice();
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
-    await useCase.execute({ id: inv.id, supplierName: "NOS" });
+    await useCase.execute({ organizationId: ORG_ID, id: inv.id, supplierName: "NOS" });
 
     expect(payableWrite.renumbered).toHaveLength(0);
     expect(reconciliationCleanup.renumbered).toHaveLength(0);
@@ -336,9 +344,9 @@ describe("UpdateInvoiceUseCase", () => {
 
   it("não propaga renumber quando o número enviado é igual ao actual", async () => {
     const inv = makeInvoice(); // invoiceNumber = "MKR-001"
-    await repo.save(inv);
+    await repo.save(ORG_ID, inv);
 
-    await useCase.execute({ id: inv.id, invoiceNumber: "MKR-001" });
+    await useCase.execute({ organizationId: ORG_ID, id: inv.id, invoiceNumber: "MKR-001" });
 
     expect(payableWrite.renumbered).toHaveLength(0);
     expect(reconciliationCleanup.renumbered).toHaveLength(0);

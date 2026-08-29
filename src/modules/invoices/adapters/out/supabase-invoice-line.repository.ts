@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import type { InvoiceLineType } from "../../domain/entities/invoice.js";
 import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
@@ -24,6 +25,7 @@ function toEntity(row: Record<string, unknown>): InvoiceLine {
     affectsDre: (row.affects_dre as boolean | null) ?? true,
     affectsCashflow: (row.affects_cashflow as boolean | null) ?? true,
     affectsProfitability: (row.affects_profitability as boolean | null) ?? false,
+    locationId: (row.location_id as string | null) ?? null,
     financialType: (row.financial_type as string | null) ?? null,
     channelId: (row.channel_id as string | null) ?? null,
     requiresChannel: (row.requires_channel as boolean | null) ?? false,
@@ -34,10 +36,15 @@ function toEntity(row: Record<string, unknown>): InvoiceLine {
   });
 }
 
+/**
+ * Nunca guarda um `SupabaseClient` — recebe o factory `createScopedQuery`
+ * (`ScopedQueryFactory`) injectado pelo composition root e constrói um
+ * `ScopedQuery` por chamada (D2).
+ */
 export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async saveAll(lines: InvoiceLine[]): Promise<void> {
+  async saveAll(organizationId: OrganizationId, lines: InvoiceLine[]): Promise<void> {
     if (lines.length === 0) return;
     const rows = lines.map((l) => ({
       id: l.id,
@@ -59,6 +66,7 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
       affects_dre: l.affectsDre,
       affects_cashflow: l.affectsCashflow,
       affects_profitability: l.affectsProfitability,
+      location_id: l.locationId,
       financial_type: l.financialType,
       channel_id: l.channelId,
       requires_channel: l.requiresChannel,
@@ -67,32 +75,32 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
       ai_confidence: l.aiConfidence,
       created_at: l.createdAt.toISOString(),
     }));
-    const { error } = await this.supabase.from("invoice_lines").insert(rows);
+    const { error } = await this.scopedQuery(organizationId).table("invoice_lines").insert(rows);
     if (error) throw new Error(error.message);
   }
 
-  async findAll(): Promise<InvoiceLine[]> {
-    const { data, error } = await this.supabase
-      .from("invoice_lines")
+  async findAll(organizationId: OrganizationId): Promise<InvoiceLine[]> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("invoice_lines")
       .select("*")
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toEntity(r));
   }
 
-  async findByInvoiceId(invoiceId: string): Promise<InvoiceLine[]> {
-    const { data, error } = await this.supabase
-      .from("invoice_lines")
+  async findByInvoiceId(organizationId: OrganizationId, invoiceId: string): Promise<InvoiceLine[]> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("invoice_lines")
       .select("*")
       .eq("invoice_id", invoiceId)
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toEntity(r));
   }
 
-  async updateLine(line: InvoiceLine): Promise<void> {
-    const { error } = await this.supabase
-      .from("invoice_lines")
+  async updateLine(organizationId: OrganizationId, line: InvoiceLine): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("invoice_lines")
       .update({
         description: line.description,
         type: line.type,
@@ -111,6 +119,7 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
         affects_dre: line.affectsDre,
         affects_cashflow: line.affectsCashflow,
         affects_profitability: line.affectsProfitability,
+        location_id: line.locationId,
         financial_type: line.financialType,
         channel_id: line.channelId,
         requires_channel: line.requiresChannel,
@@ -122,25 +131,29 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
     if (error) throw new Error(error.message);
   }
 
-  async deleteByInvoiceId(invoiceId: string): Promise<void> {
-    const { error } = await this.supabase
-      .from("invoice_lines")
+  async deleteByInvoiceId(organizationId: OrganizationId, invoiceId: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("invoice_lines")
       .delete()
       .eq("invoice_id", invoiceId);
     if (error) throw new Error(error.message);
   }
 
-  async deleteLineById(lineId: string): Promise<void> {
-    const { error } = await this.supabase
-      .from("invoice_lines")
+  async deleteLineById(organizationId: OrganizationId, lineId: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("invoice_lines")
       .delete()
       .eq("id", lineId);
     if (error) throw new Error(error.message);
   }
 
-  async updateCostCenterCategoryForInvoice(invoiceId: string, categoryId: string | null): Promise<void> {
-    const { error } = await this.supabase
-      .from("invoice_lines")
+  async updateCostCenterCategoryForInvoice(
+    organizationId: OrganizationId,
+    invoiceId: string,
+    categoryId: string | null,
+  ): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("invoice_lines")
       .update({ cost_center_category_id: categoryId })
       .eq("invoice_id", invoiceId);
     if (error) throw new Error(error.message);

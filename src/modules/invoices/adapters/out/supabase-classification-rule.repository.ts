@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import { ClassificationRule } from "../../domain/entities/classification-rule.js";
 import type { InvoiceLineType } from "../../domain/entities/invoice.js";
 import type { ClassificationRuleRepositoryPort } from "../../domain/ports/out/classification-rule-repository.port.js";
@@ -19,31 +20,40 @@ function toEntity(row: Record<string, unknown>): ClassificationRule {
   });
 }
 
+/**
+ * Nunca guarda um `SupabaseClient` — recebe o factory `createScopedQuery`
+ * (`ScopedQueryFactory`) injectado pelo composition root e constrói um
+ * `ScopedQuery` por chamada (D2).
+ */
 export class SupabaseClassificationRuleRepository implements ClassificationRuleRepositoryPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async findBySupplierId(supplierId: string): Promise<ClassificationRule | null> {
-    const { data, error } = await this.supabase
-      .from("classification_rules")
+  async findBySupplierId(organizationId: OrganizationId, supplierId: string): Promise<ClassificationRule | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("classification_rules")
       .select("*")
       .eq("supplier_id", supplierId)
       .is("description_pattern", null)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async findBySupplierIdAndDescription(supplierId: string, description?: string): Promise<ClassificationRule | null> {
-    const { data, error } = await this.supabase
-      .from("classification_rules")
+  async findBySupplierIdAndDescription(
+    organizationId: OrganizationId,
+    supplierId: string,
+    description?: string,
+  ): Promise<ClassificationRule | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("classification_rules")
       .select("*")
       .eq("supplier_id", supplierId)
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) return null;
 
-    const rules = (data as Record<string, unknown>[]).map(toEntity);
+    const rules = (data as unknown as Record<string, unknown>[]).map(toEntity);
 
     if (description) {
       const desc = description.toLowerCase();
@@ -56,8 +66,8 @@ export class SupabaseClassificationRuleRepository implements ClassificationRuleR
     return rules.find((r) => r.descriptionPattern === null) ?? null;
   }
 
-  async save(rule: ClassificationRule): Promise<void> {
-    const { error } = await this.supabase.from("classification_rules").insert({
+  async save(organizationId: OrganizationId, rule: ClassificationRule): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("classification_rules").insert({
       id: rule.id,
       supplier_id: rule.supplierId,
       default_cost_center_id: rule.defaultCostCenterId,
@@ -73,9 +83,9 @@ export class SupabaseClassificationRuleRepository implements ClassificationRuleR
     if (error) throw new Error(error.message);
   }
 
-  async update(rule: ClassificationRule): Promise<void> {
-    const { error } = await this.supabase
-      .from("classification_rules")
+  async update(organizationId: OrganizationId, rule: ClassificationRule): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("classification_rules")
       .update({
         default_cost_center_id: rule.defaultCostCenterId,
         default_cost_center_category_id: rule.defaultCostCenterCategoryId,

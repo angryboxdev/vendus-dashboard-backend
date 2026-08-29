@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { SupplierHintPort } from "../../domain/ports/out/supplier-hint.port.js";
 import type { SupplierSummary } from "../../domain/ports/out/supplier-lookup.port.js";
 
@@ -22,13 +23,13 @@ export class FakeSupplierHintPort implements SupplierHintPort {
     return this.hints;
   }
 
-  async findByNormalizedName(normalizedName: string): Promise<SupplierSummary | null> {
+  async findByNormalizedName(_organizationId: OrganizationId, normalizedName: string): Promise<SupplierSummary | null> {
     const supplierId = this.hints.get(normalizedName);
     if (!supplierId) return null;
     return this.suppliers.find((s) => s.id === supplierId) ?? null;
   }
 
-  async save(normalizedName: string, supplierId: string): Promise<void> {
+  async save(_organizationId: OrganizationId, normalizedName: string, supplierId: string): Promise<void> {
     this.hints.set(normalizedName, supplierId);
   }
 }

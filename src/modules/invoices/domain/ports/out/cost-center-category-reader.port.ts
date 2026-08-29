@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { CategorySnapshot } from "../../entities/invoice-line.js";
 
 export interface CategoryLookup {
@@ -8,6 +9,6 @@ export interface CategoryLookup {
 }
 
 export interface CostCenterCategoryReaderPort {
-  findById(id: string): Promise<CategorySnapshot | null>;
-  findManyByIds(ids: string[]): Promise<CategoryLookup[]>;
+  findById(organizationId: OrganizationId, id: string): Promise<CategorySnapshot | null>;
+  findManyByIds(organizationId: OrganizationId, ids: string[]): Promise<CategoryLookup[]>;
 }

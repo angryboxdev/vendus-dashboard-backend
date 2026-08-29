@@ -1,19 +1,25 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import type { CategorySnapshot } from "../../domain/entities/invoice-line.js";
 import type { CategoryLookup, CostCenterCategoryReaderPort } from "../../domain/ports/out/cost-center-category-reader.port.js";
 
+/**
+ * Nunca guarda um `SupabaseClient` — recebe o factory `createScopedQuery`
+ * (`ScopedQueryFactory`) injectado pelo composition root e constrói um
+ * `ScopedQuery` por chamada (D2).
+ */
 export class SupabaseCostCenterCategoryReaderAdapter implements CostCenterCategoryReaderPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async findById(id: string): Promise<CategorySnapshot | null> {
-    const { data, error } = await this.supabase
-      .from("cost_center_categories")
+  async findById(organizationId: OrganizationId, id: string): Promise<CategorySnapshot | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("cost_center_categories")
       .select("id, financial_type, affects_dre, affects_cashflow, affects_profitability, requires_channel, requires_allocation")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    const row = data as Record<string, unknown>;
+    const row = data as unknown as Record<string, unknown>;
     return {
       id: row.id as string,
       financialType: row.financial_type as string,
@@ -25,14 +31,14 @@ export class SupabaseCostCenterCategoryReaderAdapter implements CostCenterCatego
     };
   }
 
-  async findManyByIds(ids: string[]): Promise<CategoryLookup[]> {
+  async findManyByIds(organizationId: OrganizationId, ids: string[]): Promise<CategoryLookup[]> {
     if (ids.length === 0) return [];
-    const { data, error } = await this.supabase
-      .from("cost_center_categories")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("cost_center_categories")
       .select("id, code, name, financial_type")
       .in("id", ids);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((row: Record<string, unknown>) => ({
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => ({
       id: row.id as string,
       code: row.code as string,
       name: row.name as string,

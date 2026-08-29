@@ -5,6 +5,9 @@ import { FakeCostCenterCategoryReader } from "../fakes/fake-cost-center-category
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import { InvoiceNotFoundError } from "../../domain/errors.js";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 const CAT_A = { id: "cat-a", code: "OPD.01", name: "CMV / Ingredientes", financialType: "opex" };
 const CAT_B = { id: "cat-b", code: "MKT.05", name: "Anúncios Marketplace", financialType: "opex" };
@@ -63,10 +66,10 @@ describe("GetInvoiceUseCase", () => {
       vatAmount: 23000,
       totalWithVat: 123000,
     });
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([line]);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [line]);
 
-    const dto = await useCase.execute(inv.id);
+    const dto = await useCase.execute(ORG_ID, inv.id);
     expect(dto.id).toBe(inv.id);
     expect(dto.lines).toHaveLength(1);
     expect(dto.lines![0]!.description).toBe("Farinha T55");
@@ -81,14 +84,14 @@ describe("GetInvoiceUseCase", () => {
       totalVat: 5100,
       totalWithVat: 90100,
     });
-    await invoiceRepo.save(inv);
+    await invoiceRepo.save(ORG_ID, inv);
 
-    const dto = await useCase.execute(inv.id);
+    const dto = await useCase.execute(ORG_ID, inv.id);
     expect(dto.lines).toHaveLength(0);
   });
 
   it("lança InvoiceNotFoundError para id inexistente", async () => {
-    await expect(useCase.execute("nao-existe")).rejects.toThrow(InvoiceNotFoundError);
+    await expect(useCase.execute(ORG_ID, "nao-existe")).rejects.toThrow(InvoiceNotFoundError);
   });
 
   // ── linesSummary ────────────────────────────────────────────────────────────
@@ -103,18 +106,18 @@ describe("GetInvoiceUseCase", () => {
       totalWithVat: 12300,
       // lineDetailMode default = "simple"
     });
-    await invoiceRepo.save(inv);
+    await invoiceRepo.save(ORG_ID, inv);
 
-    const dto = await useCase.execute(inv.id);
+    const dto = await useCase.execute(ORG_ID, inv.id);
     expect(dto.linesSummary).toBeUndefined();
   });
 
   it("inclui linesSummary em modo detailed com totais corretos e totalsMismatch=false", async () => {
     const inv = makeDetailedInvoice({ subtotalWithoutVat: 10000, totalVat: 2300, totalWithVat: 12300 });
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([makeLine(inv.id, 12300, 2300)]);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [makeLine(inv.id, 12300, 2300)]);
 
-    const dto = await useCase.execute(inv.id);
+    const dto = await useCase.execute(ORG_ID, inv.id);
     expect(dto.linesSummary).toBeDefined();
     expect(dto.linesSummary!.totalWithVat).toBe(12300);
     expect(dto.linesSummary!.totalVat).toBe(2300);
@@ -124,41 +127,41 @@ describe("GetInvoiceUseCase", () => {
 
   it("linesSummary.totalsMismatch=true quando linhas não somam o total da fatura", async () => {
     const inv = makeDetailedInvoice({ subtotalWithoutVat: 10000, totalVat: 2300, totalWithVat: 12300 });
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([makeLine(inv.id, 5000, 1000)]); // soma parcial
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [makeLine(inv.id, 5000, 1000)]); // soma parcial
 
-    const dto = await useCase.execute(inv.id);
+    const dto = await useCase.execute(ORG_ID, inv.id);
     expect(dto.linesSummary!.totalsMismatch).toBe(true);
   });
 
   it("linesSummary.totalsMismatch=false dentro da tolerância de 1 cêntimo", async () => {
     const inv = makeDetailedInvoice({ subtotalWithoutVat: 10000, totalVat: 2300, totalWithVat: 12300 });
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([makeLine(inv.id, 12301, 2301)]); // 1 cêntimo acima
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [makeLine(inv.id, 12301, 2301)]); // 1 cêntimo acima
 
-    const dto = await useCase.execute(inv.id);
+    const dto = await useCase.execute(ORG_ID, inv.id);
     expect(dto.linesSummary!.totalsMismatch).toBe(false);
   });
 
   it("linesSummary com zero linhas em modo detailed mostra totalsMismatch=true", async () => {
     const inv = makeDetailedInvoice({ subtotalWithoutVat: 10000, totalVat: 2300, totalWithVat: 12300 });
-    await invoiceRepo.save(inv);
+    await invoiceRepo.save(ORG_ID, inv);
     // sem linhas
 
-    const dto = await useCase.execute(inv.id);
+    const dto = await useCase.execute(ORG_ID, inv.id);
     expect(dto.linesSummary!.totalWithVat).toBe(0);
     expect(dto.linesSummary!.totalsMismatch).toBe(true);
   });
 
   it("linesSummary agrega corretamente múltiplas linhas", async () => {
     const inv = makeDetailedInvoice({ subtotalWithoutVat: 20000, totalVat: 4600, totalWithVat: 24600 });
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [
       makeLine(inv.id, 12300, 2300), // subtotal 10000
       makeLine(inv.id, 12300, 2300), // subtotal 10000
     ]);
 
-    const dto = await useCase.execute(inv.id);
+    const dto = await useCase.execute(ORG_ID, inv.id);
     expect(dto.linesSummary!.totalWithVat).toBe(24600);
     expect(dto.linesSummary!.totalVat).toBe(4600);
     expect(dto.linesSummary!.subtotalWithoutVat).toBe(20000);
@@ -169,21 +172,21 @@ describe("GetInvoiceUseCase", () => {
 
   it("classificationSummary mode=none quando nenhuma linha tem categoria (detailed)", async () => {
     const inv = makeDetailedInvoice({ subtotalWithoutVat: 10000, totalVat: 2300, totalWithVat: 12300 });
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([makeLine(inv.id, 12300, 2300)]);
-    const dto = await useCase.execute(inv.id);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [makeLine(inv.id, 12300, 2300)]);
+    const dto = await useCase.execute(ORG_ID, inv.id);
     expect(dto.classificationSummary.mode).toBe("none");
     expect(dto.classificationSummary.entries).toHaveLength(0);
   });
 
   it("classificationSummary mode=unique quando todas as linhas têm a mesma categoria", async () => {
     const inv = makeDetailedInvoice({ subtotalWithoutVat: 20000, totalVat: 4600, totalWithVat: 24600 });
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [
       makeLine(inv.id, 12300, 2300, CAT_A.id),
       makeLine(inv.id, 12300, 2300, CAT_A.id),
     ]);
-    const dto = await useCase.execute(inv.id);
+    const dto = await useCase.execute(ORG_ID, inv.id);
     expect(dto.classificationSummary.mode).toBe("unique");
     expect(dto.classificationSummary.entries).toHaveLength(1);
     expect(dto.classificationSummary.entries[0]!.code).toBe("OPD.01");
@@ -192,12 +195,12 @@ describe("GetInvoiceUseCase", () => {
 
   it("classificationSummary mode=mixed quando linhas têm categorias diferentes", async () => {
     const inv = makeDetailedInvoice({ subtotalWithoutVat: 20000, totalVat: 4600, totalWithVat: 24600 });
-    await invoiceRepo.save(inv);
-    await lineRepo.saveAll([
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [
       makeLine(inv.id, 15000, 2300, CAT_A.id),
       makeLine(inv.id, 9600, 2300, CAT_B.id),
     ]);
-    const dto = await useCase.execute(inv.id);
+    const dto = await useCase.execute(ORG_ID, inv.id);
     expect(dto.classificationSummary.mode).toBe("mixed");
     expect(dto.classificationSummary.entries).toHaveLength(2);
   });
@@ -212,8 +215,8 @@ describe("GetInvoiceUseCase", () => {
       totalWithVat: 12300,
       costCenterCategoryId: CAT_A.id,
     });
-    await invoiceRepo.save(inv);
-    const dto = await useCase.execute(inv.id);
+    await invoiceRepo.save(ORG_ID, inv);
+    const dto = await useCase.execute(ORG_ID, inv.id);
     expect(dto.classificationSummary.mode).toBe("unique");
     expect(dto.classificationSummary.entries[0]!.costCenterCategoryId).toBe(CAT_A.id);
     expect(dto.classificationSummary.entries[0]!.totalWithVat).toBe(12300);
@@ -228,8 +231,8 @@ describe("GetInvoiceUseCase", () => {
       totalVat: 2300,
       totalWithVat: 12300,
     });
-    await invoiceRepo.save(inv);
-    const dto = await useCase.execute(inv.id);
+    await invoiceRepo.save(ORG_ID, inv);
+    const dto = await useCase.execute(ORG_ID, inv.id);
     expect(dto.classificationSummary.mode).toBe("none");
   });
 });

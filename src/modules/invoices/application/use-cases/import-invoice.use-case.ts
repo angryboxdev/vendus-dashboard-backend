@@ -42,20 +42,20 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     let supplierMatchMethod: "nif" | "hint" | "fuzzy" | null = null;
 
     if (extraction.supplierNif) {
-      supplierMatch = await this.supplierLookup.findByNif(normalizeNif(extraction.supplierNif));
+      supplierMatch = await this.supplierLookup.findByNif(command.organizationId, normalizeNif(extraction.supplierNif));
       if (supplierMatch) supplierMatchMethod = "nif";
     }
 
     if (!supplierMatch && extraction.supplierName) {
       const normalizedName = normalizeSupplierName(extraction.supplierName);
       if (normalizedName) {
-        supplierMatch = await this.supplierHint.findByNormalizedName(normalizedName);
+        supplierMatch = await this.supplierHint.findByNormalizedName(command.organizationId, normalizedName);
         if (supplierMatch) supplierMatchMethod = "hint";
       }
     }
 
     if (!supplierMatch && extraction.supplierName) {
-      const allSuppliers = await this.supplierLookup.findAll();
+      const allSuppliers = await this.supplierLookup.findAll(command.organizationId);
       let bestScore = 0;
       let bestSupplier: SupplierSummary | null = null;
       for (const s of allSuppliers) {
@@ -76,7 +76,11 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
 
     // Duplicate check by NIF + invoice number — warn only, don't block (user can correct in review)
     if (extraction.supplierNif && extraction.invoiceNumber) {
-      const duplicate = await this.invoiceRepo.findDuplicateByNif(extraction.invoiceNumber, extraction.supplierNif);
+      const duplicate = await this.invoiceRepo.findDuplicateByNif(
+        command.organizationId,
+        extraction.invoiceNumber,
+        extraction.supplierNif,
+      );
       if (duplicate) validationIssues.push("duplicate_invoice");
     }
 
@@ -134,7 +138,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       currency: extraction.currency ?? "EUR",
     });
 
-    await this.invoiceRepo.save(finalInvoice);
+    await this.invoiceRepo.save(command.organizationId, finalInvoice);
 
     return {
       invoice: toInvoiceDTO(finalInvoice),

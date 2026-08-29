@@ -2,6 +2,7 @@ import type { DeleteInvoiceLinePort } from "../../domain/ports/in/invoice.ports.
 import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
 import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
 import { InvoiceNotFoundError, InvoiceLineNotFoundError, LineDetailModeError } from "../../domain/errors.js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 
 export class DeleteInvoiceLineUseCase implements DeleteInvoiceLinePort {
   constructor(
@@ -9,18 +10,18 @@ export class DeleteInvoiceLineUseCase implements DeleteInvoiceLinePort {
     private readonly lineRepo: InvoiceLineRepositoryPort,
   ) {}
 
-  async execute(invoiceId: string, lineId: string): Promise<void> {
-    const invoice = await this.invoiceRepo.findById(invoiceId);
+  async execute(organizationId: OrganizationId, invoiceId: string, lineId: string): Promise<void> {
+    const invoice = await this.invoiceRepo.findById(organizationId, invoiceId);
     if (!invoice) throw new InvoiceNotFoundError(invoiceId);
 
     if (invoice.lineDetailMode === "simple") {
       throw new LineDetailModeError(invoiceId);
     }
 
-    const lines = await this.lineRepo.findByInvoiceId(invoiceId);
+    const lines = await this.lineRepo.findByInvoiceId(organizationId, invoiceId);
     const line = lines.find((l) => l.id === lineId);
     if (!line) throw new InvoiceLineNotFoundError(lineId);
 
-    await this.lineRepo.deleteLineById(lineId);
+    await this.lineRepo.deleteLineById(organizationId, lineId);
   }
 }

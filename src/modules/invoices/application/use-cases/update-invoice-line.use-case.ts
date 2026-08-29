@@ -13,14 +13,14 @@ export class UpdateInvoiceLineUseCase implements UpdateInvoiceLinePort {
   ) {}
 
   async execute(command: UpdateInvoiceLineCommand): Promise<InvoiceLineDTO> {
-    const invoice = await this.invoiceRepo.findById(command.invoiceId);
+    const invoice = await this.invoiceRepo.findById(command.organizationId, command.invoiceId);
     if (!invoice) throw new InvoiceNotFoundError(command.invoiceId);
 
     if (invoice.lineDetailMode === "simple") {
       throw new LineDetailModeError(command.invoiceId);
     }
 
-    const existingLines = await this.lineRepo.findByInvoiceId(command.invoiceId);
+    const existingLines = await this.lineRepo.findByInvoiceId(command.organizationId, command.invoiceId);
     const line = existingLines.find((l) => l.id === command.lineId);
     if (!line) throw new InvoiceLineNotFoundError(command.lineId);
 
@@ -32,6 +32,7 @@ export class UpdateInvoiceLineUseCase implements UpdateInvoiceLinePort {
     if (command.vatRate !== undefined) patch.vatRate = command.vatRate;
     if (command.vatAmount !== undefined) patch.vatAmount = command.vatAmount;
     if (command.totalWithVat !== undefined) patch.totalWithVat = command.totalWithVat;
+    if (command.locationId !== undefined) patch.locationId = command.locationId;
     const updatedLine = line.updateValues(patch);
 
     // Validate: sum of all lines (with updated line) must not exceed invoice total.
@@ -44,7 +45,7 @@ export class UpdateInvoiceLineUseCase implements UpdateInvoiceLinePort {
       throw new LinesTotalMismatchError(command.invoiceId);
     }
 
-    await this.lineRepo.updateLine(updatedLine);
+    await this.lineRepo.updateLine(command.organizationId, updatedLine);
     return toInvoiceLineDTO(updatedLine);
   }
 }

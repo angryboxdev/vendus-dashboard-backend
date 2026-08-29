@@ -1,10 +1,15 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { ClassificationRule } from "../../entities/classification-rule.js";
 
 export interface ClassificationRuleRepositoryPort {
-  findBySupplierId(supplierId: string): Promise<ClassificationRule | null>;
+  findBySupplierId(organizationId: OrganizationId, supplierId: string): Promise<ClassificationRule | null>;
   /** Devolve a regra mais específica para (supplier + descrição da linha).
    * Prioridade: 1º padrão que contenha a descrição (mais longo primeiro), 2º regra genérica (sem padrão). */
-  findBySupplierIdAndDescription(supplierId: string, description?: string): Promise<ClassificationRule | null>;
-  save(rule: ClassificationRule): Promise<void>;
-  update(rule: ClassificationRule): Promise<void>;
+  findBySupplierIdAndDescription(
+    organizationId: OrganizationId,
+    supplierId: string,
+    description?: string,
+  ): Promise<ClassificationRule | null>;
+  save(organizationId: OrganizationId, rule: ClassificationRule): Promise<void>;
+  update(organizationId: OrganizationId, rule: ClassificationRule): Promise<void>;
 }

@@ -2,6 +2,7 @@ import { ENV } from "../config/env.js";
 import { Router, type Request, type Response } from "express";
 import { runDailyVendusConsumptionJob } from "../services/dailyVendusConsumptionJobService.js";
 import type { ProcessDirectDebitsPort } from "../modules/invoices/domain/ports/in/invoice.ports.js";
+import { UNATTENDED_SCOPE } from "../infra/scoped-db/unattended-scope.js";
 
 function requireCronSecret(req: Request, res: Response): boolean {
   if (!ENV.CRON_SECRET) {
@@ -61,7 +62,7 @@ export function createInternalCronRouter(deps: {
     async (req: Request, res: Response) => {
       if (!requireCronSecret(req, res)) return;
       try {
-        const result = await deps.processDirectDebits.execute();
+        const result = await deps.processDirectDebits.execute(UNATTENDED_SCOPE.organizationId);
         res.json(result);
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : "Erro no job";

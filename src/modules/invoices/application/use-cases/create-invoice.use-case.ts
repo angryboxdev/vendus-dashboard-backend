@@ -40,7 +40,7 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
 
     // Duplicate check — only when supplier is known
     if (invoice.supplierId) {
-      const existing = await this.invoiceRepo.findDuplicate(invoice.invoiceNumber, invoice.supplierId);
+      const existing = await this.invoiceRepo.findDuplicate(command.organizationId, invoice.invoiceNumber, invoice.supplierId);
       if (existing) throw new DuplicateInvoiceError(invoice.invoiceNumber, invoice.supplierName);
     }
 
@@ -58,17 +58,18 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
       if (lc.costCenterCategoryId !== undefined) lineProps.costCenterCategoryId = lc.costCenterCategoryId;
       if (lc.stockItemId !== undefined) lineProps.stockItemId = lc.stockItemId;
       if (lc.unit !== undefined) lineProps.unit = lc.unit;
+      if (lc.locationId !== undefined) lineProps.locationId = lc.locationId;
       return InvoiceLine.create(lineProps);
     });
 
-    await this.invoiceRepo.save(invoice);
+    await this.invoiceRepo.save(command.organizationId, invoice);
     if (lines.length > 0) {
-      await this.lineRepo.saveAll(lines);
+      await this.lineRepo.saveAll(command.organizationId, lines);
     }
 
     // Auto-criar conta a pagar quando a fatura tem data de vencimento
     if (invoice.dueDate) {
-      await this.payableWrite.createForInvoice({
+      await this.payableWrite.createForInvoice(command.organizationId, {
         invoiceId: invoice.id,
         supplierId: invoice.supplierId,
         supplierName: invoice.supplierName,
