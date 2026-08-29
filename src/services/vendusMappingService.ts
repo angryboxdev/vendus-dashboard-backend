@@ -1,4 +1,5 @@
-import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import type { PizzaSize } from "../domain/pizzaTypes.js";
 
 /** Erro do Supabase ao ler mapeamento (rede/URL); não é a API Vendus. */
@@ -25,31 +26,21 @@ export type VendusMappingRow = {
 
 export type PizzaMappingEntry = { pizza_id: string; pizza_size: PizzaSize };
 
-function requireSupabase(): NonNullable<ReturnType<typeof getSupabase>> {
-  if (!isSupabaseConfigured()) {
-    throw new Error("Supabase não configurado: defina SUPABASE_URL e SUPABASE_ANON_KEY");
-  }
-  const supabase = getSupabase();
-  if (!supabase) throw new Error("Supabase não disponível");
-  return supabase;
-}
-
 /** Obtém um mapeamento por match_by + match_value */
 export async function getVendusMapping(
+  organizationId: OrganizationId,
   matchBy: "reference" | "title",
   matchValue: string
 ): Promise<VendusMappingRow | null> {
-  if (!isSupabaseConfigured()) return null;
-  const supabase = requireSupabase();
-  const { data, error } = await supabase
-    .from("vendus_product_mapping")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("vendus_product_mapping")
     .select("target_type, pizza_id, pizza_size, stock_item_id")
     .eq("match_by", matchBy)
     .eq("match_value", matchValue)
     .maybeSingle();
   if (error) throw new Error(formatMappingSupabaseError(error));
   if (!data) return null;
-  const row = data as {
+  const row = data as unknown as {
     target_type: string;
     pizza_id: string | null;
     pizza_size: string | null;
@@ -64,20 +55,18 @@ export async function getVendusMapping(
 }
 
 /** Map key: "reference:VAL" ou "title:VAL". Value: pizza_id + pizza_size (só entradas tipo pizza). */
-export async function getPizzaMappingsMap(): Promise<
-  Map<string, PizzaMappingEntry>
-> {
+export async function getPizzaMappingsMap(
+  organizationId: OrganizationId
+): Promise<Map<string, PizzaMappingEntry>> {
   const map = new Map<string, PizzaMappingEntry>();
-  if (!isSupabaseConfigured()) return map;
-  const supabase = requireSupabase();
-  const { data, error } = await supabase
-    .from("vendus_product_mapping")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("vendus_product_mapping")
     .select("match_by, match_value, pizza_id, pizza_size")
     .eq("target_type", "pizza")
     .not("pizza_id", "is", null)
     .not("pizza_size", "is", null);
   if (error) throw new Error(formatMappingSupabaseError(error));
-  const rows = (data ?? []) as Array<{
+  const rows = (data ?? []) as unknown as Array<{
     match_by: string;
     match_value: string;
     pizza_id: string;
@@ -98,17 +87,15 @@ export type ConsumptionMappingEntry =
   | { type: "stock"; stock_item_id: string };
 
 /** Map key: "reference:VAL" ou "title:VAL". Inclui pizza e stock (para consumo completo). */
-export async function getAllConsumptionMappingsMap(): Promise<
-  Map<string, ConsumptionMappingEntry>
-> {
+export async function getAllConsumptionMappingsMap(
+  organizationId: OrganizationId
+): Promise<Map<string, ConsumptionMappingEntry>> {
   const map = new Map<string, ConsumptionMappingEntry>();
-  if (!isSupabaseConfigured()) return map;
-  const supabase = requireSupabase();
-  const { data, error } = await supabase
-    .from("vendus_product_mapping")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("vendus_product_mapping")
     .select("match_by, match_value, target_type, pizza_id, pizza_size, stock_item_id");
   if (error) throw new Error(formatMappingSupabaseError(error));
-  const rows = (data ?? []) as Array<{
+  const rows = (data ?? []) as unknown as Array<{
     match_by: string;
     match_value: string;
     target_type: string;

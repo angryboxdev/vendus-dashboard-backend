@@ -59,7 +59,7 @@ pizzaRoutes.get("/pizzas", async (req, res) => {
     const filters: { category?: PizzaCategory; is_active?: boolean } = {};
     if (q.category && validatePizzaCategory(q.category)) filters.category = q.category;
     if (q.is_active !== undefined) filters.is_active = q.is_active === "true";
-    const list = await listPizzas(Object.keys(filters).length ? filters : undefined);
+    const list = await listPizzas(req.auth!.orgId, Object.keys(filters).length ? filters : undefined);
     res.json(list);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao listar pizzas";
@@ -74,7 +74,7 @@ pizzaRoutes.get("/pizzas/:id", async (req, res) => {
       res.status(400).json({ error: "id obrigatório" });
       return;
     }
-    const pizza = await getPizza(id);
+    const pizza = await getPizza(req.auth!.orgId, id);
     if (!pizza) {
       res.status(404).json({ error: "Pizza não encontrada" });
       return;
@@ -97,7 +97,7 @@ pizzaRoutes.post("/pizzas", async (req, res) => {
       res.status(400).json({ error: "category inválida (classics, specials, sweeties)" });
       return;
     }
-    const pizza = await createPizza(body);
+    const pizza = await createPizza(req.auth!.orgId, body);
     res.status(201).json(pizza);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao criar pizza";
@@ -117,7 +117,7 @@ pizzaRoutes.put("/pizzas/:id", async (req, res) => {
       res.status(400).json({ error: "category inválida" });
       return;
     }
-    const pizza = await updatePizza(id, body);
+    const pizza = await updatePizza(req.auth!.orgId, id, body);
     res.json(pizza);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao atualizar pizza";
@@ -132,7 +132,7 @@ pizzaRoutes.delete("/pizzas/:id", async (req, res) => {
       res.status(400).json({ error: "id obrigatório" });
       return;
     }
-    await deletePizza(id);
+    await deletePizza(req.auth!.orgId, id);
     res.status(204).send();
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao eliminar pizza";
@@ -148,7 +148,7 @@ pizzaRoutes.get("/pizzas/:pizzaId/prices", async (req, res) => {
       res.status(400).json({ error: "pizzaId obrigatório" });
       return;
     }
-    const list = await listPizzaPrices(pizzaId);
+    const list = await listPizzaPrices(req.auth!.orgId, pizzaId);
     res.json(list);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao listar preços";
@@ -173,7 +173,7 @@ pizzaRoutes.post("/pizzas/:pizzaId/prices", async (req, res) => {
       res.status(400).json({ error: "price inválido" });
       return;
     }
-    const created = await createPizzaPrice({ pizza_id: pizzaId, size: body.size, price });
+    const created = await createPizzaPrice(req.auth!.orgId, { pizza_id: pizzaId, size: body.size, price });
     res.status(201).json(created);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao criar preço";
@@ -189,7 +189,7 @@ pizzaRoutes.put("/pizzas/:pizzaId/prices/:priceId", async (req, res) => {
       return;
     }
     const body = req.body as PizzaPriceUpdateBody;
-    const updated = await updatePizzaPrice(priceId, body);
+    const updated = await updatePizzaPrice(req.auth!.orgId, priceId, body);
     res.json(updated);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao atualizar preço";
@@ -204,7 +204,7 @@ pizzaRoutes.delete("/pizzas/:pizzaId/prices/:priceId", async (req, res) => {
       res.status(400).json({ error: "priceId obrigatório" });
       return;
     }
-    await deletePizzaPrice(priceId);
+    await deletePizzaPrice(req.auth!.orgId, priceId);
     res.status(204).send();
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao eliminar preço";
@@ -220,7 +220,7 @@ pizzaRoutes.get("/pizzas/:pizzaId/recipes", async (req, res) => {
       res.status(400).json({ error: "pizzaId obrigatório" });
       return;
     }
-    const list = await listPizzaRecipes(pizzaId);
+    const list = await listPizzaRecipes(req.auth!.orgId, pizzaId);
     res.json(list);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao listar receitas";
@@ -236,7 +236,7 @@ pizzaRoutes.post("/pizzas/:pizzaId/recipes", async (req, res) => {
       return;
     }
     const body = req.body as Omit<PizzaRecipeCreateBody, "pizza_id">;
-    const created = await createPizzaRecipe({ pizza_id: pizzaId, ...body });
+    const created = await createPizzaRecipe(req.auth!.orgId, { pizza_id: pizzaId, ...body });
     res.status(201).json(created);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao criar receita";
@@ -251,7 +251,7 @@ pizzaRoutes.get("/pizzas/:pizzaId/recipes/:recipeId", async (req, res) => {
       res.status(400).json({ error: "recipeId obrigatório" });
       return;
     }
-    const recipe = await getPizzaRecipe(recipeId);
+    const recipe = await getPizzaRecipe(req.auth!.orgId, recipeId);
     if (!recipe) {
       res.status(404).json({ error: "Receita não encontrada" });
       return;
@@ -271,7 +271,7 @@ pizzaRoutes.put("/pizzas/:pizzaId/recipes/:recipeId", async (req, res) => {
       return;
     }
     const body = req.body as PizzaRecipeUpdateBody;
-    const updated = await updatePizzaRecipe(recipeId, body);
+    const updated = await updatePizzaRecipe(req.auth!.orgId, recipeId, body);
     res.json(updated);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao atualizar receita";
@@ -287,7 +287,7 @@ pizzaRoutes.post("/pizzas/:pizzaId/recipes/:recipeId/activate", async (req, res)
       res.status(400).json({ error: "pizzaId e recipeId obrigatórios" });
       return;
     }
-    const recipe = await setActivePizzaRecipe(pizzaId, recipeId);
+    const recipe = await setActivePizzaRecipe(req.auth!.orgId, pizzaId, recipeId);
     res.json(recipe);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao ativar receita";
@@ -302,7 +302,7 @@ pizzaRoutes.delete("/pizzas/:pizzaId/recipes/:recipeId", async (req, res) => {
       res.status(400).json({ error: "recipeId obrigatório" });
       return;
     }
-    await deletePizzaRecipe(recipeId);
+    await deletePizzaRecipe(req.auth!.orgId, recipeId);
     res.status(204).send();
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao eliminar receita";
@@ -318,7 +318,7 @@ pizzaRoutes.get("/pizzas/:pizzaId/recipes/:recipeId/items", async (req, res) => 
       res.status(400).json({ error: "recipeId obrigatório" });
       return;
     }
-    const list = await listPizzaRecipeItems(recipeId);
+    const list = await listPizzaRecipeItems(req.auth!.orgId, recipeId);
     res.json(list);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao listar itens da receita";
@@ -349,7 +349,7 @@ pizzaRoutes.post("/pizzas/:pizzaId/recipes/:recipeId/items", async (req, res) =>
       res.status(400).json({ error: "quantity deve ser positivo" });
       return;
     }
-    const created = await createPizzaRecipeItem({ recipe_id: recipeId, ...body });
+    const created = await createPizzaRecipeItem(req.auth!.orgId, { recipe_id: recipeId, ...body });
     res.status(201).json(created);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao criar item da receita";
@@ -365,7 +365,7 @@ pizzaRoutes.put("/pizzas/:pizzaId/recipes/:recipeId/items/:itemId", async (req, 
       return;
     }
     const body = req.body as PizzaRecipeItemUpdateBody;
-    const updated = await updatePizzaRecipeItem(itemId, body);
+    const updated = await updatePizzaRecipeItem(req.auth!.orgId, itemId, body);
     res.json(updated);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao atualizar item da receita";
@@ -380,7 +380,7 @@ pizzaRoutes.delete("/pizzas/:pizzaId/recipes/:recipeId/items/:itemId", async (re
       res.status(400).json({ error: "itemId obrigatório" });
       return;
     }
-    await deletePizzaRecipeItem(itemId);
+    await deletePizzaRecipeItem(req.auth!.orgId, itemId);
     res.status(204).send();
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao eliminar item da receita";

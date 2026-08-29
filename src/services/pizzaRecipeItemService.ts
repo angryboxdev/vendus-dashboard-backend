@@ -1,4 +1,5 @@
-import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import type {
   PizzaRecipeItem,
   PizzaRecipeItemCreateBody,
@@ -34,44 +35,39 @@ function rowToItem(row: Row): PizzaRecipeItem {
   return r;
 }
 
-function requireSupabase(): NonNullable<ReturnType<typeof getSupabase>> {
-  if (!isSupabaseConfigured()) {
-    throw new Error("Supabase não configurado: defina SUPABASE_URL e SUPABASE_ANON_KEY");
-  }
-  const supabase = getSupabase();
-  if (!supabase) throw new Error("Supabase não disponível");
-  return supabase;
-}
-
 const SELECT_COLS = "id, recipe_id, stock_item_id, preparation_id, size, quantity, waste_factor, is_optional, created_at";
 
-export async function listPizzaRecipeItems(recipeId: string): Promise<PizzaRecipeItem[]> {
-  if (!isSupabaseConfigured()) return [];
-  const supabase = getSupabase();
-  if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("pizza_recipe_items")
+export async function listPizzaRecipeItems(
+  organizationId: OrganizationId,
+  recipeId: string
+): Promise<PizzaRecipeItem[]> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("pizza_recipe_items")
     .select(SELECT_COLS)
     .eq("recipe_id", recipeId)
     .order("size", { ascending: true })
     .order("created_at", { ascending: true });
   if (error) throw new Error(`Pizza recipe items: ${error.message}`);
-  return ((data ?? []) as Row[]).map(rowToItem);
+  return ((data ?? []) as unknown as Row[]).map(rowToItem);
 }
 
-export async function getPizzaRecipeItem(id: string): Promise<PizzaRecipeItem | null> {
-  const supabase = requireSupabase();
-  const { data, error } = await supabase
-    .from("pizza_recipe_items")
+export async function getPizzaRecipeItem(
+  organizationId: OrganizationId,
+  id: string
+): Promise<PizzaRecipeItem | null> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("pizza_recipe_items")
     .select(SELECT_COLS)
     .eq("id", id)
     .single();
   if (error || !data) return null;
-  return rowToItem(data as Row);
+  return rowToItem(data as unknown as Row);
 }
 
-export async function createPizzaRecipeItem(body: PizzaRecipeItemCreateBody): Promise<PizzaRecipeItem> {
-  const supabase = requireSupabase();
+export async function createPizzaRecipeItem(
+  organizationId: OrganizationId,
+  body: PizzaRecipeItemCreateBody
+): Promise<PizzaRecipeItem> {
   if (!body.recipe_id) throw new Error("recipe_id é obrigatório");
   if (!validatePizzaSize(body.size)) throw new Error(`size inválido: ${body.size}`);
   const quantity = Number(body.quantity);
@@ -93,17 +89,20 @@ export async function createPizzaRecipeItem(body: PizzaRecipeItemCreateBody): Pr
     preparation_id: body.preparation_id ?? null,
   };
 
-  const { data, error } = await supabase
-    .from("pizza_recipe_items")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("pizza_recipe_items")
     .insert(payload)
     .select(SELECT_COLS)
     .single();
   if (error) throw new Error(`Criar item receita: ${error.message}`);
-  return rowToItem(data as Row);
+  return rowToItem(data as unknown as Row);
 }
 
-export async function updatePizzaRecipeItem(id: string, body: PizzaRecipeItemUpdateBody): Promise<PizzaRecipeItem> {
-  const supabase = requireSupabase();
+export async function updatePizzaRecipeItem(
+  organizationId: OrganizationId,
+  id: string,
+  body: PizzaRecipeItemUpdateBody
+): Promise<PizzaRecipeItem> {
   const updates: Record<string, unknown> = {};
   if (body.quantity !== undefined) {
     const quantity = Number(body.quantity);
@@ -113,23 +112,22 @@ export async function updatePizzaRecipeItem(id: string, body: PizzaRecipeItemUpd
   if (body.waste_factor !== undefined) updates.waste_factor = body.waste_factor != null ? Number(body.waste_factor) : null;
   if (body.is_optional !== undefined) updates.is_optional = body.is_optional;
   if (Object.keys(updates).length === 0) {
-    const existing = await getPizzaRecipeItem(id);
+    const existing = await getPizzaRecipeItem(organizationId, id);
     if (!existing) throw new Error("Item não encontrado");
     return existing;
   }
-  const { data, error } = await supabase
-    .from("pizza_recipe_items")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("pizza_recipe_items")
     .update(updates)
     .eq("id", id)
     .select(SELECT_COLS)
     .single();
   if (error) throw new Error(`Atualizar item receita: ${error.message}`);
   if (!data) throw new Error("Item não encontrado");
-  return rowToItem(data as Row);
+  return rowToItem(data as unknown as Row);
 }
 
-export async function deletePizzaRecipeItem(id: string): Promise<void> {
-  const supabase = requireSupabase();
-  const { error } = await supabase.from("pizza_recipe_items").delete().eq("id", id);
+export async function deletePizzaRecipeItem(organizationId: OrganizationId, id: string): Promise<void> {
+  const { error } = await createScopedQuery(organizationId).table("pizza_recipe_items").delete().eq("id", id);
   if (error) throw new Error(`Eliminar item receita: ${error.message}`);
 }
