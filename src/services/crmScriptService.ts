@@ -1,11 +1,6 @@
-import { getSupabaseServiceRole } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import type { CrmScript, CrmScriptVariant } from "../domain/crmTypes.js";
-
-function getDb() {
-  const db = getSupabaseServiceRole();
-  if (!db) throw new Error("Supabase não configurado");
-  return db;
-}
 
 type Row = {
   code: string;
@@ -43,36 +38,37 @@ const SELECT =
   "code, name, segment, body, variants, channel, trigger_timing, one_shot, cooldown_days, active";
 
 /** Lista todos os scripts (activos por defeito) */
-export async function listScripts(includeInactive = false): Promise<CrmScript[]> {
-  const db = getDb();
-  let q = db.from("crm_scripts").select(SELECT).order("code");
+export async function listScripts(
+  organizationId: OrganizationId,
+  includeInactive = false
+): Promise<CrmScript[]> {
+  let q = createScopedQuery(organizationId).table("crm_scripts").select(SELECT).order("code");
   if (!includeInactive) q = q.eq("active", true);
 
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  return ((data as Row[]) ?? []).map(rowToScript);
+  return ((data as unknown as Row[]) ?? []).map(rowToScript);
 }
 
 /** Detalhe de um script por código */
-export async function getScript(code: string): Promise<CrmScript | null> {
-  const db = getDb();
-  const { data, error } = await db
-    .from("crm_scripts")
+export async function getScript(organizationId: OrganizationId, code: string): Promise<CrmScript | null> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("crm_scripts")
     .select(SELECT)
     .eq("code", code)
     .maybeSingle();
 
   if (error) throw new Error(error.message);
   if (!data) return null;
-  return rowToScript(data as Row);
+  return rowToScript(data as unknown as Row);
 }
 
 /** Actualiza o texto ou configuração de um script */
 export async function updateScript(
+  organizationId: OrganizationId,
   code: string,
   patch: Partial<Pick<CrmScript, "body" | "name" | "active" | "channel" | "triggerTiming" | "oneShot" | "cooldownDays" | "variants">>
 ): Promise<CrmScript | null> {
-  const db = getDb();
   const dbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
   if (patch.body            !== undefined) dbPatch.body           = patch.body;
@@ -84,15 +80,15 @@ export async function updateScript(
   if (patch.cooldownDays    !== undefined) dbPatch.cooldown_days  = patch.cooldownDays;
   if (patch.variants        !== undefined) dbPatch.variants       = patch.variants;
 
-  const { data, error } = await db
-    .from("crm_scripts")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("crm_scripts")
     .update(dbPatch)
     .eq("code", code)
     .select(SELECT)
     .single();
 
   if (error) throw new Error(error.message);
-  return rowToScript(data as Row);
+  return rowToScript(data as unknown as Row);
 }
 
 /**

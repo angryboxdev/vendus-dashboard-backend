@@ -1,14 +1,9 @@
-import { getSupabaseServiceRole } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import type { CrmParameter, CrmParams } from "../domain/crmTypes.js";
 
-// Cache simples em memória — expira após 60 segundos
-let cache: { params: CrmParams; expiresAt: number } | null = null;
-
-function getDb() {
-  const db = getSupabaseServiceRole();
-  if (!db) throw new Error("Supabase não configurado");
-  return db;
-}
+// Cache simples em memória por organização — expira após 60 segundos
+const cache = new Map<OrganizationId, { params: CrmParams; expiresAt: number }>();
 
 /** Converte array de CrmParameter para CrmParams tipado */
 function rowsToParams(rows: CrmParameter[]): CrmParams {
@@ -50,45 +45,47 @@ function rowsToParams(rows: CrmParameter[]): CrmParams {
 }
 
 /** Carrega parâmetros da BD (com cache de 60s) */
-export async function loadParams(): Promise<CrmParams> {
+export async function loadParams(organizationId: OrganizationId): Promise<CrmParams> {
   const now = Date.now();
-  if (cache && cache.expiresAt > now) return cache.params;
+  const cached = cache.get(organizationId);
+  if (cached && cached.expiresAt > now) return cached.params;
 
-  const db = getDb();
-  const { data, error } = await db
-    .from("crm_parameters")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("crm_parameters")
     .select("key, value, description, category");
 
   if (error) throw new Error(`Erro ao carregar parâmetros CRM: ${error.message}`);
 
-  const params = rowsToParams((data as CrmParameter[]) ?? []);
-  cache = { params, expiresAt: now + 60_000 };
+  const params = rowsToParams((data as unknown as CrmParameter[]) ?? []);
+  cache.set(organizationId, { params, expiresAt: now + 60_000 });
   return params;
 }
 
 /** Invalida o cache (usar após atualizar parâmetros) */
 export function invalidateParamsCache() {
-  cache = null;
+  cache.clear();
 }
 
 /** Lista todos os parâmetros da BD */
-export async function listParameters(): Promise<CrmParameter[]> {
-  const db = getDb();
-  const { data, error } = await db
-    .from("crm_parameters")
+export async function listParameters(organizationId: OrganizationId): Promise<CrmParameter[]> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("crm_parameters")
     .select("key, value, description, category")
     .order("category")
     .order("key");
 
   if (error) throw new Error(error.message);
-  return (data as CrmParameter[]) ?? [];
+  return (data as unknown as CrmParameter[]) ?? [];
 }
 
 /** Atualiza o valor de um parâmetro */
-export async function updateParameter(key: string, value: string): Promise<CrmParameter> {
-  const db = getDb();
-  const { data, error } = await db
-    .from("crm_parameters")
+export async function updateParameter(
+  organizationId: OrganizationId,
+  key: string,
+  value: string
+): Promise<CrmParameter> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("crm_parameters")
     .update({ value, updated_at: new Date().toISOString() })
     .eq("key", key)
     .select("key, value, description, category")
@@ -96,5 +93,5 @@ export async function updateParameter(key: string, value: string): Promise<CrmPa
 
   if (error) throw new Error(error.message);
   invalidateParamsCache();
-  return data as CrmParameter;
+  return data as unknown as CrmParameter;
 }
