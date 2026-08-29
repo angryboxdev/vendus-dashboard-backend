@@ -10,21 +10,14 @@ import {
   SUPPLIER_INVOICE_IMPORT_CREATED_BY,
 } from "../domain/supplierInvoiceImportTypes.js";
 import { ENV } from "../config/env.js";
-import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import { objectStorage } from "../infra/scoped-db/object-storage.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import { extractInvoiceWithOpenAI } from "./openaiInvoiceExtractService.js";
 import { lisbonDayEndUtcIso } from "../utils/lisbonDayInstants.js";
 import { updateStockItem } from "./stockItemService.js";
 
 const BUCKET = "invoice-imports";
-
-function requireSupabase(): NonNullable<ReturnType<typeof getSupabase>> {
-  if (!isSupabaseConfigured()) {
-    throw new Error("Supabase não configurado");
-  }
-  const s = getSupabase();
-  if (!s) throw new Error("Supabase indisponível");
-  return s;
-}
 
 function sha256Hex(buf: Buffer): string {
   return createHash("sha256").update(buf).digest("hex");
@@ -110,37 +103,37 @@ function mapImportRow(
 }
 
 async function findExactStockMatch(
-  supabase: ReturnType<typeof getSupabase>,
+  organizationId: OrganizationId,
   description: string
 ): Promise<{ id: string } | null> {
   const d = description.trim();
   if (!d) return null;
-  const { data, error } = await supabase!
-    .from("stock_items")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("stock_items")
     .select("id, name")
     .eq("is_active", true)
     .limit(2000);
   if (error || !data?.length) return null;
   const lower = d.toLowerCase();
-  for (const row of data as Array<{ id: string; name: string }>) {
+  for (const row of data as unknown as Array<{ id: string; name: string }>) {
     if (row.name.trim().toLowerCase() === lower) return { id: row.id };
   }
   return null;
 }
 
 async function findMappedStockItem(
-  supabase: NonNullable<ReturnType<typeof getSupabase>>,
+  organizationId: OrganizationId,
   supplierNormalized: string,
   descriptionNormalized: string
 ): Promise<{ id: string; stock_quantity: number | null; stock_unit: string | null } | null> {
-  const { data, error } = await supabase
-    .from("supplier_article_mappings")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("supplier_article_mappings")
     .select("stock_item_id, stock_quantity, stock_unit")
     .eq("supplier_normalized", supplierNormalized)
     .contains("supplier_article_description_normalized", [descriptionNormalized])
     .maybeSingle();
   if (error || !data) return null;
-  const row = data as { stock_item_id: string; stock_quantity: number | null; stock_unit: string | null };
+  const row = data as unknown as { stock_item_id: string; stock_quantity: number | null; stock_unit: string | null };
   return {
     id: row.stock_item_id,
     stock_quantity: row.stock_quantity != null ? Number(row.stock_quantity) : null,
@@ -149,7 +142,7 @@ async function findMappedStockItem(
 }
 
 async function upsertSupplierArticleMappings(
-  supabase: NonNullable<ReturnType<typeof getSupabase>>,
+  organizationId: OrganizationId,
   supplierNormalized: string,
   lines: Array<{
     supplier_article_code: string | null;
@@ -171,8 +164,8 @@ async function upsertSupplierArticleMappings(
   for (const l of eligible) {
     const descNorm = normalizeKeyPart(l.description);
 
-    const { data: existing } = await supabase
-      .from("supplier_article_mappings")
+    const { data: existing } = await createScopedQuery(organizationId)
+      .table("supplier_article_mappings")
       .select("id, supplier_article_description_normalized")
       .eq("supplier_normalized", supplierNormalized)
       .eq("stock_item_id", l.stock_item_id!)
@@ -188,11 +181,11 @@ async function upsertSupplierArticleMappings(
     };
 
     if (existing) {
-      const row = existing as { id: string; supplier_article_description_normalized: string[] };
+      const row = existing as unknown as { id: string; supplier_article_description_normalized: string[] };
       const descs: string[] = row.supplier_article_description_normalized ?? [];
       const updatedDescs = descs.includes(descNorm) ? descs : [...descs, descNorm];
-      await supabase
-        .from("supplier_article_mappings")
+      await createScopedQuery(organizationId)
+        .table("supplier_article_mappings")
         .update({
           ...mappingData,
           supplier_article_description_normalized: updatedDescs,
@@ -200,8 +193,8 @@ async function upsertSupplierArticleMappings(
         })
         .eq("id", row.id);
     } else {
-      await supabase
-        .from("supplier_article_mappings")
+      await createScopedQuery(organizationId)
+        .table("supplier_article_mappings")
         .insert({
           ...mappingData,
           supplier_normalized: supplierNormalized,
@@ -214,29 +207,23 @@ async function upsertSupplierArticleMappings(
 /**
  * Upload + parse OpenAI + linhas em BD.
  */
-export async function createSupplierInvoiceImport(options: {
-  buffer: Buffer;
-  fileName: string;
-  mime: string;
-}): Promise<SupplierInvoiceImportSummaryDto> {
-  const supabase = requireSupabase();
+export async function createSupplierInvoiceImport(
+  organizationId: OrganizationId,
+  options: {
+    buffer: Buffer;
+    fileName: string;
+    mime: string;
+  }
+): Promise<SupplierInvoiceImportSummaryDto> {
   const { buffer, fileName, mime } = options;
   const id = randomUUID();
   const hash = sha256Hex(buffer);
   const safeName = sanitizeFileName(fileName || "invoice");
   const storagePath = `${id}/${safeName}`;
 
-  const { error: upErr } = await supabase.storage
-    .from(BUCKET)
-    .upload(storagePath, buffer, {
-      contentType: mime,
-      upsert: false,
-    });
-  if (upErr) {
-    throw new Error(`Upload Storage: ${upErr.message}`);
-  }
+  await objectStorage.upload(BUCKET, storagePath, buffer, mime);
 
-  const { error: insErr } = await supabase.from("supplier_invoice_imports").insert({
+  const { error: insErr } = await createScopedQuery(organizationId).table("supplier_invoice_imports").insert({
     id,
     status: "processing",
     storage_bucket: BUCKET,
@@ -247,7 +234,7 @@ export async function createSupplierInvoiceImport(options: {
     file_size: buffer.length,
   });
   if (insErr) {
-    void supabase.storage.from(BUCKET).remove([storagePath]);
+    void objectStorage.remove(BUCKET, storagePath);
     throw new Error(`Criar import: ${insErr.message}`);
   }
 
@@ -270,8 +257,8 @@ export async function createSupplierInvoiceImport(options: {
     let duplicateWarning = false;
     let duplicateOfId: string | null = null;
     if (bk) {
-      const { data: dup } = await supabase
-        .from("supplier_invoice_imports")
+      const { data: dup } = await createScopedQuery(organizationId)
+        .table("supplier_invoice_imports")
         .select("id")
         .eq("business_key", bk)
         .eq("status", "confirmed")
@@ -280,7 +267,7 @@ export async function createSupplierInvoiceImport(options: {
         .maybeSingle();
       if (dup) {
         duplicateWarning = true;
-        duplicateOfId = (dup as { id: string }).id;
+        duplicateOfId = (dup as unknown as { id: string }).id;
       }
     }
 
@@ -298,7 +285,7 @@ export async function createSupplierInvoiceImport(options: {
 
       // 1. Look up persisted supplier→stock mapping by normalized description
       if (supplierNorm && line.description) {
-        const mapped = await findMappedStockItem(supabase, supplierNorm, normalizeKeyPart(line.description));
+        const mapped = await findMappedStockItem(organizationId, supplierNorm, normalizeKeyPart(line.description));
         if (mapped) {
           stockItemId = mapped.id;
           lineStatus = "matched";
@@ -319,7 +306,7 @@ export async function createSupplierInvoiceImport(options: {
 
       // 2. Fall back to exact description match
       if (!stockItemId) {
-        const match = await findExactStockMatch(supabase, line.description);
+        const match = await findExactStockMatch(organizationId, line.description);
         if (match) {
           stockItemId = match.id;
           lineStatus = "matched";
@@ -347,13 +334,13 @@ export async function createSupplierInvoiceImport(options: {
       idx++;
     }
 
-    const { error: lineInsErr } = await supabase
-      .from("supplier_invoice_import_lines")
+    const { error: lineInsErr } = await createScopedQuery(organizationId)
+      .table("supplier_invoice_import_lines")
       .insert(lineRows);
     if (lineInsErr) throw new Error(`Linhas: ${lineInsErr.message}`);
 
-    const { error: updErr } = await supabase
-      .from("supplier_invoice_imports")
+    const { error: updErr } = await createScopedQuery(organizationId)
+      .table("supplier_invoice_imports")
       .update({
         status: "ready_for_review",
         supplier_name: supplierName,
@@ -373,50 +360,50 @@ export async function createSupplierInvoiceImport(options: {
       .eq("id", id);
     if (updErr) throw new Error(`Atualizar import: ${updErr.message}`);
 
-    return getSupplierInvoiceImport(id);
+    return getSupplierInvoiceImport(organizationId, id);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    await supabase
-      .from("supplier_invoice_imports")
+    await createScopedQuery(organizationId)
+      .table("supplier_invoice_imports")
       .update({
         status: "failed",
         parse_error: msg,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id);
-    return getSupplierInvoiceImport(id);
+    return getSupplierInvoiceImport(organizationId, id);
   }
 }
 
 export async function getSupplierInvoiceImport(
+  organizationId: OrganizationId,
   importId: string
 ): Promise<SupplierInvoiceImportSummaryDto> {
-  const supabase = requireSupabase();
-  const { data: imp, error } = await supabase
-    .from("supplier_invoice_imports")
+  const { data: imp, error } = await createScopedQuery(organizationId)
+    .table("supplier_invoice_imports")
     .select("*")
     .eq("id", importId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!imp) throw new Error("Importação não encontrada");
 
-  const { data: lines } = await supabase
-    .from("supplier_invoice_import_lines")
+  const { data: lines } = await createScopedQuery(organizationId)
+    .table("supplier_invoice_import_lines")
     .select("*")
     .eq("import_id", importId)
     .order("line_index", { ascending: true });
 
-  const lineDtos = ((lines ?? []) as Record<string, unknown>[]).map(mapLineRow);
-  return mapImportRow(imp as Record<string, unknown>, lineDtos);
+  const lineDtos = ((lines ?? []) as unknown as Record<string, unknown>[]).map(mapLineRow);
+  return mapImportRow(imp as unknown as Record<string, unknown>, lineDtos);
 }
 
 async function deleteMovementsForImport(
-  supabase: NonNullable<ReturnType<typeof getSupabase>>,
+  organizationId: OrganizationId,
   importId: string
 ): Promise<void> {
   const ref = invoiceImportMovementReference(importId);
-  const { error } = await supabase
-    .from("stock_movements")
+  const { error } = await createScopedQuery(organizationId)
+    .table("stock_movements")
     .delete()
     .eq("created_by", SUPPLIER_INVOICE_IMPORT_CREATED_BY)
     .eq("reference", ref);
@@ -424,11 +411,11 @@ async function deleteMovementsForImport(
 }
 
 export async function updateSupplierInvoiceImport(
+  organizationId: OrganizationId,
   importId: string,
   body: UpdateSupplierInvoiceImportBody
 ): Promise<SupplierInvoiceImportSummaryDto> {
-  const supabase = requireSupabase();
-  const imp = await getSupplierInvoiceImport(importId);
+  const imp = await getSupplierInvoiceImport(organizationId, importId);
   if (imp.status !== "ready_for_review") {
     throw new Error(
       `Importação não pode ser editada (estado: ${imp.status})`
@@ -465,8 +452,8 @@ export async function updateSupplierInvoiceImport(
   let duplicateWarning = false;
   let duplicateOfId: string | null = null;
   if (bk) {
-    const { data: dup } = await supabase
-      .from("supplier_invoice_imports")
+    const { data: dup } = await createScopedQuery(organizationId)
+      .table("supplier_invoice_imports")
       .select("id")
       .eq("business_key", bk)
       .eq("status", "confirmed")
@@ -475,27 +462,27 @@ export async function updateSupplierInvoiceImport(
       .maybeSingle();
     if (dup) {
       duplicateWarning = true;
-      duplicateOfId = (dup as { id: string }).id;
+      duplicateOfId = (dup as unknown as { id: string }).id;
     }
   }
   updates.duplicate_warning = duplicateWarning;
   updates.duplicate_of_import_id = duplicateOfId;
 
-  const { error } = await supabase
-    .from("supplier_invoice_imports")
+  const { error } = await createScopedQuery(organizationId)
+    .table("supplier_invoice_imports")
     .update(updates)
     .eq("id", importId);
   if (error) throw new Error(`Atualizar cabeçalho: ${error.message}`);
 
-  return getSupplierInvoiceImport(importId);
+  return getSupplierInvoiceImport(organizationId, importId);
 }
 
 export async function confirmSupplierInvoiceImport(
+  organizationId: OrganizationId,
   importId: string,
   body: ConfirmSupplierInvoiceImportBody
 ): Promise<ConfirmSupplierInvoiceImportResult> {
-  const supabase = requireSupabase();
-  const imp = await getSupplierInvoiceImport(importId);
+  const imp = await getSupplierInvoiceImport(organizationId, importId);
   if (imp.status !== "ready_for_review") {
     throw new Error(
       `Importação não está pronta para confirmar (estado: ${imp.status})`
@@ -507,6 +494,14 @@ export async function confirmSupplierInvoiceImport(
       "DUPLICATE: já existe uma importação confirmada com o mesmo fornecedor/número/data. Define override_duplicate=true para substituir."
     );
   }
+
+  // D4: the caller supplies the location explicitly — stock_movements is
+  // location-bearing (NOT NULL), and this import must not rely on the
+  // column default.
+  if (!body.location_id || !body.location_id.trim()) {
+    throw new Error("location_id obrigatório");
+  }
+  const locationId = body.location_id;
 
   // raw_invoice_quantity: quantity as it appears on the invoice (before factor conversion).
   // Used to compute quantity_per_invoice_unit = confirmed_stock_qty / raw_invoice_qty,
@@ -567,8 +562,8 @@ export async function confirmSupplierInvoiceImport(
       }
 
       if (Object.keys(updates).length) {
-        const { error } = await supabase
-          .from("supplier_invoice_import_lines")
+        const { error } = await createScopedQuery(organizationId)
+          .table("supplier_invoice_import_lines")
           .update(updates)
           .eq("id", adj.line_id)
           .eq("import_id", importId);
@@ -577,7 +572,7 @@ export async function confirmSupplierInvoiceImport(
     }
   }
 
-  const fresh = await getSupplierInvoiceImport(importId);
+  const fresh = await getSupplierInvoiceImport(organizationId, importId);
   const activeLines = fresh.lines.filter((l) => l.line_status !== "ignored");
 
   for (const l of activeLines) {
@@ -604,7 +599,7 @@ export async function confirmSupplierInvoiceImport(
     );
 
     await upsertSupplierArticleMappings(
-      supabase,
+      organizationId,
       supplierNormForMapping,
       activeLines.map((l) => ({
         supplier_article_code: l.supplier_article_code,
@@ -622,18 +617,18 @@ export async function confirmSupplierInvoiceImport(
   const replacedIds: string[] = [];
 
   if (body.override_duplicate && bk) {
-    const { data: others } = await supabase
-      .from("supplier_invoice_imports")
+    const { data: others } = await createScopedQuery(organizationId)
+      .table("supplier_invoice_imports")
       .select("id")
       .eq("business_key", bk)
       .eq("status", "confirmed")
       .neq("id", importId);
     for (const row of others ?? []) {
-      const oid = (row as { id: string }).id;
-      await deleteMovementsForImport(supabase, oid);
+      const oid = (row as unknown as { id: string }).id;
+      await deleteMovementsForImport(organizationId, oid);
       replacedIds.push(oid);
-      await supabase
-        .from("supplier_invoice_imports")
+      await createScopedQuery(organizationId)
+        .table("supplier_invoice_imports")
         .update({
           status: "cancelled",
           updated_at: new Date().toISOString(),
@@ -642,7 +637,7 @@ export async function confirmSupplierInvoiceImport(
     }
   }
 
-  await deleteMovementsForImport(supabase, importId);
+  await deleteMovementsForImport(organizationId, importId);
 
   // Default to today (confirmation date); the frontend may override with a specific date.
   let movementDate: string;
@@ -670,12 +665,13 @@ export async function confirmSupplierInvoiceImport(
       reference: ref,
       created_by: SUPPLIER_INVOICE_IMPORT_CREATED_BY,
       movement_date: movementDate,
+      location_id: locationId,
     });
   }
 
   if (movementRows.length) {
-    const { error: movErr } = await supabase
-      .from("stock_movements")
+    const { error: movErr } = await createScopedQuery(organizationId)
+      .table("stock_movements")
       .insert(movementRows);
     if (movErr) throw new Error(`Inserir compras: ${movErr.message}`);
   }
@@ -693,8 +689,8 @@ export async function confirmSupplierInvoiceImport(
     stockItemsUpdated++;
   }
 
-  const { error: finErr } = await supabase
-    .from("supplier_invoice_imports")
+  const { error: finErr } = await createScopedQuery(organizationId)
+    .table("supplier_invoice_imports")
     .update({
       status: "confirmed",
       confirmed_at: new Date().toISOString(),
