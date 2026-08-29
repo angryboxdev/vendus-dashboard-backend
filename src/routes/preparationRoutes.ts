@@ -21,9 +21,9 @@ export const preparationRoutes = Router();
 
 // ---------- Preparations ----------
 
-preparationRoutes.get("/preparations", async (_req, res) => {
+preparationRoutes.get("/preparations", async (req, res) => {
   try {
-    const list = await listPreparations();
+    const list = await listPreparations(req.auth!.orgId);
     res.json(list);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao listar preparos";
@@ -35,9 +35,9 @@ preparationRoutes.get("/preparations/:id", async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) { res.status(400).json({ error: "id obrigatório" }); return; }
-    const preparation = await getPreparation(id);
+    const preparation = await getPreparation(req.auth!.orgId, id);
     if (!preparation) { res.status(404).json({ error: "Preparo não encontrado" }); return; }
-    const items = await listPreparationItems(id);
+    const items = await listPreparationItems(req.auth!.orgId, id);
     res.json({ ...preparation, items });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao obter preparo";
@@ -61,7 +61,7 @@ preparationRoutes.post("/preparations", async (req, res) => {
     if (body.use_as_unit !== undefined && typeof body.use_as_unit !== "boolean") {
       res.status(400).json({ error: "use_as_unit deve ser booleano" }); return;
     }
-    const created = await createPreparation(body);
+    const created = await createPreparation(req.auth!.orgId, body);
     res.status(201).json(created);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao criar preparo";
@@ -77,7 +77,7 @@ preparationRoutes.put("/preparations/:id", async (req, res) => {
     if (body.use_as_unit !== undefined && typeof body.use_as_unit !== "boolean") {
       res.status(400).json({ error: "use_as_unit deve ser booleano" }); return;
     }
-    const updated = await updatePreparation(id, body);
+    const updated = await updatePreparation(req.auth!.orgId, id, body);
     res.json(updated);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao atualizar preparo";
@@ -89,7 +89,7 @@ preparationRoutes.delete("/preparations/:id", async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) { res.status(400).json({ error: "id obrigatório" }); return; }
-    await deletePreparation(id);
+    await deletePreparation(req.auth!.orgId, id);
     res.status(204).send();
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao eliminar preparo";
@@ -104,7 +104,7 @@ preparationRoutes.get("/preparations/:id/items", async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) { res.status(400).json({ error: "id obrigatório" }); return; }
-    const items = await listPreparationItems(id);
+    const items = await listPreparationItems(req.auth!.orgId, id);
     res.json(items);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao listar ingredientes";
@@ -124,7 +124,11 @@ preparationRoutes.post("/preparations/:id/items", async (req, res) => {
     if (!Number.isFinite(quantity) || quantity <= 0) {
       res.status(400).json({ error: "quantity deve ser positivo" }); return;
     }
-    const created = await createPreparationItem({ preparation_id, stock_item_id: body.stock_item_id, quantity });
+    const created = await createPreparationItem(req.auth!.orgId, {
+      preparation_id,
+      stock_item_id: body.stock_item_id,
+      quantity,
+    });
     res.status(201).json(created);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao adicionar ingrediente";
@@ -141,7 +145,7 @@ preparationRoutes.put("/preparations/:id/items/:itemId", async (req, res) => {
     if (!Number.isFinite(quantity) || quantity <= 0) {
       res.status(400).json({ error: "quantity deve ser positivo" }); return;
     }
-    const updated = await updatePreparationItem(itemId, { quantity });
+    const updated = await updatePreparationItem(req.auth!.orgId, itemId, { quantity });
     res.json(updated);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao atualizar ingrediente";
@@ -153,7 +157,7 @@ preparationRoutes.delete("/preparations/:id/items/:itemId", async (req, res) => 
   try {
     const { itemId } = req.params;
     if (!itemId) { res.status(400).json({ error: "itemId obrigatório" }); return; }
-    await deletePreparationItem(itemId);
+    await deletePreparationItem(req.auth!.orgId, itemId);
     res.status(204).send();
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao remover ingrediente";

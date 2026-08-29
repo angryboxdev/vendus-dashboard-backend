@@ -1,4 +1,5 @@
 import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import {
   lisbonDayEndUtcIso,
   REPORT_TIMEZONE,
@@ -67,13 +68,16 @@ export function getYesterdayLisbonYmd(): string {
  *
  * `movement_date` = fim do dia civil em Lisboa (UTC), para alinhar a relatórios por período.
  */
-export async function runDailyVendusConsumptionJob(options?: {
-  /** Omite = ontem em Lisboa. */
-  targetDate?: string;
-  dryRun?: boolean;
-  /** Inclui detalhe por documento dos consumíveis no resultado. Implica dry_run. */
-  debug?: boolean;
-}): Promise<DailyConsumptionJobResult> {
+export async function runDailyVendusConsumptionJob(
+  organizationId: OrganizationId,
+  options?: {
+    /** Omite = ontem em Lisboa. */
+    targetDate?: string;
+    dryRun?: boolean;
+    /** Inclui detalhe por documento dos consumíveis no resultado. Implica dry_run. */
+    debug?: boolean;
+  }
+): Promise<DailyConsumptionJobResult> {
   const debug = options?.debug === true;
   const dryRun = options?.dryRun === true || debug;
   const target_date =
@@ -106,7 +110,7 @@ export async function runDailyVendusConsumptionJob(options?: {
     deleted_rows = removed?.length ?? 0;
   }
 
-  const report = await getIngredientConsumption(target_date, target_date);
+  const report = await getIngredientConsumption(organizationId, target_date, target_date);
   const movementDateIso = lisbonDayEndUtcIso(target_date);
 
   type ConsumptionRow = {

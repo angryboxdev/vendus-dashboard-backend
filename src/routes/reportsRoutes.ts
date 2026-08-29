@@ -79,7 +79,7 @@ reportsRoutes.get("/reports/ingredient-consumption", async (req, res) => {
       return;
     }
 
-    const response = await getIngredientConsumption(sinceParam, untilParam, {
+    const response = await getIngredientConsumption(req.auth!.orgId, sinceParam, untilParam, {
       ...(vendus_store_id != null ? { vendus_store_id } : {}),
     });
     res.json(response);

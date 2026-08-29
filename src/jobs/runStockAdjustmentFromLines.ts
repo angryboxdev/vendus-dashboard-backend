@@ -17,6 +17,7 @@ import {
   runStockAdjustmentFromLines,
   type StockAdjustmentLine,
 } from "../services/stockAdjustmentFromLinesService.js";
+import { UNATTENDED_SCOPE } from "../infra/scoped-db/unattended-scope.js";
 
 const file =
   process.env.STOCK_ADJUSTMENT_LINES_FILE?.trim() ||
@@ -48,7 +49,7 @@ if (!Array.isArray(lines)) {
   process.exit(1);
 }
 
-const runOpts: Parameters<typeof runStockAdjustmentFromLines>[0] = {
+const runOpts: Parameters<typeof runStockAdjustmentFromLines>[1] = {
   lines,
   adjustmentDate,
   dryRun,
@@ -56,7 +57,7 @@ const runOpts: Parameters<typeof runStockAdjustmentFromLines>[0] = {
 if (batchLabel) runOpts.batchLabel = batchLabel;
 if (reasonNote) runOpts.reasonNote = reasonNote;
 
-runStockAdjustmentFromLines(runOpts)
+runStockAdjustmentFromLines(UNATTENDED_SCOPE.organizationId, runOpts)
   .then((r) => {
     console.log(JSON.stringify(r, null, 2));
     process.exit(0);

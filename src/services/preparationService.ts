@@ -1,4 +1,5 @@
-import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import type {
   Preparation,
   PreparationCreateBody,
@@ -11,15 +12,6 @@ import type {
 // -----------------------------------------------------------------------
 // Internal helpers
 // -----------------------------------------------------------------------
-
-function requireSupabase(): NonNullable<ReturnType<typeof getSupabase>> {
-  if (!isSupabaseConfigured()) {
-    throw new Error("Supabase não configurado: defina SUPABASE_URL e SUPABASE_ANON_KEY");
-  }
-  const supabase = getSupabase();
-  if (!supabase) throw new Error("Supabase não disponível");
-  return supabase;
-}
 
 type PreparationRow = {
   id: string;
@@ -72,37 +64,35 @@ const PREPARATION_ITEM_COLS = "id, preparation_id, stock_item_id, quantity, crea
 // Preparations CRUD
 // -----------------------------------------------------------------------
 
-export async function listPreparations(): Promise<Preparation[]> {
-  if (!isSupabaseConfigured()) return [];
-  const supabase = getSupabase();
-  if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("preparations")
+export async function listPreparations(organizationId: OrganizationId): Promise<Preparation[]> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("preparations")
     .select(PREPARATION_COLS)
     .order("name", { ascending: true });
   if (error) throw new Error(`Listar preparos: ${error.message}`);
-  return ((data ?? []) as PreparationRow[]).map(rowToPreparation);
+  return ((data ?? []) as unknown as PreparationRow[]).map(rowToPreparation);
 }
 
-export async function getPreparation(id: string): Promise<Preparation | null> {
-  const supabase = requireSupabase();
-  const { data, error } = await supabase
-    .from("preparations")
+export async function getPreparation(organizationId: OrganizationId, id: string): Promise<Preparation | null> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("preparations")
     .select(PREPARATION_COLS)
     .eq("id", id)
     .single();
   if (error || !data) return null;
-  return rowToPreparation(data as PreparationRow);
+  return rowToPreparation(data as unknown as PreparationRow);
 }
 
-export async function createPreparation(body: PreparationCreateBody): Promise<Preparation> {
-  const supabase = requireSupabase();
+export async function createPreparation(
+  organizationId: OrganizationId,
+  body: PreparationCreateBody
+): Promise<Preparation> {
   if (!body.name?.trim()) throw new Error("name é obrigatório");
   const yield_qty = Number(body.yield_qty);
   if (!Number.isFinite(yield_qty) || yield_qty <= 0) throw new Error("yield_qty deve ser positivo");
   if (!body.yield_unit?.trim()) throw new Error("yield_unit é obrigatório");
-  const { data, error } = await supabase
-    .from("preparations")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("preparations")
     .insert({
       name: body.name.trim(),
       description: body.description ?? null,
@@ -113,11 +103,14 @@ export async function createPreparation(body: PreparationCreateBody): Promise<Pr
     .select(PREPARATION_COLS)
     .single();
   if (error) throw new Error(`Criar preparo: ${error.message}`);
-  return rowToPreparation(data as PreparationRow);
+  return rowToPreparation(data as unknown as PreparationRow);
 }
 
-export async function updatePreparation(id: string, body: PreparationUpdateBody): Promise<Preparation> {
-  const supabase = requireSupabase();
+export async function updatePreparation(
+  organizationId: OrganizationId,
+  id: string,
+  body: PreparationUpdateBody
+): Promise<Preparation> {
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (body.name !== undefined) {
     if (!body.name?.trim()) throw new Error("name não pode ser vazio");
@@ -136,22 +129,22 @@ export async function updatePreparation(id: string, body: PreparationUpdateBody)
   if (body.use_as_unit !== undefined) {
     updates.use_as_unit = body.use_as_unit === true;
   }
-  const { data, error } = await supabase
-    .from("preparations")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("preparations")
     .update(updates)
     .eq("id", id)
     .select(PREPARATION_COLS)
     .single();
   if (error) throw new Error(`Atualizar preparo: ${error.message}`);
   if (!data) throw new Error("Preparo não encontrado");
-  return rowToPreparation(data as PreparationRow);
+  return rowToPreparation(data as unknown as PreparationRow);
 }
 
-export async function deletePreparation(id: string): Promise<void> {
-  const supabase = requireSupabase();
+export async function deletePreparation(organizationId: OrganizationId, id: string): Promise<void> {
+  const scoped = createScopedQuery(organizationId);
   // Verificar se está em uso em alguma receita de pizza
-  const { data: usages, error: usageErr } = await supabase
-    .from("pizza_recipe_items")
+  const { data: usages, error: usageErr } = await scoped
+    .table("pizza_recipe_items")
     .select("id")
     .eq("preparation_id", id)
     .limit(1);
@@ -159,7 +152,7 @@ export async function deletePreparation(id: string): Promise<void> {
   if (usages && usages.length > 0) {
     throw new Error("Este preparo está a ser usado numa receita de pizza e não pode ser eliminado");
   }
-  const { error } = await supabase.from("preparations").delete().eq("id", id);
+  const { error } = await scoped.table("preparations").delete().eq("id", id);
   if (error) throw new Error(`Eliminar preparo: ${error.message}`);
 }
 
@@ -167,63 +160,72 @@ export async function deletePreparation(id: string): Promise<void> {
 // Preparation items CRUD
 // -----------------------------------------------------------------------
 
-export async function listPreparationItems(preparationId: string): Promise<PreparationItem[]> {
-  if (!isSupabaseConfigured()) return [];
-  const supabase = getSupabase();
-  if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("preparation_items")
+export async function listPreparationItems(
+  organizationId: OrganizationId,
+  preparationId: string
+): Promise<PreparationItem[]> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("preparation_items")
     .select(PREPARATION_ITEM_COLS)
     .eq("preparation_id", preparationId)
     .order("created_at", { ascending: true });
   if (error) throw new Error(`Listar ingredientes do preparo: ${error.message}`);
-  return ((data ?? []) as PreparationItemRow[]).map(rowToPreparationItem);
+  return ((data ?? []) as unknown as PreparationItemRow[]).map(rowToPreparationItem);
 }
 
-export async function getPreparationItem(id: string): Promise<PreparationItem | null> {
-  const supabase = requireSupabase();
-  const { data, error } = await supabase
-    .from("preparation_items")
+export async function getPreparationItem(
+  organizationId: OrganizationId,
+  id: string
+): Promise<PreparationItem | null> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("preparation_items")
     .select(PREPARATION_ITEM_COLS)
     .eq("id", id)
     .single();
   if (error || !data) return null;
-  return rowToPreparationItem(data as PreparationItemRow);
+  return rowToPreparationItem(data as unknown as PreparationItemRow);
 }
 
-export async function createPreparationItem(body: PreparationItemCreateBody): Promise<PreparationItem> {
-  const supabase = requireSupabase();
+export async function createPreparationItem(
+  organizationId: OrganizationId,
+  body: PreparationItemCreateBody
+): Promise<PreparationItem> {
   if (!body.preparation_id) throw new Error("preparation_id é obrigatório");
   if (!body.stock_item_id) throw new Error("stock_item_id é obrigatório");
   const quantity = Number(body.quantity);
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error("quantity deve ser positivo");
-  const { data, error } = await supabase
-    .from("preparation_items")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("preparation_items")
     .insert({ preparation_id: body.preparation_id, stock_item_id: body.stock_item_id, quantity })
     .select(PREPARATION_ITEM_COLS)
     .single();
   if (error) throw new Error(`Criar ingrediente do preparo: ${error.message}`);
-  return rowToPreparationItem(data as PreparationItemRow);
+  return rowToPreparationItem(data as unknown as PreparationItemRow);
 }
 
-export async function updatePreparationItem(id: string, body: PreparationItemUpdateBody): Promise<PreparationItem> {
-  const supabase = requireSupabase();
+export async function updatePreparationItem(
+  organizationId: OrganizationId,
+  id: string,
+  body: PreparationItemUpdateBody
+): Promise<PreparationItem> {
   const quantity = Number(body.quantity);
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error("quantity deve ser positivo");
-  const { data, error } = await supabase
-    .from("preparation_items")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("preparation_items")
     .update({ quantity })
     .eq("id", id)
     .select(PREPARATION_ITEM_COLS)
     .single();
   if (error) throw new Error(`Atualizar ingrediente do preparo: ${error.message}`);
   if (!data) throw new Error("Ingrediente não encontrado");
-  return rowToPreparationItem(data as PreparationItemRow);
+  return rowToPreparationItem(data as unknown as PreparationItemRow);
 }
 
-export async function deletePreparationItem(id: string): Promise<void> {
-  const supabase = requireSupabase();
-  const { error } = await supabase.from("preparation_items").delete().eq("id", id);
+export async function deletePreparationItem(organizationId: OrganizationId, id: string): Promise<void> {
+  const { error } = await createScopedQuery(organizationId)
+    .table("preparation_items")
+    .delete()
+    .eq("id", id);
   if (error) throw new Error(`Eliminar ingrediente do preparo: ${error.message}`);
 }
 
@@ -233,10 +235,13 @@ export async function deletePreparationItem(id: string): Promise<void> {
 
 export type PreparationWithItems = Preparation & { items: PreparationItem[] };
 
-export async function getPreparationWithItems(id: string): Promise<PreparationWithItems | null> {
+export async function getPreparationWithItems(
+  organizationId: OrganizationId,
+  id: string
+): Promise<PreparationWithItems | null> {
   const [preparation, items] = await Promise.all([
-    getPreparation(id),
-    listPreparationItems(id),
+    getPreparation(organizationId, id),
+    listPreparationItems(organizationId, id),
   ]);
   if (!preparation) return null;
   return { ...preparation, items };
