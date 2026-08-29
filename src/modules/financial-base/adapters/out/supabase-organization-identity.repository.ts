@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import { OrganizationIdentity } from "../../domain/entities/organization-identity.js";
 import type { OrganizationIdentityPort } from "../../domain/ports/out/organization-identity.port.js";
 
@@ -12,17 +13,24 @@ function toEntity(row: Record<string, unknown>): OrganizationIdentity {
   });
 }
 
+/**
+ * Nunca guarda um `SupabaseClient` — recebe o factory `createScopedQuery`
+ * (`ScopedQueryFactory`) injectado pelo composition root e constrói um
+ * `ScopedQuery` por chamada (D2). A tabela `organizations` está registada
+ * com a sua própria PK como coluna de organização (`TABLE_REGISTRY`), pelo
+ * que o `.eq("id", organizationId)` já aplicado pelo helper é a própria
+ * consulta — não há um id separado a filtrar.
+ */
 export class SupabaseOrganizationIdentityRepository implements OrganizationIdentityPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async findById(orgId: string): Promise<OrganizationIdentity | null> {
-    const { data, error } = await this.supabase
-      .from("organizations")
+  async findById(organizationId: OrganizationId): Promise<OrganizationIdentity | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("organizations")
       .select("id, name, nif, address, email")
-      .eq("id", orgId)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 }

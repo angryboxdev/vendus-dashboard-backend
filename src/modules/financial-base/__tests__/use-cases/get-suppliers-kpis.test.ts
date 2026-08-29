@@ -1,7 +1,10 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { GetSuppliersKpisUseCase } from "../../application/use-cases/get-suppliers-kpis.use-case.js";
 import { FakeSupplierRepository } from "../fakes/fake-supplier-repository.js";
 import { FakeSupplierInvoiceStats } from "../fakes/fake-supplier-invoice-stats.js";
 import { Supplier } from "../../domain/entities/supplier.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 describe("GetSuppliersKpisUseCase", () => {
   it("devolve zeros quando não há fornecedores", async () => {
@@ -10,7 +13,7 @@ describe("GetSuppliersKpisUseCase", () => {
       new FakeSupplierInvoiceStats(),
     );
 
-    const result = await useCase.execute();
+    const result = await useCase.execute(ORG_ID);
 
     expect(result).toEqual({
       totalActive: 0,
@@ -22,12 +25,12 @@ describe("GetSuppliersKpisUseCase", () => {
 
   it("conta ativos e inativos corretamente", async () => {
     const repo = new FakeSupplierRepository();
-    await repo.save(Supplier.create({ name: "Ativo 1" }));
-    await repo.save(Supplier.create({ name: "Ativo 2" }));
-    await repo.save(Supplier.create({ name: "Inativo" }).deactivate());
+    await repo.save(ORG_ID, Supplier.create({ name: "Ativo 1" }));
+    await repo.save(ORG_ID, Supplier.create({ name: "Ativo 2" }));
+    await repo.save(ORG_ID, Supplier.create({ name: "Inativo" }).deactivate());
 
     const useCase = new GetSuppliersKpisUseCase(repo, new FakeSupplierInvoiceStats());
-    const result = await useCase.execute();
+    const result = await useCase.execute(ORG_ID);
 
     expect(result.totalActive).toBe(2);
     expect(result.totalInactive).toBe(1);
@@ -39,8 +42,8 @@ describe("GetSuppliersKpisUseCase", () => {
 
     const s1 = Supplier.create({ name: "Makro" });
     const s2 = Supplier.create({ name: "Meta" });
-    await repo.save(s1);
-    await repo.save(s2);
+    await repo.save(ORG_ID, s1);
+    await repo.save(ORG_ID, s2);
 
     statsPort.seed({
       supplierId: s1.id,
@@ -62,7 +65,7 @@ describe("GetSuppliersKpisUseCase", () => {
     });
 
     const useCase = new GetSuppliersKpisUseCase(repo, statsPort);
-    const result = await useCase.execute();
+    const result = await useCase.execute(ORG_ID);
 
     expect(result.totalBilledAll).toBe(1500);
   });
@@ -74,9 +77,9 @@ describe("GetSuppliersKpisUseCase", () => {
     const s1 = Supplier.create({ name: "Com pendências" });
     const s2 = Supplier.create({ name: "Tudo pago" });
     const s3 = Supplier.create({ name: "Sem faturas" });
-    await repo.save(s1);
-    await repo.save(s2);
-    await repo.save(s3);
+    await repo.save(ORG_ID, s1);
+    await repo.save(ORG_ID, s2);
+    await repo.save(ORG_ID, s3);
 
     statsPort.seed({
       supplierId: s1.id,
@@ -99,7 +102,7 @@ describe("GetSuppliersKpisUseCase", () => {
     // s3 não tem seed — fake devolve zeros
 
     const useCase = new GetSuppliersKpisUseCase(repo, statsPort);
-    const result = await useCase.execute();
+    const result = await useCase.execute(ORG_ID);
 
     expect(result.totalWithPending).toBe(1);
   });

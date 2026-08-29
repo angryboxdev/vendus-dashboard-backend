@@ -1,7 +1,10 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { SeedDefaultCostCentersUseCase } from "../../application/use-cases/seed-default-cost-centers.use-case.js";
 import { FakeCostCenterGroupRepository } from "../fakes/fake-cost-center-group-repository.js";
 import { FakeCostCenterCategoryRepository } from "../fakes/fake-cost-center-category-repository.js";
 import { DEFAULT_COST_CENTERS } from "../../domain/seed/default-cost-centers.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 describe("SeedDefaultCostCentersUseCase", () => {
   function makeUseCase() {
@@ -17,7 +20,7 @@ describe("SeedDefaultCostCentersUseCase", () => {
   it("cria os 7 grupos e 28 subcategorias na primeira execução", async () => {
     const { groupRepo, categoryRepo, useCase } = makeUseCase();
 
-    const result = await useCase.execute();
+    const result = await useCase.execute(ORG_ID);
 
     expect(result.groupsCreated).toBe(totalGroups);
     expect(result.categoriesCreated).toBe(totalCategories);
@@ -29,9 +32,9 @@ describe("SeedDefaultCostCentersUseCase", () => {
 
   it("é idempotente — segunda execução skip tudo", async () => {
     const { useCase } = makeUseCase();
-    await useCase.execute();
+    await useCase.execute(ORG_ID);
 
-    const result = await useCase.execute();
+    const result = await useCase.execute(ORG_ID);
 
     expect(result.groupsCreated).toBe(0);
     expect(result.categoriesCreated).toBe(0);
@@ -42,7 +45,7 @@ describe("SeedDefaultCostCentersUseCase", () => {
   it("cria apenas o que falta se parte dos dados já existe", async () => {
     const { groupRepo, categoryRepo, useCase } = makeUseCase();
     // Primeira execução
-    await useCase.execute();
+    await useCase.execute(ORG_ID);
 
     // Apaga manualmente um grupo e duas categorias do fake
     const groups = groupRepo.getAll();
@@ -52,13 +55,13 @@ describe("SeedDefaultCostCentersUseCase", () => {
     // Recria repos sem o primeiro grupo e suas categorias
     const groupRepo2 = new FakeCostCenterGroupRepository();
     const categoryRepo2 = new FakeCostCenterCategoryRepository();
-    for (const g of groups.slice(1)) await groupRepo2.save(g);
+    for (const g of groups.slice(1)) await groupRepo2.save(ORG_ID, g);
     for (const c of categoryRepo.getAll().filter((c) => c.groupId !== firstGroup.id)) {
-      await categoryRepo2.save(c);
+      await categoryRepo2.save(ORG_ID, c);
     }
 
     const useCase2 = new SeedDefaultCostCentersUseCase(groupRepo2, categoryRepo2);
-    const result = await useCase2.execute();
+    const result = await useCase2.execute(ORG_ID);
 
     expect(result.groupsCreated).toBe(1);
     expect(result.categoriesCreated).toBe(firstGroupCategories.length);
@@ -66,13 +69,13 @@ describe("SeedDefaultCostCentersUseCase", () => {
 
   it("cada subcategoria pertence ao grupo correcto (por código)", async () => {
     const { groupRepo, categoryRepo, useCase } = makeUseCase();
-    await useCase.execute();
+    await useCase.execute(ORG_ID);
 
     for (const groupSeed of DEFAULT_COST_CENTERS) {
-      const group = await groupRepo.findByCode(groupSeed.code);
+      const group = await groupRepo.findByCode(ORG_ID, groupSeed.code);
       expect(group).not.toBeNull();
 
-      const categories = await categoryRepo.findByGroupId(group!.id);
+      const categories = await categoryRepo.findByGroupId(ORG_ID, group!.id);
       expect(categories).toHaveLength(groupSeed.categories.length);
 
       for (const catSeed of groupSeed.categories) {

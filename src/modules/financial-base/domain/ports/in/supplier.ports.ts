@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { SupplierStatus, UpdateSupplierData } from "../../entities/supplier.js";
 
 // ---- Shared DTO ----
@@ -20,6 +21,7 @@ export interface SupplierDTO {
 
 // ---- Create ----
 export interface CreateSupplierCommand {
+  organizationId: OrganizationId;
   name: string;
   nif?: string | null;
   email?: string | null;
@@ -38,6 +40,7 @@ export interface CreateSupplierPort {
 
 // ---- Update ----
 export interface UpdateSupplierCommand {
+  organizationId: OrganizationId;
   id: string;
   data: UpdateSupplierData;
 }
@@ -48,6 +51,7 @@ export interface UpdateSupplierPort {
 
 // ---- Toggle status ----
 export interface ToggleSupplierStatusCommand {
+  organizationId: OrganizationId;
   id: string;
   status: "active" | "inactive";
 }
@@ -58,16 +62,18 @@ export interface ToggleSupplierStatusPort {
 
 // ---- List ----
 export interface ListSuppliersCommand {
+  organizationId: OrganizationId;
   status?: "active" | "inactive";
   search?: string;
 }
 
 export interface ListSuppliersPort {
-  execute(command?: ListSuppliersCommand): Promise<SupplierDTO[]>;
+  execute(command: ListSuppliersCommand): Promise<SupplierDTO[]>;
 }
 
 // ---- Get ----
 export interface GetSupplierCommand {
+  organizationId: OrganizationId;
   id: string;
 }
 

@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { SupplierRepositoryPort } from "../../domain/ports/out/supplier-repository.port.js";
 import type { SupplierInvoiceStatsPort } from "../../domain/ports/out/supplier-invoice-stats.port.js";
 import type {
@@ -11,8 +12,8 @@ export class GetSuppliersKpisUseCase implements GetSuppliersKpisPort {
     private readonly invoiceStats: SupplierInvoiceStatsPort,
   ) {}
 
-  async execute(): Promise<SuppliersKpisDTO> {
-    const allSuppliers = await this.supplierRepository.findAll();
+  async execute(organizationId: OrganizationId): Promise<SuppliersKpisDTO> {
+    const allSuppliers = await this.supplierRepository.findAll(organizationId);
 
     if (allSuppliers.length === 0) {
       return { totalActive: 0, totalInactive: 0, totalWithPending: 0, totalBilledAll: 0 };
@@ -22,6 +23,7 @@ export class GetSuppliersKpisUseCase implements GetSuppliersKpisPort {
     const totalInactive = allSuppliers.filter((s) => s.status === "inactive").length;
 
     const summaries = await this.invoiceStats.getSummariesForSuppliers(
+      organizationId,
       allSuppliers.map((s) => s.id),
     );
 

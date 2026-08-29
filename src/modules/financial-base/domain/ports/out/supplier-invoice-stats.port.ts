@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 export interface SupplierInvoiceStats {
   supplierId: string;
   invoiceCount: number;
@@ -31,12 +33,19 @@ export interface SupplierInvoiceStatsPort {
    * Agrega estatísticas financeiras de faturas para uma lista de fornecedores.
    * Fornecedores sem faturas são devolvidos com todos os valores a zero.
    */
-  getSummariesForSuppliers(supplierIds: string[]): Promise<SupplierInvoiceStats[]>;
+  getSummariesForSuppliers(
+    organizationId: OrganizationId,
+    supplierIds: string[],
+  ): Promise<SupplierInvoiceStats[]>;
 
   /**
    * Lista as faturas de um fornecedor (excluindo drafts em processamento).
    * Ordenadas por data de emissão descendente.
    * Aceita filtro opcional de intervalo de datas (por invoice_date).
    */
-  listInvoicesBySupplier(supplierId: string, filter?: SupplierInvoiceFilter): Promise<SupplierInvoiceRow[]>;
+  listInvoicesBySupplier(
+    organizationId: OrganizationId,
+    supplierId: string,
+    filter?: SupplierInvoiceFilter,
+  ): Promise<SupplierInvoiceRow[]>;
 }

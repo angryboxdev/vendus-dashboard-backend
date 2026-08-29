@@ -11,11 +11,11 @@ export class UpdateSupplierUseCase implements UpdateSupplierPort {
   constructor(private readonly repository: SupplierRepositoryPort) {}
 
   async execute(command: UpdateSupplierCommand): Promise<SupplierDTO> {
-    const supplier = await this.repository.findById(command.id);
+    const supplier = await this.repository.findById(command.organizationId, command.id);
     if (!supplier) throw new SupplierNotFoundError(command.id);
 
     const updated = supplier.update(command.data);
-    await this.repository.update(updated);
+    await this.repository.update(command.organizationId, updated);
     return toSupplierDTO(updated);
   }
 }

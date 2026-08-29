@@ -9,9 +9,10 @@ import { toCostCenterGroupDTO } from "./shared.js";
 export class ListCostCenterGroupsUseCase implements ListCostCenterGroupsPort {
   constructor(private readonly repository: CostCenterGroupRepositoryPort) {}
 
-  async execute(command?: ListCostCenterGroupsCommand): Promise<CostCenterGroupDTO[]> {
+  async execute(command: ListCostCenterGroupsCommand): Promise<CostCenterGroupDTO[]> {
     const groups = await this.repository.findAll(
-      command?.isActive !== undefined ? { isActive: command.isActive } : undefined,
+      command.organizationId,
+      command.isActive !== undefined ? { isActive: command.isActive } : undefined,
     );
     return groups.map(toCostCenterGroupDTO);
   }

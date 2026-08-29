@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import { CostCenterGroup } from "../../domain/entities/cost-center-group.js";
 import { CostCenterCategory } from "../../domain/entities/cost-center-category.js";
 import { DEFAULT_COST_CENTERS } from "../../domain/seed/default-cost-centers.js";
@@ -14,14 +15,14 @@ export class SeedDefaultCostCentersUseCase implements SeedDefaultCostCentersPort
     private readonly categoryRepository: CostCenterCategoryRepositoryPort,
   ) {}
 
-  async execute(): Promise<SeedResult> {
+  async execute(organizationId: OrganizationId): Promise<SeedResult> {
     let groupsCreated = 0;
     let groupsSkipped = 0;
     let categoriesCreated = 0;
     let categoriesSkipped = 0;
 
     for (const groupSeed of DEFAULT_COST_CENTERS) {
-      let group = await this.groupRepository.findByCode(groupSeed.code);
+      let group = await this.groupRepository.findByCode(organizationId, groupSeed.code);
 
       if (!group) {
         group = CostCenterGroup.create({
@@ -30,14 +31,14 @@ export class SeedDefaultCostCentersUseCase implements SeedDefaultCostCentersPort
           description: groupSeed.description,
           sortOrder: groupSeed.sortOrder,
         });
-        await this.groupRepository.save(group);
+        await this.groupRepository.save(organizationId, group);
         groupsCreated++;
       } else {
         groupsSkipped++;
       }
 
       for (const catSeed of groupSeed.categories) {
-        const existing = await this.categoryRepository.findByCode(catSeed.code);
+        const existing = await this.categoryRepository.findByCode(organizationId, catSeed.code);
         if (existing) {
           categoriesSkipped++;
           continue;
@@ -54,7 +55,7 @@ export class SeedDefaultCostCentersUseCase implements SeedDefaultCostCentersPort
           requiresChannel: catSeed.requiresChannel,
           requiresAllocation: catSeed.requiresAllocation,
         });
-        await this.categoryRepository.save(category);
+        await this.categoryRepository.save(organizationId, category);
         categoriesCreated++;
       }
     }

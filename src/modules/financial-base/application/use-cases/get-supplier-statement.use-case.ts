@@ -15,7 +15,7 @@ export class GetSupplierStatementUseCase implements GetSupplierStatementPort {
   ) {}
 
   async execute(command: GetSupplierStatementCommand): Promise<SupplierStatementDTO> {
-    const supplier = await this.supplierRepository.findById(command.id);
+    const supplier = await this.supplierRepository.findById(command.organizationId, command.id);
     if (!supplier) throw new SupplierNotFoundError(command.id);
 
     const filter = command.startDate ?? command.endDate
@@ -25,7 +25,11 @@ export class GetSupplierStatementUseCase implements GetSupplierStatementPort {
         }
       : undefined;
 
-    const invoices = await this.invoiceStats.listInvoicesBySupplier(supplier.id, filter);
+    const invoices = await this.invoiceStats.listInvoicesBySupplier(
+      command.organizationId,
+      supplier.id,
+      filter,
+    );
 
     // Calcula stats sobre as faturas filtradas (não sobre o histórico completo)
     const EXCLUDED = new Set(["cancelled", "draft_ai", "pending_review"]);

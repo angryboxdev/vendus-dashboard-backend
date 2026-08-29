@@ -1,7 +1,9 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { ListCostCenterCategoriesUseCase } from "../../application/use-cases/list-cost-center-categories.use-case.js";
 import { FakeCostCenterCategoryRepository } from "../fakes/fake-cost-center-category-repository.js";
 import { CostCenterCategory } from "../../domain/entities/cost-center-category.js";
 
+const ORG_ID = mintOrganizationId("org-test");
 const GROUP_A = "group-a-uuid";
 const GROUP_B = "group-b-uuid";
 
@@ -20,10 +22,10 @@ function makeCategory(code: string, groupId: string, active = true) {
 
 async function makeRepo() {
   const repo = new FakeCostCenterCategoryRepository();
-  await repo.save(makeCategory("OPD.01", GROUP_A));
-  await repo.save(makeCategory("OPD.02", GROUP_A));
-  await repo.save(makeCategory("PES.01", GROUP_B));
-  await repo.save(makeCategory("PES.02", GROUP_B, false)); // inativa
+  await repo.save(ORG_ID, makeCategory("OPD.01", GROUP_A));
+  await repo.save(ORG_ID, makeCategory("OPD.02", GROUP_A));
+  await repo.save(ORG_ID, makeCategory("PES.01", GROUP_B));
+  await repo.save(ORG_ID, makeCategory("PES.02", GROUP_B, false)); // inativa
   return repo;
 }
 
@@ -32,7 +34,7 @@ describe("ListCostCenterCategoriesUseCase", () => {
     const repo = await makeRepo();
     const useCase = new ListCostCenterCategoriesUseCase(repo);
 
-    const result = await useCase.execute();
+    const result = await useCase.execute({ organizationId: ORG_ID });
 
     expect(result).toHaveLength(4);
   });
@@ -41,7 +43,7 @@ describe("ListCostCenterCategoriesUseCase", () => {
     const repo = await makeRepo();
     const useCase = new ListCostCenterCategoriesUseCase(repo);
 
-    const result = await useCase.execute({ groupId: GROUP_A });
+    const result = await useCase.execute({ organizationId: ORG_ID, groupId: GROUP_A });
 
     expect(result).toHaveLength(2);
     expect(result.every((c) => c.groupId === GROUP_A)).toBe(true);
@@ -51,7 +53,7 @@ describe("ListCostCenterCategoriesUseCase", () => {
     const repo = await makeRepo();
     const useCase = new ListCostCenterCategoriesUseCase(repo);
 
-    const result = await useCase.execute({ isActive: true });
+    const result = await useCase.execute({ organizationId: ORG_ID, isActive: true });
 
     expect(result).toHaveLength(3);
     expect(result.every((c) => c.isActive)).toBe(true);
@@ -61,7 +63,7 @@ describe("ListCostCenterCategoriesUseCase", () => {
     const repo = await makeRepo();
     const useCase = new ListCostCenterCategoriesUseCase(repo);
 
-    const result = await useCase.execute({ isActive: false });
+    const result = await useCase.execute({ organizationId: ORG_ID, isActive: false });
 
     expect(result).toHaveLength(1);
     expect(result[0].code).toBe("PES.02");
@@ -71,7 +73,7 @@ describe("ListCostCenterCategoriesUseCase", () => {
     const repo = await makeRepo();
     const useCase = new ListCostCenterCategoriesUseCase(repo);
 
-    const result = await useCase.execute({ groupId: GROUP_B, isActive: true });
+    const result = await useCase.execute({ organizationId: ORG_ID, groupId: GROUP_B, isActive: true });
 
     expect(result).toHaveLength(1);
     expect(result[0].code).toBe("PES.01");
@@ -81,7 +83,7 @@ describe("ListCostCenterCategoriesUseCase", () => {
     const repo = new FakeCostCenterCategoryRepository();
     const useCase = new ListCostCenterCategoriesUseCase(repo);
 
-    const result = await useCase.execute();
+    const result = await useCase.execute({ organizationId: ORG_ID });
 
     expect(result).toEqual([]);
   });

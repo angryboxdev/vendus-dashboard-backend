@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { FinancialType, UpdateCostCenterCategoryData } from "../../entities/cost-center-category.js";
 
 // ---- Shared DTO ----
@@ -20,16 +21,18 @@ export interface CostCenterCategoryDTO {
 
 // ---- List ----
 export interface ListCostCenterCategoriesCommand {
+  organizationId: OrganizationId;
   groupId?: string;
   isActive?: boolean;
 }
 
 export interface ListCostCenterCategoriesPort {
-  execute(command?: ListCostCenterCategoriesCommand): Promise<CostCenterCategoryDTO[]>;
+  execute(command: ListCostCenterCategoriesCommand): Promise<CostCenterCategoryDTO[]>;
 }
 
 // ---- Get ----
 export interface GetCostCenterCategoryCommand {
+  organizationId: OrganizationId;
   id: string;
 }
 
@@ -39,6 +42,7 @@ export interface GetCostCenterCategoryPort {
 
 // ---- Create ----
 export interface CreateCostCenterCategoryCommand {
+  organizationId: OrganizationId;
   groupId: string;
   code: string;
   name: string;
@@ -57,6 +61,7 @@ export interface CreateCostCenterCategoryPort {
 
 // ---- Update ----
 export interface UpdateCostCenterCategoryCommand {
+  organizationId: OrganizationId;
   id: string;
   data: UpdateCostCenterCategoryData;
 }
@@ -67,6 +72,7 @@ export interface UpdateCostCenterCategoryPort {
 
 // ---- Toggle status ----
 export interface ToggleCostCenterCategoryStatusCommand {
+  organizationId: OrganizationId;
   id: string;
   isActive: boolean;
 }
@@ -84,5 +90,5 @@ export interface SeedResult {
 }
 
 export interface SeedDefaultCostCentersPort {
-  execute(): Promise<SeedResult>;
+  execute(organizationId: OrganizationId): Promise<SeedResult>;
 }

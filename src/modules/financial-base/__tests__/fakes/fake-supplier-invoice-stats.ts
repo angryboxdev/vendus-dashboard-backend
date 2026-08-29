@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type {
   SupplierInvoiceFilter,
   SupplierInvoiceRow,
@@ -5,6 +6,12 @@ import type {
   SupplierInvoiceStatsPort,
 } from "../../domain/ports/out/supplier-invoice-stats.port.js";
 
+/**
+ * A organização é apenas mais um parâmetro (D2) — este fake modela uma única
+ * organização de cada vez, tal como as suítes que o usam; a filtragem por
+ * organização é responsabilidade do helper (`ScopedQuery`), coberta pelos
+ * seus próprios testes, não deste fake.
+ */
 export class FakeSupplierInvoiceStats implements SupplierInvoiceStatsPort {
   private readonly summaries = new Map<string, SupplierInvoiceStats>();
   private readonly invoiceRows = new Map<string, SupplierInvoiceRow[]>();
@@ -14,7 +21,10 @@ export class FakeSupplierInvoiceStats implements SupplierInvoiceStatsPort {
     if (invoices) this.invoiceRows.set(stats.supplierId, invoices);
   }
 
-  async getSummariesForSuppliers(supplierIds: string[]): Promise<SupplierInvoiceStats[]> {
+  async getSummariesForSuppliers(
+    _organizationId: OrganizationId,
+    supplierIds: string[],
+  ): Promise<SupplierInvoiceStats[]> {
     return supplierIds.map(
       (id) =>
         this.summaries.get(id) ?? {
@@ -29,7 +39,11 @@ export class FakeSupplierInvoiceStats implements SupplierInvoiceStatsPort {
     );
   }
 
-  async listInvoicesBySupplier(supplierId: string, filter?: SupplierInvoiceFilter): Promise<SupplierInvoiceRow[]> {
+  async listInvoicesBySupplier(
+    _organizationId: OrganizationId,
+    supplierId: string,
+    filter?: SupplierInvoiceFilter,
+  ): Promise<SupplierInvoiceRow[]> {
     const rows = this.invoiceRows.get(supplierId) ?? [];
     if (!filter) return rows;
     return rows.filter((r) => {

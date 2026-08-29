@@ -1,9 +1,12 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateCostCenterGroupUseCase } from "../../application/use-cases/create-cost-center-group.use-case.js";
 import { CreateCostCenterCategoryUseCase } from "../../application/use-cases/create-cost-center-category.use-case.js";
 import { UpdateCostCenterCategoryUseCase } from "../../application/use-cases/update-cost-center-category.use-case.js";
 import { FakeCostCenterGroupRepository } from "../fakes/fake-cost-center-group-repository.js";
 import { FakeCostCenterCategoryRepository } from "../fakes/fake-cost-center-category-repository.js";
 import { CostCenterCategoryNotFoundError } from "../../domain/errors.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 describe("UpdateCostCenterCategoryUseCase", () => {
   async function makeUseCases() {
@@ -12,8 +15,9 @@ describe("UpdateCostCenterCategoryUseCase", () => {
     const createGroup = new CreateCostCenterGroupUseCase(groupRepo);
     const createCategory = new CreateCostCenterCategoryUseCase(groupRepo, categoryRepo);
     const updateCategory = new UpdateCostCenterCategoryUseCase(categoryRepo);
-    const group = await createGroup.execute({ code: "OPD", name: "Operação Direta" });
+    const group = await createGroup.execute({ organizationId: ORG_ID, code: "OPD", name: "Operação Direta" });
     const category = await createCategory.execute({
+      organizationId: ORG_ID,
       groupId: group.id,
       code: "OPD.01",
       name: "CMV",
@@ -29,6 +33,7 @@ describe("UpdateCostCenterCategoryUseCase", () => {
     const { updateCategory, category } = await makeUseCases();
 
     const result = await updateCategory.execute({
+      organizationId: ORG_ID,
       id: category.id,
       data: { name: "CMV / Ingredientes", requiresChannel: true },
     });
@@ -42,7 +47,7 @@ describe("UpdateCostCenterCategoryUseCase", () => {
     const { updateCategory } = await makeUseCases();
 
     await expect(
-      updateCategory.execute({ id: "nao-existe", data: { name: "X" } }),
+      updateCategory.execute({ organizationId: ORG_ID, id: "nao-existe", data: { name: "X" } }),
     ).rejects.toThrow(CostCenterCategoryNotFoundError);
   });
 });

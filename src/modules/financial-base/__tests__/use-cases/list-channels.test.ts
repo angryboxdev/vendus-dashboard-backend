@@ -1,7 +1,9 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { ListChannelsUseCase } from "../../application/use-cases/list-channels.use-case.js";
 import { FakeChannelRepository } from "../fakes/fake-channel-repository.js";
 import { Channel } from "../../domain/entities/channel.js";
 
+const ORG_ID = mintOrganizationId("org-test");
 const now = new Date();
 
 function makeChannel(id: string, code: string, name: string, sortOrder: number, isActive = true): Channel {
@@ -16,7 +18,7 @@ describe("ListChannelsUseCase", () => {
     repo.seed(makeChannel("id-3", "UBER_EATS", "Uber Eats", 3, false));
     const useCase = new ListChannelsUseCase(repo);
 
-    const result = await useCase.execute();
+    const result = await useCase.execute(ORG_ID);
 
     expect(result).toHaveLength(3);
   });
@@ -27,7 +29,7 @@ describe("ListChannelsUseCase", () => {
     repo.seed(makeChannel("id-2", "UBER_EATS", "Uber Eats", 2, false));
     const useCase = new ListChannelsUseCase(repo);
 
-    const result = await useCase.execute(true);
+    const result = await useCase.execute(ORG_ID, true);
 
     expect(result).toHaveLength(1);
     expect(result[0].code).toBe("SALON");
@@ -39,7 +41,7 @@ describe("ListChannelsUseCase", () => {
     repo.seed(makeChannel("id-2", "UBER_EATS", "Uber Eats", 2, false));
     const useCase = new ListChannelsUseCase(repo);
 
-    const result = await useCase.execute(false);
+    const result = await useCase.execute(ORG_ID, false);
 
     expect(result).toHaveLength(1);
     expect(result[0].code).toBe("UBER_EATS");
@@ -49,7 +51,7 @@ describe("ListChannelsUseCase", () => {
     const repo = new FakeChannelRepository();
     const useCase = new ListChannelsUseCase(repo);
 
-    const result = await useCase.execute();
+    const result = await useCase.execute(ORG_ID);
 
     expect(result).toEqual([]);
   });
@@ -59,7 +61,7 @@ describe("ListChannelsUseCase", () => {
     repo.seed(makeChannel("id-1", "GLOVO", "Glovo", 1));
     const useCase = new ListChannelsUseCase(repo);
 
-    const [dto] = await useCase.execute();
+    const [dto] = await useCase.execute(ORG_ID);
 
     expect(dto.id).toBe("id-1");
     expect(dto.code).toBe("GLOVO");
@@ -75,7 +77,7 @@ describe("ListChannelsUseCase", () => {
     repo.seed(makeChannel("id-2", "TAKEAWAY", "Take Away", 2));
     const useCase = new ListChannelsUseCase(repo);
 
-    const result = await useCase.execute();
+    const result = await useCase.execute(ORG_ID);
 
     expect(result.map((c) => c.code)).toEqual(["SALON", "TAKEAWAY", "BOLT"]);
   });

@@ -11,13 +11,13 @@ export class ToggleSupplierStatusUseCase implements ToggleSupplierStatusPort {
   constructor(private readonly repository: SupplierRepositoryPort) {}
 
   async execute(command: ToggleSupplierStatusCommand): Promise<SupplierDTO> {
-    const supplier = await this.repository.findById(command.id);
+    const supplier = await this.repository.findById(command.organizationId, command.id);
     if (!supplier) throw new SupplierNotFoundError(command.id);
 
     const updated =
       command.status === "active" ? supplier.activate() : supplier.deactivate();
 
-    await this.repository.update(updated);
+    await this.repository.update(command.organizationId, updated);
     return toSupplierDTO(updated);
   }
 }

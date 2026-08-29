@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { UpdateCostCenterGroupData } from "../../entities/cost-center-group.js";
 
 // ---- Shared DTO ----
@@ -14,15 +15,17 @@ export interface CostCenterGroupDTO {
 
 // ---- List ----
 export interface ListCostCenterGroupsCommand {
+  organizationId: OrganizationId;
   isActive?: boolean;
 }
 
 export interface ListCostCenterGroupsPort {
-  execute(command?: ListCostCenterGroupsCommand): Promise<CostCenterGroupDTO[]>;
+  execute(command: ListCostCenterGroupsCommand): Promise<CostCenterGroupDTO[]>;
 }
 
 // ---- Get ----
 export interface GetCostCenterGroupCommand {
+  organizationId: OrganizationId;
   id: string;
 }
 
@@ -32,6 +35,7 @@ export interface GetCostCenterGroupPort {
 
 // ---- Create ----
 export interface CreateCostCenterGroupCommand {
+  organizationId: OrganizationId;
   code: string;
   name: string;
   description?: string | null;
@@ -44,6 +48,7 @@ export interface CreateCostCenterGroupPort {
 
 // ---- Update ----
 export interface UpdateCostCenterGroupCommand {
+  organizationId: OrganizationId;
   id: string;
   data: UpdateCostCenterGroupData;
 }
@@ -54,6 +59,7 @@ export interface UpdateCostCenterGroupPort {
 
 // ---- Toggle status ----
 export interface ToggleCostCenterGroupStatusCommand {
+  organizationId: OrganizationId;
   id: string;
   isActive: boolean;
 }

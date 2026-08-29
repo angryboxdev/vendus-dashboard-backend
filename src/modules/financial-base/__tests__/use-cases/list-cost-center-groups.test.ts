@@ -1,15 +1,18 @@
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { ListCostCenterGroupsUseCase } from "../../application/use-cases/list-cost-center-groups.use-case.js";
 import { FakeCostCenterGroupRepository } from "../fakes/fake-cost-center-group-repository.js";
 import { CostCenterGroup } from "../../domain/entities/cost-center-group.js";
+
+const ORG_ID = mintOrganizationId("org-test");
 
 async function makeRepo() {
   const repo = new FakeCostCenterGroupRepository();
   const active1 = CostCenterGroup.create({ code: "OPD", name: "Operação Direta", sortOrder: 1 });
   const active2 = CostCenterGroup.create({ code: "PES", name: "Pessoal", sortOrder: 2 });
   const inactive = CostCenterGroup.create({ code: "ADM", name: "Administrativo", sortOrder: 3 }).deactivate();
-  await repo.save(active1);
-  await repo.save(active2);
-  await repo.save(inactive);
+  await repo.save(ORG_ID, active1);
+  await repo.save(ORG_ID, active2);
+  await repo.save(ORG_ID, inactive);
   return repo;
 }
 
@@ -18,7 +21,7 @@ describe("ListCostCenterGroupsUseCase", () => {
     const repo = await makeRepo();
     const useCase = new ListCostCenterGroupsUseCase(repo);
 
-    const result = await useCase.execute();
+    const result = await useCase.execute({ organizationId: ORG_ID });
 
     expect(result).toHaveLength(3);
   });
@@ -27,7 +30,7 @@ describe("ListCostCenterGroupsUseCase", () => {
     const repo = await makeRepo();
     const useCase = new ListCostCenterGroupsUseCase(repo);
 
-    const result = await useCase.execute({ isActive: true });
+    const result = await useCase.execute({ organizationId: ORG_ID, isActive: true });
 
     expect(result).toHaveLength(2);
     expect(result.every((g) => g.isActive)).toBe(true);
@@ -37,7 +40,7 @@ describe("ListCostCenterGroupsUseCase", () => {
     const repo = await makeRepo();
     const useCase = new ListCostCenterGroupsUseCase(repo);
 
-    const result = await useCase.execute({ isActive: false });
+    const result = await useCase.execute({ organizationId: ORG_ID, isActive: false });
 
     expect(result).toHaveLength(1);
     expect(result[0].code).toBe("ADM");
@@ -47,7 +50,7 @@ describe("ListCostCenterGroupsUseCase", () => {
     const repo = new FakeCostCenterGroupRepository();
     const useCase = new ListCostCenterGroupsUseCase(repo);
 
-    const result = await useCase.execute();
+    const result = await useCase.execute({ organizationId: ORG_ID });
 
     expect(result).toEqual([]);
   });

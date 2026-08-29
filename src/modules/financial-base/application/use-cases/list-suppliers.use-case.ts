@@ -12,11 +12,11 @@ import { toSupplierDTO } from "./shared.js";
 export class ListSuppliersUseCase implements ListSuppliersPort {
   constructor(private readonly repository: SupplierRepositoryPort) {}
 
-  async execute(command?: ListSuppliersCommand): Promise<SupplierDTO[]> {
+  async execute(command: ListSuppliersCommand): Promise<SupplierDTO[]> {
     const filter: SupplierFilter = {};
-    if (command?.status) filter.status = command.status;
-    if (command?.search) filter.search = command.search;
-    const suppliers = await this.repository.findAll(filter);
+    if (command.status) filter.status = command.status;
+    if (command.search) filter.search = command.search;
+    const suppliers = await this.repository.findAll(command.organizationId, filter);
     return suppliers.map(toSupplierDTO);
   }
 }
