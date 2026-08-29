@@ -3,7 +3,8 @@ import { fetchAllDocuments } from "./documentsService.js";
 import { ENV } from "../config/env.js";
 import type { VendusDocument } from "../domain/types.js";
 import { toCents, fromCents } from "../utils/numbers.js";
-import { getSupabaseServiceRole } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 
 const LISBON = "Europe/Lisbon";
 const PER_PAGE = 200;
@@ -311,17 +312,15 @@ export async function buildAnalyticsCurrent(params: {
 type CachedMonthRow = { year: number; month: number; gross_cents: number; documents_count: number };
 type CacheMap = Map<number, Map<number, CachedMonthRow>>;
 
-async function loadCachedMonths(pastYears: number[]): Promise<CacheMap> {
+async function loadCachedMonths(organizationId: OrganizationId, pastYears: number[]): Promise<CacheMap> {
   const map: CacheMap = new Map();
   if (pastYears.length === 0) return map;
   try {
-    const sb = getSupabaseServiceRole();
-    if (!sb) return map;
-    const { data } = await sb
-      .from("analytics_monthly_cache")
+    const { data } = await createScopedQuery(organizationId)
+      .table("analytics_monthly_cache")
       .select("year, month, gross_cents, documents_count")
       .in("year", pastYears);
-    for (const row of data ?? []) {
+    for (const row of (data ?? []) as unknown as CachedMonthRow[]) {
       if (!map.has(row.year)) map.set(row.year, new Map());
       map.get(row.year)!.set(row.month, {
         year: row.year,
@@ -336,12 +335,12 @@ async function loadCachedMonths(pastYears: number[]): Promise<CacheMap> {
   return map;
 }
 
-async function saveCachedMonths(rows: CachedMonthRow[]): Promise<void> {
+async function saveCachedMonths(organizationId: OrganizationId, rows: CachedMonthRow[]): Promise<void> {
   if (rows.length === 0) return;
   try {
-    const sb = getSupabaseServiceRole();
-    if (!sb) return;
-    await sb.from("analytics_monthly_cache").upsert(rows, { onConflict: "org_id,year,month" });
+    await createScopedQuery(organizationId)
+      .table("analytics_monthly_cache")
+      .upsert(rows, { onConflict: "org_id,year,month" });
   } catch (e) {
     console.error("[analytics cache] save failed (non-fatal):", e);
   }
@@ -349,10 +348,13 @@ async function saveCachedMonths(rows: CachedMonthRow[]): Promise<void> {
 
 // ---- historical (slow) ------------------------------------------------------
 
-export async function buildAnalyticsHistorical(params: {
-  year: number;
-  month: number;
-}): Promise<AnalyticsHistoricalResponse> {
+export async function buildAnalyticsHistorical(
+  organizationId: OrganizationId,
+  params: {
+    year: number;
+    month: number;
+  }
+): Promise<AnalyticsHistoricalResponse> {
   const startedAt = Date.now();
   const { year, month } = params;
   const ctx = buildDateContext(year, month);
@@ -366,7 +368,7 @@ export async function buildAnalyticsHistorical(params: {
 
   // 1. Verificar cache para tudo — anos passados + meses completos do ano atual
   const allYearsToCheck = [...pastYears, ...(currentYearCompleteMonths.length > 0 ? [year] : [])];
-  const cacheByYear = await loadCachedMonths(allYearsToCheck);
+  const cacheByYear = await loadCachedMonths(organizationId, allYearsToCheck);
 
   // 2. Identificar o que falta no cache
   const pastYearsMissing = pastYears.filter((y) => (cacheByYear.get(y)?.size ?? 0) < 12);
@@ -412,7 +414,7 @@ export async function buildAnalyticsHistorical(params: {
     computeAndCacheMonth(year, m, freshCurrentYearDocs);
   }
 
-  void saveCachedMonths(toSave);
+  void saveCachedMonths(organizationId, toSave);
 
   // 5. Calcular métricas — tudo via cache + mês atual fresco
 
