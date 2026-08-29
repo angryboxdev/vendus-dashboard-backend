@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import type {
   OccurrenceMatchCandidate,
   OccurrenceMatchReadPort,
@@ -40,16 +41,23 @@ function toCandidate(row: OccurrenceRow): OccurrenceMatchCandidate {
 }
 
 export class SupabaseOccurrenceMatchReadAdapter implements OccurrenceMatchReadPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async search(opts: {
-    q?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    limit?: number;
-  }): Promise<OccurrenceMatchCandidate[]> {
-    let query = this.supabase
-      .from("recurring_occurrences")
+  async search(
+    organizationId: OrganizationId,
+    opts: {
+      q?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      limit?: number;
+    }
+  ): Promise<OccurrenceMatchCandidate[]> {
+    // Note: the embedded recurring_contracts(...) select rides along
+    // unfiltered by organization — only the top-level recurring_occurrences
+    // table gets the organization predicate via .table(). This is a known,
+    // accepted, pre-existing gap (spec.md D16), not addressed here.
+    let query = this.scopedQuery(organizationId)
+      .table("recurring_occurrences")
       .select("id, recurrence_id, period, estimated_amount_cents, real_amount_cents, due_date, status, invoice_id, recurring_contracts(name, supplier_name, supplier_id)")
       .not("status", "eq", "cancelled")
       .is("invoice_id", null)
@@ -76,10 +84,10 @@ export class SupabaseOccurrenceMatchReadAdapter implements OccurrenceMatchReadPo
     return results;
   }
 
-  async findByIds(ids: string[]): Promise<OccurrenceMatchCandidate[]> {
+  async findByIds(organizationId: OrganizationId, ids: string[]): Promise<OccurrenceMatchCandidate[]> {
     if (ids.length === 0) return [];
-    const { data, error } = await this.supabase
-      .from("recurring_occurrences")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("recurring_occurrences")
       .select("id, recurrence_id, period, estimated_amount_cents, real_amount_cents, due_date, status, invoice_id, recurring_contracts(name, supplier_name, supplier_id)")
       .in("id", ids);
     if (error) throw new Error(error.message);

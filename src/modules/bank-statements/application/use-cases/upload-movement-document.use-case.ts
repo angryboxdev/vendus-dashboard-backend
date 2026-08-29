@@ -13,7 +13,7 @@ export class UploadMovementDocumentUseCase implements UploadMovementDocumentPort
   ) {}
 
   async execute(command: UploadMovementDocumentCommand): Promise<{ documentUrl: string }> {
-    const movement = await this.movementRepo.findById(command.movementId);
+    const movement = await this.movementRepo.findById(command.organizationId, command.movementId);
     if (!movement) throw new MovementNotFoundError(command.movementId);
 
     const documentUrl = await this.storage.store(

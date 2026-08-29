@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "@jest/globals";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateReconciliationRuleUseCase } from "../../application/use-cases/create-reconciliation-rule.use-case.js";
 import { DeleteReconciliationRuleUseCase } from "../../application/use-cases/delete-reconciliation-rule.use-case.js";
 import { ListReconciliationRulesUseCase } from "../../application/use-cases/list-reconciliation-rules.use-case.js";
@@ -6,6 +7,7 @@ import { FakeBankReconciliationRuleRepository } from "../fakes/fake-bank-reconci
 import { RuleNotFoundError } from "../../domain/errors.js";
 
 describe("Reconciliation Rules use-cases", () => {
+  const organizationId = mintOrganizationId("org-a");
   let repo: FakeBankReconciliationRuleRepository;
   let createUC: CreateReconciliationRuleUseCase;
   let deleteUC: DeleteReconciliationRuleUseCase;
@@ -20,6 +22,7 @@ describe("Reconciliation Rules use-cases", () => {
 
   it("creates a rule and lists it", async () => {
     const rule = await createUC.execute({
+      organizationId,
       name: "Comissão de conta",
       descriptionContains: "COM.MAN.CONTA",
       justificationType: "despesa_bancaria_automatica",
@@ -28,37 +31,41 @@ describe("Reconciliation Rules use-cases", () => {
     expect(rule.id).toBeDefined();
     expect(rule.isActive).toBe(true);
 
-    const list = await listUC.execute();
+    const list = await listUC.execute({ organizationId });
     expect(list).toHaveLength(1);
     expect(list[0]!.name).toBe("Comissão de conta");
   });
 
   it("activeOnly filter works", async () => {
     await createUC.execute({
+      organizationId,
       name: "Rule A",
       descriptionContains: "A",
       justificationType: "despesa_bancaria_automatica",
     });
-    const allRules = await listUC.execute(false);
+    const allRules = await listUC.execute({ organizationId, activeOnly: false });
     expect(allRules).toHaveLength(1);
-    const activeOnly = await listUC.execute(true);
+    const activeOnly = await listUC.execute({ organizationId, activeOnly: true });
     expect(activeOnly).toHaveLength(1);
   });
 
   it("deletes a rule", async () => {
     const rule = await createUC.execute({
+      organizationId,
       name: "Test",
       descriptionContains: "TEST",
       justificationType: "despesa_bancaria_automatica",
     });
 
-    await deleteUC.execute(rule.id);
+    await deleteUC.execute({ organizationId, id: rule.id });
 
-    const list = await listUC.execute();
+    const list = await listUC.execute({ organizationId });
     expect(list).toHaveLength(0);
   });
 
   it("throws RuleNotFoundError when deleting unknown rule", async () => {
-    await expect(deleteUC.execute("not-found")).rejects.toThrow(RuleNotFoundError);
+    await expect(
+      deleteUC.execute({ organizationId, id: "not-found" })
+    ).rejects.toThrow(RuleNotFoundError);
   });
 });

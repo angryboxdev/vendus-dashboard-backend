@@ -1,8 +1,8 @@
 import type { BankStatementImportRepositoryPort } from "../../domain/ports/out/bank-statement-import-repository.port.js";
 import type {
   BankStatementSummary,
-  ListBankStatementsFilter,
   ListBankStatementsPort,
+  ListBankStatementsQuery,
 } from "../../domain/ports/in/bank-statement.ports.js";
 import type { BankStatementImport } from "../../domain/entities/bank-statement-import.js";
 
@@ -30,8 +30,9 @@ function toSummary(s: BankStatementImport): BankStatementSummary {
 export class ListBankStatementsUseCase implements ListBankStatementsPort {
   constructor(private readonly statementRepo: BankStatementImportRepositoryPort) {}
 
-  async execute(filter?: ListBankStatementsFilter): Promise<BankStatementSummary[]> {
-    const statements = await this.statementRepo.findAll(filter);
+  async execute(query: ListBankStatementsQuery): Promise<BankStatementSummary[]> {
+    const { organizationId, ...filter } = query;
+    const statements = await this.statementRepo.findAll(organizationId, filter);
     return statements.map(toSummary);
   }
 }

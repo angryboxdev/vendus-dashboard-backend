@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import type {
   PayableEntryMatchCandidate,
   PayableEntryMatchReadPort,
@@ -9,7 +10,7 @@ import type {
  * any code from the payable-entries module.
  */
 export class SupabasePayableEntryMatchReadAdapter implements PayableEntryMatchReadPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
   private mapRow(row: Record<string, unknown>): PayableEntryMatchCandidate {
     return {
@@ -24,28 +25,34 @@ export class SupabasePayableEntryMatchReadAdapter implements PayableEntryMatchRe
     };
   }
 
-  async findByIds(ids: string[]): Promise<PayableEntryMatchCandidate[]> {
+  async findByIds(
+    organizationId: OrganizationId,
+    ids: string[]
+  ): Promise<PayableEntryMatchCandidate[]> {
     if (ids.length === 0) return [];
-    const { data, error } = await this.supabase
-      .from("payable_entries")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("payable_entries")
       .select("id, supplier_id, supplier_name, description, amount, due_date, status, invoice_id")
       .in("id", ids);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((row) => this.mapRow(row as Record<string, unknown>));
+    return (data ?? []).map((row) => this.mapRow(row as unknown as Record<string, unknown>));
   }
 
-  async findCandidates(opts: {
-    amountCents: number;
-    dateFrom: string;
-    dateTo: string;
-    toleranceCents?: number;
-  }): Promise<PayableEntryMatchCandidate[]> {
+  async findCandidates(
+    organizationId: OrganizationId,
+    opts: {
+      amountCents: number;
+      dateFrom: string;
+      dateTo: string;
+      toleranceCents?: number;
+    }
+  ): Promise<PayableEntryMatchCandidate[]> {
     const tolerance = opts.toleranceCents ?? 0;
     const min = opts.amountCents - tolerance;
     const max = opts.amountCents + tolerance;
 
-    const { data, error } = await this.supabase
-      .from("payable_entries")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("payable_entries")
       .select("id, supplier_id, supplier_name, description, amount, due_date, status, invoice_id")
       .gte("amount", min)
       .lte("amount", max)
@@ -54,6 +61,6 @@ export class SupabasePayableEntryMatchReadAdapter implements PayableEntryMatchRe
 
     if (error) throw new Error(error.message);
 
-    return (data ?? []).map((row) => this.mapRow(row as Record<string, unknown>));
+    return (data ?? []).map((row) => this.mapRow(row as unknown as Record<string, unknown>));
   }
 }

@@ -1,22 +1,28 @@
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type {
   OccurrenceMatchCandidate,
   OccurrenceMatchReadPort,
 } from "../../domain/ports/out/occurrence-match-read.port.js";
 
 export class FakeOccurrenceMatchReadAdapter implements OccurrenceMatchReadPort {
-  private candidates: OccurrenceMatchCandidate[] = [];
+  private candidates = new Map<OrganizationId, OccurrenceMatchCandidate[]>();
 
-  seed(candidates: OccurrenceMatchCandidate[]): void {
-    this.candidates = candidates;
+  seed(organizationId: OrganizationId, candidates: OccurrenceMatchCandidate[]): void {
+    this.candidates.set(organizationId, candidates);
   }
 
-  async search(opts: {
-    q?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    limit?: number;
-  }): Promise<OccurrenceMatchCandidate[]> {
-    let results = [...this.candidates].filter((c) => c.status !== "cancelled");
+  async search(
+    organizationId: OrganizationId,
+    opts: {
+      q?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      limit?: number;
+    }
+  ): Promise<OccurrenceMatchCandidate[]> {
+    let results = [...(this.candidates.get(organizationId) ?? [])].filter(
+      (c) => c.status !== "cancelled"
+    );
 
     if (opts.dateFrom) results = results.filter((c) => c.dueDate >= opts.dateFrom!);
     if (opts.dateTo)   results = results.filter((c) => c.dueDate <= opts.dateTo!);
@@ -33,7 +39,10 @@ export class FakeOccurrenceMatchReadAdapter implements OccurrenceMatchReadPort {
     return results.slice(0, opts.limit ?? 50);
   }
 
-  async findByIds(ids: string[]): Promise<OccurrenceMatchCandidate[]> {
-    return this.candidates.filter((c) => ids.includes(c.id));
+  async findByIds(
+    organizationId: OrganizationId,
+    ids: string[]
+  ): Promise<OccurrenceMatchCandidate[]> {
+    return (this.candidates.get(organizationId) ?? []).filter((c) => ids.includes(c.id));
   }
 }

@@ -4,7 +4,7 @@ import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 // Adapters out
 import { SupabaseBankRepository } from "./adapters/out/supabase-bank.repository.js";
 import { SupabaseBankAccountRepository } from "./adapters/out/supabase-bank-account.repository.js";
-import { BankAccountCrossModuleReadAdapter } from "./adapters/out/bank-account-cross-module-read.adapter.js";
+import type { BankAccountRepositoryPort } from "./domain/ports/out/bank-account-repository.port.js";
 
 // Use cases
 import { CreateBankUseCase } from "./application/use-cases/create-bank.use-case.js";
@@ -32,12 +32,18 @@ import { BankAccountsController } from "./adapters/in/bank-accounts.controller.j
  * Exposes:
  *  - router     : Express router mounted at /api
  *  - accountRepo: cross-module read access for bank-statements' auto-linking
- *                 (see `BankAccountCrossModuleReadAdapter` — a temporary
- *                 bridge, deleted by ticket 09)
+ *                 on import (`BankAccountReadPort`) — the scoped
+ *                 `SupabaseBankAccountRepository` satisfies that narrower
+ *                 port structurally (both take `organizationId` first, per
+ *                 D2), so it's exposed directly. Ticket 09 deleted the
+ *                 temporary `BankAccountCrossModuleReadAdapter` bridge this
+ *                 used to go through, now that bank-statements has its own
+ *                 request-scoped organization to pass across the module
+ *                 boundary.
  */
 export function createBankAccountsModule(): {
   router: Router;
-  accountRepo: BankAccountCrossModuleReadAdapter;
+  accountRepo: BankAccountRepositoryPort;
 } {
   // Adapters out
   const bankRepo = new SupabaseBankRepository(createScopedQuery);
@@ -67,5 +73,5 @@ export function createBankAccountsModule(): {
     deleteBankAccount
   );
 
-  return { router: controller.router, accountRepo: new BankAccountCrossModuleReadAdapter(accountRepo) };
+  return { router: controller.router, accountRepo };
 }

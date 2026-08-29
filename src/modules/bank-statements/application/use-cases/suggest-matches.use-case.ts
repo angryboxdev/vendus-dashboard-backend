@@ -9,6 +9,7 @@ import type { MovementMatchHintPort } from "../../domain/ports/out/movement-matc
 import type {
   MatchSuggestion,
   SuggestMatchesPort,
+  SuggestMatchesQuery,
 } from "../../domain/ports/in/bank-statement.ports.js";
 import type { BankMovement } from "../../domain/entities/bank-movement.js";
 
@@ -51,11 +52,12 @@ export class SuggestMatchesUseCase implements SuggestMatchesPort {
     private readonly hint: MovementMatchHintPort,
   ) {}
 
-  async execute(statementImportId: string): Promise<MatchSuggestion[]> {
-    const statement = await this.statementRepo.findById(statementImportId);
+  async execute(query: SuggestMatchesQuery): Promise<MatchSuggestion[]> {
+    const { organizationId, statementImportId } = query;
+    const statement = await this.statementRepo.findById(organizationId, statementImportId);
     if (!statement) throw new StatementNotFoundError(statementImportId);
 
-    const movements = await this.movementRepo.findByStatementId(statementImportId);
+    const movements = await this.movementRepo.findByStatementId(organizationId, statementImportId);
     // Only debit movements that are not yet resolved and have no pending suggestion
     const unresolved = movements.filter(
       (m) =>
@@ -70,7 +72,7 @@ export class SuggestMatchesUseCase implements SuggestMatchesPort {
     const claimedEntityIds = new Set<string>();
 
     for (const movement of unresolved) {
-      const suggestion = await this.findBestMatch(movement, claimedEntityIds);
+      const suggestion = await this.findBestMatch(organizationId, movement, claimedEntityIds);
       if (suggestion) {
         suggestions.push(suggestion);
         claimedEntityIds.add(suggestion.entityId);
@@ -79,7 +81,7 @@ export class SuggestMatchesUseCase implements SuggestMatchesPort {
           suggestion.entityId,
           suggestion.confidence
         );
-        await this.movementRepo.update(updated);
+        await this.movementRepo.update(organizationId, updated);
       }
     }
 
@@ -87,6 +89,7 @@ export class SuggestMatchesUseCase implements SuggestMatchesPort {
   }
 
   private async findBestMatch(
+    organizationId: SuggestMatchesQuery["organizationId"],
     movement: BankMovement,
     claimedEntityIds: Set<string>
   ): Promise<MatchSuggestion | null> {
@@ -100,17 +103,17 @@ export class SuggestMatchesUseCase implements SuggestMatchesPort {
     // Resolve hint once per movement — single DB lookup
     const normalizedDesc = normalizeBankDescription(movement.description);
     const hintSupplierId = normalizedDesc.length > 0
-      ? await this.hint.findSupplierByDescription(normalizedDesc)
+      ? await this.hint.findSupplierByDescription(organizationId, normalizedDesc)
       : null;
 
     const [invoiceCandidates, payableCandidates] = await Promise.all([
-      this.invoiceRead.findCandidates({
+      this.invoiceRead.findCandidates(organizationId, {
         amountCents: movement.amount,
         dateFrom,
         dateTo,
         toleranceCents: tolerance,
       }),
-      this.payableRead.findCandidates({
+      this.payableRead.findCandidates(organizationId, {
         amountCents: movement.amount,
         dateFrom,
         dateTo,

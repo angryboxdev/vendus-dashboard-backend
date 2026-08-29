@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import {
   BankMovement,
   type MovementType,
@@ -46,9 +47,9 @@ function toEntity(row: Record<string, unknown>): BankMovement {
 }
 
 export class SupabaseBankMovementRepository implements BankMovementRepositoryPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
-  async saveBulk(movements: BankMovement[]): Promise<void> {
+  async saveBulk(organizationId: OrganizationId, movements: BankMovement[]): Promise<void> {
     if (movements.length === 0) return;
     const rows = movements.map((m) => ({
       id: m.id,
@@ -74,16 +75,17 @@ export class SupabaseBankMovementRepository implements BankMovementRepositoryPor
       created_at: m.createdAt.toISOString(),
       updated_at: m.updatedAt.toISOString(),
     }));
-    const { error } = await this.supabase.from("bank_movements").insert(rows);
+    const { error } = await this.scopedQuery(organizationId).table("bank_movements").insert(rows);
     if (error) throw new Error(error.message);
   }
 
   async findByStatementId(
+    organizationId: OrganizationId,
     statementImportId: string,
     filter?: BankMovementFilter
   ): Promise<BankMovement[]> {
-    let q = this.supabase
-      .from("bank_movements")
+    let q = this.scopedQuery(organizationId)
+      .table("bank_movements")
       .select("*")
       .eq("statement_import_id", statementImportId)
       .order("booking_date", { ascending: true });
@@ -97,33 +99,33 @@ export class SupabaseBankMovementRepository implements BankMovementRepositoryPor
 
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return (data ?? []).map((r) => toEntity(r as unknown as Record<string, unknown>));
   }
 
-  async findById(id: string): Promise<BankMovement | null> {
-    const { data, error } = await this.supabase
-      .from("bank_movements")
+  async findById(organizationId: OrganizationId, id: string): Promise<BankMovement | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("bank_movements")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return toEntity(data as Record<string, unknown>);
+    return toEntity(data as unknown as Record<string, unknown>);
   }
 
-  async findByIds(ids: string[]): Promise<BankMovement[]> {
+  async findByIds(organizationId: OrganizationId, ids: string[]): Promise<BankMovement[]> {
     if (ids.length === 0) return [];
-    const { data, error } = await this.supabase
-      .from("bank_movements")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("bank_movements")
       .select("*")
       .in("id", ids);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return (data ?? []).map((r) => toEntity(r as unknown as Record<string, unknown>));
   }
 
-  async update(movement: BankMovement): Promise<void> {
-    const { error } = await this.supabase
-      .from("bank_movements")
+  async update(organizationId: OrganizationId, movement: BankMovement): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("bank_movements")
       .update({
         reconciliation_status: movement.reconciliationStatus,
         justification_type: movement.justificationType,
@@ -147,12 +149,13 @@ export class SupabaseBankMovementRepository implements BankMovementRepositoryPor
   }
 
   async findByAccountAndPeriod(
+    organizationId: OrganizationId,
     bankAccountId: string,
     from: Date,
     to: Date
   ): Promise<BankMovement[]> {
-    const { data, error } = await this.supabase
-      .from("bank_movements")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("bank_movements")
       .select("*")
       .eq("bank_account_id", bankAccountId)
       .gte("booking_date", from.toISOString().slice(0, 10))
@@ -160,12 +163,12 @@ export class SupabaseBankMovementRepository implements BankMovementRepositoryPor
       .order("booking_date", { ascending: true })
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as Record<string, unknown>));
+    return (data ?? []).map((r) => toEntity(r as unknown as Record<string, unknown>));
   }
 
-  async existsByHash(deduplicationHash: string): Promise<boolean> {
-    const { data, error } = await this.supabase
-      .from("bank_movements")
+  async existsByHash(organizationId: OrganizationId, deduplicationHash: string): Promise<boolean> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("bank_movements")
       .select("id")
       .eq("deduplication_hash", deduplicationHash)
       .maybeSingle();

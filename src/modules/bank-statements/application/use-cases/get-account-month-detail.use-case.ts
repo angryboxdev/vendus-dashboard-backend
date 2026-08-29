@@ -51,16 +51,16 @@ export class GetAccountMonthDetailUseCase implements GetAccountMonthDetailPort {
     private readonly linkRepo: BankMovementEntityLinkRepositoryPort,
   ) {}
 
-  async execute({ bankAccountId, year, month }: GetAccountMonthDetailQuery): Promise<DaySlot[]> {
+  async execute({ organizationId, bankAccountId, year, month }: GetAccountMonthDetailQuery): Promise<DaySlot[]> {
     const from = new Date(year, month - 1, 1);       // first day of month
     const to = new Date(year, month, 0);             // last day of month
 
-    const movements = await this.movementRepo.findByAccountAndPeriod(bankAccountId, from, to);
+    const movements = await this.movementRepo.findByAccountAndPeriod(organizationId, bankAccountId, from, to);
     if (movements.length === 0) return [];
 
     // Bulk-load entity links
     const movementIds = movements.map((m) => m.id);
-    const allLinks = await this.linkRepo.findByMovementIds(movementIds);
+    const allLinks = await this.linkRepo.findByMovementIds(organizationId, movementIds);
     const linksByMovementId = new Map<string, BankMovementEntityLink[]>();
     for (const link of allLinks) {
       const arr = linksByMovementId.get(link.movementId) ?? [];

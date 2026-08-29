@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 /**
  * Port para guardar e recuperar associações confirmadas entre descrições
  * bancárias normalizadas e fornecedores reais.
@@ -17,12 +19,12 @@ export interface MovementMatchHintPort {
    * Devolve null se nunca foi confirmada uma reconciliação com esta descrição.
    * Quando existem múltiplas associações, devolve a de maior use_count.
    */
-  findSupplierByDescription(normalizedDesc: string): Promise<string | null>;
+  findSupplierByDescription(organizationId: OrganizationId, normalizedDesc: string): Promise<string | null>;
 
   /**
    * Persiste (ou incrementa o contador de) uma associação description → supplier.
    * @param normalizedDesc Descrição já normalizada via normalizeBankDescription().
    * @param supplierId     ID do fornecedor confirmado pelo utilizador.
    */
-  save(normalizedDesc: string, supplierId: string): Promise<void>;
+  save(organizationId: OrganizationId, normalizedDesc: string, supplierId: string): Promise<void>;
 }

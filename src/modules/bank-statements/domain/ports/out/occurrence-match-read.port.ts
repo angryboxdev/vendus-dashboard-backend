@@ -1,3 +1,5 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+
 /**
  * Output port — cross-module read access to recurrence occurrences for matching purposes.
  * The adapter accesses recurring_occurrences + payable_recurrences tables directly via Supabase
@@ -26,13 +28,16 @@ export interface OccurrenceMatchReadPort {
    * optionally limited to a date window around dueDate.
    * Excludes cancelled occurrences and those already linked to an invoice.
    */
-  search(opts: {
-    q?: string;
-    dateFrom?: string; // YYYY-MM-DD
-    dateTo?: string;   // YYYY-MM-DD
-    limit?: number;
-  }): Promise<OccurrenceMatchCandidate[]>;
+  search(
+    organizationId: OrganizationId,
+    opts: {
+      q?: string;
+      dateFrom?: string; // YYYY-MM-DD
+      dateTo?: string;   // YYYY-MM-DD
+      limit?: number;
+    }
+  ): Promise<OccurrenceMatchCandidate[]>;
 
   /** Returns occurrences by their IDs regardless of status — used when displaying saved links. */
-  findByIds(ids: string[]): Promise<OccurrenceMatchCandidate[]>;
+  findByIds(organizationId: OrganizationId, ids: string[]): Promise<OccurrenceMatchCandidate[]>;
 }

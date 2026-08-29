@@ -38,7 +38,8 @@ export class ReconcileMovementUseCase implements ReconcileMovementPort {
 
     // ── 2. Fetch movement ─────────────────────────────────────────────────────
 
-    const movement = await this.movementRepo.findById(command.movementId);
+    const { organizationId } = command;
+    const movement = await this.movementRepo.findById(organizationId, command.movementId);
     if (!movement) throw new MovementNotFoundError(command.movementId);
 
     // ── 3. Validate total allocated ≤ movement amount ─────────────────────────
@@ -55,7 +56,7 @@ export class ReconcileMovementUseCase implements ReconcileMovementPort {
     //   deleted. We factor them back in when computing each entity's open balance
     //   so the validation is not distorted by the outgoing allocations.
 
-    const currentLinks = await this.linkRepo.findByMovementIds([command.movementId]);
+    const currentLinks = await this.linkRepo.findByMovementIds(organizationId, [command.movementId]);
     const currentAllocByEntity = new Map(
       currentLinks.map((l) => [l.entityId, l.allocatedAmountCents])
     );
@@ -70,8 +71,8 @@ export class ReconcileMovementUseCase implements ReconcileMovementPort {
       .map((l) => l.entityId);
 
     const [invoices, payables] = await Promise.all([
-      invoiceIds.length > 0 ? this.invoiceRead.findByIds(invoiceIds) : Promise.resolve([]),
-      payableIds.length > 0 ? this.payableRead.findByIds(payableIds) : Promise.resolve([]),
+      invoiceIds.length > 0 ? this.invoiceRead.findByIds(organizationId, invoiceIds) : Promise.resolve([]),
+      payableIds.length > 0 ? this.payableRead.findByIds(organizationId, payableIds) : Promise.resolve([]),
     ]);
 
     const invoiceMap = new Map(invoices.map((i) => [i.id, i]));
@@ -82,10 +83,10 @@ export class ReconcileMovementUseCase implements ReconcileMovementPort {
 
     const [existingInvoiceLinks, existingPayableLinks] = await Promise.all([
       invoiceIds.length > 0
-        ? this.linkRepo.findByEntityIds("invoice", invoiceIds)
+        ? this.linkRepo.findByEntityIds(organizationId, "invoice", invoiceIds)
         : Promise.resolve([]),
       payableIds.length > 0
-        ? this.linkRepo.findByEntityIds("payable_entry", payableIds)
+        ? this.linkRepo.findByEntityIds(organizationId, "payable_entry", payableIds)
         : Promise.resolve([]),
     ]);
 
@@ -146,9 +147,9 @@ export class ReconcileMovementUseCase implements ReconcileMovementPort {
 
     // ── 9. Persist ────────────────────────────────────────────────────────────
 
-    await this.movementRepo.update(updated);
-    await this.linkRepo.deleteByMovementId(movement.id);
-    await this.linkRepo.saveAll(links);
+    await this.movementRepo.update(organizationId, updated);
+    await this.linkRepo.deleteByMovementId(organizationId, movement.id);
+    await this.linkRepo.saveAll(organizationId, links);
 
     // ── 10. Save learning hint — only for single-entity full-movement matches ─
 
@@ -157,7 +158,7 @@ export class ReconcileMovementUseCase implements ReconcileMovementPort {
     if (isFull && command.entityLinks.length === 1 && firstLink.supplierId) {
       const normalizedDesc = normalizeBankDescription(movement.description);
       if (normalizedDesc.length > 0) {
-        await this.hint.save(normalizedDesc, firstLink.supplierId);
+        await this.hint.save(organizationId, normalizedDesc, firstLink.supplierId);
       }
     }
 
@@ -176,14 +177,14 @@ export class ReconcileMovementUseCase implements ReconcileMovementPort {
       // Fetch invoices that are NOT already in invoiceMap (i.e. those removed by re-reconciliation)
       const missingIds = affectedInvoiceIds.filter((id) => !invoiceMap.has(id));
       if (missingIds.length > 0) {
-        const missing = await this.invoiceRead.findByIds(missingIds);
+        const missing = await this.invoiceRead.findByIds(organizationId, missingIds);
         for (const inv of missing) {
           invoiceMap.set(inv.id, inv);
         }
       }
 
       // Fetch all current links for these invoices (already saved in step 9)
-      const allLinksForInvoices = await this.linkRepo.findByEntityIds("invoice", affectedInvoiceIds);
+      const allLinksForInvoices = await this.linkRepo.findByEntityIds(organizationId, "invoice", affectedInvoiceIds);
 
       const allocByInvoice = new Map<string, number>();
       for (const l of allLinksForInvoices) {
@@ -198,11 +199,11 @@ export class ReconcileMovementUseCase implements ReconcileMovementPort {
           const invoiceTotalWithVat = inv.totalWithVat;
 
           if (totalAllocated === 0) {
-            await this.invoiceReconciliationWrite.markUnreconciled(invoiceId);
+            await this.invoiceReconciliationWrite.markUnreconciled(organizationId, invoiceId);
           } else if (totalAllocated >= invoiceTotalWithVat - 1) {
-            await this.invoiceReconciliationWrite.markReconciled(invoiceId, movement.bookingDate);
+            await this.invoiceReconciliationWrite.markReconciled(organizationId, invoiceId, movement.bookingDate);
           } else {
-            await this.invoiceReconciliationWrite.markPartiallyReconciled(invoiceId);
+            await this.invoiceReconciliationWrite.markPartiallyReconciled(organizationId, invoiceId);
           }
         })
       );

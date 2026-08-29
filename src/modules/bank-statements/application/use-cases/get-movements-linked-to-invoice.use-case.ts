@@ -2,6 +2,7 @@ import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-mov
 import type { BankMovementEntityLinkRepositoryPort } from "../../domain/ports/out/bank-movement-entity-link-repository.port.js";
 import type {
   GetMovementsLinkedToInvoicePort,
+  GetMovementsLinkedToInvoiceQuery,
   InvoiceLinkedMovement,
 } from "../../domain/ports/in/bank-statement.ports.js";
 
@@ -11,12 +12,13 @@ export class GetMovementsLinkedToInvoiceUseCase implements GetMovementsLinkedToI
     private readonly movementRepo: BankMovementRepositoryPort,
   ) {}
 
-  async execute(invoiceId: string): Promise<InvoiceLinkedMovement[]> {
-    const links = await this.linkRepo.findByEntityIds("invoice", [invoiceId]);
+  async execute(query: GetMovementsLinkedToInvoiceQuery): Promise<InvoiceLinkedMovement[]> {
+    const { organizationId, invoiceId } = query;
+    const links = await this.linkRepo.findByEntityIds(organizationId, "invoice", [invoiceId]);
     if (links.length === 0) return [];
 
     const movementIds = links.map((l) => l.movementId);
-    const movements = await this.movementRepo.findByIds(movementIds);
+    const movements = await this.movementRepo.findByIds(organizationId, movementIds);
     const movementMap = new Map(movements.map((m) => [m.id, m]));
 
     return links.flatMap((l) => {

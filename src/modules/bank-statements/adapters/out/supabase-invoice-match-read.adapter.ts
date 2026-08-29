@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import type {
   InvoiceMatchCandidate,
   InvoiceMatchReadPort,
@@ -9,7 +10,7 @@ import type {
  * any code from the invoices module.
  */
 export class SupabaseInvoiceMatchReadAdapter implements InvoiceMatchReadPort {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
   private mapRow(row: Record<string, unknown>): InvoiceMatchCandidate {
     return {
@@ -25,28 +26,31 @@ export class SupabaseInvoiceMatchReadAdapter implements InvoiceMatchReadPort {
     };
   }
 
-  async findByIds(ids: string[]): Promise<InvoiceMatchCandidate[]> {
+  async findByIds(organizationId: OrganizationId, ids: string[]): Promise<InvoiceMatchCandidate[]> {
     if (ids.length === 0) return [];
-    const { data, error } = await this.supabase
-      .from("invoices")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("invoices")
       .select("id, supplier_id, supplier_name, invoice_number, total_with_vat, invoice_date, due_date, paid_at, status")
       .in("id", ids);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((row) => this.mapRow(row as Record<string, unknown>));
+    return (data ?? []).map((row) => this.mapRow(row as unknown as Record<string, unknown>));
   }
 
-  async findCandidates(opts: {
-    amountCents: number;
-    dateFrom: string;
-    dateTo: string;
-    toleranceCents?: number;
-  }): Promise<InvoiceMatchCandidate[]> {
+  async findCandidates(
+    organizationId: OrganizationId,
+    opts: {
+      amountCents: number;
+      dateFrom: string;
+      dateTo: string;
+      toleranceCents?: number;
+    }
+  ): Promise<InvoiceMatchCandidate[]> {
     const tolerance = opts.toleranceCents ?? 0;
     const min = opts.amountCents - tolerance;
     const max = opts.amountCents + tolerance;
 
-    const { data, error } = await this.supabase
-      .from("invoices")
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("invoices")
       .select("id, supplier_id, supplier_name, invoice_number, total_with_vat, invoice_date, due_date, paid_at, status")
       .gte("total_with_vat", min)
       .lte("total_with_vat", max)
@@ -57,6 +61,6 @@ export class SupabaseInvoiceMatchReadAdapter implements InvoiceMatchReadPort {
 
     if (error) throw new Error(error.message);
 
-    return (data ?? []).map((row) => this.mapRow(row as Record<string, unknown>));
+    return (data ?? []).map((row) => this.mapRow(row as unknown as Record<string, unknown>));
   }
 }

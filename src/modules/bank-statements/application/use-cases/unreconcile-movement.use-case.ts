@@ -3,7 +3,7 @@ import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-mov
 import type { BankMovementEntityLinkRepositoryPort } from "../../domain/ports/out/bank-movement-entity-link-repository.port.js";
 import type { InvoiceMatchReadPort } from "../../domain/ports/out/invoice-match-read.port.js";
 import type { InvoiceReconciliationWritePort } from "../../domain/ports/out/invoice-reconciliation-write.port.js";
-import type { UnreconcileMovementPort } from "../../domain/ports/in/bank-statement.ports.js";
+import type { UnreconcileMovementCommand, UnreconcileMovementPort } from "../../domain/ports/in/bank-statement.ports.js";
 
 export class UnreconcileMovementUseCase implements UnreconcileMovementPort {
   constructor(
@@ -13,25 +13,26 @@ export class UnreconcileMovementUseCase implements UnreconcileMovementPort {
     private readonly invoiceReconciliationWrite: InvoiceReconciliationWritePort,
   ) {}
 
-  async execute(movementId: string): Promise<void> {
-    const movement = await this.movementRepo.findById(movementId);
+  async execute(command: UnreconcileMovementCommand): Promise<void> {
+    const { organizationId, movementId } = command;
+    const movement = await this.movementRepo.findById(organizationId, movementId);
     if (!movement) throw new MovementNotFoundError(movementId);
 
     // Snapshot current links before deleting
-    const currentLinks = await this.linkRepo.findByMovementIds([movementId]);
+    const currentLinks = await this.linkRepo.findByMovementIds(organizationId, [movementId]);
     const affectedInvoiceIds = [...new Set(
       currentLinks.filter((l) => l.entityType === "invoice").map((l) => l.entityId),
     )];
 
     // Delete all entity links and reset the movement
-    await this.linkRepo.deleteByMovementId(movementId);
-    await this.movementRepo.update(movement.unreconcile());
+    await this.linkRepo.deleteByMovementId(organizationId, movementId);
+    await this.movementRepo.update(organizationId, movement.unreconcile());
 
     // Recompute reconciliation status for previously linked invoices
     if (affectedInvoiceIds.length > 0) {
       const [invoices, remainingLinks] = await Promise.all([
-        this.invoiceRead.findByIds(affectedInvoiceIds),
-        this.linkRepo.findByEntityIds("invoice", affectedInvoiceIds),
+        this.invoiceRead.findByIds(organizationId, affectedInvoiceIds),
+        this.linkRepo.findByEntityIds(organizationId, "invoice", affectedInvoiceIds),
       ]);
 
       const invoiceMap = new Map(invoices.map((i) => [i.id, i]));
@@ -47,11 +48,11 @@ export class UnreconcileMovementUseCase implements UnreconcileMovementPort {
           if (!inv) return;
 
           if (totalAllocated === 0) {
-            await this.invoiceReconciliationWrite.markUnreconciled(invoiceId);
+            await this.invoiceReconciliationWrite.markUnreconciled(organizationId, invoiceId);
           } else if (totalAllocated >= inv.totalWithVat - 1) {
-            await this.invoiceReconciliationWrite.markReconciled(invoiceId, movement.bookingDate);
+            await this.invoiceReconciliationWrite.markReconciled(organizationId, invoiceId, movement.bookingDate);
           } else {
-            await this.invoiceReconciliationWrite.markPartiallyReconciled(invoiceId);
+            await this.invoiceReconciliationWrite.markPartiallyReconciled(organizationId, invoiceId);
           }
         }),
       );

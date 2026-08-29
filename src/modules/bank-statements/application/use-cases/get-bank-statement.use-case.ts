@@ -5,8 +5,8 @@ import type { BankMovementEntityLinkRepositoryPort, BankMovementEntityLink } fro
 import type {
   BankMovementDto,
   BankStatementDetail,
-  GetBankStatementFilter,
   GetBankStatementPort,
+  GetBankStatementQuery,
 } from "../../domain/ports/in/bank-statement.ports.js";
 import type { BankMovement } from "../../domain/entities/bank-movement.js";
 
@@ -56,20 +56,18 @@ export class GetBankStatementUseCase implements GetBankStatementPort {
     private readonly linkRepo: BankMovementEntityLinkRepositoryPort,
   ) {}
 
-  async execute(
-    id: string,
-    filter?: GetBankStatementFilter
-  ): Promise<BankStatementDetail | null> {
-    const statement = await this.statementRepo.findById(id);
+  async execute(query: GetBankStatementQuery): Promise<BankStatementDetail | null> {
+    const { organizationId, id, filter } = query;
+    const statement = await this.statementRepo.findById(organizationId, id);
     if (!statement) return null;
 
-    const movements = await this.movementRepo.findByStatementId(id, filter);
+    const movements = await this.movementRepo.findByStatementId(organizationId, id, filter);
     const stats = this.calculator.compute(statement.openingBalance, movements);
 
     // Bulk-load entity links for all movements in one query
     const movementIds = movements.map((m) => m.id);
     const allLinks = movementIds.length > 0
-      ? await this.linkRepo.findByMovementIds(movementIds)
+      ? await this.linkRepo.findByMovementIds(organizationId, movementIds)
       : [];
 
     const linksByMovementId = new Map<string, BankMovementEntityLink[]>();

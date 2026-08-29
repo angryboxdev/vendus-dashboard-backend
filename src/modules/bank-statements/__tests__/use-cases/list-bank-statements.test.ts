@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "@jest/globals";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { ListBankStatementsUseCase } from "../../application/use-cases/list-bank-statements.use-case.js";
 import { BankStatementImport } from "../../domain/entities/bank-statement-import.js";
 import { FakeBankStatementImportRepository } from "../fakes/fake-bank-statement-import-repository.js";
@@ -17,6 +18,7 @@ function makeStatement(overrides: Partial<Parameters<typeof BankStatementImport.
 }
 
 describe("ListBankStatementsUseCase", () => {
+  const organizationId = mintOrganizationId("org-a");
   let repo: FakeBankStatementImportRepository;
   let useCase: ListBankStatementsUseCase;
 
@@ -26,15 +28,15 @@ describe("ListBankStatementsUseCase", () => {
   });
 
   it("returns empty array when no statements exist", async () => {
-    const result = await useCase.execute();
+    const result = await useCase.execute({ organizationId });
     expect(result).toHaveLength(0);
   });
 
   it("returns summaries for all statements", async () => {
-    await repo.save(makeStatement({ bankName: "Millennium BCP" }));
-    await repo.save(makeStatement({ bankName: "Caixa Geral", accountNumber: "9876-5432" }));
+    await repo.save(organizationId, makeStatement({ bankName: "Millennium BCP" }));
+    await repo.save(organizationId, makeStatement({ bankName: "Caixa Geral", accountNumber: "9876-5432" }));
 
-    const result = await useCase.execute();
+    const result = await useCase.execute({ organizationId });
     expect(result).toHaveLength(2);
     expect(result.map((s) => s.bankName)).toEqual(
       expect.arrayContaining(["Millennium BCP", "Caixa Geral"])
@@ -42,9 +44,9 @@ describe("ListBankStatementsUseCase", () => {
   });
 
   it("summary includes required fields", async () => {
-    await repo.save(makeStatement());
+    await repo.save(organizationId, makeStatement());
 
-    const [summary] = await useCase.execute();
+    const [summary] = await useCase.execute({ organizationId });
     expect(summary).toMatchObject({
       bankName: "Millennium BCP",
       accountNumber: "1234-5678",
@@ -58,10 +60,10 @@ describe("ListBankStatementsUseCase", () => {
   });
 
   it("filters by accountNumber", async () => {
-    await repo.save(makeStatement({ accountNumber: "111" }));
-    await repo.save(makeStatement({ accountNumber: "222" }));
+    await repo.save(organizationId, makeStatement({ accountNumber: "111" }));
+    await repo.save(organizationId, makeStatement({ accountNumber: "222" }));
 
-    const result = await useCase.execute({ accountNumber: "111" });
+    const result = await useCase.execute({ organizationId, accountNumber: "111" });
     expect(result).toHaveLength(1);
     expect(result[0]!.accountNumber).toBe("111");
   });
@@ -74,10 +76,10 @@ describe("ListBankStatementsUseCase", () => {
       calculatedClosingBalance: 95_000,
       reconciliationProgress: 0,
     });
-    await repo.save(s1);
-    await repo.save(s2);
+    await repo.save(organizationId, s1);
+    await repo.save(organizationId, s2);
 
-    const result = await useCase.execute({ status: "in_review" });
+    const result = await useCase.execute({ organizationId, status: "in_review" });
     expect(result).toHaveLength(1);
     expect(result[0]!.status).toBe("in_review");
   });

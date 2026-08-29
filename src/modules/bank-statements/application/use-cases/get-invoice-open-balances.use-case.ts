@@ -1,6 +1,6 @@
 import type { BankMovementEntityLinkRepositoryPort } from "../../domain/ports/out/bank-movement-entity-link-repository.port.js";
 import type { InvoiceMatchReadPort } from "../../domain/ports/out/invoice-match-read.port.js";
-import type { GetInvoiceOpenBalancesPort } from "../../domain/ports/in/bank-statement.ports.js";
+import type { GetInvoiceOpenBalancesPort, GetInvoiceOpenBalancesQuery } from "../../domain/ports/in/bank-statement.ports.js";
 
 export class GetInvoiceOpenBalancesUseCase implements GetInvoiceOpenBalancesPort {
   constructor(
@@ -8,12 +8,13 @@ export class GetInvoiceOpenBalancesUseCase implements GetInvoiceOpenBalancesPort
     private readonly invoiceRead: InvoiceMatchReadPort,
   ) {}
 
-  async execute(invoiceIds: string[]): Promise<Record<string, number>> {
+  async execute(query: GetInvoiceOpenBalancesQuery): Promise<Record<string, number>> {
+    const { organizationId, invoiceIds } = query;
     if (invoiceIds.length === 0) return {};
 
     const [invoices, links] = await Promise.all([
-      this.invoiceRead.findByIds(invoiceIds),
-      this.linkRepo.findByEntityIds("invoice", invoiceIds),
+      this.invoiceRead.findByIds(organizationId, invoiceIds),
+      this.linkRepo.findByEntityIds(organizationId, "invoice", invoiceIds),
     ]);
 
     // Sum allocated amounts per invoice

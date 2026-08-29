@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { BankMovement, ReconciliationStatus, MovementType, RiskLevel } from "../../entities/bank-movement.js";
 
 export interface BankMovementFilter {
@@ -9,18 +10,20 @@ export interface BankMovementFilter {
 }
 
 export interface BankMovementRepositoryPort {
-  saveBulk(movements: BankMovement[]): Promise<void>;
+  saveBulk(organizationId: OrganizationId, movements: BankMovement[]): Promise<void>;
   findByStatementId(
+    organizationId: OrganizationId,
     statementImportId: string,
     filter?: BankMovementFilter
   ): Promise<BankMovement[]>;
   findByAccountAndPeriod(
+    organizationId: OrganizationId,
     bankAccountId: string,
     from: Date,
     to: Date
   ): Promise<BankMovement[]>;
-  findById(id: string): Promise<BankMovement | null>;
-  findByIds(ids: string[]): Promise<BankMovement[]>;
-  update(movement: BankMovement): Promise<void>;
-  existsByHash(deduplicationHash: string): Promise<boolean>;
+  findById(organizationId: OrganizationId, id: string): Promise<BankMovement | null>;
+  findByIds(organizationId: OrganizationId, ids: string[]): Promise<BankMovement[]>;
+  update(organizationId: OrganizationId, movement: BankMovement): Promise<void>;
+  existsByHash(organizationId: OrganizationId, deduplicationHash: string): Promise<boolean>;
 }

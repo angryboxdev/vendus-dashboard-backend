@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "@jest/globals";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { UpdateStatementBalancesUseCase } from "../../application/use-cases/update-statement-balances.use-case.js";
 import { BankStatementImport } from "../../domain/entities/bank-statement-import.js";
 import { FakeBankStatementImportRepository } from "../fakes/fake-bank-statement-import-repository.js";
@@ -17,6 +18,7 @@ function makeStatement() {
 }
 
 describe("UpdateStatementBalancesUseCase", () => {
+  const organizationId = mintOrganizationId("org-a");
   let repo: FakeBankStatementImportRepository;
   let useCase: UpdateStatementBalancesUseCase;
   let statement: BankStatementImport;
@@ -25,19 +27,29 @@ describe("UpdateStatementBalancesUseCase", () => {
     repo = new FakeBankStatementImportRepository();
     useCase = new UpdateStatementBalancesUseCase(repo);
     statement = makeStatement();
-    await repo.save(statement);
+    await repo.save(organizationId, statement);
   });
 
   it("throws StatementNotFoundError for unknown id", async () => {
     await expect(
-      useCase.execute("not-found", 100_000, 90_000)
+      useCase.execute({
+        organizationId,
+        statementImportId: "not-found",
+        openingBalance: 100_000,
+        closingBalance: 90_000,
+      })
     ).rejects.toThrow(StatementNotFoundError);
   });
 
   it("updates opening and closing balances", async () => {
-    await useCase.execute(statement.id, 200_000, 180_000);
+    await useCase.execute({
+      organizationId,
+      statementImportId: statement.id,
+      openingBalance: 200_000,
+      closingBalance: 180_000,
+    });
 
-    const updated = await repo.findById(statement.id);
+    const updated = await repo.findById(organizationId, statement.id);
     expect(updated!.openingBalance).toBe(200_000);
     expect(updated!.closingBalance).toBe(180_000);
   });
@@ -45,9 +57,14 @@ describe("UpdateStatementBalancesUseCase", () => {
   it("recalculates balanceDifference after update", async () => {
     // calculatedClosingBalance starts at openingBalance (100_000) since no movements
     // After update closingBalance = 90_000:  diff = 100_000 - 90_000 = 10_000
-    await useCase.execute(statement.id, 100_000, 90_000);
+    await useCase.execute({
+      organizationId,
+      statementImportId: statement.id,
+      openingBalance: 100_000,
+      closingBalance: 90_000,
+    });
 
-    const updated = await repo.findById(statement.id);
+    const updated = await repo.findById(organizationId, statement.id);
     expect(updated!.balanceDifference).toBe(10_000);
   });
 
@@ -74,10 +91,15 @@ describe("UpdateStatementBalancesUseCase", () => {
       updatedAt: statement.updatedAt,
     });
     const closed = balanced.close();
-    await repo.save(closed);
+    await repo.save(organizationId, closed);
 
     await expect(
-      useCase.execute(closed.id, 200_000, 200_000)
+      useCase.execute({
+        organizationId,
+        statementImportId: closed.id,
+        openingBalance: 200_000,
+        closingBalance: 200_000,
+      })
     ).rejects.toThrow(StatementAlreadyClosedError);
   });
 });

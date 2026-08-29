@@ -185,6 +185,7 @@ export class BankStatementController {
           const bankAccountId = body.bankAccountId as string | undefined | null;
 
           const result = await this.importStatement.execute({
+            organizationId: req.auth!.orgId,
             bankAccountId: bankAccountId ?? null,
             bankName,
             accountNumber,
@@ -224,12 +225,14 @@ export class BankStatementController {
     this.router.get("/bank-statements", async (req, res) => {
       try {
         const q = req.query as Record<string, string | undefined>;
-        const filter: import("../../domain/ports/in/bank-statement.ports.js").ListBankStatementsFilter = {};
-        if (q.accountNumber) filter.accountNumber = q.accountNumber;
-        if (q.status) filter.status = q.status as import("../../domain/entities/bank-statement-import.js").StatementStatus;
-        if (q.from) filter.from = new Date(q.from);
-        if (q.to) filter.to = new Date(q.to);
-        const results = await this.listStatements.execute(filter);
+        const query: import("../../domain/ports/in/bank-statement.ports.js").ListBankStatementsQuery = {
+          organizationId: req.auth!.orgId,
+        };
+        if (q.accountNumber) query.accountNumber = q.accountNumber;
+        if (q.status) query.status = q.status as import("../../domain/entities/bank-statement-import.js").StatementStatus;
+        if (q.from) query.from = new Date(q.from);
+        if (q.to) query.to = new Date(q.to);
+        const results = await this.listStatements.execute(query);
         res.json(results);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
@@ -247,7 +250,11 @@ export class BankStatementController {
         if (q.reconciliationStatus) movFilter.reconciliationStatus = q.reconciliationStatus as import("../../domain/entities/bank-movement.js").ReconciliationStatus;
         if (q.movementType) movFilter.movementType = q.movementType as import("../../domain/entities/bank-movement.js").MovementType;
         if (q.riskLevel) movFilter.riskLevel = q.riskLevel as import("../../domain/entities/bank-movement.js").RiskLevel;
-        const detail = await this.getStatement.execute(req.params["id"]!, movFilter);
+        const detail = await this.getStatement.execute({
+          organizationId: req.auth!.orgId,
+          id: req.params["id"]!,
+          filter: movFilter,
+        });
         if (!detail) {
           res.status(404).json({ error: "Statement not found" });
           return;
@@ -263,7 +270,10 @@ export class BankStatementController {
      */
     this.router.post("/bank-statements/:id/apply-rules", async (req, res) => {
       try {
-        const result = await this.applyAutoRules.execute(req.params["id"]!);
+        const result = await this.applyAutoRules.execute({
+          organizationId: req.auth!.orgId,
+          statementImportId: req.params["id"]!,
+        });
         res.json(result);
       } catch (e) {
         if (e instanceof StatementNotFoundError) {
@@ -279,7 +289,10 @@ export class BankStatementController {
      */
     this.router.post("/bank-statements/:id/suggest", async (req, res) => {
       try {
-        const suggestions = await this.suggestMatches.execute(req.params["id"]!);
+        const suggestions = await this.suggestMatches.execute({
+          organizationId: req.auth!.orgId,
+          statementImportId: req.params["id"]!,
+        });
         res.json(suggestions);
       } catch (e) {
         if (e instanceof StatementNotFoundError) {
@@ -295,7 +308,10 @@ export class BankStatementController {
      */
     this.router.post("/bank-statements/:id/close", async (req, res) => {
       try {
-        await this.closeStatement.execute(req.params["id"]!);
+        await this.closeStatement.execute({
+          organizationId: req.auth!.orgId,
+          statementImportId: req.params["id"]!,
+        });
         res.status(204).send();
       } catch (e) {
         if (e instanceof StatementNotFoundError) {
@@ -327,7 +343,12 @@ export class BankStatementController {
           res.status(400).json({ error: "openingBalance and closingBalance are required (cents)" });
           return;
         }
-        await this.updateBalances.execute(req.params["id"]!, opening, closing);
+        await this.updateBalances.execute({
+          organizationId: req.auth!.orgId,
+          statementImportId: req.params["id"]!,
+          openingBalance: opening,
+          closingBalance: closing,
+        });
         res.status(204).send();
       } catch (e) {
         if (e instanceof StatementNotFoundError) {
@@ -348,7 +369,10 @@ export class BankStatementController {
      */
     this.router.delete("/bank-statements/:id", async (req, res) => {
       try {
-        await this.deleteStatement.execute(req.params["id"]!);
+        await this.deleteStatement.execute({
+          organizationId: req.auth!.orgId,
+          statementImportId: req.params["id"]!,
+        });
         res.status(204).send();
       } catch (e) {
         if (e instanceof StatementNotFoundError) {
@@ -389,6 +413,7 @@ export class BankStatementController {
           return;
         }
         await this.reconcileMovement.execute({
+          organizationId: req.auth!.orgId,
           movementId: req.params["movId"]!,
           entityLinks,
         });
@@ -412,7 +437,10 @@ export class BankStatementController {
      */
     this.router.delete("/bank-statements/movements/:movId/reconcile", async (req, res) => {
       try {
-        await this.unreconcileMovement.execute(req.params["movId"]!);
+        await this.unreconcileMovement.execute({
+          organizationId: req.auth!.orgId,
+          movementId: req.params["movId"]!,
+        });
         res.status(204).send();
       } catch (e) {
         if (e instanceof MovementNotFoundError) {
@@ -435,6 +463,7 @@ export class BankStatementController {
           return;
         }
         const classifyCmd: import("../../domain/ports/in/bank-statement.ports.js").ClassifyMovementCommand = {
+          organizationId: req.auth!.orgId,
           movementId: req.params["movId"]!,
           justificationType: body.justificationType as import("../../domain/entities/bank-movement.js").JustificationType,
         };
@@ -475,6 +504,7 @@ export class BankStatementController {
             return;
           }
           const result = await this.uploadMovementDocument.execute({
+            organizationId: req.auth!.orgId,
             movementId: req.params["movId"] as string,
             buffer: req.file.buffer,
             filename: req.file.originalname,
@@ -498,7 +528,10 @@ export class BankStatementController {
      */
     this.router.get("/bank-statements/movements/:movId/candidates", async (req, res) => {
       try {
-        const candidates = await this.findMovementCandidates.execute(req.params["movId"]!);
+        const candidates = await this.findMovementCandidates.execute({
+          organizationId: req.auth!.orgId,
+          movementId: req.params["movId"]!,
+        });
         res.json(candidates);
       } catch (e) {
         if (e instanceof MovementNotFoundError) {
@@ -521,7 +554,11 @@ export class BankStatementController {
           res.status(400).json({ error: "bankAccountId is required" });
           return;
         }
-        await this.linkStatementToAccount.execute(req.params["id"]!, body["bankAccountId"]);
+        await this.linkStatementToAccount.execute({
+          organizationId: req.auth!.orgId,
+          statementImportId: req.params["id"]!,
+          bankAccountId: body["bankAccountId"],
+        });
         res.status(204).send();
       } catch (e) {
         if (e instanceof StatementNotFoundError) {
@@ -543,7 +580,7 @@ export class BankStatementController {
     this.router.get("/bank-statements/rules", async (req, res) => {
       try {
         const activeOnly = req.query["activeOnly"] === "true";
-        const rules = await this.listRules.execute(activeOnly);
+        const rules = await this.listRules.execute({ organizationId: req.auth!.orgId, activeOnly });
         res.json(rules);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
@@ -563,6 +600,7 @@ export class BankStatementController {
           return;
         }
         const ruleCmd: import("../../domain/ports/in/bank-statement.ports.js").CreateReconciliationRuleCommand = {
+          organizationId: req.auth!.orgId,
           name: body.name as string,
           descriptionContains: body.descriptionContains as string,
           justificationType: body.justificationType as import("../../domain/entities/bank-movement.js").JustificationType,
@@ -587,7 +625,7 @@ export class BankStatementController {
      */
     this.router.delete("/bank-statements/rules/:ruleId", async (req, res) => {
       try {
-        await this.deleteRule.execute(req.params["ruleId"]!);
+        await this.deleteRule.execute({ organizationId: req.auth!.orgId, id: req.params["ruleId"]! });
         res.status(204).send();
       } catch (e) {
         if (e instanceof RuleNotFoundError) {
@@ -612,7 +650,11 @@ export class BankStatementController {
           res.status(400).json({ error: "year must be a valid integer" });
           return;
         }
-        const result = await this.getAccountCalendar.execute({ bankAccountId: accountId, year });
+        const result = await this.getAccountCalendar.execute({
+          organizationId: req.auth!.orgId,
+          bankAccountId: accountId,
+          year,
+        });
         res.json(result);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
@@ -632,7 +674,12 @@ export class BankStatementController {
           res.status(400).json({ error: "Invalid year or month" });
           return;
         }
-        const result = await this.getAccountMonthDetail.execute({ bankAccountId: accountId, year, month });
+        const result = await this.getAccountMonthDetail.execute({
+          organizationId: req.auth!.orgId,
+          bankAccountId: accountId,
+          year,
+          month,
+        });
         res.json(result);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
@@ -647,7 +694,10 @@ export class BankStatementController {
       try {
         const raw = req.query["ids"];
         const ids = typeof raw === "string" && raw.length > 0 ? raw.split(",").filter(Boolean) : [];
-        const result = await this.getInvoiceOpenBalances.execute(ids);
+        const result = await this.getInvoiceOpenBalances.execute({
+          organizationId: req.auth!.orgId,
+          invoiceIds: ids,
+        });
         res.json(result);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
@@ -661,7 +711,10 @@ export class BankStatementController {
     this.router.get("/bank-statements/invoices/:invoiceId/movements", async (req, res) => {
       try {
         const invoiceId = req.params["invoiceId"]!;
-        const result = await this.getMovementsLinkedToInvoice.execute(invoiceId);
+        const result = await this.getMovementsLinkedToInvoice.execute({
+          organizationId: req.auth!.orgId,
+          invoiceId,
+        });
         res.json(result);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
@@ -677,7 +730,9 @@ export class BankStatementController {
     this.router.get("/bank-statements/occurrences/candidates", async (req, res) => {
       try {
         const q = req.query as Record<string, string | undefined>;
-        const searchQuery: import("../../domain/ports/in/bank-statement.ports.js").SearchOccurrenceCandidatesQuery = {};
+        const searchQuery: import("../../domain/ports/in/bank-statement.ports.js").SearchOccurrenceCandidatesQuery = {
+          organizationId: req.auth!.orgId,
+        };
         if (q["q"]) searchQuery.q = q["q"];
         if (q["dateFrom"]) searchQuery.dateFrom = q["dateFrom"];
         if (q["dateTo"]) searchQuery.dateTo = q["dateTo"];

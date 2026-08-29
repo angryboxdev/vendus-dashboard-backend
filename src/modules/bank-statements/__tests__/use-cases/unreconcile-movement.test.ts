@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "@jest/globals";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { UnreconcileMovementUseCase } from "../../application/use-cases/unreconcile-movement.use-case.js";
 import { BankMovement } from "../../domain/entities/bank-movement.js";
 import { FakeBankMovementRepository } from "../fakes/fake-bank-movement-repository.js";
@@ -89,6 +90,7 @@ function makeInvoice(id: string, totalWithVat: number): InvoiceMatchCandidate {
 }
 
 describe("UnreconcileMovementUseCase", () => {
+  const organizationId = mintOrganizationId("org-a");
   let repo: FakeBankMovementRepository;
   let linkRepo: FakeBankMovementEntityLinkRepository;
   let invoiceRead: FakeInvoiceMatchRead;
@@ -104,18 +106,18 @@ describe("UnreconcileMovementUseCase", () => {
   });
 
   it("throws MovementNotFoundError for unknown movement", async () => {
-    await expect(useCase.execute("does-not-exist")).rejects.toBeInstanceOf(MovementNotFoundError);
+    await expect(useCase.execute({ organizationId, movementId: "does-not-exist" })).rejects.toBeInstanceOf(MovementNotFoundError);
   });
 
   it("resets movement status to saida_nao_justificada", async () => {
     const movement = makeDebit("mov-1", 10_000).multiReconcile(0);
-    await repo.saveBulk([movement]);
-    await linkRepo.saveAll([makeLink("mov-1", "inv-1", 10_000)]);
-    invoiceRead.setcandidates([makeInvoice("inv-1", 10_000)]);
+    await repo.saveBulk(organizationId, [movement]);
+    await linkRepo.saveAll(organizationId, [makeLink("mov-1", "inv-1", 10_000)]);
+    invoiceRead.setcandidates(organizationId, [makeInvoice("inv-1", 10_000)]);
 
-    await useCase.execute("mov-1");
+    await useCase.execute({ organizationId, movementId: "mov-1" });
 
-    const updated = await repo.findById("mov-1");
+    const updated = await repo.findById(organizationId, "mov-1");
     expect(updated?.reconciliationStatus).toBe("saida_nao_justificada");
     expect(updated?.justificationType).toBeNull();
     expect(updated?.reconciliationAmountDiff).toBeNull();
@@ -123,26 +125,26 @@ describe("UnreconcileMovementUseCase", () => {
 
   it("deletes all entity links for the movement", async () => {
     const movement = makeDebit("mov-1", 10_000).multiReconcile(0);
-    await repo.saveBulk([movement]);
-    await linkRepo.saveAll([
+    await repo.saveBulk(organizationId, [movement]);
+    await linkRepo.saveAll(organizationId, [
       makeLink("mov-1", "inv-1", 6_000, 10_000),
       makeLink("mov-1", "inv-2", 4_000, 10_000),
     ]);
-    invoiceRead.setcandidates([makeInvoice("inv-1", 10_000), makeInvoice("inv-2", 10_000)]);
+    invoiceRead.setcandidates(organizationId, [makeInvoice("inv-1", 10_000), makeInvoice("inv-2", 10_000)]);
 
-    await useCase.execute("mov-1");
+    await useCase.execute({ organizationId, movementId: "mov-1" });
 
-    const remaining = await linkRepo.findByMovementIds(["mov-1"]);
+    const remaining = await linkRepo.findByMovementIds(organizationId, ["mov-1"]);
     expect(remaining).toHaveLength(0);
   });
 
   it("marks a fully-allocated invoice as unreconciled", async () => {
     const movement = makeDebit("mov-1", 10_000).multiReconcile(0);
-    await repo.saveBulk([movement]);
-    await linkRepo.saveAll([makeLink("mov-1", "inv-1", 10_000)]);
-    invoiceRead.setcandidates([makeInvoice("inv-1", 10_000)]);
+    await repo.saveBulk(organizationId, [movement]);
+    await linkRepo.saveAll(organizationId, [makeLink("mov-1", "inv-1", 10_000)]);
+    invoiceRead.setcandidates(organizationId, [makeInvoice("inv-1", 10_000)]);
 
-    await useCase.execute("mov-1");
+    await useCase.execute({ organizationId, movementId: "mov-1" });
 
     expect(invoiceReconWrite.unreconciledCalls).toContain("inv-1");
     expect(invoiceReconWrite.reconciledCalls).toHaveLength(0);
@@ -153,15 +155,15 @@ describe("UnreconcileMovementUseCase", () => {
     // mov-1 allocated 3000, mov-2 also allocated 3000 to the same invoice (total=10000)
     const movement = makeDebit("mov-1", 3_000).multiReconcile(0);
     const otherMovement = makeDebit("mov-2", 3_000);
-    await repo.saveBulk([movement, otherMovement]);
+    await repo.saveBulk(organizationId, [movement, otherMovement]);
 
-    await linkRepo.saveAll([
+    await linkRepo.saveAll(organizationId, [
       makeLink("mov-1", "inv-1", 3_000, 10_000),
       makeLink("mov-2", "inv-1", 3_000, 10_000), // other movement keeps its link
     ]);
-    invoiceRead.setcandidates([makeInvoice("inv-1", 10_000)]);
+    invoiceRead.setcandidates(organizationId, [makeInvoice("inv-1", 10_000)]);
 
-    await useCase.execute("mov-1");
+    await useCase.execute({ organizationId, movementId: "mov-1" });
 
     // After removing mov-1's link, inv-1 still has 3000 allocated by mov-2 → partial
     expect(invoiceReconWrite.partialCalls).toContain("inv-1");
@@ -172,15 +174,15 @@ describe("UnreconcileMovementUseCase", () => {
     // mov-1 had a small partial allocation; mov-2 covers the full invoice
     const movement = makeDebit("mov-1", 1_000).multiReconcile(0);
     const otherMovement = makeDebit("mov-2", 10_000);
-    await repo.saveBulk([movement, otherMovement]);
+    await repo.saveBulk(organizationId, [movement, otherMovement]);
 
-    await linkRepo.saveAll([
+    await linkRepo.saveAll(organizationId, [
       makeLink("mov-1", "inv-1", 1_000, 10_000),
       makeLink("mov-2", "inv-1", 10_000, 10_000),
     ]);
-    invoiceRead.setcandidates([makeInvoice("inv-1", 10_000)]);
+    invoiceRead.setcandidates(organizationId, [makeInvoice("inv-1", 10_000)]);
 
-    await useCase.execute("mov-1");
+    await useCase.execute({ organizationId, movementId: "mov-1" });
 
     // inv-1 still has 10_000 allocated from mov-2 ≥ totalWithVat (10_000) → reconciled
     expect(invoiceReconWrite.reconciledCalls.map((c) => c.invoiceId)).toContain("inv-1");
@@ -188,10 +190,10 @@ describe("UnreconcileMovementUseCase", () => {
 
   it("does not call invoice write when movement has no invoice links", async () => {
     const movement = makeDebit("mov-1", 5_000);
-    await repo.saveBulk([movement]);
+    await repo.saveBulk(organizationId, [movement]);
     // No links saved
 
-    await useCase.execute("mov-1");
+    await useCase.execute({ organizationId, movementId: "mov-1" });
 
     expect(invoiceReconWrite.reconciledCalls).toHaveLength(0);
     expect(invoiceReconWrite.partialCalls).toHaveLength(0);
