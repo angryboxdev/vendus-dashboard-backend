@@ -19,7 +19,7 @@ import {
 } from "../services/dreCustosVariaveisService.js";
 
 import { Router } from "express";
-import { isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { ENV } from "../config/env.js";
 import { getDreKpis } from "../services/dreKpisService.js";
 import { getReceitaBruta } from "../services/dreReceitaBrutaService.js";
 
@@ -63,7 +63,7 @@ dreRoutes.get("/reports/dre/custos-variaveis", async (req, res) => {
   try {
     const period = yearMonthGuard(req, res);
     if (!period) return;
-    const payload = await getCustosVariaveis(period.year, period.month);
+    const payload = await getCustosVariaveis(req.auth!.orgId, period.year, period.month);
     res.json(payload);
   } catch (e: unknown) {
     const message =
@@ -87,7 +87,7 @@ dreRoutes.post("/reports/dre/custos-variaveis", async (req, res) => {
         .json({ error: "Body deve incluir section: 'producao' ou 'venda'" });
       return;
     }
-    const item = await createCustoVariavel(period.year, period.month, body);
+    const item = await createCustoVariavel(req.auth!.orgId, period.year, period.month, body);
     res.status(201).json(item);
   } catch (e: unknown) {
     const message =
@@ -107,6 +107,7 @@ dreRoutes.put("/reports/dre/custos-variaveis/:id", async (req, res) => {
     }
     const body = req.body as CustosVariaveisUpdateBody;
     const item = await updateCustoVariavel(
+      req.auth!.orgId,
       id,
       period.year,
       period.month,
@@ -129,7 +130,7 @@ dreRoutes.delete("/reports/dre/custos-variaveis/:id", async (req, res) => {
       res.status(400).json({ error: "Parâmetro :id obrigatório" });
       return;
     }
-    await deleteCustoVariavel(id, period.year, period.month);
+    await deleteCustoVariavel(req.auth!.orgId, id, period.year, period.month);
     res.status(204).send();
   } catch (e: unknown) {
     const message =
@@ -142,7 +143,7 @@ dreRoutes.get("/reports/dre/custos-fixos", async (req, res) => {
   try {
     const period = yearMonthGuard(req, res);
     if (!period) return;
-    const list = await getCustosFixos(period.year, period.month);
+    const list = await getCustosFixos(req.auth!.orgId, period.year, period.month);
     const debug = toQueryRecord(req.query).debug;
     if (debug === "1" && list.length === 0) {
       res.json({
@@ -150,7 +151,7 @@ dreRoutes.get("/reports/dre/custos-fixos", async (req, res) => {
         _debug: {
           year: period.year,
           month: period.month,
-          supabaseConfigured: isSupabaseConfigured(),
+          supabaseConfigured: Boolean(ENV.SUPABASE_URL && ENV.SUPABASE_SERVICE_ROLE_KEY),
           hint: "Seed has data for year=2026, month 2-12. Check query params and Supabase env.",
         },
       });
@@ -169,7 +170,7 @@ dreRoutes.post("/reports/dre/custos-fixos", async (req, res) => {
     const period = yearMonthGuard(req, res);
     if (!period) return;
     const body = req.body as CustosFixosCreateBody;
-    const item = await createCustoFixo(period.year, period.month, body ?? {});
+    const item = await createCustoFixo(req.auth!.orgId, period.year, period.month, body ?? {});
     res.status(201).json(item);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao criar custo fixo";
@@ -188,6 +189,7 @@ dreRoutes.put("/reports/dre/custos-fixos/:id", async (req, res) => {
     }
     const body = req.body as CustosFixosUpdateBody;
     const item = await updateCustoFixo(
+      req.auth!.orgId,
       id,
       period.year,
       period.month,
@@ -210,7 +212,7 @@ dreRoutes.delete("/reports/dre/custos-fixos/:id", async (req, res) => {
       res.status(400).json({ error: "Parâmetro :id obrigatório" });
       return;
     }
-    await deleteCustoFixo(id, period.year, period.month);
+    await deleteCustoFixo(req.auth!.orgId, id, period.year, period.month);
     res.status(204).send();
   } catch (e: unknown) {
     const message =
@@ -236,7 +238,7 @@ dreRoutes.get("/reports/dre/kpis", async (req, res) => {
   try {
     const period = yearMonthGuard(req, res);
     if (!period) return;
-    const payload = await getDreKpis(period.year, period.month);
+    const payload = await getDreKpis(req.auth!.orgId, period.year, period.month);
     res.json(payload);
   } catch (e: unknown) {
     const message =

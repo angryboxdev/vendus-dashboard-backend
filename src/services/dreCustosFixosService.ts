@@ -3,7 +3,8 @@ import type {
   CustosFixosCreateBody,
   CustosFixosUpdateBody,
 } from "../domain/dreTypes.js";
-import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 
 type Row = {
   id: string;
@@ -26,24 +27,12 @@ function rowToItem(row: Row): CustosFixoItem {
 }
 
 export async function getCustosFixos(
+  organizationId: OrganizationId,
   year: number,
   month: number,
 ): Promise<CustosFixoItem[]> {
-  if (!isSupabaseConfigured()) {
-    if (process.env.NODE_ENV !== "test") {
-      console.warn(
-        "[DRE custos fixos] Supabase not configured (SUPABASE_URL / SUPABASE_ANON_KEY). Returning empty array.",
-      );
-    }
-    return [];
-  }
-  const supabase = getSupabase();
-  if (!supabase) {
-    return [];
-  }
-
-  const { data, error } = await supabase
-    .from("dre_custos_fixos")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("dre_custos_fixos")
     .select("id, year, month, descricao, valor, valor_sem_iva, observacao")
     .eq("year", year)
     .eq("month", month)
@@ -53,7 +42,7 @@ export async function getCustosFixos(
     throw new Error(`DRE custos fixos: ${error.message}`);
   }
 
-  const rows = (data ?? []) as Row[];
+  const rows = (data ?? []) as unknown as Row[];
   if (rows.length === 0 && process.env.NODE_ENV !== "test") {
     console.warn(
       `[DRE custos fixos] 0 rows for year=${year} month=${month}. Seed data is year=2026, months 2-12. Check Supabase env and query params.`,
@@ -62,27 +51,14 @@ export async function getCustosFixos(
   return rows.map(rowToItem);
 }
 
-function requireSupabase(): NonNullable<ReturnType<typeof getSupabase>> {
-  if (!isSupabaseConfigured()) {
-    throw new Error(
-      "DRE não configurado: defina SUPABASE_URL e SUPABASE_ANON_KEY",
-    );
-  }
-  const supabase = getSupabase();
-  if (!supabase) {
-    throw new Error("Supabase não disponível");
-  }
-  return supabase;
-}
-
 export async function createCustoFixo(
+  organizationId: OrganizationId,
   year: number,
   month: number,
   body: CustosFixosCreateBody,
 ): Promise<CustosFixoItem> {
-  const supabase = requireSupabase();
-  const { data, error } = await supabase
-    .from("dre_custos_fixos")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("dre_custos_fixos")
     .insert({
       year,
       month,
@@ -97,18 +73,18 @@ export async function createCustoFixo(
   if (error) {
     throw new Error(`DRE criar custo fixo: ${error.message}`);
   }
-  return rowToItem(data as Row);
+  return rowToItem(data as unknown as Row);
 }
 
 export async function updateCustoFixo(
+  organizationId: OrganizationId,
   id: string,
   year: number,
   month: number,
   body: CustosFixosUpdateBody,
 ): Promise<CustosFixoItem> {
-  const supabase = requireSupabase();
-  const { data, error } = await supabase
-    .from("dre_custos_fixos")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("dre_custos_fixos")
     .update({
       descricao: (body.descricao ?? "").trim(),
       valor: Number(body.valor) || 0,
@@ -128,17 +104,17 @@ export async function updateCustoFixo(
   if (!data) {
     throw new Error("Registo não encontrado ou não pertence ao período");
   }
-  return rowToItem(data as Row);
+  return rowToItem(data as unknown as Row);
 }
 
 export async function deleteCustoFixo(
+  organizationId: OrganizationId,
   id: string,
   year: number,
   month: number,
 ): Promise<void> {
-  const supabase = requireSupabase();
-  const { error } = await supabase
-    .from("dre_custos_fixos")
+  const { error } = await createScopedQuery(organizationId)
+    .table("dre_custos_fixos")
     .delete()
     .eq("id", id)
     .eq("year", year)

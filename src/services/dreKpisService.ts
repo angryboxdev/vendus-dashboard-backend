@@ -4,6 +4,7 @@ import { fetchAllDocuments } from "./documentsService.js";
 import { getCustosVariaveis } from "./dreCustosVariaveisService.js";
 import { getCustosFixos } from "./dreCustosFixosService.js";
 import { ENV } from "../config/env.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 
 function getMonthBounds(
   year: number,
@@ -24,6 +25,7 @@ function safeDivide(num: number, den: number): number {
  * KPIs do período: vendas por canal, tickets médios, % receita por canal, CMV % e Custo Fixo %.
  */
 export async function getDreKpis(
+  organizationId: OrganizationId,
   year: number,
   month: number
 ): Promise<DREKpisPayload> {
@@ -38,8 +40,8 @@ export async function getDreKpis(
       concurrency: ENV.CONCURRENCY,
       fetchAllDocuments,
     }),
-    getCustosVariaveis(year, month),
-    getCustosFixos(year, month),
+    getCustosVariaveis(organizationId, year, month),
+    getCustosFixos(organizationId, year, month),
   ]);
 
   const totals = summary.totals;
