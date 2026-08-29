@@ -38,6 +38,7 @@ export function createInternalCronRouter(deps: {
         const dryRun = req.body?.dry_run === true;
         const debug = req.body?.debug === true;
         const result = await runDailyVendusConsumptionJob(
+          UNATTENDED_SCOPE.organizationId,
           rawTarget !== ""
             ? { targetDate: rawTarget, dryRun, debug }
             : { dryRun, debug }

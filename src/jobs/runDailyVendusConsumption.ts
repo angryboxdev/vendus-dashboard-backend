@@ -11,6 +11,7 @@
  */
 import "../config/env.js";
 import { runDailyVendusConsumptionJob } from "../services/dailyVendusConsumptionJobService.js";
+import { UNATTENDED_SCOPE } from "../infra/scoped-db/unattended-scope.js";
 
 const dryRun =
   process.env.CRON_DRY_RUN === "1" || process.env.CRON_DRY_RUN === "true";
@@ -21,7 +22,7 @@ const jobOpts =
     ? { targetDate, dryRun }
     : { dryRun };
 
-runDailyVendusConsumptionJob(jobOpts)
+runDailyVendusConsumptionJob(UNATTENDED_SCOPE.organizationId, jobOpts)
   .then((result) => {
     console.log(JSON.stringify(result, null, 2));
     process.exit(0);

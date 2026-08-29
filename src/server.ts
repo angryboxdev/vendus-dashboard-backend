@@ -27,6 +27,7 @@ import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoute
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { crmRoutes } from "./routes/crmRoutes.js";
 import { runDailyVendusConsumptionJob } from "./services/dailyVendusConsumptionJobService.js";
+import { UNATTENDED_SCOPE } from "./infra/scoped-db/unattended-scope.js";
 import { populateAuth, requireAuth, requireMinRole } from "./middleware/auth.js";
 import { authRoutes } from "./routes/authRoutes.js";
 import { createLocationsModule } from "./modules/locations/locations.module.js";
@@ -168,7 +169,7 @@ if (ENV.ENABLE_DAILY_CONSUMPTION_CRON) {
     cron.schedule(
       ENV.DAILY_CONSUMPTION_CRON_SCHEDULE,
       () => {
-        void runDailyVendusConsumptionJob({})
+        void runDailyVendusConsumptionJob(UNATTENDED_SCOPE.organizationId, {})
           .then((r) => {
             console.log("[cron] daily-vendus-consumption ok", r);
           })

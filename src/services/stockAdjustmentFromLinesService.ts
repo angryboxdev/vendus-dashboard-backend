@@ -8,6 +8,7 @@
  */
 import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
 import { lisbonDayEndUtcIso } from "../utils/lisbonDayInstants.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import {
   getAllConsumptionMappingsMap,
   type ConsumptionMappingEntry,
@@ -98,6 +99,7 @@ function buildReason(adjustmentDate: string, reasonNote?: string): string {
  * Falha se alguma linha não tiver mapeamento.
  */
 export async function computeConsumptionForProductLines(
+  organizationId: OrganizationId,
   lines: StockAdjustmentLine[]
 ): Promise<Map<string, number>> {
   const mappings = await getAllConsumptionMappingsMap();
@@ -120,7 +122,7 @@ export async function computeConsumptionForProductLines(
           const add = (consumptionByStockId.get(item.stock_item_id) ?? 0) + item.quantity * q;
           consumptionByStockId.set(item.stock_item_id, add);
         } else if (item.preparation_id) {
-          const preparation = await getPreparationWithItems(item.preparation_id);
+          const preparation = await getPreparationWithItems(organizationId, item.preparation_id);
           if (!preparation) continue;
           const factor = preparation.use_as_unit
             ? item.quantity
@@ -149,6 +151,7 @@ export async function computeConsumptionForProductLines(
  * Útil para autoconsumo Vendus com produtos heterogéneos.
  */
 export async function computeConsumptionForProductLinesLenient(
+  organizationId: OrganizationId,
   lines: StockAdjustmentLine[]
 ): Promise<{ map: Map<string, number>; skipped: string[] }> {
   const mappings = await getAllConsumptionMappingsMap();
@@ -174,7 +177,7 @@ export async function computeConsumptionForProductLinesLenient(
             const add = (consumptionByStockId.get(item.stock_item_id) ?? 0) + item.quantity * q;
             consumptionByStockId.set(item.stock_item_id, add);
           } else if (item.preparation_id) {
-            const preparation = await getPreparationWithItems(item.preparation_id);
+            const preparation = await getPreparationWithItems(organizationId, item.preparation_id);
             if (!preparation) continue;
             const factor = preparation.use_as_unit
               ? item.quantity
@@ -239,19 +242,22 @@ async function enrichByItemWithNames(
  * @param batchLabel - Opcional: distingue vários ajustes no mesmo dia (sufixo em `stock_movements.reference`).
  * @param reasonNote - Opcional: texto extra no `reason` (ex.: "contagem física 21/03").
  */
-export async function runStockAdjustmentFromLines(options: {
-  lines: StockAdjustmentLine[];
-  adjustmentDate: string;
-  dryRun?: boolean;
-  batchLabel?: string;
-  reasonNote?: string;
-}): Promise<StockAdjustmentFromLinesResult> {
+export async function runStockAdjustmentFromLines(
+  organizationId: OrganizationId,
+  options: {
+    lines: StockAdjustmentLine[];
+    adjustmentDate: string;
+    dryRun?: boolean;
+    batchLabel?: string;
+    reasonNote?: string;
+  }
+): Promise<StockAdjustmentFromLinesResult> {
   const { lines, adjustmentDate, dryRun, batchLabel, reasonNote } = options;
   if (!lines.length) {
     throw new Error("Lista de linhas vazia");
   }
 
-  const byItem = await computeConsumptionForProductLines(lines);
+  const byItem = await computeConsumptionForProductLines(organizationId, lines);
   const entries = Array.from(byItem.entries()).map(([stock_item_id, qty]) => ({
     stock_item_id,
     quantity_added: Math.round(qty * 1000) / 1000,
@@ -328,7 +334,8 @@ export type ExcludedSaleByItemRow = StockAdjustmentByItemRow;
 export type ExcludedSalesAdjustmentResult = StockAdjustmentFromLinesResult;
 /** @deprecated Usar `runStockAdjustmentFromLines` */
 export async function runExcludedSalesAdjustment(
-  options: Parameters<typeof runStockAdjustmentFromLines>[0]
+  organizationId: OrganizationId,
+  options: Parameters<typeof runStockAdjustmentFromLines>[1]
 ): Promise<StockAdjustmentFromLinesResult> {
-  return runStockAdjustmentFromLines(options);
+  return runStockAdjustmentFromLines(organizationId, options);
 }

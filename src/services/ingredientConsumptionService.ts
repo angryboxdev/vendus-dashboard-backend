@@ -1,4 +1,5 @@
 import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 
 import { ENV } from "../config/env.js";
 import type { StockItemType } from "../domain/stockTypes.js";
@@ -344,6 +345,7 @@ export type GetIngredientConsumptionOptions = {
 };
 
 export async function getIngredientConsumption(
+  organizationId: OrganizationId,
   since: string,
   until: string,
   options?: GetIngredientConsumptionOptions
@@ -403,7 +405,7 @@ export async function getIngredientConsumption(
             item.quantity * product.qty;
           consumptionByStockId.set(item.stock_item_id, qty);
         } else if (item.preparation_id) {
-          const preparation = await getPreparationWithItems(item.preparation_id);
+          const preparation = await getPreparationWithItems(organizationId, item.preparation_id);
           if (!preparation) continue;
           const factor = preparation.use_as_unit
             ? item.quantity
@@ -458,7 +460,7 @@ export async function getIngredientConsumption(
     vsc?.records ?? []
   );
   const { map: selfConsumptionMap, skipped: selfconsumption_skipped } =
-    await computeConsumptionForProductLinesLenient(selfLines);
+    await computeConsumptionForProductLinesLenient(organizationId, selfLines);
   const { entries: consumption_selfconsumption } =
     await buildConsumptionEntriesFromStockMap(selfConsumptionMap);
 
