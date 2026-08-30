@@ -177,6 +177,8 @@ export type StockMovementCreateBody = {
   item_id: string;
   type: StockMovementType;
   quantity: number;
+  /** Loja a que este movimento pertence (D3/D4): obrigatório, fornecido pelo cliente. */
+  location_id: string;
   unit_cost_per_base_unit_with_vat?: number | null;
   unit_cost_per_base_unit_without_vat?: number | null;
   reason?: string | null;
@@ -189,6 +191,8 @@ export type StockMovementCreateBody = {
 export type StockMovementUpdateBody = {
   movement_date?: string | null;
   quantity?: number;
+  /** Loja a que este movimento pertence (D3/D4): opcional, só atualiza quando fornecido. */
+  location_id?: string;
   unit_cost_per_base_unit_with_vat?: number | null;
   unit_cost_per_base_unit_without_vat?: number | null;
   reason?: string | null;

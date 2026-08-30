@@ -46,9 +46,9 @@ function toQueryRecord(q: Request["query"]): Record<string, string | undefined> 
 }
 
 // ---------- Categories ----------
-stockRoutes.get("/stock/categories", async (_req, res) => {
+stockRoutes.get("/stock/categories", async (req, res) => {
   try {
-    const list = await listStockCategories();
+    const list = await listStockCategories(req.auth!.orgId);
     res.json(list);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao listar categorias";
@@ -63,7 +63,7 @@ stockRoutes.get("/stock/categories/:id", async (req, res) => {
       res.status(400).json({ error: "id obrigatório" });
       return;
     }
-    const category = await getStockCategory(id);
+    const category = await getStockCategory(req.auth!.orgId, id);
     if (!category) {
       res.status(404).json({ error: "Categoria não encontrada" });
       return;
@@ -82,7 +82,7 @@ stockRoutes.post("/stock/categories", async (req, res) => {
       res.status(400).json({ error: "name é obrigatório" });
       return;
     }
-    const category = await createStockCategory(body);
+    const category = await createStockCategory(req.auth!.orgId, body);
     res.status(201).json(category);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao criar categoria";
@@ -102,7 +102,7 @@ stockRoutes.put("/stock/categories/:id", async (req, res) => {
       res.status(400).json({ error: "name é obrigatório" });
       return;
     }
-    const category = await updateStockCategory(id, body);
+    const category = await updateStockCategory(req.auth!.orgId, id, body);
     res.json(category);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao atualizar categoria";
@@ -117,7 +117,7 @@ stockRoutes.delete("/stock/categories/:id", async (req, res) => {
       res.status(400).json({ error: "id obrigatório" });
       return;
     }
-    await deleteStockCategory(id);
+    await deleteStockCategory(req.auth!.orgId, id);
     res.status(204).send();
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao eliminar categoria";
@@ -133,7 +133,10 @@ stockRoutes.get("/stock/items", async (req, res) => {
     if (q.category_id) filters.category_id = q.category_id;
     if (q.type && validateItemType(q.type)) filters.type = q.type;
     if (q.is_active !== undefined) filters.is_active = q.is_active === "true";
-    const list = await listStockItems(Object.keys(filters).length ? filters : undefined);
+    const list = await listStockItems(
+      req.auth!.orgId,
+      Object.keys(filters).length ? filters : undefined
+    );
     res.json(list);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao listar itens";
@@ -148,7 +151,7 @@ stockRoutes.get("/stock/items/:id", async (req, res) => {
       res.status(400).json({ error: "id obrigatório" });
       return;
     }
-    const item = await getStockItem(id);
+    const item = await getStockItem(req.auth!.orgId, id);
     if (!item) {
       res.status(404).json({ error: "Item não encontrado" });
       return;
@@ -179,7 +182,7 @@ stockRoutes.post("/stock/items", async (req, res) => {
       res.status(400).json({ error: "base_unit inválido (g, kg, ml, l, un)" });
       return;
     }
-    const item = await createStockItem(body);
+    const item = await createStockItem(req.auth!.orgId, body);
     res.status(201).json(item);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao criar item";
@@ -203,7 +206,7 @@ stockRoutes.put("/stock/items/:id", async (req, res) => {
       res.status(400).json({ error: "base_unit inválido" });
       return;
     }
-    const item = await updateStockItem(id, body);
+    const item = await updateStockItem(req.auth!.orgId, id, body);
     res.json(item);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao atualizar item";
@@ -218,7 +221,7 @@ stockRoutes.delete("/stock/items/:id", async (req, res) => {
       res.status(400).json({ error: "id obrigatório" });
       return;
     }
-    await deleteStockItem(id);
+    await deleteStockItem(req.auth!.orgId, id);
     res.status(204).send();
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao eliminar item";
@@ -265,7 +268,7 @@ stockRoutes.get("/stock/movements", async (req, res) => {
       ...(q.date_to ? { date_to: q.date_to } : {}),
     };
 
-    const payload = await listStockMovementsPaginated(filters);
+    const payload = await listStockMovementsPaginated(req.auth!.orgId, filters);
     res.json(payload);
   } catch (e: unknown) {
     const message =
@@ -288,7 +291,11 @@ stockRoutes.post("/stock/movements", async (req, res) => {
       });
       return;
     }
-    const movement = await createStockMovement(body);
+    if (!body.location_id) {
+      res.status(400).json({ error: "location_id é obrigatório" });
+      return;
+    }
+    const movement = await createStockMovement(req.auth!.orgId, body);
     res.status(201).json(movement);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao criar movimentação";
@@ -304,7 +311,7 @@ stockRoutes.put("/stock/movements/:id", async (req, res) => {
       return;
     }
     const body = req.body as StockMovementUpdateBody;
-    const movement = await updateStockMovement(id, body ?? {});
+    const movement = await updateStockMovement(req.auth!.orgId, id, body ?? {});
     res.json(movement);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao atualizar movimentação";
@@ -319,7 +326,7 @@ stockRoutes.get("/stock/movements/:id", async (req, res) => {
       res.status(400).json({ error: "id é obrigatório" });
       return;
     }
-    const movement = await getStockMovementById(id);
+    const movement = await getStockMovementById(req.auth!.orgId, id);
     if (!movement) {
       res.status(404).json({ error: "Movimentação não encontrada" });
       return;
@@ -340,7 +347,7 @@ stockRoutes.get("/stock/items/:id/movements", async (req, res) => {
     }
     const q = toQueryRecord(req.query);
     const limit = Math.min(Math.max(Number(q.limit) || 100, 1), 500);
-    const list = await listStockMovementsByItem(id, limit);
+    const list = await listStockMovementsByItem(req.auth!.orgId, id, limit);
     res.json(list);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao listar movimentações";

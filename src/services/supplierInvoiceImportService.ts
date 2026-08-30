@@ -682,7 +682,7 @@ export async function confirmSupplierInvoiceImport(
     const hasWith = l.unit_price_gross != null && Number.isFinite(l.unit_price_gross);
     const hasWithout = l.unit_price_net != null && Number.isFinite(l.unit_price_net);
     if (!hasWith && !hasWithout) continue;
-    await updateStockItem(l.stock_item_id, {
+    await updateStockItem(organizationId, l.stock_item_id, {
       purchase_reference_unit_cost_with_vat: hasWith ? l.unit_price_gross : null,
       purchase_reference_unit_cost_without_vat: hasWithout ? l.unit_price_net : null,
     });

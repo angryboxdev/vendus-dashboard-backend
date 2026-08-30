@@ -5,7 +5,8 @@ import type {
   StockItemType,
   StockItemUpdateBody,
 } from "../domain/stockTypes.js";
-import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 
 type Row = {
   id: string;
@@ -74,17 +75,6 @@ function rowToItem(
   return item;
 }
 
-function requireSupabase(): NonNullable<ReturnType<typeof getSupabase>> {
-  if (!isSupabaseConfigured()) {
-    throw new Error(
-      "Supabase não configurado: defina SUPABASE_URL e SUPABASE_ANON_KEY"
-    );
-  }
-  const supabase = getSupabase();
-  if (!supabase) throw new Error("Supabase não disponível");
-  return supabase;
-}
-
 const ITEM_TYPES: StockItemType[] = [
   "ingredient",
   "beverage",
@@ -119,7 +109,7 @@ const ITEM_SELECT =
 
 /** Última linha purchase com pelo menos um custo; devolve os dois valores dessa linha (podem ser null). */
 async function getQuantitiesAndLastPurchaseFromMovements(
-  supabase: NonNullable<ReturnType<typeof getSupabase>>,
+  organizationId: OrganizationId,
   itemIds: string[]
 ): Promise<
   Map<string, { quantity: number; lastFromMovement: LastFromMovement }>
@@ -133,8 +123,9 @@ async function getQuantitiesAndLastPurchaseFromMovements(
     last_purchase_without_vat: number | null;
   };
 
-  const { data, error } = await supabase
-    .rpc("get_stock_quantities_with_last_purchase", { p_item_ids: itemIds });
+  const { data, error } = await createScopedQuery(
+    organizationId
+  ).getStockQuantitiesWithLastPurchase(itemIds);
   if (error) throw new Error(`Stock quantities RPC: ${error.message}`);
 
   const out = new Map<
@@ -147,7 +138,7 @@ async function getQuantitiesAndLastPurchaseFromMovements(
       lastFromMovement: { withVat: null, withoutVat: null },
     });
   }
-  for (const row of (data ?? []) as RpcRow[]) {
+  for (const row of (data ?? []) as unknown as RpcRow[]) {
     const w = row.last_purchase_with_vat != null ? Number(row.last_purchase_with_vat) : null;
     const wo = row.last_purchase_without_vat != null ? Number(row.last_purchase_without_vat) : null;
     out.set(row.item_id, {
@@ -179,16 +170,16 @@ function effectiveLastPurchaseCosts(
   };
 }
 
-export async function listStockItems(filters?: {
-  category_id?: string;
-  type?: StockItemType;
-  is_active?: boolean;
-}): Promise<StockItem[]> {
-  if (!isSupabaseConfigured()) return [];
-  const supabase = getSupabase();
-  if (!supabase) return [];
-  let q = supabase
-    .from("stock_items")
+export async function listStockItems(
+  organizationId: OrganizationId,
+  filters?: {
+    category_id?: string;
+    type?: StockItemType;
+    is_active?: boolean;
+  }
+): Promise<StockItem[]> {
+  let q = createScopedQuery(organizationId)
+    .table("stock_items")
     .select(ITEM_SELECT)
     .order("name", { ascending: true });
   if (filters?.category_id) q = q.eq("category_id", filters.category_id);
@@ -197,10 +188,10 @@ export async function listStockItems(filters?: {
     q = q.eq("is_active", filters.is_active);
   const { data, error } = await q;
   if (error) throw new Error(`Stock items: ${error.message}`);
-  const rows = (data ?? []) as Row[];
+  const rows = (data ?? []) as unknown as Row[];
   const itemIds = rows.map((r) => r.id);
   const qtyMap = await getQuantitiesAndLastPurchaseFromMovements(
-    supabase,
+    organizationId,
     itemIds
   );
   return rows.map((r) => {
@@ -216,18 +207,21 @@ export async function listStockItems(filters?: {
   });
 }
 
-export async function getStockItem(id: string): Promise<StockItem | null> {
-  const supabase = requireSupabase();
-  const { data, error } = await supabase
-    .from("stock_items")
+export async function getStockItem(
+  organizationId: OrganizationId,
+  id: string
+): Promise<StockItem | null> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("stock_items")
     .select(ITEM_SELECT)
     .eq("id", id)
     .single();
   if (error || !data) return null;
-  const row = data as Row;
-  const qtyMap = await getQuantitiesAndLastPurchaseFromMovements(supabase, [
-    row.id,
-  ]);
+  const row = data as unknown as Row;
+  const qtyMap = await getQuantitiesAndLastPurchaseFromMovements(
+    organizationId,
+    [row.id]
+  );
   const { quantity, lastFromMovement } = qtyMap.get(row.id) ?? {
     quantity: 0,
     lastFromMovement: { withVat: null, withoutVat: null },
@@ -240,9 +234,9 @@ export async function getStockItem(id: string): Promise<StockItem | null> {
 }
 
 export async function createStockItem(
+  organizationId: OrganizationId,
   body: StockItemCreateBody
 ): Promise<StockItem> {
-  const supabase = requireSupabase();
   const name = (body.name ?? "").trim();
   if (!name) throw new Error("name é obrigatório");
   if (!body.category_id) throw new Error("category_id é obrigatório");
@@ -280,13 +274,13 @@ export async function createStockItem(
     is_active: body.is_active !== false,
     updated_at: new Date().toISOString(),
   };
-  const { data, error } = await supabase
-    .from("stock_items")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("stock_items")
     .insert(payload)
     .select(ITEM_SELECT)
     .single();
   if (error) throw new Error(`Criar item: ${error.message}`);
-  const created = data as Row;
+  const created = data as unknown as Row;
   return rowToItem(
     created,
     0,
@@ -295,10 +289,10 @@ export async function createStockItem(
 }
 
 export async function updateStockItem(
+  organizationId: OrganizationId,
   id: string,
   body: StockItemUpdateBody
 ): Promise<StockItem> {
-  const supabase = requireSupabase();
   if (body.type != null && !validateItemType(body.type))
     throw new Error(`type inválido: ${body.type}`);
   if (body.base_unit != null && !validateBaseUnit(body.base_unit))
@@ -338,18 +332,19 @@ export async function updateStockItem(
     updates.min_stock = Number(body.min_stock) ?? 0;
   if (body.base_unit !== undefined) updates.base_unit = body.base_unit;
   if (body.is_active !== undefined) updates.is_active = body.is_active;
-  const { data, error } = await supabase
-    .from("stock_items")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("stock_items")
     .update(updates)
     .eq("id", id)
     .select(ITEM_SELECT)
     .single();
   if (error) throw new Error(`Atualizar item: ${error.message}`);
   if (!data) throw new Error("Item não encontrado");
-  const qtyMap = await getQuantitiesAndLastPurchaseFromMovements(supabase, [
-    id,
-  ]);
-  const row = data as Row;
+  const row = data as unknown as Row;
+  const qtyMap = await getQuantitiesAndLastPurchaseFromMovements(
+    organizationId,
+    [id]
+  );
   const { quantity, lastFromMovement } = qtyMap.get(id) ?? {
     quantity: 0,
     lastFromMovement: { withVat: null, withoutVat: null },
@@ -361,8 +356,13 @@ export async function updateStockItem(
   );
 }
 
-export async function deleteStockItem(id: string): Promise<void> {
-  const supabase = requireSupabase();
-  const { error } = await supabase.from("stock_items").delete().eq("id", id);
+export async function deleteStockItem(
+  organizationId: OrganizationId,
+  id: string
+): Promise<void> {
+  const { error } = await createScopedQuery(organizationId)
+    .table("stock_items")
+    .delete()
+    .eq("id", id);
   if (error) throw new Error(`Eliminar item: ${error.message}`);
 }

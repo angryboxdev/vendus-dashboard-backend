@@ -7,7 +7,8 @@ import type {
   StockMovementUpdateBody,
   StockMovementsPaginatedResponse,
 } from "../domain/stockTypes.js";
-import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import {
   lisbonDayEndUtcIso,
   lisbonDayStartUtcIso,
@@ -62,17 +63,6 @@ function parseMovementDate(value: string | null | undefined): string | null {
   return date.toISOString();
 }
 
-function requireSupabase(): NonNullable<ReturnType<typeof getSupabase>> {
-  if (!isSupabaseConfigured()) {
-    throw new Error(
-      "Supabase não configurado: defina SUPABASE_URL e SUPABASE_ANON_KEY"
-    );
-  }
-  const supabase = getSupabase();
-  if (!supabase) throw new Error("Supabase não disponível");
-  return supabase;
-}
-
 const MOVEMENT_TYPES: StockMovementType[] = [
   "purchase",
   "consumption",
@@ -87,12 +77,13 @@ export function validateMovementType(t: string): t is StockMovementType {
 }
 
 export async function createStockMovement(
+  organizationId: OrganizationId,
   body: StockMovementCreateBody
 ): Promise<StockMovement> {
-  const supabase = requireSupabase();
   if (!body.item_id) throw new Error("item_id é obrigatório");
   if (!validateMovementType(body.type))
     throw new Error(`type inválido: ${body.type}`);
+  if (!body.location_id) throw new Error("location_id é obrigatório");
   const quantity = Number(body.quantity);
   if (!Number.isFinite(quantity)) throw new Error("quantity inválido");
   const movementDate = parseMovementDate(body.movement_date);
@@ -115,6 +106,7 @@ export async function createStockMovement(
     item_id: body.item_id,
     type: body.type,
     quantity,
+    location_id: body.location_id,
     unit_cost_per_base_unit_with_vat: costWith,
     unit_cost_per_base_unit_without_vat: costWithout,
     reason: (body.reason ?? "").trim() || null,
@@ -122,13 +114,13 @@ export async function createStockMovement(
     created_by: (body.created_by ?? "").trim() || null,
   };
   if (movementDate) payload.movement_date = movementDate;
-  const { data, error } = await supabase
-    .from("stock_movements")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("stock_movements")
     .insert(payload)
     .select(COLS)
     .single();
   if (error) throw new Error(`Criar movimentação: ${error.message}`);
-  return rowToMovement(data as Row);
+  return rowToMovement(data as unknown as Row);
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -218,31 +210,10 @@ const MOVEMENT_HISTORY_SELECT = `
  * Histórico global de movimentos com paginação, item e categoria.
  */
 export async function listStockMovementsPaginated(
+  organizationId: OrganizationId,
   query: ListStockMovementsQuery
 ): Promise<StockMovementsPaginatedResponse> {
-  if (!isSupabaseConfigured()) {
-    return {
-      data: [],
-      pagination: {
-        page: 1,
-        page_size: 20,
-        total: 0,
-        total_pages: 0,
-      },
-    };
-  }
-  const supabase = getSupabase();
-  if (!supabase) {
-    return {
-      data: [],
-      pagination: {
-        page: 1,
-        page_size: 20,
-        total: 0,
-        total_pages: 0,
-      },
-    };
-  }
+  const scoped = createScopedQuery(organizationId);
 
   const page = Math.max(1, Math.floor(query.page ?? 1));
   const pageSize = Math.min(Math.max(1, Math.floor(query.page_size ?? 20)), 100);
@@ -254,12 +225,12 @@ export async function listStockMovementsPaginated(
 
   let categoryItemIds: string[] | undefined;
   if (query.category_id) {
-    const { data: catRows, error: catErr } = await supabase
-      .from("stock_items")
+    const { data: catRows, error: catErr } = await scoped
+      .table("stock_items")
       .select("id")
       .eq("category_id", query.category_id);
     if (catErr) throw new Error(`Stock items (categoria): ${catErr.message}`);
-    categoryItemIds = (catRows ?? []).map((r: { id: string }) => r.id);
+    categoryItemIds = ((catRows ?? []) as unknown as { id: string }[]).map((r) => r.id);
     if (categoryItemIds.length === 0) {
       return {
         data: [],
@@ -268,8 +239,8 @@ export async function listStockMovementsPaginated(
     }
   }
 
-  let qb = supabase
-    .from("stock_movements")
+  let qb = scoped
+    .table("stock_movements")
     .select(MOVEMENT_HISTORY_SELECT, { count: "exact" })
     .order("movement_date", { ascending: false })
     .order("created_at", { ascending: false });
@@ -309,42 +280,38 @@ export async function listStockMovementsPaginated(
 }
 
 export async function listStockMovementsByItem(
+  organizationId: OrganizationId,
   itemId: string,
   limit = 100
 ): Promise<StockMovement[]> {
-  if (!isSupabaseConfigured()) return [];
-  const supabase = getSupabase();
-  if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("stock_movements")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("stock_movements")
     .select(COLS)
     .eq("item_id", itemId)
     .order("movement_date", { ascending: false })
     .limit(limit);
   if (error) throw new Error(`Stock movements: ${error.message}`);
-  return ((data ?? []) as Row[]).map(rowToMovement);
+  return ((data ?? []) as unknown as Row[]).map(rowToMovement);
 }
 
 export async function getStockMovementById(
+  organizationId: OrganizationId,
   id: string
 ): Promise<StockMovement | null> {
-  if (!isSupabaseConfigured()) return null;
-  const supabase = getSupabase();
-  if (!supabase) return null;
-  const { data, error } = await supabase
-    .from("stock_movements")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("stock_movements")
     .select(COLS)
     .eq("id", id)
     .maybeSingle();
   if (error) throw new Error(`Movimentação: ${error.message}`);
-  return data ? rowToMovement(data as Row) : null;
+  return data ? rowToMovement(data as unknown as Row) : null;
 }
 
 export async function updateStockMovement(
+  organizationId: OrganizationId,
   id: string,
   body: StockMovementUpdateBody
 ): Promise<StockMovement> {
-  const supabase = requireSupabase();
   const updates: Record<string, unknown> = {};
   if (body.movement_date !== undefined) {
     const v = parseMovementDate(body.movement_date);
@@ -354,6 +321,10 @@ export async function updateStockMovement(
     const q = Number(body.quantity);
     if (!Number.isFinite(q)) throw new Error("quantity inválido");
     updates.quantity = q;
+  }
+  if (body.location_id !== undefined) {
+    if (!body.location_id) throw new Error("location_id inválido");
+    updates.location_id = body.location_id;
   }
   if (body.unit_cost_per_base_unit_with_vat !== undefined) {
     const v = body.unit_cost_per_base_unit_with_vat;
@@ -382,16 +353,16 @@ export async function updateStockMovement(
   if (body.reference !== undefined)
     updates.reference = (body.reference ?? "").trim() || null;
   if (Object.keys(updates).length === 0) {
-    const existing = await getStockMovementById(id);
+    const existing = await getStockMovementById(organizationId, id);
     if (!existing) throw new Error("Movimentação não encontrada");
     return existing;
   }
-  const { data, error } = await supabase
-    .from("stock_movements")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("stock_movements")
     .update(updates)
     .eq("id", id)
     .select(COLS)
     .single();
   if (error) throw new Error(`Atualizar movimentação: ${error.message}`);
-  return rowToMovement(data as Row);
+  return rowToMovement(data as unknown as Row);
 }

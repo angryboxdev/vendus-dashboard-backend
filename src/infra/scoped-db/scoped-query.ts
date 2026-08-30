@@ -49,6 +49,23 @@ export class ScopedQuery {
     return new ScopedQuery(organizationId, client);
   }
 
+  /**
+   * The one stored procedure in the codebase (D17, ADR-0008):
+   * `get_stock_quantities_with_last_purchase` aggregated `stock_movements`
+   * for a set of item identifiers with no organization predicate at all, and
+   * was executable by anonymous callers — a hole in the "the helper is the
+   * only place a query is built" claim regardless of who wrote the function.
+   * It now takes an organization argument and filters on it (migration
+   * `20260829140000_scope_stock_quantities_rpc.sql`); this method is the only
+   * place in `src/**` that may call it, so it cannot be invoked unscoped.
+   */
+  getStockQuantitiesWithLastPurchase(itemIds: string[]) {
+    return this.client.rpc("get_stock_quantities_with_last_purchase", {
+      p_org_id: this.organizationId,
+      p_item_ids: itemIds,
+    });
+  }
+
   table<T extends TableName>(name: T) {
     const entry = TABLE_REGISTRY[name];
     const organizationId = this.organizationId;
