@@ -6,7 +6,7 @@
  * Serve para qualquer cenário de ajuste manual em que queiras o cálculo por receita
  * (ex.: compensar vendas antes de uma contagem, corrigir um lote, simular devolução, etc.).
  */
-import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery, type ScopedQuery } from "../infra/scoped-db/scoped-query.js";
 import { lisbonDayEndUtcIso } from "../utils/lisbonDayInstants.js";
 import type { OrganizationId } from "../kernel/organization-id.js";
 import {
@@ -206,14 +206,14 @@ export async function computeConsumptionForProductLinesLenient(
 }
 
 async function enrichByItemWithNames(
-  supabase: NonNullable<ReturnType<typeof getSupabase>>,
+  scoped: ScopedQuery,
   entries: Array<{ stock_item_id: string; quantity_added: number }>
 ): Promise<StockAdjustmentByItemRow[]> {
   const ids = entries.map((e) => e.stock_item_id);
   if (ids.length === 0) return [];
 
-  const { data, error } = await supabase
-    .from("stock_items")
+  const { data, error } = await scoped
+    .table("stock_items")
     .select("id, name")
     .in("id", ids);
 
@@ -222,7 +222,7 @@ async function enrichByItemWithNames(
   }
 
   const byId = new Map(
-    (data ?? []).map((r: { id: string; name: string }) => [r.id, r.name as string])
+    ((data ?? []) as unknown as { id: string; name: string }[]).map((r) => [r.id, r.name])
   );
 
   const rows: StockAdjustmentByItemRow[] = entries.map((e) => ({
@@ -247,14 +247,19 @@ export async function runStockAdjustmentFromLines(
   options: {
     lines: StockAdjustmentLine[];
     adjustmentDate: string;
+    /** Loja a que estes movimentos pertencem (D3/D4/D6): fornecida pelo unattended scope. */
+    locationId: string;
     dryRun?: boolean;
     batchLabel?: string;
     reasonNote?: string;
   }
 ): Promise<StockAdjustmentFromLinesResult> {
-  const { lines, adjustmentDate, dryRun, batchLabel, reasonNote } = options;
+  const { lines, adjustmentDate, locationId, dryRun, batchLabel, reasonNote } = options;
   if (!lines.length) {
     throw new Error("Lista de linhas vazia");
+  }
+  if (!locationId) {
+    throw new Error("locationId é obrigatório");
   }
 
   const byItem = await computeConsumptionForProductLines(organizationId, lines);
@@ -263,13 +268,9 @@ export async function runStockAdjustmentFromLines(
     quantity_added: Math.round(qty * 1000) / 1000,
   }));
 
-  if (!isSupabaseConfigured()) {
-    throw new Error("Supabase não configurado");
-  }
-  const supabase = getSupabase();
-  if (!supabase) throw new Error("Supabase indisponível");
+  const scoped = createScopedQuery(organizationId);
 
-  const byItemNamed = await enrichByItemWithNames(supabase, entries);
+  const byItemNamed = await enrichByItemWithNames(scoped, entries);
 
   const movementDateIso = lisbonDayEndUtcIso(adjustmentDate);
   const reason = buildReason(adjustmentDate, reasonNote);
@@ -292,6 +293,7 @@ export async function runStockAdjustmentFromLines(
       item_id: e.stock_item_id,
       type: "adjustment" as const,
       quantity: e.quantity_added,
+      location_id: locationId,
       unit_cost_per_base_unit_with_vat: null as number | null,
       unit_cost_per_base_unit_without_vat: null as number | null,
       reason,
@@ -311,7 +313,7 @@ export async function runStockAdjustmentFromLines(
     };
   }
 
-  const { error } = await supabase.from("stock_movements").insert(rows);
+  const { error } = await scoped.table("stock_movements").insert(rows);
   if (error) {
     throw new Error(`Inserir ajustes: ${error.message}`);
   }

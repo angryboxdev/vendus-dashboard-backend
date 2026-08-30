@@ -11,6 +11,7 @@ import {
 } from "../domain/supplierInvoiceImportTypes.js";
 import { ENV } from "../config/env.js";
 import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import { extractInvoiceWithOpenAI } from "./openaiInvoiceExtractService.js";
 import { lisbonDayEndUtcIso } from "../utils/lisbonDayInstants.js";
 import { updateStockItem } from "./stockItemService.js";
@@ -491,6 +492,7 @@ export async function updateSupplierInvoiceImport(
 }
 
 export async function confirmSupplierInvoiceImport(
+  organizationId: OrganizationId,
   importId: string,
   body: ConfirmSupplierInvoiceImportBody
 ): Promise<ConfirmSupplierInvoiceImportResult> {
@@ -686,7 +688,7 @@ export async function confirmSupplierInvoiceImport(
     const hasWith = l.unit_price_gross != null && Number.isFinite(l.unit_price_gross);
     const hasWithout = l.unit_price_net != null && Number.isFinite(l.unit_price_net);
     if (!hasWith && !hasWithout) continue;
-    await updateStockItem(l.stock_item_id, {
+    await updateStockItem(organizationId, l.stock_item_id, {
       purchase_reference_unit_cost_with_vat: hasWith ? l.unit_price_gross : null,
       purchase_reference_unit_cost_without_vat: hasWithout ? l.unit_price_net : null,
     });

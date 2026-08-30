@@ -19,8 +19,8 @@ const targetDate = process.env.TARGET_DATE?.trim();
 
 const jobOpts =
   targetDate !== undefined && targetDate !== ""
-    ? { targetDate, dryRun }
-    : { dryRun };
+    ? { targetDate, locationId: UNATTENDED_SCOPE.locationId, dryRun }
+    : { locationId: UNATTENDED_SCOPE.locationId, dryRun };
 
 runDailyVendusConsumptionJob(UNATTENDED_SCOPE.organizationId, jobOpts)
   .then((result) => {

@@ -40,8 +40,8 @@ export function createInternalCronRouter(deps: {
         const result = await runDailyVendusConsumptionJob(
           UNATTENDED_SCOPE.organizationId,
           rawTarget !== ""
-            ? { targetDate: rawTarget, dryRun, debug }
-            : { dryRun, debug }
+            ? { targetDate: rawTarget, locationId: UNATTENDED_SCOPE.locationId, dryRun, debug }
+            : { locationId: UNATTENDED_SCOPE.locationId, dryRun, debug }
         );
         res.json(result);
       } catch (e: unknown) {

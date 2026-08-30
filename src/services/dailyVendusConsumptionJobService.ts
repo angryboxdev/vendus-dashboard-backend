@@ -1,4 +1,4 @@
-import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
 import type { OrganizationId } from "../kernel/organization-id.js";
 import {
   lisbonDayEndUtcIso,
@@ -70,34 +70,32 @@ export function getYesterdayLisbonYmd(): string {
  */
 export async function runDailyVendusConsumptionJob(
   organizationId: OrganizationId,
-  options?: {
+  options: {
     /** Omite = ontem em Lisboa. */
     targetDate?: string;
+    /** Loja a que estes movimentos pertencem (D3/D4/D6): fornecida pelo unattended scope. */
+    locationId: string;
     dryRun?: boolean;
     /** Inclui detalhe por documento dos consumíveis no resultado. Implica dry_run. */
     debug?: boolean;
   }
 ): Promise<DailyConsumptionJobResult> {
-  const debug = options?.debug === true;
-  const dryRun = options?.dryRun === true || debug;
+  const debug = options.debug === true;
+  const dryRun = options.dryRun === true || debug;
   const target_date =
-    options?.targetDate?.trim() || getYesterdayLisbonYmd();
+    options.targetDate?.trim() || getYesterdayLisbonYmd();
   assertValidTargetDate(target_date);
+  const locationId = options.locationId;
+  if (!locationId) throw new Error("locationId é obrigatório");
 
-  if (!isSupabaseConfigured()) {
-    throw new Error(
-      "Supabase não configurado (SUPABASE_URL / SUPABASE_ANON_KEY)"
-    );
-  }
-  const supabase = getSupabase();
-  if (!supabase) throw new Error("Cliente Supabase indisponível");
+  const scoped = createScopedQuery(organizationId);
 
   const reason = cronVendusConsumptionReason(target_date);
   let deleted_rows = 0;
 
   if (!dryRun) {
-    const { data: removed, error: delErr } = await supabase
-      .from("stock_movements")
+    const { data: removed, error: delErr } = await scoped
+      .table("stock_movements")
       .delete()
       .eq("type", "consumption")
       .eq("created_by", CRON_CONSUMPTION_CREATED_BY)
@@ -117,6 +115,7 @@ export async function runDailyVendusConsumptionJob(
     item_id: string;
     type: "consumption";
     quantity: number;
+    location_id: string;
     unit_cost_per_base_unit_with_vat: number | null;
     unit_cost_per_base_unit_without_vat: number | null;
     reason: string;
@@ -137,6 +136,7 @@ export async function runDailyVendusConsumptionJob(
           item_id: c.stock_item_id,
           type: "consumption" as const,
           quantity: -qty,
+          location_id: locationId,
           unit_cost_per_base_unit_with_vat: null,
           unit_cost_per_base_unit_without_vat: null,
           reason,
@@ -210,8 +210,8 @@ export async function runDailyVendusConsumptionJob(
     };
   }
 
-  const { error: insErr } = await supabase
-    .from("stock_movements")
+  const { error: insErr } = await scoped
+    .table("stock_movements")
     .insert(rows);
 
   if (insErr) {

@@ -103,7 +103,7 @@ supplierInvoiceImportRoutes.post(
         return;
       }
       const body = req.body as ConfirmSupplierInvoiceImportBody;
-      const result = await confirmSupplierInvoiceImport(id, body ?? {});
+      const result = await confirmSupplierInvoiceImport(req.auth!.orgId, id, body ?? {});
       res.json(result);
     } catch (e: unknown) {
       const message =
