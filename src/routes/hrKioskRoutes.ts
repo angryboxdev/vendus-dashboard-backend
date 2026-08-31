@@ -14,6 +14,7 @@ import {
 } from "../services/hrKioskService.js";
 import { hashPin } from "../utils/kiosk.js";
 import { logAudit } from "../services/hrAuditService.js";
+import { UNATTENDED_SCOPE } from "../infra/scoped-db/unattended-scope.js";
 
 export const hrKioskRoutes = Router();
 
@@ -88,9 +89,9 @@ hrKioskRoutes.post("/kiosk/scan", async (req: Request, res: Response) => {
       jsonError(res, 400, parsed.error.issues.map((i) => i.message).join("; "));
       return;
     }
-    const result = await kioskScan(parsed.data);
+    const result = await kioskScan(UNATTENDED_SCOPE.organizationId, UNATTENDED_SCOPE.locationId, parsed.data);
     res.json(result);
-    void logAudit({
+    void logAudit(UNATTENDED_SCOPE.organizationId, {
       entityType: "attendance",
       entityId: result.employee.id,
       action: result.action === "check_in" ? "kiosk_checkin" : "kiosk_checkout",
@@ -131,11 +132,11 @@ hrKioskRoutes.patch(
         jsonError(res, 503, "Kiosk não configurado no servidor");
         return;
       }
-      const existingEmployee = await getEmployee(id);
+      const existingEmployee = await getEmployee(req.auth!.orgId, id);
       const pinHash = hashPin(ENV.HR_KIOSK_HMAC_SECRET, parsed.data.pin);
-      const updated = await setKioskPin(id, pinHash);
+      const updated = await setKioskPin(req.auth!.orgId, id, pinHash);
       res.json(updated);
-      void logAudit({
+      void logAudit(req.auth!.orgId, {
         entityType: "employee", entityId: id, action: "pin_set",
         description: `PIN de kiosk de "${updated.fullName}" ${existingEmployee?.hasKioskPin ? "atualizado" : "definido"}`,
         employeeId: id,

@@ -3,7 +3,8 @@ import type {
   PaymentCreateBody,
   PaymentUpdateBody,
 } from "../domain/hrTypes.js";
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import { DateTime } from "luxon";
 import { REPORT_TIMEZONE } from "../utils/lisbonDayInstants.js";
 
@@ -40,20 +41,8 @@ function rowToPayment(row: Row): HrEmployeePayment {
   };
 }
 
-function requireHr() {
-  if (!isHrSupabaseConfigured()) {
-    throw new Error(
-      "RH não configurado: defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY",
-    );
-  }
-  const s = getSupabaseServiceRole();
-  if (!s) {
-    throw new Error("Supabase service role indisponível");
-  }
-  return s;
-}
-
 export async function listPaymentsForEmployee(
+  organizationId: OrganizationId,
   employeeId: string,
   filters: {
     from?: string;
@@ -62,9 +51,8 @@ export async function listPaymentsForEmployee(
     month?: number;
   },
 ): Promise<HrEmployeePayment[]> {
-  const supabase = requireHr();
-  let q = supabase
-    .from("hr_employee_payments")
+  let q = createScopedQuery(organizationId)
+    .table("hr_employee_payments")
     .select(PAYMENT_SELECT)
     .eq("employee_id", employeeId)
     .order("payment_date", { ascending: false });
@@ -91,26 +79,28 @@ export async function listPaymentsForEmployee(
   if (error) {
     throw new Error(`RH pagamentos: ${error.message}`);
   }
-  return ((data ?? []) as Row[]).map(rowToPayment);
+  return ((data ?? []) as unknown as Row[]).map(rowToPayment);
 }
 
-export async function getPaymentById(id: string): Promise<HrEmployeePayment | null> {
-  const supabase = requireHr();
-  const { data, error } = await supabase
-    .from("hr_employee_payments")
+export async function getPaymentById(
+  organizationId: OrganizationId,
+  id: string,
+): Promise<HrEmployeePayment | null> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_employee_payments")
     .select(PAYMENT_SELECT)
     .eq("id", id)
     .maybeSingle();
   if (error) throw new Error(`RH pagamento: ${error.message}`);
   if (!data) return null;
-  return rowToPayment(data as Row);
+  return rowToPayment(data as unknown as Row);
 }
 
 export async function createPayment(
+  organizationId: OrganizationId,
   employeeId: string,
   body: PaymentCreateBody,
 ): Promise<HrEmployeePayment> {
-  const supabase = requireHr();
   const now = new Date().toISOString();
   const insert = {
     employee_id: employeeId,
@@ -124,8 +114,8 @@ export async function createPayment(
     updated_at: now,
   };
 
-  const { data, error } = await supabase
-    .from("hr_employee_payments")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_employee_payments")
     .insert(insert)
     .select(PAYMENT_SELECT)
     .single();
@@ -133,14 +123,14 @@ export async function createPayment(
   if (error) {
     throw new Error(`RH criar pagamento: ${error.message}`);
   }
-  return rowToPayment(data as Row);
+  return rowToPayment(data as unknown as Row);
 }
 
 export async function updatePayment(
+  organizationId: OrganizationId,
   id: string,
   body: PaymentUpdateBody,
 ): Promise<HrEmployeePayment> {
-  const supabase = requireHr();
   const patch: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
@@ -152,8 +142,8 @@ export async function updatePayment(
   if ("salaryPeriodMonth" in body) patch.salary_period_month = body.salaryPeriodMonth ?? null;
   if (body.isPaid !== undefined) patch.is_paid = body.isPaid;
 
-  const { data, error } = await supabase
-    .from("hr_employee_payments")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_employee_payments")
     .update(patch)
     .eq("id", id)
     .select(PAYMENT_SELECT)
@@ -162,13 +152,12 @@ export async function updatePayment(
   if (error) {
     throw new Error(`RH atualizar pagamento: ${error.message}`);
   }
-  return rowToPayment(data as Row);
+  return rowToPayment(data as unknown as Row);
 }
 
-export async function deletePayment(id: string): Promise<void> {
-  const supabase = requireHr();
-  const { error } = await supabase
-    .from("hr_employee_payments")
+export async function deletePayment(organizationId: OrganizationId, id: string): Promise<void> {
+  const { error } = await createScopedQuery(organizationId)
+    .table("hr_employee_payments")
     .delete()
     .eq("id", id);
   if (error) {

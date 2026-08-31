@@ -1,4 +1,5 @@
-import { getSupabaseServiceRole } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import type { WeeklySchedule } from "../domain/hrTypes.js";
 
 // ---------- types ----------
@@ -67,11 +68,14 @@ function toYmd(d: Date): string {
 
 // ---------- public holidays ----------
 
-export async function getPublicHolidays(year?: number): Promise<HrPublicHoliday[]> {
-  const sb = getSupabaseServiceRole();
-  if (!sb) return [];
-
-  let query = sb.from("hr_public_holidays").select("*").order("date");
+export async function getPublicHolidays(
+  organizationId: OrganizationId,
+  year?: number,
+): Promise<HrPublicHoliday[]> {
+  let query = createScopedQuery(organizationId)
+    .table("hr_public_holidays")
+    .select("*")
+    .order("date");
   if (year != null) {
     query = query
       .gte("date", `${year}-01-01`)
@@ -81,7 +85,7 @@ export async function getPublicHolidays(year?: number): Promise<HrPublicHoliday[
   const { data, error } = await query;
   if (error) throw new Error(error.message);
 
-  return (data ?? []).map((r) => ({
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
     id: r.id as string,
     date: r.date as string,
     name: r.name as string,
@@ -90,52 +94,49 @@ export async function getPublicHolidays(year?: number): Promise<HrPublicHoliday[
 }
 
 export async function createPublicHoliday(
+  organizationId: OrganizationId,
   date: string,
   name: string,
   isNational = false,
 ): Promise<HrPublicHoliday> {
-  const sb = getSupabaseServiceRole();
-  if (!sb) throw new Error("Supabase indisponível");
-
-  const { data, error } = await sb
-    .from("hr_public_holidays")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_public_holidays")
     .insert({ date, name, is_national: isNational })
     .select()
     .single();
 
   if (error) throw new Error(error.message);
-  const r = data as Record<string, unknown>;
+  const r = data as unknown as Record<string, unknown>;
   return { id: r.id as string, date: r.date as string, name: r.name as string, isNational: r.is_national as boolean };
 }
 
-export async function deletePublicHoliday(id: string): Promise<void> {
-  const sb = getSupabaseServiceRole();
-  if (!sb) throw new Error("Supabase indisponível");
-  const { error } = await sb.from("hr_public_holidays").delete().eq("id", id);
+export async function deletePublicHoliday(organizationId: OrganizationId, id: string): Promise<void> {
+  const { error } = await createScopedQuery(organizationId)
+    .table("hr_public_holidays")
+    .delete()
+    .eq("id", id);
   if (error) throw new Error(error.message);
 }
 
 // ---------- working days calculation ----------
 
 export async function calculateWorkingDays(
+  organizationId: OrganizationId,
   startDate: string,
   endDate: string,
   schedule: WeeklySchedule | null,
 ): Promise<number> {
-  const sb = getSupabaseServiceRole();
   const startYear = Number(startDate.slice(0, 4));
   const endYear = Number(endDate.slice(0, 4));
 
   // Fetch all holidays in range
   const holidaySet = new Set<string>();
-  if (sb) {
-    const { data } = await sb
-      .from("hr_public_holidays")
-      .select("date")
-      .gte("date", `${startYear}-01-01`)
-      .lte("date", `${endYear}-12-31`);
-    (data ?? []).forEach((r) => holidaySet.add(r.date as string));
-  }
+  const { data } = await createScopedQuery(organizationId)
+    .table("hr_public_holidays")
+    .select("date")
+    .gte("date", `${startYear}-01-01`)
+    .lte("date", `${endYear}-12-31`);
+  ((data ?? []) as unknown as { date: string }[]).forEach((r) => holidaySet.add(r.date));
 
   const workingWeekdays = getWorkingWeekdays(schedule);
   let count = 0;
@@ -167,15 +168,18 @@ function mapLeaveRow(r: Record<string, unknown>): HrLeaveRequest {
   };
 }
 
-export async function getLeaveRequests(params: {
-  employeeId?: string;
-  year?: number;
-  type?: LeaveType;
-}): Promise<HrLeaveRequest[]> {
-  const sb = getSupabaseServiceRole();
-  if (!sb) return [];
-
-  let q = sb.from("hr_leave_requests").select("*").order("start_date");
+export async function getLeaveRequests(
+  organizationId: OrganizationId,
+  params: {
+    employeeId?: string;
+    year?: number;
+    type?: LeaveType;
+  },
+): Promise<HrLeaveRequest[]> {
+  let q = createScopedQuery(organizationId)
+    .table("hr_leave_requests")
+    .select("*")
+    .order("start_date");
   if (params.employeeId) q = q.eq("employee_id", params.employeeId);
   if (params.type) q = q.eq("type", params.type);
   if (params.year != null) {
@@ -186,22 +190,22 @@ export async function getLeaveRequests(params: {
 
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => mapLeaveRow(r as Record<string, unknown>));
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => mapLeaveRow(r));
 }
 
-export async function createLeaveRequest(body: {
-  employeeId: string;
-  type: LeaveType;
-  startDate: string;
-  endDate: string;
-  workingDays: number;
-  notes?: string | null;
-}): Promise<HrLeaveRequest> {
-  const sb = getSupabaseServiceRole();
-  if (!sb) throw new Error("Supabase indisponível");
-
-  const { data, error } = await sb
-    .from("hr_leave_requests")
+export async function createLeaveRequest(
+  organizationId: OrganizationId,
+  body: {
+    employeeId: string;
+    type: LeaveType;
+    startDate: string;
+    endDate: string;
+    workingDays: number;
+    notes?: string | null;
+  },
+): Promise<HrLeaveRequest> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_leave_requests")
     .insert({
       employee_id: body.employeeId,
       type: body.type,
@@ -218,6 +222,7 @@ export async function createLeaveRequest(body: {
 }
 
 export async function updateLeaveRequest(
+  organizationId: OrganizationId,
   id: string,
   body: {
     type?: LeaveType;
@@ -227,9 +232,6 @@ export async function updateLeaveRequest(
     notes?: string | null;
   },
 ): Promise<HrLeaveRequest> {
-  const sb = getSupabaseServiceRole();
-  if (!sb) throw new Error("Supabase indisponível");
-
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (body.type != null) patch.type = body.type;
   if (body.startDate != null) patch.start_date = body.startDate;
@@ -237,8 +239,8 @@ export async function updateLeaveRequest(
   if (body.workingDays != null) patch.working_days = body.workingDays;
   if ("notes" in body) patch.notes = body.notes ?? null;
 
-  const { data, error } = await sb
-    .from("hr_leave_requests")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_leave_requests")
     .update(patch)
     .eq("id", id)
     .select()
@@ -251,10 +253,11 @@ export async function updateLeaveRequest(
   return mapLeaveRow(data as Record<string, unknown>);
 }
 
-export async function deleteLeaveRequest(id: string): Promise<void> {
-  const sb = getSupabaseServiceRole();
-  if (!sb) throw new Error("Supabase indisponível");
-  const { error } = await sb.from("hr_leave_requests").delete().eq("id", id);
+export async function deleteLeaveRequest(organizationId: OrganizationId, id: string): Promise<void> {
+  const { error } = await createScopedQuery(organizationId)
+    .table("hr_leave_requests")
+    .delete()
+    .eq("id", id);
   if (error) throw new Error(error.message);
 }
 
@@ -282,16 +285,16 @@ export function suggestDaysEntitled(hiredAt: string | null, year: number): numbe
 }
 
 export async function getLeaveBalance(
+  organizationId: OrganizationId,
   employeeId: string,
   year: number,
   hiredAt: string | null = null,
 ): Promise<HrLeaveBalance> {
-  const sb = getSupabaseServiceRole();
-  if (!sb) throw new Error("Supabase indisponível");
+  const scoped = createScopedQuery(organizationId);
 
   // Fetch or create balance row
-  let { data, error } = await sb
-    .from("hr_leave_balances")
+  let { data, error } = await scoped
+    .table("hr_leave_balances")
     .select("*")
     .eq("employee_id", employeeId)
     .eq("year", year)
@@ -302,8 +305,8 @@ export async function getLeaveBalance(
   if (!data) {
     const suggested = suggestDaysEntitled(hiredAt, year);
     const daysEntitled = (Number.isFinite(suggested) && suggested >= 0) ? suggested : 22;
-    const insert = await sb
-      .from("hr_leave_balances")
+    const insert = await scoped
+      .table("hr_leave_balances")
       .insert({ employee_id: employeeId, year, days_entitled: daysEntitled })
       .select()
       .single();
@@ -311,18 +314,18 @@ export async function getLeaveBalance(
     data = insert.data;
   }
 
-  const row = data as Record<string, unknown>;
+  const row = data as unknown as Record<string, unknown>;
 
   // Calculate used days from vacation requests only (other types don't deduct)
-  const { data: used } = await sb
-    .from("hr_leave_requests")
+  const { data: used } = await scoped
+    .table("hr_leave_requests")
     .select("working_days")
     .eq("employee_id", employeeId)
     .eq("type", "vacation")
     .gte("start_date", `${year}-01-01`)
     .lte("start_date", `${year}-12-31`);
 
-  const daysUsed = (used ?? []).reduce((s, r) => s + ((r as Record<string, unknown>).working_days as number), 0);
+  const daysUsed = ((used ?? []) as unknown as Record<string, unknown>[]).reduce((s, r) => s + (r.working_days as number), 0);
   const daysEntitled = row.days_entitled as number;
   const daysCarriedOver = row.days_carried_over as number;
 
@@ -339,20 +342,18 @@ export async function getLeaveBalance(
 }
 
 export async function updateLeaveBalance(
+  organizationId: OrganizationId,
   employeeId: string,
   year: number,
   body: { daysEntitled?: number; daysCarriedOver?: number; notes?: string | null },
 ): Promise<void> {
-  const sb = getSupabaseServiceRole();
-  if (!sb) throw new Error("Supabase indisponível");
-
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (body.daysEntitled != null) patch.days_entitled = body.daysEntitled;
   if (body.daysCarriedOver != null) patch.days_carried_over = body.daysCarriedOver;
   if ("notes" in body) patch.notes = body.notes ?? null;
 
-  const { error } = await sb
-    .from("hr_leave_balances")
+  const { error } = await createScopedQuery(organizationId)
+    .table("hr_leave_balances")
     .upsert({ employee_id: employeeId, year, ...patch }, { onConflict: "employee_id,year" });
 
   if (error) throw new Error(error.message);
@@ -360,6 +361,6 @@ export async function updateLeaveBalance(
 
 // ---------- overview (global page) ----------
 
-export async function getLeaveOverview(year: number): Promise<HrLeaveRequest[]> {
-  return getLeaveRequests({ year });
+export async function getLeaveOverview(organizationId: OrganizationId, year: number): Promise<HrLeaveRequest[]> {
+  return getLeaveRequests(organizationId, { year });
 }

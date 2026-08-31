@@ -38,4 +38,11 @@ export const objectStorage = {
     const { error } = await client().storage.from(bucket).remove([path]);
     if (error) throw new Error(`Document delete failed: ${error.message}`);
   },
+
+  /** Time-limited signed URL, for buckets that aren't public (e.g. HR documents). */
+  async createSignedUrl(bucket: string, path: string, expiresInSeconds: number): Promise<string> {
+    const { data, error } = await client().storage.from(bucket).createSignedUrl(path, expiresInSeconds);
+    if (error || !data?.signedUrl) throw new Error(`Signed URL failed: ${error?.message}`);
+    return data.signedUrl;
+  },
 };

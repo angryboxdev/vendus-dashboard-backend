@@ -4,7 +4,8 @@ import type {
   ShiftCreateBody,
   ShiftUpdateBody,
 } from "../domain/hrTypes.js";
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import { formatHrTimeForApi, normalizeTimeForPg } from "../utils/hrTime.js";
 import { REPORT_TIMEZONE } from "../utils/lisbonDayInstants.js";
 import { DateTime } from "luxon";
@@ -40,19 +41,6 @@ function rowToShift(
   };
 }
 
-function requireHr() {
-  if (!isHrSupabaseConfigured()) {
-    throw new Error(
-      "RH não configurado: defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY",
-    );
-  }
-  const s = getSupabaseServiceRole();
-  if (!s) {
-    throw new Error("Supabase service role indisponível");
-  }
-  return s;
-}
-
 export function assertValidShiftRange(fromYmd: string, toYmd: string): void {
   const a = DateTime.fromISO(fromYmd, { zone: REPORT_TIMEZONE }).startOf("day");
   const b = DateTime.fromISO(toYmd, { zone: REPORT_TIMEZONE }).startOf("day");
@@ -64,10 +52,12 @@ export function assertValidShiftRange(fromYmd: string, toYmd: string): void {
   }
 }
 
-export async function getWorkShiftById(id: string): Promise<HrWorkShift | null> {
-  const supabase = requireHr();
-  const { data, error } = await supabase
-    .from("hr_work_shifts")
+export async function getWorkShiftById(
+  organizationId: OrganizationId,
+  id: string,
+): Promise<HrWorkShift | null> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_work_shifts")
     .select(
       "id, employee_id, work_date, start_time, end_time, location_or_station, notes, created_at, updated_at",
     )
@@ -78,20 +68,22 @@ export async function getWorkShiftById(id: string): Promise<HrWorkShift | null> 
     throw new Error(`RH turno: ${error.message}`);
   }
   if (!data) return null;
-  const row = data as Row;
-  const attMap = await getAttendanceByShiftIds([id]);
+  const row = data as unknown as Row;
+  const attMap = await getAttendanceByShiftIds(organizationId, [id]);
   return rowToShift(row, attMap.get(id) ?? null);
 }
 
-export async function listShiftsInRange(options: {
-  from: string;
-  to: string;
-  employeeId?: string;
-}): Promise<HrWorkShift[]> {
+export async function listShiftsInRange(
+  organizationId: OrganizationId,
+  options: {
+    from: string;
+    to: string;
+    employeeId?: string;
+  },
+): Promise<HrWorkShift[]> {
   assertValidShiftRange(options.from, options.to);
-  const supabase = requireHr();
-  let q = supabase
-    .from("hr_work_shifts")
+  let q = createScopedQuery(organizationId)
+    .table("hr_work_shifts")
     .select(
       "id, employee_id, work_date, start_time, end_time, location_or_station, notes, created_at, updated_at",
     )
@@ -108,9 +100,9 @@ export async function listShiftsInRange(options: {
   if (error) {
     throw new Error(`RH turnos: ${error.message}`);
   }
-  const rows = (data ?? []) as Row[];
+  const rows = (data ?? []) as unknown as Row[];
   const ids = rows.map((r) => r.id);
-  const attendanceMap = await getAttendanceByShiftIds(ids);
+  const attendanceMap = await getAttendanceByShiftIds(organizationId, ids);
   return rows.map((r) =>
     rowToShift(r, attendanceMap.get(r.id) ?? null),
   );
@@ -124,9 +116,17 @@ function assertStartBeforeEnd(start: string, end: string): void {
   }
 }
 
-export async function createShift(body: ShiftCreateBody): Promise<HrWorkShift> {
+/**
+ * `location_id` (spec B2 D3/D4): `hr_work_shifts` é location-bearing
+ * (`location_id` NOT NULL). `body.locationId` é obrigatório na criação
+ * (`shiftCreateBodySchema`) e vem do chamador — um manager autenticado, não
+ * do unattended scope (esse é só o caminho do kiosk, D14).
+ */
+export async function createShift(
+  organizationId: OrganizationId,
+  body: ShiftCreateBody,
+): Promise<HrWorkShift> {
   assertStartBeforeEnd(body.startTime, body.endTime);
-  const supabase = requireHr();
   const now = new Date().toISOString();
   const insert = {
     employee_id: body.employeeId,
@@ -136,10 +136,11 @@ export async function createShift(body: ShiftCreateBody): Promise<HrWorkShift> {
     location_or_station: body.locationOrStation?.trim() || null,
     notes: body.notes?.trim() || null,
     updated_at: now,
+    location_id: body.locationId,
   };
 
-  const { data, error } = await supabase
-    .from("hr_work_shifts")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_work_shifts")
     .insert(insert)
     .select(
       "id, employee_id, work_date, start_time, end_time, location_or_station, notes, created_at, updated_at",
@@ -149,14 +150,14 @@ export async function createShift(body: ShiftCreateBody): Promise<HrWorkShift> {
   if (error) {
     throw new Error(`RH criar turno: ${error.message}`);
   }
-  return rowToShift(data as Row, null);
+  return rowToShift(data as unknown as Row, null);
 }
 
 export async function updateShift(
+  organizationId: OrganizationId,
   id: string,
   body: ShiftUpdateBody,
 ): Promise<HrWorkShift> {
-  const supabase = requireHr();
   const patch: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
@@ -172,9 +173,14 @@ export async function updateShift(
   }
   if (body.notes !== undefined) patch.notes = body.notes?.trim() || null;
   if (body.employeeId !== undefined) patch.employee_id = body.employeeId;
+  // location_id (spec B2 D3/D4): only touched when the caller supplies it —
+  // a PATCH that doesn't mention location leaves the shift's current store alone.
+  if (body.locationId !== undefined) patch.location_id = body.locationId;
 
-  const { data: current, error: fetchErr } = await supabase
-    .from("hr_work_shifts")
+  const scoped = createScopedQuery(organizationId);
+
+  const { data: current, error: fetchErr } = await scoped
+    .table("hr_work_shifts")
     .select("start_time, end_time")
     .eq("id", id)
     .single();
@@ -185,7 +191,7 @@ export async function updateShift(
     );
   }
 
-  const cur = current as { start_time: string; end_time: string };
+  const cur = current as unknown as { start_time: string; end_time: string };
   const start =
     patch.start_time != null
       ? String(patch.start_time)
@@ -196,8 +202,8 @@ export async function updateShift(
       : normalizeTimeForPg(cur.end_time);
   assertStartBeforeEnd(start, end);
 
-  const { data, error } = await supabase
-    .from("hr_work_shifts")
+  const { data, error } = await scoped
+    .table("hr_work_shifts")
     .update(patch)
     .eq("id", id)
     .select(
@@ -208,13 +214,15 @@ export async function updateShift(
   if (error) {
     throw new Error(`RH atualizar turno: ${error.message}`);
   }
-  const attMap = await getAttendanceByShiftIds([id]);
-  return rowToShift(data as Row, attMap.get(id) ?? null);
+  const attMap = await getAttendanceByShiftIds(organizationId, [id]);
+  return rowToShift(data as unknown as Row, attMap.get(id) ?? null);
 }
 
-export async function deleteShift(id: string): Promise<void> {
-  const supabase = requireHr();
-  const { error } = await supabase.from("hr_work_shifts").delete().eq("id", id);
+export async function deleteShift(organizationId: OrganizationId, id: string): Promise<void> {
+  const { error } = await createScopedQuery(organizationId)
+    .table("hr_work_shifts")
+    .delete()
+    .eq("id", id);
   if (error) {
     throw new Error(`RH eliminar turno: ${error.message}`);
   }

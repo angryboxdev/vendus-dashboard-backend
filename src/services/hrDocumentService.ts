@@ -1,5 +1,7 @@
 import { randomUUID } from "crypto";
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import { objectStorage } from "../infra/scoped-db/object-storage.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 
 export type DocumentType = "contract" | "id_card" | "nif" | "iban" | "other";
 
@@ -34,79 +36,68 @@ function rowToDoc(row: DocRow): HrEmployeeDocument {
   };
 }
 
-function requireHr() {
-  if (!isHrSupabaseConfigured()) {
-    throw new Error("RH não configurado: defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY");
-  }
-  const s = getSupabaseServiceRole();
-  if (!s) throw new Error("Supabase service role indisponível");
-  return s;
-}
-
-export async function listDocuments(employeeId: string): Promise<HrEmployeeDocument[]> {
-  const supabase = requireHr();
-  const { data, error } = await supabase
-    .from("hr_employee_documents")
+export async function listDocuments(
+  organizationId: OrganizationId,
+  employeeId: string,
+): Promise<HrEmployeeDocument[]> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_employee_documents")
     .select("id, employee_id, document_type, file_name, storage_path, uploaded_at")
     .eq("employee_id", employeeId)
     .order("uploaded_at", { ascending: false });
   if (error) throw new Error(`RH documentos: ${error.message}`);
-  return ((data ?? []) as DocRow[]).map(rowToDoc);
+  return ((data ?? []) as unknown as DocRow[]).map(rowToDoc);
 }
 
-export async function uploadDocument(options: {
-  employeeId: string;
-  documentType: DocumentType;
-  fileName: string;
-  buffer: Buffer;
-  mimeType: string;
-}): Promise<HrEmployeeDocument> {
+export async function uploadDocument(
+  organizationId: OrganizationId,
+  options: {
+    employeeId: string;
+    documentType: DocumentType;
+    fileName: string;
+    buffer: Buffer;
+    mimeType: string;
+  },
+): Promise<HrEmployeeDocument> {
   const { employeeId, documentType, fileName, buffer, mimeType } = options;
-  const supabase = requireHr();
   const id = randomUUID();
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
   const storagePath = `${employeeId}/${id}/${safeName}`;
 
-  const { error: storageErr } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .upload(storagePath, buffer, { contentType: mimeType, upsert: false });
-  if (storageErr) throw new Error(`Upload falhou: ${storageErr.message}`);
+  await objectStorage.upload(STORAGE_BUCKET, storagePath, buffer, mimeType);
 
-  const { data, error } = await supabase
-    .from("hr_employee_documents")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_employee_documents")
     .insert({ id, employee_id: employeeId, document_type: documentType, file_name: fileName, storage_path: storagePath })
     .select("id, employee_id, document_type, file_name, storage_path, uploaded_at")
     .single();
 
   if (error) {
-    await supabase.storage.from(STORAGE_BUCKET).remove([storagePath]);
+    await objectStorage.remove(STORAGE_BUCKET, storagePath).catch(() => {});
     throw new Error(`Guardar documento: ${error.message}`);
   }
-  return rowToDoc(data as DocRow);
+  return rowToDoc(data as unknown as DocRow);
 }
 
 export async function getDocumentSignedUrl(storagePath: string): Promise<string> {
-  const supabase = requireHr();
-  const { data, error } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .createSignedUrl(storagePath, 120);
-  if (error || !data?.signedUrl) throw new Error(`URL de download: ${error?.message}`);
-  return data.signedUrl;
+  return objectStorage.createSignedUrl(STORAGE_BUCKET, storagePath, 120);
 }
 
-export async function deleteDocument(docId: string): Promise<void> {
-  const supabase = requireHr();
-  const { data, error: fetchErr } = await supabase
-    .from("hr_employee_documents")
+export async function deleteDocument(organizationId: OrganizationId, docId: string): Promise<void> {
+  const { data, error: fetchErr } = await createScopedQuery(organizationId)
+    .table("hr_employee_documents")
     .select("storage_path")
     .eq("id", docId)
     .maybeSingle();
   if (fetchErr) throw new Error(`RH documento: ${fetchErr.message}`);
   if (!data) throw new Error("Documento não encontrado");
 
-  const { storage_path } = data as { storage_path: string };
-  await supabase.storage.from(STORAGE_BUCKET).remove([storage_path]);
+  const { storage_path } = data as unknown as { storage_path: string };
+  await objectStorage.remove(STORAGE_BUCKET, storage_path);
 
-  const { error } = await supabase.from("hr_employee_documents").delete().eq("id", docId);
+  const { error } = await createScopedQuery(organizationId)
+    .table("hr_employee_documents")
+    .delete()
+    .eq("id", docId);
   if (error) throw new Error(`Apagar documento: ${error.message}`);
 }

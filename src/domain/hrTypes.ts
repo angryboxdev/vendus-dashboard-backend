@@ -255,6 +255,13 @@ export const shiftCreateBodySchema = z.object({
   endTime: timeHmSchema,
   locationOrStation: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  /**
+   * Loja onde o turno decorre (spec B2 D3/D4): `hr_work_shifts` é
+   * location-bearing (`location_id` NOT NULL). Obrigatório na criação;
+   * `.partial()` torna-o opcional em `shiftUpdateBodySchema` abaixo, como
+   * qualquer outro campo do PATCH.
+   */
+  locationId: uuid,
 });
 
 export const shiftUpdateBodySchema = shiftCreateBodySchema
@@ -281,6 +288,13 @@ export const shiftAttendanceUpsertBodySchema = z
       .optional()
       .default("dashboard"),
     registeredByEmployeeId: uuid.optional().nullable(),
+    /**
+     * Loja onde a conferência é registada (spec B2 D3/D4): `hr_shift_attendance`
+     * é location-bearing (`location_id` NOT NULL) e este endpoint substitui a
+     * linha inteira (upsert), por isso o campo é sempre obrigatório aqui,
+     * ao contrário do PATCH de turno.
+     */
+    locationId: uuid,
   })
   .superRefine((body, ctx) => {
     const a =
