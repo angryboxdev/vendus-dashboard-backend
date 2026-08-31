@@ -4,10 +4,12 @@
 > decisões 2, 3, 4 e 6 fechadas (§6); 5 e 7 ainda abertas;
 > spec A implementada (`.scratch/org-location-foundation/`);
 > spec B dividida em B1/B2 — B1 implementada (`.scratch/tenant-identity/`);
-> B2 implementada (`.scratch/scoped-access/`): todas as áreas convertidas, regra
-> de import do scoped-db em `error` a zero violações (ADR-0008, ADR-0009,
-> ticket 20); falta só o incremento de fecho (21) — dropar os defaults de coluna,
-> as composite keys de location e o smoke de duas organizações
+> B2 implementada e fechada (`.scratch/scoped-access/`): todas as áreas
+> convertidas, regra de import do scoped-db em `error` a zero violações
+> (ADR-0008, ADR-0009, ticket 20); incremento de fecho (21) feito — defaults
+> de coluna dropados, composite keys de location a existir, smoke de duas
+> organizações verificado no stack local (falta só correr contra produção,
+> ver `docs/DEPLOY_SCOPED_ACCESS.md`)
 > Última atualização: 2026-08-31
 > Nota: escrito em inglês por pedido; traduzir se for para o padrão do repo.
 
@@ -482,7 +484,7 @@ phase 11 is not one piece of work at all.
 |---|---|---|---|
 | **A — Org & location foundation** | 1, 3 (+ phase 2's audit) | `supabase db reset` rebuilds the schema from the repo and `db diff --linked` shows no drift; `organizations`/`locations` hold the Angrybox rows; no other table lacks `org_id`; event tables carry `location_id`; invoice PDFs read the org identity from the row; the four unprotected HR tables have RLS; app behaves identically | — |
 | **B1 — Tenant identity** | 4 | Every request and job carries a verified `org_id`; roles are org-scoped; user admin is org-scoped | A |
-| **B2 — Scoped access** | 5 | A user of org A provably cannot read org B; the helper is the only DB construction site; column defaults dropped. **Implemented**: every area converted, the import rule is `error` at zero violations (ADR-0008, ADR-0009, ticket 20). Column-default drop, location composite keys and the two-organization smoke are the remaining increment (21) | B1 |
+| **B2 — Scoped access** | 5 | A user of org A provably cannot read org B; the helper is the only DB construction site; column defaults dropped. **Implemented and closed**: every area converted, the import rule is `error` at zero violations (ADR-0008, ADR-0009, ticket 20); the closing increment (21) dropped both column-default families, added the location composite foreign keys, and verified the two-organization smoke on the local stack — production still needs the migration run, per `docs/DEPLOY_SCOPED_ACCESS.md` | B1 |
 | **C — Per-org configuration** | 6, 7 | `ENV.API_KEY` is deleted; crons run per org | A, B1, B2 |
 | **D — Sales ledger** | 9, then 8, with 10 folded in | Core owns revenue: DRE and analytics read the ledger, not the Vendus API | Open decision 5 (and 7) |
 
@@ -507,9 +509,11 @@ reference, and the composite key is the only structural fix (spec B2's D16).
 B2 pulled a narrow slice of this forward as its own fix — the five *location*
 composite keys, closing only the caller-supplied-location hole B2 itself
 introduces (ADR-0009) — and left the other 65 behind the gate, because they
-predate B2 and are spec A's mess to close. The remaining five deferred items
-really do just wait out a window in which they cannot bite: composite
-`(org_id, …)` indexes; dropping the `org_id`/`location_id` column defaults;
+predate B2 and are spec A's mess to close. Dropping the `org_id`/`location_id`
+column defaults was one of the six and is now also done (ticket 21) — it
+waited on every write path supplying an organization explicitly, which B2
+itself delivered. The remaining four deferred items really do just wait out
+a window in which they cannot bite: composite `(org_id, …)` indexes;
 restructuring the four CRM text primary keys (`crm_customers.id` is `'C001'`,
 so every tenant's first customer collides); the kiosk PIN fix (the only one
 with a frontend contract change); and storage path org-prefixing. Full table
