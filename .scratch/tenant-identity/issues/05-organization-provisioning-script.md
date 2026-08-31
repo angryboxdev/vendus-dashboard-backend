@@ -12,7 +12,7 @@ something, and that something becomes a permanent privileged concept in the
 running application. Worse, such a request is legitimately *unscoped* — so B2's
 scoped query helper would need an escape hatch and the raw-query lint would need
 an exception. §2.6 already observes that escape hatches get reused. Keeping
-provisioning outside the request path lets the rule governing 406 call sites
+provisioning outside the request path lets the rule governing 371 call sites
 stay absolute, because the exception is not in the same building.
 
 There is also a practical reason this ticket exists now rather than later: a

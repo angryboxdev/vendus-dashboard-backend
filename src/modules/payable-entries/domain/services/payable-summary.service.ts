@@ -19,8 +19,11 @@ export class PayableSummaryService {
     const in7Days = new Date(today);
     in7Days.setDate(in7Days.getDate() + 7);
 
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    // dueDate/paidAt are parsed from date-only strings, which JS interprets
+    // as UTC midnight. Month boundaries must be computed in UTC too, or a
+    // local timezone ahead of UTC excludes entries paid on the month's last day.
+    const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    const monthEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0, 23, 59, 59, 999));
 
     let totalDue = 0;
     let totalOverdue = 0;

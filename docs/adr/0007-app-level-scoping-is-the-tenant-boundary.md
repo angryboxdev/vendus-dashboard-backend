@@ -37,7 +37,7 @@ single global flip — every table without a correct policy goes dark at once.
 ## Consequences
 
 The deferral is cheap **only if the helper is the sole construction site**. One
-migration and one file, or a re-audit of 406 `.from(` call sites — and the second
+migration and one file, or a re-audit of 371 `.from(` call sites — and the second
 never happens. Spec B therefore carries three mechanical done-criteria:
 
 1. zero `getSupabaseServiceRole()` / `getSupabase()` call sites outside the
@@ -48,7 +48,7 @@ never happens. Spec B therefore carries three mechanical done-criteria:
 Criterion 3 is not housekeeping. dependency-cruiser is **not a gate today**:
 there is no npm script and no CI workflow, and it runs only from a Claude Code
 hook scoped to `src/modules/<module>` (`.claude/hooks/run-checks.mjs:55`). It
-never sees `src/services`, where 192 of the 406 `.from(` calls live. §2.6's ban
+never sees `src/services`, where 182 of the 371 `.from(` calls live. §2.6's ban
 on raw `.from()` cannot be enforced by it as configured.
 
 Accepted risk for the duration: with app-level scoping alone, one adapter that
@@ -61,3 +61,42 @@ until they land.**
 
 Related: `docs/MULTI_TENANCY_SAAS_DESIGN.md` §2.6, §6 item 3;
 `.scratch/org-location-foundation/issues/05-rls-inventory.md`.
+
+## Amendment (spec B2, ticket 20)
+
+The decision above stands unchanged. Its three Consequences criteria do not —
+they were written before spec B2's design existed, and two of them are now
+superseded rather than met as originally stated. This section marks what
+changed; nothing above is rewritten.
+
+- **Criteria 1 and 2** (zero call sites naming the Supabase client, and zero
+  `.from(` call sites, outside the helper file) are **subsumed, not dropped**,
+  by ADR-0008's D10: a single dependency-cruiser rule making the helper's own
+  folder the only place in `src/**` that may import the Supabase client or
+  package. That is structural rather than textual — it holds regardless of
+  aliasing, re-export, or a query assembled across several statements, which a
+  grep for `.from(` cannot follow, and it also covers the object-storage and
+  auth-admin surfaces a search for query syntax never did. The two textual
+  criteria remain as cheap secondary checks, not the primary guarantee.
+- **Criterion 3** (`dependency-cruiser` wired into an npm script and CI over
+  `src/**`) is met only partially, and this ADR was optimistic about what
+  "wired in" would mean. `npm run check` (typecheck + tests + `lint:deps`)
+  exists and does run the rule over the whole tree. It is **not** called from
+  `npm run build` or `npm start`: an earlier attempt to call it from `build`
+  was reverted (`.scratch/scoped-access/issues/01-*.md`, Comments) because the
+  deploy environment's `npm ci` runs with `NODE_ENV=production`, which omits
+  the devDependencies Jest needs at runtime, and the revert followed a broken
+  deploy. There is no CI workflow in this repository. What actually enforces
+  the rule today is the Claude Code `PostToolUse` hook
+  (`.claude/hooks/run-checks.mjs`), widened in ticket 01 to run `depcruise`
+  over the whole source tree instead of only the edited module, plus manual
+  `npm run check`. That hook fires only when an agent edits a file under
+  `src/modules/<module>/`, so a human commit, or any edit to the legacy
+  `src/services` layer, bypasses it entirely. A pull-request workflow running
+  the same checks is recorded in `.scratch/scoped-access/spec.md`'s deferred
+  register as a small, purely additive follow-up — not something already
+  built.
+
+This amendment corrects the record of how the decision is enforced; it does
+not change the decision. See ADR-0008 for the import rule and its rationale,
+and `.scratch/scoped-access/spec.md` D10, D18, D19.
