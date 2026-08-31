@@ -4,7 +4,8 @@
  * never breaks the main operation.
  */
 
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 
 export type AuditEntityType = "employee" | "shift" | "payment" | "attendance";
 
@@ -75,40 +76,38 @@ function rowToLog(row: AuditRow): HrAuditLog {
 }
 
 /** Write an audit entry. Never throws — errors are logged to stderr only. */
-export async function logAudit(params: LogAuditParams): Promise<void> {
+export async function logAudit(organizationId: OrganizationId, params: LogAuditParams): Promise<void> {
   try {
-    if (!isHrSupabaseConfigured()) return;
-    const supabase = getSupabaseServiceRole();
-    if (!supabase) return;
-    await supabase.from("hr_audit_logs").insert({
-      entity_type: params.entityType,
-      entity_id: params.entityId,
-      action: params.action,
-      description: params.description,
-      employee_id: params.employeeId ?? null,
-      actor: params.actor ?? null,
-      payload_before: params.payloadBefore ?? null,
-      payload_after: params.payloadAfter ?? null,
-    });
+    await createScopedQuery(organizationId)
+      .table("hr_audit_logs")
+      .insert({
+        entity_type: params.entityType,
+        entity_id: params.entityId,
+        action: params.action,
+        description: params.description,
+        employee_id: params.employeeId ?? null,
+        actor: params.actor ?? null,
+        payload_before: params.payloadBefore ?? null,
+        payload_after: params.payloadAfter ?? null,
+      });
   } catch {
     console.error("[audit] failed to write log:", params.description);
   }
 }
 
 /** Paginated audit log query. */
-export async function listAuditLogs(options: {
-  employeeId?: string;
-  entityType?: AuditEntityType;
-  action?: AuditAction;
-  limit: number;
-  offset: number;
-}): Promise<{ logs: HrAuditLog[]; total: number }> {
-  if (!isHrSupabaseConfigured()) return { logs: [], total: 0 };
-  const supabase = getSupabaseServiceRole();
-  if (!supabase) return { logs: [], total: 0 };
-
-  let q = supabase
-    .from("hr_audit_logs")
+export async function listAuditLogs(
+  organizationId: OrganizationId,
+  options: {
+    employeeId?: string;
+    entityType?: AuditEntityType;
+    action?: AuditAction;
+    limit: number;
+    offset: number;
+  },
+): Promise<{ logs: HrAuditLog[]; total: number }> {
+  let q = createScopedQuery(organizationId)
+    .table("hr_audit_logs")
     .select(
       "id, created_at, entity_type, entity_id, action, actor, description, payload_before, payload_after, employee_id",
       { count: "exact" },
@@ -124,7 +123,7 @@ export async function listAuditLogs(options: {
   if (error) throw new Error(`Audit logs: ${error.message}`);
 
   return {
-    logs: ((data ?? []) as AuditRow[]).map(rowToLog),
+    logs: ((data ?? []) as unknown as AuditRow[]).map(rowToLog),
     total: count ?? 0,
   };
 }

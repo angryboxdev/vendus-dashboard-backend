@@ -9,7 +9,8 @@ import {
   type JobRole,
   type WeeklySchedule,
 } from "../domain/hrTypes.js";
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import { hashPin } from "../utils/kiosk.js";
 
 type Row = {
@@ -91,27 +92,16 @@ function rowToEmployee(row: Row): HrEmployee {
   };
 }
 
-function requireHr() {
-  if (!isHrSupabaseConfigured()) {
-    throw new Error(
-      "RH não configurado: defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY",
-    );
-  }
-  const s = getSupabaseServiceRole();
-  if (!s) {
-    throw new Error("Supabase service role indisponível");
-  }
-  return s;
-}
-
-export async function listEmployees(options: {
-  status: "active" | "inactive" | "all";
-  limit: number;
-  offset: number;
-}): Promise<HrEmployee[]> {
-  const supabase = requireHr();
-  let q = supabase
-    .from("hr_employees")
+export async function listEmployees(
+  organizationId: OrganizationId,
+  options: {
+    status: "active" | "inactive" | "all";
+    limit: number;
+    offset: number;
+  },
+): Promise<HrEmployee[]> {
+  let q = createScopedQuery(organizationId)
+    .table("hr_employees")
     .select(
       EMPLOYEE_SELECT,
     )
@@ -126,13 +116,15 @@ export async function listEmployees(options: {
   if (error) {
     throw new Error(`RH funcionários: ${error.message}`);
   }
-  return ((data ?? []) as Row[]).map(rowToEmployee);
+  return ((data ?? []) as unknown as Row[]).map(rowToEmployee);
 }
 
-export async function getEmployee(id: string): Promise<HrEmployee | null> {
-  const supabase = requireHr();
-  const { data, error } = await supabase
-    .from("hr_employees")
+export async function getEmployee(
+  organizationId: OrganizationId,
+  id: string,
+): Promise<HrEmployee | null> {
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_employees")
     .select(
       EMPLOYEE_SELECT,
     )
@@ -143,13 +135,13 @@ export async function getEmployee(id: string): Promise<HrEmployee | null> {
     throw new Error(`RH funcionário: ${error.message}`);
   }
   if (!data) return null;
-  return rowToEmployee(data as Row);
+  return rowToEmployee(data as unknown as Row);
 }
 
 export async function createEmployee(
+  organizationId: OrganizationId,
   body: EmployeeCreateBody,
 ): Promise<HrEmployee> {
-  const supabase = requireHr();
   const now = new Date().toISOString();
   let weekly_schedule: WeeklySchedule | null = null;
   if (body.weeklySchedule !== undefined) {
@@ -188,8 +180,8 @@ export async function createEmployee(
     updated_at: now,
   };
 
-  const { data, error } = await supabase
-    .from("hr_employees")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_employees")
     .insert(insert)
     .select(
       EMPLOYEE_SELECT,
@@ -199,14 +191,14 @@ export async function createEmployee(
   if (error) {
     throw new Error(`RH criar funcionário: ${error.message}`);
   }
-  return rowToEmployee(data as Row);
+  return rowToEmployee(data as unknown as Row);
 }
 
 export async function updateEmployee(
+  organizationId: OrganizationId,
   id: string,
   body: EmployeeUpdateBody,
 ): Promise<HrEmployee> {
-  const supabase = requireHr();
   const patch: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
@@ -247,8 +239,8 @@ export async function updateEmployee(
   if ("emergencyContactName" in body) patch.emergency_contact_name = body.emergencyContactName?.trim() || null;
   if ("emergencyContactPhone" in body) patch.emergency_contact_phone = body.emergencyContactPhone?.trim() || null;
 
-  const { data, error } = await supabase
-    .from("hr_employees")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_employees")
     .update(patch)
     .eq("id", id)
     .select(
@@ -259,7 +251,7 @@ export async function updateEmployee(
   if (error) {
     throw new Error(`RH atualizar funcionário: ${error.message}`);
   }
-  return rowToEmployee(data as Row);
+  return rowToEmployee(data as unknown as Row);
 }
 
 /**
@@ -267,16 +259,16 @@ export async function updateEmployee(
  * Falha com erro descritivo se o PIN já estiver em uso por outro funcionário.
  */
 export async function setKioskPin(
+  organizationId: OrganizationId,
   id: string,
   pinHash: string,
 ): Promise<HrEmployee> {
-  const existing = await getEmployee(id);
+  const existing = await getEmployee(organizationId, id);
   if (!existing) {
     throw new Error("Funcionário não encontrado");
   }
-  const supabase = requireHr();
-  const { data, error } = await supabase
-    .from("hr_employees")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_employees")
     .update({ kiosk_pin_hash: pinHash, updated_at: new Date().toISOString() })
     .eq("id", id)
     .select(EMPLOYEE_SELECT)
@@ -288,16 +280,23 @@ export async function setKioskPin(
     }
     throw new Error(`RH kiosk PIN: ${error.message}`);
   }
-  return rowToEmployee(data as Row);
+  return rowToEmployee(data as unknown as Row);
 }
 
-/** Encontra um funcionário activo pelo hash do PIN. Retorna null se não encontrado. */
+/**
+ * Encontra um funcionário activo pelo hash do PIN. Retorna null se não encontrado.
+ *
+ * Scoped ao `organizationId` (spec B2 D14): antes desta ficha, este lookup era
+ * global entre todas as organizações — a colisão de PIN de 4 dígitos entre
+ * organizações fica correta por construção enquanto existir uma só
+ * organização, e é o item diferido da spec A, não resolvido aqui.
+ */
 export async function findActiveEmployeeByPinHash(
+  organizationId: OrganizationId,
   pinHash: string,
 ): Promise<HrEmployee | null> {
-  const supabase = requireHr();
-  const { data, error } = await supabase
-    .from("hr_employees")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_employees")
     .select(EMPLOYEE_SELECT)
     .eq("kiosk_pin_hash", pinHash)
     .eq("status", "active")
@@ -307,20 +306,20 @@ export async function findActiveEmployeeByPinHash(
     throw new Error(`RH kiosk lookup: ${error.message}`);
   }
   if (!data) return null;
-  return rowToEmployee(data as Row);
+  return rowToEmployee(data as unknown as Row);
 }
 
 export type ExpiringContract = HrEmployee & { daysRemaining: number };
 
 /** Funcionários ativos com contrato a terminar nos próximos `withinDays` dias. */
 export async function listExpiringContracts(
+  organizationId: OrganizationId,
   withinDays = 30,
 ): Promise<ExpiringContract[]> {
-  const supabase = requireHr();
   const now = new Date();
   const future = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
-  const { data, error } = await supabase
-    .from("hr_employees")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_employees")
     .select(EMPLOYEE_SELECT)
     .eq("status", "active")
     .not("ended_at", "is", null)
@@ -328,7 +327,7 @@ export async function listExpiringContracts(
     .lte("ended_at", future.toISOString())
     .order("ended_at", { ascending: true });
   if (error) throw new Error(`RH contratos a expirar: ${error.message}`);
-  return ((data ?? []) as Row[]).map((row) => {
+  return ((data ?? []) as unknown as Row[]).map((row) => {
     const emp = rowToEmployee(row);
     const endMs = new Date(row.ended_at!).getTime();
     const daysRemaining = Math.ceil((endMs - now.getTime()) / (1000 * 60 * 60 * 24));
@@ -337,15 +336,17 @@ export async function listExpiringContracts(
 }
 
 /** Soft delete: marca inativo e data de fim. */
-export async function softDeleteEmployee(id: string): Promise<HrEmployee> {
-  const existing = await getEmployee(id);
+export async function softDeleteEmployee(
+  organizationId: OrganizationId,
+  id: string,
+): Promise<HrEmployee> {
+  const existing = await getEmployee(organizationId, id);
   if (!existing) {
     throw new Error("Funcionário não encontrado");
   }
-  const supabase = requireHr();
   const now = new Date().toISOString();
-  const { data, error } = await supabase
-    .from("hr_employees")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_employees")
     .update({
       status: "inactive",
       ended_at: now,
@@ -360,5 +361,5 @@ export async function softDeleteEmployee(id: string): Promise<HrEmployee> {
   if (error) {
     throw new Error(`RH desativar funcionário: ${error.message}`);
   }
-  return rowToEmployee(data as Row);
+  return rowToEmployee(data as unknown as Row);
 }

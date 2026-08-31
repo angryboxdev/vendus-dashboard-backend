@@ -22,7 +22,7 @@ hrAuditRoutes.get("/audit-logs", requireMinRole("manager"), async (req: Request,
       return;
     }
     const { employeeId, entityType, action, limit, offset } = parsed.data;
-    const result = await listAuditLogs({
+    const result = await listAuditLogs(req.auth!.orgId, {
       ...(employeeId !== undefined ? { employeeId } : {}),
       ...(entityType !== undefined ? { entityType: entityType as AuditEntityType } : {}),
       ...(action !== undefined ? { action: action as AuditAction } : {}),

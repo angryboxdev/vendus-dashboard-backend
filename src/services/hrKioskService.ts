@@ -1,7 +1,8 @@
 import { DateTime } from "luxon";
 import { ENV } from "../config/env.js";
 import { type KioskScanBody, type KioskScanResult } from "../domain/hrTypes.js";
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import { formatHrTimeForApi, normalizeTimeForPg } from "../utils/hrTime.js";
 import { generateDailyToken, hashPin, verifyDailyToken } from "../utils/kiosk.js";
 import { REPORT_TIMEZONE } from "../utils/lisbonDayInstants.js";
@@ -23,15 +24,6 @@ function requireKioskSecret(): string {
   return ENV.HR_KIOSK_HMAC_SECRET;
 }
 
-function requireHr() {
-  if (!isHrSupabaseConfigured()) {
-    throw new KioskError("RH não configurado no servidor", 503);
-  }
-  const s = getSupabaseServiceRole();
-  if (!s) throw new KioskError("Supabase indisponível", 503);
-  return s;
-}
-
 /** Retorna o token HMAC para hoje (hora de Lisboa) — usado pelo frontend para gerar o QR. */
 export function getTodayKioskToken(): { token: string; date: string } {
   const secret = requireKioskSecret();
@@ -40,8 +32,20 @@ export function getTodayKioskToken(): { token: string; date: string } {
   return { token, date };
 }
 
-/** Processa o scan do QR: valida token + PIN e regista entrada ou saída. */
-export async function kioskScan(body: KioskScanBody): Promise<KioskScanResult> {
+/**
+ * Processa o scan do QR: valida token + PIN e regista entrada ou saída.
+ *
+ * Rota pública sem sessão (D14): `organizationId` e `locationId` vêm do
+ * unattended scope no chamador (`hrKioskRoutes.ts`), nunca do request — o
+ * kiosk não tem identidade de dispositivo. Isto inclui a procura do
+ * funcionário pelo PIN (`findActiveEmployeeByPinHash`), que antes desta
+ * ficha era global entre organizações.
+ */
+export async function kioskScan(
+  organizationId: OrganizationId,
+  locationId: string,
+  body: KioskScanBody,
+): Promise<KioskScanResult> {
   const secret = requireKioskSecret();
 
   // 1. Verificar token HMAC
@@ -57,15 +61,15 @@ export async function kioskScan(body: KioskScanBody): Promise<KioskScanResult> {
 
   // 3. Encontrar funcionário pelo hash do PIN
   const pinHash = hashPin(secret, body.pin);
-  const employee = await findActiveEmployeeByPinHash(pinHash);
+  const employee = await findActiveEmployeeByPinHash(organizationId, pinHash);
   if (!employee) {
     throw new KioskError("PIN incorrecto", 401);
   }
 
   // 4. Encontrar turno de hoje para este funcionário
-  const supabase = requireHr();
-  const { data: shiftsData, error: shiftError } = await supabase
-    .from("hr_work_shifts")
+  const scoped = createScopedQuery(organizationId);
+  const { data: shiftsData, error: shiftError } = await scoped
+    .table("hr_work_shifts")
     .select("id, start_time, end_time")
     .eq("employee_id", employee.id)
     .eq("work_date", todayYmd)
@@ -89,9 +93,9 @@ export async function kioskScan(body: KioskScanBody): Promise<KioskScanResult> {
   let shift: ShiftRow | null = null;
   let att: AttRow = null;
 
-  for (const s of shiftsData as ShiftRow[]) {
-    const { data: attData, error: attError } = await supabase
-      .from("hr_shift_attendance")
+  for (const s of shiftsData as unknown as ShiftRow[]) {
+    const { data: attData, error: attError } = await scoped
+      .table("hr_shift_attendance")
       .select("id, actual_start_time, actual_end_time")
       .eq("work_shift_id", s.id)
       .maybeSingle();
@@ -100,7 +104,7 @@ export async function kioskScan(body: KioskScanBody): Promise<KioskScanResult> {
       throw new KioskError(`Erro ao verificar conferência: ${attError.message}`, 500);
     }
 
-    const a = attData as AttRow;
+    const a = attData as unknown as AttRow;
     // Turno sem registo → pronto para check-in
     // Turno com entrada mas sem saída → pronto para check-out
     if (!a || (a.actual_start_time && !a.actual_end_time)) {
@@ -125,8 +129,8 @@ export async function kioskScan(body: KioskScanBody): Promise<KioskScanResult> {
     const lateMinutes = computeLateMinutes(currentHm, shiftStartHm);
     const status = lateMinutes > 0 ? "late" : "worked_as_planned";
 
-    const { error: insertErr } = await supabase
-      .from("hr_shift_attendance")
+    const { error: insertErr } = await scoped
+      .table("hr_shift_attendance")
       .insert({
         work_shift_id: shiftId,
         status,
@@ -138,6 +142,7 @@ export async function kioskScan(body: KioskScanBody): Promise<KioskScanResult> {
         registered_by_employee_id: employee.id,
         registered_at: nowIso,
         updated_at: nowIso,
+        location_id: locationId,
       });
 
     if (insertErr) {
@@ -154,14 +159,14 @@ export async function kioskScan(body: KioskScanBody): Promise<KioskScanResult> {
 
   if (att.actual_start_time && !att.actual_end_time) {
     // --- CHECK-OUT ---
-    const currentStatus = await getCurrentAttendanceStatus(supabase, att.id);
+    const currentStatus = await getCurrentAttendanceStatus(scoped, att.id);
     const leftEarly = isLeftEarly(currentHm, shiftEndHm);
     const newStatus = leftEarly && currentStatus === "worked_as_planned"
       ? "left_early"
       : currentStatus;
 
-    const { error: updateErr } = await supabase
-      .from("hr_shift_attendance")
+    const { error: updateErr } = await scoped
+      .table("hr_shift_attendance")
       .update({
         actual_end_time: normalizeTimeForPg(currentHm),
         status: newStatus,
@@ -202,13 +207,13 @@ function isLeftEarly(currentHm: string, shiftEndHm: string): boolean {
 }
 
 async function getCurrentAttendanceStatus(
-  supabase: ReturnType<typeof getSupabaseServiceRole>,
+  scoped: ReturnType<typeof createScopedQuery>,
   attId: string,
 ): Promise<string> {
-  const { data } = await supabase!
-    .from("hr_shift_attendance")
+  const { data } = await scoped
+    .table("hr_shift_attendance")
     .select("status")
     .eq("id", attId)
     .single();
-  return (data as { status: string } | null)?.status ?? "worked_as_planned";
+  return (data as unknown as { status: string } | null)?.status ?? "worked_as_planned";
 }

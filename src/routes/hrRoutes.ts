@@ -74,7 +74,7 @@ hrRoutes.get("/employees", async (req, res) => {
       return;
     }
     const { status, limit, offset } = parsed.data;
-    const list = await listEmployees({ status, limit, offset });
+    const list = await listEmployees(req.auth!.orgId, { status, limit, offset });
     res.json(list);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao listar funcionários";
@@ -89,8 +89,8 @@ hrRoutes.post("/employees", requireMinRole("manager"), async (req, res) => {
       jsonError(res, 400, parsed.error.issues.map((i) => i.message).join("; "));
       return;
     }
-    const created = await createEmployee(parsed.data);
-    void logAudit({
+    const created = await createEmployee(req.auth!.orgId, parsed.data);
+    void logAudit(req.auth!.orgId, {
       entityType: "employee",
       entityId: created.id,
       action: "created",
@@ -108,7 +108,7 @@ hrRoutes.post("/employees", requireMinRole("manager"), async (req, res) => {
 hrRoutes.get("/employees/expiring-contracts", requireMinRole("manager"), async (req, res) => {
   try {
     const withinDays = req.query["days"] != null ? Number(req.query["days"]) : 30;
-    const list = await listExpiringContracts(Number.isFinite(withinDays) ? withinDays : 30);
+    const list = await listExpiringContracts(req.auth!.orgId, Number.isFinite(withinDays) ? withinDays : 30);
     res.json(list);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao listar contratos";
@@ -123,7 +123,7 @@ hrRoutes.get("/employees/:id", async (req, res) => {
       jsonError(res, 400, "id obrigatório");
       return;
     }
-    const row = await getEmployee(id);
+    const row = await getEmployee(req.auth!.orgId, id);
     if (!row) {
       jsonError(res, 404, "Funcionário não encontrado");
       return;
@@ -144,8 +144,8 @@ hrRoutes.patch("/employees/:id", requireMinRole("manager"), async (req, res) => 
       jsonError(res, 400, parsed.error.issues.map((i) => i.message).join("; "));
       return;
     }
-    const before = await getEmployee(id);
-    const updated = await updateEmployee(id, parsed.data);
+    const before = await getEmployee(req.auth!.orgId, id);
+    const updated = await updateEmployee(req.auth!.orgId, id, parsed.data);
     res.json(updated);
 
     const isScheduleOnly =
@@ -164,20 +164,20 @@ hrRoutes.patch("/employees/:id", requireMinRole("manager"), async (req, res) => 
     );
 
     if (isScheduleOnly) {
-      void logAudit({
+      void logAudit(req.auth!.orgId, {
         entityType: "employee", entityId: id, action: "schedule_updated",
         description: `Escala base de "${updated.fullName}" atualizada`,
         employeeId: id, payloadBefore: before?.weeklySchedule, payloadAfter: updated.weeklySchedule,
       });
     } else if (isStatusChange) {
-      void logAudit({
+      void logAudit(req.auth!.orgId, {
         entityType: "employee", entityId: id, action: "status_changed",
         description: `Estado de "${updated.fullName}" alterado: ${before.status} → ${updated.status}`,
         employeeId: id, payloadBefore: before, payloadAfter: updated,
       });
     } else {
       if (contractChanged && before !== null) {
-        void logAudit({
+        void logAudit(req.auth!.orgId, {
           entityType: "employee", entityId: id, action: "contract_changed",
           description: `Dados contratuais de "${updated.fullName}" alterados`,
           employeeId: id,
@@ -185,7 +185,7 @@ hrRoutes.patch("/employees/:id", requireMinRole("manager"), async (req, res) => 
           payloadAfter: toContractSnapshot(updated),
         });
       }
-      void logAudit({
+      void logAudit(req.auth!.orgId, {
         entityType: "employee", entityId: id, action: "updated",
         description: `Perfil de "${updated.fullName}" atualizado`,
         employeeId: id, payloadBefore: before, payloadAfter: updated,
@@ -204,9 +204,9 @@ hrRoutes.delete("/employees/:id", requireMinRole("manager"), async (req, res) =>
       jsonError(res, 400, "id obrigatório");
       return;
     }
-    const updated = await softDeleteEmployee(id);
+    const updated = await softDeleteEmployee(req.auth!.orgId, id);
     res.json(updated);
-    void logAudit({
+    void logAudit(req.auth!.orgId, {
       entityType: "employee", entityId: id, action: "deleted",
       description: `Funcionário "${updated.fullName}" desativado`,
       employeeId: id, payloadBefore: { status: "active" }, payloadAfter: updated,
@@ -229,7 +229,7 @@ hrRoutes.get("/shifts", async (req, res) => {
       return;
     }
     const { from, to, employeeId } = parsed.data;
-    const list = await listShiftsInRange({
+    const list = await listShiftsInRange(req.auth!.orgId, {
       from,
       to,
       ...(employeeId != null ? { employeeId } : {}),
@@ -249,9 +249,9 @@ hrRoutes.post("/shifts", requireMinRole("manager"), async (req, res) => {
       jsonError(res, 400, parsed.error.issues.map((i) => i.message).join("; "));
       return;
     }
-    const created = await createShift(parsed.data);
+    const created = await createShift(req.auth!.orgId, parsed.data);
     res.status(201).json(created);
-    void logAudit({
+    void logAudit(req.auth!.orgId, {
       entityType: "shift", entityId: created.id, action: "created",
       description: `Turno de ${created.workDate} (${created.startTime}–${created.endTime}) criado`,
       employeeId: created.employeeId, payloadAfter: created,
@@ -275,15 +275,15 @@ hrRoutes.patch("/shifts/:id/attendance", requireMinRole("manager"), async (req, 
       jsonError(res, 400, parsed.error.issues.map((i) => i.message).join("; "));
       return;
     }
-    const existing = await getWorkShiftById(id);
+    const existing = await getWorkShiftById(req.auth!.orgId, id);
     if (!existing) {
       jsonError(res, 404, "Turno não encontrado");
       return;
     }
-    const attendance = await upsertShiftAttendance(id, parsed.data);
+    const attendance = await upsertShiftAttendance(req.auth!.orgId, id, parsed.data);
     res.json({ ...existing, attendance });
     const isUpdate = existing.attendance !== null;
-    void logAudit({
+    void logAudit(req.auth!.orgId, {
       entityType: "attendance", entityId: id,
       action: isUpdate ? "attendance_updated" : "attendance_registered",
       description: `Conferência ${isUpdate ? "editada" : "registada"}: ${attendance.status} (${existing.workDate})`,
@@ -309,11 +309,11 @@ hrRoutes.delete("/shifts/:id/attendance", requireMinRole("manager"), async (req,
   try {
     const id = req.params["id"] as string;
     if (!id) { jsonError(res, 400, "id obrigatório"); return; }
-    const existing = await getWorkShiftById(id);
+    const existing = await getWorkShiftById(req.auth!.orgId, id);
     if (!existing) { jsonError(res, 404, "Turno não encontrado"); return; }
     if (!existing.attendance) { jsonError(res, 404, "Este turno não tem conferência registada"); return; }
-    await deleteShiftAttendance(id);
-    void logAudit({
+    await deleteShiftAttendance(req.auth!.orgId, id);
+    void logAudit(req.auth!.orgId, {
       entityType: "attendance", entityId: id,
       action: "attendance_deleted",
       description: `Conferência apagada (${existing.workDate})`,
@@ -340,10 +340,10 @@ hrRoutes.patch("/shifts/:id", requireMinRole("manager"), async (req, res) => {
       jsonError(res, 400, parsed.error.issues.map((i) => i.message).join("; "));
       return;
     }
-    const before = await getWorkShiftById(id);
-    const updated = await updateShift(id, parsed.data);
+    const before = await getWorkShiftById(req.auth!.orgId, id);
+    const updated = await updateShift(req.auth!.orgId, id, parsed.data);
     res.json(updated);
-    void logAudit({
+    void logAudit(req.auth!.orgId, {
       entityType: "shift", entityId: id, action: "updated",
       description: `Turno de ${updated.workDate} (${updated.startTime}–${updated.endTime}) atualizado`,
       employeeId: updated.employeeId, payloadBefore: before, payloadAfter: updated,
@@ -368,11 +368,11 @@ hrRoutes.delete("/shifts/:id", requireMinRole("manager"), async (req, res) => {
       jsonError(res, 400, "id obrigatório");
       return;
     }
-    const toDelete = await getWorkShiftById(id);
-    await deleteShift(id);
+    const toDelete = await getWorkShiftById(req.auth!.orgId, id);
+    await deleteShift(req.auth!.orgId, id);
     res.status(204).send();
     if (toDelete) {
-      void logAudit({
+      void logAudit(req.auth!.orgId, {
         entityType: "shift", entityId: id, action: "deleted",
         description: `Turno de ${toDelete.workDate} (${toDelete.startTime}–${toDelete.endTime}) apagado`,
         employeeId: toDelete.employeeId, payloadBefore: toDelete,
@@ -412,7 +412,7 @@ hrRoutes.get("/employees/:id/payments", async (req, res) => {
       filters.from = q.from;
       filters.to = q.to;
     }
-    const list = await listPaymentsForEmployee(id, filters);
+    const list = await listPaymentsForEmployee(req.auth!.orgId, id, filters);
     res.json(list);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro ao listar pagamentos";
@@ -432,9 +432,9 @@ hrRoutes.post("/employees/:id/payments", requireMinRole("manager"), async (req, 
       jsonError(res, 400, parsed.error.issues.map((i) => i.message).join("; "));
       return;
     }
-    const created = await createPayment(id, parsed.data);
+    const created = await createPayment(req.auth!.orgId, id, parsed.data);
     res.status(201).json(created);
-    void logAudit({
+    void logAudit(req.auth!.orgId, {
       entityType: "payment", entityId: created.id, action: "created",
       description: `Pagamento de €${created.amount.toFixed(2)} (${created.paymentType}) registado`,
       employeeId: id, payloadAfter: created,
@@ -457,10 +457,10 @@ hrRoutes.patch("/payments/:id", requireMinRole("manager"), async (req, res) => {
       jsonError(res, 400, parsed.error.issues.map((i) => i.message).join("; "));
       return;
     }
-    const before = await getPaymentById(id);
-    const updated = await updatePayment(id, parsed.data);
+    const before = await getPaymentById(req.auth!.orgId, id);
+    const updated = await updatePayment(req.auth!.orgId, id, parsed.data);
     res.json(updated);
-    void logAudit({
+    void logAudit(req.auth!.orgId, {
       entityType: "payment", entityId: id, action: "updated",
       description: `Pagamento de €${updated.amount.toFixed(2)} (${updated.paymentType}) atualizado`,
       employeeId: updated.employeeId, payloadBefore: before, payloadAfter: updated,
@@ -479,11 +479,11 @@ hrRoutes.delete("/payments/:id", requireMinRole("manager"), async (req, res) => 
       jsonError(res, 400, "id obrigatório");
       return;
     }
-    const toDelete = await getPaymentById(id);
-    await deletePayment(id);
+    const toDelete = await getPaymentById(req.auth!.orgId, id);
+    await deletePayment(req.auth!.orgId, id);
     res.status(204).send();
     if (toDelete) {
-      void logAudit({
+      void logAudit(req.auth!.orgId, {
         entityType: "payment", entityId: id, action: "deleted",
         description: `Pagamento de €${toDelete.amount.toFixed(2)} (${toDelete.paymentType}) apagado`,
         employeeId: toDelete.employeeId, payloadBefore: toDelete,
@@ -505,7 +505,7 @@ hrRoutes.get("/employees/:id/documents", requireMinRole("manager"), async (req, 
   try {
     const id = req.params["id"] as string;
     if (!id) { jsonError(res, 400, "id obrigatório"); return; }
-    const docs = await listDocuments(id);
+    const docs = await listDocuments(req.auth!.orgId, id);
     res.json(docs);
   } catch (e: unknown) {
     res.status(500).json({ error: e instanceof Error ? e.message : "Erro ao listar documentos" });
@@ -523,7 +523,7 @@ hrRoutes.post("/employees/:id/documents", requireMinRole("manager"), docUpload.s
       jsonError(res, 400, `document_type inválido. Use: ${[...VALID_DOC_TYPES].join(", ")}`);
       return;
     }
-    const doc = await uploadDocument({
+    const doc = await uploadDocument(req.auth!.orgId, {
       employeeId: id,
       documentType: documentType as DocumentType,
       fileName: file.originalname || "document",
@@ -541,7 +541,7 @@ hrRoutes.get("/employees/:id/documents/:docId/download-url", requireMinRole("man
     const docId = req.params["docId"] as string;
     if (!docId) { jsonError(res, 400, "docId obrigatório"); return; }
     // fetch doc to get storagePath
-    const docs = await listDocuments(req.params["id"] as string);
+    const docs = await listDocuments(req.auth!.orgId, req.params["id"] as string);
     const doc = docs.find((d) => d.id === docId);
     if (!doc) { jsonError(res, 404, "Documento não encontrado"); return; }
     const url = await getDocumentSignedUrl(doc.storagePath);
@@ -555,7 +555,7 @@ hrRoutes.delete("/employees/:id/documents/:docId", requireMinRole("manager"), as
   try {
     const docId = req.params["docId"] as string;
     if (!docId) { jsonError(res, 400, "docId obrigatório"); return; }
-    await deleteDocument(docId);
+    await deleteDocument(req.auth!.orgId, docId);
     res.status(204).send();
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Erro ao apagar documento";

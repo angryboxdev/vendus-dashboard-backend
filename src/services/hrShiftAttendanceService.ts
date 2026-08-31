@@ -4,7 +4,8 @@ import type {
   ShiftAttendanceStatus,
   ShiftAttendanceUpsertBody,
 } from "../domain/hrTypes.js";
-import { getSupabaseServiceRole, isHrSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
+import type { OrganizationId } from "../kernel/organization-id.js";
 import { formatHrTimeForApi, normalizeTimeForPg } from "../utils/hrTime.js";
 
 type AttendanceRow = {
@@ -44,50 +45,37 @@ function rowToAttendance(row: AttendanceRow): HrShiftAttendance {
   };
 }
 
-function requireHr() {
-  if (!isHrSupabaseConfigured()) {
-    throw new Error(
-      "RH não configurado: defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY",
-    );
-  }
-  const s = getSupabaseServiceRole();
-  if (!s) {
-    throw new Error("Supabase service role indisponível");
-  }
-  return s;
-}
-
 const attendanceSelect =
   "id, work_shift_id, status, actual_start_time, actual_end_time, late_minutes, notes, registration_source, registered_by_employee_id, registered_at, updated_at";
 
 /** Carrega conferências para vários turnos (uma query). */
 export async function getAttendanceByShiftIds(
+  organizationId: OrganizationId,
   shiftIds: string[],
 ): Promise<Map<string, HrShiftAttendance>> {
   const map = new Map<string, HrShiftAttendance>();
   if (shiftIds.length === 0) return map;
 
-  const supabase = requireHr();
-  const { data, error } = await supabase
-    .from("hr_shift_attendance")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_shift_attendance")
     .select(attendanceSelect)
     .in("work_shift_id", shiftIds);
 
   if (error) {
     throw new Error(`RH conferência turnos: ${error.message}`);
   }
-  for (const row of (data ?? []) as AttendanceRow[]) {
+  for (const row of (data ?? []) as unknown as AttendanceRow[]) {
     map.set(row.work_shift_id, rowToAttendance(row));
   }
   return map;
 }
 
 export async function getShiftEmployeeId(
+  organizationId: OrganizationId,
   shiftId: string,
 ): Promise<string | null> {
-  const supabase = requireHr();
-  const { data, error } = await supabase
-    .from("hr_work_shifts")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_work_shifts")
     .select("employee_id")
     .eq("id", shiftId)
     .maybeSingle();
@@ -96,14 +84,16 @@ export async function getShiftEmployeeId(
     throw new Error(`RH turno: ${error.message}`);
   }
   if (!data) return null;
-  return (data as { employee_id: string }).employee_id;
+  return (data as unknown as { employee_id: string }).employee_id;
 }
 
 /** Remove a conferência de um turno (volta ao estado "sem conferência"). */
-export async function deleteShiftAttendance(shiftId: string): Promise<void> {
-  const supabase = requireHr();
-  const { error } = await supabase
-    .from("hr_shift_attendance")
+export async function deleteShiftAttendance(
+  organizationId: OrganizationId,
+  shiftId: string,
+): Promise<void> {
+  const { error } = await createScopedQuery(organizationId)
+    .table("hr_shift_attendance")
     .delete()
     .eq("work_shift_id", shiftId);
   if (error) {
@@ -114,12 +104,17 @@ export async function deleteShiftAttendance(shiftId: string): Promise<void> {
 /**
  * Cria ou substitui a conferência do turno (corpo completo).
  * `registration_source=employee_qr`: se `registeredByEmployeeId` for enviado, deve coincidir com o funcionário do turno.
+ *
+ * `location_id` (spec B2 D3/D4): `hr_shift_attendance` é location-bearing e
+ * este upsert substitui a linha inteira, por isso `body.locationId` (validado
+ * como obrigatório em `shiftAttendanceUpsertBodySchema`) é sempre escrito.
  */
 export async function upsertShiftAttendance(
+  organizationId: OrganizationId,
   shiftId: string,
   body: ShiftAttendanceUpsertBody,
 ): Promise<HrShiftAttendance> {
-  const employeeId = await getShiftEmployeeId(shiftId);
+  const employeeId = await getShiftEmployeeId(organizationId, shiftId);
   if (!employeeId) {
     throw new Error("Turno não encontrado");
   }
@@ -152,11 +147,11 @@ export async function upsertShiftAttendance(
     registered_by_employee_id: body.registeredByEmployeeId ?? null,
     registered_at: now,
     updated_at: now,
+    location_id: body.locationId,
   };
 
-  const supabase = requireHr();
-  const { data, error } = await supabase
-    .from("hr_shift_attendance")
+  const { data, error } = await createScopedQuery(organizationId)
+    .table("hr_shift_attendance")
     .upsert(row, { onConflict: "work_shift_id" })
     .select(attendanceSelect)
     .single();
@@ -164,5 +159,5 @@ export async function upsertShiftAttendance(
   if (error) {
     throw new Error(`RH conferência: ${error.message}`);
   }
-  return rowToAttendance(data as AttendanceRow);
+  return rowToAttendance(data as unknown as AttendanceRow);
 }
