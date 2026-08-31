@@ -52,6 +52,7 @@ if (!Array.isArray(lines)) {
 const runOpts: Parameters<typeof runStockAdjustmentFromLines>[1] = {
   lines,
   adjustmentDate,
+  locationId: UNATTENDED_SCOPE.locationId,
   dryRun,
 };
 if (batchLabel) runOpts.batchLabel = batchLabel;

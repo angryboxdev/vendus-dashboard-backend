@@ -169,7 +169,9 @@ if (ENV.ENABLE_DAILY_CONSUMPTION_CRON) {
     cron.schedule(
       ENV.DAILY_CONSUMPTION_CRON_SCHEDULE,
       () => {
-        void runDailyVendusConsumptionJob(UNATTENDED_SCOPE.organizationId, {})
+        void runDailyVendusConsumptionJob(UNATTENDED_SCOPE.organizationId, {
+          locationId: UNATTENDED_SCOPE.locationId,
+        })
           .then((r) => {
             console.log("[cron] daily-vendus-consumption ok", r);
           })

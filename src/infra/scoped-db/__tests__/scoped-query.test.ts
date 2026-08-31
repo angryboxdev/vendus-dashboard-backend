@@ -23,10 +23,20 @@ interface RecordedFrom {
   eqCalls: Array<[string, unknown]>;
 }
 
+interface RecordedRpc {
+  fn: string;
+  args: unknown;
+}
+
 function fakeSupabaseClient() {
   const froms: RecordedFrom[] = [];
+  const rpcs: RecordedRpc[] = [];
 
   const client = {
+    rpc(fn: string, args: unknown) {
+      rpcs.push({ fn, args });
+      return Promise.resolve({ data: [], error: null });
+    },
     from(table: string) {
       const record: RecordedFrom = { table, deleteCalled: false, eqCalls: [] };
       froms.push(record);
@@ -72,7 +82,7 @@ function fakeSupabaseClient() {
     },
   };
 
-  return { client: client as unknown as SupabaseClient, froms };
+  return { client: client as unknown as SupabaseClient, froms, rpcs };
 }
 
 describe("ScopedQuery", () => {
@@ -193,6 +203,20 @@ describe("ScopedQuery", () => {
       const last = froms[froms.length - 1];
       expect(last?.eqCalls).toEqual([[entry.organizationColumn, "org-a"]]);
     }
+  });
+
+  it("the stock quantities RPC is called with the organization and item ids", () => {
+    const { client, rpcs } = fakeSupabaseClient();
+    const scoped = ScopedQuery.create(orgA, client);
+
+    scoped.getStockQuantitiesWithLastPurchase(["item-1", "item-2"]);
+
+    expect(rpcs).toEqual([
+      {
+        fn: "get_stock_quantities_with_last_purchase",
+        args: { p_org_id: "org-a", p_item_ids: ["item-1", "item-2"] },
+      },
+    ]);
   });
 
   it("the helper cannot be constructed without an organization", () => {

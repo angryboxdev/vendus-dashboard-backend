@@ -1,4 +1,4 @@
-import { getSupabase, isSupabaseConfigured } from "../infra/scoped-db/supabase-client.js";
+import { createScopedQuery } from "../infra/scoped-db/scoped-query.js";
 import type { OrganizationId } from "../kernel/organization-id.js";
 
 import { ENV } from "../config/env.js";
@@ -97,19 +97,18 @@ export type IngredientConsumptionResponse = {
 
 /** Adições de stock no período (movimentos com quantity > 0, agregados por item). */
 async function getStockAdditionsForPeriod(
+  organizationId: OrganizationId,
   since: string,
   until: string
 ): Promise<StockAdditionEntry[]> {
   const entries: StockAdditionEntry[] = [];
-  if (!isSupabaseConfigured()) return entries;
-  const supabase = getSupabase();
-  if (!supabase) return entries;
+  const scoped = createScopedQuery(organizationId);
 
   const sinceTs = lisbonDayStartUtcIso(since);
   const untilTs = lisbonDayEndUtcIso(until);
 
-  const { data: movements, error: movError } = await supabase
-    .from("stock_movements")
+  const { data: movements, error: movError } = await scoped
+    .table("stock_movements")
     .select("item_id, quantity")
     .gt("quantity", 0)
     .gte("movement_date", sinceTs)
@@ -119,14 +118,14 @@ async function getStockAdditionsForPeriod(
   if (movError || !movements?.length) return entries;
 
   const byItemId = new Map<string, number>();
-  for (const m of movements as Array<{ item_id: string; quantity: number }>) {
+  for (const m of movements as unknown as Array<{ item_id: string; quantity: number }>) {
     const qty = byItemId.get(m.item_id) ?? 0;
     byItemId.set(m.item_id, qty + Number(m.quantity));
   }
 
   const itemIds = Array.from(byItemId.keys());
-  const { data: rows, error: itemsError } = await supabase
-    .from("stock_items")
+  const { data: rows, error: itemsError } = await scoped
+    .table("stock_items")
     .select("id, name, base_unit, type, category_id, stock_categories(name)")
     .in("id", itemIds);
 
@@ -134,7 +133,7 @@ async function getStockAdditionsForPeriod(
 
   const byId = new Map(
     (
-      rows as Array<{
+      rows as unknown as Array<{
         id: string;
         name: string;
         base_unit: string;
@@ -192,18 +191,18 @@ function categoryNameFromRow(
 
 /** Soma de quantity por item com movement_date estritamente antes da meia-noite Lisboa do dia `since`. */
 async function getOpeningStockAtPeriodStart(
+  organizationId: OrganizationId,
   since: string,
   itemIds: string[]
 ): Promise<StockOpeningEntry[]> {
   const entries: StockOpeningEntry[] = [];
-  if (!itemIds.length || !isSupabaseConfigured()) return entries;
-  const supabase = getSupabase();
-  if (!supabase) return entries;
+  if (!itemIds.length) return entries;
+  const scoped = createScopedQuery(organizationId);
 
   const sinceTs = lisbonDayStartUtcIso(since);
 
-  const { data: movements, error: movError } = await supabase
-    .from("stock_movements")
+  const { data: movements, error: movError } = await scoped
+    .table("stock_movements")
     .select("item_id, quantity")
     .in("item_id", itemIds)
     .lt("movement_date", sinceTs)
@@ -213,20 +212,20 @@ async function getOpeningStockAtPeriodStart(
 
   const byItemId = new Map<string, number>();
   for (const id of itemIds) byItemId.set(id, 0);
-  for (const m of (movements ?? []) as Array<{ item_id: string; quantity: number }>) {
+  for (const m of (movements ?? []) as unknown as Array<{ item_id: string; quantity: number }>) {
     const qty = byItemId.get(m.item_id) ?? 0;
     byItemId.set(m.item_id, qty + Number(m.quantity));
   }
 
-  const { data: rows, error: itemsError } = await supabase
-    .from("stock_items")
+  const { data: rows, error: itemsError } = await scoped
+    .table("stock_items")
     .select("id, name, base_unit, type, category_id, stock_categories(name)")
     .in("id", itemIds);
 
   if (itemsError || !rows?.length) return entries;
 
   const byId = new Map(
-    (rows as StockRowWithCategory[]).map((r) => {
+    (rows as unknown as StockRowWithCategory[]).map((r) => {
       const x = categoryNameFromRow(r);
       return [r.id, x] as const;
     })
@@ -268,6 +267,7 @@ type StockItemRowWithCategory = {
 
 /** Constrói entradas de consumo a partir de quantidades por stock_item_id (reutilizado vendas vs autoconsumo). */
 async function buildConsumptionEntriesFromStockMap(
+  organizationId: OrganizationId,
   consumptionByStockId: Map<string, number>
 ): Promise<{
   entries: IngredientConsumptionEntry[];
@@ -276,19 +276,17 @@ async function buildConsumptionEntriesFromStockMap(
   const entries: IngredientConsumptionEntry[] = [];
   const byId = new Map<string, StockItemRowWithCategory>();
   const stockIds = Array.from(consumptionByStockId.keys());
-  if (stockIds.length === 0 || !isSupabaseConfigured()) {
+  if (stockIds.length === 0) {
     return { entries, byId };
   }
-  const supabase = getSupabase();
-  if (!supabase) return { entries, byId };
 
-  const { data: rows, error } = await supabase
-    .from("stock_items")
+  const { data: rows, error } = await createScopedQuery(organizationId)
+    .table("stock_items")
     .select("id, name, base_unit, type, category_id, stock_categories(name)")
     .in("id", stockIds);
   if (error || !rows?.length) return { entries, byId };
 
-  for (const r of rows as Array<{
+  for (const r of rows as unknown as Array<{
     id: string;
     name: string;
     base_unit: string;
@@ -447,7 +445,7 @@ export async function getIngredientConsumption(
   }
 
   const { entries: consumptionEntries, byId } =
-    await buildConsumptionEntriesFromStockMap(consumptionByStockId);
+    await buildConsumptionEntriesFromStockMap(organizationId, consumptionByStockId);
   for (const m of matchedProducts) {
     if (m.match_type === "stock" && m.stock_item_id) {
       const row = byId.get(m.stock_item_id);
@@ -462,15 +460,16 @@ export async function getIngredientConsumption(
   const { map: selfConsumptionMap, skipped: selfconsumption_skipped } =
     await computeConsumptionForProductLinesLenient(organizationId, selfLines);
   const { entries: consumption_selfconsumption } =
-    await buildConsumptionEntriesFromStockMap(selfConsumptionMap);
+    await buildConsumptionEntriesFromStockMap(organizationId, selfConsumptionMap);
 
-  const additionsEntries = await getStockAdditionsForPeriod(since, until);
+  const additionsEntries = await getStockAdditionsForPeriod(organizationId, since, until);
 
   const openingItemIds = new Set<string>();
   for (const c of consumptionEntries) openingItemIds.add(c.stock_item_id);
   for (const c of consumption_selfconsumption) openingItemIds.add(c.stock_item_id);
   for (const a of additionsEntries) openingItemIds.add(a.stock_item_id);
   const openingEntries = await getOpeningStockAtPeriodStart(
+    organizationId,
     since,
     Array.from(openingItemIds)
   );
