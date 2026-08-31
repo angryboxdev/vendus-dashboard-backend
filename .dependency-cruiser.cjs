@@ -66,10 +66,9 @@ module.exports = {
         "folder: runOrganizationProvisioning cria a organização que o escopiaria " +
         "e é inatingível a partir do request path (spec B1 D7) — os outros dois " +
         "jobs escrevem dados de tenant e passam pelo helper como tudo o resto. " +
-        "Ships at warn: reporta centenas de violações no dia 1 (os 371 sites que " +
-        "ainda não foram convertidos); promovido a error no ticket 20, a zero " +
-        "violações.",
-      severity: "warn",
+        "Era warn desde o dia 1 (centenas de violações, os 371 sites ainda por " +
+        "converter); promovido a error no ticket 20, a zero violações.",
+      severity: "error",
       from: {
         path: "^src",
         pathNot: ["^src/infra/scoped-db", "^src/jobs/runOrganizationProvisioning\\.ts$"],

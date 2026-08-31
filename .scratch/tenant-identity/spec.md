@@ -158,7 +158,7 @@ is strict — the helper cannot be built before an `orgId` exists to build it fr
 `docs/MULTI_TENANCY_SAAS_DESIGN.md` §5.1 defines spec B as phases 2, 4 and 5
 together. Measured against the codebase that is 132 use case input DTOs, 59
 out-adapters, 12 controllers, 16 route files, 124 endpoints and 38 legacy service
-files holding 192 of the 406 `.from(` call sites — plus the membership rework,
+files holding 192 of the 371 `.from(` call sites — plus the membership rework,
 the token hook, the role taxonomy and dropping the column defaults.
 
 That fails §5.1's own test, that a spec should be a unit of *verification*. It
@@ -303,7 +303,7 @@ permanent privileged concept in the running application. More decisively, such a
 request is legitimately *unscoped*, so the B2 helper would need an escape hatch
 and the raw-query lint would need an exception. §2.6 already observes that escape
 hatches get reused. Keeping provisioning outside the request path lets the rule
-governing 406 call sites stay absolute, because the exception is not in the same
+governing 371 call sites stay absolute, because the exception is not in the same
 building.
 
 What this does not buy: any protection against a leaked service role key, which
@@ -532,7 +532,7 @@ corrected as part of this spec:
   the scoped helper. As configured, dependency-cruiser is not a gate at all:
   there is no package script and no CI workflow, and it runs only from an agent
   hook scoped to a single module directory. It never sees the legacy service
-  layer, where 192 of the 406 query call sites live. Wiring it up over the whole
+  layer, where 192 of the 371 query call sites live. Wiring it up over the whole
   source tree is a B2 done-criterion.
 
 ### Why the front end is touched at all

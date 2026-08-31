@@ -3,8 +3,12 @@
 > Status: em discussão — Variant A escolhida (linha core/plugin fechada em §3);
 > decisões 2, 3, 4 e 6 fechadas (§6); 5 e 7 ainda abertas;
 > spec A implementada (`.scratch/org-location-foundation/`);
-> spec B dividida em B1/B2 — B1 escrita (`.scratch/tenant-identity/`)
-> Última atualização: 2026-08-24
+> spec B dividida em B1/B2 — B1 implementada (`.scratch/tenant-identity/`);
+> B2 implementada (`.scratch/scoped-access/`): todas as áreas convertidas, regra
+> de import do scoped-db em `error` a zero violações (ADR-0008, ADR-0009,
+> ticket 20); falta só o incremento de fecho (21) — dropar os defaults de coluna,
+> as composite keys de location e o smoke de duas organizações
+> Última atualização: 2026-08-31
 > Nota: escrito em inglês por pedido; traduzir se for para o padrão do repo.
 
 ---
@@ -162,9 +166,16 @@ correct under CLAUDE.md's dependency rules — it is not an infra leak.
 
 RLS alone will not save us — 76 call sites use the service role and bypass it.
 
-1. **A scoped query helper** that cannot be constructed without an `orgId`. Every
-   out-adapter goes through it; raw `.from()` banned outside it, enforced by
-   `dependency-cruiser` (already a dependency) or a grep test.
+1. **A scoped query helper** that cannot be constructed without an `orgId`. It is
+   the only thing in `src/**` allowed to import the Supabase client — enforced
+   structurally by a `dependency-cruiser` import rule, not a grep test: a grep
+   for `.from()` cannot follow a query assembled across several statements
+   (91 of the 371 call sites did exactly that), while an import rule holds
+   regardless of aliasing, re-export or how many statements a query spans. The
+   rule is at `error` severity, verified at zero violations (spec B2 ticket
+   20; ADR-0008). It runs via the Claude Code agent hook (whole source tree)
+   and manual `npm run check`; it is **not** wired into CI or the deploy
+   build — see ADR-0007's amendment for why and what that leaves open.
 2. **Real RLS policies** as the backstop, using an `org_id` claim in the JWT — added
    in the same `custom_access_token_hook` that already injects `app_role`.
 3. **Storage paths** prefixed by org for HR documents and invoice PDFs.
@@ -471,7 +482,7 @@ phase 11 is not one piece of work at all.
 |---|---|---|---|
 | **A — Org & location foundation** | 1, 3 (+ phase 2's audit) | `supabase db reset` rebuilds the schema from the repo and `db diff --linked` shows no drift; `organizations`/`locations` hold the Angrybox rows; no other table lacks `org_id`; event tables carry `location_id`; invoice PDFs read the org identity from the row; the four unprotected HR tables have RLS; app behaves identically | — |
 | **B1 — Tenant identity** | 4 | Every request and job carries a verified `org_id`; roles are org-scoped; user admin is org-scoped | A |
-| **B2 — Scoped access** | 5 | A user of org A provably cannot read org B; the helper is the only DB construction site; column defaults dropped | B1 |
+| **B2 — Scoped access** | 5 | A user of org A provably cannot read org B; the helper is the only DB construction site; column defaults dropped. **Implemented**: every area converted, the import rule is `error` at zero violations (ADR-0008, ADR-0009, ticket 20). Column-default drop, location composite keys and the two-organization smoke are the remaining increment (21) | B1 |
 | **C — Per-org configuration** | 6, 7 | `ENV.API_KEY` is deleted; crons run per org | A, B1, B2 |
 | **D — Sales ledger** | 9, then 8, with 10 folded in | Core owns revenue: DRE and analytics read the ledger, not the Vendus API | Open decision 5 (and 7) |
 
@@ -488,13 +499,21 @@ Three notes on why the grouping is not simply "one spec per phase":
   `channels`, a table spec D already touches.
 
 **Spec A defers six items into spec B, behind a hard gate: no second
-`organizations` row until they land.** Each is something that cannot bite while
-one organization exists, and that is cheaper or safer done later — composite
-foreign keys; composite `(org_id, …)` indexes; dropping the `org_id`/`location_id`
-column defaults; restructuring the four CRM text primary keys (`crm_customers.id`
-is `'C001'`, so every tenant's first customer collides); the kiosk PIN fix (the
-only one with a frontend contract change); and storage path org-prefixing. Full
-table in `.scratch/org-location-foundation/spec.md`.
+`organizations` row until they land.** Composite foreign keys are the one item
+whose reasoning is not "cannot bite yet": every write endpoint that accepts an
+identifier — an employee id, a stock item id, any of the schema's 65
+pre-existing foreign key references — is an unvalidated cross-tenant
+reference, and the composite key is the only structural fix (spec B2's D16).
+B2 pulled a narrow slice of this forward as its own fix — the five *location*
+composite keys, closing only the caller-supplied-location hole B2 itself
+introduces (ADR-0009) — and left the other 65 behind the gate, because they
+predate B2 and are spec A's mess to close. The remaining five deferred items
+really do just wait out a window in which they cannot bite: composite
+`(org_id, …)` indexes; dropping the `org_id`/`location_id` column defaults;
+restructuring the four CRM text primary keys (`crm_customers.id` is `'C001'`,
+so every tenant's first customer collides); the kiosk PIN fix (the only one
+with a frontend contract change); and storage path org-prefixing. Full table
+in `.scratch/org-location-foundation/spec.md`.
 
 **Write one spec at a time, just ahead of the work.** Specs B and D are exactly the
 ones open decisions 3, 5 and 7 reshape; writing all four now means writing two of
