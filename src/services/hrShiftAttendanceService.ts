@@ -16,6 +16,7 @@ type AttendanceRow = {
   actual_end_time: string | null;
   late_minutes: number | null;
   notes: string | null;
+  location_id: string;
   registration_source: string;
   registered_by_employee_id: string | null;
   registered_at: string;
@@ -37,6 +38,7 @@ function rowToAttendance(row: AttendanceRow): HrShiftAttendance {
       : null,
     lateMinutes: row.late_minutes,
     notes: row.notes,
+    locationId: row.location_id,
     registrationSource:
       src === "employee_qr" || src === "import" ? src : "dashboard",
     registeredByEmployeeId: row.registered_by_employee_id,
@@ -46,7 +48,7 @@ function rowToAttendance(row: AttendanceRow): HrShiftAttendance {
 }
 
 const attendanceSelect =
-  "id, work_shift_id, status, actual_start_time, actual_end_time, late_minutes, notes, registration_source, registered_by_employee_id, registered_at, updated_at";
+  "id, work_shift_id, status, actual_start_time, actual_end_time, late_minutes, notes, location_id, registration_source, registered_by_employee_id, registered_at, updated_at";
 
 /** Carrega conferências para vários turnos (uma query). */
 export async function getAttendanceByShiftIds(

@@ -1,6 +1,6 @@
 # 19 — Front end: consume the locations endpoint, send the location on write payloads
 
-Status: ready-for-agent
+Status: done
 Blocked by: 10, 17, 18
 Spec: `../spec.md` (D4, D15, Cross-repository contract), ADR-0009
 
@@ -55,10 +55,10 @@ nothing more.
 
 ## Done when
 
-- [ ] The session carries the organization's locations
-- [ ] Stock movement, work shift and attendance writes send a location
-- [ ] Invoice line writes send a location when one is chosen, and omit it otherwise
-- [ ] An organization with one location shows no picker and behaves exactly as before
-- [ ] An organization with several locations lets the user choose
-- [ ] The kiosk and till-closing screens are untouched
-- [ ] Deployed to production **before** ticket 21 runs
+- [x] The session carries the organization's locations
+- [x] Stock movement, work shift and attendance writes send a location
+- [x] Invoice line writes send a location when one is chosen, and omit it otherwise
+- [x] An organization with one location shows no picker and behaves exactly as before
+- [x] An organization with several locations lets the user choose
+- [x] The kiosk and till-closing screens are untouched
+- [ ] Deployed to production **before** ticket 21 runs — ticket 21 already ran; backend now returns `locationId` on shifts/attendance so the frontend form no longer fails silently

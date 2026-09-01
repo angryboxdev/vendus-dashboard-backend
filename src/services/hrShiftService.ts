@@ -18,6 +18,7 @@ type Row = {
   start_time: string;
   end_time: string;
   location_or_station: string | null;
+  location_id: string;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -34,6 +35,7 @@ function rowToShift(
     startTime: formatHrTimeForApi(row.start_time),
     endTime: formatHrTimeForApi(row.end_time),
     locationOrStation: row.location_or_station,
+    locationId: row.location_id,
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -59,7 +61,7 @@ export async function getWorkShiftById(
   const { data, error } = await createScopedQuery(organizationId)
     .table("hr_work_shifts")
     .select(
-      "id, employee_id, work_date, start_time, end_time, location_or_station, notes, created_at, updated_at",
+      "id, employee_id, work_date, start_time, end_time, location_or_station, location_id, notes, created_at, updated_at",
     )
     .eq("id", id)
     .maybeSingle();
@@ -85,7 +87,7 @@ export async function listShiftsInRange(
   let q = createScopedQuery(organizationId)
     .table("hr_work_shifts")
     .select(
-      "id, employee_id, work_date, start_time, end_time, location_or_station, notes, created_at, updated_at",
+      "id, employee_id, work_date, start_time, end_time, location_or_station, location_id, notes, created_at, updated_at",
     )
     .gte("work_date", options.from)
     .lte("work_date", options.to)
@@ -143,7 +145,7 @@ export async function createShift(
     .table("hr_work_shifts")
     .insert(insert)
     .select(
-      "id, employee_id, work_date, start_time, end_time, location_or_station, notes, created_at, updated_at",
+      "id, employee_id, work_date, start_time, end_time, location_or_station, location_id, notes, created_at, updated_at",
     )
     .single();
 
@@ -207,7 +209,7 @@ export async function updateShift(
     .update(patch)
     .eq("id", id)
     .select(
-      "id, employee_id, work_date, start_time, end_time, location_or_station, notes, created_at, updated_at",
+      "id, employee_id, work_date, start_time, end_time, location_or_station, location_id, notes, created_at, updated_at",
     )
     .single();
 
