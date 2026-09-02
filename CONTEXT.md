@@ -28,3 +28,26 @@ and to no store — digital marketing, the accountant's fee, group insurance.
 "Which store" is a question with a legitimate empty answer, so an unallocated
 cost is a real state and not missing data.
 _Avoid_: Store, Branch.
+
+**Location Token**:
+An opaque, DB-backed credential scoped to one Location, issued by pairing an
+unattended screen (kiosk, till-closing, kitchen display) that has no user to
+authenticate as. Proves "this caller is a screen paired to Location X" —
+nothing about which physical screen, and nothing about which employee is
+using it. Several tokens can exist for one Location (one per paired screen),
+each individually revocable; there is no separate row identifying the
+physical device itself.
+Deliberately unrestricted across features: a single token authorizes kiosk,
+till-closing and KDS requests equally, so one physical screen that serves
+more than one of those pages pairs once, not once per page. There is no
+feature-scoped variant.
+_Avoid_: Device (this codebase does not model a Device entity — the
+credential is per-Location, not per-device), Device Token, Device Identity
+(the deferred register's name for this concept, kept for historical
+cross-reference but not accurate: nothing here is scoped to a device).
+
+**Pairing Code**:
+A short-lived, single-use code an org admin generates for a specific
+Location, entered once on an unpaired screen to redeem a Location Token. Not
+itself a credential — it authorizes exactly one redemption, then is burned
+whether it succeeded or expired.
