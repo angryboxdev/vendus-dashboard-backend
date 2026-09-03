@@ -71,7 +71,11 @@ module.exports = {
       severity: "error",
       from: {
         path: "^src",
-        pathNot: ["^src/infra/scoped-db", "^src/jobs/runOrganizationProvisioning\\.ts$"],
+        pathNot: [
+          "^src/infra/scoped-db",
+          "^src/jobs/runOrganizationProvisioning\\.ts$",
+          "^src/modules/location-credentials/__tests__/integration/supabase-location-credentials\\.integration\\.test\\.ts$",
+        ],
       },
       to: {
         path: "(^src/infra/scoped-db/supabase-client\\.ts$|node_modules/@supabase/supabase-js)",

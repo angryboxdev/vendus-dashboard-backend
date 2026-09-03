@@ -96,6 +96,10 @@ export const TABLE_REGISTRY = {
   // allocated to one store), not absent.
   invoice_lines: { organizationColumn: "org_id", locationBearing: true },
   invoices: { organizationColumn: "org_id", locationBearing: false },
+  // spec E ticket 01: pairing codes and location tokens, both keyed by
+  // (org_id, location_id) — see supabase/migrations/20260903072439_create_location_credentials_tables.sql.
+  location_tokens: { organizationColumn: "org_id", locationBearing: true },
+  pairing_codes: { organizationColumn: "org_id", locationBearing: true },
   payable_entries: { organizationColumn: "org_id", locationBearing: false },
   pizza_prices: { organizationColumn: "org_id", locationBearing: false },
   pizza_recipe_items: { organizationColumn: "org_id", locationBearing: false },

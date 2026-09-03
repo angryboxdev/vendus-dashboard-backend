@@ -38,12 +38,14 @@ Manager (frontend)
 
 ## Technical purpose
 
-Módulo mínimo — um único read — que prova o caminho ponta-a-ponta da spec B2:
+Módulo mínimo — leitura apenas — que prova o caminho ponta-a-ponta da spec B2:
 pedido → claim verificada → use case → `ScopedQuery` → base de dados,
 devolvendo apenas as locations da organização do chamador (spec.md D15;
 ticket `01-foundation-scoped-helper-and-enforcement`). Não cria, edita nem
 desactiva locations — isso continua a ser feito pelo script de provisioning
-(`runOrganizationProvisioning`, spec B1).
+(`runOrganizationProvisioning`, spec B1). Desde a spec E (location-credentials),
+também expõe um segundo read — `findOneForOrganization` — usado por esse
+módulo para confirmar posse de uma location antes de emitir um pairing code.
 
 ## Domain concepts
 
@@ -61,7 +63,11 @@ desactiva locations — isso continua a ser feito pelo script de provisioning
 
 ### Output (domain dependencies)
 
-- `LocationRepositoryPort` — `findAllForOrganization(organizationId)`.
+- `LocationRepositoryPort` — `findAllForOrganization(organizationId)`;
+  `findOneForOrganization(organizationId, locationId)` — ownership check
+  added for `location-credentials` (spec E D11/D19): confirms a location
+  belongs to the calling organization before minting a pairing code, without
+  re-implementing that check outside this module.
 
 ## Adapters
 
