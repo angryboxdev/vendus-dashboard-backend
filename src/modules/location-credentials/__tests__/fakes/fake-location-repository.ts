@@ -1,6 +1,6 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
-import { Location } from "../../domain/entities/location.js";
-import type { LocationRepositoryPort } from "../../domain/ports/out/location-repository.port.js";
+import type { Location } from "../../../locations/domain/entities/location.js";
+import type { LocationRepositoryPort } from "../../../locations/domain/ports/out/location-repository.port.js";
 
 export class FakeLocationRepository implements LocationRepositoryPort {
   private readonly byOrganization = new Map<OrganizationId, Location[]>();

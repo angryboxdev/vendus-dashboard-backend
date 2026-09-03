@@ -32,4 +32,15 @@ export class SupabaseLocationRepository implements LocationRepositoryPort {
     if (error) throw new Error(error.message);
     return ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => toEntity(row));
   }
+
+  async findOneForOrganization(organizationId: OrganizationId, locationId: string): Promise<Location | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("locations")
+      .select("id, name, code, timezone, is_active")
+      .eq("id", locationId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    return toEntity(data as unknown as Record<string, unknown>);
+  }
 }
