@@ -104,10 +104,18 @@ Transições permitidas pelo frontend (short press = avançar, long press = reve
 
 | Endpoint | Auth | Descrição |
 |---|---|---|
-| `GET /kds/stream` | ✅ | SSE stream: replay do estado actual + updates em tempo real. `event: delivery` = upsert |
-| `GET /kds/deliveries` | ✅ | Lista pedidos Vendus activos (polling) |
-| `PATCH /kds/deliveries/:id/status` | ✅ | Actualiza status de pedido Vendus |
-| `PATCH /kds/air-menu-deliveries/:id/status` | ✅ | Actualiza status de pedido AirMenu; broadcast automático via SSE |
+| `GET /kds/stream` | `requireDeviceAuthAllowingQueryParam` (token via query param) | SSE stream: replay do estado actual + updates em tempo real. `event: delivery` = upsert |
+| `GET /kds/deliveries` | `requireDeviceAuth` (token via header) | Lista pedidos Vendus activos (polling) |
+| `PATCH /kds/deliveries/:id/status` | `requireDeviceAuth` (token via header) | Actualiza status de pedido Vendus |
+| `PATCH /kds/air-menu-deliveries/:id/status` | `requireDeviceAuth` (token via header) | Actualiza status de pedido AirMenu; broadcast automático via SSE |
+
+Todas as rotas exigem um Location token válido. Um ecrã ainda não emparelhado
+(sem token) cai no fallback `UNATTENDED_SCOPE` (ticket 01) em vez de ser
+rejeitado — comportamento inalterado durante o rollout. `/kds/stream` é a
+única rota que aceita o token via query param (`?device_token=...`) em vez do
+header `X-Device-Token`, porque o `EventSource` nativo do browser não permite
+headers customizados — excepção deliberada e documentada, não uma
+inconsistência a "corrigir".
 
 O SSE stream emite:
 - `event: connected` — ao conectar
@@ -176,6 +184,6 @@ Esta ligação acontece **uma vez por processo**, ao nível do módulo — não 
 ## Pontos de atenção / dívidas conhecidas
 
 - **Estado em memória**: pedidos AirMenu perdem-se ao reiniciar o servidor. Persistência em Supabase eliminaria esta limitação.
-- **Sem autenticação no SSE**: o endpoint `/kds/stream` requer token (via middleware `requireAuth`), mas o token é passado implicitamente pelo frontend — não há verificação por cliente SSE individual.
+- **Token do SSE na URL**: `/kds/stream` autentica via `requireDeviceAuthAllowingQueryParam`, com verificação real por conexão (não implícita). A excepção necessária é o token ir na query string em vez do header — URLs com token podem ficar em logs de proxies/intermediários; risco aceite dado que o token é por ecrã (location), não por utilizador.
 - **Pedidos Vendus não passam pelo SSE**: atualizações de status Vendus não são propagadas via SSE — cada ecrã faz polling independente. Numa próxima iteração, o `UpdateDeliveryStatusUseCase` poderia também publicar no SSE.
 - **`mapAirMenuEventToDelivery` só processa `CREATED`**: eventos `MODIFIED`, `ACCEPTED` e `READY` são descartados. Tratar estas transições automatizaria parte do fluxo da cozinha.
