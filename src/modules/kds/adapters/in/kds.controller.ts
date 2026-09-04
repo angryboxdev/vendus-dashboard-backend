@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { GetPendingDeliveriesPort, UpdateDeliveryStatusPort } from '../../domain/ports/in/kds.ports.js';
 import type { DeliveryStatus } from '../../domain/entities/delivery.js';
 import type { AirMenuKdsStorePort } from '../../domain/ports/out/air-menu-kds-store.port.js';
+import { requireDeviceAuth, requireDeviceAuthAllowingQueryParam } from '../../../../middleware/device-auth.js';
 
 const VALID_STATUSES: DeliveryStatus[] = [
   'pending',
@@ -35,8 +36,13 @@ export class KdsController {
      *   3. Recebe `event: delivery` sempre que um pedido chega ou muda de status
      *
      * O frontend trata `event: delivery` como upsert (add se novo, update se já existia).
+     *
+     * Auth: `requireDeviceAuthAllowingQueryParam` — o `EventSource` nativo do browser
+     * não permite headers customizados, por isso esta rota (e só esta) aceita o token
+     * via query param (`?device_token=...`) em vez do header `X-Device-Token`. Excepção
+     * deliberada e documentada — não "normalizar" para o header.
      */
-    this.router.get('/kds/stream', (req, res) => {
+    this.router.get('/kds/stream', requireDeviceAuthAllowingQueryParam, (req, res) => {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
@@ -68,7 +74,7 @@ export class KdsController {
      * GET /kds/deliveries
      * Retorna pedidos activos do Vendus (pending/received/cooking/waiting_to_delivery).
      */
-    this.router.get('/kds/deliveries', async (_req, res) => {
+    this.router.get('/kds/deliveries', requireDeviceAuth, async (_req, res) => {
       try {
         const deliveries = await this.getDeliveries.execute();
         res.json({ deliveries });
@@ -83,7 +89,7 @@ export class KdsController {
      * Body: { status: DeliveryStatus }
      * Avança o estado de um pedido Vendus.
      */
-    this.router.patch('/kds/deliveries/:id/status', async (req, res) => {
+    this.router.patch('/kds/deliveries/:id/status', requireDeviceAuth, async (req, res) => {
       try {
         const id = Number(req.params['id']);
         if (isNaN(id)) {
@@ -111,7 +117,7 @@ export class KdsController {
      * Body: { status: DeliveryStatus }
      * Avança o estado de um pedido AirMenu (em memória). Broadcast automático via SSE.
      */
-    this.router.patch('/kds/air-menu-deliveries/:id/status', (req, res) => {
+    this.router.patch('/kds/air-menu-deliveries/:id/status', requireDeviceAuth, (req, res) => {
       const id = Number(req.params['id']);
       if (isNaN(id)) {
         res.status(400).json({ error: 'Invalid id' });
