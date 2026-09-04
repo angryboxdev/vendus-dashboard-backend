@@ -21,9 +21,11 @@ export class InvalidPinError extends Error {
   }
 }
 
-export class EmployeeNotFoundError extends Error {
-  constructor(id: string) {
-    super(`Funcionário não encontrado: ${id}`);
-    this.name = "EmployeeNotFoundError";
+export class RateLimitExceededError extends Error {
+  constructor(locationId: string) {
+    super(
+      `Demasiadas submissões para esta loja (${locationId}). Tenta novamente dentro de alguns minutos.`,
+    );
+    this.name = "RateLimitExceededError";
   }
 }

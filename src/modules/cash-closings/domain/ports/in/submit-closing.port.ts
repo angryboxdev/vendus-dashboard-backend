@@ -11,7 +11,12 @@ export interface SubmitClosingCommand {
    * (o kiosk não tem identidade de dispositivo) nem pelo default da coluna.
    */
   locationId: string;
-  employeeId: string;
+  /**
+   * Prova de identidade do funcionário — o use case re-verifica-o via
+   * `VerifyPinPort` em vez de confiar num `employeeId` enviado pelo cliente
+   * sem qualquer prova associada. Espelha o motivo de `VerifyPinCommand.pin`.
+   */
+  pin: string;
   closingDate: string;
   tpa: number;
   uber: number;

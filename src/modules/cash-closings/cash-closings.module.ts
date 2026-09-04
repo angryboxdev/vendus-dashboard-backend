@@ -7,6 +7,7 @@ import { SupabaseCashClosingRepository } from "./adapters/out/supabase-cash-clos
 import { SupabaseEmployeeRepository } from "./adapters/out/supabase-employee.repository.js";
 import { VendusRegisterSessionsGateway } from "./adapters/out/vendus-register-sessions.gateway.js";
 import { AirMenuDeliveryGateway } from "./adapters/out/air-menu-delivery.gateway.js";
+import { InMemorySubmitRateLimiter } from "./adapters/out/in-memory-submit-rate-limiter.adapter.js";
 import type { GetSummaryPort } from "../air-menu/domain/ports/in/get-summary.port.js";
 import type { VendusGatewayPort } from "../vendus/domain/ports/out/vendus-gateway.port.js";
 
@@ -61,9 +62,11 @@ export function createCashClosingsModule(
 
   // Use cases
   const verifyPin = new VerifyPinUseCase(employeeRepository, hashPinFn);
+  const submitRateLimiter = new InMemorySubmitRateLimiter();
   const submitClosing = new SubmitClosingUseCase(
     closingRepository,
-    employeeRepository,
+    verifyPin,
+    submitRateLimiter,
     sessionsGateway,
     airMenuGateway,
   );

@@ -2,7 +2,8 @@ import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { GetAvailableSessionsUseCase } from "../../application/use-cases/get-available-sessions.use-case.js";
 import { FakeVendusRegisterSessionsGateway } from "../fakes/fake-vendus-register-sessions-gateway.js";
 import { FakeCashClosingRepository } from "../fakes/fake-cash-closing-repository.js";
-import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
+import { FakeVerifyPinPort } from "../fakes/fake-verify-pin.js";
+import { FakeSubmitRateLimiter } from "../fakes/fake-submit-rate-limiter.js";
 import { SubmitClosingUseCase } from "../../application/use-cases/submit-closing.use-case.js";
 
 const organizationId = mintOrganizationId("org-a");
@@ -58,17 +59,18 @@ describe("GetAvailableSessionsUseCase", () => {
     });
 
     // Submeter fecho para a primeira sessão
-    const employeeRepo = new FakeEmployeeRepository();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const fakeVerifyPin = new FakeVerifyPinPort();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
     const submitUseCase = new SubmitClosingUseCase(
       closingRepo,
-      employeeRepo,
+      fakeVerifyPin,
+      new FakeSubmitRateLimiter(),
       sessionsGateway,
     );
     await submitUseCase.execute({
       organizationId,
       locationId: "loc-1",
-      employeeId: "emp-1",
+      pin: "1111",
       closingDate: "2026-06-07",
       tpa: 0, uber: 0, glovo: 0, bolt: 0, eatz: 0,
       cashSales: 162.37, cashIn: 100, cashOut: 0,
@@ -106,13 +108,18 @@ describe("GetAvailableSessionsUseCase", () => {
     });
 
     const otherOrganizationId = mintOrganizationId("org-b");
-    const employeeRepo = new FakeEmployeeRepository();
-    employeeRepo.addEmployee(otherOrganizationId, { id: "emp-1", fullName: "Ana Silva" });
-    const submitUseCase = new SubmitClosingUseCase(closingRepo, employeeRepo, sessionsGateway);
+    const fakeVerifyPin = new FakeVerifyPinPort();
+    fakeVerifyPin.addEmployeePin(otherOrganizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
+    const submitUseCase = new SubmitClosingUseCase(
+      closingRepo,
+      fakeVerifyPin,
+      new FakeSubmitRateLimiter(),
+      sessionsGateway,
+    );
     await submitUseCase.execute({
       organizationId: otherOrganizationId,
       locationId: "loc-1",
-      employeeId: "emp-1",
+      pin: "1111",
       closingDate: "2026-06-07",
       tpa: 0, uber: 0, glovo: 0, bolt: 0, eatz: 0,
       cashSales: 162.37, cashIn: 100, cashOut: 0,

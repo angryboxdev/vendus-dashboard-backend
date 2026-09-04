@@ -1,34 +1,43 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { SubmitClosingUseCase } from "../../application/use-cases/submit-closing.use-case.js";
 import { FakeCashClosingRepository } from "../fakes/fake-cash-closing-repository.js";
-import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
+import { FakeVerifyPinPort } from "../fakes/fake-verify-pin.js";
+import { FakeSubmitRateLimiter } from "../fakes/fake-submit-rate-limiter.js";
 import { FakeVendusRegisterSessionsGateway } from "../fakes/fake-vendus-register-sessions-gateway.js";
 import { FakeAirMenuDeliveryGateway } from "../fakes/fake-air-menu-delivery-gateway.js";
-import { DuplicateClosingError, EmployeeNotFoundError } from "../../domain/errors.js";
+import { DuplicateClosingError, InvalidPinError, RateLimitExceededError } from "../../domain/errors.js";
 
 const organizationId = mintOrganizationId("org-a");
 
 function makeUseCase() {
   const closingRepo = new FakeCashClosingRepository();
-  const employeeRepo = new FakeEmployeeRepository();
+  const fakeVerifyPin = new FakeVerifyPinPort();
+  const rateLimiter = new FakeSubmitRateLimiter();
   const sessionsGateway = new FakeVendusRegisterSessionsGateway();
-  const useCase = new SubmitClosingUseCase(closingRepo, employeeRepo, sessionsGateway);
-  return { closingRepo, employeeRepo, sessionsGateway, useCase };
+  const useCase = new SubmitClosingUseCase(closingRepo, fakeVerifyPin, rateLimiter, sessionsGateway);
+  return { closingRepo, fakeVerifyPin, rateLimiter, sessionsGateway, useCase };
 }
 
 function makeUseCaseWithAirMenu() {
   const closingRepo = new FakeCashClosingRepository();
-  const employeeRepo = new FakeEmployeeRepository();
+  const fakeVerifyPin = new FakeVerifyPinPort();
+  const rateLimiter = new FakeSubmitRateLimiter();
   const sessionsGateway = new FakeVendusRegisterSessionsGateway();
   const airMenuGateway = new FakeAirMenuDeliveryGateway();
-  const useCase = new SubmitClosingUseCase(closingRepo, employeeRepo, sessionsGateway, airMenuGateway);
-  return { closingRepo, employeeRepo, airMenuGateway, useCase };
+  const useCase = new SubmitClosingUseCase(
+    closingRepo,
+    fakeVerifyPin,
+    rateLimiter,
+    sessionsGateway,
+    airMenuGateway,
+  );
+  return { closingRepo, fakeVerifyPin, airMenuGateway, useCase };
 }
 
 const baseCommand = {
   organizationId,
   locationId: "loc-1",
-  employeeId: "emp-1",
+  pin: "1111",
   closingDate: "2026-06-10",
   tpa: 200,
   uber: 50,
@@ -44,8 +53,8 @@ const baseCommand = {
 
 describe("SubmitClosingUseCase", () => {
   it("persiste o fecho e devolve DTO correcto", async () => {
-    const { closingRepo, employeeRepo, useCase } = makeUseCase();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { closingRepo, fakeVerifyPin, useCase } = makeUseCase();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
 
     const result = await useCase.execute(baseCommand);
 
@@ -62,30 +71,47 @@ describe("SubmitClosingUseCase", () => {
     expect(closingRepo.findAll()).toHaveLength(1);
   });
 
-  it("lança EmployeeNotFoundError para funcionário inexistente", async () => {
+  it("lança InvalidPinError para PIN não registado", async () => {
     const { useCase } = makeUseCase();
-    await expect(useCase.execute(baseCommand)).rejects.toThrow(EmployeeNotFoundError);
+    await expect(useCase.execute(baseCommand)).rejects.toThrow(InvalidPinError);
   });
 
-  it("lança EmployeeNotFoundError para funcionário registado noutra organização", async () => {
-    const { employeeRepo, useCase } = makeUseCase();
+  it("lança InvalidPinError para PIN registado noutra organização", async () => {
+    const { fakeVerifyPin, useCase } = makeUseCase();
     const otherOrganizationId = mintOrganizationId("org-b");
-    employeeRepo.addEmployee(otherOrganizationId, { id: "emp-1", fullName: "Ana Silva" });
+    fakeVerifyPin.addEmployeePin(otherOrganizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
 
-    await expect(useCase.execute(baseCommand)).rejects.toThrow(EmployeeNotFoundError);
+    await expect(useCase.execute(baseCommand)).rejects.toThrow(InvalidPinError);
+  });
+
+  it("lança InvalidPinError e não persiste nada quando o PIN não corresponde", async () => {
+    const { closingRepo, useCase } = makeUseCase();
+
+    await expect(useCase.execute(baseCommand)).rejects.toThrow(InvalidPinError);
+    expect(closingRepo.findAll()).toHaveLength(0);
+  });
+
+  it("lança RateLimitExceededError quando o limite por loja é excedido, sem consultar o PIN nem persistir", async () => {
+    const { closingRepo, fakeVerifyPin, rateLimiter, useCase } = makeUseCase();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
+    rateLimiter.denyAll = true;
+
+    await expect(useCase.execute(baseCommand)).rejects.toThrow(RateLimitExceededError);
+    expect(fakeVerifyPin.callCount).toBe(0);
+    expect(closingRepo.findAll()).toHaveLength(0);
   });
 
   it("lança DuplicateClosingError para fecho duplicado no mesmo dia", async () => {
-    const { employeeRepo, useCase } = makeUseCase();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { fakeVerifyPin, useCase } = makeUseCase();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
 
     await useCase.execute(baseCommand);
     await expect(useCase.execute(baseCommand)).rejects.toThrow(DuplicateClosingError);
   });
 
   it("vendusTotal fica null quando não há sessionOpenedAt", async () => {
-    const { employeeRepo, useCase } = makeUseCase();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { fakeVerifyPin, useCase } = makeUseCase();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
 
     const result = await useCase.execute(baseCommand); // sem sessionOpenedAt
     expect(result.vendusTotal).toBeNull();
@@ -93,8 +119,8 @@ describe("SubmitClosingUseCase", () => {
   });
 
   it("passa drawerDenominations ao DTO quando fornecido", async () => {
-    const { employeeRepo, useCase } = makeUseCase();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { fakeVerifyPin, useCase } = makeUseCase();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
     const denoms = {
       notes50: 1, notes20: 2, notes10: 0, notes5: 1,
       coins200: 3, coins100: 2, coins50: 1, coins20: 0, coins10: 0, coins1: 5,
@@ -106,8 +132,8 @@ describe("SubmitClosingUseCase", () => {
   });
 
   it("drawerDenominations fica null no DTO quando não fornecido", async () => {
-    const { employeeRepo, useCase } = makeUseCase();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { fakeVerifyPin, useCase } = makeUseCase();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
 
     const result = await useCase.execute(baseCommand);
 
@@ -115,8 +141,8 @@ describe("SubmitClosingUseCase", () => {
   });
 
   it("campos AirMenu ficam null quando gateway não configurado", async () => {
-    const { employeeRepo, useCase } = makeUseCase();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { fakeVerifyPin, useCase } = makeUseCase();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
 
     const result = await useCase.execute(baseCommand);
 
@@ -126,20 +152,20 @@ describe("SubmitClosingUseCase", () => {
   });
 
   it("não bloqueia como duplicado um fecho com o mesmo employeeId/data noutra organização", async () => {
-    const { closingRepo, employeeRepo, useCase } = makeUseCase();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { closingRepo, fakeVerifyPin, useCase } = makeUseCase();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
     await useCase.execute(baseCommand);
 
     const otherOrganizationId = mintOrganizationId("org-b");
-    employeeRepo.addEmployee(otherOrganizationId, { id: "emp-1", fullName: "Ana Silva (org B)" });
+    fakeVerifyPin.addEmployeePin(otherOrganizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva (org B)" });
     await useCase.execute({ ...baseCommand, organizationId: otherOrganizationId });
 
     expect(closingRepo.findAll()).toHaveLength(2);
   });
 
   it("permite que o mesmo funcionário submeta em datas diferentes", async () => {
-    const { closingRepo, employeeRepo, useCase } = makeUseCase();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { closingRepo, fakeVerifyPin, useCase } = makeUseCase();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
 
     await useCase.execute({ ...baseCommand, closingDate: "2026-06-10" });
     await useCase.execute({ ...baseCommand, closingDate: "2026-06-11" });
@@ -154,18 +180,19 @@ describe("SubmitClosingUseCase — modo sessions", () => {
 
   function makeUseCaseWithSessions() {
     const closingRepo = new FakeCashClosingRepository();
-    const employeeRepo = new FakeEmployeeRepository();
+    const fakeVerifyPin = new FakeVerifyPinPort();
+    const rateLimiter = new FakeSubmitRateLimiter();
     const sessionsGateway = new FakeVendusRegisterSessionsGateway();
     sessionsGateway.addSession("2026-06-07", { openedAt: SESSION_1, closedAt: "2026-06-07T16:00:45", total: 162.37 });
     sessionsGateway.addSession("2026-06-07", { openedAt: SESSION_2, closedAt: "2026-06-07T22:17:07", total: 679.13 });
-    const useCase = new SubmitClosingUseCase(closingRepo, employeeRepo, sessionsGateway);
-    return { closingRepo, employeeRepo, sessionsGateway, useCase };
+    const useCase = new SubmitClosingUseCase(closingRepo, fakeVerifyPin, rateLimiter, sessionsGateway);
+    return { closingRepo, fakeVerifyPin, sessionsGateway, useCase };
   }
 
   const sessionCommand = {
     organizationId,
     locationId: "loc-1",
-    employeeId: "emp-1",
+    pin: "1111",
     closingDate: "2026-06-07",
     tpa: 100, uber: 0, glovo: 0, bolt: 0, eatz: 0,
     cashSales: 62.37, cashIn: 100, cashOut: 0,
@@ -173,8 +200,8 @@ describe("SubmitClosingUseCase — modo sessions", () => {
   };
 
   it("usa o total da sessão como vendusTotal", async () => {
-    const { employeeRepo, useCase } = makeUseCaseWithSessions();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { fakeVerifyPin, useCase } = makeUseCaseWithSessions();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
 
     const result = await useCase.execute({ ...sessionCommand, sessionOpenedAt: SESSION_1 });
 
@@ -183,19 +210,19 @@ describe("SubmitClosingUseCase — modo sessions", () => {
   });
 
   it("permite dois fechos no mesmo dia se forem sessões distintas", async () => {
-    const { closingRepo, employeeRepo, useCase } = makeUseCaseWithSessions();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
-    employeeRepo.addEmployee(organizationId, { id: "emp-2", fullName: "Bruno Costa" });
+    const { closingRepo, fakeVerifyPin, useCase } = makeUseCaseWithSessions();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
+    fakeVerifyPin.addEmployeePin(organizationId, "2222", { employeeId: "emp-2", fullName: "Bruno Costa" });
 
-    await useCase.execute({ ...sessionCommand, employeeId: "emp-1", sessionOpenedAt: SESSION_1 });
-    await useCase.execute({ ...sessionCommand, employeeId: "emp-2", sessionOpenedAt: SESSION_2 });
+    await useCase.execute({ ...sessionCommand, pin: "1111", sessionOpenedAt: SESSION_1 });
+    await useCase.execute({ ...sessionCommand, pin: "2222", sessionOpenedAt: SESSION_2 });
 
     expect(closingRepo.findAll()).toHaveLength(2);
   });
 
   it("lança DuplicateClosingError se a sessão já foi fechada", async () => {
-    const { employeeRepo, useCase } = makeUseCaseWithSessions();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { fakeVerifyPin, useCase } = makeUseCaseWithSessions();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
 
     await useCase.execute({ ...sessionCommand, sessionOpenedAt: SESSION_1 });
     await expect(
@@ -204,8 +231,8 @@ describe("SubmitClosingUseCase — modo sessions", () => {
   });
 
   it("vendusTotal fica null se a API de sessões falhar (best-effort)", async () => {
-    const { employeeRepo, sessionsGateway, useCase } = makeUseCaseWithSessions();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { fakeVerifyPin, sessionsGateway, useCase } = makeUseCaseWithSessions();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
     sessionsGateway.shouldFail = true;
 
     const result = await useCase.execute({ ...sessionCommand, sessionOpenedAt: SESSION_1 });
@@ -218,7 +245,7 @@ describe("SubmitClosingUseCase — totais AirMenu", () => {
   const baseCmd = {
     organizationId,
     locationId: "loc-1",
-    employeeId: "emp-1",
+    pin: "1111",
     closingDate: "2026-08-01",
     tpa: 200,
     uber: 50,
@@ -233,8 +260,8 @@ describe("SubmitClosingUseCase — totais AirMenu", () => {
   };
 
   it("popula airMenuUber/Glovo/Bolt a partir do gateway", async () => {
-    const { employeeRepo, airMenuGateway, useCase } = makeUseCaseWithAirMenu();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { fakeVerifyPin, airMenuGateway, useCase } = makeUseCaseWithAirMenu();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
     airMenuGateway.setTotals("2026-08-01", { uber: 48.20, glovo: 30.00, bolt: 21.50 });
 
     const result = await useCase.execute(baseCmd);
@@ -246,8 +273,8 @@ describe("SubmitClosingUseCase — totais AirMenu", () => {
   });
 
   it("airMenuUber/Glovo/Bolt ficam null se o gateway falhar (best-effort)", async () => {
-    const { employeeRepo, airMenuGateway, useCase } = makeUseCaseWithAirMenu();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { fakeVerifyPin, airMenuGateway, useCase } = makeUseCaseWithAirMenu();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
     airMenuGateway.shouldFail = true;
 
     const result = await useCase.execute(baseCmd);
@@ -260,8 +287,8 @@ describe("SubmitClosingUseCase — totais AirMenu", () => {
   });
 
   it("totais AirMenu não afectam totalCalculated", async () => {
-    const { employeeRepo, airMenuGateway, useCase } = makeUseCaseWithAirMenu();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { fakeVerifyPin, airMenuGateway, useCase } = makeUseCaseWithAirMenu();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
     airMenuGateway.setTotals("2026-08-01", { uber: 9999, glovo: 9999, bolt: 9999 });
 
     const result = await useCase.execute(baseCmd);

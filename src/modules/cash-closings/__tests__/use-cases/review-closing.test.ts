@@ -2,7 +2,8 @@ import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { SubmitClosingUseCase } from "../../application/use-cases/submit-closing.use-case.js";
 import { ReviewClosingUseCase } from "../../application/use-cases/review-closing.use-case.js";
 import { FakeCashClosingRepository } from "../fakes/fake-cash-closing-repository.js";
-import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
+import { FakeVerifyPinPort } from "../fakes/fake-verify-pin.js";
+import { FakeSubmitRateLimiter } from "../fakes/fake-submit-rate-limiter.js";
 import { FakeVendusRegisterSessionsGateway } from "../fakes/fake-vendus-register-sessions-gateway.js";
 import { ClosingNotFoundError } from "../../domain/errors.js";
 
@@ -10,21 +11,26 @@ const organizationId = mintOrganizationId("org-a");
 
 function makeUseCases() {
   const closingRepo = new FakeCashClosingRepository();
-  const employeeRepo = new FakeEmployeeRepository();
+  const fakeVerifyPin = new FakeVerifyPinPort();
   const sessionsGateway = new FakeVendusRegisterSessionsGateway();
-  const submitUseCase = new SubmitClosingUseCase(closingRepo, employeeRepo, sessionsGateway);
+  const submitUseCase = new SubmitClosingUseCase(
+    closingRepo,
+    fakeVerifyPin,
+    new FakeSubmitRateLimiter(),
+    sessionsGateway,
+  );
   const reviewUseCase = new ReviewClosingUseCase(closingRepo);
-  return { closingRepo, employeeRepo, submitUseCase, reviewUseCase };
+  return { closingRepo, fakeVerifyPin, submitUseCase, reviewUseCase };
 }
 
 describe("ReviewClosingUseCase", () => {
   it("aprova um fecho e define reviewedAt", async () => {
-    const { employeeRepo, submitUseCase, reviewUseCase } = makeUseCases();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { fakeVerifyPin, submitUseCase, reviewUseCase } = makeUseCases();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
 
     const submitted = await submitUseCase.execute({
       organizationId, locationId: "loc-1",
-      employeeId: "emp-1", closingDate: "2026-06-10",
+      pin: "1111", closingDate: "2026-06-10",
       tpa: 200, uber: 50, glovo: 0, bolt: 0, eatz: 0, cashSales: 100,
       cashIn: 0, cashOut: 0, cashDrawerOpen: 100, cashDrawerTotal: 200,
     });
@@ -42,12 +48,12 @@ describe("ReviewClosingUseCase", () => {
   });
 
   it("edita valores numéricos e recalcula totais", async () => {
-    const { employeeRepo, submitUseCase, reviewUseCase } = makeUseCases();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { fakeVerifyPin, submitUseCase, reviewUseCase } = makeUseCases();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
 
     const submitted = await submitUseCase.execute({
       organizationId, locationId: "loc-1",
-      employeeId: "emp-1", closingDate: "2026-06-10",
+      pin: "1111", closingDate: "2026-06-10",
       tpa: 200, uber: 50, glovo: 0, bolt: 0, eatz: 0, cashSales: 100,
       cashIn: 0, cashOut: 0, cashDrawerOpen: 100, cashDrawerTotal: 200,
     });
@@ -60,12 +66,12 @@ describe("ReviewClosingUseCase", () => {
   });
 
   it("recalcula sangria ao editar cashDrawerTotal", async () => {
-    const { employeeRepo, submitUseCase, reviewUseCase } = makeUseCases();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { fakeVerifyPin, submitUseCase, reviewUseCase } = makeUseCases();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
 
     const submitted = await submitUseCase.execute({
       organizationId, locationId: "loc-1",
-      employeeId: "emp-1", closingDate: "2026-06-10",
+      pin: "1111", closingDate: "2026-06-10",
       tpa: 100, uber: 0, glovo: 0, bolt: 0, eatz: 0, cashSales: 0,
       cashIn: 0, cashOut: 0, cashDrawerOpen: 100, cashDrawerTotal: 80,
     });
@@ -82,12 +88,12 @@ describe("ReviewClosingUseCase", () => {
   });
 
   it("lança ClosingNotFoundError para um fecho que pertence a outra organização", async () => {
-    const { employeeRepo, submitUseCase, reviewUseCase } = makeUseCases();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { fakeVerifyPin, submitUseCase, reviewUseCase } = makeUseCases();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
 
     const submitted = await submitUseCase.execute({
       organizationId, locationId: "loc-1",
-      employeeId: "emp-1", closingDate: "2026-06-10",
+      pin: "1111", closingDate: "2026-06-10",
       tpa: 100, uber: 0, glovo: 0, bolt: 0, eatz: 0, cashSales: 0,
       cashIn: 0, cashOut: 0, cashDrawerOpen: 100, cashDrawerTotal: 100,
     });
@@ -99,12 +105,12 @@ describe("ReviewClosingUseCase", () => {
   });
 
   it("persiste as alterações no repositório", async () => {
-    const { closingRepo, employeeRepo, submitUseCase, reviewUseCase } = makeUseCases();
-    employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
+    const { closingRepo, fakeVerifyPin, submitUseCase, reviewUseCase } = makeUseCases();
+    fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
 
     const submitted = await submitUseCase.execute({
       organizationId, locationId: "loc-1",
-      employeeId: "emp-1", closingDate: "2026-06-10",
+      pin: "1111", closingDate: "2026-06-10",
       tpa: 100, uber: 0, glovo: 0, bolt: 0, eatz: 0, cashSales: 0,
       cashIn: 0, cashOut: 0, cashDrawerOpen: 100, cashDrawerTotal: 100,
     });

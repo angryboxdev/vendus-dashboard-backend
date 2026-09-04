@@ -2,42 +2,48 @@ import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { SubmitClosingUseCase } from "../../application/use-cases/submit-closing.use-case.js";
 import { ListClosingsUseCase } from "../../application/use-cases/list-closings.use-case.js";
 import { FakeCashClosingRepository } from "../fakes/fake-cash-closing-repository.js";
-import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
+import { FakeVerifyPinPort } from "../fakes/fake-verify-pin.js";
+import { FakeSubmitRateLimiter } from "../fakes/fake-submit-rate-limiter.js";
 import { FakeVendusRegisterSessionsGateway } from "../fakes/fake-vendus-register-sessions-gateway.js";
 
 const organizationId = mintOrganizationId("org-a");
 
 function makeUseCases() {
   const closingRepo = new FakeCashClosingRepository();
-  const employeeRepo = new FakeEmployeeRepository();
+  const fakeVerifyPin = new FakeVerifyPinPort();
   const sessionsGateway = new FakeVendusRegisterSessionsGateway();
-  const submitUseCase = new SubmitClosingUseCase(closingRepo, employeeRepo, sessionsGateway);
+  const submitUseCase = new SubmitClosingUseCase(
+    closingRepo,
+    fakeVerifyPin,
+    new FakeSubmitRateLimiter(),
+    sessionsGateway,
+  );
   const listUseCase = new ListClosingsUseCase(closingRepo);
-  return { closingRepo, employeeRepo, submitUseCase, listUseCase };
+  return { closingRepo, fakeVerifyPin, submitUseCase, listUseCase };
 }
 
 async function seedClosings(
   submitUseCase: SubmitClosingUseCase,
-  employeeRepo: FakeEmployeeRepository,
+  fakeVerifyPin: FakeVerifyPinPort,
 ) {
-  employeeRepo.addEmployee(organizationId, { id: "emp-1", fullName: "Ana Silva" });
-  employeeRepo.addEmployee(organizationId, { id: "emp-2", fullName: "Bruno Costa" });
+  fakeVerifyPin.addEmployeePin(organizationId, "1111", { employeeId: "emp-1", fullName: "Ana Silva" });
+  fakeVerifyPin.addEmployeePin(organizationId, "2222", { employeeId: "emp-2", fullName: "Bruno Costa" });
 
   await submitUseCase.execute({
     organizationId, locationId: "loc-1",
-    employeeId: "emp-1", closingDate: "2026-06-09",
+    pin: "1111", closingDate: "2026-06-09",
     tpa: 100, uber: 0, glovo: 0, bolt: 0, eatz: 0, cashSales: 50,
     cashIn: 0, cashOut: 0, cashDrawerOpen: 100, cashDrawerTotal: 150,
   });
   await submitUseCase.execute({
     organizationId, locationId: "loc-1",
-    employeeId: "emp-2", closingDate: "2026-06-10",
+    pin: "2222", closingDate: "2026-06-10",
     tpa: 200, uber: 0, glovo: 0, bolt: 0, eatz: 0, cashSales: 100,
     cashIn: 0, cashOut: 0, cashDrawerOpen: 100, cashDrawerTotal: 100,
   });
   await submitUseCase.execute({
     organizationId, locationId: "loc-1",
-    employeeId: "emp-1", closingDate: "2026-06-10",
+    pin: "1111", closingDate: "2026-06-10",
     tpa: 150, uber: 0, glovo: 0, bolt: 0, eatz: 0, cashSales: 80,
     cashIn: 0, cashOut: 0, cashDrawerOpen: 100, cashDrawerTotal: 200,
   });
@@ -45,8 +51,8 @@ async function seedClosings(
 
 describe("ListClosingsUseCase", () => {
   it("devolve todos os fechos sem filtros", async () => {
-    const { employeeRepo, submitUseCase, listUseCase } = makeUseCases();
-    await seedClosings(submitUseCase, employeeRepo);
+    const { fakeVerifyPin, submitUseCase, listUseCase } = makeUseCases();
+    await seedClosings(submitUseCase, fakeVerifyPin);
 
     const result = await listUseCase.execute({ organizationId });
     expect(result.total).toBe(3);
@@ -54,8 +60,8 @@ describe("ListClosingsUseCase", () => {
   });
 
   it("filtra por intervalo de datas (from/to)", async () => {
-    const { employeeRepo, submitUseCase, listUseCase } = makeUseCases();
-    await seedClosings(submitUseCase, employeeRepo);
+    const { fakeVerifyPin, submitUseCase, listUseCase } = makeUseCases();
+    await seedClosings(submitUseCase, fakeVerifyPin);
 
     const result = await listUseCase.execute({ organizationId, from: "2026-06-10", to: "2026-06-10" });
     expect(result.total).toBe(2);
@@ -63,8 +69,8 @@ describe("ListClosingsUseCase", () => {
   });
 
   it("suporta filtro por date como atalho para from=to=date", async () => {
-    const { employeeRepo, submitUseCase, listUseCase } = makeUseCases();
-    await seedClosings(submitUseCase, employeeRepo);
+    const { fakeVerifyPin, submitUseCase, listUseCase } = makeUseCases();
+    await seedClosings(submitUseCase, fakeVerifyPin);
 
     const result = await listUseCase.execute({ organizationId, date: "2026-06-09" });
     expect(result.total).toBe(1);
@@ -72,8 +78,8 @@ describe("ListClosingsUseCase", () => {
   });
 
   it("filtra por employeeId", async () => {
-    const { employeeRepo, submitUseCase, listUseCase } = makeUseCases();
-    await seedClosings(submitUseCase, employeeRepo);
+    const { fakeVerifyPin, submitUseCase, listUseCase } = makeUseCases();
+    await seedClosings(submitUseCase, fakeVerifyPin);
 
     const result = await listUseCase.execute({ organizationId, employeeId: "emp-1" });
     expect(result.total).toBe(2);
@@ -81,8 +87,8 @@ describe("ListClosingsUseCase", () => {
   });
 
   it("aplica limit e offset", async () => {
-    const { employeeRepo, submitUseCase, listUseCase } = makeUseCases();
-    await seedClosings(submitUseCase, employeeRepo);
+    const { fakeVerifyPin, submitUseCase, listUseCase } = makeUseCases();
+    await seedClosings(submitUseCase, fakeVerifyPin);
 
     const page1 = await listUseCase.execute({ organizationId, limit: 2, offset: 0 });
     const page2 = await listUseCase.execute({ organizationId, limit: 2, offset: 2 });
@@ -93,8 +99,8 @@ describe("ListClosingsUseCase", () => {
   });
 
   it("não devolve fechos de outra organização", async () => {
-    const { employeeRepo, submitUseCase, listUseCase } = makeUseCases();
-    await seedClosings(submitUseCase, employeeRepo);
+    const { fakeVerifyPin, submitUseCase, listUseCase } = makeUseCases();
+    await seedClosings(submitUseCase, fakeVerifyPin);
 
     const otherOrganizationId = mintOrganizationId("org-b");
     const result = await listUseCase.execute({ organizationId: otherOrganizationId });

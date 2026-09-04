@@ -1,7 +1,7 @@
 # Módulo: cash-closings
 
 > Status: ativo
-> Última atualização: 2026-08-28
+> Última atualização: 2026-09-04
 
 ---
 
@@ -129,14 +129,18 @@ port, como campo dentro do comando/query em todo input port, adapters a
 receber `ScopedQueryFactory` em vez de `SupabaseClient`. O que este módulo
 acrescenta:
 
-- **As rotas públicas usam o unattended scope, não o request (D14).**
-  `verify-pin`, `submit` e `sessions` não têm utilizador autenticado — o
-  kiosk e o ecrã de fecho são páginas públicas na mesma aplicação, sem build
-  separado nem identidade de dispositivo. O controller preenche
-  `organizationId` (e, no submit, `locationId`) a partir de
-  `UNATTENDED_SCOPE` (`src/infra/scoped-db/unattended-scope.ts`), nunca do
-  body ou de `req.auth`. As rotas geridas (`list`, `get`, `patch`) continuam
-  a ler `req.auth!.orgId` como qualquer módulo autenticado.
+- **As rotas públicas resolvem o scope via `requireDeviceAuth`, não do request (D14).**
+  `verify-pin`, `submit`, `sessions` e `airmenu-totals` não têm utilizador
+  autenticado — o kiosk e o ecrã de fecho são páginas públicas na mesma
+  aplicação, sem build separado. O `publicRouter` monta `requireDeviceAuth`
+  (`src/middleware/device-auth.ts`, spec de location-credentials, ticket 01)
+  como middleware de router, e o controller lê `organizationId`/`locationId`
+  de `req.deviceAuth!`, nunca do body. Um ecrã emparelhado resolve para a sua
+  loja real via `X-Device-Token`; um ecrã não emparelhado continua a cair no
+  fallback de `UNATTENDED_SCOPE` que `requireDeviceAuth` já traz embutido —
+  o comportamento anterior a este ticket, preservado por esse fallback. As
+  rotas geridas (`list`, `get`, `patch`) continuam a ler `req.auth!.orgId`
+  como qualquer módulo autenticado.
 - **`locationId` é um campo de comando, não um escopo (D7).** Ao contrário de
   `organizationId`, não ganhou um tipo próprio nem viaja como parâmetro
   separado nos output ports — é uma propriedade normal da entidade
@@ -164,17 +168,22 @@ acrescenta:
 
 - `VerifyPinPort` — verifica o PIN de 4 dígitos do funcionário dentro da
   organização; devolve `{ employeeId, fullName }` ou lança `InvalidPinError`.
-  `VerifyPinCommand = { organizationId, pin }` — `organizationId` vem do
-  unattended scope (rota pública, D14).
+  `VerifyPinCommand = { organizationId, pin }` — `organizationId` vem de
+  `req.deviceAuth!.organizationId` (rota pública, D14).
 - `SubmitClosingPort` — funcionário submete o fecho com `sessionOpenedAt`; usa
   o total da sessão Vendus e impede duplicado por sessão. `vendusTotal` é
   best-effort: fica `null` se a API Vendus estiver indisponível.
   `SubmitClosingCommand` inclui `organizationId` e `locationId`, ambos vindos
-  do unattended scope (D14) — nunca do cliente, mesmo que o body os inclua.
+  de `req.deviceAuth!` (D14) — nunca do cliente, mesmo que o body os inclua.
+  Em vez de `employeeId`, o comando leva `pin`: o use case volta a verificar
+  o PIN através do `VerifyPinPort` (nunca confia num `employeeId` que o
+  cliente diga ter, sem prova) e usa o `{ employeeId, fullName }` devolvido.
+  Um `PIN` inválido lança `InvalidPinError`; um `locationId` sobre o limite
+  de submissões lança `RateLimitExceededError` (ver `SubmitRateLimiterPort`).
 - `GetAvailableSessionsPort` — lista sessões Vendus para uma data, anotando quais
   já têm fecho submetido no nosso sistema. Usado pelo kiosk antes de submeter.
-  `GetAvailableSessionsQuery = { organizationId, date }`, `organizationId` do
-  unattended scope.
+  `GetAvailableSessionsQuery = { organizationId, date }`, `organizationId` de
+  `req.deviceAuth!.organizationId`.
 - `ListClosingsPort` — lista fechos com filtros opcionais: `from`/`to` (intervalo
   de datas), `date` (atalho para `from=to=date`), `status`, `employeeId`,
   paginação `limit`/`offset`. `ListClosingsQuery` inclui `organizationId`,
@@ -203,6 +212,9 @@ acrescenta:
   sempre o primeiro parâmetro (D2).
 - `EmployeeRepositoryPort` — `findActiveByPinHash(organizationId, pinHash)`,
   `findActiveById(organizationId, id)`.
+- `SubmitRateLimiterPort` — `checkAndRecord(locationId): boolean`. Rate limit
+  de `submit` por loja (não por organização): devolve `true` e regista a
+  tentativa se ainda dentro do limite, `false` se excedido.
 - `VendusRegisterSessionsGatewayPort` — `getSessionsForDate(date)`, `getSessionTotal(date, openedAt)`.
   Chama a API Vendus, não a base de dados — sem `organizationId`.
 - `AirMenuDeliveryGatewayPort` — `getDeliveryTotalsForDate(date)` → `{ uber, glovo, bolt }`.
@@ -214,8 +226,9 @@ acrescenta:
 ### Entrada
 
 - `CashClosingController` — expõe dois `Router` Express:
-  - `publicRouter` → rotas sem auth (D14: `organizationId`/`locationId` vêm de
-    `UNATTENDED_SCOPE`, nunca do request):
+  - `publicRouter` → rotas sem auth, com `requireDeviceAuth` montado ao nível
+    do router (D14: `organizationId`/`locationId` vêm de `req.deviceAuth!`,
+    nunca do request body):
     - `POST /cash-closings/verify-pin`
     - `POST /cash-closings/submit` — aceita `sessionOpenedAt?` e `drawerDenominations?`
     - `GET /cash-closings/sessions?date=` — lista sessões Vendus com flag `alreadySubmitted`
@@ -239,6 +252,10 @@ acrescenta:
   `analytics.byPlatform` para extrair os totais por plataforma (NCs já descontadas).
 - `SupabaseEmployeeRepository` — implementa `EmployeeRepositoryPort` via
   `ScopedQueryFactory`.
+- `InMemorySubmitRateLimiter` — implementa `SubmitRateLimiterPort`. Mapa
+  `locationId → {count, resetAt}` em memória, janela fixa (mesmo estilo do
+  `scanRateMap` do kiosk). Ver "Decisões de design" para os números e o
+  porquê de não precisar de limpeza periódica.
 - `VendusRegisterSessionsGateway` — implementa `VendusRegisterSessionsGatewayPort`;
   chama `GET /registers/{id}/movements/` em paralelo com `GET /documents/` (FS+FT+NC)
   para calcular totais correctos por sessão. Instanciado com `registerId`
@@ -248,6 +265,24 @@ acrescenta:
   para ser testável sem dependências de infra.
 
 ## Decisões de design (ADR resumido)
+
+**`SubmitClosingUseCase` já não depende de `EmployeeRepositoryPort`.**
+Reutiliza `VerifyPinPort` em vez de duplicar o lookup do funcionário: há
+exactamente um lugar no código que decide se um PIN é válido, e o `submit`
+usa esse mesmo veredicto ao invés de confiar num `employeeId` que o cliente
+diga ter (sem qualquer prova associada, dado que a rota é pública). Isto
+também fecha uma lacuna: um PIN incorrecto em `submit` deixou de ser
+aceite silenciosamente — passa a lançar `InvalidPinError`, tal como já
+acontecia em `verify-pin`.
+
+**Rate limit de `submit`: 10 tentativas / 5 minutos, por `locationId`, sem limpeza periódica.**
+Submissões legítimas são ~1 por loja por turno, por isso o limite é generoso
+para reenvios (ex: erro de rede) e ainda assim limita tentativas de
+adivinhar o PIN através deste endpoint. Ao contrário do `scanRateMap` do
+kiosk (chave = IP, potencialmente controlado por um atacante e por isso
+limpo periodicamente), aqui a chave é `locationId`, cuja cardinalidade está
+limitada às lojas realmente emparelhadas na organização — o mapa não pode
+crescer sem limite, logo não precisa de `setInterval` de limpeza.
 
 **`CashClosing.review()` devolve nova instância (imutabilidade).**
 Facilita testes (comparar antes/depois sem mock de estado) e elimina bugs de
@@ -281,11 +316,14 @@ airMenuCalculated` — soma de todos os campos declarados pelo funcionário.
 `vendusCalculated` e `airMenuCalculated` são campos derivados calculados no construtor
 da entidade; `airMenuTotal` é calculado no `toDto()` do use case e não é persistido.
 
-**`locationId` é imutável após submissão e vem sempre do unattended scope, nunca do cliente.**
-O kiosk é uma página pública sem identidade de dispositivo (spec B2 D14): não
-há como validar uma loja que o cliente alegasse. O `review()` preserva
-`this.locationId` e o repositório não o inclui no `update()`, tal como
-`drawerDenominations`.
+**`locationId` é imutável após submissão e vem sempre de `req.deviceAuth!`, nunca do cliente.**
+O kiosk é uma página pública (spec B2 D14): não há como validar no body uma
+loja que o cliente alegasse. `req.deviceAuth!.locationId` resolve à loja
+real de um ecrã emparelhado (`X-Device-Token`) ou, para um ecrã não
+emparelhado, ao fallback `UNATTENDED_SCOPE` (ticket 01 de
+location-credentials) — nunca a um valor vindo do body. O `review()`
+preserva `this.locationId` e o repositório não o inclui no `update()`, tal
+como `drawerDenominations`.
 
 **`drawerDenominations` é imutável após submissão.**
 A contagem física de notas e moedas é auditoria — representa o que o funcionário

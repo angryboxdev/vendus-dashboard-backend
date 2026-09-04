@@ -1,36 +1,43 @@
 import { CashClosing } from "../../domain/entities/cash-closing.js";
-import { DuplicateClosingError, EmployeeNotFoundError } from "../../domain/errors.js";
+import { DuplicateClosingError, RateLimitExceededError } from "../../domain/errors.js";
 import type { SubmitClosingPort, SubmitClosingCommand } from "../../domain/ports/in/submit-closing.port.js";
+import type { VerifyPinPort } from "../../domain/ports/in/verify-pin.port.js";
 import type { CashClosingDto } from "../../domain/ports/in/shared-dto.js";
 import type { CashClosingRepositoryPort } from "../../domain/ports/out/cash-closing-repository.port.js";
-import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
+import type { SubmitRateLimiterPort } from "../../domain/ports/out/submit-rate-limiter.port.js";
 import type { VendusRegisterSessionsGatewayPort } from "../../domain/ports/out/vendus-register-sessions-gateway.port.js";
 import type { AirMenuDeliveryGatewayPort } from "../../domain/ports/out/air-menu-delivery-gateway.port.js";
 
 export class SubmitClosingUseCase implements SubmitClosingPort {
   private readonly closingRepository: CashClosingRepositoryPort;
-  private readonly employeeRepository: EmployeeRepositoryPort;
+  private readonly verifyPin: VerifyPinPort;
+  private readonly rateLimiter: SubmitRateLimiterPort;
   private readonly sessionsGateway: VendusRegisterSessionsGatewayPort;
   private readonly airMenuGateway: AirMenuDeliveryGatewayPort | undefined;
 
   constructor(
     closingRepository: CashClosingRepositoryPort,
-    employeeRepository: EmployeeRepositoryPort,
+    verifyPin: VerifyPinPort,
+    rateLimiter: SubmitRateLimiterPort,
     sessionsGateway: VendusRegisterSessionsGatewayPort,
     airMenuGateway?: AirMenuDeliveryGatewayPort,
   ) {
     this.closingRepository = closingRepository;
-    this.employeeRepository = employeeRepository;
+    this.verifyPin = verifyPin;
+    this.rateLimiter = rateLimiter;
     this.sessionsGateway = sessionsGateway;
     this.airMenuGateway = airMenuGateway;
   }
 
   async execute(command: SubmitClosingCommand): Promise<CashClosingDto> {
-    const employee = await this.employeeRepository.findActiveById(
-      command.organizationId,
-      command.employeeId,
-    );
-    if (!employee) throw new EmployeeNotFoundError(command.employeeId);
+    if (!this.rateLimiter.checkAndRecord(command.locationId)) {
+      throw new RateLimitExceededError(command.locationId);
+    }
+
+    const { employeeId, fullName } = await this.verifyPin.execute({
+      organizationId: command.organizationId,
+      pin: command.pin,
+    });
 
     const sessionOpenedAt = command.sessionOpenedAt ?? null;
 
@@ -40,14 +47,14 @@ export class SubmitClosingUseCase implements SubmitClosingPort {
         command.organizationId,
         sessionOpenedAt,
       );
-      if (isDuplicate) throw new DuplicateClosingError(command.employeeId, command.closingDate);
+      if (isDuplicate) throw new DuplicateClosingError(employeeId, command.closingDate);
     } else {
       const isDuplicate = await this.closingRepository.existsForEmployeeOnDate(
         command.organizationId,
-        command.employeeId,
+        employeeId,
         command.closingDate,
       );
-      if (isDuplicate) throw new DuplicateClosingError(command.employeeId, command.closingDate);
+      if (isDuplicate) throw new DuplicateClosingError(employeeId, command.closingDate);
     }
 
     // Total Vendus (canal próprio): best-effort — se a API falhar não impede a submissão.
@@ -79,8 +86,8 @@ export class SubmitClosingUseCase implements SubmitClosingPort {
     }
 
     const closing = CashClosing.create({
-      employeeId: command.employeeId,
-      employeeName: employee.fullName,
+      employeeId,
+      employeeName: fullName,
       locationId: command.locationId,
       closingDate: command.closingDate,
       tpa: command.tpa,

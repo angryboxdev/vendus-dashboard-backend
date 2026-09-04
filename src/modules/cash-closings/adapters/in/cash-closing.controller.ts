@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { requireAuth, requireMinRole } from "../../../../middleware/auth.js";
-import { UNATTENDED_SCOPE } from "../../../../infra/scoped-db/unattended-scope.js";
+import { requireDeviceAuth } from "../../../../middleware/device-auth.js";
 import type { DrawerDenominations } from "../../domain/entities/cash-closing.js";
 import type { VerifyPinPort } from "../../domain/ports/in/verify-pin.port.js";
 import type { SubmitClosingPort } from "../../domain/ports/in/submit-closing.port.js";
@@ -14,8 +14,8 @@ import type { CashClosingStatus } from "../../domain/entities/cash-closing.js";
 import {
   ClosingNotFoundError,
   DuplicateClosingError,
-  EmployeeNotFoundError,
   InvalidPinError,
+  RateLimitExceededError,
 } from "../../domain/errors.js";
 
 function jsonError(res: Response, status: number, message: string): void {
@@ -50,10 +50,14 @@ export class CashClosingController {
   /**
    * These routes have no authenticated user — the kiosk and the closing
    * screen are public, unauthenticated pages (D14). Organization (and, for
-   * submit, location) come from the unattended scope, never from the
-   * request: an unauthenticated URL cannot be trusted to carry either.
+   * submit, location) come from `requireDeviceAuth`, never from the
+   * request body: an unauthenticated URL cannot be trusted to carry either.
+   * A paired screen resolves to its real location; an unpaired one still
+   * falls back to `UNATTENDED_SCOPE` (ticket 01's fallback).
    */
   private registerPublicRoutes(): void {
+    this.publicRouter.use(requireDeviceAuth);
+
     /** POST /api/cash-closings/verify-pin */
     this.publicRouter.post(
       "/cash-closings/verify-pin",
@@ -65,7 +69,7 @@ export class CashClosingController {
             return;
           }
           const result = await this.verifyPin.execute({
-            organizationId: UNATTENDED_SCOPE.organizationId,
+            organizationId: req.deviceAuth!.organizationId,
             pin,
           });
           res.json(result);
@@ -87,7 +91,7 @@ export class CashClosingController {
         try {
           const b = req.body as Record<string, unknown>;
           const {
-            employeeId,
+            pin,
             closingDate,
             tpa,
             uber,
@@ -104,8 +108,8 @@ export class CashClosingController {
             drawerDenominations,
           } = b;
 
-          if (!employeeId || typeof employeeId !== "string") {
-            jsonError(res, 400, "employeeId obrigatório");
+          if (!pin || typeof pin !== "string" || !/^\d{4}$/.test(pin)) {
+            jsonError(res, 400, "PIN inválido (4 dígitos)");
             return;
           }
           if (
@@ -118,9 +122,9 @@ export class CashClosingController {
           }
 
           const closing = await this.submitClosing.execute({
-            organizationId: UNATTENDED_SCOPE.organizationId,
-            locationId: UNATTENDED_SCOPE.locationId,
-            employeeId,
+            organizationId: req.deviceAuth!.organizationId,
+            locationId: req.deviceAuth!.locationId,
+            pin,
             closingDate,
             tpa: toNum(tpa, "tpa"),
             uber: toNum(uber, "uber"),
@@ -143,8 +147,12 @@ export class CashClosingController {
 
           res.status(201).json(closing);
         } catch (e: unknown) {
-          if (e instanceof EmployeeNotFoundError) {
-            jsonError(res, 404, e.message);
+          if (e instanceof InvalidPinError) {
+            jsonError(res, 401, e.message);
+            return;
+          }
+          if (e instanceof RateLimitExceededError) {
+            jsonError(res, 429, e.message);
             return;
           }
           if (e instanceof DuplicateClosingError) {
@@ -188,7 +196,7 @@ export class CashClosingController {
             return;
           }
           const sessions = await this.getAvailableSessions.execute({
-            organizationId: UNATTENDED_SCOPE.organizationId,
+            organizationId: req.deviceAuth!.organizationId,
             date,
           });
           res.json(sessions);
