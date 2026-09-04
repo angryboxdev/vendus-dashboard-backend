@@ -4,12 +4,16 @@
 contract-sync rule. Ticket tracked here because the spec makes it a required, blocking
 increment, not a separately-tracked, undated dependency.)*
 
-- An org admin can generate a pairing code for one of their organization's locations
-  from a screen in the admin UI, see the code, and know it's short-lived and
-  single-use.
+- An org admin can generate a pairing code for a chosen location and see it displayed,
+  short-lived and single-use.
+- Build a page listing every location and its currently active tokens, with a
+  per-token revoke action (revoking one has no effect on siblings at the same
+  location, per ticket 01). That same page is the entry point to generate a new
+  pairing code.
 - An unpaired kiosk/till/KDS screen presents a redemption form; entering a valid code
   pairs the screen and persists the resulting token so the setup is never repeated for
-  that screen.
+  that screen. The three unpaired screens share one pairing page/component — not
+  three separate implementations.
 - After pairing once, kiosk, till-closing and KDS all work on the same physical
   tablet — no per-feature re-pairing (a token authorizes a Location, not a feature).
 
@@ -26,6 +30,10 @@ mistake would turn deployment into an outage on every live kiosk, till and KDS s
       (token persisted, setup not repeated).
 - [ ] One pairing on one tablet works across kiosk, till-closing and KDS without
       re-pairing per feature.
+- [ ] Kiosk, till and KDS unpaired-redemption forms are the same shared page/component.
+- [ ] Admin can view all active tokens per location, revoke any one individually
+      without affecting others at the same location, and reach code generation from
+      that same page.
 - [ ] Back/front contract for the three new/changed endpoints (generate pairing code,
       list/revoke tokens, redeem code) matches what tickets 01–04 actually shipped;
       flag and resolve any drift in the same task, per CLAUDE.md.
