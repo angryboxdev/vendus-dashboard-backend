@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { ENV } from "../config/env.js";
 import {
   kioskScanBodySchema,
@@ -7,6 +7,7 @@ import {
 } from "../domain/hrTypes.js";
 import { getEmployee, setKioskPin } from "../services/hrEmployeeService.js";
 import { requireAuth, requireMinRole } from "../middleware/auth.js";
+import { requireDeviceAuth } from "../middleware/device-auth.js";
 import {
   KioskError,
   getTodayKioskToken,
@@ -14,7 +15,6 @@ import {
 } from "../services/hrKioskService.js";
 import { hashPin } from "../utils/kiosk.js";
 import { logAudit } from "../services/hrAuditService.js";
-import { UNATTENDED_SCOPE } from "../infra/scoped-db/unattended-scope.js";
 
 export const hrKioskRoutes = Router();
 
@@ -72,7 +72,7 @@ hrKioskRoutes.get("/kiosk/daily-token", (_req: Request, res: Response) => {
 // ---------- POST /kiosk/scan ----------
 // Endpoint público: recebe token + data + PIN e regista entrada/saída.
 
-hrKioskRoutes.post("/kiosk/scan", async (req: Request, res: Response) => {
+function rateLimitScan(req: Request, res: Response, next: NextFunction): void {
   const xff = req.headers["x-forwarded-for"];
   const ip = (Array.isArray(xff) ? xff[0] : xff)?.split(",")[0]?.trim()
     ?? req.socket.remoteAddress
@@ -82,16 +82,20 @@ hrKioskRoutes.post("/kiosk/scan", async (req: Request, res: Response) => {
     jsonError(res, 429, "Demasiadas tentativas. Aguarda um momento.");
     return;
   }
+  next();
+}
 
+hrKioskRoutes.post("/kiosk/scan", rateLimitScan, requireDeviceAuth, async (req: Request, res: Response) => {
   try {
     const parsed = kioskScanBodySchema.safeParse(req.body);
     if (!parsed.success) {
       jsonError(res, 400, parsed.error.issues.map((i) => i.message).join("; "));
       return;
     }
-    const result = await kioskScan(UNATTENDED_SCOPE.organizationId, UNATTENDED_SCOPE.locationId, parsed.data);
+    const { organizationId, locationId } = req.deviceAuth!;
+    const result = await kioskScan(organizationId, locationId, parsed.data);
     res.json(result);
-    void logAudit(UNATTENDED_SCOPE.organizationId, {
+    void logAudit(organizationId, {
       entityType: "attendance",
       entityId: result.employee.id,
       action: result.action === "check_in" ? "kiosk_checkin" : "kiosk_checkout",
