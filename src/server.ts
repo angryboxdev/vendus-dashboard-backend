@@ -31,6 +31,7 @@ import { UNATTENDED_SCOPE } from "./infra/scoped-db/unattended-scope.js";
 import { populateAuth, requireAuth, requireMinRole } from "./middleware/auth.js";
 import { authRoutes } from "./routes/authRoutes.js";
 import { createLocationsModule } from "./modules/locations/locations.module.js";
+import { createLocationCredentialsModule } from "./modules/location-credentials/location-credentials.module.js";
 
 const app = express();
 
@@ -91,6 +92,12 @@ app.use("/api", cashClosingsModule.publicRouter);
 const kdsModule = createKdsModule({ eventBus: airMenuModule.eventBus });
 app.use("/api", kdsModule.router);
 
+// Location credentials module (hexagonal) — deviceRouter is public (unpaired
+// screen redeeming a code, no credential yet); adminRouter has its own
+// requireAuth + requireMinRole("admin") applied per-route inside the controller
+const locationCredentialsModule = createLocationCredentialsModule();
+app.use("/api", locationCredentialsModule.deviceRouter);
+
 // All routes below this line require authentication
 app.use(requireAuth);
 
@@ -100,6 +107,9 @@ app.use("/api/auth", requireMinRole("admin"), authRoutes);
 // Locations module (hexagonal) — org-scoped read, any authenticated role (D15)
 const locationsModule = createLocationsModule();
 app.use("/api", locationsModule.router);
+
+// Location credentials admin routes (generate pairing code, list/revoke tokens)
+app.use("/api", locationCredentialsModule.adminRouter);
 
 // Manager+: financial, stock, documents, reports, pizza, preparations, analytics
 app.use("/api", requireMinRole("manager"), analyticsRoutes);
