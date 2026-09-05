@@ -8,6 +8,19 @@ function must<T>(value: T | undefined | null, name: string): T {
   return value as T;
 }
 
+const CREDENTIALS_ENCRYPTION_KEY_LENGTH_BYTES = 32;
+
+function mustEncryptionKey(value: string | undefined, name: string): Buffer {
+  const raw = must(value, name);
+  const key = Buffer.from(raw, "base64");
+  if (key.length !== CREDENTIALS_ENCRYPTION_KEY_LENGTH_BYTES) {
+    throw new Error(
+      `${name} must be a base64-encoded ${CREDENTIALS_ENCRYPTION_KEY_LENGTH_BYTES}-byte key for AES-256 (got ${key.length} bytes)`,
+    );
+  }
+  return key;
+}
+
 export const ENV = {
   BASE_URL: must(process.env.VENDUS_BASE_URL, "VENDUS_BASE_URL"),
   API_KEY: must(process.env.VENDUS_API_KEY, "VENDUS_API_KEY"),
@@ -120,4 +133,15 @@ export const ENV = {
   VENDUS_APPS_PAYMENT_ID: Number(process.env.VENDUS_APPS_PAYMENT_ID ?? 355967761),
   VENDUS_PRICE_GROUP_SALAO: Number(process.env.VENDUS_PRICE_GROUP_SALAO ?? 275787593),
   VENDUS_PRICE_GROUP_EATZ: Number(process.env.VENDUS_PRICE_GROUP_EATZ ?? 290759644),
+
+  /**
+   * Chave AES-256-GCM (base64, 32 bytes) para cifrar credenciais de
+   * integrações reversíveis (ex: Vendus API key, AirMenu credentials) — ver
+   * src/infra/crypto/encryption.ts. Gerar com:
+   * `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`
+   */
+  CREDENTIALS_ENCRYPTION_KEY: mustEncryptionKey(
+    process.env.CREDENTIALS_ENCRYPTION_KEY,
+    "CREDENTIALS_ENCRYPTION_KEY",
+  ),
 };

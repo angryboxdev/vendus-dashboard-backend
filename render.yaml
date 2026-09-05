@@ -19,6 +19,8 @@ services:
         sync: false
       - key: VENDUS_API_KEY
         sync: false
+      - key: CREDENTIALS_ENCRYPTION_KEY
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
@@ -45,6 +47,8 @@ services:
       - key: VENDUS_BASE_URL
         sync: false
       - key: VENDUS_API_KEY
+        sync: false
+      - key: CREDENTIALS_ENCRYPTION_KEY
         sync: false
       - key: SUPABASE_URL
         sync: false
