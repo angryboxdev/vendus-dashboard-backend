@@ -1,7 +1,7 @@
 # Module: location-credentials
 
 > Status: active
-> Last updated: 2026-09-03
+> Last updated: 2026-09-05
 
 ---
 
@@ -132,12 +132,33 @@ own design, informed by this decision, not a field bolted onto
     - `POST /location-credentials/pairing-codes` — generate
     - `GET /location-credentials/locations/:locationId/tokens` — list
     - `DELETE /location-credentials/tokens/:tokenId` — revoke
-  - `deviceRouter`, no user auth at all:
-    - `POST /location-credentials/redeem` — redeem a code for a token
-  - **Not mounted in `server.ts` by this ticket.** `createLocationCredentialsModule()`
-    is ready to be called the same way `createLocationsModule()` already is,
-    but no consumer route is switched over yet (spec.md ticket 01's own
-    text) — this module proves itself via its own tests only.
+  - `deviceRouter`, no user auth (no `requireAuth`/`requireMinRole`
+    anywhere on it) — but not uniformly unauthenticated: each route sets
+    its own device-facing gate per-route, individually:
+    - `POST /location-credentials/redeem` — redeem a code for a token. No
+      auth at all — an unpaired screen has no credential yet, that's the
+      whole point.
+    - `GET /location-credentials/tokens/me` — behind `requireDeviceAuth`.
+      A paired screen's own revalidation check: "is the token I already
+      have still good?" (frontend `DevicePairingGate`, closes the bug where
+      "token present in localStorage" was treated as "still paired" with no
+      server round-trip). Returns `200 { locationId: string }` — the
+      `locationId` `requireDeviceAuth` itself resolved — on a valid token;
+      the middleware rejects with `401` before this handler ever runs for a
+      missing/unknown/revoked token, identically (see "Tokens are deleted,
+      not marked revoked" below) — **except** a request that carries no
+      token at all, which still gets `200` via `requireDeviceAuth`'s
+      `UNATTENDED_SCOPE` fallback (see that section below) — this route
+      does not change that behavior, it inherited it. No new use case/port:
+      `requireDeviceAuth` already does 100% of the validation this route
+      needs (DB-backed hash lookup, not just decoding a token's shape), so
+      the handler is a thin pass-through with no domain decision left to
+      make — adding a `CheckDeviceTokenUseCase` would just re-wrap a read of
+      something already proven, unlike `ListActiveTokensUseCase`'s use case,
+      which actually queries a repository this port doesn't need to.
+  - **Mounted in `server.ts`** (`app.use("/api", locationCredentialsModule.deviceRouter)`
+    before the global `requireAuth`, and `app.use("/api", locationCredentialsModule.adminRouter)`
+    after it) — effectively `/api/location-credentials/...`.
 
 ### Output
 
@@ -268,10 +289,18 @@ blocklist).
   same code both racing before either write lands could, in principle, both
   read "not yet burned." Given the code is entered by hand on one screen at
   a time, this is a low-likelihood window, not addressed in this ticket.
-- No route in `server.ts` uses this module yet (by design — see Adapters →
-  Input above). `createLocationCredentialsModule()` is unmounted until a
-  later ticket wires an admin-facing pairing UI to it.
 - `requireDeviceAuthAllowingQueryParam` is untested against a real Express
   route (only via the same hand-constructed fake `req`/`res` as the header
   form) — ticket 04, which actually mounts it on `GET /kds/stream`, is
   where that gets exercised against the real KDS route.
+- `GET /location-credentials/tokens/me` returns `200` for a request with
+  **no** device token at all, not `401` — it inherits `requireDeviceAuth`'s
+  `UNATTENDED_SCOPE` fallback (see above), which this ticket did not
+  change. A caller that wants "definitely paired, and I can prove it" from
+  this endpoint needs that fallback gone first — that's ticket 06's job for
+  kiosk/till-closing/KDS specifically; this route was not in that list and
+  still gets the fallback. `LocationToken` also has no expiry field at all
+  (only `PairingCode` expires) — "expired" is not a state this endpoint (or
+  `requireDeviceAuth`) can ever return; the only two outcomes are "valid" or
+  "missing/unknown/revoked," collapsed identically into `401` (or `200`
+  unattended, for a wholly absent token).

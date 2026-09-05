@@ -37,3 +37,13 @@ mistake would turn deployment into an outage on every live kiosk, till and KDS s
 - [ ] Back/front contract for the three new/changed endpoints (generate pairing code,
       list/revoke tokens, redeem code) matches what tickets 01–04 actually shipped;
       flag and resolve any drift in the same task, per CLAUDE.md.
+
+**Manual tests - results**
+
+The following issues were found when manually testing the ticket.
+I'm not sure these are this ticket's scope - if not, that's fine.
+
+- On an unpaired device, the `/kiosk` page doesn't show the token gate. `/fecho` and `/kds` pages show it, as expected.
+- After pairing a device, whenever I go back to `/admin/location-tokens` page, I still see an empty list. I expected to see a table showing information about the device/location I just paired.
+- Minor issue: After generating a new pairing code, if I reload the page, the code goes away. Since it takes 10min to expire, it would be nice to keep showing the pairing code until it expires. I assume we can retrieve the pairing code from the DB. If not possible to get the code once it's generated, then we can adjust the UI saying something like "This code won't appear again after you leave this page."
+- By testing it, I got confused by something: Once the admin generates a pairing code, how do we know which location that code is for? I wasn't asked to select a location or anything - is that just because we currently have a single location? How would it behave in a organization with multiple locations?

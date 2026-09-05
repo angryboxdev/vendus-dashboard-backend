@@ -92,9 +92,11 @@ app.use("/api", cashClosingsModule.publicRouter);
 const kdsModule = createKdsModule({ eventBus: airMenuModule.eventBus });
 app.use("/api", kdsModule.router);
 
-// Location credentials module (hexagonal) — deviceRouter is public (unpaired
-// screen redeeming a code, no credential yet); adminRouter has its own
-// requireAuth + requireMinRole("admin") applied per-route inside the controller
+// Location credentials module (hexagonal) — deviceRouter has no user auth:
+// redeem is fully public (unpaired screen, no credential yet), tokens/me is
+// gated per-route by requireDeviceAuth (a paired screen's own token, not a
+// user session); adminRouter has its own requireAuth + requireMinRole("admin")
+// applied per-route inside the controller
 const locationCredentialsModule = createLocationCredentialsModule();
 app.use("/api", locationCredentialsModule.deviceRouter);
 
