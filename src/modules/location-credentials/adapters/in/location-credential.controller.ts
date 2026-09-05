@@ -74,7 +74,7 @@ export class LocationCredentialController {
 
     /**
      * GET /location-credentials/locations/:locationId/tokens
-     * Lists issue dates only — no per-device naming (D3).
+     * Lists issue date and location name only — no per-device naming (D3).
      */
     this.adminRouter.get(
       "/location-credentials/locations/:locationId/tokens",
@@ -88,6 +88,10 @@ export class LocationCredentialController {
           });
           res.json(tokens);
         } catch (e: unknown) {
+          if (e instanceof LocationNotOwnedError) {
+            jsonError(res, 404, e.message);
+            return;
+          }
           const msg = e instanceof Error ? e.message : "Internal error";
           res.status(500).json({ error: msg });
         }

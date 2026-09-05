@@ -103,7 +103,11 @@ own design, informed by this decision, not a field bolted onto
   or `PairingCodeExpiredError`; the code is burned before any of these is
   decided (see PairingCode above).
 - `ListActiveTokensPort` — lists a Location's active tokens (`id`,
-  `issuedAt` only).
+  `issuedAt`, `locationName`). Confirms ownership via `locations`'
+  `LocationRepositoryPort.findOneForOrganization` the same way
+  `GeneratePairingCodePort` does, throwing `LocationNotOwnedError`
+  otherwise — `locationName` comes from that same lookup, not from
+  `LocationToken` itself (D3, see "No Device entity" above).
 - `RevokeTokenPort` — deletes one token by id, scoped to the caller's
   organization. Idempotent: revoking an id that doesn't exist (or already
   belongs to someone else) is not an error.

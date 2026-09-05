@@ -31,7 +31,7 @@ export function createLocationCredentialsModule(): { adminRouter: Router; device
 
   const generatePairingCode = new GeneratePairingCodeUseCase(pairingCodeRepository, locationRepository);
   const redeemPairingCode = new RedeemPairingCodeUseCase(pairingCodeRepository, locationTokenRepository);
-  const listActiveTokens = new ListActiveTokensUseCase(locationTokenRepository);
+  const listActiveTokens = new ListActiveTokensUseCase(locationTokenRepository, locationRepository);
   const revokeToken = new RevokeTokenUseCase(locationTokenRepository);
 
   const controller = new LocationCredentialController(
