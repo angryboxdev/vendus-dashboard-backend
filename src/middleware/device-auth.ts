@@ -1,4 +1,3 @@
-import { UNATTENDED_SCOPE } from "../infra/scoped-db/unattended-scope.js";
 import { findLocationTokenScopeByHash } from "../infra/scoped-db/device-token-lookup.js";
 import { createDeviceAuthMiddleware } from "./device-auth-middleware.js";
 
@@ -25,7 +24,6 @@ export {
 
 const defaultDeviceAuthMiddleware = createDeviceAuthMiddleware({
   lookupToken: findLocationTokenScopeByHash,
-  unattendedScope: UNATTENDED_SCOPE,
 });
 
 export const requireDeviceAuth = defaultDeviceAuthMiddleware.requireDeviceAuth;

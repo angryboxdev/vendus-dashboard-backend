@@ -18,8 +18,8 @@ import type { DeviceScopeRow } from "../../../../../middleware/device-auth-middl
 
 /**
  * Exercises `GET /location-credentials/tokens/me` through the real Express
- * router and the real `requireDeviceAuth` middleware (hashing, header
- * extraction, the UNATTENDED_SCOPE fallback included) — only the DB lookup
+ * router and the real `requireDeviceAuth` middleware (hashing and header
+ * extraction included, no fallback since ticket 06) — only the DB lookup
  * seam (`infra/scoped-db/device-token-lookup.ts`) is faked, the same seam
  * the module's own integration test replaces with a real local Supabase
  * client. No supertest dependency: a real `http.Server` plus the platform's
@@ -123,13 +123,9 @@ describe("GET /location-credentials/tokens/me", () => {
     expect(res.status).toBe(401);
   });
 
-  it(
-    "no token at all currently falls through to 200 via requireDeviceAuth's UNATTENDED_SCOPE " +
-      "fallback (D12 scaffolding) — NOT 401; see module README/PR notes",
-    async () => {
-      const res = await fetch(`${baseUrl}/location-credentials/tokens/me`);
+  it("no token at all is rejected with 401 — the UNATTENDED_SCOPE fallback was removed in ticket 06", async () => {
+    const res = await fetch(`${baseUrl}/location-credentials/tokens/me`);
 
-      expect(res.status).toBe(200);
-    },
-  );
+    expect(res.status).toBe(401);
+  });
 });

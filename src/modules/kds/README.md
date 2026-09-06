@@ -109,9 +109,11 @@ Transições permitidas pelo frontend (short press = avançar, long press = reve
 | `PATCH /kds/deliveries/:id/status` | `requireDeviceAuth` (token via header) | Actualiza status de pedido Vendus |
 | `PATCH /kds/air-menu-deliveries/:id/status` | `requireDeviceAuth` (token via header) | Actualiza status de pedido AirMenu; broadcast automático via SSE |
 
-Todas as rotas exigem um Location token válido. Um ecrã ainda não emparelhado
-(sem token) cai no fallback `UNATTENDED_SCOPE` (ticket 01) em vez de ser
-rejeitado — comportamento inalterado durante o rollout. `/kds/stream` é a
+Todas as rotas exigem um Location token válido. Um ecrã sem token, com um
+token desconhecido ou com um token revogado é rejeitado com `401` —
+ticket 06 removeu o fallback `UNATTENDED_SCOPE` que, durante o rollout
+(tickets 01-05), deixava um ecrã ainda não emparelhado passar sem token.
+`/kds/stream` é a
 única rota que aceita o token via query param (`?device_token=...`) em vez do
 header `X-Device-Token`, porque o `EventSource` nativo do browser não permite
 headers customizados — excepção deliberada e documentada, não uma

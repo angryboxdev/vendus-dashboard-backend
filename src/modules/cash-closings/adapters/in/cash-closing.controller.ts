@@ -52,11 +52,21 @@ export class CashClosingController {
    * screen are public, unauthenticated pages (D14). Organization (and, for
    * submit, location) come from `requireDeviceAuth`, never from the
    * request body: an unauthenticated URL cannot be trusted to carry either.
-   * A paired screen resolves to its real location; an unpaired one still
-   * falls back to `UNATTENDED_SCOPE` (ticket 01's fallback).
+   * A screen with no valid, paired token is rejected outright — ticket 06
+   * removed the `UNATTENDED_SCOPE` fallback for this consumer.
+   *
+   * `requireDeviceAuth` is mounted at the `/cash-closings` path prefix, not
+   * as a bare router-level `.use()` — `publicRouter` shares its parent's
+   * `/api` mount point with every other module's public router (server.ts),
+   * so a path-less `.use()` here would gate every `/api/*` request that
+   * happens to reach this router first, not only this module's own routes.
+   * That was invisible while the fallback always called `next()`
+   * regardless of path; ticket 06's smoke test caught it live (every
+   * unrelated authenticated route started returning 401) the moment the
+   * fallback was removed and this middleware started actually rejecting.
    */
   private registerPublicRoutes(): void {
-    this.publicRouter.use(requireDeviceAuth);
+    this.publicRouter.use("/cash-closings", requireDeviceAuth);
 
     /** POST /api/cash-closings/verify-pin */
     this.publicRouter.post(

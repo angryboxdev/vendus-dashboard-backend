@@ -1,7 +1,6 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { createHash } from "node:crypto";
 import { mintOrganizationId, type OrganizationId } from "../kernel/organization-id.js";
-import type { UnattendedScope } from "../infra/scoped-db/unattended-scope.js";
 
 /**
  * The device-auth middleware factory, decoupled from any concrete I/O
@@ -38,10 +37,11 @@ export type DeviceTokenLookup = (tokenHash: string) => Promise<DeviceScopeRow | 
  * Outcome of the token-to-scope decision. Deliberately two-valued, not a
  * discriminated union naming *why* a token failed: a missing token, an
  * unknown token and a revoked token all collapse into "rejected" here, with
- * nothing to tell them apart (spec.md Testing Decisions; story 35). The
- * `UNATTENDED_SCOPE` fallback for a wholly absent token is NOT part of this
- * decision — it's added on top, in the wiring below, as ticket-01-only
- * scaffolding (D12).
+ * nothing to tell them apart (spec.md Testing Decisions; story 35). Ticket
+ * 01 through 05 added an `UNATTENDED_SCOPE` fallback on top of this, for a
+ * wholly absent token, as expand-and-contract scaffolding (D12); ticket 06
+ * removes it — a missing token is rejected the same as an unknown or
+ * revoked one, unconditionally.
  */
 export type DeviceAuthResolution = { status: "ok"; scope: DeviceAuthScope } | { status: "rejected" };
 
@@ -98,29 +98,21 @@ export interface DeviceAuthMiddleware {
 }
 
 /**
- * Factory taking the token lookup and the unattended-scope fallback as
- * injected collaborators (mirrors `createAuthMiddleware`'s D10 idiom). The
- * fallback is ticket-01-only scaffolding (D12): removed for kiosk,
- * till-closing and KDS specifically in ticket 06 — see the module README.
+ * Factory taking the token lookup as an injected collaborator (mirrors
+ * `createAuthMiddleware`'s D10 idiom). Ticket 01 through 05 also injected an
+ * `unattendedScope` fallback here as expand-and-contract scaffolding (D12).
+ * Ticket 06 removes it: kiosk, till-closing and KDS are this middleware's
+ * only consumers (crons build `UNATTENDED_SCOPE` directly — see
+ * `internalCronRoutes.ts` — and never go through this middleware), so making
+ * the token mandatory here is the whole change, with nothing left to
+ * parameterize per-consumer.
  */
-export function createDeviceAuthMiddleware(deps: {
-  lookupToken: DeviceTokenLookup;
-  unattendedScope: UnattendedScope;
-}): DeviceAuthMiddleware {
-  const { lookupToken, unattendedScope } = deps;
+export function createDeviceAuthMiddleware(deps: { lookupToken: DeviceTokenLookup }): DeviceAuthMiddleware {
+  const { lookupToken } = deps;
 
   function makeHandler(allowQueryParam: boolean): RequestHandler {
     return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       const token = extractDeviceToken(req, allowQueryParam);
-      if (!token) {
-        req.deviceAuth = {
-          organizationId: unattendedScope.organizationId,
-          locationId: unattendedScope.locationId,
-        };
-        next();
-        return;
-      }
-
       const resolution = await resolveDeviceAuth(token, lookupToken);
       if (resolution.status === "ok") {
         req.deviceAuth = resolution.scope;
