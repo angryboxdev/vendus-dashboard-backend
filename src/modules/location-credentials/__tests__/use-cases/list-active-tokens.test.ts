@@ -24,7 +24,27 @@ describe("ListActiveTokensUseCase", () => {
     const useCase = new ListActiveTokensUseCase(tokenRepo, locationRepo);
     const result = await useCase.execute({ organizationId: ORG_A, locationId: "loc-1" });
 
-    expect(result).toEqual([{ id: token.id, issuedAt: token.issuedAt, locationName: "Downtown" }]);
+    expect(result).toEqual([
+      { id: token.id, issuedAt: token.issuedAt, locationName: "Downtown", description: null },
+    ]);
+  });
+
+  it("includes the token's description when it was set", async () => {
+    const tokenRepo = new FakeLocationTokenRepository();
+    const locationRepo = new FakeLocationRepository();
+    locationRepo.seed(ORG_A, [buildLocation("loc-1", "Downtown")]);
+    const token = LocationToken.create({
+      organizationId: ORG_A,
+      locationId: "loc-1",
+      tokenHash: "h1",
+      description: "Kitchen monitor",
+    });
+    await tokenRepo.save(token);
+
+    const useCase = new ListActiveTokensUseCase(tokenRepo, locationRepo);
+    const result = await useCase.execute({ organizationId: ORG_A, locationId: "loc-1" });
+
+    expect(result[0]!.description).toBe("Kitchen monitor");
   });
 
   it("does not return tokens from another organization or another location", async () => {

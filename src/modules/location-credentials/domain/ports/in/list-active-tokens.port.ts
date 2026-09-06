@@ -14,6 +14,7 @@ export interface LocationTokenDto {
   id: string;
   issuedAt: Date;
   locationName: string;
+  description: string | null;
 }
 
 export interface ListActiveTokensPort {

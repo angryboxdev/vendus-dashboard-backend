@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { PairingCode } from "../../domain/entities/pairing-code.js";
-import { LocationNotOwnedError } from "../../domain/errors.js";
+import { InvalidDescriptionError, LocationNotOwnedError } from "../../domain/errors.js";
 import type { PairingCodeRepositoryPort } from "../../domain/ports/out/pairing-code-repository.port.js";
 import type { LocationRepositoryPort } from "../../../locations/domain/ports/out/location-repository.port.js";
 import type {
@@ -24,6 +24,20 @@ function generateHumanPairingCode(): string {
   return code;
 }
 
+const DESCRIPTION_MAX_LENGTH = 100;
+
+function normalizeDescription(description: string | null | undefined): string | null {
+  if (description === undefined || description === null) return null;
+  const trimmed = description.trim();
+  if (trimmed.length === 0) {
+    throw new InvalidDescriptionError("description cannot be blank");
+  }
+  if (trimmed.length > DESCRIPTION_MAX_LENGTH) {
+    throw new InvalidDescriptionError(`description cannot exceed ${DESCRIPTION_MAX_LENGTH} characters`);
+  }
+  return trimmed;
+}
+
 export class GeneratePairingCodeUseCase implements GeneratePairingCodePort {
   constructor(
     private readonly pairingCodeRepository: PairingCodeRepositoryPort,
@@ -39,15 +53,17 @@ export class GeneratePairingCodeUseCase implements GeneratePairingCodePort {
       throw new LocationNotOwnedError(command.locationId);
     }
 
+    const description = normalizeDescription(command.description);
     const expiresAt = new Date(Date.now() + PAIRING_CODE_TTL_MINUTES * 60_000);
     const pairingCode = PairingCode.create({
       organizationId: command.organizationId,
       locationId: command.locationId,
       code: generateHumanPairingCode(),
       expiresAt,
+      description,
     });
     await this.pairingCodeRepository.save(pairingCode);
 
-    return { code: pairingCode.code, expiresAt: pairingCode.expiresAt };
+    return { code: pairingCode.code, expiresAt: pairingCode.expiresAt, description: pairingCode.description };
   }
 }

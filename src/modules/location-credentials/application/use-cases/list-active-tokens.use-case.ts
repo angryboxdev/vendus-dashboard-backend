@@ -26,6 +26,11 @@ export class ListActiveTokensUseCase implements ListActiveTokensPort {
       command.organizationId,
       command.locationId,
     );
-    return tokens.map((t) => ({ id: t.id, issuedAt: t.issuedAt, locationName: location.name }));
+    return tokens.map((t) => ({
+      id: t.id,
+      issuedAt: t.issuedAt,
+      locationName: location.name,
+      description: t.description,
+    }));
   }
 }

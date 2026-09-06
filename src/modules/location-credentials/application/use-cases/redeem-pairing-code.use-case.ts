@@ -50,6 +50,7 @@ export class RedeemPairingCodeUseCase implements RedeemPairingCodePort {
       organizationId: pairingCode.organizationId,
       locationId: pairingCode.locationId,
       tokenHash: hashToken(rawToken),
+      description: pairingCode.description,
     });
     await this.locationTokenRepository.save(locationToken);
 

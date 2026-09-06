@@ -7,6 +7,7 @@ import type { RedeemPairingCodePort } from "../../domain/ports/in/redeem-pairing
 import type { ListActiveTokensPort } from "../../domain/ports/in/list-active-tokens.port.js";
 import type { RevokeTokenPort } from "../../domain/ports/in/revoke-token.port.js";
 import {
+  InvalidDescriptionError,
   LocationNotOwnedError,
   PairingCodeAlreadyUsedError,
   PairingCodeExpiredError,
@@ -43,7 +44,7 @@ export class LocationCredentialController {
   private registerAdminRoutes(): void {
     /**
      * POST /location-credentials/pairing-codes
-     * Body: { locationId: string }
+     * Body: { locationId: string, description?: string }
      */
     this.adminRouter.post(
       "/location-credentials/pairing-codes",
@@ -51,19 +52,28 @@ export class LocationCredentialController {
       requireMinRole("admin"),
       async (req: Request, res: Response) => {
         try {
-          const body = req.body as { locationId?: unknown };
+          const body = req.body as { locationId?: unknown; description?: unknown };
           if (typeof body.locationId !== "string" || body.locationId.trim().length === 0) {
             jsonError(res, 400, "locationId is required");
+            return;
+          }
+          if (body.description !== undefined && typeof body.description !== "string") {
+            jsonError(res, 400, "description must be a string");
             return;
           }
           const result = await this.generatePairingCode.execute({
             organizationId: req.auth!.orgId,
             locationId: body.locationId,
+            description: body.description ?? null,
           });
           res.status(201).json(result);
         } catch (e: unknown) {
           if (e instanceof LocationNotOwnedError) {
             jsonError(res, 404, e.message);
+            return;
+          }
+          if (e instanceof InvalidDescriptionError) {
+            jsonError(res, 400, e.message);
             return;
           }
           const msg = e instanceof Error ? e.message : "Internal error";

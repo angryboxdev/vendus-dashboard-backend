@@ -25,3 +25,10 @@ export class PairingCodeExpiredError extends Error {
     this.name = "PairingCodeExpiredError";
   }
 }
+
+export class InvalidDescriptionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidDescriptionError";
+  }
+}

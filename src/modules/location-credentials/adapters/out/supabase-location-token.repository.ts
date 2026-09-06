@@ -11,6 +11,7 @@ function toEntity(row: Record<string, unknown>): LocationToken {
     locationId: row.location_id as string,
     tokenHash: row.token_hash as string,
     issuedAt: new Date(row.issued_at as string),
+    description: (row.description as string | null) ?? null,
   });
 }
 
@@ -32,6 +33,7 @@ export class SupabaseLocationTokenRepository implements LocationTokenRepositoryP
         id: token.id,
         location_id: token.locationId,
         token_hash: token.tokenHash,
+        description: token.description,
       });
     if (error) throw new Error(error.message);
   }
@@ -39,7 +41,7 @@ export class SupabaseLocationTokenRepository implements LocationTokenRepositoryP
   async listByLocation(organizationId: OrganizationId, locationId: string): Promise<LocationToken[]> {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("location_tokens")
-      .select("id, org_id, location_id, token_hash, issued_at")
+      .select("id, org_id, location_id, token_hash, issued_at, description")
       .eq("location_id", locationId)
       .order("issued_at", { ascending: false });
     if (error) throw new Error(error.message);

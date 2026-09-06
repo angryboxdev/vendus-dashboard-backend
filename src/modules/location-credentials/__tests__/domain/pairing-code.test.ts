@@ -16,6 +16,19 @@ describe("PairingCode entity", () => {
       expect(code.isBurned).toBe(false);
       expect(code.burnedAt).toBeNull();
       expect(code.id).toBeDefined();
+      expect(code.description).toBeNull();
+    });
+
+    it("carries an optional description", () => {
+      const code = PairingCode.create({
+        organizationId: ORG_A,
+        locationId: "loc-1",
+        code: "ABCD1234",
+        expiresAt: new Date(Date.now() + 60_000),
+        description: "Kitchen monitor",
+      });
+
+      expect(code.description).toBe("Kitchen monitor");
     });
   });
 
@@ -71,12 +84,14 @@ describe("PairingCode entity", () => {
         expiresAt,
         burnedAt: null,
         createdAt,
+        description: "Reception tablet",
       });
 
       expect(code.id).toBe("code-1");
       expect(code.code).toBe("ZZZZ9999");
       expect(code.createdAt).toBe(createdAt);
       expect(code.isBurned).toBe(false);
+      expect(code.description).toBe("Reception tablet");
     });
   });
 });

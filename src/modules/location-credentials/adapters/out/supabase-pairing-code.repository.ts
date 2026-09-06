@@ -13,6 +13,7 @@ function toEntity(row: PairingCodeRow): PairingCode {
     expiresAt: new Date(row.expiresAt),
     burnedAt: row.burnedAt ? new Date(row.burnedAt) : null,
     createdAt: new Date(row.createdAt),
+    description: row.description,
   });
 }
 
@@ -38,6 +39,7 @@ export class SupabasePairingCodeRepository implements PairingCodeRepositoryPort 
           code: pairingCode.code,
           expires_at: pairingCode.expiresAt.toISOString(),
           burned_at: pairingCode.burnedAt ? pairingCode.burnedAt.toISOString() : null,
+          description: pairingCode.description,
         },
         { onConflict: "id" },
       );

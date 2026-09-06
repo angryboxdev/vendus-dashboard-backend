@@ -16,6 +16,18 @@ describe("LocationToken entity", () => {
     expect(token.locationId).toBe("loc-1");
     expect(token.tokenHash).toBe("hash-value");
     expect(token.issuedAt).toBeInstanceOf(Date);
+    expect(token.description).toBeNull();
+  });
+
+  it("carries an optional description", () => {
+    const token = LocationToken.create({
+      organizationId: ORG_A,
+      locationId: "loc-1",
+      tokenHash: "hash-value",
+      description: "Kitchen monitor",
+    });
+
+    expect(token.description).toBe("Kitchen monitor");
   });
 
   it("reconstitutes from persisted data", () => {
@@ -26,9 +38,11 @@ describe("LocationToken entity", () => {
       locationId: "loc-1",
       tokenHash: "hash-value",
       issuedAt,
+      description: "Reception tablet",
     });
 
     expect(token.id).toBe("token-1");
     expect(token.issuedAt).toBe(issuedAt);
+    expect(token.description).toBe("Reception tablet");
   });
 });

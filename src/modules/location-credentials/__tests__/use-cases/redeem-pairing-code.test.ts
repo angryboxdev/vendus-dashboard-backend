@@ -20,13 +20,14 @@ function makeUseCase() {
 
 async function seedActiveCode(
   pairingCodeRepository: FakePairingCodeRepository,
-  overrides: Partial<{ locationId: string; expiresAt: Date }> = {},
+  overrides: Partial<{ locationId: string; expiresAt: Date; description: string | null }> = {},
 ) {
   const code = PairingCode.create({
     organizationId: ORG_A,
     locationId: overrides.locationId ?? "loc-1",
     code: "ABCD1234",
     expiresAt: overrides.expiresAt ?? new Date(Date.now() + 60_000),
+    description: overrides.description,
   });
   await pairingCodeRepository.save(code);
   return code;
@@ -48,6 +49,17 @@ describe("RedeemPairingCodeUseCase", () => {
     expect(saved!.locationId).toBe("loc-1");
     // The stored value is a hash, never the raw token.
     expect(saved!.tokenHash).not.toBe(result.token);
+    expect(saved!.description).toBeNull();
+  });
+
+  it("copies the pairing code's description onto the minted token", async () => {
+    const { pairingCodeRepository, locationTokenRepository, useCase } = makeUseCase();
+    await seedActiveCode(pairingCodeRepository, { description: "Kitchen monitor" });
+
+    await useCase.execute({ code: "ABCD1234" });
+
+    const [saved] = locationTokenRepository.all();
+    expect(saved!.description).toBe("Kitchen monitor");
   });
 
   it("redeemed a second time fails", async () => {
