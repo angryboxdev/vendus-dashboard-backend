@@ -23,7 +23,6 @@ function mustEncryptionKey(value: string | undefined, name: string): Buffer {
 
 export const ENV = {
   BASE_URL: must(process.env.VENDUS_BASE_URL, "VENDUS_BASE_URL"),
-  API_KEY: must(process.env.VENDUS_API_KEY, "VENDUS_API_KEY"),
   PORT: Number(process.env.PORT || 3333),
 
   PER_PAGE_DEFAULT: Number(process.env.VENDUS_PER_PAGE || 50),
@@ -105,34 +104,6 @@ export const ENV = {
    * Opcional: se não configurado, os totais AirMenu ficam null no fecho.
    */
   AIRMENU_CLOSING_ENTERPRISE_ID: process.env.AIRMENU_CLOSING_ENTERPRISE_ID ?? null,
-
-  /**
-   * ID do caixa registador Vendus usado nos fechos de caixa.
-   * Fallback para UBER_EATS_VENDUS_REGISTER_ID (mesmo registo).
-   */
-  VENDUS_REGISTER_ID: must(
-    process.env.VENDUS_REGISTER_ID ?? process.env.UBER_EATS_VENDUS_REGISTER_ID,
-    "VENDUS_REGISTER_ID (ou UBER_EATS_VENDUS_REGISTER_ID)",
-  ),
-
-  /**
-   * Módulo Vendus (hexagonal) — channel detection e catálogo de produtos.
-   *
-   * VENDUS_EATZ_PAYMENT_ID   — ID do método de pagamento "Eatz" na Vendus.
-   *                            Documentos com este payment → canal 'eatz'.
-   * VENDUS_APPS_PAYMENT_ID   — ID do método de pagamento "Apps" na Vendus.
-   *                            Documentos com este payment → canal 'apps' (histórico pré-AirMenu).
-   *                            Canal só aparece na UI se existirem documentos com este método.
-   * VENDUS_PRICE_GROUP_SALAO — ID do price group de salão (preços de restaurante).
-   * VENDUS_PRICE_GROUP_EATZ  — ID do price group de delivery/eatz.
-   *
-   * Os IDs por omissão correspondem à instalação actual (Angry Box).
-   * Se o Vendus recriar os price groups, actualizar aqui.
-   */
-  VENDUS_EATZ_PAYMENT_ID: Number(process.env.VENDUS_EATZ_PAYMENT_ID ?? 275787588),
-  VENDUS_APPS_PAYMENT_ID: Number(process.env.VENDUS_APPS_PAYMENT_ID ?? 355967761),
-  VENDUS_PRICE_GROUP_SALAO: Number(process.env.VENDUS_PRICE_GROUP_SALAO ?? 275787593),
-  VENDUS_PRICE_GROUP_EATZ: Number(process.env.VENDUS_PRICE_GROUP_EATZ ?? 290759644),
 
   /**
    * Chave AES-256-GCM (base64, 32 bytes) para cifrar credenciais de

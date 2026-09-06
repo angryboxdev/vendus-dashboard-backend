@@ -10,8 +10,8 @@ import type { VendusDetailedDocumentRaw, VendusChannel } from "../entities/vendu
  *  4. Caso contrário → 'salao'
  *
  * @param doc           Documento detalhado raw (payments[] e items[] obrigatórios)
- * @param eatzPaymentId ID do método de pagamento "Eatz" na Vendus (env VENDUS_EATZ_PAYMENT_ID)
- * @param appsPaymentId ID do método de pagamento "Apps" na Vendus (env VENDUS_APPS_PAYMENT_ID)
+ * @param eatzPaymentId ID do método de pagamento "Eatz" na Vendus (config por organização/location — ver `VendusLocationConfigPort`)
+ * @param appsPaymentId ID do método de pagamento "Apps" na Vendus (idem)
  */
 export function detectChannel(
   doc: VendusDetailedDocumentRaw,

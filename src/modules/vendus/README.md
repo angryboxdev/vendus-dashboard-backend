@@ -1,7 +1,7 @@
 # Módulo: vendus
 
 > Status: ativo
-> Última atualização: 2026-08-28
+> Última atualização: 2026-09-05
 
 ---
 
@@ -109,20 +109,27 @@ Supabase**; um gateway HTTP para um sistema externo não é uma dessas
 queries, e adicionar-lhe `organizationId` seria inventar um parâmetro sem
 significado (o Vendus não sabe o que é uma organização).
 
-O único ponto do módulo que constrói uma query Supabase é o cache de
-analytics mensais (2 métodos, `analytics_monthly_cache`). É por isso o
-único port de saída, o único port de entrada e o único adapter que ganharam
-`organizationId`:
+Os pontos do módulo que constroem uma query Supabase são o cache de
+analytics mensais (`analytics_monthly_cache`) e, desde o ticket 03
+(org-integration-credentials), as credenciais/config Vendus
+(`vendus_credentials`, `vendus_location_config`). São esses os ports de
+saída, o único port de entrada e os adapters que ganharam `organizationId`:
 
 - **`AnalyticsCachePort`** (saída) — `organizationId: OrganizationId` é o
   **primeiro parâmetro, separado**, em `getMonths` e `saveMonths` (D2 — nunca
   um campo dentro de um objecto de filtro).
-- **`GetAnalyticsHistoricalPort`** (entrada) — o único use case que chama o
-  `AnalyticsCachePort`, por isso o único cujo `GetAnalyticsHistoricalParams`
-  ganhou um campo `organizationId`. Os outros cinco use cases (`GetSummaryPort`,
-  `GetAnalyticsCurrentPort`, `GetDocumentDetailPort`, `ListDocumentsPort`,
-  `GetSelfConsumptionPort`) não tocam o Supabase e mantêm as suas assinaturas
-  inalteradas.
+- **`VendusCredentialsPort` / `VendusLocationConfigPort`** (saída, ticket 03)
+  — mesmo padrão: `organizationId` (e `locationId`, para o segundo) como
+  parâmetro separado em cada método.
+- **`GetAnalyticsHistoricalPort`** (entrada) — o único use case *de negócio*
+  que chama o `AnalyticsCachePort`, por isso o único cujo
+  `GetAnalyticsHistoricalParams` ganhou um campo `organizationId`. Os outros
+  cinco use cases (`GetSummaryPort`, `GetAnalyticsCurrentPort`,
+  `GetDocumentDetailPort`, `ListDocumentsPort`, `GetSelfConsumptionPort`) não
+  tocam o Supabase e mantêm as suas assinaturas inalteradas.
+- **`ResolveVendusBootConfigPort`** (entrada, ticket 03) — não é um use case
+  de negócio: corre uma vez, no boot do servidor, não por pedido HTTP. Ver
+  "Resolução de configuração no boot" abaixo.
 - **Controller** — só a rota `/vendus/analytics/historical` lê
   `req.auth!.orgId` e coloca-o no query object; as restantes rotas não
   precisam de organização nenhuma. Nunca lido do body/params, para não ser um
@@ -130,10 +137,37 @@ analytics mensais (2 métodos, `analytics_monthly_cache`). É por isso o
 - **`SupabaseAnalyticsCacheAdapter`** — recebe o `ScopedQueryFactory`
   (`createScopedQuery`) no construtor em vez de resolver o cliente Supabase
   internamente, e chama `this.scopedQuery(organizationId).table("analytics_monthly_cache")`
-  por operação. Os outros dois adapters de saída (`VendusHttpGateway`,
-  `VendusProductCatalogAdapter`) não mudam — nunca seguraram um `SupabaseClient`.
+  por operação. `SupabaseVendusCredentialsAdapter`/
+  `SupabaseVendusLocationConfigAdapter` seguem o mesmo padrão. O
+  `VendusHttpGateway` e o `VendusProductCatalogAdapter` não mudam — nunca
+  seguraram um `SupabaseClient`.
 - **Domínio**: nenhuma entity ganhou um campo `organizationId` — é uma
   preocupação de acesso/query, não um invariante de negócio.
+
+## Resolução de configuração no boot (ticket 03, org-integration-credentials)
+
+Desde este ticket, o módulo já não lê `VENDUS_API_KEY`,
+`VENDUS_REGISTER_ID`/`UBER_EATS_VENDUS_REGISTER_ID` nem os quatro env vars de
+price-group/payment-ID. Em vez disso:
+
+1. `vendus_credentials` (uma linha por organização) guarda a API key
+   cifrada (AES-256-GCM, `src/infra/crypto/encryption.ts`).
+2. `vendus_location_config` (uma linha por `org_id, location_id`) guarda o
+   `register_id` e os quatro IDs de price-group/payment-method, em colunas
+   simples (não são segredos).
+3. `resolveVendusBootConfig(organizationId, locationId)`, exportado por
+   `vendus.module.ts`, lê as duas tabelas via `VendusCredentialsPort`/
+   `VendusLocationConfigPort` e devolve tudo num único objecto. **Lança** se
+   qualquer uma faltar — falha alto no boot em vez de arrancar
+   meio-configurado (mesmo espírito do `must(...)` de `env.ts`).
+4. `server.ts` chama isto **uma vez, no arranque**, para o `UNATTENDED_SCOPE`
+   (única organização/location reais hoje), antes de montar qualquer rota —
+   não é um caminho por-pedido. O resultado alimenta `setVendusApiKey`
+   (`src/infra/vendusClient.ts`), `createVendusModule` (os quatro campos de
+   `VendusModuleConfig`) e `createCashClosingsModule` (o `registerId`).
+
+Ver "Decisões de design" abaixo para o porquê do singleton em
+`vendusClient.ts` em vez de passar a API key por pedido.
 
 ---
 
@@ -147,12 +181,15 @@ analytics mensais (2 métodos, `analytics_monthly_cache`). É por isso o
 - `GetDocumentDetailPort` — `execute(id)` → documento detalhado + channel + has_drinks. Títulos de itens normalizados (S/L). Sem organização — não toca o Supabase.
 - `ListDocumentsPort` — `execute(params)` → lista de documentos sem detail (rápida). Sem organização — não toca o Supabase.
 - `GetSelfConsumptionPort` — `execute({ since, until })` → registos de autoconsumo normalizados + analytics (byEmployee, byCategory, topProducts). Sem organização — não toca o Supabase.
+- `ResolveVendusBootConfigPort` — `execute({ organizationId, locationId })` → `VendusBootConfig` (api key + register id + os quatro IDs de price-group/payment). Não é um use case de negócio: chamado uma vez pelo `server.ts` no boot, nunca por um controller. Lança se faltar a linha de credenciais ou de config (ver "Resolução de configuração no boot" acima).
 
 ### Saída (dependências do domínio)
 
 - `VendusGatewayPort` — `listDocuments`, `fetchDetail` — HTTP para a API Vendus. Sem organização — gateway externo, fora do escopo de D2.
 - `VendusProductCatalogPort` — `getProducts()` → catálogo em Map com cache em memória. Sem organização — mesmo motivo.
-- `AnalyticsCachePort` — `getMonths(organizationId, years)`, `saveMonths(organizationId, rows)` — cache de meses imutáveis. `organizationId` é sempre o primeiro parâmetro (D2) — único port de saída do módulo que constrói queries Supabase.
+- `AnalyticsCachePort` — `getMonths(organizationId, years)`, `saveMonths(organizationId, rows)` — cache de meses imutáveis. `organizationId` é sempre o primeiro parâmetro (D2).
+- `VendusCredentialsPort` (ticket 03) — `getByOrganization(organizationId)` → `{ status: "configured", credentials } | { status: "not_configured" }`; `save(organizationId, credentials)`. A API key devolvida já vem decifrada — cifrar/decifrar é responsabilidade do adapter.
+- `VendusLocationConfigPort` (ticket 03) — `getByOrganizationAndLocation(organizationId, locationId)` → mesmo shape `configured`/`not_configured`; `save(organizationId, locationId, config)`.
 
 ---
 
@@ -176,6 +213,8 @@ analytics mensais (2 métodos, `analytics_monthly_cache`). É por isso o
 - `VendusHttpGateway` — implementa `VendusGatewayPort` via `vendusClient.ts` (infra partilhada).
 - `VendusProductCatalogAdapter` — implementa `VendusProductCatalogPort`. Fetch paginado de `/products/`, TTL cache 10 min, mapeia category_id → Category via `VENDUS_CATEGORY_MAP`.
 - `SupabaseAnalyticsCacheAdapter` — implementa `AnalyticsCachePort`, via `ScopedQueryFactory` (D2) — não guarda um `SupabaseClient`. Lê/escreve tabela `analytics_monthly_cache`. Falhas são não-fatais.
+- `SupabaseVendusCredentialsAdapter` (ticket 03) — implementa `VendusCredentialsPort` via `ScopedQueryFactory`. Lê/escreve `vendus_credentials`; cifra a API key com `src/infra/crypto/encryption.ts` no `save`, decifra no `getByOrganization`. Ao contrário do cache de analytics, falhas **não** são engolidas — propagam como erro (é config de arranque, não um cache best-effort).
+- `SupabaseVendusLocationConfigAdapter` (ticket 03) — implementa `VendusLocationConfigPort` via `ScopedQueryFactory`. Lê/escreve `vendus_location_config` (colunas simples, sem cifra).
 
 ---
 
@@ -190,26 +229,30 @@ analytics mensais (2 métodos, `analytics_monthly_cache`). É por isso o
 - **Routes legadas em paralelo**: `/api/analytics/*`, `/api/documents`, `/api/reports/monthly-summary` continuam activas até o frontend migrar para `/api/vendus/*`.
 - **`getSummary` exposto pelo composition root**: para injeção futura no `cash-closings` module sem importar o adapter diretamente.
 - **`take_away` como sub-canal**: mantido no domínio como canal distinto. Em `byChannel` é agrupado com `salao` (apenas dois canais na UI de faturação). Em `productsByChannel` é exposto separado — necessário para o cálculo de CMV por canal, onde take-away tem custos de embalagem distintos do salão.
+- **`vendusClient.ts` guarda a API key num singleton a nível de módulo, não por-pedido (ticket 03)**: reescrever cada consumidor legado deste ficheiro (`vendusProductsCatalog.ts`, `documentsRoutes.ts`, `cashClosingService.ts`, etc.) para multi-tenancy real por-pedido está fora de escopo deste ticket — `CLAUDE.md` proíbe refactors legacy "big bang", e o spec confirma exactamente uma organização/location hoje. `setVendusApiKey(key)` é chamado uma única vez por `server.ts`, no boot, com o valor resolvido da BD; todo o resto do ficheiro (e todos os consumidores, hexagonais e legacy) continua a chamar `vendusGet`/`vendusPatch`/etc. exactamente como antes, recebendo a chave da BD de forma transparente. Quando uma segunda organização precisar mesmo de credenciais Vendus diferentes por pedido, este singleton terá de ser revisitado — não é o desenho certo para multi-tenancy real, é o desenho certo para "sair de env vars sem reescrever oito ficheiros legacy".
+- **Falha alto no boot se a organização/location não tiver Vendus configurado**: `resolveVendusBootConfig` lança em vez de arrancar com uma chave vazia — um servidor "meio-configurado" em produção é pior que um crash imediato no arranque (mesmo espírito do `must(...)` de `env.ts`). O script `src/jobs/runVendusCredentialsCutover.ts` garante que a linha existe antes de qualquer deploy sem as env vars antigas.
 
 ---
 
-## Configuração (variáveis de ambiente)
+## Configuração (BD, não env vars — ticket 03)
 
-| Variável | Default | Descrição |
-|---|---|---|
-| `VENDUS_EATZ_PAYMENT_ID` | `275787588` | ID do método de pagamento Eatz |
-| `VENDUS_APPS_PAYMENT_ID` | `355967761` | ID do método de pagamento Apps (histórico pré-AirMenu) |
-| `VENDUS_PRICE_GROUP_SALAO` | `275787593` | ID do price group de salão |
-| `VENDUS_PRICE_GROUP_EATZ` | `290759644` | ID do price group de eatz/delivery |
+Desde o ticket 03 (org-integration-credentials), a API key, o register ID e
+os IDs de price-group/payment-method **não** são env vars — vêm de
+`vendus_credentials`/`vendus_location_config`, resolvidos no boot (ver
+"Resolução de configuração no boot" acima). Para alterar qualquer um destes
+valores (ex: o Vendus recriar os price groups), actualizar a linha
+correspondente na BD, não uma env var — `src/jobs/runVendusCredentialsCutover.ts`
+é o script de referência para o fazer (idempotente, upsert).
 
-Os defaults correspondem à instalação actual (Angry Box). Se o Vendus recriar os price groups, actualizar as env vars.
+`VENDUS_BASE_URL` continua a ser uma env var (fora do escopo do ticket 03 —
+é o mesmo para todas as organizações, não uma credencial por organização).
 
 ---
 
 ## Como testar
 
 ```bash
-# Todos os testes do módulo (9 suites, ~130 testes)
+# Todos os testes do módulo (11 suites, ~134 testes)
 npx jest src/modules/vendus --no-coverage
 ```
 
@@ -226,6 +269,8 @@ Testes disponíveis por área:
 | `__tests__/use-cases/get-analytics-historical.use-case.test.ts` | Cache hit/miss, annual/historical totals, growth chart, comparações |
 | `__tests__/use-cases/get-selfconsumption.use-case.test.ts` | Detail fetch de fallback, normalização, analytics de autoconsumo |
 | `__tests__/use-cases/get-document-detail.use-case.test.ts` | Channel + has_drinks derivados; lookup por catálogo; normalização de títulos |
+| `__tests__/use-cases/resolve-vendus-boot-config.use-case.test.ts` | Resolve api key + location config a partir dos ports; lança se credenciais ou config não configuradas (fakes, sem BD) |
+| `__tests__/integration/supabase-vendus-credentials-and-location-config.integration.test.ts` | `SupabaseVendusCredentialsAdapter`/`SupabaseVendusLocationConfigAdapter` contra o stack Supabase local: write-then-read (com cifra), api key nunca em plain text na BD, linha em falta → not-configured (precisa de `supabase start` e da migração deste ticket aplicada) |
 
 Integração manual:
 ```
@@ -245,3 +290,4 @@ GET /api/vendus/selfconsumption?since=2026-08-01&until=2026-08-31
 - **`VENDUS_CATEGORY_MAP` hardcoded**: se novas categorias forem criadas no Vendus, adicionar manualmente em `vendus-product.ts` e no README. Pós-MVP: carregar categorias via `GET /categories/` da API Vendus.
 - **VAT rate por produto não disponível no `/products/`**: o IVA por item vem do campo `tax.rate` do documento detalhado. O catálogo não expõe taxa de IVA por produto — confirmar se a API Vendus disponibiliza este campo num endpoint de produtos.
 - **Routes legadas activas em paralelo**: `/api/analytics/*`, `/api/documents`, `/api/reports/monthly-summary` — remover após migração completa do frontend para `/api/vendus/*`.
+- **`vendusClient.ts`'s API key singleton não é multi-tenant real**: funciona correctamente enquanto existir uma organização (a realidade de hoje), mas uma segunda organização com uma conta Vendus diferente exigiria reescrever `vendusGet`/etc. para receber a chave por-pedido, e por extensão todos os consumidores legacy que os chamam directamente — ver "Decisões de design" acima.

@@ -38,19 +38,23 @@ export interface CashClosingsModule {
  * factory `createScopedQuery` injectado aqui e constroem um helper escopado
  * por chamada.
  *
- * @param vendusGateway  - VendusGatewayPort do módulo vendus (injectado pelo servidor).
+ * @param vendusGateway   - VendusGatewayPort do módulo vendus (injectado pelo servidor).
  *   Usado para buscar movimentos de caixa e documentos ao calcular sessões.
- * @param airMenuSummary - GetSummaryPort do módulo air-menu (injectado pelo servidor).
+ * @param vendusRegisterId - ID do caixa registador Vendus (ticket 03,
+ *   org-integration-credentials: resolvido pelo servidor a partir da BD via
+ *   `resolveVendusBootConfig`, já não de `VENDUS_REGISTER_ID`).
+ * @param airMenuSummary  - GetSummaryPort do módulo air-menu (injectado pelo servidor).
  *   Opcional: se ausente, os totais AirMenu ficam null nos fechos submetidos.
  */
 export function createCashClosingsModule(
   vendusGateway: VendusGatewayPort,
+  vendusRegisterId: string,
   airMenuSummary?: GetSummaryPort,
 ): CashClosingsModule {
   // Adapters de saída
   const closingRepository = new SupabaseCashClosingRepository(createScopedQuery);
   const employeeRepository = new SupabaseEmployeeRepository(createScopedQuery);
-  const sessionsGateway = new VendusRegisterSessionsGateway(ENV.VENDUS_REGISTER_ID, vendusGateway);
+  const sessionsGateway = new VendusRegisterSessionsGateway(vendusRegisterId, vendusGateway);
 
   const airMenuGateway =
     airMenuSummary && ENV.AIRMENU_CLOSING_ENTERPRISE_ID
