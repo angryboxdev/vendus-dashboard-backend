@@ -1,7 +1,7 @@
 # Módulo: air-menu
 
 > Status: ativo
-> Última atualização: 2026-08-11
+> Última atualização: 2026-09-05
 
 ---
 
@@ -100,6 +100,17 @@ Representa um item do catálogo de menu (carregado via `GetMenu`).
 ### `AirMenuAnalytics`
 
 Objecto de resultado da secção `analytics` do endpoint `/summary`. Ver secção "Endpoint /summary" para o shape completo.
+
+### `AirMenuCredentials` / `AirMenuLocationConfig`
+
+Interfaces simples (sem comportamento), como `AirMenuEnterprise` — apenas o shape lido pelos dois novos output ports:
+
+| Entidade | Campos |
+|---|---|
+| `AirMenuCredentials` | `apiKey`, `username`, `password` (as três colunas cifradas de `airmenu_credentials`, decifradas na leitura) |
+| `AirMenuLocationConfig` | `closingEnterpriseId` (a única coluna de `airmenu_location_config`) |
+
+Não há um estado "configurado mas vazio": a **existência da linha** é o sinal de "configurado" (`AirMenuCredentialsResult`/`AirMenuLocationConfigResult` são uniões discriminadas `found | not_configured`) — ver "Decisões de design".
 
 ---
 
@@ -222,6 +233,10 @@ O `tax` propaga-se da família para os itens filhos (`activeTax`): se um item n�
 - `OrderEventBusPort` — pub/sub em memória de eventos de webhook recebidos:
   - `publish(event)` — emite um `WebhookOrderEvent` para todos os subscribers
   - `subscribe(listener)` → `unsubscribe()` — regista listener; retorna função de cleanup
+- `AirMenuCredentialsPort` — `getByOrganization(organizationId)` → `{ status: "found", credentials: AirMenuCredentials } | { status: "not_configured" }`. Lê a API key/username/password da AirMenu, decifradas, de uma linha por organização.
+- `AirMenuLocationConfigPort` — `getByLocation(organizationId, locationId)` → `{ status: "found", config: AirMenuLocationConfig } | { status: "not_configured" }`. Lê o `closingEnterpriseId` usado para os totais de delivery num fecho de caixa, uma linha por `(org_id, location_id)`.
+
+Estes dois últimos são **read-only** e não têm use-case de entrada: são resolvidos uma vez, no arranque do servidor (`server.ts`), não por pedido — ver "Decisões de design".
 
 ---
 
@@ -247,6 +262,8 @@ Os endpoints públicos (`/webhook/receive` e `/webhook/stream`) são registados 
 - `AirMenuHttpGateway` — implementa `AirMenuGatewayPort`. Todas as chamadas usam o padrão `?ACTION=X&VERSION=1.0.0&KEY=...&DATA={...}` com resposta `RESULT={...json...}`.
 - `AirMenuMenuCatalogAdapter` — implementa `MenuCatalogPort`. Carrega o catálogo via `GetMenu` e mantém-no em cache em memória por 1 hora. Ver nota de configuração acima.
 - `OrderEventBusAdapter` — implementa `OrderEventBusPort`. Wrapper fino sobre `EventEmitter` do Node. Partilhado entre o módulo `air-menu` (que publica) e o módulo `kds` (que subscreve) via injeção no composition root (`server.ts`).
+- `SupabaseAirMenuCredentialsRepository` — implementa `AirMenuCredentialsPort` sobre `airmenu_credentials` (Supabase, via `ScopedQueryFactory`). Decifra as três colunas no `getByOrganization`. Expõe também `upsert(organizationId, credentials)` — cifra e grava, **fora** do port (só o script de cutover chama).
+- `SupabaseAirMenuLocationConfigRepository` — implementa `AirMenuLocationConfigPort` sobre `airmenu_location_config`. Expõe também `upsert(organizationId, locationId, config)`, mesma lógica.
 
 ---
 
@@ -364,6 +381,11 @@ Os endpoints públicos (`/webhook/receive` e `/webhook/stream`) são registados 
 - **Títulos com trailing space**: o AirMenu pode enviar títulos com espaço no final (ex.: `"Tomate e Pesto "`). O extractor faz `.trim()` antes de construir o título final.
 - **`topItemMap` chaveado por `resolvedPlu|rawTitle`**: a mesma SKU pode ter tamanhos diferentes — usar apenas o PLU como chave agregaria tamanhos indevidamente. `resolvedPlu` usa o PLU do item quando presente, ou o PLU resolvido via catálogo pelo título quando o item é um complemento sem PLU. `rawTitle` é o título sem o prefixo `"+ "`. Isto garante que o mesmo produto (ex.: Coca-cola) agregue numa única linha independentemente de ter sido pedido standalone ou como add-on de pizza.
 - **Herança de `tax` na família**: o `walkMenu` propaga `activeTax` pela árvore do menu. Necessário porque no AirMenu o IVA pode estar configurado ao nível da família e não em cada item individualmente.
+- **Credenciais e closing-enterprise-id vieram da base de dados, não de ENV** (org-integration-credentials spec, ticket 04): `AIRMENU_API_KEY`, `AIRMENU_USERNAME`, `AIRMENU_PASSWORD` e `AIRMENU_CLOSING_ENTERPRISE_ID` deixaram de existir em `src/config/env.ts`. `server.ts` resolve-os uma vez, no arranque, via `AirMenuCredentialsPort`/`AirMenuLocationConfigPort` (adapters Supabase) para o `UNATTENDED_SCOPE` (Angrybox), e passa os valores já resolvidos para `createAirMenuModule`/`createCashClosingsModule`. Falha de arranque (throw) se as credenciais não existirem — este é o caminho de bootstrap single-tenant, não um fan-out por organização (isso é spec C); um config de location em falta não é fatal, só faz os totais AirMenu ficarem `null` no fecho, exactamente como `AIRMENU_CLOSING_ENTERPRISE_ID` ausente já fazia.
+- **Existência da linha é o sinal de "configurado"**: nem `airmenu_credentials` nem `airmenu_location_config` têm colunas nullable — falta de linha, não coluna null, é "não configurado" (`AirMenuCredentialsResult`/`AirMenuLocationConfigResult` como uniões `found | not_configured`). Mantém o comportamento actual de `AIRMENU_CLOSING_ENTERPRISE_ID` opcional: sem linha → totais de delivery ficam `null` no fecho, mesmo efeito a jusante.
+- **Sem use-case para os dois novos output ports**: isto é resolução de configuração no arranque do processo, não um fluxo de domínio a pedido — `server.ts` chama os adapters directamente (seguindo o precedente do próprio módulo de expor `getSummary`/`eventBus` via composition root, não via mais um use-case). A única lógica extraída para `domain/services/resolve-closing-enterprise-id.ts` é o mapeamento puro `found|not_configured → string|null`, testável com fakes sem precisar de um use-case só para isso.
+- **`AIRMENU_WEBHOOK_SECRET`, `AIRMENU_ENTERPRISES` e `AIRMENU_WEBHOOK_URL` continuam em ENV** — não migrados por este ticket. O webhook é inbound e só é autenticado por assinatura; autenticá-lo por organização exigiria primeiro resolver que organização o enviou (via `enterpriseId` no payload), o que depende do mapeamento enterprise→organização que `AIRMENU_ENTERPRISES` hoje carrega — explicitamente deferido para a spec D (channels). `AIRMENU_WEBHOOK_URL` só é usado interactivamente ao registar um webhook.
+- **`upsert` nos dois adapters Supabase não faz parte dos ports**: os ports (`AirMenuCredentialsPort`/`AirMenuLocationConfigPort`) são read-only — tudo o que o arranque do servidor precisa. `upsert` é usado apenas pelo script de cutover (`src/jobs/runAirMenuCredentialsCutover.ts`), para não reimplementar a cifra/mapeamento de colunas fora do adapter.
 
 ---
 
@@ -371,12 +393,11 @@ Os endpoints públicos (`/webhook/receive` e `/webhook/stream`) são registados 
 
 | Variável | Descrição |
 |---|---|
-| `AIRMENU_API_KEY` | Chave de API fixa por instalação |
-| `AIRMENU_USERNAME` | Utilizador para `Authenticate` |
-| `AIRMENU_PASSWORD` | Password para `Authenticate` |
 | `AIRMENU_ENTERPRISES` | Enterprises no formato `id:nome\|id:nome` |
 | `AIRMENU_WEBHOOK_URL` | URL pública onde a AirMenu entrega notificações (`POST /api/air-menu/webhook/receive`) |
 | `AIRMENU_WEBHOOK_SECRET` | Secret opcional para validação de assinatura do payload (header ainda a confirmar com suporte AirMenu) |
+
+**Já não são variáveis de ambiente** (org-integration-credentials spec, ticket 04) — `AIRMENU_API_KEY`, `AIRMENU_USERNAME`, `AIRMENU_PASSWORD` vêm de `airmenu_credentials` (uma linha por organização, cifradas); `AIRMENU_CLOSING_ENTERPRISE_ID` vem de `airmenu_location_config` (uma linha por `org_id, location_id`). Ver "Decisões de design" acima e `src/jobs/runAirMenuCredentialsCutover.ts` para o script de cutover.
 
 Enterprises configuradas actualmente:
 
@@ -400,6 +421,15 @@ Todos os testes unitários: `jest --testPathPattern=air-menu`
 | `__tests__/use-cases/get-orders.use-case.test.ts` | `derivePlatform`, extracção de itens, complement "Dobre" (L/S), default S por família de pizza, sufixo legado, add-ons pagos, consolidação de divisões, filtro por `documentDate` |
 | `__tests__/services/session-manager.service.test.ts` | Re-autenticação, sessão válida em cache, deduplicação de chamadas concorrentes |
 | `__tests__/use-cases/register-webhook.use-case.test.ts` | Passagem de sessionId e campos ao gateway |
+| `__tests__/services/resolve-closing-enterprise-id.test.ts` | Contrato `found`/`not_configured` dos dois novos ports (via fakes) e o mapeamento puro `resolveClosingEnterpriseId` |
+
+Adapters Supabase (integração, stack local — `npx supabase start` + migração `20260905090000_create_airmenu_credentials_tables.sql` aplicada):
+
+```
+npx jest --config jest.config.cjs src/modules/air-menu/__tests__/integration/supabase-air-menu-credentials.integration.test.ts
+```
+
+Cobre: write-then-read de `airmenu_credentials` a passar pela cifra (a linha crua na BD não é igual ao valor lido de volta), `upsert` idempotente, e `not_configured` para organização/location sem linha, em ambas as tabelas.
 
 - Integração manual — summary:
   ```

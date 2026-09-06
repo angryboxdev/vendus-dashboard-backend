@@ -68,9 +68,6 @@ export const ENV = {
   SUPABASE_JWT_SECRET: process.env.SUPABASE_JWT_SECRET ?? "",
 
   /** AirMenu: API de agregação de pedidos Glovo/Uber Eats/Bolt. */
-  AIRMENU_API_KEY: must(process.env.AIRMENU_API_KEY, "AIRMENU_API_KEY"),
-  AIRMENU_USERNAME: must(process.env.AIRMENU_USERNAME, "AIRMENU_USERNAME"),
-  AIRMENU_PASSWORD: must(process.env.AIRMENU_PASSWORD, "AIRMENU_PASSWORD"),
   AIRMENU_ENTERPRISES: must(process.env.AIRMENU_ENTERPRISES, "AIRMENU_ENTERPRISES")
     .split("|")
     .map((entry) => {
@@ -97,13 +94,6 @@ export const ENV = {
    * Opcional — apenas necessário ao chamar POST /api/air-menu/webhook/register.
    */
   AIRMENU_WEBHOOK_URL: process.env.AIRMENU_WEBHOOK_URL ?? null,
-
-  /**
-   * Enterprise AirMenu usada para obter totais de delivery nos fechos de caixa.
-   * Corresponde à localização do restaurante (ex: Angry Box - Porto).
-   * Opcional: se não configurado, os totais AirMenu ficam null no fecho.
-   */
-  AIRMENU_CLOSING_ENTERPRISE_ID: process.env.AIRMENU_CLOSING_ENTERPRISE_ID ?? null,
 
   /**
    * Chave AES-256-GCM (base64, 32 bytes) para cifrar credenciais de

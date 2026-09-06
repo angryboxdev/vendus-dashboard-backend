@@ -45,11 +45,16 @@ export interface CashClosingsModule {
  *   `resolveVendusBootConfig`, já não de `VENDUS_REGISTER_ID`).
  * @param airMenuSummary  - GetSummaryPort do módulo air-menu (injectado pelo servidor).
  *   Opcional: se ausente, os totais AirMenu ficam null nos fechos submetidos.
+ * @param closingEnterpriseId - AirMenu closing-enterprise id resolvido pelo servidor
+ *   a partir da base de dados (spec org-integration-credentials, ticket 04). Opcional/
+ *   null: se ausente, os totais AirMenu ficam null nos fechos submetidos — mesmo
+ *   comportamento que `AIRMENU_CLOSING_ENTERPRISE_ID` tinha quando não configurado.
  */
 export function createCashClosingsModule(
   vendusGateway: VendusGatewayPort,
   vendusRegisterId: string,
   airMenuSummary?: GetSummaryPort,
+  closingEnterpriseId?: string | null,
 ): CashClosingsModule {
   // Adapters de saída
   const closingRepository = new SupabaseCashClosingRepository(createScopedQuery);
@@ -57,8 +62,8 @@ export function createCashClosingsModule(
   const sessionsGateway = new VendusRegisterSessionsGateway(vendusRegisterId, vendusGateway);
 
   const airMenuGateway =
-    airMenuSummary && ENV.AIRMENU_CLOSING_ENTERPRISE_ID
-      ? new AirMenuDeliveryGateway(airMenuSummary, ENV.AIRMENU_CLOSING_ENTERPRISE_ID)
+    airMenuSummary && closingEnterpriseId
+      ? new AirMenuDeliveryGateway(airMenuSummary, closingEnterpriseId)
       : undefined;
 
   // Função de hash injectada no use case (evita dependência directa de infra no domínio)

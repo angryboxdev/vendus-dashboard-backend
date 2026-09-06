@@ -56,6 +56,12 @@ export const TABLE_REGISTRY = {
   locations: { organizationColumn: "org_id", locationBearing: false },
   org_members: { organizationColumn: "org_id", locationBearing: false },
 
+  // org-integration-credentials spec, ticket 04: AirMenu credentials (one
+  // row per org) and per-location config — see
+  // supabase/migrations/20260905090000_create_airmenu_credentials_tables.sql.
+  airmenu_credentials: { organizationColumn: "org_id", locationBearing: false },
+  airmenu_location_config: { organizationColumn: "org_id", locationBearing: true },
+
   analytics_monthly_cache: { organizationColumn: "org_id", locationBearing: false },
   bank_accounts: { organizationColumn: "org_id", locationBearing: false },
   bank_movement_entity_links: { organizationColumn: "org_id", locationBearing: false },
