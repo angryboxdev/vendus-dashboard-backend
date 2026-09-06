@@ -259,8 +259,10 @@ acrescenta:
   porquê de não precisar de limpeza periódica.
 - `VendusRegisterSessionsGateway` — implementa `VendusRegisterSessionsGatewayPort`;
   chama `GET /registers/{id}/movements/` em paralelo com `GET /documents/` (FS+FT+NC)
-  para calcular totais correctos por sessão. Instanciado com `registerId`
-  (env `VENDUS_REGISTER_ID`).
+  para calcular totais correctos por sessão. Instanciado com `registerId`,
+  passado pelo `server.ts` como parâmetro de `createCashClosingsModule` —
+  resolvido da BD via `resolveVendusBootConfig` do módulo `vendus` (ticket 03,
+  org-integration-credentials), já não de `VENDUS_REGISTER_ID`.
 - `session-builder.ts` — módulo puro (sem I/O) que implementa `buildSessions`:
   constrói sessões a partir dos movimentos e desconta NCs. Separado do gateway
   para ser testável sem dependências de infra.
@@ -360,8 +362,10 @@ Permite ao frontend carregar uma semana completa (Mon-Sun) ou um mês inteiro
 numa única chamada, sem precisar de lógica de datas no adapter HTTP.
 
 **`VendusRegisterSessionsGateway` recebe `registerId` no construtor, não via port.**
-O `registerId` é config de infra (env var). O domínio não o conhece.
-O port define apenas o comportamento (`getSessionsForDate`, `getSessionTotal`).
+O `registerId` é config de infra — resolvida da BD no boot pelo `server.ts`
+(ticket 03) e passada a `createCashClosingsModule` como parâmetro. O domínio
+não a conhece. O port define apenas o comportamento (`getSessionsForDate`,
+`getSessionTotal`).
 
 **`buildSessions` extraído para `session-builder.ts` (módulo puro).**
 O gateway precisava de importar `vendusClient` e `documentsService` (infra), o que

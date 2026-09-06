@@ -1,17 +1,22 @@
 import type { Router } from "express";
+import type { OrganizationId } from "../../kernel/organization-id.js";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import type { VendusGatewayPort } from "./domain/ports/out/vendus-gateway.port.js";
 import { VendusHttpGateway } from "./adapters/out/vendus-http.gateway.js";
 import { VendusProductCatalogAdapter } from "./adapters/out/vendus-product-catalog.adapter.js";
 import { SupabaseAnalyticsCacheAdapter } from "./adapters/out/supabase-analytics-cache.adapter.js";
+import { SupabaseVendusCredentialsAdapter } from "./adapters/out/supabase-vendus-credentials.adapter.js";
+import { SupabaseVendusLocationConfigAdapter } from "./adapters/out/supabase-vendus-location-config.adapter.js";
 import { GetSummaryUseCase } from "./application/use-cases/get-summary.use-case.js";
 import { GetAnalyticsCurrentUseCase } from "./application/use-cases/get-analytics-current.use-case.js";
 import { GetAnalyticsHistoricalUseCase } from "./application/use-cases/get-analytics-historical.use-case.js";
 import { GetDocumentDetailUseCase } from "./application/use-cases/get-document-detail.use-case.js";
 import { ListDocumentsUseCase } from "./application/use-cases/list-documents.use-case.js";
 import { GetSelfConsumptionUseCase } from "./application/use-cases/get-selfconsumption.use-case.js";
+import { ResolveVendusBootConfigUseCase } from "./application/use-cases/resolve-vendus-boot-config.use-case.js";
 import { VendusController } from "./adapters/in/vendus.controller.js";
 import type { GetSummaryPort } from "./domain/ports/in/get-summary.port.js";
+import type { VendusBootConfig } from "./domain/ports/in/resolve-vendus-boot-config.port.js";
 
 export interface VendusModuleConfig {
   eatzPaymentId: number;
@@ -90,4 +95,24 @@ export function createVendusModule(config: VendusModuleConfig): {
   );
 
   return { router: controller.router, getSummary, gateway };
+}
+
+/**
+ * Boot-time resolution (ticket 03): resolves the Vendus API key and the
+ * location's register id / price-group / payment-method ids from the
+ * database, replacing `VENDUS_API_KEY`, `VENDUS_REGISTER_ID`
+ * (`UBER_EATS_VENDUS_REGISTER_ID`) and the four price-group/payment-ID env
+ * vars. Called once by `server.ts`, before `createVendusModule` and
+ * `createCashClosingsModule` — not a per-request path. Throws if either the
+ * organization's credentials or the location's config is missing (see
+ * `ResolveVendusBootConfigUseCase`).
+ */
+export async function resolveVendusBootConfig(
+  organizationId: OrganizationId,
+  locationId: string,
+): Promise<VendusBootConfig> {
+  const credentials = new SupabaseVendusCredentialsAdapter(createScopedQuery);
+  const locationConfig = new SupabaseVendusLocationConfigAdapter(createScopedQuery);
+  const useCase = new ResolveVendusBootConfigUseCase(credentials, locationConfig);
+  return useCase.execute({ organizationId, locationId });
 }

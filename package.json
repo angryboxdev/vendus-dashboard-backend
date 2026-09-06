@@ -16,6 +16,8 @@
     "stock:adjust-excluded-sales:dev": "tsx src/jobs/runStockAdjustmentFromLines.ts",
     "org:provision": "node dist/jobs/runOrganizationProvisioning.js",
     "org:provision:dev": "tsx src/jobs/runOrganizationProvisioning.ts",
+    "vendus:credentials-cutover": "node dist/jobs/runVendusCredentialsCutover.js",
+    "vendus:credentials-cutover:dev": "tsx src/jobs/runVendusCredentialsCutover.ts",
     "test": "jest --config jest.config.cjs",
     "test:tasks": "jest --config jest.config.cjs --testPathPattern=src/modules/tasks",
     "typecheck": "tsc --noEmit -p tsconfig.json",

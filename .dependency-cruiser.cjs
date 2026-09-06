@@ -75,6 +75,7 @@ module.exports = {
           "^src/infra/scoped-db",
           "^src/jobs/runOrganizationProvisioning\\.ts$",
           "^src/modules/location-credentials/__tests__/integration/supabase-location-credentials\\.integration\\.test\\.ts$",
+          "^src/modules/vendus/__tests__/integration/supabase-vendus-credentials-and-location-config\\.integration\\.test\\.ts$",
         ],
       },
       to: {

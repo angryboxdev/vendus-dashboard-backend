@@ -1,6 +1,30 @@
 import { ENV } from "../config/env.js";
 
 /**
+ * The Vendus API key, resolved from the database at server boot (ticket 03,
+ * org-integration-credentials) instead of `VENDUS_API_KEY`. Module-level
+ * singleton, not per-request: this repo has exactly one organization/
+ * location today (spec.md Scope Boundary), and every legacy caller of this
+ * file (`vendusProductsCatalog.ts`, `documentsRoutes.ts`, etc.) keeps calling
+ * `vendusGet`/etc. exactly as before, transparently picking up the
+ * DB-sourced key — rewriting each of them for real per-request
+ * multi-tenancy is out of scope for this ticket. `setVendusApiKey` must be
+ * called once, early in `src/server.ts`, before any route is mounted.
+ */
+let vendusApiKey: string | undefined;
+
+export function setVendusApiKey(key: string): void {
+  vendusApiKey = key;
+}
+
+function getApiKey(): string {
+  if (!vendusApiKey) {
+    throw new Error("Vendus API key not set — call setVendusApiKey() before making Vendus API calls.");
+  }
+  return vendusApiKey;
+}
+
+/**
  * Vendus GET helper
  * Mantém api_key na query como hoje.
  * Se futuramente mudar pra Basic Auth, altera só aqui.
@@ -10,7 +34,7 @@ export async function vendusGet<T>(
   query?: Record<string, string | number | undefined>,
 ): Promise<T> {
   const urlObj = new URL(`${ENV.BASE_URL}${path}`);
-  urlObj.searchParams.set("api_key", ENV.API_KEY);
+  urlObj.searchParams.set("api_key", getApiKey());
   if (query) {
     for (const [k, v] of Object.entries(query)) {
       if (v === undefined) continue;
@@ -32,7 +56,7 @@ export async function vendusPatch<T = void>(
   body: Record<string, unknown>,
 ): Promise<T> {
   const urlObj = new URL(`${ENV.BASE_URL}${path}`);
-  urlObj.searchParams.set("api_key", ENV.API_KEY);
+  urlObj.searchParams.set("api_key", getApiKey());
 
   const res = await fetch(urlObj.toString(), {
     method: "PATCH",
@@ -60,7 +84,7 @@ export async function vendusBasicWrite<T = void>(
   body: Record<string, unknown>,
 ): Promise<T> {
   const urlObj = new URL(`${ENV.BASE_URL}${path}`);
-  const basic = Buffer.from(`${ENV.API_KEY}:`, "utf8").toString("base64");
+  const basic = Buffer.from(`${getApiKey()}:`, "utf8").toString("base64");
 
   const res = await fetch(urlObj.toString(), {
     method,
@@ -100,7 +124,7 @@ export async function vendusGetBasic<T>(
     }
   }
 
-  const basic = Buffer.from(`${ENV.API_KEY}:`, "utf8").toString("base64");
+  const basic = Buffer.from(`${getApiKey()}:`, "utf8").toString("base64");
 
   const res = await fetch(urlObj.toString(), {
     headers: {

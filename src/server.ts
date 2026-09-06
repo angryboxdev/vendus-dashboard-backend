@@ -21,7 +21,8 @@ import { createPayableRecurrencesModule } from "./modules/payable-recurrences/pa
 import { createBankAccountsModule } from "./modules/bank-accounts/bank-accounts.module.js";
 import { createBankStatementsModule } from "./modules/bank-statements/bank-statements.module.js";
 import { createAirMenuModule } from "./modules/air-menu/air-menu.module.js";
-import { createVendusModule } from "./modules/vendus/vendus.module.js";
+import { createVendusModule, resolveVendusBootConfig } from "./modules/vendus/vendus.module.js";
+import { setVendusApiKey } from "./infra/vendusClient.js";
 import { createCrmModule } from "./modules/crm/crm.module.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
@@ -59,12 +60,24 @@ app.use(populateAuth);
 // PATCH /employees/:id/kiosk-pin has inline requireAuth inside the handler
 app.use("/api/hr", hrKioskRoutes);
 
+// Vendus: credenciais e config (register ID, price groups, payment IDs)
+// resolvidas da BD no boot (ticket 03, org-integration-credentials) —
+// substitui VENDUS_API_KEY, VENDUS_REGISTER_ID/UBER_EATS_VENDUS_REGISTER_ID
+// e os quatro env vars de price-group/payment-ID. Falha alto (throw) se o
+// UNATTENDED_SCOPE não tiver estas linhas seedadas na BD — ver
+// src/jobs/runVendusCredentialsCutover.ts.
+const vendusBootConfig = await resolveVendusBootConfig(
+  UNATTENDED_SCOPE.organizationId,
+  UNATTENDED_SCOPE.locationId,
+);
+setVendusApiKey(vendusBootConfig.apiKey);
+
 // Vendus: instanciado antes do cash-closings para injectar o gateway de sessões
 const vendusModule = createVendusModule({
-  eatzPaymentId: ENV.VENDUS_EATZ_PAYMENT_ID,
-  appsPaymentId: ENV.VENDUS_APPS_PAYMENT_ID,
-  salaoPriceGroupId: ENV.VENDUS_PRICE_GROUP_SALAO,
-  eatzPriceGroupId: ENV.VENDUS_PRICE_GROUP_EATZ,
+  eatzPaymentId: vendusBootConfig.eatzPaymentId,
+  appsPaymentId: vendusBootConfig.appsPaymentId,
+  salaoPriceGroupId: vendusBootConfig.salaoPriceGroupId,
+  eatzPriceGroupId: vendusBootConfig.eatzPriceGroupId,
   concurrency: ENV.CONCURRENCY,
   historyStartYear: ENV.ANALYTICS_HISTORY_START_YEAR,
 });
@@ -82,7 +95,11 @@ const airMenuModule = createAirMenuModule({
 app.use("/api", airMenuModule.publicRouter);
 
 // Cash closing module (hexagonal) — recebe gateway Vendus e getSummary do air-menu
-const cashClosingsModule = createCashClosingsModule(vendusModule.gateway, airMenuModule.getSummary);
+const cashClosingsModule = createCashClosingsModule(
+  vendusModule.gateway,
+  vendusBootConfig.registerId,
+  airMenuModule.getSummary,
+);
 
 // Cash closing public routes (PIN verify + submit) — no auth required
 app.use("/api", cashClosingsModule.publicRouter);

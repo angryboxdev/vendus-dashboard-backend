@@ -119,6 +119,10 @@ export const TABLE_REGISTRY = {
   supplier_invoice_imports: { organizationColumn: "org_id", locationBearing: false },
   suppliers: { organizationColumn: "org_id", locationBearing: false },
   vendus_product_mapping: { organizationColumn: "org_id", locationBearing: false },
+  // spec C (org-integration-credentials) ticket 03: one row per organization.
+  vendus_credentials: { organizationColumn: "org_id", locationBearing: false },
+  // spec C ticket 03: keyed by (org_id, location_id), like location_tokens/pairing_codes.
+  vendus_location_config: { organizationColumn: "org_id", locationBearing: true },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;
