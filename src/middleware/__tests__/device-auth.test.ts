@@ -8,18 +8,10 @@ import {
   type DeviceScopeRow,
   type DeviceTokenLookup,
 } from "../device-auth-middleware.js";
-import { mintOrganizationId } from "../../kernel/organization-id.js";
-import type { UnattendedScope } from "../../infra/scoped-db/unattended-scope.js";
-
 const RAW_TOKEN = "raw-token-value";
 const TOKEN_HASH = createHash("sha256").update(RAW_TOKEN).digest("hex");
 
 const SCOPE_ROW: DeviceScopeRow = { organizationId: "org-a", locationId: "loc-1" };
-
-const UNATTENDED_SCOPE: UnattendedScope = {
-  organizationId: mintOrganizationId("unattended-org"),
-  locationId: "unattended-loc",
-};
 
 function fakeLookupToken(rowsByHash: Record<string, DeviceScopeRow | null>) {
   const calls: string[] = [];
@@ -99,7 +91,7 @@ describe("createDeviceAuthMiddleware", () => {
 
   it("a valid token via the header populates req.deviceAuth and calls next", async () => {
     const lookup = fakeLookupToken({ [TOKEN_HASH]: SCOPE_ROW });
-    const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn, unattendedScope: UNATTENDED_SCOPE });
+    const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn });
 
     const { req, res, next } = fakeReqRes({ header: RAW_TOKEN });
     await middleware.requireDeviceAuth(req, res, next);
@@ -108,23 +100,22 @@ describe("createDeviceAuthMiddleware", () => {
     expect(next).toHaveBeenCalled();
   });
 
-  it("no token at all falls back to the unattended scope (ticket-01 scaffolding, D12)", async () => {
+  it("no token at all is rejected with 401 — the unattended-scope fallback was removed in ticket 06", async () => {
     const lookup = fakeLookupToken({});
-    const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn, unattendedScope: UNATTENDED_SCOPE });
+    const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn });
 
-    const { req, res, next } = fakeReqRes();
+    const { req, res, next, status, json } = fakeReqRes();
     await middleware.requireDeviceAuth(req, res, next);
 
-    expect(req.deviceAuth).toEqual({
-      organizationId: UNATTENDED_SCOPE.organizationId,
-      locationId: UNATTENDED_SCOPE.locationId,
-    });
-    expect(next).toHaveBeenCalled();
+    expect(req.deviceAuth).toBeUndefined();
+    expect(status).toHaveBeenCalledWith(401);
+    expect(json).toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
   });
 
-  it("an unknown token via the header is rejected with 401, not the unattended fallback", async () => {
+  it("an unknown token via the header is rejected with 401, the same as a missing one", async () => {
     const lookup = fakeLookupToken({});
-    const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn, unattendedScope: UNATTENDED_SCOPE });
+    const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn });
 
     const { req, res, next, status, json } = fakeReqRes({ header: "unknown-token" });
     await middleware.requireDeviceAuth(req, res, next);
@@ -137,7 +128,7 @@ describe("createDeviceAuthMiddleware", () => {
 
   it("a revoked token via the header is rejected with the exact same status and body as an unknown one", async () => {
     const lookup = fakeLookupToken({});
-    const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn, unattendedScope: UNATTENDED_SCOPE });
+    const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn });
 
     const unknown = fakeReqRes({ header: "unknown-token" });
     await middleware.requireDeviceAuth(unknown.req, unknown.res, unknown.next);
@@ -149,24 +140,23 @@ describe("createDeviceAuthMiddleware", () => {
     expect(revoked.json.mock.calls[0]).toEqual(unknown.json.mock.calls[0]);
   });
 
-  it("requireDeviceAuth ignores a query-parameter token — header transport only", async () => {
+  it("requireDeviceAuth ignores a query-parameter token — header transport only, so it's rejected as if no token were sent", async () => {
     const lookup = fakeLookupToken({ [TOKEN_HASH]: SCOPE_ROW });
-    const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn, unattendedScope: UNATTENDED_SCOPE });
+    const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn });
 
-    const { req, res, next } = fakeReqRes({ query: { [DEVICE_TOKEN_QUERY_PARAM]: RAW_TOKEN } });
+    const { req, res, next, status } = fakeReqRes({ query: { [DEVICE_TOKEN_QUERY_PARAM]: RAW_TOKEN } });
     await middleware.requireDeviceAuth(req, res, next);
 
-    // No header present at all -> falls back to the unattended scope,
-    // exactly as if no token had been supplied.
-    expect(req.deviceAuth).toEqual({
-      organizationId: UNATTENDED_SCOPE.organizationId,
-      locationId: UNATTENDED_SCOPE.locationId,
-    });
+    // No header present at all -> rejected, exactly as if no token had been
+    // supplied (no fallback left to catch it).
+    expect(req.deviceAuth).toBeUndefined();
+    expect(status).toHaveBeenCalledWith(401);
+    expect(next).not.toHaveBeenCalled();
   });
 
   it("requireDeviceAuthAllowingQueryParam accepts a token via the query string (KDS SSE exception, D7)", async () => {
     const lookup = fakeLookupToken({ [TOKEN_HASH]: SCOPE_ROW });
-    const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn, unattendedScope: UNATTENDED_SCOPE });
+    const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn });
 
     const { req, res, next } = fakeReqRes({ query: { [DEVICE_TOKEN_QUERY_PARAM]: RAW_TOKEN } });
     await middleware.requireDeviceAuthAllowingQueryParam(req, res, next);
@@ -179,7 +169,7 @@ describe("createDeviceAuthMiddleware", () => {
     const otherRow: DeviceScopeRow = { organizationId: "org-b", locationId: "loc-2" };
     const otherHash = createHash("sha256").update("header-token").digest("hex");
     const lookup = fakeLookupToken({ [otherHash]: otherRow, [TOKEN_HASH]: SCOPE_ROW });
-    const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn, unattendedScope: UNATTENDED_SCOPE });
+    const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn });
 
     const { req, res, next } = fakeReqRes({
       header: "header-token",
@@ -188,5 +178,17 @@ describe("createDeviceAuthMiddleware", () => {
     await middleware.requireDeviceAuthAllowingQueryParam(req, res, next);
 
     expect(req.deviceAuth).toEqual({ organizationId: "org-b", locationId: "loc-2" });
+  });
+
+  it("requireDeviceAuthAllowingQueryParam rejects with 401 when neither header nor query param carry a token", async () => {
+    const lookup = fakeLookupToken({});
+    const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn });
+
+    const { req, res, next, status } = fakeReqRes();
+    await middleware.requireDeviceAuthAllowingQueryParam(req, res, next);
+
+    expect(req.deviceAuth).toBeUndefined();
+    expect(status).toHaveBeenCalledWith(401);
+    expect(next).not.toHaveBeenCalled();
   });
 });

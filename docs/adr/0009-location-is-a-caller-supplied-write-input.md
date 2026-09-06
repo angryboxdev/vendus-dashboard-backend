@@ -95,3 +95,35 @@ Related: `docs/adr/0002` (location is first-class in v1), `docs/adr/0005`
 `docs/adr/0008` (the helper whose registry marks which tables are
 location-bearing); `docs/MULTI_TENANCY_SAAS_DESIGN.md` §2.2;
 `.scratch/scoped-access/spec.md` D3, D4, D5, D14, D16.
+
+## Amendment (spec E, ticket 06)
+
+The decision above stands unchanged for the authenticated write endpoints
+(D4, D5) and for the crons. **D14's mechanism is superseded for kiosk,
+till-closing and KDS specifically — not for the crons.**
+
+D14 recorded that "the device has no identity" and that the kiosk and
+till-closing paths take both organization and location from the single named
+`UNATTENDED_SCOPE` file "until device identity lands." Spec E's
+`location-credentials` module is that device-identity spec for three of
+D14's paths: kiosk, till-closing and KDS now resolve their organization and
+location from a real, per-Location, revocable token (`requireDeviceAuth`),
+never from `UNATTENDED_SCOPE`, as of spec E's closing increment (ticket 06 —
+see `docs/adr/0010`). The employee PIN lookup D14 also describes ("scoped to
+the unattended organization... superseded by device identity later") now
+scopes to whichever organization actually paired the calling screen, which
+closes the separately-deferred "kiosk PIN collision across organizations"
+item — see the deferred register.
+
+**The crons are unaffected.** They never went through `requireDeviceAuth` in
+the first place — `internalCronRoutes.ts` builds `UNATTENDED_SCOPE` directly
+— and D14's mechanism remains their live, correct identity source until spec
+C ("per-organization credentials, cron fan-out") retires it for them. This
+amendment does not touch that part of D14, and `UNATTENDED_SCOPE` itself is
+not deleted.
+
+This follows the same discipline as ADR-0007's own amendment: the original
+decision stands, and this section marks what changed rather than rewriting
+it. See `docs/adr/0010` for the replacement mechanism's own design decisions,
+and `.scratch/location-credentials/spec.md` D1, D14 for why the crons are a
+separate spec's problem.

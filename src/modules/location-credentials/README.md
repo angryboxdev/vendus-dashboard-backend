@@ -171,11 +171,10 @@ new domain concept described above, unaddressed by this field.
       server round-trip). Returns `200 { locationId: string }` — the
       `locationId` `requireDeviceAuth` itself resolved — on a valid token;
       the middleware rejects with `401` before this handler ever runs for a
-      missing/unknown/revoked token, identically (see "Tokens are deleted,
-      not marked revoked" below) — **except** a request that carries no
-      token at all, which still gets `200` via `requireDeviceAuth`'s
-      `UNATTENDED_SCOPE` fallback (see that section below) — this route
-      does not change that behavior, it inherited it. No new use case/port:
+      missing, unknown or revoked token, identically (see "Tokens are
+      deleted, not marked revoked" below; ticket 06 removed the
+      `UNATTENDED_SCOPE` fallback that used to make a missing token the one
+      exception). No new use case/port:
       `requireDeviceAuth` already does 100% of the validation this route
       needs (DB-backed hash lookup, not just decoding a token's shape), so
       the handler is a thin pass-through with no domain decision left to
@@ -230,22 +229,25 @@ therefore the same thing to `requireDeviceAuth`: this is what makes
 revoking one token can never touch a sibling row at the same Location (D4) —
 there is no shared state between rows to accidentally disturb.
 
-### `requireDeviceAuth`'s `UNATTENDED_SCOPE` fallback is temporary scaffolding
+### The `UNATTENDED_SCOPE` fallback is gone (ticket 06 closed the rollout)
 
-When no token is present on a request **at all**, `requireDeviceAuth`
-currently falls back to populating `req.deviceAuth` from `UNATTENDED_SCOPE`
-instead of rejecting. This is deliberate, ticket-01-only scaffolding
-(spec.md D12, "expand-and-contract"): nothing consumes this middleware yet,
-and Angrybox's live kiosk/till/KDS screens must keep working, unpaired,
-while this module ships and while the front-end pairing UI (ticket 05) is
-built. **Ticket 06 deletes this fallback for kiosk, till-closing and KDS
-specifically** — making the token mandatory for those three consumers.
-`UNATTENDED_SCOPE` itself is untouched by that removal: it remains the
-crons' mechanism, and stays that way until spec C retires it for them (spec
-C is a different piece of work — see spec.md D1). A present-but-unresolvable
-token (missing/unknown/revoked) is **never** covered by this fallback — only
-a request carrying no token at all is; see `resolveDeviceAuth` above for why
-those three still collapse into one outcome.
+Tickets 01-05 had `requireDeviceAuth` fall back to populating `req.deviceAuth`
+from `UNATTENDED_SCOPE` when no token was present on a request **at all** —
+deliberate, temporary expand-and-contract scaffolding (spec.md D12) so
+Angrybox's live kiosk/till/KDS screens kept working, unpaired, while this
+module shipped and while the front-end pairing UI (ticket 05) was built.
+
+**Ticket 06 deleted that fallback.** `requireDeviceAuth` and
+`requireDeviceAuthAllowingQueryParam` now reject a request carrying no
+token exactly as they already rejected an unknown or revoked one — one
+outcome, no distinguishing signal (story 35). Kiosk, till-closing and KDS
+are this middleware's only consumers (crons build `UNATTENDED_SCOPE`
+directly in `internalCronRoutes.ts` and never go through this middleware),
+so removing the fallback needed no per-consumer parameterization — the
+factory (`createDeviceAuthMiddleware`) no longer takes an `unattendedScope`
+dependency at all. `UNATTENDED_SCOPE` itself is untouched by this: it
+remains the crons' mechanism, and stays that way until spec C retires it for
+them (spec C is a different piece of work — see spec.md D1).
 
 ### The KDS SSE query-parameter transport is a deliberate exception, not an inconsistency
 
@@ -306,6 +308,11 @@ blocklist).
 - Adapter integration test (needs `supabase start`, then `supabase db reset` at least once to apply this ticket's migration): `npx jest --config jest.config.cjs --testPathPattern=src/modules/location-credentials/__tests__/integration`.
 - All of this module: `npx jest --config jest.config.cjs --testPathPattern=src/modules/location-credentials`.
 - Lint de fronteiras: `npx depcruise src/modules/location-credentials --config .dependency-cruiser.cjs`.
+- Pairing-and-revocation smoke (hand-run against the local stack, ticket 06):
+  `.scratch/location-credentials/issues/06-closing-mandatory-token-and-adrs.md`
+  ("Comments" section) — pairing, cross-organization rejection, immediate
+  revocation, and the KDS stream's query-param/header equivalence, all
+  verified live.
 
 ## Known gaps / open debt
 
@@ -319,14 +326,9 @@ blocklist).
   route (only via the same hand-constructed fake `req`/`res` as the header
   form) — ticket 04, which actually mounts it on `GET /kds/stream`, is
   where that gets exercised against the real KDS route.
-- `GET /location-credentials/tokens/me` returns `200` for a request with
-  **no** device token at all, not `401` — it inherits `requireDeviceAuth`'s
-  `UNATTENDED_SCOPE` fallback (see above), which this ticket did not
-  change. A caller that wants "definitely paired, and I can prove it" from
-  this endpoint needs that fallback gone first — that's ticket 06's job for
-  kiosk/till-closing/KDS specifically; this route was not in that list and
-  still gets the fallback. `LocationToken` also has no expiry field at all
-  (only `PairingCode` expires) — "expired" is not a state this endpoint (or
-  `requireDeviceAuth`) can ever return; the only two outcomes are "valid" or
-  "missing/unknown/revoked," collapsed identically into `401` (or `200`
-  unattended, for a wholly absent token).
+- `LocationToken` has no expiry field at all (only `PairingCode` expires) —
+  "expired" is not a state this endpoint (or `requireDeviceAuth`) can ever
+  return; the only two outcomes are "valid" or "missing/unknown/revoked,"
+  collapsed identically into `401` (ticket 06 removed the one previous
+  exception, where a wholly absent token got `200` via the
+  `UNATTENDED_SCOPE` fallback).

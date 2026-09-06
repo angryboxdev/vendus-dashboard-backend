@@ -133,14 +133,15 @@ acrescenta:
   `verify-pin`, `submit`, `sessions` e `airmenu-totals` não têm utilizador
   autenticado — o kiosk e o ecrã de fecho são páginas públicas na mesma
   aplicação, sem build separado. O `publicRouter` monta `requireDeviceAuth`
-  (`src/middleware/device-auth.ts`, spec de location-credentials, ticket 01)
-  como middleware de router, e o controller lê `organizationId`/`locationId`
-  de `req.deviceAuth!`, nunca do body. Um ecrã emparelhado resolve para a sua
-  loja real via `X-Device-Token`; um ecrã não emparelhado continua a cair no
-  fallback de `UNATTENDED_SCOPE` que `requireDeviceAuth` já traz embutido —
-  o comportamento anterior a este ticket, preservado por esse fallback. As
-  rotas geridas (`list`, `get`, `patch`) continuam a ler `req.auth!.orgId`
-  como qualquer módulo autenticado.
+  (`src/middleware/device-auth.ts`, spec de location-credentials) como
+  middleware de router, e o controller lê `organizationId`/`locationId` de
+  `req.deviceAuth!`, nunca do body. Um ecrã emparelhado resolve para a sua
+  loja real via `X-Device-Token`; um ecrã sem token válido, com um token
+  desconhecido ou com um token revogado é rejeitado com `401` — ticket 06
+  removeu o fallback `UNATTENDED_SCOPE` que `requireDeviceAuth` usava durante
+  o rollout (tickets 01-05) para deixar um ecrã não emparelhado passar sem
+  token. As rotas geridas (`list`, `get`, `patch`) continuam a ler
+  `req.auth!.orgId` como qualquer módulo autenticado.
 - **`locationId` é um campo de comando, não um escopo (D7).** Ao contrário de
   `organizationId`, não ganhou um tipo próprio nem viaja como parâmetro
   separado nos output ports — é uma propriedade normal da entidade

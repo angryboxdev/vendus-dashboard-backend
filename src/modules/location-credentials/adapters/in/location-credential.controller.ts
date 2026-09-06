@@ -173,17 +173,13 @@ export class LocationCredentialController {
      * A paired screen's own revalidation check (frontend `DevicePairingGate`):
      * "is the token I already have still good?" `requireDeviceAuth` has
      * already done 100% of the work by the time this handler runs — it
-     * rejects with 401 for a present-but-unknown/revoked token (README
-     * "Tokens are deleted, not marked revoked") — so this is a thin
-     * pass-through that echoes back the scope the middleware resolved,
-     * rather than a second read of something already proven. No new
-     * use-case/port: there is no domain decision left to make here.
-     * Caller beware: a request with NO token at all still falls through
-     * to 200 via `requireDeviceAuth`'s UNATTENDED_SCOPE fallback (D12
-     * scaffolding, ticket 06 removes it) — this route only tells you
-     * "the token you sent is bad," not "you're unpaired." The frontend
-     * must keep treating "no local token" as unpaired on its own, never
-     * inferring pairing from a 200 here alone.
+     * rejects with 401 for a missing, unknown or revoked token alike
+     * (README "Tokens are deleted, not marked revoked"; the
+     * `UNATTENDED_SCOPE` fallback for a wholly absent token was removed in
+     * ticket 06) — so this is a thin pass-through that echoes back the
+     * scope the middleware resolved, rather than a second read of something
+     * already proven. No new use-case/port: there is no domain decision
+     * left to make here.
      */
     this.deviceRouter.get(
       "/location-credentials/tokens/me",
