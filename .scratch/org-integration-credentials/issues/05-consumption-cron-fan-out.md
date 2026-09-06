@@ -14,7 +14,9 @@ utility and ticket 03's Vendus ports.
 
 **Blocked by:** 02, 03
 
-**Status:** ready-for-agent
+**Status:** won't-do — the `daily-vendus-consumption` cron is disabled and
+there's no plan to re-enable it. Ticket 07's smoke test was rescoped to
+cover ticket 06's direct-debits fan-out instead.
 
 - [ ] The cron (both the HTTP route and the standalone script) processes
       every `(org, location)` pair with Vendus configured, not a single

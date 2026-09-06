@@ -20,7 +20,7 @@ own closing ticket (06) handled the same kind of wrap-up.
   and the migrated AirMenu env vars are gone; both crons fan out; the two-
   organization smoke test passes.
 
-**Blocked by:** 04, 05, 06, 07
+**Blocked by:** 04, 06, 07
 
 **Status:** ready-for-agent
 
