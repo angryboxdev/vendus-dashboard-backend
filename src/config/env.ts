@@ -105,4 +105,11 @@ export const ENV = {
     process.env.CREDENTIALS_ENCRYPTION_KEY,
     "CREDENTIALS_ENCRYPTION_KEY",
   ),
+
+  /**
+   * AirMenu enterprise ID used by the sales-summary module to aggregate
+   * delivery revenue (Angry Box main enterprise — see ADR-0012).
+   * Required when the sales-summary module is active.
+   */
+  AIRMENU_SALES_SUMMARY_ENTERPRISE_ID: process.env.AIRMENU_SALES_SUMMARY_ENTERPRISE_ID ?? "",
 };

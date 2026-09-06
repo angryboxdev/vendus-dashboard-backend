@@ -4,11 +4,11 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `GetGrowthChartUseCase` reads all cached months for the year via `SalesSummaryCachePort.getYearMonths`.
-- [ ] For each past month absent from cache, the use case runs the same calculation logic as `GetSalesSummaryUseCase` (shared via `SalesSummaryCalculatorService`) sequentially, saving each result to cache before advancing to the next.
-- [ ] Current month follows the same TTL logic as ticket 01 (recalculate if `calculated_at` ≥ 15 min).
-- [ ] `SalesSummaryController` exposes `GET /api/sales-summary/growth?year=`; `organizationId` from `req.auth.orgId`.
-- [ ] Unit tests with fakes: all 12 months cached → no calculator calls; 3 months missing → calculator called exactly 3 times in month order; each missing month saved before the next is computed; a computation failure for one month does not abort the others (that month's entry has `cachedAt: null`).
-- [ ] Module README updated to document the cold-start behaviour (first load of a year with many uncached months is slow; `POST /refresh` is the pre-warm mechanism).
+- [x] `GetGrowthChartUseCase` reads all cached months for the year via `SalesSummaryCachePort.getYearMonths`.
+- [x] For each past month absent from cache, the use case runs the same calculation logic as `GetSalesSummaryUseCase` (shared via `SalesSummaryCalculatorService`) sequentially, saving each result to cache before advancing to the next.
+- [x] Current month follows the same TTL logic as ticket 01 (recalculate if `calculated_at` ≥ 15 min).
+- [x] `SalesSummaryController` exposes `GET /api/sales-summary/growth?year=`; `organizationId` from `req.auth.orgId`.
+- [x] Unit tests with fakes: all 12 months cached → no calculator calls; 3 months missing → calculator called exactly 3 times in month order; each missing month saved before the next is computed; a computation failure for one month does not abort the others (that month's entry has `cachedAt: null`).
+- [x] Module README updated to document the cold-start behaviour (first load of a year with many uncached months is slow; `POST /refresh` is the pre-warm mechanism).

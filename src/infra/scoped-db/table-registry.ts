@@ -129,6 +129,7 @@ export const TABLE_REGISTRY = {
   vendus_credentials: { organizationColumn: "org_id", locationBearing: false },
   // spec C ticket 03: keyed by (org_id, location_id), like location_tokens/pairing_codes.
   vendus_location_config: { organizationColumn: "org_id", locationBearing: true },
+  sales_summary_cache: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;

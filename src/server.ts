@@ -37,6 +37,7 @@ import { populateAuth, requireAuth, requireMinRole } from "./middleware/auth.js"
 import { authRoutes } from "./routes/authRoutes.js";
 import { createLocationsModule } from "./modules/locations/locations.module.js";
 import { createLocationCredentialsModule } from "./modules/location-credentials/location-credentials.module.js";
+import { createSalesSummaryModule } from "./modules/sales-summary/sales-summary.module.js";
 
 const app = express();
 
@@ -204,6 +205,14 @@ app.use("/api", requireMinRole("manager"), airMenuModule.router);
 // As routes legadas (/api/analytics/*, /api/documents, /api/reports/monthly-summary)
 // continuam registadas acima durante a migração do frontend.
 app.use("/api", requireMinRole("manager"), vendusModule.router);
+
+// Sales Summary module (hexagonal) — requires vendus and air-menu getSummary ports
+const salesSummaryModule = createSalesSummaryModule(
+  vendusModule.getSummary,
+  airMenuModule.getSummary,
+  { salesSummaryEnterpriseId: ENV.AIRMENU_SALES_SUMMARY_ENTERPRISE_ID },
+);
+app.use("/api", requireMinRole("manager"), salesSummaryModule.router);
 
 // Cash closing manager routes (authenticated)
 app.use("/api", requireMinRole("manager"), cashClosingsModule.managedRouter);
