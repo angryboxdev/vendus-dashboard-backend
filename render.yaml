@@ -19,6 +19,8 @@ services:
         sync: false
       - key: CREDENTIALS_ENCRYPTION_KEY
         sync: false
+      - key: CREDENTIALS_ENCRYPTION_KEY
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
@@ -43,6 +45,8 @@ services:
       - key: NODE_ENV
         value: staging
       - key: VENDUS_BASE_URL
+        sync: false
+      - key: CREDENTIALS_ENCRYPTION_KEY
         sync: false
       - key: CREDENTIALS_ENCRYPTION_KEY
         sync: false

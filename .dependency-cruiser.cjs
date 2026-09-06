@@ -76,6 +76,7 @@ module.exports = {
           "^src/jobs/runOrganizationProvisioning\\.ts$",
           "^src/modules/location-credentials/__tests__/integration/supabase-location-credentials\\.integration\\.test\\.ts$",
           "^src/modules/vendus/__tests__/integration/supabase-vendus-credentials-and-location-config\\.integration\\.test\\.ts$",
+          "^src/modules/air-menu/__tests__/integration/supabase-air-menu-credentials\\.integration\\.test\\.ts$",
         ],
       },
       to: {

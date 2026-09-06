@@ -16,7 +16,9 @@ function endOfDay(dateStr: string): Date {
  * os totais de delivery (Uber Eats, Glovo, Bolt Food) de um dado dia.
  *
  * Usa GetSummaryPort do módulo air-menu (comunicação inter-módulo via port).
- * O enterpriseId é configurado no composition root (env AIRMENU_CLOSING_ENTERPRISE_ID).
+ * O enterpriseId é resolvido pelo servidor a partir da base de dados
+ * (airmenu_location_config, spec org-integration-credentials ticket 04) e
+ * injectado no composition root do cash-closings.
  */
 export class AirMenuDeliveryGateway implements AirMenuDeliveryGatewayPort {
   constructor(

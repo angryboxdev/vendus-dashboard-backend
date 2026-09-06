@@ -23,12 +23,16 @@ import { createBankStatementsModule } from "./modules/bank-statements/bank-state
 import { createAirMenuModule } from "./modules/air-menu/air-menu.module.js";
 import { createVendusModule, resolveVendusBootConfig } from "./modules/vendus/vendus.module.js";
 import { setVendusApiKey } from "./infra/vendusClient.js";
+import { SupabaseAirMenuCredentialsRepository } from "./modules/air-menu/adapters/out/supabase-air-menu-credentials.repository.js";
+import { SupabaseAirMenuLocationConfigRepository } from "./modules/air-menu/adapters/out/supabase-air-menu-location-config.repository.js";
 import { createCrmModule } from "./modules/crm/crm.module.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { crmRoutes } from "./routes/crmRoutes.js";
 import { runDailyVendusConsumptionJob } from "./services/dailyVendusConsumptionJobService.js";
 import { UNATTENDED_SCOPE } from "./infra/scoped-db/unattended-scope.js";
+import { createScopedQuery } from "./infra/scoped-db/scoped-query.js";
+import { resolveClosingEnterpriseId } from "./modules/air-menu/domain/services/resolve-closing-enterprise-id.js";
 import { populateAuth, requireAuth, requireMinRole } from "./middleware/auth.js";
 import { authRoutes } from "./routes/authRoutes.js";
 import { createLocationsModule } from "./modules/locations/locations.module.js";
@@ -82,11 +86,29 @@ const vendusModule = createVendusModule({
   historyStartYear: ENV.ANALYTICS_HISTORY_START_YEAR,
 });
 
+// Air Menu: credenciais e config resolvidas da base de dados (spec
+// org-integration-credentials, ticket 04) — nunca de ENV.AIRMENU_API_KEY/
+// USERNAME/PASSWORD/CLOSING_ENTERPRISE_ID, que deixaram de existir.
+const airMenuCredentialsRepository = new SupabaseAirMenuCredentialsRepository(createScopedQuery);
+const airMenuLocationConfigRepository = new SupabaseAirMenuLocationConfigRepository(createScopedQuery);
+
+const airMenuCredentialsResult = await airMenuCredentialsRepository.getByOrganization(
+  UNATTENDED_SCOPE.organizationId,
+);
+if (airMenuCredentialsResult.status === "not_configured") {
+  throw new Error("AirMenu credentials not configured for the Angrybox organization — run the cutover script.");
+}
+const airMenuLocationConfigResult = await airMenuLocationConfigRepository.getByLocation(
+  UNATTENDED_SCOPE.organizationId,
+  UNATTENDED_SCOPE.locationId,
+);
+const airMenuClosingEnterpriseId = resolveClosingEnterpriseId(airMenuLocationConfigResult);
+
 // Air Menu: instanciado antes do cash-closings para injectar getSummary
 const airMenuModule = createAirMenuModule({
-  apiKey: ENV.AIRMENU_API_KEY,
-  username: ENV.AIRMENU_USERNAME,
-  password: ENV.AIRMENU_PASSWORD,
+  apiKey: airMenuCredentialsResult.credentials.apiKey,
+  username: airMenuCredentialsResult.credentials.username,
+  password: airMenuCredentialsResult.credentials.password,
   enterprises: ENV.AIRMENU_ENTERPRISES,
   webhookSecret: ENV.AIRMENU_WEBHOOK_SECRET,
 });
@@ -99,6 +121,7 @@ const cashClosingsModule = createCashClosingsModule(
   vendusModule.gateway,
   vendusBootConfig.registerId,
   airMenuModule.getSummary,
+  airMenuClosingEnterpriseId,
 );
 
 // Cash closing public routes (PIN verify + submit) — no auth required
