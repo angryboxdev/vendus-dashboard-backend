@@ -8,6 +8,7 @@ interface PairingCodeProps {
   expiresAt: Date;
   burnedAt: Date | null;
   createdAt: Date;
+  description: string | null;
 }
 
 /**
@@ -23,6 +24,7 @@ export class PairingCode {
   readonly code: string;
   readonly expiresAt: Date;
   readonly createdAt: Date;
+  readonly description: string | null;
   private _burnedAt: Date | null;
 
   private constructor(props: PairingCodeProps) {
@@ -32,6 +34,7 @@ export class PairingCode {
     this.code = props.code;
     this.expiresAt = props.expiresAt;
     this.createdAt = props.createdAt;
+    this.description = props.description;
     this._burnedAt = props.burnedAt;
   }
 
@@ -56,6 +59,7 @@ export class PairingCode {
     locationId: string;
     code: string;
     expiresAt: Date;
+    description?: string | null;
   }): PairingCode {
     return new PairingCode({
       id: crypto.randomUUID(),
@@ -65,6 +69,7 @@ export class PairingCode {
       expiresAt: props.expiresAt,
       burnedAt: null,
       createdAt: new Date(),
+      description: props.description ?? null,
     });
   }
 

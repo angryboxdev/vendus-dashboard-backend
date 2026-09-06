@@ -41,6 +41,11 @@ Deliberately unrestricted across features: a single token authorizes kiosk,
 till-closing and KDS requests equally, so one physical screen that serves
 more than one of those pages pairs once, not once per page. There is no
 feature-scoped variant.
+Carries an optional, nullable, write-once `description` copied from the
+`PairingCode` that minted it — a plain opaque label (e.g. "Kitchen monitor")
+with no identity or lookup semantics: it cannot be used to look anything up,
+is not unique, and nothing branches on its value. Not the Device entity
+below; fixing a typo means revoking and re-pairing, not editing the field.
 _Avoid_: Device (this codebase does not model a Device entity — the
 credential is per-Location, not per-device), Device Token, Device Identity
 (the deferred register's name for this concept, kept for historical
@@ -51,3 +56,7 @@ A short-lived, single-use code an org admin generates for a specific
 Location, entered once on an unpaired screen to redeem a Location Token. Not
 itself a credential — it authorizes exactly one redemption, then is burned
 whether it succeeded or expired.
+Carries the same optional, nullable, write-once `description` set by the
+admin at generation time — the only channel that value has to reach the
+`LocationToken` minted later, since generation and redemption are separate
+requests, possibly by different actors minutes apart.

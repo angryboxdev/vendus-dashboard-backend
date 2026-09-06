@@ -110,6 +110,24 @@ describe("SupabasePairingCodeRepository (integration, local Supabase stack)", ()
     expect(found!.organizationId).toBe(ANGRYBOX_ORG_ID);
     expect(found!.locationId).toBe(ANGRYBOX_LOCATION_ID);
     expect(found!.isBurned).toBe(false);
+    expect(found!.description).toBeNull();
+  });
+
+  it("round-trips a description", async () => {
+    const repo = new SupabasePairingCodeRepository(scopedQuery);
+    const pairingCode = PairingCode.create({
+      organizationId: ANGRYBOX_ORG_ID,
+      locationId: ANGRYBOX_LOCATION_ID,
+      code: `IT${Date.now()}D`,
+      expiresAt: new Date(Date.now() + 60_000),
+      description: "Kitchen monitor",
+    });
+    createdPairingCodeIds.push(pairingCode.id);
+
+    await repo.save(pairingCode);
+    const found = await repo.findByCode(pairingCode.code);
+
+    expect(found!.description).toBe("Kitchen monitor");
   });
 
   it("persists burn() so a re-saved code comes back burned", async () => {
@@ -150,7 +168,26 @@ describe("SupabaseLocationTokenRepository (integration, local Supabase stack)", 
     await repo.save(token);
     const listed = await repo.listByLocation(ANGRYBOX_ORG_ID, ANGRYBOX_LOCATION_ID);
 
-    expect(listed.some((t) => t.id === token.id)).toBe(true);
+    const found = listed.find((t) => t.id === token.id);
+    expect(found).toBeDefined();
+    expect(found!.description).toBeNull();
+  });
+
+  it("round-trips a description", async () => {
+    const repo = new SupabaseLocationTokenRepository(scopedQuery);
+    const token = LocationToken.create({
+      organizationId: ANGRYBOX_ORG_ID,
+      locationId: ANGRYBOX_LOCATION_ID,
+      tokenHash: `hash-desc-${Date.now()}`,
+      description: "Kitchen monitor",
+    });
+    createdTokenIds.push(token.id);
+
+    await repo.save(token);
+    const listed = await repo.listByLocation(ANGRYBOX_ORG_ID, ANGRYBOX_LOCATION_ID);
+
+    const found = listed.find((t) => t.id === token.id);
+    expect(found!.description).toBe("Kitchen monitor");
   });
 
   it("revoking one token deletes only that row, leaving a sibling at the same location untouched", async () => {

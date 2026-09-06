@@ -21,7 +21,7 @@ This ticket exists specifically so the closing increment (06) doesn't ship the
 mandatory-token cutover before any real screen is capable of pairing — that sequencing
 mistake would turn deployment into an outage on every live kiosk, till and KDS screen.
 
-**Blocked by:** 02, 03, 04
+**Blocked by:** 02, 03, 04, 07
 
 **Status:** ready-for-agent
 
@@ -37,6 +37,9 @@ mistake would turn deployment into an outage on every live kiosk, till and KDS s
 - [ ] Back/front contract for the three new/changed endpoints (generate pairing code,
       list/revoke tokens, redeem code) matches what tickets 01–04 actually shipped;
       flag and resolve any drift in the same task, per CLAUDE.md.
+- [ ] Pairing-code generation form includes an optional "description" input
+      (e.g. "Kitchen monitor"); active-tokens list displays each token's description
+      — see ticket 07, backend contract for this field.
 
 **Manual tests - results**
 

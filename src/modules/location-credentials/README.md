@@ -1,7 +1,7 @@
 # Module: location-credentials
 
 > Status: active
-> Last updated: 2026-09-05
+> Last updated: 2026-09-06
 
 ---
 
@@ -63,18 +63,23 @@ see "No Device entity" below.
 ## Domain concepts
 
 - **PairingCode** — `id`, `organizationId`, `locationId`, `code`,
-  `expiresAt`, `burnedAt`. Invariant: `burn()` is called on the **first
-  redemption attempt**, whether that attempt succeeds or the caller never
-  receives the response — a second attempt against the same code always
-  finds it burned, even if the first attempt actually failed for some other
-  reason (e.g. expiry). `isExpired(now)` and `burn(now)` are separate calls
-  so the use case can burn before it checks expiry (spec.md D6).
+  `expiresAt`, `burnedAt`, `description`. Invariant: `burn()` is called on
+  the **first redemption attempt**, whether that attempt succeeds or the
+  caller never receives the response — a second attempt against the same
+  code always finds it burned, even if the first attempt actually failed for
+  some other reason (e.g. expiry). `isExpired(now)` and `burn(now)` are
+  separate calls so the use case can burn before it checks expiry (spec.md
+  D6). `description` is an optional, nullable, write-once free-text label
+  set by the admin at generation time (ticket 07) — see "No Device entity"
+  below for what it is not.
 - **LocationToken** — `id`, `organizationId`, `locationId`, `tokenHash`,
-  `issuedAt`. Holds only the SHA-256 hash of the raw token — the raw value
-  is minted and returned exactly once, by `RedeemPairingCodeUseCase`, and is
-  never reconstructed from this entity or logged anywhere. Authorizes one
-  Location, not a feature (spec.md D8) — nothing on this entity says which
-  of kiosk/till/KDS it was paired "for."
+  `issuedAt`, `description`. Holds only the SHA-256 hash of the raw token —
+  the raw value is minted and returned exactly once, by
+  `RedeemPairingCodeUseCase`, and is never reconstructed from this entity or
+  logged anywhere. Authorizes one Location, not a feature (spec.md D8) —
+  nothing on this entity says which of kiosk/till/KDS it was paired "for."
+  `description` is copied from the `PairingCode` at redemption time (ticket
+  07) — it is the same opaque label, not a new piece of identity.
 
 ### No Device entity (spec.md D3, story 33)
 
@@ -89,6 +94,19 @@ this,"** that is a new domain concept, not a gap in this one — it needs its
 own design, informed by this decision, not a field bolted onto
 `LocationToken`.
 
+**`description` (ticket 07) is not that Device entity.** An admin can
+attach a free-text label (e.g. "Kitchen monitor") when generating a pairing
+code, carried onto the resulting `LocationToken` so a later listing says
+which physical device a token is for — but it is a plain opaque string with
+no identity or lookup semantics: it cannot be used to look anything up, it
+is not unique, and nothing in this module branches on its value. It exists
+purely as a carrier between two separate requests (generation, then
+redemption, possibly minutes apart and by a different actor) — there is no
+other channel for that value to reach the token. It is also write-once: no
+update/rename endpoint, so fixing a typo means revoking and re-pairing. A
+future "which screen is this, actually identify it" request is still the
+new domain concept described above, unaddressed by this field.
+
 ## Ports
 
 ### Input (use cases)
@@ -97,13 +115,17 @@ own design, informed by this decision, not a field bolted onto
   organization's Locations. Confirms ownership via `locations`' own
   `LocationRepositoryPort.findOneForOrganization` (spec.md D11/D19) rather
   than re-implementing that check; throws `LocationNotOwnedError` otherwise.
+  Accepts an optional `description` (ticket 07): trimmed, 1-100 chars if
+  present, throws `InvalidDescriptionError` if it's whitespace-only or too
+  long; omitted stores `null`.
 - `RedeemPairingCodePort` — redeems a code for a raw token. No caller
   identity is required — this is how an unpaired screen gets its first
   credential. Throws `PairingCodeNotFoundError`, `PairingCodeAlreadyUsedError`
   or `PairingCodeExpiredError`; the code is burned before any of these is
-  decided (see PairingCode above).
+  decided (see PairingCode above). Copies the pairing code's `description`
+  onto the minted `LocationToken` (ticket 07).
 - `ListActiveTokensPort` — lists a Location's active tokens (`id`,
-  `issuedAt`, `locationName`). Confirms ownership via `locations`'
+  `issuedAt`, `locationName`, `description`). Confirms ownership via `locations`'
   `LocationRepositoryPort.findOneForOrganization` the same way
   `GeneratePairingCodePort` does, throwing `LocationNotOwnedError`
   otherwise — `locationName` comes from that same lookup, not from

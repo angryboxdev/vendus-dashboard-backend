@@ -18,6 +18,7 @@ export interface PairingCodeRow {
   expiresAt: string;
   burnedAt: string | null;
   createdAt: string;
+  description: string | null;
 }
 
 export async function findPairingCodeRowByCode(code: string): Promise<PairingCodeRow | null> {
@@ -26,7 +27,7 @@ export async function findPairingCodeRowByCode(code: string): Promise<PairingCod
 
   const { data, error } = await supabase
     .from("pairing_codes")
-    .select("id, org_id, location_id, code, expires_at, burned_at, created_at")
+    .select("id, org_id, location_id, code, expires_at, burned_at, created_at, description")
     .eq("code", code)
     .maybeSingle();
   if (error || !data) return null;
@@ -40,5 +41,6 @@ export async function findPairingCodeRowByCode(code: string): Promise<PairingCod
     expiresAt: row.expires_at as string,
     burnedAt: (row.burned_at as string | null) ?? null,
     createdAt: row.created_at as string,
+    description: (row.description as string | null) ?? null,
   };
 }

@@ -2,7 +2,7 @@ import { GeneratePairingCodeUseCase } from "../../application/use-cases/generate
 import { FakePairingCodeRepository } from "../fakes/fake-pairing-code-repository.js";
 import { FakeLocationRepository } from "../fakes/fake-location-repository.js";
 import { Location } from "../../../locations/domain/entities/location.js";
-import { LocationNotOwnedError } from "../../domain/errors.js";
+import { InvalidDescriptionError, LocationNotOwnedError } from "../../domain/errors.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 
 const ORG_A = mintOrganizationId("org-a");
@@ -26,12 +26,53 @@ describe("GeneratePairingCodeUseCase", () => {
 
     expect(result.code).toHaveLength(8);
     expect(result.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect(result.description).toBeNull();
 
     const saved = await pairingCodeRepository.findByCode(result.code);
     expect(saved).not.toBeNull();
     expect(saved!.organizationId).toBe(ORG_A);
     expect(saved!.locationId).toBe("loc-1");
     expect(saved!.isBurned).toBe(false);
+    expect(saved!.description).toBeNull();
+  });
+
+  it("trims and carries an optional description", async () => {
+    const { pairingCodeRepository, locationRepository, useCase } = makeUseCase();
+    locationRepository.seed(ORG_A, [
+      Location.reconstitute({ id: "loc-1", name: "Store", code: "S1", timezone: "Europe/Lisbon", isActive: true }),
+    ]);
+
+    const result = await useCase.execute({
+      organizationId: ORG_A,
+      locationId: "loc-1",
+      description: "  Kitchen monitor  ",
+    });
+
+    expect(result.description).toBe("Kitchen monitor");
+    const saved = await pairingCodeRepository.findByCode(result.code);
+    expect(saved!.description).toBe("Kitchen monitor");
+  });
+
+  it("rejects a whitespace-only description", async () => {
+    const { locationRepository, useCase } = makeUseCase();
+    locationRepository.seed(ORG_A, [
+      Location.reconstitute({ id: "loc-1", name: "Store", code: "S1", timezone: "Europe/Lisbon", isActive: true }),
+    ]);
+
+    await expect(
+      useCase.execute({ organizationId: ORG_A, locationId: "loc-1", description: "   " }),
+    ).rejects.toThrow(InvalidDescriptionError);
+  });
+
+  it("rejects a description longer than 100 characters", async () => {
+    const { locationRepository, useCase } = makeUseCase();
+    locationRepository.seed(ORG_A, [
+      Location.reconstitute({ id: "loc-1", name: "Store", code: "S1", timezone: "Europe/Lisbon", isActive: true }),
+    ]);
+
+    await expect(
+      useCase.execute({ organizationId: ORG_A, locationId: "loc-1", description: "a".repeat(101) }),
+    ).rejects.toThrow(InvalidDescriptionError);
   });
 
   it("rejects a location that does not belong to the calling organization", async () => {
