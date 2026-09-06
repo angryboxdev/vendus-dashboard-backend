@@ -61,4 +61,4 @@ nothing more.
 - [x] An organization with one location shows no picker and behaves exactly as before
 - [x] An organization with several locations lets the user choose
 - [x] The kiosk and till-closing screens are untouched
-- [ ] Deployed to production **before** ticket 21 runs — ticket 21 already ran; backend now returns `locationId` on shifts/attendance so the frontend form no longer fails silently
+- [x] Deployed to production **before** ticket 21 runs — ticket 21 already ran; backend now returns `locationId` on shifts/attendance so the frontend form no longer fails silently

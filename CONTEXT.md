@@ -60,3 +60,42 @@ Carries the same optional, nullable, write-once `description` set by the
 admin at generation time — the only channel that value has to reach the
 `LocationToken` minted later, since generation and redemption are separate
 requests, possibly by different actors minutes apart.
+
+## Sales analytics
+
+**Sales Period**:
+A calendar month (year + month pair) — the unit of revenue analysis in the
+sales-summary module. Free date ranges are not supported; the calendar month
+boundary is the only granularity the module accepts.
+_Avoid_: Reporting period, date range, interval.
+
+**Sales Summary**:
+A consolidated revenue view for one Sales Period, aggregating Vendus
+(in-person channels) and AirMenu (delivery platform channels) into a single
+result.
+_Avoid_: Dashboard, report.
+
+**Unified Channel**:
+One entry in the channel breakdown of a Sales Summary: Salão, Take Away,
+Eatz, Uber Eats, Glovo, Bolt Food. The legacy Apps channel (pre-AirMenu
+platform deliveries billed directly in Vendus) is also a Unified Channel,
+present only when historical data exists for the period.
+_Avoid_: Source (use for the two data-source systems — Vendus and AirMenu —
+not for individual channels).
+
+**Unified Category**:
+One of four product groups used to reconcile Vendus and AirMenu taxonomies
+in a Sales Summary: Pizzas, Bebidas Alcoólicas, Bebidas, Outros. AirMenu
+"Drinks" maps to Bebidas (known approximation — AirMenu makes no
+alcoholic/non-alcoholic distinction; see ADR-0011 note). Vendus "sacos"
+maps to Outros.
+_Avoid_: Category (ambiguous — qualify as Unified Category, Vendus category,
+or AirMenu category when the distinction matters).
+
+**Gross Revenue**:
+Revenue that includes VAT (as opposed to Net Revenue, which excludes VAT).
+In the Sales Summary module the headline Gross Revenue KPI additionally
+subtracts credit note values for the period — see ADR-0011. The
+pre-cancellation total (invoices only, before NC subtraction) is called
+Faturado Total and is shown as a secondary informative card.
+_Avoid_: Total Revenue (ambiguous across contexts).
