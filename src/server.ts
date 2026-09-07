@@ -142,6 +142,25 @@ app.use("/api", kdsModule.router);
 const locationCredentialsModule = createLocationCredentialsModule();
 app.use("/api", locationCredentialsModule.deviceRouter);
 
+// Financial base + invoices modules instantiated here (ahead of their
+// protected route registration below) so processDirectDebits is available
+// for the internal cron router, which must be mounted before requireAuth.
+const financialBaseModule = createFinancialBaseModule();
+const invoicesModule = createInvoicesModule(financialBaseModule.createSupplier);
+
+// Internal cron routes: authenticated via requireCronSecret (Bearer
+// CRON_SECRET), not user sessions — must be mounted before the global
+// requireAuth below, or Supabase JWT auth rejects the request first.
+if (ENV.CRON_SECRET) {
+  app.use(
+    "/api",
+    createInternalCronRouter({
+      processDirectDebits: invoicesModule.processDirectDebits,
+      listOrganizations,
+    }),
+  );
+}
+
 // All routes below this line require authentication
 app.use(requireAuth);
 
@@ -175,12 +194,10 @@ const crmModule = createCrmModule();
 app.use("/api", requireMinRole("manager"), crmModule.router);
 app.use("/api", requireMinRole("manager"), crmRoutes);
 
-// Financial base module (hexagonal)
-const financialBaseModule = createFinancialBaseModule();
+// Financial base module (hexagonal) — instantiated above, before requireAuth
 app.use("/api", requireMinRole("manager"), financialBaseModule.router);
 
-// Invoices module (hexagonal) — recebe createSupplier do financial-base
-const invoicesModule = createInvoicesModule(financialBaseModule.createSupplier);
+// Invoices module (hexagonal) — instantiated above, before requireAuth
 app.use("/api", requireMinRole("manager"), invoicesModule.router);
 
 // Payable entries module (hexagonal)
@@ -217,16 +234,6 @@ app.use("/api", requireMinRole("manager"), salesSummaryModule.router);
 
 // Cash closing manager routes (authenticated)
 app.use("/api", requireMinRole("manager"), cashClosingsModule.managedRouter);
-
-if (ENV.CRON_SECRET) {
-  app.use(
-    "/api",
-    createInternalCronRouter({
-      processDirectDebits: invoicesModule.processDirectDebits,
-      listOrganizations,
-    }),
-  );
-}
 
 app.listen(ENV.PORT, () => {
   console.log(`Backend running on http://localhost:${ENV.PORT}`);
