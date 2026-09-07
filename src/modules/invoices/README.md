@@ -1,7 +1,7 @@
 # Módulo: invoices
 
 > Status: ativo
-> Última atualização: 2026-08-29 (spec B2 ticket 10 — organização explícita em todas as portas de saída via `ScopedQuery`; `InvoiceLine` ganha `locationId` opcional e nullable)
+> Última atualização: 2026-09-06 (spec C ticket 06 — cron de débitos diretos passa a processar todas as organizações via fan-out, deixa de usar `UNATTENDED_SCOPE`)
 
 ---
 
@@ -144,8 +144,11 @@ organização como parâmetro explícito** — um `OrganizationId` (tipo nominal
 `DeleteInvoicePort`, `DeleteInvoiceLinePort`, `SuggestLineClassificationPort`,
 `GetInvoiceAlertsPort`, `ProcessDirectDebitsPort`), é o novo primeiro
 parâmetro posicional. O controller lê-o de `req.auth.orgId` (claim
-verificada); o cron de débitos diretos, que não tem pedido, usa o
-`UNATTENDED_SCOPE` (D6). Excepções deliberadas: `AiExtractionPort` e
+verificada); o cron de débitos diretos, que não tem pedido, chama
+`ProcessDirectDebitsPort.execute()` uma vez por organização — spec C ticket
+06 substituiu o `UNATTENDED_SCOPE` fixo por um fan-out sobre
+`listOrganizations()` (`src/infra/scoped-db/organization-listing.ts`, ticket
+02), ver "Processamento de DD via cron" abaixo. Excepções deliberadas: `AiExtractionPort` e
 `DocumentStoragePort` não tomam organização — nunca tocam a base de dados
 (a IA e o storage-wrapper são discutidos em "Decisões de design").
 
@@ -236,7 +239,7 @@ módulo não importa `@supabase/supabase-js` em lado nenhum — só o folder
 | DELETE | `/api/invoices/:invoiceId/lines/:lineId` | Eliminar linha (requer `lineDetailMode=detailed`) |
 | PATCH | `/api/invoices/:invoiceId/lines/:lineId/classify` | Classificar linha |
 | POST | `/api/invoices/process-direct-debits` | Processar débitos diretos vencidos (manager+) |
-| POST | `/api/internal/cron/process-direct-debits` | Idem, via cron (Bearer `CRON_SECRET`) |
+| POST | `/api/internal/cron/process-direct-debits` | Idem, via cron, para todas as organizações (Bearer `CRON_SECRET`) |
 
 ## Decisões de design
 
@@ -248,7 +251,8 @@ módulo não importa `@supabase/supabase-js` em lado nenhum — só o folder
 - **Débito direto e "já paga" são mutuamente exclusivos**: o frontend impede selecionar ambos; o backend aceita `isDirectDebit` independentemente de `markAsPaid`, mas a semântica esperada é exclusiva.
 - **Débito direto não cria payable entry**: quando o utilizador confirma uma fatura com `isDirectDebit=true`, o `saveAsPayable` é forçado a `false` no frontend e ignorado no backend — não faz sentido ter uma entrada a pagar para algo que será debitado automaticamente. O processamento do cron sincroniza o payable entry existente (se houver) via `markPaidByInvoiceId`.
 - **Processamento de DD via cron**: `ProcessDirectDebitsUseCase` lê faturas com `directDebitDate ≤ hoje` e status não pago/cancelado (`paid`/`cancelled` excluídos; `overdue` é elegível), marca-as como pagas na `directDebitDate` e sincroniza o payable entry.
-- **`internalCronRoutes` como factory**: o ficheiro `src/routes/internalCronRoutes.ts` exporta `createInternalCronRouter(deps)` em vez de uma instância singleton. Isto evita que o módulo `invoices` seja instanciado duas vezes (uma no `server.ts` e outra na criação das rotas cron), o que criaria dois clientes Supabase separados. O `server.ts` passa `{ processDirectDebits: invoicesModule.processDirectDebits }` já instanciado.
+- **`internalCronRoutes` como factory**: o ficheiro `src/routes/internalCronRoutes.ts` exporta `createInternalCronRouter(deps)` em vez de uma instância singleton. Isto evita que o módulo `invoices` seja instanciado duas vezes (uma no `server.ts` e outra na criação das rotas cron), o que criaria dois clientes Supabase separados. O `server.ts` passa `{ processDirectDebits: invoicesModule.processDirectDebits, listOrganizations }` já instanciados — `listOrganizations` vem de `src/infra/scoped-db/organization-listing.ts` (ticket 02), não do módulo `invoices`.
+- **Fan-out do cron de débitos diretos (spec C ticket 06)**: `POST /api/internal/cron/process-direct-debits` deixou de processar só o `UNATTENDED_SCOPE.organizationId` fixo — agora lista todas as organizações (`listOrganizations()`) e chama `ProcessDirectDebitsPort.execute(organizationId)` uma vez por organização através do utilitário genérico `fanOut` (`src/utils/fan-out.ts`, ticket 02). Ao contrário do cron `daily-vendus-consumption` (ticket 05, não implementado), este cron não depende de credenciais Vendus/AirMenu — opera sobre `invoices`/`payable_entries` já filtradas por `org_id` — por isso não há caso de skip "não configurado"; o processor nunca devolve `not_configured`, só falha isolada por organização (uma exceção numa organização não impede as restantes, apanhada e registada pelo `fanOut`). A resposta HTTP devolve o `FanOutSummary` completo (`succeeded`/`skipped`/`failed`); o log por organização (sucesso ou falha) é responsabilidade do `fanOut`, não deste route handler.
 - **Proteção contra duplicados — dois caminhos distintos**:
   - Criação manual: `findDuplicate(invoiceNumber, supplierId)` — só actua quando o fornecedor está ligado.
   - Import/Confirm: `findDuplicateByNif(invoiceNumber, supplierNifSnapshot)` — usa o NIF extraído pela IA porque o `supplierId` pode ainda não estar resolvido na tela de revisão.
@@ -272,7 +276,7 @@ módulo não importa `@supabase/supabase-js` em lado nenhum — só o folder
 - **Renumber propagation no UpdateInvoice**: quando `invoiceNumber` muda, o use case actualiza a `description` do payable entry (via `renumberByInvoiceId`) e o `entity_label` dos links de conciliação bancária (via `renumberLinksForInvoice`). A propagação só ocorre quando o número realmente muda (não quando é omitido nem quando é igual ao actual).
 - **lineDetailMode automático no ConfirmImport**: quando o utilizador fornece linhas ao confirmar uma fatura importada, o use case define automaticamente `lineDetailMode=detailed` e persiste a fatura actualizada antes de criar o payable entry — garantindo que o DTO retornado reflecte o modo correcto.
 - **Alocação de linha a uma loja (`locationId`, spec B2 D3/D4/D5)**: `invoice_lines` é a única tabela location-bearing cujo `location_id` é **nullable** — todas as outras (event-grain: `cash_closings`, `stock_movements`, `hr_work_shifts`, `hr_shift_attendance`) exigem uma loja. Aqui, `null` é um estado real e não a ausência de um dado: um custo pode pertencer à organização inteira (ex: marketing central, serviços partilhados) e a nenhuma loja específica. Por isso o campo é opcional em todas as escritas de linha (`AddInvoiceLineUseCase`, `UpdateInvoiceLineUseCase`, linhas de `CreateInvoiceUseCase` e de `ConfirmImportedInvoiceUseCase`) e **nunca é defaultado** — ausente na escrita fica `null` na base de dados, não uma loja adivinhada. O cabeçalho da fatura (`invoices`) continua ao nível da organização; só a linha carrega a loja. O frontend só começa a enviar o campo no ticket 19 da spec B2 — até lá fica ausente na prática. Uma loja indicada por um caller que pertença a outra organização será rejeitada pela FK composta `(org_id, location_id)` quando essa migração aterrar (D5, ticket 21) — hoje ainda não há essa validação estrutural.
-- **Organização explícita em todas as portas de saída (spec B2 D1/D2/D7, ADR-0008)**: cada adapter deixou de guardar um `SupabaseClient` e passou a receber `createScopedQuery` (`ScopedQueryFactory`), construindo um `ScopedQuery` escopado por chamada. A organização (`OrganizationId`, tipo nominal — `src/kernel/organization-id.ts`) chega pelo `organizationId` do comando nos casos de uso baseados em objecto, e como primeiro parâmetro posicional nos que tomam argumentos primitivos. O controller lê-a de `req.auth.orgId`; o cron de débitos diretos (`POST /api/internal/cron/process-direct-debits`, sem sessão) usa o `UNATTENDED_SCOPE` nomeado em `src/infra/scoped-db/unattended-scope.ts` (D6). `AiExtractionPort` e `DocumentStoragePort` ficam de fora deliberadamente — nunca tocam a base de dados (a IA fala com a OpenAI; o storage delega no wrapper que também não é re-pathado por organização, D17).
+- **Organização explícita em todas as portas de saída (spec B2 D1/D2/D7, ADR-0008)**: cada adapter deixou de guardar um `SupabaseClient` e passou a receber `createScopedQuery` (`ScopedQueryFactory`), construindo um `ScopedQuery` escopado por chamada. A organização (`OrganizationId`, tipo nominal — `src/kernel/organization-id.ts`) chega pelo `organizationId` do comando nos casos de uso baseados em objecto, e como primeiro parâmetro posicional nos que tomam argumentos primitivos. O controller lê-a de `req.auth.orgId`; o cron de débitos diretos (`POST /api/internal/cron/process-direct-debits`, sem sessão) já não usa o `UNATTENDED_SCOPE` fixo — desde a spec C (ticket 06) recebe um `OrganizationId` por chamada, um por organização listada, ver "Fan-out do cron de débitos diretos" acima. `AiExtractionPort` e `DocumentStoragePort` ficam de fora deliberadamente — nunca tocam a base de dados (a IA fala com a OpenAI; o storage delega no wrapper que também não é re-pathado por organização, D17).
 
 ## SQL — alterações às tabelas
 

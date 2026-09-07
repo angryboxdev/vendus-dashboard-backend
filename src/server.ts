@@ -32,6 +32,7 @@ import { crmRoutes } from "./routes/crmRoutes.js";
 import { runDailyVendusConsumptionJob } from "./services/dailyVendusConsumptionJobService.js";
 import { UNATTENDED_SCOPE } from "./infra/scoped-db/unattended-scope.js";
 import { createScopedQuery } from "./infra/scoped-db/scoped-query.js";
+import { listOrganizations } from "./infra/scoped-db/organization-listing.js";
 import { resolveClosingEnterpriseId } from "./modules/air-menu/domain/services/resolve-closing-enterprise-id.js";
 import { populateAuth, requireAuth, requireMinRole } from "./middleware/auth.js";
 import { authRoutes } from "./routes/authRoutes.js";
@@ -218,7 +219,13 @@ app.use("/api", requireMinRole("manager"), salesSummaryModule.router);
 app.use("/api", requireMinRole("manager"), cashClosingsModule.managedRouter);
 
 if (ENV.CRON_SECRET) {
-  app.use("/api", createInternalCronRouter({ processDirectDebits: invoicesModule.processDirectDebits }));
+  app.use(
+    "/api",
+    createInternalCronRouter({
+      processDirectDebits: invoicesModule.processDirectDebits,
+      listOrganizations,
+    }),
+  );
 }
 
 app.listen(ENV.PORT, () => {
