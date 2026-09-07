@@ -95,22 +95,24 @@ export class AirMenuController {
      * body before express.json() (see Express rawBody middleware pattern).
      */
     this.publicRouter.post("/air-menu/webhook/receive", (req, res) => {
-      console.log(`[AirMenu webhook] received — ip=${req.ip} contentType=${req.headers["content-type"]} bodyKeys=${Object.keys(req.body ?? {}).join(",")}`);
-
       const signature = req.headers["x-airmenu-signature"];
 
+      if (this.webhookSecret && typeof signature !== "string") {
+        console.warn(`[AirMenu webhook] signature header missing (x-airmenu-signature) — rejecting 401`);
+        res.status(401).json({ error: "Invalid webhook signature" });
+        return;
+      }
+
+      console.log(`[AirMenu webhook] received — ip=${req.ip} contentType=${req.headers["content-type"]} bodyKeys=${Object.keys(req.body ?? {}).join(",")}`);
+
       if (this.webhookSecret) {
-        if (typeof signature !== "string") {
-          console.warn(`[AirMenu webhook] signature header missing (x-airmenu-signature) — secret is configured`);
-        } else {
-          const rawBody = JSON.stringify(req.body);
-          if (!this.verifySignature(rawBody, signature)) {
-            console.warn(`[AirMenu webhook] signature mismatch — rejecting 401`);
-            res.status(401).json({ error: "Invalid webhook signature" });
-            return;
-          }
-          console.log(`[AirMenu webhook] signature OK`);
+        const rawBody = JSON.stringify(req.body);
+        if (!this.verifySignature(rawBody, signature as string)) {
+          console.warn(`[AirMenu webhook] signature mismatch — rejecting 401`);
+          res.status(401).json({ error: "Invalid webhook signature" });
+          return;
         }
+        console.log(`[AirMenu webhook] signature OK`);
       } else {
         console.log(`[AirMenu webhook] no secret configured — skipping signature check`);
       }
