@@ -32,6 +32,11 @@ export class SessionManagerService {
     return this.authPromise;
   }
 
+  /** Force re-authentication on the next call (e.g. when AirMenu invalidates the session externally). */
+  invalidate(): void {
+    this.session = null;
+  }
+
   private async doAuthenticate(): Promise<AirMenuSession> {
     const result = await this.gateway.authenticate(this.username, this.password);
     this.session = AirMenuSession.create(result.sessionId, this.enterprises);

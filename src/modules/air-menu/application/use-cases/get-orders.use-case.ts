@@ -41,6 +41,17 @@ export class GetOrdersUseCase implements GetOrdersPort {
   ) {}
 
   async execute(enterpriseId: string, startDate: Date, endDate: Date): Promise<AirMenuOrder[]> {
+    try {
+      return await this.doExecute(enterpriseId, startDate, endDate);
+    } catch {
+      // Session may have been invalidated externally (e.g. another login replaced it).
+      // Force re-authentication and retry once.
+      this.sessionManager.invalidate();
+      return this.doExecute(enterpriseId, startDate, endDate);
+    }
+  }
+
+  private async doExecute(enterpriseId: string, startDate: Date, endDate: Date): Promise<AirMenuOrder[]> {
     const session = await this.sessionManager.getValidSession();
 
     const orderIds = await this.gateway.getOrderIds(
@@ -57,6 +68,15 @@ export class GetOrdersUseCase implements GetOrdersPort {
         this.gateway.getOrders(session.sessionId, enterpriseId, id),
       ),
     );
+
+    // If every single GetOrders call failed the session is almost certainly stale.
+    // Throw so the outer execute() can invalidate and retry.
+    const allRejected = rawOrdersSettled.every((r) => r.status === "rejected");
+    if (rawOrdersSettled.length > 0 && allRejected) {
+      throw new Error(
+        `All ${rawOrdersSettled.length} GetOrders calls failed — possible stale session: ${String((rawOrdersSettled[0] as PromiseRejectedResult).reason)}`,
+      );
+    }
 
     const rawOrdersList = rawOrdersSettled
       .filter((r): r is PromiseFulfilledResult<Record<string, RawOrderItemInstance[]>> => {
