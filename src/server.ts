@@ -111,7 +111,7 @@ const airMenuModule = createAirMenuModule({
   apiKey: airMenuCredentialsResult.credentials.apiKey,
   username: airMenuCredentialsResult.credentials.username,
   password: airMenuCredentialsResult.credentials.password,
-  enterprises: ENV.AIRMENU_ENTERPRISES,
+  enterprises: [{ id: ENV.AIRMENU_ENTERPRISE_ID, name: "Angry Box - Menu" }],
   webhookSecret: ENV.AIRMENU_WEBHOOK_SECRET,
 });
 

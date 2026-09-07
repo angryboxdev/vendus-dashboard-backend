@@ -67,14 +67,14 @@ export const ENV = {
   /** JWT secret legado (HS256). Já não obrigatório — verificação usa JWKS. */
   SUPABASE_JWT_SECRET: process.env.SUPABASE_JWT_SECRET ?? "",
 
-  /** AirMenu: API de agregação de pedidos Glovo/Uber Eats/Bolt. */
-  AIRMENU_ENTERPRISES: must(process.env.AIRMENU_ENTERPRISES, "AIRMENU_ENTERPRISES")
-    .split("|")
-    .map((entry) => {
-      const [id, ...nameParts] = entry.trim().split(":");
-      return { id: id!.trim(), name: nameParts.join(":").trim() };
-    })
-    .filter((e) => e.id && e.name),
+  /**
+   * AirMenu: enterprise principal (Angry Box - Menu).
+   * As restantes enterprises existem na plataforma mas não são usadas:
+   *   1783676282102 — Angry Box
+   *   1783676282106 — Angry Box - Porto
+   *   1785509161620 — Angry Box - Porto (teste)
+   */
+  AIRMENU_ENTERPRISE_ID: must(process.env.AIRMENU_ENTERPRISE_ID, "AIRMENU_ENTERPRISE_ID"),
 
   /**
    * Ano a partir do qual se calcula o histórico total de faturação.
@@ -111,5 +111,5 @@ export const ENV = {
    * delivery revenue (Angry Box main enterprise — see ADR-0012).
    * Required when the sales-summary module is active.
    */
-  AIRMENU_SALES_SUMMARY_ENTERPRISE_ID: process.env.AIRMENU_SALES_SUMMARY_ENTERPRISE_ID ?? "",
+  AIRMENU_SALES_SUMMARY_ENTERPRISE_ID: must(process.env.AIRMENU_SALES_SUMMARY_ENTERPRISE_ID, "AIRMENU_SALES_SUMMARY_ENTERPRISE_ID"),
 };

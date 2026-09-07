@@ -55,22 +55,16 @@ export class CashClosingController {
    * A screen with no valid, paired token is rejected outright — ticket 06
    * removed the `UNATTENDED_SCOPE` fallback for this consumer.
    *
-   * `requireDeviceAuth` is mounted at the `/cash-closings` path prefix, not
-   * as a bare router-level `.use()` — `publicRouter` shares its parent's
-   * `/api` mount point with every other module's public router (server.ts),
-   * so a path-less `.use()` here would gate every `/api/*` request that
-   * happens to reach this router first, not only this module's own routes.
-   * That was invisible while the fallback always called `next()`
-   * regardless of path; ticket 06's smoke test caught it live (every
-   * unrelated authenticated route started returning 401) the moment the
-   * fallback was removed and this middleware started actually rejecting.
+   * `requireDeviceAuth` is applied per-route, not as a path-prefix `.use()`.
+   * A path-prefix `.use("/cash-closings", requireDeviceAuth)` would intercept
+   * ALL requests to `/cash-closings*` — including the managed `GET /cash-closings`
+   * list route — causing it to 401 before ever reaching `managedRouter`.
    */
   private registerPublicRoutes(): void {
-    this.publicRouter.use("/cash-closings", requireDeviceAuth);
-
     /** POST /api/cash-closings/verify-pin */
     this.publicRouter.post(
       "/cash-closings/verify-pin",
+      requireDeviceAuth,
       async (req: Request, res: Response) => {
         try {
           const { pin } = req.body as { pin?: string };
@@ -97,6 +91,7 @@ export class CashClosingController {
     /** POST /api/cash-closings/submit */
     this.publicRouter.post(
       "/cash-closings/submit",
+      requireDeviceAuth,
       async (req: Request, res: Response) => {
         try {
           const b = req.body as Record<string, unknown>;
@@ -179,6 +174,7 @@ export class CashClosingController {
     /** GET /api/cash-closings/airmenu-totals?date=YYYY-MM-DD */
     this.publicRouter.get(
       "/cash-closings/airmenu-totals",
+      requireDeviceAuth,
       async (req: Request, res: Response) => {
         try {
           const date = req.query.date as string | undefined;
@@ -198,6 +194,7 @@ export class CashClosingController {
     /** GET /api/cash-closings/sessions?date=YYYY-MM-DD */
     this.publicRouter.get(
       "/cash-closings/sessions",
+      requireDeviceAuth,
       async (req: Request, res: Response) => {
         try {
           const date = req.query.date as string | undefined;

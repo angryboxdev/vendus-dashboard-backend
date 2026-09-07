@@ -393,18 +393,23 @@ Os endpoints públicos (`/webhook/receive` e `/webhook/stream`) são registados 
 
 | Variável | Descrição |
 |---|---|
-| `AIRMENU_ENTERPRISES` | Enterprises no formato `id:nome\|id:nome` |
+| `AIRMENU_ENTERPRISE_ID` | ID da enterprise principal activa (única usada) |
 | `AIRMENU_WEBHOOK_URL` | URL pública onde a AirMenu entrega notificações (`POST /api/air-menu/webhook/receive`) |
 | `AIRMENU_WEBHOOK_SECRET` | Secret opcional para validação de assinatura do payload (header ainda a confirmar com suporte AirMenu) |
 
 **Já não são variáveis de ambiente** (org-integration-credentials spec, ticket 04) — `AIRMENU_API_KEY`, `AIRMENU_USERNAME`, `AIRMENU_PASSWORD` vêm de `airmenu_credentials` (uma linha por organização, cifradas); `AIRMENU_CLOSING_ENTERPRISE_ID` vem de `airmenu_location_config` (uma linha por `org_id, location_id`). Ver "Decisões de design" acima e `src/jobs/runAirMenuCredentialsCutover.ts` para o script de cutover.
 
-Enterprises configuradas actualmente:
+Enterprise activa:
+
+| ID | Nome |
+|---|---|
+| `1783676282104` | Angry Box - Menu *(enterprise principal; fonte do catálogo de menu)* |
+
+Outras enterprises existentes na plataforma AirMenu (não usadas):
 
 | ID | Nome |
 |---|---|
 | `1783676282102` | Angry Box |
-| `1783676282104` | Angry Box - Menu *(fonte do catálogo de menu)* |
 | `1783676282106` | Angry Box - Porto |
 | `1785509161620` | Angry Box - Porto (teste) |
 

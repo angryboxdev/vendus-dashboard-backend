@@ -18,8 +18,8 @@ export function detectChannel(
   eatzPaymentId: number,
   appsPaymentId: number,
 ): VendusChannel {
-  if (doc.payments.some((p) => p.id === appsPaymentId)) return "apps";
-  if (doc.payments.some((p) => p.id === eatzPaymentId)) return "eatz";
-  if (doc.items.some((i) => i.title.toLowerCase().includes("embalagem"))) return "take_away";
+  if ((doc.payments ?? []).some((p) => p.id === appsPaymentId)) return "apps";
+  if ((doc.payments ?? []).some((p) => p.id === eatzPaymentId)) return "eatz";
+  if ((doc.items ?? []).some((i) => i.title.toLowerCase().includes("embalagem"))) return "take_away";
   return "salao";
 }

@@ -52,11 +52,21 @@ export class GetOrdersUseCase implements GetOrdersPort {
 
     if (orderIds.length === 0) return [];
 
-    const rawOrdersList = await Promise.all(
+    const rawOrdersSettled = await Promise.allSettled(
       orderIds.map((id) =>
         this.gateway.getOrders(session.sessionId, enterpriseId, id),
       ),
     );
+
+    const rawOrdersList = rawOrdersSettled
+      .filter((r): r is PromiseFulfilledResult<Record<string, RawOrderItemInstance[]>> => {
+        if (r.status === "rejected") {
+          console.warn(`[AirMenu] GetOrders skipped order (API error): ${String(r.reason)}`);
+          return false;
+        }
+        return true;
+      })
+      .map((r) => r.value);
 
     const mergedRawOrders: Record<string, RawOrderItemInstance[]> = {};
     for (const rawOrders of rawOrdersList) {

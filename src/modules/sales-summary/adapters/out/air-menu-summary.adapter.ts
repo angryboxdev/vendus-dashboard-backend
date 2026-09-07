@@ -38,11 +38,36 @@ export class AirMenuSummaryAdapter implements AirMenuSummaryPort {
     const startDate = DateTime.fromObject({ year, month, day: 1 }, { zone }).startOf("day").toJSDate();
     const endDate = DateTime.fromObject({ year, month, day: 1 }, { zone }).endOf("month").toJSDate();
 
-    const { orders, analytics } = await this.airMenuGetSummary.execute(
-      this.enterpriseId,
-      startDate,
-      endDate,
-    );
+    let orders: Awaited<ReturnType<typeof this.airMenuGetSummary.execute>>["orders"];
+    let analytics: Awaited<ReturnType<typeof this.airMenuGetSummary.execute>>["analytics"];
+
+    try {
+      ({ orders, analytics } = await this.airMenuGetSummary.execute(
+        this.enterpriseId,
+        startDate,
+        endDate,
+      ));
+    } catch (e) {
+      // AirMenu unavailable for this period (e.g. 403 before integration was active, transient error).
+      // Return empty data so Vendus-only months still cache correctly.
+      console.warn(`[AirMenuSummaryAdapter] ${year}-${month}: returning empty data — ${String(e)}`);
+      return {
+        faturadoTotalCents: 0,
+        invoiceVatCollectedCents: 0,
+        invoiceCount: 0,
+        creditNoteCount: 0,
+        creditNoteValueCents: 0,
+        byChannel: [],
+        byCategory: [],
+        topProducts: [],
+        temporalDistribution: Array.from({ length: 24 }, (_, hour) => ({
+          hour,
+          invoiceCount: 0,
+          creditNoteCount: 0,
+          grossRevenueCents: 0,
+        })),
+      };
+    }
 
     // ─── Totals from orders ───────────────────────────────────────────────────
 
