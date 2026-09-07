@@ -1,16 +1,27 @@
 # Multi-tenancy & White-label — Análise de Arquitetura
 
 > Status: em discussão — Variant A escolhida (linha core/plugin fechada em §3);
-> decisões 2, 3, 4 e 6 fechadas (§6); 5 e 7 ainda abertas;
-> spec A implementada (`.scratch/org-location-foundation/`);
-> spec B dividida em B1/B2 — B1 implementada (`.scratch/tenant-identity/`);
-> B2 implementada e fechada (`.scratch/scoped-access/`): todas as áreas
+> decisões 2, 3, 4, 6 e 7 fechadas (§6); 5 ainda aberta;
+> spec A implementada (`.scratch/_done/org-location-foundation/`);
+> spec B dividida em B1/B2 — B1 implementada (`.scratch/_done/tenant-identity/`);
+> B2 implementada e fechada (`.scratch/_done/scoped-access/`): todas as áreas
 > convertidas, regra de import do scoped-db em `error` a zero violações
 > (ADR-0008, ADR-0009, ticket 20); incremento de fecho (21) feito — defaults
 > de coluna dropados, composite keys de location a existir, smoke de duas
-> organizações verificado no stack local (falta só correr contra produção,
-> ver `docs/DEPLOY_SCOPED_ACCESS.md`)
-> Última atualização: 2026-08-31
+> organizações verificado no stack local e migração já corrida em produção
+> (`docs/DEPLOY_SCOPED_ACCESS.md`);
+> spec C implementada e fechada (`.scratch/_done/org-integration-credentials/`):
+> credenciais Vendus/AirMenu por org encriptadas a nível de aplicação
+> (ADR-0014), `ENV.API_KEY` e restantes env vars mortos, `process-direct-debits`
+> em fan-out por org com smoke de duas organizações verificado — o fan-out do
+> `daily-vendus-consumption` ficou por fazer de propósito (ticket 05,
+> won't-do: esse cron está desativado por omissão e continua a ler
+> `UNATTENDED_SCOPE`);
+> spec E implementada e fechada (`.scratch/_done/location-credentials/`):
+> kiosk, till-closing e KDS exigem token de dispositivo emparelhado, o
+> fallback `UNATTENDED_SCOPE` caiu para estes três consumidores (ADR-0010,
+> ADR-0009 emendada); crons continuam intocados por esta spec
+> Última atualização: 2026-09-07
 > Nota: escrito em inglês por pedido; traduzir se for para o padrão do repo.
 
 ---
@@ -437,10 +448,15 @@ the answer, and phase 3 can proceed against it.
 Replaces environment variables and hardcoded config:
 
 - `ENV.API_KEY` (Vendus) → output port `IntegrationCredentialsPort.vendusFor(orgId)`,
-  backed by an encrypted per-org table.
+  backed by an encrypted per-org table. **Done, spec C** — Vendus and AirMenu
+  credentials both moved to per-org tables, encrypted at the application layer
+  (AES-256-GCM, ADR-0014); `ENV.API_KEY` and the rest of the Vendus/AirMenu
+  credential env vars are gone from `src/config/env.ts` and `render.yaml`.
 - `src/config/company.ts` (name, NIF, address, email) → the `organizations` row
   itself (§2.7), not `org_settings` — it is legal identity, not configuration.
-- Branding, plan and feature flags → `org_settings`, 1:1 with the org.
+  **Done, spec A.**
+- Branding, plan and feature flags → `org_settings`, 1:1 with the org. **Not
+  built yet** — no customer needs it before phase 11.
 
 ---
 
@@ -449,13 +465,13 @@ Replaces environment variables and hardcoded config:
 | Phase | Work | Risk | Spec |
 |---|---|---|---|
 | 0 | Settle core-vs-plugin line (Variant A or B) — **done, §3** | Design only | — |
-| 1 | Tenant root tables: `organizations` + `locations` (§2.7); seed the Angrybox rows; org identity replaces `config/company.ts` | Low, independent | A |
-| 2 | Auth + RLS review; deny-by-default baseline | Low, independent | audit → A, policies → B |
-| 3 | Add `org_id` to all 51 tables and `location_id` to the event/allocation ones, as **one migration**. No backfill pass — `ADD COLUMN … NOT NULL DEFAULT <const>` is metadata-only in PG11+. Composite indexes move to B | Mechanical, big | A |
-| 4 | `org_id` claim in JWT hook + `AuthPayload`; membership table with org-scoped roles | Medium | B |
-| 5 | Scoped query helper + migrate adapters module by module (start with `cash-closings`, already hexagonal) | Steady | B |
-| 6 | Per-org credentials & settings; remove `ENV.API_KEY` and the `DEFAULT_ORG_ID` constant (`config/company.ts` is already gone — phase 1) | Medium | C |
-| 7 | Crons fan out per org | Small, easy to get wrong | C |
+| 1 | Tenant root tables: `organizations` + `locations` (§2.7); seed the Angrybox rows; org identity replaces `config/company.ts` — **done, spec A** | Low, independent | A |
+| 2 | Auth + RLS review; deny-by-default baseline — **done, spec A** | Low, independent | audit → A, policies → B |
+| 3 | Add `org_id` to all 51 tables and `location_id` to the event/allocation ones, as **one migration**. No backfill pass — `ADD COLUMN … NOT NULL DEFAULT <const>` is metadata-only in PG11+. Composite indexes move to B — **done, spec A** | Mechanical, big | A |
+| 4 | `org_id` claim in JWT hook + `AuthPayload`; membership table with org-scoped roles — **done, spec B1** | Medium | B |
+| 5 | Scoped query helper + migrate adapters module by module (start with `cash-closings`, already hexagonal) — **done, spec B2; migration run against production** | Steady | B |
+| 6 | Per-org credentials & settings; remove `ENV.API_KEY` and the `DEFAULT_ORG_ID` constant (`config/company.ts` is already gone — phase 1) — **`ENV.API_KEY` done, spec C; `DEFAULT_ORG_ID` (now `UNATTENDED_SCOPE`) not deleted — see §6's "third correction"** | Medium | C |
+| 7 | Crons fan out per org — **done for `process-direct-debits`; `daily-vendus-consumption` won't-do, that cron is disabled** | Small, easy to get wrong | C |
 | 8 | Sales ledger: `sales_documents`/`sales_lines` + `SalesSourcePort`; move analytics out of `vendus`; manual-entry adapter (v1 scope) | Medium, unblocks POS #2 | D |
 | 9 | De-pizza-fy: `product_variants`, per-org category table, rename recipes/preparations; migrate `vendus_product_mapping` to `variant_id` | Mechanical, touches 35 files | D |
 | 10 | Channel economic attributes (`type`, `commission_rate`, `settlement`) | Small | D |
@@ -478,15 +494,17 @@ A phase is a unit of *sequencing*. A spec should be a unit of *verification* —
 something that can be tested as done and that leaves the system deployable. Several
 phases fail that test alone: phase 3 by itself adds columns nothing reads, and phase
 10 is three columns. So the phases group into four specs rather than eleven, and
-phase 11 is not one piece of work at all.
+phase 11 is not one piece of work at all. (Spec E was added later, deferred out of
+B1/B2 under the "device identity" name — it never had a phase number of its own.)
 
 | Spec | Phases | Done means | Needs first |
 |---|---|---|---|
-| **A — Org & location foundation** | 1, 3 (+ phase 2's audit) | `supabase db reset` rebuilds the schema from the repo and `db diff --linked` shows no drift; `organizations`/`locations` hold the Angrybox rows; no other table lacks `org_id`; event tables carry `location_id`; invoice PDFs read the org identity from the row; the four unprotected HR tables have RLS; app behaves identically | — |
-| **B1 — Tenant identity** | 4 | Every request and job carries a verified `org_id`; roles are org-scoped; user admin is org-scoped | A |
-| **B2 — Scoped access** | 5 | A user of org A provably cannot read org B; the helper is the only DB construction site; column defaults dropped. **Implemented and closed**: every area converted, the import rule is `error` at zero violations (ADR-0008, ADR-0009, ticket 20); the closing increment (21) dropped both column-default families, added the location composite foreign keys, and verified the two-organization smoke on the local stack — production still needs the migration run, per `docs/DEPLOY_SCOPED_ACCESS.md` | B1 |
-| **C — Per-org configuration** | 6, 7 | `ENV.API_KEY` is deleted; crons run per org | A, B1, B2 |
-| **D — Sales ledger** | 9, then 8, with 10 folded in | Core owns revenue: DRE and analytics read the ledger, not the Vendus API | Open decision 5 (and 7) |
+| **A — Org & location foundation** | 1, 3 (+ phase 2's audit) | `supabase db reset` rebuilds the schema from the repo and `db diff --linked` shows no drift; `organizations`/`locations` hold the Angrybox rows; no other table lacks `org_id`; event tables carry `location_id`; invoice PDFs read the org identity from the row; the four unprotected HR tables have RLS; app behaves identically. **Implemented and closed** (`.scratch/_done/org-location-foundation/`). | — |
+| **B1 — Tenant identity** | 4 | Every request and job carries a verified `org_id`; roles are org-scoped; user admin is org-scoped. **Implemented and closed** (`.scratch/_done/tenant-identity/`). | A |
+| **B2 — Scoped access** | 5 | A user of org A provably cannot read org B; the helper is the only DB construction site; column defaults dropped. **Implemented and closed** (`.scratch/_done/scoped-access/`): every area converted, the import rule is `error` at zero violations (ADR-0008, ADR-0009, ticket 20); the closing increment (21) dropped both column-default families, added the location composite foreign keys, and verified the two-organization smoke on the local stack; the migration has since run against production (`docs/DEPLOY_SCOPED_ACCESS.md`) | B1 |
+| **C — Per-org configuration** | 6, 7 | `ENV.API_KEY` and all Vendus/AirMenu env credentials are deleted; crons run per org. **Implemented and closed** (`.scratch/_done/org-integration-credentials/`): secrets encrypted at the application layer (AES-256-GCM, ADR-0014), `process-direct-debits` fans out per org with a two-organization smoke passing. `daily-vendus-consumption`'s fan-out is **won't-do** (ticket 05) — that cron is disabled by default and still reads `UNATTENDED_SCOPE`, deliberately, since nothing runs it. | A, B1, B2 |
+| **E — Location credentials** | — (deferred out of B1/B2 as "device identity"; not in the original phase table) | Kiosk, till-closing and KDS require a paired device token instead of falling back to `UNATTENDED_SCOPE`; a revoked or unknown token is rejected on all three. **Implemented and closed** (`.scratch/_done/location-credentials/`): ADR-0010 written, ADR-0009 amended, pairing/revocation smoke passing. Crons are untouched by this spec — that's spec C's job. | B1, B2 |
+| **D — Sales ledger** | 9, then 8, with 10 folded in | Core owns revenue: DRE and analytics read the ledger, not the Vendus API | Open decision 5 |
 
 Three notes on why the grouping is not simply "one spec per phase":
 
@@ -517,7 +535,7 @@ a window in which they cannot bite: composite `(org_id, …)` indexes;
 restructuring the four CRM text primary keys (`crm_customers.id` is `'C001'`,
 so every tenant's first customer collides); the kiosk PIN fix (the only one
 with a frontend contract change); and storage path org-prefixing. Full table
-in `.scratch/org-location-foundation/spec.md`.
+in `.scratch/_done/org-location-foundation/spec.md`.
 
 **Write one spec at a time, just ahead of the work.** Specs B and D are exactly the
 ones open decisions 3, 5 and 7 reshape; writing all four now means writing two of
@@ -588,21 +606,25 @@ it belongs (§2–§3) and is only summarized here.
 6. ~~**Does manual sales entry ship in v1?**~~ — **decided: yes** (§3.3). It ships
    with the ledger in phase 8, as a core implementation of `SalesSourcePort`, not as a
    side door that writes to the ledger directly.
-7. **Do channel economic attributes ship with the ledger or later?** Without them the
-   DRE shows gross revenue by channel but not margin by channel. **Still open.**
-   Phase 10 is small and additive (three columns on `channels`), so deferring it costs
-   little as long as the ledger keeps the `channel_id` reference — that reference is
-   the part that would be expensive to backfill later.
+7. ~~**Do channel economic attributes ship with the ledger or later?**~~ — **decided:
+   yes, the three proposed columns** (§3.2) — `type`
+   (`dine_in | takeaway | own_delivery | marketplace`), `commission_rate`,
+   `settlement` (`immediate | payout`). Ships as phase 10, after the ledger (§5's
+   ordering), not folded into phase 8 — cheap to defer as long as the ledger
+   keeps the `channel_id` reference, which is the part that would be expensive to
+   backfill later. Further fields (if a connector needs one) are additive, one-line
+   columns against a single table — not a reason to block on getting the set
+   exhaustive now.
 
 ### Remaining before implementation
 
-5 and 7 are the ones still to settle, and both live inside spec D. Neither blocks
+5 is the one still to settle, and it lives inside spec D. It doesn't block
 phases 1–5: the company profile table, the RLS deny-by-default baseline, the
 `org_id`/`location_id` schema pass, the auth/membership rework and the scoped
-helper are all independent of them.
+helper are all independent of it. (7 was the other item tracked here — now
+decided, above.)
 
-Deadlines: 5 before phase 8, 7 before phase 10 (7 stays cheap even after, as long
-as the ledger carries `channel_id`). See §5.1 for the specs.
+Deadline: 5 before phase 8. See §5.1 for the specs.
 
 **Two corrections found while writing spec B1.** Spec C cannot delete
 `DEFAULT_ORG_ID`: the user-less paths (kiosk, KDS, AirMenu webhook and SSE, cron)
@@ -611,6 +633,20 @@ is corrected accordingly. And §2.6 point 1 cannot lean on `dependency-cruiser` 
 configured: there is no npm script and no CI workflow, and it runs only from an
 agent hook scoped to `src/modules/<module>`, so it never sees the 192 `.from(`
 calls in `src/services`. Wiring it over `src/**` is a B2 done-criterion.
+
+**Third correction, found while closing specs C and E: the file is not deleted.**
+`DEFAULT_ORG_ID` became B2's `UNATTENDED_SCOPE` (`src/infra/scoped-db/unattended-scope.ts`),
+and "the device-identity spec" turned out to be two — C for the crons, E for
+kiosk/till-closing/KDS — neither of which removes the file. Spec C converted
+`process-direct-debits` only; `daily-vendus-consumption`'s fan-out was
+descoped as won't-do because that cron is disabled by default, so it (the
+route, the standalone script, and `server.ts`'s in-process `node-cron`
+schedule) still reads `UNATTENDED_SCOPE` deliberately. Spec E removed the
+fallback for kiosk, till-closing and KDS, but left two one-time credential
+cutover scripts and two manual stock-adjustment scripts reading it by design.
+`unattended-scope.ts`'s own header (rewritten by spec C's closing ticket)
+names every remaining consumer precisely — that header, not this paragraph,
+is the source of truth going forward.
 
 ~~Not tracked as an open decision but needed before phase 3 starts: the order in
 which the 46 tables and their modules get touched.~~ **Resolved: this is a spec B
@@ -623,11 +659,23 @@ ordering, aligned with the legacy→hexagonal migration, belongs to phase 5.
 
 ## 7. Related
 
-- `.scratch/org-location-foundation/` — spec A and its issues
-- `.scratch/tenant-identity/` — spec B1 and its issues
+- `.scratch/_done/org-location-foundation/` — spec A and its issues, closed
+- `.scratch/_done/tenant-identity/` — spec B1 and its issues, closed
+- `.scratch/_done/scoped-access/` — spec B2 and its issues, closed
+- `.scratch/_done/org-integration-credentials/` — spec C and its issues, closed
+- `.scratch/_done/location-credentials/` — spec E and its issues, closed
+- `.scratch/airmenu-webhook-signature/` — standalone bugfix, unrelated to the
+  tenancy phasing, still open
+- `docs/DEPLOY_SCOPED_ACCESS.md` — spec B2's production deploy order (run)
 - `docs/adr/0007` — app-level scoping is the tenant boundary; RLS deferred
 - `docs/adr/0005` — `org_id` denormalized on every table
 - `docs/adr/0006` — schema baselined; historical migrations archived
+- `docs/adr/0008`, `docs/adr/0009` — scoped query helper; location as a
+  caller-supplied write input (amended by spec E for kiosk/till/KDS)
+- `docs/adr/0010-location-credentials-replace-unattended-scope-for-paired-screens`
+  — spec E's device-identity design
+- `docs/adr/0014-integration-secrets-encrypted-at-the-application-layer` —
+  spec C's encryption mechanism, no-rotation-tooling call, and rotation runbook
 - `CLAUDE.md` — architecture rules (hexagonal, ports & adapters, module docs)
 - `src/modules/tasks` — reference module for the new pattern
 - `docs/FINANCIAL_SYSTEM_PLAN.md` — financial system roadmap
