@@ -1,7 +1,7 @@
 # Composite FKs & indexes — closing the gate's biggest remaining item
 
-> Status: ready-for-agent
-> Última atualização: 2026-09-07
+> Status: done (all tickets 01-07 closed)
+> Última atualização: 2026-09-08
 > Architecture reference: `docs/MULTI_TENANCY_SAAS_DESIGN.md` §5.1 (the hard
 > gate), §2.4/§2.6 (denormalization and enforcement)
 > ADRs: `docs/adr/0005` (`org_id` denormalized, composite FKs are what proves
@@ -428,10 +428,20 @@ moved, not that the migration is correct.
 
 ### Deferred register, after this spec
 
+**Confirmed closed, not just projected.** Ticket 07's two-organization
+smoke (`issues/07-two-org-smoke.md`) found and fixed a real migration-ledger
+bug — the four phase-2 files shared one migration-version timestamp, so a
+clean `supabase db reset` silently dropped 3 of the 4 files' constraints
+(64 of 82) — before confirming the row below. The fix (distinct timestamps
+per file) is applied and merged; a fresh `db reset` now applies all four
+files, and a targeted spot-check confirmed the cross-organization rejection
+mechanism fires correctly across all three previously-broken files.
+
 | Deferred | Status after this spec |
 |---|---|
-| The other 65 composite foreign keys | **Closed** (minus the two named exceptions in D6, which get their own follow-up) |
+| The other 65 composite foreign keys | **Closed** (minus the two named exceptions in D6, which get their own follow-up) — verified per ticket 07 |
 | Composite `(org_id, …)` indexes | **Closed**, scoped to the query shapes the helper actually produces (D4) |
+| The 14 (17, on rediscovery) embedded selects | **Reviewed, all safe** — none depend on either named exception (ticket 07, `07-embedded-select-review.md`) |
 | CRM text primary keys | Still open — this spec is its prerequisite, not its fix (D7) |
 | Kiosk PIN collision across organizations | Still open, unchanged (deferred item 5) |
 | Object-storage path prefixing | Still open, unchanged (deferred item 6) |
@@ -440,7 +450,10 @@ moved, not that the migration is correct.
 After this spec, the register's "before org #2" group is down to CRM keys,
 kiosk PIN, storage prefixing and seed-template data — none of which is
 mechanical in the way this spec's two items were, so none of them should be
-assumed to fold into a follow-up of this same shape.
+assumed to fold into a follow-up of this same shape. **This does not lift
+spec A's hard gate** — no second `organizations` row exists in production as
+a result of this spec; the local stack's second organization used for
+ticket 07's smoke was provisioned and torn down entirely on the local stack.
 
 ### Reference inventory (this spec's own audit, phase 2 starting point)
 
