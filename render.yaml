@@ -1,9 +1,45 @@
-# Render Blueprint - Staging
+# Render Blueprint - Staging + Production
 # Ver: https://render.com/docs/blueprint-spec
 #
 # Nota: Cron Jobs no Render não usam plano "free" — o serviço cron abaixo fica em
 # "starter" (ou define plan: starter explicitamente). O Web Service pode continuar free.
 services:
+  # Produção: o buildCommand corre os checks (typecheck, testes unitários,
+  # lint:deps) e aplica as migrations pendentes (`supabase db push`) antes de
+  # compilar — um deploy só chega a correr com o schema e o código validados.
+  # --testPathIgnorePatterns em test:unit exclui os *.integration.test.ts
+  # (exigem `supabase start` local, indisponível no build do Render).
+  - type: web
+    name: vendus-dashboard-api
+    runtime: node
+    region: frankfurt
+    branch: main
+
+    # --include=dev sobrepõe-se ao NODE_ENV=production abaixo, que por omissão
+    # faria o `npm ci` saltar as devDependencies (typescript, ts-jest, depcruise
+    # — todas necessárias para check:ci e para o build).
+    buildCommand: npm ci --include=dev && npm run check:ci && npx supabase db push --project-ref frbxmerhgnvhocwpuzrq --password "$SUPABASE_DB_PASSWORD" --yes && npm run build
+    startCommand: npm run start
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: VENDUS_BASE_URL
+        sync: false
+      - key: CREDENTIALS_ENCRYPTION_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      # Usadas só durante o build, pelo `supabase db push` acima — não pela app.
+      - key: SUPABASE_ACCESS_TOKEN # token de acesso pessoal/serviço da Supabase (auth da CLI)
+        sync: false
+      - key: SUPABASE_DB_PASSWORD # password da Postgres do projeto (link do dashboard Supabase)
+        sync: false
+
+    healthCheckPath: /api/health
+
   - type: web
     name: vendus-dashboard-api-staging
     runtime: node
@@ -16,8 +52,6 @@ services:
       - key: NODE_ENV
         value: staging
       - key: VENDUS_BASE_URL
-        sync: false
-      - key: CREDENTIALS_ENCRYPTION_KEY
         sync: false
       - key: CREDENTIALS_ENCRYPTION_KEY
         sync: false
