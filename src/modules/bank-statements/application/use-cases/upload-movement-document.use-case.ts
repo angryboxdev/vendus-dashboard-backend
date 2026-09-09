@@ -19,7 +19,8 @@ export class UploadMovementDocumentUseCase implements UploadMovementDocumentPort
     const documentUrl = await this.storage.store(
       command.buffer,
       command.filename,
-      command.mimeType
+      command.mimeType,
+      command.organizationId,
     );
 
     // documentUrl is returned to the caller; the classify step will persist it

@@ -31,6 +31,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       command.fileBuffer,
       command.filename,
       command.mimeType,
+      command.organizationId,
     );
 
     // 2. Extract invoice data with AI (send buffer directly — no public URL needed)

@@ -221,20 +221,20 @@ export async function createSupplierInvoiceImport(
   const safeName = sanitizeFileName(fileName || "invoice");
   const storagePath = `${id}/${safeName}`;
 
-  await objectStorage.upload(BUCKET, storagePath, buffer, mime);
+  const actualPath = await objectStorage.upload(BUCKET, storagePath, buffer, mime, organizationId);
 
   const { error: insErr } = await createScopedQuery(organizationId).table("supplier_invoice_imports").insert({
     id,
     status: "processing",
     storage_bucket: BUCKET,
-    storage_path: storagePath,
+    storage_path: actualPath,
     file_name: fileName,
     file_mime: mime,
     file_sha256: hash,
     file_size: buffer.length,
   });
   if (insErr) {
-    void objectStorage.remove(BUCKET, storagePath);
+    void objectStorage.remove(BUCKET, actualPath);
     throw new Error(`Criar import: ${insErr.message}`);
   }
 

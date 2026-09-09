@@ -27,7 +27,7 @@ export class UploadOccurrenceDocumentUseCase {
       await this.storage.delete(occurrence.documentUrl);
     }
 
-    const url = await this.storage.store(command.buffer, command.filename, command.mimeType);
+    const url = await this.storage.store(command.buffer, command.filename, command.mimeType, command.organizationId);
     const updated = occurrence.setDocumentUrl(url);
     await this.repo.update(command.organizationId, updated);
     return toOccurrenceDTO(updated);

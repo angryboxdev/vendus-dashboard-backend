@@ -1,7 +1,7 @@
 # Módulo: bank-statements
 
 > Status: ativo
-> Última atualização: 2026-08-21
+> Última atualização: 2026-09-09 (`kiosk-pin-storage-prefix` ticket 03 — `DocumentStoragePort.store`/`objectStorage` ganham `organizationId`; `bank-statement-documents` não opta por prefixação, ADR-0015 DB4)
 
 ---
 
@@ -205,16 +205,16 @@ desse módulo para a explicação completa das decisões):
   `BankReconciliationRule`) não ganharam um campo `organizationId` — é uma
   preocupação de acesso/query, não um invariante de negócio.
 
-**Exceção deliberada — `DocumentStoragePort`**: `store(buffer, filename,
-mimeType)` **não** ganhou `organizationId` (D17). Objectos já existem em
-caminhos sem prefixo de organização; prefixar agora exigiria migrar
-ficheiros guardados ou partir URLs existentes — dívida pré-existente que a
-spec A já tinha deferido, e que B2 explicitamente não fecha aqui (D16). O
-adapter passou a usar o wrapper partilhado `objectStorage`
+**`DocumentStoragePort`**: `store(buffer, filename, mimeType, organizationId)`
+ganhou `organizationId` como **último** parâmetro, não o primeiro (ADR-0015,
+ticket 03 de `kiosk-pin-storage-prefix`). `bank-statement-documents` não
+optou por prefixação de caminho (ADR-0015 DB4 — deliberadamente deixado fora
+deste bucket), pelo que o wrapper recebe a organização sem que o caminho
+mude; objectos já existentes continuam nos caminhos sem prefixo (ADR-0015
+DB2). O adapter usa o wrapper partilhado `objectStorage`
 (`src/infra/scoped-db/object-storage.ts`) em vez de guardar um
 `SupabaseClient` próprio — exigido pela regra de import do D10 (só a pasta
-do helper pode importar o cliente Supabase), sem mudar a assinatura do
-port.
+do helper pode importar o cliente Supabase).
 
 **Embeds não filtrados (D16)**: `SupabaseOccurrenceMatchReadAdapter` faz um
 join embutido a `recurring_contracts` que não leva o predicado de
@@ -248,7 +248,7 @@ ou nada, o `execute()` passou a tomar um objecto nomeado.
 - `GetBankStatementPort` — devolve detalhe do import + movimentos (com filtros) + stats ao vivo. Cada movimento inclui `entityLinks[]` carregados em bulk (uma query para todos os movimentos). O campo `balanceAfter` de cada movimento é **calculado dinamicamente** a partir do `openingBalance` do extrato + soma acumulada dos movimentos em ordem cronológica — não lido do valor raw guardado em DB. Isto garante que edições ao saldo inicial se reflectem imediatamente na coluna "Saldo após". `GetBankStatementQuery = { organizationId, id, filter? }` (antes `execute(id, filter?)`).
 - `ReconcileMovementPort` — vincula um movimento a uma ou mais faturas/contas a pagar com alocação explícita por entidade. Validações: (1) `allocatedAmountCents > 0` por link; (2) `sum(allocatedAmountCents) ≤ movement.amount`; (3) por entidade, `allocatedAmountCents ≤ saldo em aberto` (total da entidade − alocações existentes de outros movimentos + alocações saintes do próprio movimento para re-conciliação). Determina o status: `conciliado_com_fatura` se `|diff| ≤ 1€`, `conciliado_parcial` caso contrário. Guarda learning hint apenas para conciliações de entidade única com match exacto de montante. `ReconcileMovementCommand` inclui `organizationId`.
 - `ClassifyMovementPort` — classificação manual com suporte a `costCenterGroupId`, `costCenterCategoryId`, `supplierId`, `vatRate`, `vatIncluded` e `documentUrl`. `ClassifyMovementCommand` inclui `organizationId`.
-- `UploadMovementDocumentPort` — faz upload de ficheiro para Supabase Storage e devolve a URL pública; o movimento em si não é alterado (a URL é passada no classify subsequente). `UploadMovementDocumentCommand` inclui `organizationId` (mas não é passado ao `DocumentStoragePort` — ver "Isolamento por organização" acima).
+- `UploadMovementDocumentPort` — faz upload de ficheiro para Supabase Storage e devolve a URL pública; o movimento em si não é alterado (a URL é passada no classify subsequente). `UploadMovementDocumentCommand` inclui `organizationId`, agora também passado ao `DocumentStoragePort` (ver "Isolamento por organização" acima).
 - `ApplyAutoRulesPort` — aplica todas as regras ativas aos movimentos não resolvidos de um import. `ApplyAutoRulesCommand = { organizationId, statementImportId }` (antes `execute(statementImportId)`).
 - `SuggestMatchesPort` — gera sugestões de correspondência por valor + data + nome do fornecedor. `SuggestMatchesQuery = { organizationId, statementImportId }` (antes `execute(statementImportId)`).
 - `FindMovementCandidatesPort` — devolve candidatos pontuados (fatura + conta a pagar) para um movimento específico; usado pelo drawer de classificação. Cada candidato inclui `openBalanceCents` (saldo em aberto da entidade). **Filtro por saldo:** entidades com `openBalanceCents = 0` (totalmente alocadas a outros movimentos) são excluídas; entidades com alocação parcial são incluídas com o saldo residual. Payable entries associadas a uma fatura que já aparece na lista de candidatos são omitidas (evita dupla contagem). `FindMovementCandidatesQuery = { organizationId, movementId }` (antes `execute(movementId)`).
@@ -270,14 +270,14 @@ ou nada, o `execute()` passou a tomar um objecto nomeado.
 
 Em todos os ports abaixo, `organizationId: OrganizationId` é sempre o
 primeiro parâmetro do método (D2) — omitido nas listas de argumentos que
-se seguem por brevidade, à excepção do `DocumentStoragePort`, que
-deliberadamente não o tem (ver secção "Isolamento por organização" acima).
+se seguem por brevidade, à excepção do `DocumentStoragePort.store`, onde é
+o último (ver secção "Isolamento por organização" acima).
 
 - `BankStatementImportRepositoryPort` — save, findById, findAll, update, delete.
 - `BankMovementRepositoryPort` — `saveBulk`, `findByStatementId(statementImportId, filter?)`, `findByIds(ids)` (bulk por lista de IDs — usado em `GetMovementsLinkedToInvoiceUseCase`), `findById`, `update`, `existsByHash`, `findByAccountAndPeriod(bankAccountId, from, to)` (usado pelos use cases de calendário).
 - `BankAccountReadPort` *(cross-module)* — `findByAccountNumber(raw)`, `findById(id)`; permite ao módulo tentar auto-link sem depender directamente de bank-accounts. Satisfeito directamente pelo `SupabaseBankAccountRepository` de bank-accounts, injectado — ver "Isolamento por organização" acima.
 - `BankReconciliationRuleRepositoryPort` — save, findAll(activeOnly?), findById, update, delete.
-- `DocumentStoragePort` — `store(buffer, filename, mimeType)` → URL pública. **Sem `organizationId`** (D17).
+- `DocumentStoragePort` — `store(buffer, filename, mimeType, organizationId)` → URL pública. `bank-statement-documents` não optou por prefixação (ADR-0015 DB4), pelo que `organizationId` passa pelo wrapper sem alterar o caminho.
 - `BankMovementEntityLinkRepositoryPort` — `saveAll`, `findByMovementIds` (bulk por movimento — usado para carregar links do próprio movimento em re-conciliação), `findByEntityIds(entityType, entityIds)` (bulk por entidade — usado para calcular alocações existentes e saldo em aberto), `findAllByEntityType(entityType)` (sem filtro de ID — usado em `FindMovementCandidatesUseCase` para encontrar faturas parcialmente conciliadas por saldo em aberto), `deleteByMovementId` (para re-conciliação e anulação).
 - `MovementMatchHintPort` — `findSupplierByDescription(normalizedDesc)` para sugestões; `save(normalizedDesc, supplierId)` para aprendizagem.
 - `InvoiceMatchReadPort` *(cross-module)* — `findCandidates(opts)` por amount + date range (exclui faturas com `reconciliation_status = 'reconciled'`); `findByIds` para lookup bulk na reconciliação e cálculo de saldos em aberto.
@@ -299,15 +299,16 @@ Todos os adapters de tabela recebem o `ScopedQueryFactory`
 (`createScopedQuery`) no construtor, não um `SupabaseClient`, e chamam
 `this.scopedQuery(organizationId).table(...)` por operação (D2) — 9 dos 13
 adapters deste módulo. Exceções: `SupabaseBankDocumentStorageAdapter` (usa
-o wrapper partilhado `objectStorage`, sem `organizationId` — D17) e os dois
-parsers (`CsvStatementParser`/`XlsxStatementParser`, sem I/O nenhum).
+o wrapper partilhado `objectStorage`, que recebe `organizationId` por
+chamada — ADR-0015 — mas não o usa para prefixar este bucket, DB4) e os
+dois parsers (`CsvStatementParser`/`XlsxStatementParser`, sem I/O nenhum).
 
 - `SupabaseBankStatementImportRepository` → tabela `bank_statement_imports`, via `ScopedQueryFactory`.
 - `SupabaseBankMovementRepository` → tabela `bank_movements` (inclui campos de classificação: cost_center_group_id, cost_center_category_id, supplier_id, vat_rate, vat_included, reconciliation_amount_diff), via `ScopedQueryFactory`.
 - `SupabaseBankMovementEntityLinkRepository` → tabela `bank_movement_entity_links`, via `ScopedQueryFactory`.
 - `SupabaseBankReconciliationRuleRepository` → tabela `bank_reconciliation_rules`, via `ScopedQueryFactory`.
 - `SupabaseMovementMatchHintAdapter` → tabela `bank_movement_match_hints`, via `ScopedQueryFactory`.
-- `SupabaseBankDocumentStorageAdapter` → Supabase Storage, bucket `bank-statement-documents`, via `objectStorage` (`src/infra/scoped-db/object-storage.ts`) — não guarda `SupabaseClient`, não recebe `organizationId` (D17).
+- `SupabaseBankDocumentStorageAdapter` → Supabase Storage, bucket `bank-statement-documents`, via `objectStorage` (`src/infra/scoped-db/object-storage.ts`) — não guarda `SupabaseClient`. Recebe `organizationId` e repassa-o ao wrapper (ADR-0015), que o deixa por usar para este bucket (DB4).
 - `SupabaseInvoiceMatchReadAdapter` → cross-module; acede à tabela `invoices` directamente, via `ScopedQueryFactory`. `findCandidates` exclui explicitamente `reconciliation_status = 'reconciled'` para que faturas totalmente conciliadas nunca apareçam como candidatas.
 - `SupabasePayableEntryMatchReadAdapter` → cross-module; acede à tabela `payable_entries` directamente, via `ScopedQueryFactory`.
 - `SupabaseInvoiceReconciliationWriteAdapter` → cross-module; acede à tabela `invoices` directamente para actualizar `reconciliation_status` (e `status`/`paid_at` quando aplicável), via `ScopedQueryFactory`, sem importar nenhum código do módulo `invoices`.

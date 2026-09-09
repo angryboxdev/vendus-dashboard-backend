@@ -1,7 +1,7 @@
 # Módulo: invoices
 
 > Status: ativo
-> Última atualização: 2026-09-06 (spec C ticket 06 — cron de débitos diretos passa a processar todas as organizações via fan-out, deixa de usar `UNATTENDED_SCOPE`)
+> Última atualização: 2026-09-09 (`kiosk-pin-storage-prefix` ticket 03 — `DocumentStoragePort.store`/`objectStorage` ganham `organizationId`; `invoice-documents` opta por prefixação de caminho, ADR-0015)
 
 ---
 
@@ -148,9 +148,13 @@ verificada); o cron de débitos diretos, que não tem pedido, chama
 `ProcessDirectDebitsPort.execute()` uma vez por organização — spec C ticket
 06 substituiu o `UNATTENDED_SCOPE` fixo por um fan-out sobre
 `listOrganizations()` (`src/infra/scoped-db/organization-listing.ts`, ticket
-02), ver "Processamento de DD via cron" abaixo. Excepções deliberadas: `AiExtractionPort` e
-`DocumentStoragePort` não tomam organização — nunca tocam a base de dados
-(a IA e o storage-wrapper são discutidos em "Decisões de design").
+02), ver "Processamento de DD via cron" abaixo. Excepção deliberada:
+`AiExtractionPort` não toma organização — nunca toca a base de dados (a IA
+é discutida em "Decisões de design"). `DocumentStoragePort` passou a tomar
+`organizationId` (ADR-0015, ticket 03 de `kiosk-pin-storage-prefix`) como
+**último** parâmetro de `store` — não o primeiro, ao contrário da convenção
+D2 acima — porque o wrapper `objectStorage` usa-o para prefixar o caminho do
+upload (ver "Decisões de design").
 
 ### Entrada (use cases)
 
@@ -183,7 +187,7 @@ verificada); o cron de débitos diretos, que não tem pedido, chama
 - `PayableEntryWritePort` — `createForInvoice(organizationId, data)`, `markPaidByInvoiceId(organizationId, invoiceId, paidAt)`, `cancelByInvoiceId(organizationId, invoiceId)`, `renumberByInvoiceId(organizationId, invoiceId, newInvoiceNumber)` (actualiza a `description` das entradas não canceladas quando o número da fatura muda).
 - `InvoiceReconciliationCleanupPort` — interface declarada no módulo `invoices` para evitar acoplamento ao módulo `bank-statements`. Dois métodos: `removeLinksForInvoice(organizationId, invoiceId)` (remove links do tipo `invoice` e recalcula estado de conciliação dos movimentos afectados) e `renumberLinksForInvoice(organizationId, invoiceId, newLabel)` (actualiza `entity_label` dos links quando o número da fatura muda).
 - **`AiExtractionPort`** — `extract(fileUrl, mimeType): Promise<AiExtractionResult>`. Sem organização — nunca toca a base de dados.
-- **`DocumentStoragePort`** — `store(buffer, filename, mimeType): Promise<string>`. Sem organização, deliberadamente (ADR-0008/D17): o wrapper `objectStorage` (`src/infra/scoped-db/object-storage.ts`) não faz path-prefixing por organização — os objectos existentes vivem em paths sem prefixo, e prefixar quebraria todos os URLs já emitidos. Ganha organização se e quando essa migração acontecer.
+- **`DocumentStoragePort`** — `store(buffer, filename, mimeType, organizationId): Promise<string>`. Desde ADR-0015 (ticket 03), o wrapper `objectStorage` (`src/infra/scoped-db/object-storage.ts`) usa `organizationId` para prefixar o caminho de novos uploads a `invoice-documents` (bucket opt-in) — `{org_id}/{timestamp}_{safeName}`. Objectos já existentes ficam nos caminhos sem prefixo e continuam a resolver sem alterações (sem backfill, ADR-0015 DB2). `delete(url)` continua sem organização.
 - **`SupplierLookupPort`** — `findByNif(organizationId, nif)` + `findByName(organizationId, query)` + `findAll(organizationId)`. Inclui defaults do fornecedor.
 - **`SupplierCreatePort`** — `create(organizationId, data)` para criar fornecedor durante confirmação de importação.
 - **`SupplierHintPort`** — `findByNormalizedName(organizationId, normalizedName)` + `save(organizationId, normalizedName, supplierId)`.
@@ -210,7 +214,7 @@ módulo não importa `@supabase/supabase-js` em lado nenhum — só o folder
 - **`FinancialBaseSupplierCreateAdapter`** → delega criação de fornecedor ao financial-base, passando adiante o `organizationId` recebido (já não usa o `UNATTENDED_SCOPE`, que era o stopgap antes desta conversão).
 - `SupabaseClassificationRuleRepository` → tabela `classification_rules`.
 - `SupabasePayableEntryWriteAdapter` → tabela `payable_entries`.
-- **`SupabaseDocumentStorageAdapter`** → bucket Supabase Storage `invoice-documents`. Não recebe `SupabaseClient` nem organização no construtor: delega para o wrapper `objectStorage` de `src/infra/scoped-db/` (spec B2 ticket 01/D10/D17) — esse folder é o único lugar em `src/**` autorizado a importar `@supabase/supabase-js`, e o wrapper deliberadamente não faz path-prefixing por organização (ver Ports acima).
+- **`SupabaseDocumentStorageAdapter`** → bucket Supabase Storage `invoice-documents`. Não recebe `SupabaseClient` no construtor: delega para o wrapper `objectStorage` de `src/infra/scoped-db/` (spec B2 ticket 01/D10; organização em ADR-0015, ticket 03) — esse folder é o único lugar em `src/**` autorizado a importar `@supabase/supabase-js`. `store()` recebe `organizationId` do use case e devolve o path efectivo (prefixado, ver Ports acima) que `getPublicUrl` usa para montar o URL.
 - **`SupabaseSupplierLookupAdapter`** → tabela `suppliers` (NIF + defaults).
 - **`SupabaseSupplierHintAdapter`** → tabelas `supplier_import_hints` + `suppliers`.
 - **`SupabaseOccurrenceSyncAdapter`** → tabela `recurring_occurrences`, sem importar código do módulo `payable-recurrences`.
@@ -276,7 +280,7 @@ módulo não importa `@supabase/supabase-js` em lado nenhum — só o folder
 - **Renumber propagation no UpdateInvoice**: quando `invoiceNumber` muda, o use case actualiza a `description` do payable entry (via `renumberByInvoiceId`) e o `entity_label` dos links de conciliação bancária (via `renumberLinksForInvoice`). A propagação só ocorre quando o número realmente muda (não quando é omitido nem quando é igual ao actual).
 - **lineDetailMode automático no ConfirmImport**: quando o utilizador fornece linhas ao confirmar uma fatura importada, o use case define automaticamente `lineDetailMode=detailed` e persiste a fatura actualizada antes de criar o payable entry — garantindo que o DTO retornado reflecte o modo correcto.
 - **Alocação de linha a uma loja (`locationId`, spec B2 D3/D4/D5)**: `invoice_lines` é a única tabela location-bearing cujo `location_id` é **nullable** — todas as outras (event-grain: `cash_closings`, `stock_movements`, `hr_work_shifts`, `hr_shift_attendance`) exigem uma loja. Aqui, `null` é um estado real e não a ausência de um dado: um custo pode pertencer à organização inteira (ex: marketing central, serviços partilhados) e a nenhuma loja específica. Por isso o campo é opcional em todas as escritas de linha (`AddInvoiceLineUseCase`, `UpdateInvoiceLineUseCase`, linhas de `CreateInvoiceUseCase` e de `ConfirmImportedInvoiceUseCase`) e **nunca é defaultado** — ausente na escrita fica `null` na base de dados, não uma loja adivinhada. O cabeçalho da fatura (`invoices`) continua ao nível da organização; só a linha carrega a loja. O frontend só começa a enviar o campo no ticket 19 da spec B2 — até lá fica ausente na prática. Uma loja indicada por um caller que pertença a outra organização será rejeitada pela FK composta `(org_id, location_id)` quando essa migração aterrar (D5, ticket 21) — hoje ainda não há essa validação estrutural.
-- **Organização explícita em todas as portas de saída (spec B2 D1/D2/D7, ADR-0008)**: cada adapter deixou de guardar um `SupabaseClient` e passou a receber `createScopedQuery` (`ScopedQueryFactory`), construindo um `ScopedQuery` escopado por chamada. A organização (`OrganizationId`, tipo nominal — `src/kernel/organization-id.ts`) chega pelo `organizationId` do comando nos casos de uso baseados em objecto, e como primeiro parâmetro posicional nos que tomam argumentos primitivos. O controller lê-a de `req.auth.orgId`; o cron de débitos diretos (`POST /api/internal/cron/process-direct-debits`, sem sessão) já não usa o `UNATTENDED_SCOPE` fixo — desde a spec C (ticket 06) recebe um `OrganizationId` por chamada, um por organização listada, ver "Fan-out do cron de débitos diretos" acima. `AiExtractionPort` e `DocumentStoragePort` ficam de fora deliberadamente — nunca tocam a base de dados (a IA fala com a OpenAI; o storage delega no wrapper que também não é re-pathado por organização, D17).
+- **Organização explícita em todas as portas de saída (spec B2 D1/D2/D7, ADR-0008)**: cada adapter deixou de guardar um `SupabaseClient` e passou a receber `createScopedQuery` (`ScopedQueryFactory`), construindo um `ScopedQuery` escopado por chamada. A organização (`OrganizationId`, tipo nominal — `src/kernel/organization-id.ts`) chega pelo `organizationId` do comando nos casos de uso baseados em objecto, e como primeiro parâmetro posicional nos que tomam argumentos primitivos. O controller lê-a de `req.auth.orgId`; o cron de débitos diretos (`POST /api/internal/cron/process-direct-debits`, sem sessão) já não usa o `UNATTENDED_SCOPE` fixo — desde a spec C (ticket 06) recebe um `OrganizationId` por chamada, um por organização listada, ver "Fan-out do cron de débitos diretos" acima. `AiExtractionPort` fica de fora deliberadamente — nunca toca a base de dados (fala com a OpenAI). `DocumentStoragePort` recebe `organizationId` como último argumento de `store` (não o primeiro) desde ADR-0015 — não toca a base de dados directamente, mas o wrapper `objectStorage` usa a organização para prefixar o caminho de upload em `invoice-documents`.
 
 ## SQL — alterações às tabelas
 

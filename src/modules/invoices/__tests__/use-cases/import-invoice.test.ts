@@ -39,6 +39,7 @@ describe("ImportInvoiceUseCase", () => {
 
     expect(storage.storedFiles).toHaveLength(1);
     expect(storage.storedFiles[0].filename).toBe("fatura.pdf");
+    expect(storage.storedFiles[0].organizationId).toBe(ORG_ID);
     expect(result.invoice.status).toBe("draft_ai");
     expect(result.invoice.source).toBe("pdf_import");
   });

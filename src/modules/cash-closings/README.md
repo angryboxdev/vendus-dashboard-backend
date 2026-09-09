@@ -152,8 +152,14 @@ acrescenta:
 - **O lookup de PIN passou a ser escopado à organização (`EmployeeRepositoryPort.findActiveByPinHash`).**
   Antes procurava em todos os funcionários da base de dados; correcto por
   construção enquanto existe uma organização. Continua correcto por
-  construção depois de escopado — o risco de colisão de PIN de 4 dígitos
-  *entre* organizações é o item diferido de spec A, não é resolvido aqui.
+  construção depois de escopado. O risco de colisão de PIN de 4 dígitos
+  *entre* organizações — que este scoping por si só não resolvia — foi
+  fechado à parte pelo índice composto `(org_id, kiosk_pin_hash)`
+  (`hr_employees_kiosk_pin_hash_org_uq`,
+  `.scratch/kiosk-pin-storage-prefix/spec.md` Section A DA1); este módulo não
+  precisou de nenhuma alteração de código para isso, só a confirmação (por
+  teste de regressão) de que o filtro de organização já corre antes do
+  predicado `kiosk_pin_hash`.
 - **O par legado morto foi convertido, não apagado (D9).** `src/routes/cashClosingRoutes.ts`
   (não montado em `server.ts`) e `src/services/cashClosingService.ts` (só
   importado por essa rota) replicam exactamente as mesmas regras — rotas

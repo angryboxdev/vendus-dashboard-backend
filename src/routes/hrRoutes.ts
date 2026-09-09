@@ -544,7 +544,7 @@ hrRoutes.get("/employees/:id/documents/:docId/download-url", requireMinRole("man
     const docs = await listDocuments(req.auth!.orgId, req.params["id"] as string);
     const doc = docs.find((d) => d.id === docId);
     if (!doc) { jsonError(res, 404, "Documento não encontrado"); return; }
-    const url = await getDocumentSignedUrl(doc.storagePath);
+    const url = await getDocumentSignedUrl(req.auth!.orgId, doc.storagePath);
     res.json({ url });
   } catch (e: unknown) {
     res.status(500).json({ error: e instanceof Error ? e.message : "Erro ao gerar URL" });

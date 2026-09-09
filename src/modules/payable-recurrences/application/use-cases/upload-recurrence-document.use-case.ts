@@ -28,7 +28,7 @@ export class UploadRecurrenceDocumentUseCase {
       await this.storage.delete(recurrence.documentUrl);
     }
 
-    const url = await this.storage.store(command.buffer, command.filename, command.mimeType);
+    const url = await this.storage.store(command.buffer, command.filename, command.mimeType, command.organizationId);
     const updated = recurrence.setDocumentUrl(url);
     await this.repo.update(command.organizationId, updated);
     return toRecurrenceDTO(updated);

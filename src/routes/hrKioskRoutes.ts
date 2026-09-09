@@ -40,7 +40,10 @@ function checkScanRateLimit(ip: string): boolean {
   return true;
 }
 
-// Limpeza periódica do mapa (a cada 5 min) para não crescer indefinidamente
+// Limpeza periódica do mapa (a cada 5 min) para não crescer indefinidamente.
+// `.unref()`: this timer alone must never keep the process (or a test that
+// imports this route module) alive — the HTTP server's own listener already
+// does that in production.
 setInterval(
   () => {
     const now = Date.now();
@@ -49,7 +52,7 @@ setInterval(
     }
   },
   5 * 60_000,
-);
+).unref();
 
 // ---------- GET /kiosk/daily-token ----------
 // Retorna o token HMAC de hoje para o frontend gerar o QR.
