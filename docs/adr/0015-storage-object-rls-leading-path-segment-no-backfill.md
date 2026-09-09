@@ -88,12 +88,41 @@ unprefixed reference keeps resolving unchanged. A bucket outside the
 registered set is a compile error, mirroring how an unregistered table is
 rejected by the scoped-query helper's `TableName` union.
 
-The `storage.objects` policy migration itself — the actual
-`select`/`insert`/`update`/`delete` policies per bucket, and the credential
-switch that makes them evaluate — is not part of this change; it ships in a
-later ticket of the same spec, on the same timeline this ADR and ADR-0007
-both commit to (before organization #2). Until that migration lands, the
-prefixed path convention is descriptive only: nothing enforces it.
+The `storage.objects` policy migrations have since shipped, both buckets, on
+the timeline this ADR and ADR-0007 committed to (before organization #2):
+`supabase/migrations/20260909130000_hr_documents_storage_rls.sql` (ticket 04,
+`hr-documents`) and `supabase/migrations/20260909140000_invoice_documents_storage_rls.sql`
+(ticket 05, `invoice-documents`). Both end up with the same four operations
+— select/insert/update/delete — even though `invoice-documents` is public
+and the Solution section above only asked for write/delete there: a bare
+DELETE (or UPDATE) policy with no accompanying SELECT-granting policy for
+the same role deletes/updates **zero rows unconditionally, including a
+legitimately matching same-org row** — confirmed empirically against an
+isolated probe table and against `storage.objects` itself (ticket 05's
+smoke, Deviation 1) before shipping the fix. This is a general Postgres RLS
+mechanic (UPDATE/DELETE need the target row to already be SELECT-visible
+before their own USING clause is even consulted), not something specific to
+Storage — omitting the select policy would have shipped a delete policy that
+silently never deletes anything, for any organization, which is worse than
+no policy because it reads as protection while being inert. Adding it grants
+no new read exposure for `invoice-documents` (see the next paragraph): the
+bucket already serves any object to anyone regardless of RLS, so an
+org-scoped select policy only ever helps this bucket's own write/delete
+policies function, never widens what a reader can reach.
+
+**A held URL — or, for `invoice-documents` specifically, an authenticated
+`.download()` call — is unaffected by any of this, confirmed empirically at
+smoke time (ticket 05's smoke, Deviation 2).** For a public bucket, Supabase
+Storage serves an object through both its direct public URL and the SDK's
+`.download()` call without evaluating `storage.objects` RLS at all — the
+select policy above exists solely for the DELETE/UPDATE visibility mechanic
+just described, not to gate reads, which this bucket structurally cannot do
+while it stays public (DB3, out of scope). `hr-documents` is private and has
+no equivalent exposure: its signed URLs expire in 120 seconds and its own
+select policy is the real read gate for anything going through Storage
+directly. A future reader must not assume `invoice-documents` having RLS
+policies at all means reads are access-controlled — they are not, for either
+transport.
 
 Related: `docs/adr/0007-app-level-scoping-is-the-tenant-boundary.md` (the
 org-claim mechanism and the deferred-item gate this belongs to),
