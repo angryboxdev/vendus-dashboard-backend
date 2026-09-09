@@ -1,7 +1,7 @@
 # Módulo: invoices
 
 > Status: ativo
-> Última atualização: 2026-09-09 (`kiosk-pin-storage-prefix` ticket 03 — `DocumentStoragePort.store`/`objectStorage` ganham `organizationId`; `invoice-documents` opta por prefixação de caminho, ADR-0015)
+> Última atualização: 2026-09-09 (`kiosk-pin-storage-prefix` ticket 05 — políticas RLS de `storage.objects` para o bucket `invoice-documents`, ADR-0015; ticket 03 já tinha dado a `DocumentStoragePort.store`/`objectStorage` o parâmetro `organizationId` e a prefixação de caminho)
 
 ---
 
@@ -249,6 +249,7 @@ módulo não importa `@supabase/supabase-js` em lado nenhum — só o folder
 
 - **Upload multipart no controller, não no use case**: o controller faz a leitura do buffer (`multer`) e passa-o ao `ImportInvoiceUseCase`. O domínio nunca toca em `Buffer` — só vê `DocumentStoragePort` e `AiExtractionPort` como interfaces.
 - **AI extraction via base64, não URL público**: o `OpenAiExtractionAdapter` armazena primeiro o ficheiro no Supabase Storage, lê o buffer e envia-o como `data:<mimeType>;base64,...` diretamente à API GPT-4o Vision. Nenhum URL público é partilhado com a OpenAI.
+- **`storage.objects` RLS no bucket `invoice-documents` (ticket 05, ADR-0015) — protege operações administrativas, não leitura por URL**: `supabase/migrations/20260909140000_invoice_documents_storage_rls.sql` adiciona políticas `select`/`insert`/`update`/`delete` chave­adas em `(storage.foldername(name))[1] = current_org()::text` (reutiliza `current_org()`, criada pela migration do ticket 04 para `hr-documents`). **Limitação explícita, confirmada no smoke do ticket 05 (`.scratch/kiosk-pin-storage-prefix/issues/05-smoke-verification.md`): o bucket continua público, e servir um objecto (via URL pública directa OU via `.download()` autenticado) não passa pelas políticas RLS de todo — nenhuma delas protege quem já tem/guarda um URL de uma fatura.** As políticas só têm efeito real sobre listagem e escrita/eliminação por path (impedir a organização A de listar, sobrescrever ou apagar um objecto da organização B adivinhando ou enumerando o caminho). A política de `select` foi acrescentada apesar do ticket pedir apenas "write/delete": sem ela, `delete`/`update` não funcionam mesmo para o próprio dono — é um mecanismo geral do RLS do Postgres (UPDATE/DELETE precisam de visibilidade SELECT sobre a linha alvo antes da sua própria cláusula USING ser avaliada), confirmado empiricamente antes de expedir a migration (ver Deviation 1 do smoke). Não converte o bucket para leitura privada/URLs assinados (DB3, fora de âmbito) — essa é uma decisão de produto, não desta spec.
 - **Linhas de fatura opcionais no import**: o MVP regista sempre os totais da fatura. As linhas são salvas durante `confirmImport` se o utilizador as fornecer. Não é necessário ter linhas para que a fatura seja válida.
 - **Criação de fornecedor durante confirmação**: `ConfirmImportedInvoiceUseCase` aceita o campo `newSupplier` (nome + NIF opcional). Quando presente, chama `SupplierCreatePort.create()` e usa o ID retornado — `newSupplier` tem precedência sobre `supplierId`. O adapter concreto (`FinancialBaseSupplierCreateAdapter`) delega ao módulo `financial-base`. A consulta de fornecedor existente por NIF é feita via `SupplierLookupPort`.
 - **`confirmImport` transita para `pending`, `paid` ou `pending` com DD**: se "Fatura já paga" → `paid`; se "Débito direto" → `pending` com `isDirectDebit=true` e `directDebitDate`; caso contrário `pending`.
@@ -334,6 +335,8 @@ alter table suppliers
 
 -- Bucket Supabase Storage
 -- Criar bucket "invoice-documents" com acesso público no painel Supabase Storage.
+-- Políticas RLS de storage.objects (ticket 05, ADR-0015):
+-- supabase/migrations/20260909140000_invoice_documents_storage_rls.sql
 ```
 
 `org_id` (NOT NULL, com default temporário) em `invoices` e `invoice_lines`, e
@@ -374,3 +377,4 @@ apenas faz o código passar a escrever/ler através do `ScopedQuery` e a aceitar
 - Seed de regras built-in para Uber Eats/Glovo/Bolt adiado: requer UUIDs dos fornecedores
   reais na base de dados, que não existem em tempo de migration. As regras criam-se
   organicamente quando o utilizador classifica a primeira fatura e clica "Guardar como regra".
+- **`invoice-documents` continua um bucket público sem backfill (ADR-0015, tickets 03/05)**: PDFs de faturas importadas antes destas mudanças ficam em caminhos sem prefixo de organização, para sempre — nunca são migrados. As políticas RLS novas não protegem quem já tem o URL de uma fatura (ver "Decisões de design" acima) nem convertem o bucket para privado — isso é uma decisão de produto explicitamente fora de âmbito (DB3).
