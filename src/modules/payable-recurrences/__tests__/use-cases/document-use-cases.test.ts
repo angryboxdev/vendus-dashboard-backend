@@ -63,6 +63,7 @@ describe("UploadRecurrenceDocumentUseCase", () => {
     expect(updated.documentUrl).not.toBeNull();
     expect(storage.stored).toHaveLength(1);
     expect(storage.stored[0]!.filename).toBe("contrato.pdf");
+    expect(storage.stored[0]!.organizationId).toBe(organizationId);
   });
 
   it("elimina o documento anterior antes de fazer upload do novo", async () => {
@@ -191,6 +192,7 @@ describe("UploadOccurrenceDocumentUseCase", () => {
 
     expect(updated.documentUrl).not.toBeNull();
     expect(storage.stored).toHaveLength(1);
+    expect(storage.stored[0]!.organizationId).toBe(organizationId);
   });
 
   it("substitui documento anterior ao fazer novo upload", async () => {

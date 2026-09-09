@@ -64,23 +64,23 @@ export async function uploadDocument(
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
   const storagePath = `${employeeId}/${id}/${safeName}`;
 
-  await objectStorage.upload(STORAGE_BUCKET, storagePath, buffer, mimeType);
+  const actualPath = await objectStorage.upload(STORAGE_BUCKET, storagePath, buffer, mimeType, organizationId);
 
   const { data, error } = await createScopedQuery(organizationId)
     .table("hr_employee_documents")
-    .insert({ id, employee_id: employeeId, document_type: documentType, file_name: fileName, storage_path: storagePath })
+    .insert({ id, employee_id: employeeId, document_type: documentType, file_name: fileName, storage_path: actualPath })
     .select("id, employee_id, document_type, file_name, storage_path, uploaded_at")
     .single();
 
   if (error) {
-    await objectStorage.remove(STORAGE_BUCKET, storagePath).catch(() => {});
+    await objectStorage.remove(STORAGE_BUCKET, actualPath).catch(() => {});
     throw new Error(`Guardar documento: ${error.message}`);
   }
   return rowToDoc(data as unknown as DocRow);
 }
 
-export async function getDocumentSignedUrl(storagePath: string): Promise<string> {
-  return objectStorage.createSignedUrl(STORAGE_BUCKET, storagePath, 120);
+export async function getDocumentSignedUrl(organizationId: OrganizationId, storagePath: string): Promise<string> {
+  return objectStorage.createSignedUrl(STORAGE_BUCKET, storagePath, 120, organizationId);
 }
 
 export async function deleteDocument(organizationId: OrganizationId, docId: string): Promise<void> {

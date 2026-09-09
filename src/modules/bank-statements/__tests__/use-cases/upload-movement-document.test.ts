@@ -72,6 +72,7 @@ describe("UploadMovementDocumentUseCase", () => {
     expect(storage.uploads).toHaveLength(1);
     expect(storage.uploads[0]!.filename).toBe("comprovativo.jpg");
     expect(storage.uploads[0]!.mimeType).toBe("image/jpeg");
+    expect(storage.uploads[0]!.organizationId).toBe(organizationId);
   });
 
   it("does not change movement reconciliation status", async () => {

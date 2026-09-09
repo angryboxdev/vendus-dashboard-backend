@@ -1,7 +1,7 @@
 # Módulo: payable-recurrences
 
 > Status: ativo
-> Última atualização: 2026-08-28
+> Última atualização: 2026-09-09 (`kiosk-pin-storage-prefix` ticket 03 — `DocumentStoragePort.store`/`objectStorage` ganham `organizationId`; `recurrence-documents` não opta por prefixação, ADR-0015 DB4)
 
 ---
 
@@ -210,12 +210,13 @@ Resumo aplicado aqui:
   `occurrenceRepo.save(organizationId, …)` uma vez por ocorrência gerada; cada
   chamada passa pelo mesmo helper escopado, que stampa `org_id`, pelo que
   nenhuma linha do lote carrega um campo de organização escrito à mão.
-- **`DocumentStoragePort` é a única excepção deliberada** — `store`/`delete`
-  não ganharam `organizationId`. O wrapper `objectStorage` que este adapter já
-  chamava (desde o ticket 01) foi desenhado sem parâmetro de organização e sem
-  prefixação de caminho (D17): re-prefixar os caminhos existentes fica para
-  quando essa migração acontecer, não antes. Ver o comentário em
-  `src/infra/scoped-db/object-storage.ts`.
+- **`DocumentStoragePort.store` ganhou `organizationId` como último
+  parâmetro** (ADR-0015, ticket 03 de `kiosk-pin-storage-prefix`) — não o
+  primeiro, ao contrário da convenção D2 acima. `recurrence-documents` não
+  optou por prefixação (ADR-0015 DB4: deliberadamente deixado fora deste
+  bucket), por isso o adapter passa a organização ao wrapper `objectStorage`
+  sem que o caminho mude. `delete` continua sem organização. Ver o comentário
+  em `src/infra/scoped-db/object-storage.ts`.
 - **`PayableEntryWritePort`/`SupabasePayableEntryWriteAdapter`** ganharam
   `organizationId` como qualquer outro output port, mas continuam por ligar a
   qualquer use case (dívida pré-existente ao ticket 06, ver "Pontos de
@@ -259,13 +260,13 @@ Resumo aplicado aqui:
 ### Saída (dependências do domínio)
 
 Em todos, `organizationId` é sempre o primeiro parâmetro do método (D2) —
-excepto `DocumentStoragePort`, ver secção acima.
+excepto `DocumentStoragePort.store`, onde é o último (ver secção acima).
 
 - `RecurrenceRepositoryPort` — `save(organizationId, recurrence)`, `update(organizationId, recurrence)`, `findById(organizationId, id)`, `findAll(organizationId, filter?)`.
 - `OccurrenceRepositoryPort` — `save`, `update`, `delete`, `findById`, `findAll`, `findByRecurrenceAndPeriod`, `countByStatus`, `findLinkedInvoiceIds` — todos com `organizationId` como primeiro parâmetro. Inclui `findByRecurrenceAndPeriod` para o check de duplicados.
 - `PayableEntryWritePort` — cross-módulo: `create(organizationId, data)`, cria conta a pagar em `payable_entries`.
 - `InvoiceReadPort` — cross-módulo: `findById(organizationId, id)`, ler dados mínimos de uma fatura para vincular.
-- `DocumentStoragePort` — `store(buffer, filename, mimeType)`, `delete(url)` — armazenamento de ficheiros (contrato base, faturas mensais). **Não** tem `organizationId` (ver secção "Isolamento por organização" acima).
+- `DocumentStoragePort` — `store(buffer, filename, mimeType, organizationId)`, `delete(url)` — armazenamento de ficheiros (contrato base, faturas mensais). `store` recebe `organizationId` como último parâmetro (ADR-0015); `recurrence-documents` não optou por prefixação (DB4), pelo que o wrapper recebe-a sem alterar o caminho.
 - `BankMovementLinkReadPort` — cross-módulo: `findByOccurrenceIds(organizationId, occurrenceIds)`, devolve um `Map<occurrenceId, LinkedBankMovement>` com data, montante e descrição do movimento bancário que justificou cada ocorrência. Usado por `ListOccurrencesUseCase` e `GetOccurrenceUseCase` para enriquecer o DTO com `linkedBankMovement`. O adapter concreto lê directamente `bank_movements` sem importar código de `bank-statements`.
 
 ---
@@ -287,7 +288,7 @@ ticket 06).
 - `SupabaseOccurrenceRepository` → implementa `OccurrenceRepositoryPort` na tabela `recurring_occurrences`, via `ScopedQueryFactory`.
 - `SupabasePayableEntryWriteAdapter` → cross-módulo, acede directamente à tabela `payable_entries`, via `ScopedQueryFactory`.
 - `SupabaseInvoiceReadAdapter` → cross-módulo, acede directamente à tabela `invoices`, via `ScopedQueryFactory`.
-- `SupabaseRecurrenceDocumentStorageAdapter` → implementa `DocumentStoragePort` no bucket Supabase Storage `recurrence-documents`. Não recebe `SupabaseClient` nem `ScopedQueryFactory` no construtor: delega para o wrapper `objectStorage` de `src/infra/scoped-db/` (spec B2 ticket 01/D10), que é deliberadamente não-escopado (D17) — esse folder é o único lugar em `src/**` autorizado a importar `@supabase/supabase-js`.
+- `SupabaseRecurrenceDocumentStorageAdapter` → implementa `DocumentStoragePort` no bucket Supabase Storage `recurrence-documents`. Não recebe `SupabaseClient` nem `ScopedQueryFactory` no construtor: delega para o wrapper `objectStorage` de `src/infra/scoped-db/` (spec B2 ticket 01/D10) — esse folder é o único lugar em `src/**` autorizado a importar `@supabase/supabase-js`. `store()` passa `organizationId` ao wrapper (ADR-0015), mas este bucket não optou por prefixação (DB4) — o caminho fica igual.
 - `SupabaseBankMovementLinkReadAdapter` → cross-módulo; lê `bank_movements WHERE matched_entity_type = 'recurrence_occurrence' AND matched_entity_id IN (...)` via `ScopedQueryFactory`, sem importar código de `bank-statements`. Implementa `BankMovementLinkReadPort`.
 
 ---

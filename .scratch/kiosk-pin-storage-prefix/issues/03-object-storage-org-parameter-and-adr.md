@@ -20,17 +20,17 @@ Statement, Solution, DB1/DB2/DB5, Testing Decisions) for the full reasoning.
 
 **Blocked by:** None — can start immediately. Independent of Section A.
 
-**Status:** ready-for-agent
+**Status:** done and verified
 
-- [ ] `objectStorage`'s upload/signed-url/public-url functions accept an
+- [x] `objectStorage`'s upload/signed-url/public-url functions accept an
       organization parameter.
-- [ ] All 5 callers updated to pass it (3 pass through unused, matching
+- [x] All 5 callers updated to pass it (3 pass through unused, matching
       DB4).
-- [ ] Existing `objectStorage` unit tests extended: the upload path is
+- [x] Existing `objectStorage` unit tests extended: the upload path is
       prefixed when a bucket opts in, signed-url/public-url paths accept an
       unprefixed legacy path unchanged, and a bucket outside the
       to-be-prefixed set is rejected the same way an unregistered table is.
-- [ ] `docs/adr/0015-*.md` written, covering the path convention, the
+- [x] `docs/adr/0015-*.md` written, covering the path convention, the
       `storage.foldername`-keyed policy predicate, and the no-backfill
       decision. Title: "Storage-object RLS keys on the leading path
       segment; existing objects are not backfilled."
