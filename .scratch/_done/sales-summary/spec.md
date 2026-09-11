@@ -381,7 +381,7 @@ for cache hit/miss logic.
 
 ## Out of Scope
 
-- Free date range queries (Sales Period = calendar month only; see ADR-0010).
+- Free date range queries (Sales Period = calendar month only; see ADR-0017).
 - "Angry Box - Porto" AirMenu enterprise (see ADR-0012).
 - Year-over-year comparison in the growth chart (documented for a future
   iteration; the chart component should be designed to accommodate it).
