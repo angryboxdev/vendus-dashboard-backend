@@ -60,7 +60,10 @@ projects:
       - key: SUPABASE_DB_PASSWORD
         sync: false
       region: frankfurt
-      buildCommand: npm ci && npm run check:ci && npm run build && npx --yes supabase db push --project-ref frbxmerhgnvhocwpuzrq --dry-run
+      # --include=dev overrides NODE_ENV=production so check:ci/build have
+      # devDependencies (jest, typescript, dependency-cruiser); prune puts
+      # the running container back to prod-only deps afterward.
+      buildCommand: npm ci --include=dev && npm run check:ci && npm run build && npm prune --omit=dev && npx --yes supabase db push --project-ref frbxmerhgnvhocwpuzrq --dry-run
       # `yes |` works around a supabase/cli bug where db push's confirmation
       # prompt exits 0 without applying migrations on non-TTY runners:
       # https://github.com/orgs/supabase/discussions/26366
