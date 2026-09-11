@@ -14,8 +14,6 @@ projects:
       # Regular variables
       - key: AIRMENU_SALES_SUMMARY_ENTERPRISE_ID
         value: "1783676282102"
-      - key: AIRMENU_ENTERPRISES
-        value: "1783676282102:Angry Box|1783676282104:Angry Box - Menu|1783676282106:Angry Box - Porto|1785509161620:Angry Box - Porto (teste)"
       - key: AIRMENU_ENTERPRISE_ID
         value: "1783676282102"
       - key: AIRMENU_CLOSING_ENTERPRISE_ID
@@ -24,8 +22,6 @@ projects:
         value: "false"
       - key: AIRMENU_USERNAME
         value: general@angrybox.pt
-      - key: VENDUS_REGISTER_ID
-        value: "275787597"
       - key: SUPABASE_URL
         value: https://frbxmerhgnvhocwpuzrq.supabase.co
       - key: VENDUS_PER_PAGE
@@ -36,8 +32,6 @@ projects:
         value: https://www.vendus.pt/ws
       
       # Secrets (sync: false)
-      - key: VENDUS_API_KEY
-        sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
       - key: AIRMENU_API_KEY
@@ -79,15 +73,11 @@ projects:
       repo: https://github.com/angryboxdev/vendus-dashboard-backend
       plan: starter
       envVars:
-      - key: DB_PASSWORD
-        sync: false
       - key: NODE_ENV
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
       - key: SUPABASE_URL
-        sync: false
-      - key: VENDUS_API_KEY
         sync: false
       - key: VENDUS_BASE_URL
         sync: false
