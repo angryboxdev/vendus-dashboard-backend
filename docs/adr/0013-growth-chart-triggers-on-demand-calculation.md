@@ -22,4 +22,4 @@ A background cron job that pre-computes the previous month on the 1st of
 each month is the documented next step to eliminate cold starts in
 production.
 
-Related: `.scratch/sales-summary/spec.md` Q26, Q30; ADR-0010.
+Related: `.scratch/sales-summary/spec.md` Q26, Q30; ADR-0017.

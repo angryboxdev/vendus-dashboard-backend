@@ -223,7 +223,7 @@ flow and serves `GET /api/health` → `{"ok":true}` while running.
 - `src/modules/cash-closings/README.md` — updated the two mentions of
   `registerId` coming from `VENDUS_REGISTER_ID` to describe the new
   parameter-injection-from-DB path.
-- `docs/adr/0010-vendus-config-resolved-from-db-at-boot.md` — new ADR:
+- `docs/adr/0016-vendus-config-resolved-from-db-at-boot.md` — new ADR:
   records the decision (boot-time DB resolution + the `vendusClient.ts`
   singleton), the rejected alternative (per-request threading through every
   legacy consumer), and the fail-loud-at-boot call. Judged this crosses the

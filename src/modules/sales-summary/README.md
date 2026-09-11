@@ -34,7 +34,7 @@ Manager
 **Key concepts for the business:**
 
 - **Sales Period** — a calendar month (year + month pair). Only complete
-  months are supported; no free date ranges (ADR-0010).
+  months are supported; no free date ranges (ADR-0017).
 - **Receita Bruta** — total invoices minus credit notes, with VAT.
 - **Faturado Total** — total invoices before NC subtraction.
 - **Unified Channel** — one of: salao, take_away, eatz, uber_eats, glovo,
@@ -101,7 +101,7 @@ or employee self-consumption.
 
 ## Design decisions (ADR summary)
 
-- **ADR-0010** — Sales Period is a calendar month, not a free date range.
+- **ADR-0017** — Sales Period is a calendar month, not a free date range.
   Fixed boundaries are required by the cache strategy (UNIQUE on org+year+month)
   and unambiguous comparison period.
 - **ADR-0011** — AirMenu "Drinks" → "Bebidas" is a known approximation. No
