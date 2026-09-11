@@ -1,90 +1,86 @@
-# Render Blueprint - Staging + Production
-# Ver: https://render.com/docs/blueprint-spec
-#
-# Nota: Cron Jobs no Render não usam plano "free" — o serviço cron abaixo fica em
-# "starter" (ou define plan: starter explicitamente). O Web Service pode continuar free.
-services:
-  # Produção: o buildCommand corre os checks (typecheck, testes unitários,
-  # lint:deps) e aplica as migrations pendentes (`supabase db push`) antes de
-  # compilar — um deploy só chega a correr com o schema e o código validados.
-  # --testPathIgnorePatterns em test:unit exclui os *.integration.test.ts
-  # (exigem `supabase start` local, indisponível no build do Render).
-  - type: web
-    name: vendus-dashboard-api
-    runtime: node
-    region: frankfurt
-    branch: main
-
-    # --include=dev sobrepõe-se ao NODE_ENV=production abaixo, que por omissão
-    # faria o `npm ci` saltar as devDependencies (typescript, ts-jest, depcruise
-    # — todas necessárias para check:ci e para o build).
-    buildCommand: npm ci --include=dev && npm run check:ci && npx supabase db push --project-ref frbxmerhgnvhocwpuzrq --password "$SUPABASE_DB_PASSWORD" --yes && npm run build
-    startCommand: npm run start
-
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: VENDUS_BASE_URL
-        sync: false
-      - key: CREDENTIALS_ENCRYPTION_KEY
-        sync: false
+# Exported from Render on 2026-09-11T07:35:15Z
+version: "1"
+projects:
+- name: Mezza
+  environments:
+  - name: Production
+    services:
+    - type: web
+      name: mezza-api
+      runtime: node
+      repo: https://github.com/angryboxdev/vendus-dashboard-backend
+      plan: starter
+      envVars:
+      # Regular variables
+      - key: AIRMENU_SALES_SUMMARY_ENTERPRISE_ID
+        sync: true
+      - key: AIRMENU_ENTERPRISES
+        sync: true
+      - key: AIRMENU_ENTERPRISE_ID
+        sync: true
+      - key: AIRMENU_CLOSING_ENTERPRISE_ID
+        sync: true
+      - key: ENABLE_DAILY_CONSUMPTION_CRON
+        sync: true
+      - key: AIRMENU_USERNAME
+        sync: true
+      - key: VENDUS_REGISTER_ID
+        sync: true
       - key: SUPABASE_URL
+        sync: true
+      - key: VENDUS_PER_PAGE
+        sync: true
+      - key: VENDUS_CONCURRENCY
+        sync: true
+      - key: VENDUS_BASE_URL
+        sync: true
+      
+      # Secrets (sync: false)
+      - key: VENDUS_API_KEY
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
-      # Usadas só durante o build, pelo `supabase db push` acima — não pela app.
-      - key: SUPABASE_ACCESS_TOKEN # token de acesso pessoal/serviço da Supabase (auth da CLI)
-        sync: false
-      - key: SUPABASE_DB_PASSWORD # password da Postgres do projeto (link do dashboard Supabase)
-        sync: false
-
-    healthCheckPath: /api/health
-
-  - type: web
-    name: vendus-dashboard-api-staging
-    runtime: node
-    region: frankfurt
-
-    buildCommand: npm ci && npm run build
-    startCommand: npm run start
-
-    envVars:
-      - key: NODE_ENV
-        value: staging
-      - key: VENDUS_BASE_URL
+      - key: AIRMENU_API_KEY
         sync: false
       - key: CREDENTIALS_ENCRYPTION_KEY
         sync: false
-      - key: SUPABASE_URL
+      - key: AIRMENU_PASSWORD
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: HR_KIOSK_HMAC_SECRET
+        sync: false
+      region: frankfurt
+      buildCommand: npm ci && npm run build
+      startCommand: npm run start
+      healthCheckPath: /api/health
+      autoDeployTrigger: commit
+      branch: main
+      
+    - type: cron
+      name: vendus-daily-vendus-consumption
+      runtime: node
+      repo: https://github.com/angryboxdev/vendus-dashboard-backend
+      plan: starter
+      envVars:
+      - key: DB_PASSWORD
+        sync: false
+      - key: NODE_ENV
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
-
-    # Opcional: health check
-    healthCheckPath: /api/health
-
-  # Consumo diário Vendus → movimentos de stock (docs/CRON_DAILY_STOCK.md)
-  # Debita sempre o DIA ANTERIOR (calendário Lisboa), às 01:30 locais — ver nota UTC abaixo.
-  # Render usa UTC: 01:30 Lisboa = 01:30 UTC no inverno (UTC+0) → "30 1 * * *".
-  # No verão (UTC+1), 01:30 Lisboa = 00:30 UTC → troca manual para "30 0 * * *" ou ajusta no dashboard.
-  - type: cron
-    name: vendus-daily-vendus-consumption
-    runtime: node
-    region: frankfurt
-    plan: starter
-    schedule: "30 1 * * *"
-    buildCommand: npm ci && npm run build
-    startCommand: npm run cron:daily-vendus-consumption
-    envVars:
-      - key: NODE_ENV
-        value: staging
-      - key: VENDUS_BASE_URL
-        sync: false
-      - key: CREDENTIALS_ENCRYPTION_KEY
-        sync: false
-      - key: CREDENTIALS_ENCRYPTION_KEY
-        sync: false
       - key: SUPABASE_URL
         sync: false
-      - key: SUPABASE_ANON_KEY
+      - key: VENDUS_API_KEY
         sync: false
+      - key: VENDUS_BASE_URL
+        sync: false
+      region: frankfurt
+      buildCommand: npm ci && npm run build
+      startCommand: npm run cron:daily-vendus-consumption
+      schedule: 30 1 * * *
+      autoDeployTrigger: commit
