@@ -13,27 +13,27 @@ projects:
       envVars:
       # Regular variables
       - key: AIRMENU_SALES_SUMMARY_ENTERPRISE_ID
-        sync: true
+        value: "1783676282102"
       - key: AIRMENU_ENTERPRISES
-        sync: true
+        value: "1783676282102:Angry Box|1783676282104:Angry Box - Menu|1783676282106:Angry Box - Porto|1785509161620:Angry Box - Porto (teste)"
       - key: AIRMENU_ENTERPRISE_ID
-        sync: true
+        value: "1783676282102"
       - key: AIRMENU_CLOSING_ENTERPRISE_ID
-        sync: true
+        value: "1783676282106"
       - key: ENABLE_DAILY_CONSUMPTION_CRON
-        sync: true
+        value: "false"
       - key: AIRMENU_USERNAME
-        sync: true
+        value: general@angrybox.pt
       - key: VENDUS_REGISTER_ID
-        sync: true
+        value: "275787597"
       - key: SUPABASE_URL
-        sync: true
+        value: https://frbxmerhgnvhocwpuzrq.supabase.co
       - key: VENDUS_PER_PAGE
-        sync: true
+        value: "50"
       - key: VENDUS_CONCURRENCY
-        sync: true
+        value: "6"
       - key: VENDUS_BASE_URL
-        sync: true
+        value: https://www.vendus.pt/ws
       
       # Secrets (sync: false)
       - key: VENDUS_API_KEY
