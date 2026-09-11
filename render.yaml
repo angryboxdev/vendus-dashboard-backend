@@ -54,8 +54,17 @@ projects:
         sync: false
       - key: HR_KIOSK_HMAC_SECRET
         sync: false
+      # The following variables are only used by buildCommand and preDeployCommand to apply the migrations, not by the app runtime.
+      - key: SUPABASE_ACCESS_TOKEN
+        sync: false
+      - key: SUPABASE_DB_PASSWORD
+        sync: false
       region: frankfurt
-      buildCommand: npm ci && npm run build
+      buildCommand: npm ci && npm run check:ci && npm run build && npx --yes supabase db push --project-ref frbxmerhgnvhocwpuzrq --dry-run
+      # `yes |` works around a supabase/cli bug where db push's confirmation
+      # prompt exits 0 without applying migrations on non-TTY runners:
+      # https://github.com/orgs/supabase/discussions/26366
+      preDeployCommand: yes | npx --yes supabase db push --project-ref frbxmerhgnvhocwpuzrq
       startCommand: npm run start
       healthCheckPath: /api/health
       autoDeployTrigger: commit
