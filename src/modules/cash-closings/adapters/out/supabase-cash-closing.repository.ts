@@ -88,7 +88,7 @@ export class SupabaseCashClosingRepository implements CashClosingRepositoryPort 
   async findById(organizationId: OrganizationId, id: string): Promise<CashClosing | null> {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("cash_closings")
-      .select("*, hr_employees(full_name)")
+      .select("*, hr_employees!cash_closings_employee_id_fkey(full_name)")
       .eq("id", id)
       .maybeSingle();
 
@@ -104,7 +104,7 @@ export class SupabaseCashClosingRepository implements CashClosingRepositoryPort 
   ): Promise<{ closings: CashClosing[]; total: number }> {
     let q = this.scopedQuery(organizationId)
       .table("cash_closings")
-      .select("*, hr_employees(full_name)", { count: "exact" })
+      .select("*, hr_employees!cash_closings_employee_id_fkey(full_name)", { count: "exact" })
       .order("closing_date", { ascending: false })
       .order("submitted_at", { ascending: false });
 

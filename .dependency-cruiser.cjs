@@ -77,6 +77,11 @@ module.exports = {
           "^src/modules/location-credentials/__tests__/integration/supabase-location-credentials\\.integration\\.test\\.ts$",
           "^src/modules/vendus/__tests__/integration/supabase-vendus-credentials-and-location-config\\.integration\\.test\\.ts$",
           "^src/modules/air-menu/__tests__/integration/supabase-air-menu-credentials\\.integration\\.test\\.ts$",
+          "^src/modules/cash-closings/__tests__/integration/supabase-cash-closing\\.integration\\.test\\.ts$",
+          "^src/modules/bank-statements/__tests__/integration/supabase-occurrence-match-read\\.integration\\.test\\.ts$",
+          "^src/modules/crm/__tests__/integration/supabase-crm-workspace\\.integration\\.test\\.ts$",
+          "^src/services/__tests__/ingredientConsumptionService\\.integration\\.test\\.ts$",
+          "^src/services/__tests__/stockMovementService\\.integration\\.test\\.ts$",
         ],
       },
       to: {

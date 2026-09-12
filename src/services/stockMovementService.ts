@@ -197,12 +197,12 @@ const MOVEMENT_HISTORY_SELECT = `
   movement_date,
   created_at,
   created_by,
-  stock_items (
+  stock_items!stock_movements_item_id_fkey (
     name,
     sku,
     base_unit,
     category_id,
-    stock_categories ( id, name )
+    stock_categories!stock_items_category_id_fkey ( id, name )
   )
 `;
 
