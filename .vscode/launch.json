@@ -1,0 +1,36 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug server (tsx)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "watch", "src/server.ts"],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "skipFiles": ["<node_internals>/**", "node_modules/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Jest (current file)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["jest", "--config", "jest.config.cjs", "--runInBand", "${fileBasenameNoExtension}"],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "skipFiles": ["<node_internals>/**", "node_modules/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Jest (all tests)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["jest", "--config", "jest.config.cjs", "--runInBand"],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "skipFiles": ["<node_internals>/**", "node_modules/**"]
+    }
+  ]
+}
