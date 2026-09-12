@@ -58,7 +58,7 @@ export class SupabaseOccurrenceMatchReadAdapter implements OccurrenceMatchReadPo
     // accepted, pre-existing gap (spec.md D16), not addressed here.
     let query = this.scopedQuery(organizationId)
       .table("recurring_occurrences")
-      .select("id, recurrence_id, period, estimated_amount_cents, real_amount_cents, due_date, status, invoice_id, recurring_contracts(name, supplier_name, supplier_id)")
+      .select("id, recurrence_id, period, estimated_amount_cents, real_amount_cents, due_date, status, invoice_id, recurring_contracts!recurring_occurrences_recurrence_id_fkey(name, supplier_name, supplier_id)")
       .not("status", "eq", "cancelled")
       .is("invoice_id", null)
       .order("due_date", { ascending: false })
@@ -88,7 +88,7 @@ export class SupabaseOccurrenceMatchReadAdapter implements OccurrenceMatchReadPo
     if (ids.length === 0) return [];
     const { data, error } = await this.scopedQuery(organizationId)
       .table("recurring_occurrences")
-      .select("id, recurrence_id, period, estimated_amount_cents, real_amount_cents, due_date, status, invoice_id, recurring_contracts(name, supplier_name, supplier_id)")
+      .select("id, recurrence_id, period, estimated_amount_cents, real_amount_cents, due_date, status, invoice_id, recurring_contracts!recurring_occurrences_recurrence_id_fkey(name, supplier_name, supplier_id)")
       .in("id", ids);
     if (error) throw new Error(error.message);
     return ((data ?? []) as unknown as OccurrenceRow[]).map(toCandidate);

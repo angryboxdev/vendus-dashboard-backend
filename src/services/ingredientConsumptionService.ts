@@ -126,7 +126,7 @@ async function getStockAdditionsForPeriod(
   const itemIds = Array.from(byItemId.keys());
   const { data: rows, error: itemsError } = await scoped
     .table("stock_items")
-    .select("id, name, base_unit, type, category_id, stock_categories(name)")
+    .select("id, name, base_unit, type, category_id, stock_categories!stock_items_category_id_fkey(name)")
     .in("id", itemIds);
 
   if (itemsError || !rows?.length) return entries;
@@ -219,7 +219,7 @@ async function getOpeningStockAtPeriodStart(
 
   const { data: rows, error: itemsError } = await scoped
     .table("stock_items")
-    .select("id, name, base_unit, type, category_id, stock_categories(name)")
+    .select("id, name, base_unit, type, category_id, stock_categories!stock_items_category_id_fkey(name)")
     .in("id", itemIds);
 
   if (itemsError || !rows?.length) return entries;
@@ -282,7 +282,7 @@ async function buildConsumptionEntriesFromStockMap(
 
   const { data: rows, error } = await createScopedQuery(organizationId)
     .table("stock_items")
-    .select("id, name, base_unit, type, category_id, stock_categories(name)")
+    .select("id, name, base_unit, type, category_id, stock_categories!stock_items_category_id_fkey(name)")
     .in("id", stockIds);
   if (error || !rows?.length) return { entries, byId };
 
