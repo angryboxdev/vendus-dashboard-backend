@@ -23,7 +23,10 @@ export interface DeviceTokenScopeRow {
 
 export async function findLocationTokenScopeByHash(tokenHash: string): Promise<DeviceTokenScopeRow | null> {
   const supabase = getSupabaseServiceRole();
-  if (!supabase) return null;
+  if (!supabase) {
+    console.error("[device-auth] token lookup failed: Supabase service role não configurado");
+    throw new Error("Supabase service role não configurado");
+  }
 
   const { data, error } = await supabase
     .from("location_tokens")
