@@ -8,10 +8,16 @@ import {
   type DeviceScopeRow,
   type DeviceTokenLookup,
 } from "../device-auth-middleware.js";
+import { mintOrganizationId } from "../../kernel/organization-id.js";
+import type { UnattendedScope } from "../../infra/scoped-db/unattended-scope.js";
 const RAW_TOKEN = "raw-token-value";
 const TOKEN_HASH = createHash("sha256").update(RAW_TOKEN).digest("hex");
 
 const SCOPE_ROW: DeviceScopeRow = { organizationId: "org-a", locationId: "loc-1" };
+const BYPASS_SCOPE: UnattendedScope = {
+  organizationId: mintOrganizationId("bypass-org"),
+  locationId: "bypass-loc",
+};
 
 function fakeLookupToken(rowsByHash: Record<string, DeviceScopeRow | null>) {
   const calls: string[] = [];
@@ -214,5 +220,89 @@ describe("createDeviceAuthMiddleware", () => {
     expect(status).not.toHaveBeenCalled();
     expect(json).not.toHaveBeenCalled();
     expect(next).not.toHaveBeenCalled();
+  });
+
+  describe("bypassScope (manual last-resort kill-switch)", () => {
+    it("with no bypassScope (the default), a missing token is still rejected with 401 — unchanged from before", async () => {
+      const lookup = fakeLookupToken({});
+      const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn });
+
+      const { req, res, next, status, json } = fakeReqRes();
+      await middleware.requireDeviceAuth(req, res, next);
+
+      expect(req.deviceAuth).toBeUndefined();
+      expect(status).toHaveBeenCalledWith(401);
+      expect(json).toHaveBeenCalled();
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("with no bypassScope (the default), an unknown token is still rejected with 401 — unchanged from before", async () => {
+      const lookup = fakeLookupToken({});
+      const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn });
+
+      const { req, res, next, status, json } = fakeReqRes({ header: "unknown-token" });
+      await middleware.requireDeviceAuth(req, res, next);
+
+      expect(req.deviceAuth).toBeUndefined();
+      expect(status).toHaveBeenCalledWith(401);
+      expect(json).toHaveBeenCalled();
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("with bypassScope provided, a missing token is accepted as the bypass scope instead of 401", async () => {
+      const lookup = fakeLookupToken({});
+      const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn, bypassScope: BYPASS_SCOPE });
+
+      const { req, res, next, status } = fakeReqRes();
+      await middleware.requireDeviceAuth(req, res, next);
+
+      expect(req.deviceAuth).toEqual({
+        organizationId: BYPASS_SCOPE.organizationId,
+        locationId: BYPASS_SCOPE.locationId,
+      });
+      expect(next).toHaveBeenCalled();
+      expect(status).not.toHaveBeenCalled();
+    });
+
+    it("with bypassScope provided, an unknown token is accepted as the bypass scope instead of 401", async () => {
+      const lookup = fakeLookupToken({});
+      const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn, bypassScope: BYPASS_SCOPE });
+
+      const { req, res, next, status } = fakeReqRes({ header: "unknown-token" });
+      await middleware.requireDeviceAuth(req, res, next);
+
+      expect(req.deviceAuth).toEqual({
+        organizationId: BYPASS_SCOPE.organizationId,
+        locationId: BYPASS_SCOPE.locationId,
+      });
+      expect(next).toHaveBeenCalled();
+      expect(status).not.toHaveBeenCalled();
+    });
+
+    it("with bypassScope provided, a valid token still resolves to its own scope — the bypass never overrides an 'ok' resolution", async () => {
+      const lookup = fakeLookupToken({ [TOKEN_HASH]: SCOPE_ROW });
+      const middleware = createDeviceAuthMiddleware({ lookupToken: lookup.fn, bypassScope: BYPASS_SCOPE });
+
+      const { req, res, next } = fakeReqRes({ header: RAW_TOKEN });
+      await middleware.requireDeviceAuth(req, res, next);
+
+      expect(req.deviceAuth).toEqual({ organizationId: "org-a", locationId: "loc-1" });
+      expect(next).toHaveBeenCalled();
+    });
+
+    it("with bypassScope provided, a genuine lookup error still propagates instead of being swallowed by the bypass", async () => {
+      const lookupError = new Error("connection timeout");
+      const throwingLookup: DeviceTokenLookup = async () => {
+        throw lookupError;
+      };
+      const middleware = createDeviceAuthMiddleware({ lookupToken: throwingLookup, bypassScope: BYPASS_SCOPE });
+
+      const { req, res, next, status, json } = fakeReqRes({ header: RAW_TOKEN });
+
+      await expect(middleware.requireDeviceAuth(req, res, next)).rejects.toBe(lookupError);
+      expect(status).not.toHaveBeenCalled();
+      expect(json).not.toHaveBeenCalled();
+      expect(next).not.toHaveBeenCalled();
+    });
   });
 });

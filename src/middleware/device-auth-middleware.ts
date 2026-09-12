@@ -1,6 +1,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { createHash } from "node:crypto";
 import { mintOrganizationId, type OrganizationId } from "../kernel/organization-id.js";
+import type { UnattendedScope } from "../infra/scoped-db/unattended-scope.js";
 
 /**
  * The device-auth middleware factory, decoupled from any concrete I/O
@@ -119,14 +120,27 @@ export interface DeviceAuthMiddleware {
  * Factory taking the token lookup as an injected collaborator (mirrors
  * `createAuthMiddleware`'s D10 idiom). Ticket 01 through 05 also injected an
  * `unattendedScope` fallback here as expand-and-contract scaffolding (D12).
- * Ticket 06 removes it: kiosk, till-closing and KDS are this middleware's
+ * Ticket 06 removed it: kiosk, till-closing and KDS are this middleware's
  * only consumers (crons build `UNATTENDED_SCOPE` directly — see
  * `internalCronRoutes.ts` — and never go through this middleware), so making
- * the token mandatory here is the whole change, with nothing left to
+ * the token mandatory here was the whole change, with nothing left to
  * parameterize per-consumer.
+ *
+ * `bypassScope` (2026-09) is a second, unrelated, opt-in escape hatch — a
+ * manual last-resort kill-switch, not a return of ticket 06's scaffolding.
+ * It is undefined by default (off), and when provided it applies to *any*
+ * `"rejected"` resolution — missing, unknown or revoked token alike — not
+ * only a missing one, because it exists to cover a *present* token being
+ * wrongly rejected. See
+ * `src/modules/location-credentials/README.md` for why it exists and how to
+ * enable it. `resolveDeviceAuth`'s own two-outcome contract is untouched —
+ * the bypass is applied here, in `makeHandler`, after that decision.
  */
-export function createDeviceAuthMiddleware(deps: { lookupToken: DeviceTokenLookup }): DeviceAuthMiddleware {
-  const { lookupToken } = deps;
+export function createDeviceAuthMiddleware(deps: {
+  lookupToken: DeviceTokenLookup;
+  bypassScope?: UnattendedScope;
+}): DeviceAuthMiddleware {
+  const { lookupToken, bypassScope } = deps;
 
   function makeHandler(allowQueryParam: boolean): RequestHandler {
     return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -134,11 +148,19 @@ export function createDeviceAuthMiddleware(deps: { lookupToken: DeviceTokenLooku
       // Express 5 forwards that rejection to the default error handler
       // (500), the same way `populateAuth` relies on it elsewhere. Only a
       // resolved "rejected" outcome — missing/unknown/revoked — gets the
-      // 401 device-auth-failure shape below.
+      // 401 device-auth-failure shape below (or the bypass, if armed).
       const token = extractDeviceToken(req, allowQueryParam);
       const resolution = await resolveDeviceAuth(token, lookupToken);
       if (resolution.status === "ok") {
         req.deviceAuth = resolution.scope;
+        next();
+        return;
+      }
+      if (bypassScope) {
+        console.warn(
+          `[device-auth] BYPASS ACTIVE — accepting rejected token as UNATTENDED_SCOPE (org=${bypassScope.organizationId}, location=${bypassScope.locationId})`,
+        );
+        req.deviceAuth = { organizationId: bypassScope.organizationId, locationId: bypassScope.locationId };
         next();
         return;
       }

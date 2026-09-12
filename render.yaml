@@ -12,6 +12,8 @@ projects:
       plan: starter
       envVars:
       # Regular variables
+      - key: DEVICE_AUTH_BYPASS_UNATTENDED
+        value: "false"
       - key: AIRMENU_SALES_SUMMARY_ENTERPRISE_ID
         value: "1783676282102"
       - key: AIRMENU_ENTERPRISE_ID
