@@ -30,7 +30,13 @@ export interface DeviceScopeRow {
   locationId: string;
 }
 
-/** Looks up a token by its hash. Returns null for unknown AND revoked tokens alike — see resolveDeviceAuth. */
+/**
+ * Looks up a token by its hash. Returns null for unknown AND revoked tokens
+ * alike — see resolveDeviceAuth. Must reject/throw on a genuine lookup
+ * error (DB timeout, connection blip, etc.) rather than returning null for
+ * it — that error is not a "token rejected" outcome and must not be
+ * reported as one.
+ */
 export type DeviceTokenLookup = (tokenHash: string) => Promise<DeviceScopeRow | null>;
 
 /**
@@ -42,6 +48,12 @@ export type DeviceTokenLookup = (tokenHash: string) => Promise<DeviceScopeRow | 
  * wholly absent token, as expand-and-contract scaffolding (D12); ticket 06
  * removes it — a missing token is rejected the same as an unknown or
  * revoked one, unconditionally.
+ *
+ * A genuine lookup error is NOT a third member of this union — it is not a
+ * "rejected" outcome at all. `resolveDeviceAuth` lets `lookupToken`'s
+ * rejection propagate instead of catching it, so it never reaches this type;
+ * the caller (`createDeviceAuthMiddleware`) sees the throw and responds with
+ * something other than the 401 device-auth-failure shape.
  */
 export type DeviceAuthResolution = { status: "ok"; scope: DeviceAuthScope } | { status: "rejected" };
 
@@ -60,10 +72,16 @@ export async function resolveDeviceAuth(
   rawToken: string | null,
   lookupToken: DeviceTokenLookup,
 ): Promise<DeviceAuthResolution> {
-  if (!rawToken) return { status: "rejected" };
+  if (!rawToken) {
+    console.warn(`[device-auth] rejected — reason=${rawToken ? "unknown_or_revoked" : "missing"}`);
+    return { status: "rejected" };
+  }
 
   const row = await lookupToken(hashDeviceToken(rawToken));
-  if (!row) return { status: "rejected" };
+  if (!row) {
+    console.warn(`[device-auth] rejected — reason=${rawToken ? "unknown_or_revoked" : "missing"}`);
+    return { status: "rejected" };
+  }
 
   return {
     status: "ok",
@@ -112,6 +130,11 @@ export function createDeviceAuthMiddleware(deps: { lookupToken: DeviceTokenLooku
 
   function makeHandler(allowQueryParam: boolean): RequestHandler {
     return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+      // No try/catch: a genuine lookup error rejects this promise, and
+      // Express 5 forwards that rejection to the default error handler
+      // (500), the same way `populateAuth` relies on it elsewhere. Only a
+      // resolved "rejected" outcome — missing/unknown/revoked — gets the
+      // 401 device-auth-failure shape below.
       const token = extractDeviceToken(req, allowQueryParam);
       const resolution = await resolveDeviceAuth(token, lookupToken);
       if (resolution.status === "ok") {

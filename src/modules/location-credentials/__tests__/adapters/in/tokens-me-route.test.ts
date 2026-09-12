@@ -32,9 +32,13 @@ const TOKEN_HASH = createHash("sha256").update(RAW_TOKEN).digest("hex");
 const SCOPE_ROW: DeviceScopeRow = { organizationId: "org-a", locationId: "loc-1" };
 
 let lookupByHash: Record<string, DeviceScopeRow | null> = {};
+let lookupError: Error | null = null;
 
 jest.mock("../../../../../infra/scoped-db/device-token-lookup.js", () => ({
-  findLocationTokenScopeByHash: async (hash: string) => lookupByHash[hash] ?? null,
+  findLocationTokenScopeByHash: async (hash: string) => {
+    if (lookupError) throw lookupError;
+    return lookupByHash[hash] ?? null;
+  },
 }));
 
 // The controller also imports `requireAuth`/`requireMinRole` for its
@@ -90,6 +94,7 @@ describe("GET /location-credentials/tokens/me", () => {
 
   beforeEach(() => {
     lookupByHash = {};
+    lookupError = null;
   });
 
   it("a valid token returns 200 with the location the middleware resolved", async () => {
@@ -127,5 +132,18 @@ describe("GET /location-credentials/tokens/me", () => {
     const res = await fetch(`${baseUrl}/location-credentials/tokens/me`);
 
     expect(res.status).toBe(401);
+  });
+
+  it("a genuine lookup error (DB timeout/connection blip) surfaces as something other than the 401 device-auth shape", async () => {
+    lookupError = new Error("connection timeout");
+
+    const res = await fetch(`${baseUrl}/location-credentials/tokens/me`, {
+      headers: { "x-device-token": "some-valid-looking-token" },
+    });
+
+    // Not the 401 device-auth-failure response: a genuine lookup error is
+    // not the same outcome as a missing/unknown/revoked token.
+    expect(res.status).not.toBe(401);
+    expect(res.status).toBeGreaterThanOrEqual(500);
   });
 });
