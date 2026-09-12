@@ -43,6 +43,17 @@ export const ENV = {
   /** Se true, agenda job de consumo diário no próprio processo do servidor (ver DAILY_CONSUMPTION_CRON_SCHEDULE). */
   ENABLE_DAILY_CONSUMPTION_CRON:
     process.env.ENABLE_DAILY_CONSUMPTION_CRON === "true",
+  /**
+   * Manual last-resort kill-switch (2026-09): when true, `requireDeviceAuth`
+   * accepts an otherwise-rejected device token (missing, unknown or revoked)
+   * as `UNATTENDED_SCOPE` instead of returning 401 — see
+   * `src/modules/location-credentials/README.md`. Expected OFF in normal
+   * operation; only for use if the device-auth fixes turn out not to fully
+   * resolve the "paired screens revert to pairing screen" bug. Turn back off
+   * once that's confirmed unnecessary.
+   */
+  DEVICE_AUTH_BYPASS_UNATTENDED:
+    process.env.DEVICE_AUTH_BYPASS_UNATTENDED === "true",
   /** Expressão cron (5 campos), timezone Europe/Lisbon. Por omissão: 01:30 — debita o dia civil anterior. */
   DAILY_CONSUMPTION_CRON_SCHEDULE:
     process.env.DAILY_CONSUMPTION_CRON_SCHEDULE ?? "30 1 * * *",

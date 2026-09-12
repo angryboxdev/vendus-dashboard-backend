@@ -260,6 +260,40 @@ dependency at all. `UNATTENDED_SCOPE` itself is untouched by this: it
 remains the crons' mechanism, and stays that way until spec C retires it for
 them (spec C is a different piece of work — see spec.md D1).
 
+### `DEVICE_AUTH_BYPASS_UNATTENDED` — prepared, unused safety valve (2026-09)
+
+**Not a feature — a manual last-resort kill-switch, off by default, prepared
+in case the just-shipped fixes to `device-token-lookup.ts` and
+`device-auth-middleware.ts` for the "paired screens spuriously revert to the
+pairing screen" bug turn out not to fully solve it.**
+
+- **What it does:** when `ENV.DEVICE_AUTH_BYPASS_UNATTENDED` is `true`,
+  `createDeviceAuthMiddleware`'s `bypassScope` dep is set to
+  `UNATTENDED_SCOPE`, and `requireDeviceAuth`/
+  `requireDeviceAuthAllowingQueryParam` accept **any** `"rejected"`
+  resolution — missing, unknown or revoked token alike — as
+  `UNATTENDED_SCOPE` instead of returning `401`. This is deliberately
+  broader than the ticket 01-05 fallback described above, which only caught
+  a wholly *absent* token: the reported bug is about a *present* token being
+  wrongly rejected, so a missing-only fallback wouldn't cover it.
+  `resolveDeviceAuth`'s own two-outcome contract is untouched — the bypass
+  is applied in `makeHandler`, after that decision, and every time it
+  actually fires it logs a distinct `BYPASS ACTIVE` warning so its use in
+  production is impossible to miss.
+- **Why it exists:** as a prepared-but-unused safety valve while confirming
+  the DB-error/no-client fixes above fully resolve the bug. It is not meant
+  to run in normal operation.
+- **How to enable/disable:** set `DEVICE_AUTH_BYPASS_UNATTENDED=true` in the
+  environment to arm it; unset it (or set it to anything else) to disable —
+  the default. **Turn it back off once the fixes above are confirmed
+  sufficient.**
+- **Single-location assumption it relies on:** safe only because there is
+  currently exactly one organization and one Location on this flow — every
+  bypassed request is misattributed to `UNATTENDED_SCOPE`'s hardcoded
+  org/location, same as the removed ticket 01-05 fallback. The day a second
+  organization or Location starts using kiosk/till/KDS, this flag stops
+  being safe to enable, kill-switch or not.
+
 ### The KDS SSE query-parameter transport is a deliberate exception, not an inconsistency
 
 `requireDeviceAuth` only reads the token from the `X-Device-Token` header.
