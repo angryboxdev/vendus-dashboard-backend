@@ -1,7 +1,7 @@
 # Module: location-credentials
 
 > Status: active
-> Last updated: 2026-09-06
+> Last updated: 2026-09-12
 
 ---
 
@@ -229,6 +229,17 @@ therefore the same thing to `requireDeviceAuth`: this is what makes
 revoking one token can never touch a sibling row at the same Location (D4) —
 there is no shared state between rows to accidentally disturb.
 
+That collapse is deliberately scoped to "missing vs. unknown vs. revoked"
+only. A genuine lookup failure (DB timeout, connection blip) on
+`device-token-lookup.ts` is not a fourth member of that group: it throws
+instead of returning `null`, `resolveDeviceAuth`/`requireDeviceAuth` let that
+rejection propagate rather than swallowing it into `{ status: "rejected" }`,
+and Express 5 forwards the rejected promise to the default error handler
+(500) — the same mechanism `populateAuth` already relies on. So a valid,
+non-expiring device token that hits a transient DB error gets a 500-ish
+response, never the `401 {"error":"Invalid or missing device credentials"}`
+body a caller would otherwise mistake for an actually-rejected token.
+
 ### The `UNATTENDED_SCOPE` fallback is gone (ticket 06 closed the rollout)
 
 Tickets 01-05 had `requireDeviceAuth` fall back to populating `req.deviceAuth`
@@ -328,7 +339,9 @@ blocklist).
   where that gets exercised against the real KDS route.
 - `LocationToken` has no expiry field at all (only `PairingCode` expires) —
   "expired" is not a state this endpoint (or `requireDeviceAuth`) can ever
-  return; the only two outcomes are "valid" or "missing/unknown/revoked,"
-  collapsed identically into `401` (ticket 06 removed the one previous
-  exception, where a wholly absent token got `200` via the
-  `UNATTENDED_SCOPE` fallback).
+  return; the only two outcomes for a *resolved* token check are "valid" or
+  "missing/unknown/revoked," collapsed identically into `401` (ticket 06
+  removed the one previous exception, where a wholly absent token got `200`
+  via the `UNATTENDED_SCOPE` fallback). A genuine lookup error is a separate,
+  third case — see "Tokens are deleted, not marked revoked" above — and never
+  reaches `401`.

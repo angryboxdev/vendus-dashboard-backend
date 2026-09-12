@@ -74,6 +74,15 @@ describe("resolveDeviceAuth", () => {
     expect(missing).toEqual(unknown);
     expect(unknown).toEqual(revoked);
   });
+
+  it("a genuine lookup error propagates instead of resolving to 'rejected' — it is not the same outcome as a missing/unknown/revoked token", async () => {
+    const lookupError = new Error("connection timeout");
+    const throwingLookup: DeviceTokenLookup = async () => {
+      throw lookupError;
+    };
+
+    await expect(resolveDeviceAuth(RAW_TOKEN, throwingLookup)).rejects.toBe(lookupError);
+  });
 });
 
 describe("createDeviceAuthMiddleware", () => {
@@ -189,6 +198,21 @@ describe("createDeviceAuthMiddleware", () => {
 
     expect(req.deviceAuth).toBeUndefined();
     expect(status).toHaveBeenCalledWith(401);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("a genuine lookup error propagates out of requireDeviceAuth rather than being answered with the 401 device-auth-failure shape", async () => {
+    const lookupError = new Error("connection timeout");
+    const throwingLookup: DeviceTokenLookup = async () => {
+      throw lookupError;
+    };
+    const middleware = createDeviceAuthMiddleware({ lookupToken: throwingLookup });
+
+    const { req, res, next, status, json } = fakeReqRes({ header: RAW_TOKEN });
+
+    await expect(middleware.requireDeviceAuth(req, res, next)).rejects.toBe(lookupError);
+    expect(status).not.toHaveBeenCalled();
+    expect(json).not.toHaveBeenCalled();
     expect(next).not.toHaveBeenCalled();
   });
 });
