@@ -82,12 +82,14 @@ export function mapAirMenuEventToDelivery(event: WebhookOrderEvent): Delivery | 
   );
 
   const items: DeliveryItem[] = nestedItems.length > 0
-    ? nestedItems.map((item, idx) => ({
-        id: idx,
-        name: item.title,
-        qty: item.count,
-        notes: '',
-      }))
+    ? nestedItems
+        .filter((item) => item.price >= 0) // exclude discount lines — kitchen doesn't need them
+        .map((item, idx) => ({
+          id: idx,
+          name: item.title,
+          qty: item.count,
+          notes: '',
+        }))
     : simplifiedItems.map((item, idx) => ({
         id: idx,
         name: applyLegacyNormalization(item.name ?? ''),

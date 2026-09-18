@@ -143,6 +143,20 @@ function extractItemsWithContext(
   const items: AirMenuOrderItem[] = [];
 
   for (const child of childs) {
+    // Discount node emitted by AirMenu promotions (platform % or item-level).
+    // The actual discount amount is on the complexItem itself (negative price).
+    // Its child "item Desconto" (plu: AM_DISCOUNT) carries price 0 and must be
+    // skipped — do NOT recurse into it.
+    if (child.menuRelation === 'complexItem' && child.plu === 'AM_PROMO') {
+      items.push({
+        title: 'Desconto',
+        plu: 'AM_DISCOUNT',
+        price: child.price ?? 0,
+        count: child.count ?? 1,
+      });
+      continue;
+    }
+
     if (child.menuRelation === 'item') {
       const { baseTitle, size: legacySize } = normalizeLegacyTitle(child.title ?? '');
       const sizeFromComplement = findSizeInfo(child.childs ?? []);
