@@ -15,6 +15,65 @@ function complexItem(title: string, plu: string, price: number, childs: RawOrder
   return { title, plu, price, count: 1, menuRelation: 'complexItem', childs };
 }
 
+// ─── Item notes (AM_NOTE) ─────────────────────────────────────────────────────
+
+describe('extractItems — item notes (AM_NOTE)', () => {
+  it('propagates AM_NOTE from item extraInfo to the notes field', () => {
+    const pizza: RawOrderItemInstance = {
+      title: 'Honey Pepperoni',
+      plu: 'ITM-1',
+      price: 15.9,
+      count: 1,
+      menuRelation: 'item',
+      childs: [],
+      extraInfo: [{ AM_NOTE: 'sem cebola' }],
+    };
+    const result = extractItems([pizza]);
+    expect(result[0].notes).toBe('sem cebola');
+  });
+
+  it('handles extraInfo as a single object (not array)', () => {
+    const pizza: RawOrderItemInstance = {
+      title: 'Honey Pepperoni',
+      plu: 'ITM-1',
+      price: 15.9,
+      count: 1,
+      menuRelation: 'item',
+      childs: [],
+      extraInfo: { AM_NOTE: 'extra picante' },
+    };
+    const result = extractItems([pizza]);
+    expect(result[0].notes).toBe('extra picante');
+  });
+
+  it('omits notes field when AM_NOTE is absent', () => {
+    const pizza: RawOrderItemInstance = {
+      title: 'Honey Pepperoni',
+      plu: 'ITM-1',
+      price: 15.9,
+      count: 1,
+      menuRelation: 'item',
+      childs: [],
+    };
+    const result = extractItems([pizza]);
+    expect(result[0].notes).toBeUndefined();
+  });
+
+  it('omits notes field when AM_NOTE is empty string', () => {
+    const pizza: RawOrderItemInstance = {
+      title: 'Honey Pepperoni',
+      plu: 'ITM-1',
+      price: 15.9,
+      count: 1,
+      menuRelation: 'item',
+      childs: [],
+      extraInfo: [{ AM_NOTE: '' }],
+    };
+    const result = extractItems([pizza]);
+    expect(result[0].notes).toBeUndefined();
+  });
+});
+
 // ─── Discount (AM_PROMO) ──────────────────────────────────────────────────────
 
 describe('extractItems — discount (AM_PROMO)', () => {

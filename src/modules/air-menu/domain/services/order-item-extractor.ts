@@ -20,6 +20,20 @@ const UPGRADE_COMPLEMENT_RE = /dobre|dobrar/i;
 /** Identifies "Upgrade para L" complementItem titles. */
 const UPGRADE_TO_L_RE = /upgrade.*\bl\b/i;
 
+/**
+ * Extracts AM_NOTE from an extraInfo field (array or single object).
+ * Returns an empty string when absent or empty.
+ */
+function extractNote(extraInfo: RawOrderItemInstance['extraInfo']): string {
+  if (!extraInfo) return '';
+  const entries = Array.isArray(extraInfo) ? extraInfo : [extraInfo];
+  for (const entry of entries) {
+    const note = entry['AM_NOTE'];
+    if (typeof note === 'string' && note.trim() !== '') return note.trim();
+  }
+  return '';
+}
+
 /** Legacy size suffixes: "- Grande" → L, "- Individual" → S. */
 const LEGACY_SIZE_RE = /\s*[-–]\s*(grande|individual)\s*$/i;
 
@@ -170,11 +184,13 @@ function extractItemsWithContext(
             ? { label: 'S', price: 0 }
             : null);
 
+      const notes = extractNote(child.extraInfo);
       items.push({
         title: finalSize ? `${baseTitle} ${finalSize.label}` : baseTitle,
         plu: child.plu ?? '',
         price: (child.price ?? 0) + (finalSize?.price ?? 0),
         count: child.count ?? 1,
+        ...(notes && { notes }),
       });
 
       items.push(...collectPaidNonSizeComplements(child.childs ?? []));

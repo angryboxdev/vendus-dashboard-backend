@@ -3,6 +3,7 @@ export interface AirMenuOrderItem {
   plu: string;
   price: number;
   count: number;
+  notes?: string;
 }
 
 export interface AirMenuFlag {

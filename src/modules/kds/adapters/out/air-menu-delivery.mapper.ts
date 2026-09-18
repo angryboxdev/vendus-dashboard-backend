@@ -20,6 +20,25 @@ function derivePlatform(orders: Record<string, unknown>): string {
 }
 
 /**
+ * Reads a named string field from an extraInfo value (array or single object).
+ * Returns null when absent or empty.
+ */
+function readExtraInfoField(
+  rawExtraInfo: unknown,
+  field: string,
+): string | null {
+  const arr = Array.isArray(rawExtraInfo)
+    ? rawExtraInfo
+    : rawExtraInfo != null ? [rawExtraInfo] : [];
+
+  for (const entry of arr as Array<Record<string, unknown>>) {
+    const val = entry[field];
+    if (typeof val === 'string' && val.trim() !== '') return val.trim();
+  }
+  return null;
+}
+
+/**
  * Extracts AM_PROVIDER_ORDER_ID from the first order instance in the orders map.
  * Returns null if not present or empty.
  *
@@ -29,20 +48,22 @@ function derivePlatform(orders: Record<string, unknown>): string {
 function extractProviderOrderId(orders: Record<string, unknown>): string | null {
   const firstDivision = Object.values(orders)[0];
   if (!Array.isArray(firstDivision) || firstDivision.length === 0) return null;
-
   const instance = firstDivision[0] as Record<string, unknown>;
-  const rawExtraInfo = instance['extraInfo'];
+  return readExtraInfoField(instance['extraInfo'], 'AM_PROVIDER_ORDER_ID');
+}
 
-  // extraInfo can be an array of objects or a single object
-  const extraInfoArr = Array.isArray(rawExtraInfo)
-    ? rawExtraInfo
-    : rawExtraInfo != null ? [rawExtraInfo] : [];
-
-  for (const entry of extraInfoArr as Array<Record<string, unknown>>) {
-    const val = entry['AM_PROVIDER_ORDER_ID'];
-    if (typeof val === 'string' && val.trim() !== '') return val.trim();
-  }
-  return null;
+/**
+ * Extracts the order-level customer note (AM_NOTE) from the first instance.
+ * Returns null when absent or empty.
+ *
+ * Payload structure:
+ *   orders[divisionName][0].extraInfo[0].AM_NOTE
+ */
+function extractOrderNote(orders: Record<string, unknown>): string | null {
+  const firstDivision = Object.values(orders)[0];
+  if (!Array.isArray(firstDivision) || firstDivision.length === 0) return null;
+  const instance = firstDivision[0] as Record<string, unknown>;
+  return readExtraInfoField(instance['extraInfo'], 'AM_NOTE');
 }
 
 /**
@@ -68,6 +89,7 @@ export function mapAirMenuEventToDelivery(event: WebhookOrderEvent): Delivery | 
 
   const platform = derivePlatform(orders);
   const providerOrderId = extractProviderOrderId(orders);
+  const orderNote = extractOrderNote(orders);
 
   // Prefer the nested `orders` structure (same shape as GetOrders) so we can
   // resolve sizes from complement trees. Fall back to simplifiedItems (with
@@ -88,7 +110,7 @@ export function mapAirMenuEventToDelivery(event: WebhookOrderEvent): Delivery | 
           id: idx,
           name: item.title,
           qty: item.count,
-          notes: '',
+          notes: item.notes ?? '',
         }))
     : simplifiedItems
         .filter((item) => (item.price ?? 0) >= 0) // exclude discount lines
@@ -114,6 +136,7 @@ export function mapAirMenuEventToDelivery(event: WebhookOrderEvent): Delivery | 
       airMenuOrderId: orderId,
       providerOrderId,   // ID da plataforma (Glovo, Uber Eats, Bolt) — null se não disponível
       enterpriseId: event.enterpriseId,
+      ...(orderNote && { orderNote }), // nota de pedido do cliente — omitido se vazio
     }),
     dateCreate: event.receivedAt.toISOString(),
   };
