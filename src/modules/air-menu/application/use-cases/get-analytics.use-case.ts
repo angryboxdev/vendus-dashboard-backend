@@ -135,8 +135,8 @@ export function computeAnalytics(
       temporal.grossRevenue += order.total;
     }
 
-    // Items (category, vatRate, topItems)
-    for (const item of order.items) {
+    // Items (category, vatRate, topItems) — skip discount lines (negative price)
+    for (const item of order.items.filter((i) => i.price >= 0)) {
       // Complementos de pizza não têm PLU na API AirMenu — fallback por título
       // (strip do prefixo "+ " adicionado por collectPaidNonSizeComplements).
       const rawTitle = item.title.startsWith("+ ") ? item.title.slice(2) : item.title;

@@ -90,12 +90,14 @@ export function mapAirMenuEventToDelivery(event: WebhookOrderEvent): Delivery | 
           qty: item.count,
           notes: '',
         }))
-    : simplifiedItems.map((item, idx) => ({
-        id: idx,
-        name: applyLegacyNormalization(item.name ?? ''),
-        qty: item.quantity ?? 1,
-        notes: '',
-      }));
+    : simplifiedItems
+        .filter((item) => (item.price ?? 0) >= 0) // exclude discount lines
+        .map((item, idx) => ({
+          id: idx,
+          name: applyLegacyNormalization(item.name ?? ''),
+          qty: item.quantity ?? 1,
+          notes: '',
+        }));
 
   return {
     id: orderId,
