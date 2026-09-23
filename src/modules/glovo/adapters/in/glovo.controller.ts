@@ -3,6 +3,9 @@ import { Router } from "express";
 import type { HandleOrderDispatchedPort } from "../../domain/ports/in/handle-order-dispatched.port.js";
 import type { HandleOrderPickedUpPort } from "../../domain/ports/in/handle-order-picked-up.port.js";
 import type { HandleOrderCancelledPort } from "../../domain/ports/in/handle-order-cancelled.port.js";
+import type { GlovoOrder } from "../../domain/entities/glovo-order.js";
+import type { GlovoOrderPickedUp } from "../../domain/entities/glovo-order-picked-up.js";
+import type { GlovoOrderCancelled } from "../../domain/entities/glovo-order-cancelled.js";
 
 export class GlovoController {
   readonly publicRouter: Router;
@@ -48,8 +51,15 @@ export class GlovoController {
         return;
       }
 
+      const body = req.body as Record<string, unknown>;
+      if (typeof body.order_id !== "string" || !body.order_id ||
+          typeof body.store_id !== "string" || !body.store_id) {
+        res.status(400).json({ error: "Invalid payload: order_id and store_id are required" });
+        return;
+      }
+
       try {
-        await this.handleOrderDispatched.execute(req.body);
+        await this.handleOrderDispatched.execute(body as unknown as GlovoOrder);
         res.status(200).json({ ok: true });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Internal error";
@@ -71,8 +81,15 @@ export class GlovoController {
         return;
       }
 
+      const body = req.body as Record<string, unknown>;
+      if (typeof body.order_id !== "string" || !body.order_id ||
+          typeof body.store_id !== "string" || !body.store_id) {
+        res.status(400).json({ error: "Invalid payload: order_id and store_id are required" });
+        return;
+      }
+
       try {
-        await this.handleOrderPickedUp.execute(req.body);
+        await this.handleOrderPickedUp.execute(body as unknown as GlovoOrderPickedUp);
         res.status(200).json({ ok: true });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Internal error";
@@ -95,8 +112,15 @@ export class GlovoController {
         return;
       }
 
+      const body = req.body as Record<string, unknown>;
+      if (typeof body.order_id !== "string" || !body.order_id ||
+          typeof body.store_id !== "string" || !body.store_id) {
+        res.status(400).json({ error: "Invalid payload: order_id and store_id are required" });
+        return;
+      }
+
       try {
-        await this.handleOrderCancelled.execute(req.body);
+        await this.handleOrderCancelled.execute(body as unknown as GlovoOrderCancelled);
         res.status(200).json({ ok: true });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Internal error";
