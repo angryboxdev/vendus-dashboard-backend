@@ -123,4 +123,11 @@ export const ENV = {
    * Required when the sales-summary module is active.
    */
   AIRMENU_SALES_SUMMARY_ENTERPRISE_ID: must(process.env.AIRMENU_SALES_SUMMARY_ENTERPRISE_ID, "AIRMENU_SALES_SUMMARY_ENTERPRISE_ID"),
+
+  /**
+   * Token estático partilhado pela Glovo para autenticar os webhooks recebidos.
+   * Enviado por eles no header Authorization: Bearer <token>.
+   * Se não configurado, a verificação é ignorada (útil em stage/dev com o token ainda não disponível).
+   */
+  GLOVO_WEBHOOK_TOKEN: process.env.GLOVO_WEBHOOK_TOKEN ?? null,
 };

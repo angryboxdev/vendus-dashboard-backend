@@ -39,6 +39,7 @@ import { authRoutes } from "./routes/authRoutes.js";
 import { createLocationsModule } from "./modules/locations/locations.module.js";
 import { createLocationCredentialsModule } from "./modules/location-credentials/location-credentials.module.js";
 import { createSalesSummaryModule } from "./modules/sales-summary/sales-summary.module.js";
+import { createGlovoModule } from "./modules/glovo/glovo.module.js";
 
 const app = express();
 
@@ -117,6 +118,11 @@ const airMenuModule = createAirMenuModule({
 
 // Air Menu public routes (webhook receiver + SSE stream) — no auth required
 app.use("/api", airMenuModule.publicRouter);
+
+// Glovo public routes (webhook receiver) — no auth required
+// Token verified per-request via Authorization: Bearer header
+const glovoModule = createGlovoModule({ webhookToken: ENV.GLOVO_WEBHOOK_TOKEN });
+app.use("/api", glovoModule.publicRouter);
 
 // Cash closing module (hexagonal) — recebe gateway Vendus e getSummary do air-menu
 const cashClosingsModule = createCashClosingsModule(
