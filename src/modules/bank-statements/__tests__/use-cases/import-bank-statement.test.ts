@@ -72,6 +72,17 @@ describe("ImportBankStatementUseCase", () => {
     expect(result.importedMovementsCount).toBe(0);
   });
 
+  it("deduplica movimentos repetidos dentro do MESMO ficheiro (regressão: violava a constraint UNIQUE no insert em lote)", async () => {
+    const repeated = baseCommand.movements[0]!; // "COM.MAN.CONTA", débito 500, 2026-07-01
+    const result = await useCase.execute({
+      ...baseCommand,
+      movements: [repeated, { ...repeated }, baseCommand.movements[1]!],
+    });
+
+    expect(result.importedMovementsCount).toBe(2); // 1x "COM.MAN.CONTA" + 1x "TRANSFERENCIA RECEBIDA"
+    expect(result.skippedDuplicates).toBe(1);
+  });
+
   it("imports with zero movements when all are duplicates", async () => {
     await useCase.execute(baseCommand);
     const result2 = await useCase.execute({ ...baseCommand, movements: [] });

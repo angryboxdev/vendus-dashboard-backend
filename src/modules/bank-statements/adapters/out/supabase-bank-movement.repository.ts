@@ -12,6 +12,14 @@ import type {
   BankMovementFilter,
   BankMovementRepositoryPort,
 } from "../../domain/ports/out/bank-movement-repository.port.js";
+import { DuplicateMovementError } from "../../domain/errors.js";
+
+/** True for a Postgres unique_violation (SQLSTATE 23505), matched defensively
+ * on the error code first and falling back to the message since supabase-js's
+ * PostgrestError typing doesn't guarantee `code` is populated on every path. */
+function isUniqueViolation(error: { code?: string; message: string }): boolean {
+  return error.code === "23505" || /duplicate key value violates unique constraint/i.test(error.message);
+}
 
 function toEntity(row: Record<string, unknown>): BankMovement {
   return BankMovement.reconstitute({
@@ -76,7 +84,15 @@ export class SupabaseBankMovementRepository implements BankMovementRepositoryPor
       updated_at: m.updatedAt.toISOString(),
     }));
     const { error } = await this.scopedQuery(organizationId).table("bank_movements").insert(rows);
-    if (error) throw new Error(error.message);
+    if (error) {
+      // Rede de segurança para a corrida entre existsByHash (leitura) e este
+      // insert (ex: duplo clique em "Importar", ou dois uploads concorrentes
+      // do mesmo extrato) — o use case já filtra duplicados dentro do próprio
+      // ficheiro e contra a BD antes de chegar aqui, mas isto evita expor o
+      // erro cru do Postgres ao utilizador nesse cenário residual.
+      if (isUniqueViolation(error)) throw new DuplicateMovementError();
+      throw new Error(error.message);
+    }
   }
 
   async findByStatementId(

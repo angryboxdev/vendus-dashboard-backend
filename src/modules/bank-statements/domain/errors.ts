@@ -47,8 +47,12 @@ export class BlockingMovementsError extends Error {
 }
 
 export class DuplicateMovementError extends Error {
-  constructor(hash: string) {
-    super(`Movement with deduplication hash ${hash} already exists`);
+  constructor(hash?: string) {
+    super(
+      hash
+        ? `Movement with deduplication hash ${hash} already exists`
+        : "One or more movements already exist (duplicate deduplication hash)",
+    );
     this.name = "DuplicateMovementError";
   }
 }

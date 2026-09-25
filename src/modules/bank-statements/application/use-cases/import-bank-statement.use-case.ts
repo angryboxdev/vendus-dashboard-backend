@@ -71,6 +71,12 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
     // 3. Build movements, skipping duplicates
     const toSave: BankMovement[] = [];
     let skippedDuplicates = 0;
+    // Hashes já colocados em toSave nesta própria execução — existsByHash só vê
+    // o que já está na BD, por isso duas linhas do MESMO ficheiro com o mesmo
+    // hash (ex: dois pagamentos iguais no mesmo dia com a mesma descrição)
+    // passavam as duas na checagem contra a BD e rebentavam a constraint UNIQUE
+    // (org_id, deduplication_hash) no insert em lote.
+    const seenHashes = new Set<string>();
 
     // If the file didn't supply balances (all zero), compute them from openingBalance.
     // Sort ascending by bookingDate first — files like BCP XLSX come newest-first.
@@ -97,12 +103,18 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
         raw.movementType
       );
 
+      if (seenHashes.has(hash)) {
+        skippedDuplicates++;
+        continue;
+      }
+
       const exists = await this.movementRepo.existsByHash(organizationId, hash);
       if (exists) {
         skippedDuplicates++;
         continue;
       }
 
+      seenHashes.add(hash);
       toSave.push(
         BankMovement.create({
           bankAccountId: resolvedBankAccountId,
