@@ -75,13 +75,16 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     // 4. Collect validation issues
     const validationIssues = [...extraction.validationIssues];
 
-    // Duplicate check by NIF + invoice number — warn only, don't block (user can correct in review)
-    if (extraction.supplierNif && extraction.invoiceNumber) {
-      const duplicate = await this.invoiceRepo.findDuplicateByNif(
-        command.organizationId,
-        extraction.invoiceNumber,
-        extraction.supplierNif,
-      );
+    // Duplicate check — warn only, don't block (user can correct in review).
+    // Prefer the resolved supplier (reliable regardless of whether the AI
+    // extracted a NIF this time — e.g. supplier matched by hint/fuzzy name);
+    // fall back to the extracted NIF only when no supplier was matched at all.
+    if (extraction.invoiceNumber) {
+      const duplicate = supplierMatch
+        ? await this.invoiceRepo.findDuplicate(command.organizationId, extraction.invoiceNumber, supplierMatch.id)
+        : extraction.supplierNif
+          ? await this.invoiceRepo.findDuplicateByNif(command.organizationId, extraction.invoiceNumber, extraction.supplierNif)
+          : null;
       if (duplicate) validationIssues.push("duplicate_invoice");
     }
 

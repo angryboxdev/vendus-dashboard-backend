@@ -67,6 +67,8 @@ export interface InvoiceDTO {
   aiExtractionStatus: AiExtractionStatus | null;
   aiConfidence: number | null;
   requiresReview: boolean;
+  /** true quando outra fatura activa (não cancelada) do mesmo fornecedor tem o mesmo número. Calculado em cada listagem — ver findDuplicateInvoiceIds. */
+  isDuplicate: boolean;
   costCenterGroupId: string | null;
   costCenterCategoryId: string | null;
   financialType: string | null;

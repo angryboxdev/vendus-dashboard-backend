@@ -69,14 +69,15 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       confirmed = confirmed.markPaid(paidAt);
     }
 
-    // Duplicate check by NIF + invoice number — hard block, exclude this invoice itself
-    if (confirmed.supplierNifSnapshot && confirmed.invoiceNumber) {
-      const duplicate = await this.invoiceRepo.findDuplicateByNif(
-        command.organizationId,
-        confirmed.invoiceNumber,
-        confirmed.supplierNifSnapshot,
-        confirmed.id,
-      );
+    // Duplicate check — hard block, exclude this invoice itself. Prefer the
+    // resolved supplierId (reliable regardless of NIF extraction); fall back
+    // to the supplier NIF snapshot when no supplier is linked yet.
+    if (confirmed.invoiceNumber) {
+      const duplicate = confirmed.supplierId
+        ? await this.invoiceRepo.findDuplicate(command.organizationId, confirmed.invoiceNumber, confirmed.supplierId, confirmed.id)
+        : confirmed.supplierNifSnapshot
+          ? await this.invoiceRepo.findDuplicateByNif(command.organizationId, confirmed.invoiceNumber, confirmed.supplierNifSnapshot, confirmed.id)
+          : null;
       if (duplicate) throw new DuplicateInvoiceError(confirmed.invoiceNumber, confirmed.supplierName);
     }
 

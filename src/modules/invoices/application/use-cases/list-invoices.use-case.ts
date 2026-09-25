@@ -5,6 +5,7 @@ import type {
 } from "../../domain/ports/in/invoice.ports.js";
 import type { InvoiceRepositoryPort, InvoiceFilter } from "../../domain/ports/out/invoice-repository.port.js";
 import type { CostCenterCategoryReaderPort, CategoryLookup } from "../../domain/ports/out/cost-center-category-reader.port.js";
+import { findDuplicateInvoiceIds } from "../../domain/utils/duplicate-detection.js";
 import { toInvoiceDTO } from "./shared.js";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 
@@ -34,6 +35,11 @@ export class ListInvoicesUseCase implements ListInvoicesPort {
       : [];
     const categoryMap = new Map(lookups.map((l) => [l.id, l]));
 
-    return invoices.map((inv) => toInvoiceDTO(inv, undefined, categoryMap));
+    // Calculado sobre a própria lista devolvida (não persistido) — ver
+    // findDuplicateInvoiceIds. Quando a listagem é filtrada (ex: por status),
+    // só deteta duplicados dentro do subconjunto filtrado.
+    const duplicateIds = findDuplicateInvoiceIds(invoices);
+
+    return invoices.map((inv) => toInvoiceDTO(inv, undefined, categoryMap, duplicateIds.has(inv.id)));
   }
 }
