@@ -34,6 +34,7 @@ import { GetMovementsLinkedToInvoiceUseCase } from "./application/use-cases/get-
 import { GetInvoiceOpenBalancesUseCase } from "./application/use-cases/get-invoice-open-balances.use-case.js";
 import { UnreconcileMovementUseCase } from "./application/use-cases/unreconcile-movement.use-case.js";
 import { SearchOccurrenceCandidatesUseCase } from "./application/use-cases/search-occurrence-candidates.use-case.js";
+import { GetMonthlySuggestionsUseCase } from "./application/use-cases/get-monthly-suggestions.use-case.js";
 import { SupabaseBankDocumentStorageAdapter } from "./adapters/out/supabase-bank-document-storage.adapter.js";
 import { SupabaseOccurrenceMatchReadAdapter } from "./adapters/out/supabase-occurrence-match-read.adapter.js";
 
@@ -102,6 +103,7 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort)
   const getInvoiceOpenBalances = new GetInvoiceOpenBalancesUseCase(entityLinkRepo, invoiceRead);
   const unreconcileMovement = new UnreconcileMovementUseCase(movementRepo, entityLinkRepo, invoiceRead, invoiceReconciliationWrite);
   const searchOccurrenceCandidates = new SearchOccurrenceCandidatesUseCase(occurrenceRead);
+  const getMonthlySuggestions = new GetMonthlySuggestionsUseCase(movementRepo, findMovementCandidates);
 
   // Adapter in
   const controller = new BankStatementController(
@@ -127,6 +129,7 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort)
     getInvoiceOpenBalances,
     unreconcileMovement,
     searchOccurrenceCandidates,
+    getMonthlySuggestions,
   );
 
   return { router: controller.router };
