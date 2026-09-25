@@ -36,6 +36,7 @@ import type { GetMovementsLinkedToInvoicePort } from "../../domain/ports/in/bank
 import type { GetInvoiceOpenBalancesPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { UnreconcileMovementPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { SearchOccurrenceCandidatesPort } from "../../domain/ports/in/bank-statement.ports.js";
+import type { GetMonthlySuggestionsPort } from "../../domain/ports/in/bank-statement.ports.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const csvParser = new CsvStatementParser();
@@ -67,6 +68,7 @@ export class BankStatementController {
     private readonly getInvoiceOpenBalances: GetInvoiceOpenBalancesPort,
     private readonly unreconcileMovement: UnreconcileMovementPort,
     private readonly searchOccurrenceCandidates: SearchOccurrenceCandidatesPort,
+    private readonly getMonthlySuggestions: GetMonthlySuggestionsPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -675,6 +677,34 @@ export class BankStatementController {
           return;
         }
         const result = await this.getAccountMonthDetail.execute({
+          organizationId: req.auth!.orgId,
+          bankAccountId: accountId,
+          year,
+          month,
+        });
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * GET /bank-statements/accounts/:accountId/calendar/:year/:month/suggestions
+     * Returns suggestions for the pending movements of the given month: entity
+     * (invoice/payable) matches and "repeat last month's classification" hints
+     * for recurring descriptions. Read-only — applying a suggestion goes through
+     * the regular reconcile/classify endpoints.
+     */
+    this.router.get("/bank-statements/accounts/:accountId/calendar/:year/:month/suggestions", async (req, res) => {
+      try {
+        const accountId = req.params["accountId"]!;
+        const year = parseInt(req.params["year"]!, 10);
+        const month = parseInt(req.params["month"]!, 10);
+        if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
+          res.status(400).json({ error: "Invalid year or month" });
+          return;
+        }
+        const result = await this.getMonthlySuggestions.execute({
           organizationId: req.auth!.orgId,
           bankAccountId: accountId,
           year,

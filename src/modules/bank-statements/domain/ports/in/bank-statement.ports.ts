@@ -244,6 +244,59 @@ export interface SuggestMatchesPort {
   execute(query: SuggestMatchesQuery): Promise<MatchSuggestion[]>;
 }
 
+// ─── Monthly reconciliation suggestions ────────────────────────────────────────
+// Two independent suggestion sources for the "por conciliar" view of a month:
+//  - entityMatches: same engine as FindMovementCandidatesPort (invoice/payable
+//    matching by amount+date+hint), run for every pending movement in the month.
+//  - repeatJustifications: movements whose (normalized) description matches a
+//    movement classified without an invoice in a previous month for the same
+//    account (e.g. a recurring salary transfer) — proposes repeating that
+//    classification. Never overlaps with entityMatches for the same movement:
+//    an entity match, when found, takes priority.
+
+export interface MonthlyEntityMatchSuggestion {
+  movementId: string;
+  entityType: "invoice" | "payable_entry";
+  entityId: string;
+  entityLabel: string;
+  amountCents: number;
+  openBalanceCents: number;
+  supplierId: string | null;
+  confidence: number;
+}
+
+export interface RepeatJustificationSuggestion {
+  movementId: string;
+  /** The past movement this suggestion is copied from — shown to the user as "igual a …". */
+  sourceMovementId: string;
+  sourceDescription: string;
+  sourceDate: string; // YYYY-MM-DD
+  justificationType: JustificationType;
+  costCenterGroupId: string | null;
+  costCenterCategoryId: string | null;
+  supplierId: string | null;
+  notes: string | null;
+  riskLevel: RiskLevel;
+  vatRate: number | null;
+  vatIncluded: boolean | null;
+}
+
+export interface MonthlySuggestions {
+  entityMatches: MonthlyEntityMatchSuggestion[];
+  repeatJustifications: RepeatJustificationSuggestion[];
+}
+
+export interface GetMonthlySuggestionsQuery {
+  organizationId: OrganizationId;
+  bankAccountId: string;
+  year: number;
+  month: number;
+}
+
+export interface GetMonthlySuggestionsPort {
+  execute(query: GetMonthlySuggestionsQuery): Promise<MonthlySuggestions>;
+}
+
 // ─── Create rule ──────────────────────────────────────────────────────────────
 
 export interface CreateReconciliationRuleCommand {
