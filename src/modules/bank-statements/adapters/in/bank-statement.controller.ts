@@ -13,6 +13,7 @@ import {
   StatementBalanceDifferenceError,
   BlockingMovementsError,
   EntityAlreadyReconciledError,
+  DuplicateMovementError,
 } from "../../domain/errors.js";
 import type { ImportBankStatementPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { ListBankStatementsPort } from "../../domain/ports/in/bank-statement.ports.js";
@@ -210,6 +211,12 @@ export class BankStatementController {
         } catch (e) {
           if (e instanceof ParseError) {
             res.status(422).json({ error: e.message });
+            return;
+          }
+          if (e instanceof DuplicateMovementError) {
+            res.status(409).json({
+              error: "Um ou mais movimentos deste extrato já existem (duplicados). Verifique se o ficheiro já tinha sido importado.",
+            });
             return;
           }
           const msg = e instanceof Error ? e.message : "Internal error";

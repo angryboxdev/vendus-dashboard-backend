@@ -146,7 +146,7 @@ Regra de matching automático por `descriptionContains` (case-insensitive). Ao f
 
 ### Deduplicação
 
-Hash SHA-256 de `accountNumber + bookingDate + description + amount + movementType` por linha. Movimentos repetidos numa reimportação são ignorados silenciosamente.
+Hash SHA-256 de `accountNumber + bookingDate + description + amount + movementType` por linha. Movimentos repetidos numa reimportação são ignorados silenciosamente — verificados contra a BD (`existsByHash`) **e** contra os hashes já vistos dentro do próprio ficheiro sendo importado (`seenHashes`, em `ImportBankStatementUseCase`). Este segundo caso (duas linhas do mesmo ficheiro com hash igual — ex: dois movimentos com o mesmo valor, descrição e dia) só é coberto pelo `existsByHash` depois de cada linha ser gravada uma a uma; como o import grava tudo em `saveBulk` no fim, sem a checagem intra-lote as duas linhas passavam as duas e o insert em lote rebentava a constraint UNIQUE `(org_id, deduplication_hash)`. `SupabaseBankMovementRepository.saveBulk` também apanha essa violação defensivamente (corrida entre `existsByHash` e o insert, ex: duplo clique) e traduz para `DuplicateMovementError` → 409, em vez de expor o erro cru do Postgres.
 
 ### Estados de conciliação
 
@@ -356,7 +356,7 @@ GET    /api/bank-statements/occurrences/candidates                            ca
 
 **`amount` absoluto + `movementType`** — valor sempre não-negativo; a direção (débito/crédito) é separada. Mais legível que valor negativo para débito.
 
-**Deduplicação por hash no import use case** — o hash inclui `accountNumber + bookingDate + description + amount + movementType`. Movimentos duplicados são silenciosamente ignorados (o resultado inclui `skippedDuplicates` para visibilidade). A constraint UNIQUE na tabela actua como segunda linha de defesa.
+**Deduplicação por hash no import use case** — o hash inclui `accountNumber + bookingDate + description + amount + movementType`. Movimentos duplicados são silenciosamente ignorados (o resultado inclui `skippedDuplicates` para visibilidade), verificados tanto contra a BD (`existsByHash`) como contra os hashes já vistos dentro do mesmo ficheiro (`seenHashes`, bug corrigido em set/2026 — duas linhas do mesmo extrato com o mesmo hash rebentavam a constraint UNIQUE `bank_movements_org_id_deduplication_hash_key` no insert em lote, porque `existsByHash` só via o que já estava persistido). A constraint UNIQUE na tabela actua como segunda linha de defesa — `SupabaseBankMovementRepository.saveBulk` apanha essa violação (SQLSTATE 23505) e lança `DuplicateMovementError` (→ 409 no controller) em vez de propagar a mensagem crua do Postgres.
 
 **Stats persistidas no header** — `calculatedClosingBalance`, `balanceDifference` e `reconciliationProgress` são persistidos no import header (não calculados on-the-fly a cada request), excepto no `GetBankStatementUseCase` que os recalcula ao vivo com os movimentos filtrados. Isto permite listar imports com stats sem carregar todos os movimentos.
 
