@@ -9,6 +9,7 @@ import { SupabaseInvoiceReconciliationCleanupAdapter } from "./adapters/out/supa
 import { SupabaseOccurrenceSyncAdapter } from "./adapters/out/supabase-occurrence-sync.adapter.js";
 import { SupabaseSupplierLookupAdapter } from "./adapters/out/supabase-supplier-lookup.adapter.js";
 import { SupabaseSupplierHintAdapter } from "./adapters/out/supabase-supplier-hint.adapter.js";
+import { SupabaseOrganizationIdentityReadAdapter } from "./adapters/out/supabase-organization-identity-read.adapter.js";
 import { FinancialBaseSupplierCreateAdapter } from "./adapters/out/financial-base-supplier-create.adapter.js";
 import { OpenAiExtractionAdapter } from "./adapters/out/openai-extraction.adapter.js";
 import { CreateInvoiceUseCase } from "./application/use-cases/create-invoice.use-case.js";
@@ -65,6 +66,7 @@ export function createInvoicesModule(createSupplierPort: CreateSupplierPort): In
   const reconciliationCleanup = new SupabaseInvoiceReconciliationCleanupAdapter(createScopedQuery);
   const supplierLookup = new SupabaseSupplierLookupAdapter(createScopedQuery);
   const supplierHint = new SupabaseSupplierHintAdapter(createScopedQuery);
+  const organizationIdentityRead = new SupabaseOrganizationIdentityReadAdapter(createScopedQuery);
   const supplierCreate = new FinancialBaseSupplierCreateAdapter(createSupplierPort);
   const aiExtraction = new OpenAiExtractionAdapter(openaiApiKey);
 
@@ -85,7 +87,7 @@ export function createInvoicesModule(createSupplierPort: CreateSupplierPort): In
     getInvoice: new GetInvoiceUseCase(invoiceRepo, lineRepo, categoryReader),
     deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage, payableWrite, reconciliationCleanup),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),
-    importInvoice: new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint),
+    importInvoice: new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint, organizationIdentityRead),
     confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint),
     getInvoiceAlerts: new GetInvoiceAlertsUseCase(invoiceRepo),
     processDirectDebits,
