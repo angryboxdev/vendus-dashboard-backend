@@ -9,6 +9,7 @@ import type { DocumentStoragePort } from "../../domain/ports/out/document-storag
 import type { AiExtractionPort } from "../../domain/ports/out/ai-extraction.port.js";
 import type { SupplierLookupPort, SupplierSummary } from "../../domain/ports/out/supplier-lookup.port.js";
 import type { SupplierHintPort } from "../../domain/ports/out/supplier-hint.port.js";
+import type { OrganizationIdentityReadPort } from "../../domain/ports/out/organization-identity-read.port.js";
 import { normalizeNif } from "../../domain/utils/nif.js";
 import { normalizeSupplierName, supplierNameSimilarity, FUZZY_MATCH_THRESHOLD } from "../../domain/utils/supplier-name.js";
 import { toInvoiceDTO } from "./shared.js";
@@ -23,6 +24,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     private readonly aiExtraction: AiExtractionPort,
     private readonly supplierLookup: SupplierLookupPort,
     private readonly supplierHint: SupplierHintPort,
+    private readonly organizationIdentityRead: OrganizationIdentityReadPort,
   ) {}
 
   async execute(command: ImportInvoiceCommand): Promise<InvoiceImportResultDTO> {
@@ -37,30 +39,41 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     // 2. Extract invoice data with AI (send buffer directly — no public URL needed)
     const extraction = await this.aiExtraction.extract(command.fileBuffer, command.mimeType);
 
+    // 2b. Guard: the AI sometimes reads our own company's details off the
+    // invoice (billing/"cliente" section) instead of the actual issuer's —
+    // never let our own NIF end up as the supplier of an imported invoice,
+    // regardless of which legal name the organization is currently trading
+    // under (the NIF is what stays constant across a company name change).
+    const ownNif = await this.organizationIdentityRead.getNif(command.organizationId);
+    const extractedIsOwnCompany =
+      !!ownNif && !!extraction.supplierNif && normalizeNif(extraction.supplierNif) === normalizeNif(ownNif);
+    const supplierNif = extractedIsOwnCompany ? null : extraction.supplierNif;
+    const supplierName = extractedIsOwnCompany ? null : extraction.supplierName;
+
     // 3. Look up supplier — 3-step chain:
     //    a) NIF exacto (normalizado) → b) hint de confirmação anterior → c) fuzzy por nome
     let supplierMatch: SupplierSummary | null = null;
     let supplierMatchMethod: "nif" | "hint" | "fuzzy" | null = null;
 
-    if (extraction.supplierNif) {
-      supplierMatch = await this.supplierLookup.findByNif(command.organizationId, normalizeNif(extraction.supplierNif));
+    if (supplierNif) {
+      supplierMatch = await this.supplierLookup.findByNif(command.organizationId, normalizeNif(supplierNif));
       if (supplierMatch) supplierMatchMethod = "nif";
     }
 
-    if (!supplierMatch && extraction.supplierName) {
-      const normalizedName = normalizeSupplierName(extraction.supplierName);
+    if (!supplierMatch && supplierName) {
+      const normalizedName = normalizeSupplierName(supplierName);
       if (normalizedName) {
         supplierMatch = await this.supplierHint.findByNormalizedName(command.organizationId, normalizedName);
         if (supplierMatch) supplierMatchMethod = "hint";
       }
     }
 
-    if (!supplierMatch && extraction.supplierName) {
+    if (!supplierMatch && supplierName) {
       const allSuppliers = await this.supplierLookup.findAll(command.organizationId);
       let bestScore = 0;
       let bestSupplier: SupplierSummary | null = null;
       for (const s of allSuppliers) {
-        const score = supplierNameSimilarity(extraction.supplierName, s.name);
+        const score = supplierNameSimilarity(supplierName, s.name);
         if (score > bestScore) {
           bestScore = score;
           bestSupplier = s;
@@ -74,16 +87,18 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
 
     // 4. Collect validation issues
     const validationIssues = [...extraction.validationIssues];
+    if (extractedIsOwnCompany) validationIssues.push("supplier_is_own_company");
 
     // Duplicate check — warn only, don't block (user can correct in review).
     // Prefer the resolved supplier (reliable regardless of whether the AI
     // extracted a NIF this time — e.g. supplier matched by hint/fuzzy name);
-    // fall back to the extracted NIF only when no supplier was matched at all.
+    // fall back to supplierNif (sanitized — null when extractedIsOwnCompany,
+    // so we never check duplicates against our own company's NIF).
     if (extraction.invoiceNumber) {
       const duplicate = supplierMatch
         ? await this.invoiceRepo.findDuplicate(command.organizationId, extraction.invoiceNumber, supplierMatch.id)
-        : extraction.supplierNif
-          ? await this.invoiceRepo.findDuplicateByNif(command.organizationId, extraction.invoiceNumber, extraction.supplierNif)
+        : supplierNif
+          ? await this.invoiceRepo.findDuplicateByNif(command.organizationId, extraction.invoiceNumber, supplierNif)
           : null;
       if (duplicate) validationIssues.push("duplicate_invoice");
     }
@@ -124,8 +139,8 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     const source = command.mimeType === "application/pdf" ? "pdf_import" : "image_import";
     const finalInvoice = Invoice.createFromImport({
       supplierId: supplierMatch?.id ?? null,
-      supplierName: extraction.supplierName ?? "Fornecedor desconhecido",
-      supplierNifSnapshot: extraction.supplierNif ?? null,
+      supplierName: supplierName ?? "Fornecedor desconhecido",
+      supplierNifSnapshot: supplierNif ?? null,
       invoiceNumber: extraction.invoiceNumber ?? "",
       invoiceDate: extraction.issueDate ?? new Date(),
       dueDate: extraction.dueDate ?? null,

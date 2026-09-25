@@ -4,6 +4,7 @@ import { FakeDocumentStoragePort } from "../fakes/fake-document-storage.port.js"
 import { FakeAiExtractionPort } from "../fakes/fake-ai-extraction.port.js";
 import { FakeSupplierLookupPort } from "../fakes/fake-supplier-lookup.port.js";
 import { FakeSupplierHintPort } from "../fakes/fake-supplier-hint.port.js";
+import { FakeOrganizationIdentityRead } from "../fakes/fake-organization-identity-read.port.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 
 const ORG_ID = mintOrganizationId("org-test");
@@ -18,6 +19,7 @@ describe("ImportInvoiceUseCase", () => {
   let aiExtraction: FakeAiExtractionPort;
   let supplierLookup: FakeSupplierLookupPort;
   let supplierHint: FakeSupplierHintPort;
+  let organizationIdentityRead: FakeOrganizationIdentityRead;
   let useCase: ImportInvoiceUseCase;
 
   beforeEach(() => {
@@ -26,7 +28,8 @@ describe("ImportInvoiceUseCase", () => {
     aiExtraction = new FakeAiExtractionPort();
     supplierLookup = new FakeSupplierLookupPort();
     supplierHint = new FakeSupplierHintPort();
-    useCase = new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint);
+    organizationIdentityRead = new FakeOrganizationIdentityRead();
+    useCase = new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint, organizationIdentityRead);
   });
 
   it("stores the file and creates a draft_ai invoice", async () => {
@@ -351,5 +354,74 @@ describe("ImportInvoiceUseCase", () => {
 
     expect(result.supplierMatch?.id).toBe("sup-dream-plus");
     expect(result.validationIssues).toContain("duplicate_invoice");
+  });
+
+  // ── Guard: never treat our own company as the supplier ──────────────────────
+
+  it("nunca associa a própria empresa como fornecedor quando a IA extrai o NIF da organização (caso Gold Energy / Raul Afonso e Mariana Cavalcanti)", async () => {
+    organizationIdentityRead.seedNif("518902609");
+    // A IA leu os dados de faturação (a nossa empresa, sob o nome social
+    // anterior) em vez do emitente real (Gold Energy).
+    aiExtraction.setResult({
+      supplierNif: "518902609",
+      supplierName: "Raul Afonso e Mariana Cavalcanti Lda",
+      invoiceNumber: "DR2605477119",
+    });
+
+    const result = await useCase.execute({
+      organizationId: ORG_ID,
+      fileBuffer: makeBuffer(),
+      filename: "fatura.pdf",
+      mimeType: "application/pdf",
+    });
+
+    expect(result.supplierMatch).toBeNull();
+    expect(result.invoice.supplierId).toBeNull();
+    expect(result.invoice.supplierName).toBe("Fornecedor desconhecido");
+    expect(result.invoice.supplierNifSnapshot).toBeNull();
+    expect(result.validationIssues).toContain("supplier_is_own_company");
+    expect(result.validationIssues).toContain("no_supplier_match");
+    expect(result.invoice.requiresReview).toBe(true);
+  });
+
+  it("reconhece o NIF da própria empresa mesmo com formatação diferente (pontos/espaços)", async () => {
+    organizationIdentityRead.seedNif("518902609");
+    aiExtraction.setResult({ supplierNif: "518.902.609", supplierName: "Angry Box Lda" });
+
+    const result = await useCase.execute({
+      organizationId: ORG_ID,
+      fileBuffer: makeBuffer(),
+      filename: "fatura.pdf",
+      mimeType: "application/pdf",
+    });
+
+    expect(result.validationIssues).toContain("supplier_is_own_company");
+    expect(result.invoice.supplierName).toBe("Fornecedor desconhecido");
+  });
+
+  it("não sinaliza supplier_is_own_company quando o NIF extraído é de um fornecedor real diferente", async () => {
+    organizationIdentityRead.seedNif("518902609");
+    supplierLookup.seed([
+      {
+        id: "sup-gold-energy",
+        name: "Gold Energy",
+        nif: "509999999",
+        defaultCostCenterGroupId: null,
+        defaultCostCenterCategoryId: null,
+        defaultFinancialType: null,
+      },
+    ]);
+    aiExtraction.setResult({ supplierNif: "509999999", supplierName: "Gold Energy" });
+
+    const result = await useCase.execute({
+      organizationId: ORG_ID,
+      fileBuffer: makeBuffer(),
+      filename: "fatura.pdf",
+      mimeType: "application/pdf",
+    });
+
+    expect(result.validationIssues).not.toContain("supplier_is_own_company");
+    expect(result.supplierMatch?.id).toBe("sup-gold-energy");
+    expect(result.invoice.supplierName).toBe("Gold Energy");
   });
 });
