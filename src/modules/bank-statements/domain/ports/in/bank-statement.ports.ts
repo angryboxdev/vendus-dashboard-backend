@@ -419,12 +419,15 @@ export interface LinkStatementToAccountPort {
 export interface AccountMonthStat {
   year: number;
   month: number; // 1–12
-  totalDays: number;
-  coveredDays: number;
   totalMovements: number;
   reconciledMovements: number;
-  coveragePercent: number; // 0–100
-  reconciliationPercent: number; // 0–100
+  /** Credits (vendas) resolvidos / total de créditos do mês. 100 quando não há créditos — hoje quase sempre 100%, pois os créditos ficam auto-resolvidos na importação (`conciliado_sem_fatura`). */
+  salesReconciledPercent: number; // 0–100
+  /** Débitos (despesas) resolvidos / total de débitos do mês — o sinal real de trabalho pendente. 100 quando não há débitos. */
+  expensesReconciledPercent: number; // 0–100
+  totalCreditCents: number; // soma dos créditos do mês ("entrou")
+  totalDebitCents: number; // soma dos débitos do mês ("saiu")
+  balanceCents: number; // totalCreditCents - totalDebitCents
 }
 
 export interface GetAccountCalendarQuery {

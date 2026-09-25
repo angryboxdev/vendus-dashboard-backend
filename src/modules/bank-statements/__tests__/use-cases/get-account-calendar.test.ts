@@ -10,6 +10,7 @@ function makeMovement(
   date: string,
   movementType: "debit" | "credit" = "debit",
   reconciled = false,
+  amount = 1000,
   bankAccountId = ACCOUNT_ID,
 ): BankMovement {
   const m = BankMovement.create({
@@ -18,7 +19,7 @@ function makeMovement(
     bookingDate: new Date(`${date}T00:00:00.000Z`),
     valueDate: new Date(`${date}T00:00:00.000Z`),
     description: "Test movement",
-    amount: 1000,
+    amount,
     balanceAfter: 10000,
     movementType,
     deduplicationHash: `${date}-${movementType}-${Math.random()}`,
@@ -60,32 +61,16 @@ describe("GetAccountCalendarUseCase", () => {
     expect(result).toHaveLength(12);
   });
 
-  it("counts zero movements and zero coverage for months with no data", async () => {
+  it("reports zero movements and 100% (nothing to reconcile) for months with no data", async () => {
     const result = await useCase.execute({ organizationId, bankAccountId: ACCOUNT_ID, year: 2025 });
     const jan = result.find((m) => m.month === 1)!;
     expect(jan.totalMovements).toBe(0);
-    expect(jan.coveredDays).toBe(0);
-    expect(jan.coveragePercent).toBe(0);
-    expect(jan.reconciliationPercent).toBe(0);
+    expect(jan.salesReconciledPercent).toBe(100);
+    expect(jan.expensesReconciledPercent).toBe(100);
+    expect(jan.balanceCents).toBe(0);
   });
 
-  it("computes coverage as unique days with movements / total days in month", async () => {
-    await movementRepo.saveBulk(organizationId, [
-      makeMovement("2025-03-01"),
-      makeMovement("2025-03-01"), // same day — should not double-count
-      makeMovement("2025-03-15"),
-    ]);
-
-    const result = await useCase.execute({ organizationId, bankAccountId: ACCOUNT_ID, year: 2025 });
-    const march = result.find((m) => m.month === 3)!;
-
-    expect(march.coveredDays).toBe(2); // only 2 unique days
-    expect(march.totalMovements).toBe(3);
-    expect(march.totalDays).toBe(31);
-    expect(march.coveragePercent).toBe(Math.round((2 / 31) * 100));
-  });
-
-  it("computes reconciliation percent correctly", async () => {
+  it("computes reconciledMovements/totalMovements across both credits and debits", async () => {
     await movementRepo.saveBulk(organizationId, [
       makeMovement("2025-03-01", "debit", true),
       makeMovement("2025-03-02", "debit", true),
@@ -98,12 +83,54 @@ describe("GetAccountCalendarUseCase", () => {
 
     expect(march.reconciledMovements).toBe(2);
     expect(march.totalMovements).toBe(4);
-    expect(march.reconciliationPercent).toBe(50);
+  });
+
+  it("computes salesReconciledPercent and expensesReconciledPercent independently", async () => {
+    await movementRepo.saveBulk(organizationId, [
+      // credits: created auto-resolved (conciliado_sem_fatura) — 2/2 resolved
+      makeMovement("2025-04-01", "credit"),
+      makeMovement("2025-04-02", "credit"),
+      // debits: only 1 of 3 resolved
+      makeMovement("2025-04-03", "debit", true),
+      makeMovement("2025-04-04", "debit", false),
+      makeMovement("2025-04-05", "debit", false),
+    ]);
+
+    const result = await useCase.execute({ organizationId, bankAccountId: ACCOUNT_ID, year: 2025 });
+    const april = result.find((m) => m.month === 4)!;
+
+    expect(april.salesReconciledPercent).toBe(100);
+    expect(april.expensesReconciledPercent).toBe(33); // round(1/3 * 100)
+  });
+
+  it("computes totalCreditCents, totalDebitCents e balanceCents (negativo quando saiu mais do que entrou)", async () => {
+    await movementRepo.saveBulk(organizationId, [
+      makeMovement("2025-09-01", "credit", false, 200_000), // entrou 2000€
+      makeMovement("2025-09-02", "debit", false, 300_000),  // saiu 3000€
+    ]);
+
+    const result = await useCase.execute({ organizationId, bankAccountId: ACCOUNT_ID, year: 2025 });
+    const september = result.find((m) => m.month === 9)!;
+
+    expect(september.totalCreditCents).toBe(200_000);
+    expect(september.totalDebitCents).toBe(300_000);
+    expect(september.balanceCents).toBe(-100_000);
+  });
+
+  it("balanceCents é positivo quando entrou mais do que saiu", async () => {
+    await movementRepo.saveBulk(organizationId, [
+      makeMovement("2025-10-01", "credit", false, 500_000),
+      makeMovement("2025-10-02", "debit", false, 100_000),
+    ]);
+
+    const result = await useCase.execute({ organizationId, bankAccountId: ACCOUNT_ID, year: 2025 });
+    const october = result.find((m) => m.month === 10)!;
+    expect(october.balanceCents).toBe(400_000);
   });
 
   it("ignores movements from other accounts", async () => {
     await movementRepo.saveBulk(organizationId, [
-      makeMovement("2025-05-10", "debit", false, "other-acc"),
+      makeMovement("2025-05-10", "debit", false, 1000, "other-acc"),
     ]);
 
     const result = await useCase.execute({ organizationId, bankAccountId: ACCOUNT_ID, year: 2025 });
@@ -111,7 +138,7 @@ describe("GetAccountCalendarUseCase", () => {
     expect(may.totalMovements).toBe(0);
   });
 
-  it("reports 100% reconciliation when all movements are resolved", async () => {
+  it("reports 100% expensesReconciledPercent when all debits are resolved", async () => {
     await movementRepo.saveBulk(organizationId, [
       makeMovement("2025-06-10", "debit", true),
       makeMovement("2025-06-20", "debit", true),
@@ -119,6 +146,6 @@ describe("GetAccountCalendarUseCase", () => {
 
     const result = await useCase.execute({ organizationId, bankAccountId: ACCOUNT_ID, year: 2025 });
     const june = result.find((m) => m.month === 6)!;
-    expect(june.reconciliationPercent).toBe(100);
+    expect(june.expensesReconciledPercent).toBe(100);
   });
 });

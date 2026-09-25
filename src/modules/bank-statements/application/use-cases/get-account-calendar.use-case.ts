@@ -6,9 +6,9 @@ import type {
 } from "../../domain/ports/in/bank-statement.ports.js";
 import { RESOLVED_STATUSES } from "../../domain/entities/bank-movement.js";
 
-function daysInMonth(year: number, month: number): number {
-  // month is 1–12; new Date(year, month, 0) = last day of that month
-  return new Date(year, month, 0).getDate();
+/** Ratio of resolved movements as a 0–100 percent. 100 when there's nothing to reconcile (division by zero would otherwise be meaningless, and an empty checklist is trivially "done"). */
+function resolvedPercent(resolved: number, total: number): number {
+  return total > 0 ? Math.round((resolved / total) * 100) : 100;
 }
 
 export class GetAccountCalendarUseCase implements GetAccountCalendarPort {
@@ -37,30 +37,28 @@ export class GetAccountCalendarUseCase implements GetAccountCalendarPort {
 
     for (let month = 1; month <= maxMonth; month++) {
       const monthMovements = byMonth.get(month) ?? [];
-      const totalDays = daysInMonth(year, month);
-      const coveredDays = new Set(
-        monthMovements.map((m) => m.bookingDate.toISOString().slice(0, 10))
-      ).size;
       const totalMovements = monthMovements.length;
       const reconciledMovements = monthMovements.filter((m) =>
         RESOLVED_STATUSES.has(m.reconciliationStatus)
       ).length;
-      const coveragePercent =
-        totalDays > 0 ? Math.round((coveredDays / totalDays) * 100) : 0;
-      const reconciliationPercent =
-        totalMovements > 0
-          ? Math.round((reconciledMovements / totalMovements) * 100)
-          : 0;
+
+      const credits = monthMovements.filter((m) => m.movementType === "credit");
+      const debits = monthMovements.filter((m) => m.movementType === "debit");
+      const reconciledCredits = credits.filter((m) => RESOLVED_STATUSES.has(m.reconciliationStatus)).length;
+      const reconciledDebits = debits.filter((m) => RESOLVED_STATUSES.has(m.reconciliationStatus)).length;
+      const totalCreditCents = credits.reduce((s, m) => s + m.amount, 0);
+      const totalDebitCents = debits.reduce((s, m) => s + m.amount, 0);
 
       result.push({
         year,
         month,
-        totalDays,
-        coveredDays,
         totalMovements,
         reconciledMovements,
-        coveragePercent,
-        reconciliationPercent,
+        salesReconciledPercent: resolvedPercent(reconciledCredits, credits.length),
+        expensesReconciledPercent: resolvedPercent(reconciledDebits, debits.length),
+        totalCreditCents,
+        totalDebitCents,
+        balanceCents: totalCreditCents - totalDebitCents,
       });
     }
 
