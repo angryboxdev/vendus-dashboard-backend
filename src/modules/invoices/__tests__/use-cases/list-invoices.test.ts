@@ -146,4 +146,40 @@ describe("ListInvoicesUseCase", () => {
     await useCase.execute(ORG_ID);
     expect(spy).not.toHaveBeenCalled();
   });
+
+  // ── isDuplicate ──────────────────────────────────────────────────────────────
+
+  it("marca isDuplicate=true nas duas faturas quando partilham fornecedor + número", async () => {
+    await repo.save(ORG_ID, makeInvoice({ supplierId: "sup-1", invoiceNumber: "DUP-001" }));
+    await repo.save(ORG_ID, makeInvoice({ supplierId: "sup-1", invoiceNumber: "DUP-001" }));
+
+    const result = await useCase.execute(ORG_ID);
+    expect(result).toHaveLength(2);
+    expect(result.every((dto) => dto.isDuplicate)).toBe(true);
+  });
+
+  it("isDuplicate=false quando o número é igual mas o fornecedor é diferente", async () => {
+    await repo.save(ORG_ID, makeInvoice({ supplierId: "sup-1", invoiceNumber: "SAME-001" }));
+    await repo.save(ORG_ID, makeInvoice({ supplierId: "sup-2", invoiceNumber: "SAME-001" }));
+
+    const result = await useCase.execute(ORG_ID);
+    expect(result.every((dto) => !dto.isDuplicate)).toBe(true);
+  });
+
+  it("ignora fatura cancelada ao calcular isDuplicate", async () => {
+    const cancelled = makeInvoice({ supplierId: "sup-1", invoiceNumber: "DUP-002" }).cancel();
+    await repo.save(ORG_ID, cancelled);
+    await repo.save(ORG_ID, makeInvoice({ supplierId: "sup-1", invoiceNumber: "DUP-002" }));
+
+    const result = await useCase.execute(ORG_ID);
+    expect(result.every((dto) => !dto.isDuplicate)).toBe(true);
+  });
+
+  it("isDuplicate=false para fatura sem fornecedor ligado nem NIF (sem âncora para comparar)", async () => {
+    await repo.save(ORG_ID, makeInvoice({ invoiceNumber: "SOLO-001" }));
+    await repo.save(ORG_ID, makeInvoice({ invoiceNumber: "SOLO-001" }));
+
+    const result = await useCase.execute(ORG_ID);
+    expect(result.every((dto) => !dto.isDuplicate)).toBe(true);
+  });
 });

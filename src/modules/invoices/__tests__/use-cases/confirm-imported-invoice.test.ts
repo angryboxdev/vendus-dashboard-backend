@@ -163,6 +163,32 @@ describe("ConfirmImportedInvoiceUseCase", () => {
     ).rejects.toThrow(DuplicateInvoiceError);
   });
 
+  it("lança DuplicateInvoiceError ao confirmar por supplierId mesmo sem NIF extraído (regressão: bloqueio não disparava)", async () => {
+    const existing = Invoice.createFromImport({
+      supplierId: "sup-dream-plus",
+      supplierName: "Dream Plus Comércio e Distribuição Produtos Alimentares Lda",
+      supplierNifSnapshot: null,
+      invoiceNumber: "55199",
+      invoiceDate: new Date("2026-08-01"),
+      dueDate: null,
+      subtotalWithoutVat: 50000,
+      totalVat: 11500,
+      totalWithVat: 61500,
+      source: "pdf_import",
+      attachmentUrl: null,
+      aiConfidence: 0.9,
+      requiresReview: false,
+    });
+    await invoiceRepo.save(ORG_ID, existing);
+
+    const draft = makeDraftInvoice({ supplierId: undefined, supplierNifSnapshot: null, invoiceNumber: "55199" });
+    await invoiceRepo.save(ORG_ID, draft);
+
+    await expect(
+      useCase.execute({ organizationId: ORG_ID, id: draft.id, supplierId: "sup-dream-plus", invoiceNumber: "55199" }),
+    ).rejects.toThrow(DuplicateInvoiceError);
+  });
+
   it("não lança DuplicateInvoiceError ao confirmar a mesma fatura (excludeId correto)", async () => {
     const draft = makeDraftInvoice({ supplierNifSnapshot: "500123456" });
     await invoiceRepo.save(ORG_ID, draft);

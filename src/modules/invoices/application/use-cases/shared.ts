@@ -79,6 +79,7 @@ export function toInvoiceDTO(
   invoice: Invoice,
   lines?: InvoiceLine[],
   categoryMap: Map<string, CategoryLookup> = new Map(),
+  isDuplicate = false,
 ): InvoiceDTO {
   const dto: InvoiceDTO = {
     id: invoice.id,
@@ -107,6 +108,7 @@ export function toInvoiceDTO(
     aiExtractionStatus: invoice.aiExtractionStatus,
     aiConfidence: invoice.aiConfidence,
     requiresReview: invoice.requiresReview,
+    isDuplicate,
     costCenterGroupId: invoice.costCenterGroupId,
     costCenterCategoryId: invoice.costCenterCategoryId,
     financialType: invoice.financialType,

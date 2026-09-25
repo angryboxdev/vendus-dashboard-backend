@@ -305,4 +305,51 @@ describe("ImportInvoiceUseCase", () => {
     expect(result.validationIssues).toContain("duplicate_invoice");
     expect(result.invoice.requiresReview).toBe(true);
   });
+
+  it("adiciona duplicate_invoice quando o NIF não é extraído mas o fornecedor é resolvido por nome (regressão: alerta não disparava)", async () => {
+    supplierLookup.seed([
+      {
+        id: "sup-dream-plus",
+        name: "Dream Plus Comércio e Distribuição Produtos Alimentares Lda",
+        nif: "500999888",
+        defaultCostCenterGroupId: null,
+        defaultCostCenterCategoryId: null,
+        defaultFinancialType: null,
+      },
+    ]);
+    // Este scan não extraiu o NIF — só o nome do fornecedor, resolvido por fuzzy match.
+    aiExtraction.setResult({
+      supplierNif: null,
+      supplierName: "Dream Plus Comércio e Distribuição Produtos Alimentares Lda",
+      invoiceNumber: "55199",
+    });
+
+    const { Invoice } = await import("../../domain/entities/invoice.js");
+    const existing = Invoice.createFromImport({
+      supplierId: "sup-dream-plus",
+      supplierName: "Dream Plus Comércio e Distribuição Produtos Alimentares Lda",
+      supplierNifSnapshot: "500999888",
+      invoiceNumber: "55199",
+      invoiceDate: new Date("2026-08-01"),
+      dueDate: null,
+      subtotalWithoutVat: 50000,
+      totalVat: 11500,
+      totalWithVat: 61500,
+      source: "pdf_import",
+      attachmentUrl: null,
+      aiConfidence: 0.9,
+      requiresReview: false,
+    });
+    await invoiceRepo.save(ORG_ID, existing);
+
+    const result = await useCase.execute({
+      organizationId: ORG_ID,
+      fileBuffer: makeBuffer(),
+      filename: "fatura.pdf",
+      mimeType: "application/pdf",
+    });
+
+    expect(result.supplierMatch?.id).toBe("sup-dream-plus");
+    expect(result.validationIssues).toContain("duplicate_invoice");
+  });
 });

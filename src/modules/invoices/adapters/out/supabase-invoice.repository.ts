@@ -9,6 +9,7 @@ import {
   type LineDetailMode,
 } from "../../domain/entities/invoice.js";
 import type { InvoiceFilter, InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
+import { normalizeNif } from "../../domain/utils/nif.js";
 
 function toEntity(row: Record<string, unknown>): Invoice {
   return Invoice.reconstitute({
@@ -188,10 +189,12 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
     supplierId: string,
     excludeId?: string,
   ): Promise<Invoice | null> {
+    // ilike sem wildcards é uma comparação exacta case-insensitive — tolera
+    // faturas gravadas com capitalização diferente do mesmo número.
     let q = this.scopedQuery(organizationId)
       .table("invoices")
       .select("*")
-      .eq("invoice_number", invoiceNumber)
+      .ilike("invoice_number", invoiceNumber.trim())
       .eq("supplier_id", supplierId)
       .neq("status", "cancelled")
       .limit(1);
@@ -220,17 +223,25 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
     supplierNif: string,
     excludeId?: string,
   ): Promise<Invoice | null> {
+    // supplier_nif_snapshot é gravado tal como a IA o extraiu (ou o utilizador
+    // o editou), sem normalização — comparar com .eq() falha sempre que o
+    // mesmo NIF aparece formatado de forma diferente entre duas faturas (ex:
+    // espaços, pontos, hífens). Filtra candidatos por número (case-insensitive)
+    // e status, e decide o match final em memória usando normalizeNif().
     let q = this.scopedQuery(organizationId)
       .table("invoices")
       .select("*")
-      .eq("invoice_number", invoiceNumber)
-      .eq("supplier_nif_snapshot", supplierNif)
-      .neq("status", "cancelled")
-      .limit(1);
+      .ilike("invoice_number", invoiceNumber.trim())
+      .not("supplier_nif_snapshot", "is", null)
+      .neq("status", "cancelled");
     if (excludeId) q = q.neq("id", excludeId);
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    if (!data || data.length === 0) return null;
-    return toEntity(data[0] as unknown as Record<string, unknown>);
+
+    const target = normalizeNif(supplierNif);
+    const match = ((data ?? []) as unknown as Record<string, unknown>[]).find(
+      (row) => normalizeNif(String(row["supplier_nif_snapshot"] ?? "")) === target,
+    );
+    return match ? toEntity(match) : null;
   }
 }
