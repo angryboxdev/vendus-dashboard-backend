@@ -141,13 +141,11 @@ function buildStatementPdf(data: SupplierStatementDTO, organization: Organizatio
 
     // Cabeçalho da tabela
     const cols = {
-      num:      { x: 40,   w: 80 },
-      date:     { x: 124,  w: 68 },
-      due:      { x: 196,  w: 68 },
-      netVal:   { x: 268,  w: 72 },
-      vat:      { x: 344,  w: 60 },
-      total:    { x: 408,  w: 72 },
-      status:   { x: 484,  w: 72 },
+      num:      { x: 40,   w: 110 },
+      date:     { x: 150,  w: 85 },
+      due:      { x: 235,  w: 85 },
+      total:    { x: 320,  w: 100 },
+      status:   { x: 420,  w: 95 },
     };
 
     const headerY = doc.y;
@@ -157,8 +155,6 @@ function buildStatementPdf(data: SupplierStatementDTO, organization: Organizatio
     doc.text("Nº Fatura",    cols.num.x + 4,    headerY + 5, { width: cols.num.w });
     doc.text("Emissão",      cols.date.x,        headerY + 5, { width: cols.date.w });
     doc.text("Vencimento",   cols.due.x,         headerY + 5, { width: cols.due.w });
-    doc.text("Valor s/ IVA", cols.netVal.x,      headerY + 5, { width: cols.netVal.w, align: "right" });
-    doc.text("IVA",          cols.vat.x,         headerY + 5, { width: cols.vat.w, align: "right" });
     doc.text("Total c/ IVA", cols.total.x,       headerY + 5, { width: cols.total.w, align: "right" });
     doc.text("Estado",       cols.status.x,      headerY + 5, { width: cols.status.w });
 
@@ -183,8 +179,6 @@ function buildStatementPdf(data: SupplierStatementDTO, organization: Organizatio
       doc.text(inv.invoiceNumber,             cols.num.x + 4,   ry, { width: cols.num.w });
       doc.text(formatDate(inv.invoiceDate),   cols.date.x,      ry, { width: cols.date.w });
       doc.text(formatDate(inv.dueDate),       cols.due.x,       ry, { width: cols.due.w });
-      doc.text(formatMoney(inv.totalWithoutVat), cols.netVal.x, ry, { width: cols.netVal.w, align: "right" });
-      doc.text(formatMoney(inv.vatAmount),    cols.vat.x,       ry, { width: cols.vat.w, align: "right" });
       doc.text(formatMoney(inv.totalWithVat), cols.total.x,     ry, { width: cols.total.w, align: "right" });
       doc.text(STATUS_LABELS[inv.status] ?? inv.status, cols.status.x, ry, { width: cols.status.w });
 
