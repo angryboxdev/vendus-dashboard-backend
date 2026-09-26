@@ -15,6 +15,7 @@ export class FakeAiExtractionPort implements AiExtractionPort {
     totalWithVat: 123000,
     currency: "EUR",
     confidence: 0.92,
+    documentType: "invoice",
     lines: [],
     validationIssues: [],
   };

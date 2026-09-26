@@ -6,8 +6,7 @@ import type {
   GenerateBatchCommand,
   BatchGenerationResult,
 } from "../../domain/ports/in/batch.ports.js";
-import type { OccurrenceDTO } from "../../domain/ports/in/occurrence.ports.js";
-import { toOccurrenceDTO } from "./shared.js";
+import { toOccurrenceDTO, ensureOccurrencesForPeriod } from "./shared.js";
 
 export class GenerateBatchOccurrencesUseCase implements GenerateBatchOccurrencesPort {
   private readonly generator = new OccurrenceGeneratorService();
@@ -20,29 +19,15 @@ export class GenerateBatchOccurrencesUseCase implements GenerateBatchOccurrences
   async execute(command: GenerateBatchCommand): Promise<BatchGenerationResult> {
     const { organizationId } = command;
     const period = this.generator.toPeriod(command.year, command.month);
-    const activeRecurrences = await this.recurrenceRepo.findAll(organizationId, { status: "active" });
 
-    const generated: OccurrenceDTO[] = [];
-    let skippedAlreadyExists = 0;
-    let skippedOutOfScope = 0;
+    const { generated, skippedAlreadyExists, skippedOutOfScope } = await ensureOccurrencesForPeriod(
+      organizationId,
+      command.year,
+      command.month,
+      this.recurrenceRepo,
+      this.occurrenceRepo,
+    );
 
-    for (const recurrence of activeRecurrences) {
-      const existing = await this.occurrenceRepo.findByRecurrenceAndPeriod(organizationId, recurrence.id, period);
-      if (existing) {
-        skippedAlreadyExists++;
-        continue;
-      }
-
-      const occurrence = this.generator.generateForMonth(recurrence, command.year, command.month);
-      if (!occurrence) {
-        skippedOutOfScope++;
-        continue;
-      }
-
-      await this.occurrenceRepo.save(organizationId, occurrence);
-      generated.push(toOccurrenceDTO(occurrence));
-    }
-
-    return { period, generated, skippedAlreadyExists, skippedOutOfScope };
+    return { period, generated: generated.map((o) => toOccurrenceDTO(o)), skippedAlreadyExists, skippedOutOfScope };
   }
 }

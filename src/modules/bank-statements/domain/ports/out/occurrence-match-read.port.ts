@@ -20,6 +20,11 @@ export interface OccurrenceMatchCandidate {
   effectiveAmountCents: number; // realAmountCents ?? estimatedAmountCents
   dueDate: string;         // YYYY-MM-DD
   status: string;          // forecast | awaiting_invoice | paid | cancelled
+  /** Classificação da recorrência-mãe — usada para auto-preencher o drawer "Justificar despesa → Contrato/Recorrência" (só campos ainda vazios, nunca sobrescreve edição manual). */
+  costCenterGroupId: string | null;
+  costCenterCategoryId: string | null;
+  vatRate: number | null;
+  vatIncluded: boolean | null;
 }
 
 export interface OccurrenceMatchReadPort {
@@ -34,6 +39,8 @@ export interface OccurrenceMatchReadPort {
       q?: string;
       dateFrom?: string; // YYYY-MM-DD
       dateTo?: string;   // YYYY-MM-DD
+      /** Quando presente, ordena os resultados pela proximidade a esta data (sempre — nunca restringe/exclui). Normalmente a bookingDate do movimento bancário. */
+      referenceDate?: string; // YYYY-MM-DD
       limit?: number;
     }
   ): Promise<OccurrenceMatchCandidate[]>;

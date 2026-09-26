@@ -1,4 +1,4 @@
-import { RecurrenceOccurrence } from "../../domain/entities/recurrence-occurrence.js";
+import { RecurrenceOccurrence, computeOccurrenceDisplayState } from "../../domain/entities/recurrence-occurrence.js";
 import { OccurrenceInvalidTransitionError, OccurrenceInvoiceRequiredError } from "../../domain/errors.js";
 
 const BASE_PROPS = {
@@ -107,5 +107,50 @@ describe("RecurrenceOccurrence.cancel", () => {
   it("lança erro ao cancelar já cancelado", () => {
     const occ = RecurrenceOccurrence.create(BASE_PROPS).cancel();
     expect(() => occ.cancel()).toThrow(OccurrenceInvalidTransitionError);
+  });
+});
+
+describe("computeOccurrenceDisplayState", () => {
+  const TODAY = new Date("2026-09-25");
+
+  it("cancelled tem prioridade sobre tudo", () => {
+    const occ = RecurrenceOccurrence.create(BASE_PROPS).cancel();
+    expect(computeOccurrenceDisplayState(occ, 0, TODAY)).toBe("cancelled");
+  });
+
+  it("awaiting_invoice quando requireInvoice=true e ainda sem fatura", () => {
+    const occ = RecurrenceOccurrence.create({ ...BASE_PROPS, requireInvoice: true, dueDate: new Date("2027-01-01") });
+    expect(computeOccurrenceDisplayState(occ, 0, TODAY)).toBe("awaiting_invoice");
+  });
+
+  it("awaiting_payment quando pronta a pagar, vencimento no futuro, sem pagamento", () => {
+    const occ = RecurrenceOccurrence.create({ ...BASE_PROPS, dueDate: new Date("2027-01-01") });
+    expect(computeOccurrenceDisplayState(occ, 0, TODAY)).toBe("awaiting_payment");
+  });
+
+  it("overdue quando vencimento já passou e continua sem pagamento", () => {
+    const occ = RecurrenceOccurrence.create({ ...BASE_PROPS, dueDate: new Date("2026-01-01") });
+    expect(computeOccurrenceDisplayState(occ, 0, TODAY)).toBe("overdue");
+  });
+
+  it("partially_paid quando paidAmountCents > 0 mas abaixo do efectivo (fora da tolerância)", () => {
+    const occ = RecurrenceOccurrence.create({ ...BASE_PROPS, estimatedAmountCents: 100_000, dueDate: new Date("2027-01-01") });
+    expect(computeOccurrenceDisplayState(occ, 50_000, TODAY)).toBe("partially_paid");
+  });
+
+  it("paid quando paidAmountCents cobre o efectivo dentro da tolerância de 100 cêntimos", () => {
+    const occ = RecurrenceOccurrence.create({ ...BASE_PROPS, estimatedAmountCents: 100_000, dueDate: new Date("2027-01-01") });
+    expect(computeOccurrenceDisplayState(occ, 99_950, TODAY)).toBe("paid");
+  });
+
+  it("paid quando status já é 'paid', mesmo que paidAmountCents seja 0 (pagamento manual sem movimento bancário)", () => {
+    const occ = RecurrenceOccurrence.create(BASE_PROPS).markPaid(new Date("2026-09-20"));
+    expect(computeOccurrenceDisplayState(occ, 0, TODAY)).toBe("paid");
+  });
+
+  it("awaiting_payment para invoice_linked com vencimento no futuro", () => {
+    const occ = RecurrenceOccurrence.create({ ...BASE_PROPS, requireInvoice: true, dueDate: new Date("2027-01-01") })
+      .linkInvoice("inv-1", 26175);
+    expect(computeOccurrenceDisplayState(occ, 0, TODAY)).toBe("awaiting_payment");
   });
 });

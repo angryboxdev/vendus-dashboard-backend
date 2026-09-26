@@ -10,7 +10,7 @@ export class CloseRecurrenceUseCase implements CloseRecurrencePort {
     const recurrence = await this.repo.findById(command.organizationId, command.id);
     if (!recurrence) throw new RecurrenceNotFoundError(command.id);
 
-    const closed = recurrence.close();
+    const closed = recurrence.close(new Date(command.closedAt));
     await this.repo.update(command.organizationId, closed);
     return toRecurrenceDTO(closed);
   }

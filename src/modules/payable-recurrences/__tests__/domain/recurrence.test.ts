@@ -90,13 +90,14 @@ describe("Recurrence.pause / resume / close", () => {
     expect(r.status).toBe("active");
   });
 
-  it("fecha uma recorrência activa", () => {
-    const r = Recurrence.create(BASE).close();
+  it("fecha uma recorrência activa, guardando a data de finalização", () => {
+    const r = Recurrence.create(BASE).close(new Date("2026-09-30"));
     expect(r.status).toBe("closed");
+    expect(r.closedAt).toEqual(new Date("2026-09-30"));
   });
 
   it("fecha uma recorrência pausada", () => {
-    const r = Recurrence.create(BASE).pause().close();
+    const r = Recurrence.create(BASE).pause().close(new Date("2026-09-30"));
     expect(r.status).toBe("closed");
   });
 
@@ -110,13 +111,13 @@ describe("Recurrence.pause / resume / close", () => {
   });
 
   it("lança RecurrenceClosedError ao pausar encerrada", () => {
-    const r = Recurrence.create(BASE).close();
+    const r = Recurrence.create(BASE).close(new Date("2026-09-30"));
     expect(() => r.pause()).toThrow(RecurrenceClosedError);
   });
 
   it("lança RecurrenceClosedError ao fechar já encerrada", () => {
-    const r = Recurrence.create(BASE).close();
-    expect(() => r.close()).toThrow(RecurrenceClosedError);
+    const r = Recurrence.create(BASE).close(new Date("2026-09-30"));
+    expect(() => r.close(new Date("2026-10-15"))).toThrow(RecurrenceClosedError);
   });
 });
 
@@ -128,7 +129,7 @@ describe("Recurrence.update", () => {
   });
 
   it("lança erro ao editar recorrência encerrada", () => {
-    const r = Recurrence.create(BASE).close();
+    const r = Recurrence.create(BASE).close(new Date("2026-09-30"));
     expect(() => r.update({ estimatedAmountCents: 150000 })).toThrow(RecurrenceClosedError);
   });
 

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import PDFDocument from "pdfkit";
+import path from "node:path";
 import type { OrganizationIdentity } from "../../domain/entities/organization-identity.js";
 import {
   CostCenterGroupNotFoundError,
@@ -50,22 +51,33 @@ function formatDate(date: Date | string | null | undefined): string {
   return DATE_FMT.format(typeof date === "string" ? new Date(date) : date);
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  paid: "Paga",
-  pending: "Pendente",
-  overdue: "Vencida",
-  partial: "Parcial",
-  cancelled: "Anulada",
-  draft_ai: "Rascunho IA",
-  pending_review: "Em revisão",
+// ── Geração de PDF — Extrato de Conta Corrente ────────────────────────────────
+
+type LineKind = "invoice" | "credit_note" | "payment" | "settlement";
+
+const KIND_BADGE: Record<LineKind, { label: string; bg: string; text: string }> = {
+  invoice: { label: "Fatura", bg: "#dbeafe", text: "#1d4ed8" },
+  credit_note: { label: "Nota de crédito", bg: "#fee2e2", text: "#b91c1c" },
+  payment: { label: "Liquidação", bg: "#d1fae5", text: "#047857" },
+  settlement: { label: "Liquidação", bg: "#d1fae5", text: "#047857" },
 };
 
-// ── Geração de PDF ────────────────────────────────────────────────────────────
+const KIND_PREFIX: Record<LineKind, string> = {
+  invoice: "FT ",
+  credit_note: "NC ",
+  payment: "PG ",
+  settlement: "",
+};
+
+// Relativo ao cwd (não a __dirname), para resolver igual em dev (tsx a
+// partir de src/) e em produção (node a partir de dist/) — ambos correm com
+// cwd = raiz do repositório.
+const LOGO_PATH = path.join(process.cwd(), "assets", "angry-box-logo.png");
 
 function buildStatementPdf(data: SupplierStatementDTO, organization: OrganizationIdentity): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    const doc = new PDFDocument({ margin: 40, size: "A4" });
+    const doc = new PDFDocument({ margin: 40, size: "A4", bufferPages: true });
 
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
@@ -76,132 +88,211 @@ function buildStatementPdf(data: SupplierStatementDTO, organization: Organizatio
     const dark = "#111827";
     const accent = "#ED5C32";
     const lineGray = "#e5e7eb";
+    const cardBg = "#f9fafb";
+    const greenBg = "#ecfdf5";
+    const greenBorder = "#a7f3d0";
+    const greenText = "#047857";
+    const amberBg = "#fef3c7";
+    const amberText = "#b45309";
+    const redText = "#b91c1c";
+
+    function badge(text: string, x: number, y: number, bg: string, textColor: string, align: "left" | "right" = "left"): number {
+      doc.fontSize(8).font("Helvetica-Bold");
+      const textWidth = doc.widthOfString(text);
+      const w = textWidth + 14;
+      const bx = align === "right" ? x - w : x;
+      doc.roundedRect(bx, y, w, 16, 8).fill(bg);
+      doc.fillColor(textColor).text(text, bx, y + 4, { width: w, align: "center" });
+      return w;
+    }
 
     // ── Cabeçalho ───────────────────────────────────────────────────────────
-    doc
-      .fontSize(18).fillColor(accent).font("Helvetica-Bold")
-      .text("Extrato de Fornecedor", 40, 40);
-
-    doc.fontSize(9).fillColor(gray).font("Helvetica")
-      .text(organization.name || "—", 40, 66)
-      .text(`NIF: ${organization.nif || "—"}`, 40, 78)
-      .text(organization.address || "", 40, 90);
-
-    // Período (canto direito)
     const periodLabel = (() => {
       const { startDate, endDate } = data.period;
-      if (startDate && endDate) return `${formatDate(startDate)} – ${formatDate(endDate)}`;
+      if (startDate && endDate) return `${formatDate(startDate)} a ${formatDate(endDate)}`;
       if (startDate) return `A partir de ${formatDate(startDate)}`;
       if (endDate) return `Até ${formatDate(endDate)}`;
       return "Histórico completo";
     })();
-    doc.text(`Período: ${periodLabel}`, 40, 66, { align: "right", width: pageWidth });
-    doc.text(`Gerado em: ${formatDate(new Date())}`, 40, 78, { align: "right", width: pageWidth });
 
-    // Linha separadora
-    doc.moveTo(40, 112).lineTo(40 + pageWidth, 112).strokeColor(lineGray).lineWidth(1).stroke();
-
-    // ── Dados do fornecedor ──────────────────────────────────────────────────
-    const s = data.supplier;
-    doc.y = 120;
-    doc.fontSize(11).fillColor(dark).font("Helvetica-Bold").text(s.name, 40);
-    doc.fontSize(9).fillColor(gray).font("Helvetica");
-
-    const supplierFields: [string, string | null | undefined][] = [
-      ["NIF", s.nif],
-      ["Email", s.email],
-      ["Telefone", s.phone],
-      ["Prazo de pagamento", s.paymentTermsDays ? `${s.paymentTermsDays} dias` : null],
-    ];
-    for (const [label, value] of supplierFields) {
-      if (value) doc.text(`${label}: ${value}`, 40);
+    try {
+      doc.image(LOGO_PATH, 40, 36, { width: 54 });
+    } catch {
+      // Logotipo indisponível (ex: asset não copiado neste ambiente) — não bloqueia a geração do PDF.
     }
 
-    // ── KPI cards (linha) ────────────────────────────────────────────────────
-    const kpiY = doc.y + 14;
-    const kpiW = pageWidth / 3;
-    const kpis: [string, string][] = [
-      ["Total faturado", formatMoney(data.stats.totalBilled)],
-      ["Total pago", formatMoney(data.stats.totalPaid)],
-      ["Total pendente", formatMoney(data.stats.totalPending)],
-    ];
+    doc.fontSize(18).fillColor(dark).font("Helvetica-Bold")
+      .text("Extrato de Conta Corrente", 40, 40, { align: "right", width: pageWidth });
+    doc.fontSize(8).fillColor(gray).font("Helvetica")
+      .text(`Período: ${periodLabel}`, 40, 64, { align: "right", width: pageWidth })
+      .text(`Emissão: ${formatDate(new Date())} | Moeda: EUR`, 40, 76, { align: "right", width: pageWidth });
 
-    kpis.forEach(([label, value], i) => {
-      const x = 40 + i * kpiW;
-      doc.rect(x, kpiY, kpiW - 8, 38).fillAndStroke("#f9fafb", lineGray);
-      doc.fontSize(7).fillColor(gray).font("Helvetica").text(label, x + 6, kpiY + 6, { width: kpiW - 20 });
-      doc.fontSize(12).fillColor(dark).font("Helvetica-Bold").text(value, x + 6, kpiY + 17, { width: kpiW - 20 });
+    const reconciledBadge = data.isReconciled
+      ? { label: "Conta corrente conciliada", bg: greenBg, text: greenText }
+      : { label: "Saldo em aberto", bg: amberBg, text: amberText };
+    badge(reconciledBadge.label, 40 + pageWidth, 94, reconciledBadge.bg, reconciledBadge.text, "right");
+
+    doc.moveTo(40, 122).lineTo(40 + pageWidth, 122).strokeColor(lineGray).lineWidth(1).stroke();
+
+    // ── Cartões Emitente / Fornecedor ────────────────────────────────────────
+    const cardY = 134;
+    const cardGap = 14;
+    const cardW = (pageWidth - cardGap) / 2;
+    const cardH = 82;
+
+    doc.rect(40, cardY, cardW, cardH).fillAndStroke("#ffffff", lineGray);
+    doc.rect(40 + cardW + cardGap, cardY, cardW, cardH).fillAndStroke("#ffffff", lineGray);
+
+    doc.fontSize(7).fillColor(gray).font("Helvetica-Bold").text("EMITENTE", 40 + 10, cardY + 10);
+    doc.fontSize(10).fillColor(dark).font("Helvetica-Bold").text(organization.name || "—", 40 + 10, cardY + 22, { width: cardW - 20 });
+    doc.fontSize(8).fillColor(gray).font("Helvetica")
+      .text(`NIF: ${organization.nif || "—"}`, 40 + 10, cardY + 36, { width: cardW - 20 })
+      .text(organization.address || "", 40 + 10, cardY + 47, { width: cardW - 20 });
+
+    const supX = 40 + cardW + cardGap + 10;
+    doc.fontSize(7).fillColor(gray).font("Helvetica-Bold").text("FORNECEDOR", supX, cardY + 10);
+    doc.fontSize(10).fillColor(dark).font("Helvetica-Bold").text(data.supplier.name, supX, cardY + 22, { width: cardW - 20 });
+    doc.fontSize(8).fillColor(gray).font("Helvetica")
+      .text(`NIF: ${data.supplier.nif || "—"}`, supX, cardY + 36, { width: cardW - 20 });
+    doc.fillColor(gray).text("Saldo inicial considerado: ", supX, cardY + 48, { continued: true, width: cardW - 20 })
+      .fillColor(dark).font("Helvetica-Bold").text(formatMoney(data.openingBalance));
+
+    // ── KPI cards ─────────────────────────────────────────────────────────────
+    const kpiY = cardY + cardH + 14;
+    const kpiGap = 8;
+    const kpiW = (pageWidth - kpiGap * 3) / 4;
+    const kpis: [string, string, boolean][] = [
+      ["FATURAÇÃO (FT)", formatMoney(data.totalInvoiced), false],
+      ["NOTAS DE CRÉDITO", formatMoney(data.totalCreditNotes), false],
+      ["TOTAL MOVIMENTADO", formatMoney(data.totalMovement), false],
+      ["SALDO FINAL", formatMoney(data.finalBalance), true],
+    ];
+    kpis.forEach(([label, value, isBalance], i) => {
+      const x = 40 + i * (kpiW + kpiGap);
+      const highlight = isBalance && data.isReconciled;
+      doc.rect(x, kpiY, kpiW, 42).fillAndStroke(highlight ? greenBg : cardBg, highlight ? greenBorder : lineGray);
+      doc.fontSize(6.5).fillColor(gray).font("Helvetica-Bold").text(label, x + 8, kpiY + 8, { width: kpiW - 16 });
+      const valueColor = isBalance ? (data.isReconciled ? greenText : data.finalBalance > 0 ? redText : dark) : dark;
+      doc.fontSize(12).fillColor(valueColor).font("Helvetica-Bold").text(value, x + 8, kpiY + 20, { width: kpiW - 16 });
     });
 
-    doc.y = kpiY + 48;
+    // ── Tabela "Movimentos e Conciliação" ────────────────────────────────────
+    let y = kpiY + 42 + 18;
+    doc.fontSize(10).fillColor(dark).font("Helvetica-Bold").text("Movimentos e Conciliação", 40, y);
+    doc.fontSize(8).fillColor(gray).font("Helvetica")
+      .text("(por data de emissão)", 40, y, { align: "right", width: pageWidth });
+    y += 20;
 
-    // ── Tabela de faturas ────────────────────────────────────────────────────
-    doc.fontSize(10).fillColor(dark).font("Helvetica-Bold").text("Faturas", 40, doc.y + 6);
-    doc.y += 22;
-
-    // Cabeçalho da tabela
     const cols = {
-      num:      { x: 40,   w: 110 },
-      date:     { x: 150,  w: 85 },
-      due:      { x: 235,  w: 85 },
-      total:    { x: 320,  w: 100 },
-      status:   { x: 420,  w: 95 },
+      date: { x: 40, w: 60 },
+      doc: { x: 100, w: 135 },
+      kind: { x: 235, w: 85 },
+      invoiced: { x: 320, w: 75 },
+      credit: { x: 395, w: 90 },
+      balance: { x: 485, w: 70 },
     };
 
-    const headerY = doc.y;
-    doc.rect(40, headerY, pageWidth, 18).fill("#f3f4f6");
+    function drawTableHeader(headerY: number): void {
+      doc.rect(40, headerY, pageWidth, 18).fill("#f3f4f6");
+      doc.fontSize(7).fillColor(gray).font("Helvetica-Bold");
+      doc.text("DATA", cols.date.x + 4, headerY + 6, { width: cols.date.w });
+      doc.text("DOCUMENTO", cols.doc.x, headerY + 6, { width: cols.doc.w });
+      doc.text("TIPO", cols.kind.x, headerY + 6, { width: cols.kind.w });
+      doc.text("FATURADO", cols.invoiced.x, headerY + 6, { width: cols.invoiced.w, align: "right" });
+      doc.text("N. CRÉDITO / LIQ.", cols.credit.x, headerY + 6, { width: cols.credit.w, align: "right" });
+      doc.text("SALDO", cols.balance.x, headerY + 6, { width: cols.balance.w - 4, align: "right" });
+    }
 
-    doc.fontSize(7).fillColor(gray).font("Helvetica-Bold");
-    doc.text("Nº Fatura",    cols.num.x + 4,    headerY + 5, { width: cols.num.w });
-    doc.text("Emissão",      cols.date.x,        headerY + 5, { width: cols.date.w });
-    doc.text("Vencimento",   cols.due.x,         headerY + 5, { width: cols.due.w });
-    doc.text("Total c/ IVA", cols.total.x,       headerY + 5, { width: cols.total.w, align: "right" });
-    doc.text("Estado",       cols.status.x,      headerY + 5, { width: cols.status.w });
+    drawTableHeader(y);
+    y += 18;
 
-    doc.y = headerY + 18;
+    const ROW_H = 20;
+    for (let i = 0; i < data.lines.length; i++) {
+      const line = data.lines[i]!;
 
-    // Linhas de dados
-    for (let i = 0; i < data.invoices.length; i++) {
-      const inv = data.invoices[i]!;
-      const rowY = doc.y;
-
-      // Nova página se necessário (rodapé reserva 60px)
-      if (rowY > doc.page.height - 80) {
+      if (y > doc.page.height - 100) {
         doc.addPage();
-        doc.y = 40;
+        y = 40;
+        drawTableHeader(y);
+        y += 18;
       }
 
       const bg = i % 2 === 0 ? "#ffffff" : "#f9fafb";
-      doc.rect(40, doc.y, pageWidth, 16).fill(bg);
+      doc.rect(40, y, pageWidth, ROW_H).fill(bg);
 
+      const ry = y + 5;
       doc.fontSize(8).fillColor(dark).font("Helvetica");
-      const ry = doc.y + 4;
-      doc.text(inv.invoiceNumber,             cols.num.x + 4,   ry, { width: cols.num.w });
-      doc.text(formatDate(inv.invoiceDate),   cols.date.x,      ry, { width: cols.date.w });
-      doc.text(formatDate(inv.dueDate),       cols.due.x,       ry, { width: cols.due.w });
-      doc.text(formatMoney(inv.totalWithVat), cols.total.x,     ry, { width: cols.total.w, align: "right" });
-      doc.text(STATUS_LABELS[inv.status] ?? inv.status, cols.status.x, ry, { width: cols.status.w });
+      doc.text(line.date ? formatDate(new Date(line.date)) : "-", cols.date.x + 4, ry, { width: cols.date.w });
+      doc.text(`${KIND_PREFIX[line.kind]}${line.documentNumber ?? "-"}`, cols.doc.x, ry, { width: cols.doc.w });
 
-      doc.y += 16;
+      const kindStyle = KIND_BADGE[line.kind];
+      badge(kindStyle.label, cols.kind.x, y + 3, kindStyle.bg, kindStyle.text);
+
+      doc.fillColor(dark).font("Helvetica");
+      doc.text(line.invoicedAmount != null ? formatMoney(line.invoicedAmount) : "-", cols.invoiced.x, ry, { width: cols.invoiced.w, align: "right" });
+      doc.text(line.creditOrSettlementAmount != null ? formatMoney(line.creditOrSettlementAmount) : "-", cols.credit.x, ry, { width: cols.credit.w, align: "right" });
+      doc.font("Helvetica-Bold").text(formatMoney(line.runningBalance), cols.balance.x, ry, { width: cols.balance.w - 4, align: "right" });
+
+      y += ROW_H;
     }
 
-    // Linha de total
-    doc.moveTo(40, doc.y).lineTo(40 + pageWidth, doc.y).strokeColor(lineGray).lineWidth(0.5).stroke();
-    doc.y += 6;
+    // Linha de totais
+    doc.moveTo(40, y).lineTo(40 + pageWidth, y).strokeColor(lineGray).lineWidth(0.5).stroke();
+    y += 6;
     doc.fontSize(8).fillColor(dark).font("Helvetica-Bold");
-    doc.text(`${data.stats.invoiceCount} fatura(s)`, cols.num.x + 4, doc.y, { width: cols.num.w });
-    doc.text(formatMoney(data.stats.totalBilled), cols.total.x, doc.y, { width: cols.total.w, align: "right" });
+    doc.text("TOTAIS:", cols.doc.x, y, { width: cols.doc.w });
+    doc.text(formatMoney(data.totalInvoiced), cols.invoiced.x, y, { width: cols.invoiced.w, align: "right" });
+    doc.text(formatMoney(data.totalMovement - data.totalInvoiced), cols.credit.x, y, { width: cols.credit.w, align: "right" });
+    doc.text(formatMoney(data.finalBalance), cols.balance.x, y, { width: cols.balance.w - 4, align: "right" });
+    y += 24;
 
-    // ── Rodapé ───────────────────────────────────────────────────────────────
-    const footerY = doc.page.height - 40;
-    doc.moveTo(40, footerY - 10).lineTo(40 + pageWidth, footerY - 10).strokeColor(lineGray).lineWidth(0.5).stroke();
-    doc.fontSize(7).fillColor(gray).font("Helvetica")
-      .text(
-        `Extrato gerado a partir das faturas registadas no Angrybox Hub em ${formatDate(new Date())}`,
-        40,
-        footerY - 4,
-        { width: pageWidth, align: "center" },
-      );
+    // ── Conferência / nota explicativa ────────────────────────────────────────
+    if (y > doc.page.height - 140) {
+      doc.addPage();
+      y = 40;
+    }
+
+    const hasSettlementLine = data.lines.some((l) => l.kind === "settlement");
+    const conferenceParts = [
+      `Conferência: ${data.documentCounts.invoices} fatura(s) + ${data.documentCounts.creditNotes} nota(s) de crédito`,
+      `Saldo documental líquido antes da conciliação: ${formatMoney(data.netDocumentBalanceBeforeSettlement)}`,
+      `Saldo final: ${formatMoney(data.finalBalance)}`,
+    ];
+    doc.rect(40, y, 3, hasSettlementLine ? 60 : 24).fill(accent);
+    doc.fontSize(8).fillColor(dark).font("Helvetica-Bold")
+      .text(conferenceParts.join(" | "), 52, y, { width: pageWidth - 20 });
+
+    if (hasSettlementLine) {
+      y += 24;
+      doc.fontSize(8).fillColor(dark).font("Helvetica-Bold").text("Nota: ", 52, y, { continued: true, width: pageWidth - 20 })
+        .font("Helvetica").fillColor(gray)
+        .text(
+          "O extrato de origem indica todos os documentos como liquidados, mas não discrimina as datas nem os valores dos pagamentos. " +
+          "A liquidação apresentada acima corresponde à conciliação matemática entre faturas, notas de crédito e o saldo final informado.",
+        );
+    }
+
+    // ── Rodapé (todas as páginas, com numeração) ─────────────────────────────
+    // Desativa temporariamente a margem inferior: escrever tão perto do fundo
+    // da página faz o pdfkit disparar uma quebra de página automática por
+    // conta própria (mesmo com x/y explícitos), criando páginas em branco.
+    const range = doc.bufferedPageRange();
+    const savedBottomMargin = doc.page.margins.bottom;
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+      doc.page.margins.bottom = 0;
+      const footerY = doc.page.height - 40;
+      doc.moveTo(40, footerY - 10).lineTo(40 + pageWidth, footerY - 10).strokeColor(lineGray).lineWidth(0.5).stroke();
+      doc.fontSize(7).fillColor(gray).font("Helvetica")
+        .text(
+          `${organization.name || "—"} NIF ${organization.nif || "—"} • Documento de conferência de conta corrente`,
+          40,
+          footerY - 4,
+          { width: pageWidth / 2, lineBreak: false },
+        );
+      doc.text(`Página ${i - range.start + 1} de ${range.count}`, 40 + pageWidth / 2, footerY - 4, { width: pageWidth / 2, align: "right", lineBreak: false });
+      doc.page.margins.bottom = savedBottomMargin;
+    }
 
     doc.end();
   });
@@ -642,12 +733,14 @@ export class FinancialBaseController {
 
     /**
      * GET /financial-base/suppliers/:id/statement-pdf
-     * Query: startDate? (YYYY-MM-DD), endDate? (YYYY-MM-DD)
-     * Devolve application/pdf com o extrato do fornecedor.
+     * Query: startDate? (YYYY-MM-DD), endDate? (YYYY-MM-DD),
+     *        openingBalance? (euros), informedFinalBalance? (euros)
+     * Devolve application/pdf com o extrato de conta corrente do fornecedor.
      */
     this.router.get("/financial-base/suppliers/:id/statement-pdf", async (req, res) => {
       try {
-        const { startDate: startStr, endDate: endStr } = req.query as Record<string, string | undefined>;
+        const { startDate: startStr, endDate: endStr, openingBalance: openingStr, informedFinalBalance: informedStr } =
+          req.query as Record<string, string | undefined>;
         const organizationId = req.auth!.orgId;
 
         const startDate = startStr ? new Date(startStr) : undefined;
@@ -662,12 +755,32 @@ export class FinancialBaseController {
           return;
         }
 
+        let openingBalance: number | undefined;
+        if (openingStr !== undefined && openingStr !== "") {
+          openingBalance = parseFloat(openingStr);
+          if (isNaN(openingBalance)) {
+            res.status(400).json({ error: "openingBalance inválido (usa um número, ex: 150.50)" });
+            return;
+          }
+        }
+
+        let informedFinalBalance: number | undefined;
+        if (informedStr !== undefined && informedStr !== "") {
+          informedFinalBalance = parseFloat(informedStr);
+          if (isNaN(informedFinalBalance)) {
+            res.status(400).json({ error: "informedFinalBalance inválido (usa um número, ex: 0)" });
+            return;
+          }
+        }
+
         const [data, organization] = await Promise.all([
           this.getSupplierStatement.execute({
             organizationId,
             id: req.params["id"] as string,
             ...(startDate && { startDate }),
             ...(endDate && { endDate }),
+            ...(openingBalance !== undefined && { openingBalance }),
+            ...(informedFinalBalance !== undefined && { informedFinalBalance }),
           }),
           this.getOrganizationIdentity.execute({ organizationId }),
         ]);

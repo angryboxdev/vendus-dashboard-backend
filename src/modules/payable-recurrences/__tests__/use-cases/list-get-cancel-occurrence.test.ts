@@ -7,6 +7,7 @@ import { CancelOccurrenceUseCase } from "../../application/use-cases/cancel-occu
 import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js";
 import { FakeOccurrenceRepository } from "../fakes/fake-occurrence-repository.js";
 import { FakeBankMovementLinkReadAdapter } from "../fakes/fake-bank-movement-link-read.js";
+import { FakeInvoiceAllocatedAmountReadAdapter } from "../fakes/fake-invoice-allocated-amount-read.js";
 import { OccurrenceNotFoundError } from "../../domain/errors.js";
 
 const organizationId = mintOrganizationId("org-a");
@@ -39,14 +40,15 @@ function make() {
   const recurrenceRepo = new FakeRecurrenceRepository();
   const occurrenceRepo = new FakeOccurrenceRepository();
   const bankMovementLinkRead = new FakeBankMovementLinkReadAdapter();
+  const invoiceAllocatedAmountRead = new FakeInvoiceAllocatedAmountReadAdapter();
   return {
     recurrenceRepo,
     occurrenceRepo,
     bankMovementLinkRead,
     create: new CreateRecurrenceUseCase(recurrenceRepo),
     generate: new GenerateOccurrenceUseCase(recurrenceRepo, occurrenceRepo),
-    list: new ListOccurrencesUseCase(occurrenceRepo, bankMovementLinkRead),
-    get: new GetOccurrenceUseCase(occurrenceRepo, bankMovementLinkRead),
+    list: new ListOccurrencesUseCase(occurrenceRepo, bankMovementLinkRead, invoiceAllocatedAmountRead),
+    get: new GetOccurrenceUseCase(occurrenceRepo, bankMovementLinkRead, invoiceAllocatedAmountRead),
     cancel: new CancelOccurrenceUseCase(occurrenceRepo),
   } as const;
 }

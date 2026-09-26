@@ -28,6 +28,9 @@ export type InvoiceLineType =
 
 export type InvoiceSource = "manual" | "pdf_import" | "image_import";
 
+/** Fatura = aumenta o valor devido ao fornecedor. Nota de crédito = reduz (totais guardados sempre negativos, ver normalizeAmountSign). */
+export type InvoiceDocumentType = "invoice" | "credit_note";
+
 export type AiExtractionStatus = "processing" | "done" | "failed";
 
 export const INVOICE_STATUSES: InvoiceStatus[] = [
@@ -53,6 +56,7 @@ interface InvoiceProps {
   subtotalWithoutVat: number;
   totalVat: number;
   totalWithVat: number;
+  documentType: InvoiceDocumentType;
   status: InvoiceStatus;
   reconciliationStatus: ReconciliationStatus;
   lineDetailMode: LineDetailMode;
@@ -89,6 +93,7 @@ export interface UpdateInvoiceData {
   subtotalWithoutVat?: number;
   totalVat?: number;
   totalWithVat?: number;
+  documentType?: InvoiceDocumentType;
   notes?: string | null;
   attachmentUrl?: string | null;
   costCenterGroupId?: string | null;
@@ -113,6 +118,7 @@ export interface ConfirmImportData {
   subtotalWithoutVat?: number;
   totalVat?: number;
   totalWithVat?: number;
+  documentType?: InvoiceDocumentType;
   notes?: string | null;
   costCenterGroupId?: string | null;
   costCenterCategoryId?: string | null;
@@ -137,6 +143,7 @@ export class Invoice {
   readonly subtotalWithoutVat: number;
   readonly totalVat: number;
   readonly totalWithVat: number;
+  readonly documentType: InvoiceDocumentType;
   readonly status: InvoiceStatus;
   readonly reconciliationStatus: ReconciliationStatus;
   readonly lineDetailMode: LineDetailMode;
@@ -174,6 +181,7 @@ export class Invoice {
     this.subtotalWithoutVat = props.subtotalWithoutVat;
     this.totalVat = props.totalVat;
     this.totalWithVat = props.totalWithVat;
+    this.documentType = props.documentType;
     this.status = props.status;
     this.reconciliationStatus = props.reconciliationStatus;
     this.lineDetailMode = props.lineDetailMode;
@@ -211,6 +219,7 @@ export class Invoice {
     subtotalWithoutVat: number;
     totalVat: number;
     totalWithVat: number;
+    documentType?: InvoiceDocumentType;
     notes?: string | null;
     attachmentUrl?: string | null;
     costCenterGroupId?: string | null;
@@ -224,6 +233,7 @@ export class Invoice {
     lineDetailMode?: LineDetailMode;
   }): Invoice {
     const now = new Date();
+    const documentType = props.documentType ?? "invoice";
     return new Invoice({
       id: crypto.randomUUID(),
       supplierId: props.supplierId ?? null,
@@ -235,9 +245,10 @@ export class Invoice {
       paidAt: null,
       isDirectDebit: props.isDirectDebit ?? false,
       directDebitDate: props.directDebitDate ?? null,
-      subtotalWithoutVat: props.subtotalWithoutVat,
-      totalVat: props.totalVat,
-      totalWithVat: props.totalWithVat,
+      subtotalWithoutVat: Invoice.normalizeAmountSign(props.subtotalWithoutVat, documentType),
+      totalVat: Invoice.normalizeAmountSign(props.totalVat, documentType),
+      totalWithVat: Invoice.normalizeAmountSign(props.totalWithVat, documentType),
+      documentType,
       status: "pending",
       reconciliationStatus: "none",
       lineDetailMode: props.lineDetailMode ?? "simple",
@@ -273,6 +284,7 @@ export class Invoice {
     subtotalWithoutVat: number;
     totalVat: number;
     totalWithVat: number;
+    documentType?: InvoiceDocumentType;
     source: InvoiceSource;
     attachmentUrl?: string | null;
     aiConfidence: number;
@@ -283,6 +295,7 @@ export class Invoice {
     currency?: string;
   }): Invoice {
     const now = new Date();
+    const documentType = props.documentType ?? "invoice";
     return new Invoice({
       id: crypto.randomUUID(),
       supplierId: props.supplierId ?? null,
@@ -294,9 +307,10 @@ export class Invoice {
       paidAt: null,
       isDirectDebit: false,
       directDebitDate: null,
-      subtotalWithoutVat: props.subtotalWithoutVat,
-      totalVat: props.totalVat,
-      totalWithVat: props.totalWithVat,
+      subtotalWithoutVat: Invoice.normalizeAmountSign(props.subtotalWithoutVat, documentType),
+      totalVat: Invoice.normalizeAmountSign(props.totalVat, documentType),
+      totalWithVat: Invoice.normalizeAmountSign(props.totalWithVat, documentType),
+      documentType,
       status: "draft_ai",
       reconciliationStatus: "none",
       lineDetailMode: "simple",
@@ -341,6 +355,7 @@ export class Invoice {
     if (data.subtotalWithoutVat !== undefined) p.subtotalWithoutVat = data.subtotalWithoutVat;
     if (data.totalVat !== undefined) p.totalVat = data.totalVat;
     if (data.totalWithVat !== undefined) p.totalWithVat = data.totalWithVat;
+    if (data.documentType !== undefined) p.documentType = data.documentType;
     if (data.notes !== undefined) p.notes = data.notes;
     if (data.attachmentUrl !== undefined) p.attachmentUrl = data.attachmentUrl;
     if (data.costCenterGroupId !== undefined) p.costCenterGroupId = data.costCenterGroupId;
@@ -351,6 +366,9 @@ export class Invoice {
     if (data.affectsProfitability !== undefined) p.affectsProfitability = data.affectsProfitability;
     if (data.currency !== undefined) p.currency = data.currency;
     if (data.competenceDate !== undefined) p.competenceDate = data.competenceDate;
+    p.subtotalWithoutVat = Invoice.normalizeAmountSign(p.subtotalWithoutVat, p.documentType);
+    p.totalVat = Invoice.normalizeAmountSign(p.totalVat, p.documentType);
+    p.totalWithVat = Invoice.normalizeAmountSign(p.totalWithVat, p.documentType);
     p.updatedAt = new Date();
     return new Invoice(p);
   }
@@ -368,6 +386,7 @@ export class Invoice {
     if (data.subtotalWithoutVat !== undefined) p.subtotalWithoutVat = data.subtotalWithoutVat;
     if (data.totalVat !== undefined) p.totalVat = data.totalVat;
     if (data.totalWithVat !== undefined) p.totalWithVat = data.totalWithVat;
+    if (data.documentType !== undefined) p.documentType = data.documentType;
     if (data.notes !== undefined) p.notes = data.notes;
     if (data.costCenterGroupId !== undefined) p.costCenterGroupId = data.costCenterGroupId;
     if (data.costCenterCategoryId !== undefined) p.costCenterCategoryId = data.costCenterCategoryId;
@@ -376,6 +395,9 @@ export class Invoice {
     if (data.affectsCashflow !== undefined) p.affectsCashflow = data.affectsCashflow;
     if (data.affectsProfitability !== undefined) p.affectsProfitability = data.affectsProfitability;
     if (data.currency !== undefined) p.currency = data.currency;
+    p.subtotalWithoutVat = Invoice.normalizeAmountSign(p.subtotalWithoutVat, p.documentType);
+    p.totalVat = Invoice.normalizeAmountSign(p.totalVat, p.documentType);
+    p.totalWithVat = Invoice.normalizeAmountSign(p.totalWithVat, p.documentType);
     p.status = "pending";
     p.requiresReview = false;
     p.updatedAt = new Date();
@@ -423,6 +445,12 @@ export class Invoice {
     return new Invoice({ ...this.toProps(), status, updatedAt: new Date() });
   }
 
+  /** Fatura = magnitude positiva. Nota de crédito = sempre negativa — mesmo que o documento original mostre o valor como positivo (regra de negócio, não do chamador). */
+  private static normalizeAmountSign(amount: number, documentType: InvoiceDocumentType): number {
+    const magnitude = Math.abs(amount);
+    return documentType === "credit_note" ? -magnitude : magnitude;
+  }
+
   private toProps(): InvoiceProps {
     return {
       id: this.id,
@@ -438,6 +466,7 @@ export class Invoice {
       subtotalWithoutVat: this.subtotalWithoutVat,
       totalVat: this.totalVat,
       totalWithVat: this.totalWithVat,
+      documentType: this.documentType,
       status: this.status,
       reconciliationStatus: this.reconciliationStatus,
       lineDetailMode: this.lineDetailMode,
