@@ -157,4 +157,33 @@ describe("OccurrenceGeneratorService.generateForMonth", () => {
     expect(generator.toPeriod(2026, 1)).toBe("2026-01");
     expect(generator.toPeriod(2026, 12)).toBe("2026-12");
   });
+
+  describe("isActiveInMonth", () => {
+    it("true para recorrência activa dentro do período de vigência", () => {
+      const rec = Recurrence.create(BASE_REC);
+      expect(generator.isActiveInMonth(rec, 2026, 9)).toBe(true);
+    });
+
+    it("false para recorrência pausada/encerrada", () => {
+      const rec = Recurrence.create(BASE_REC).pause();
+      expect(generator.isActiveInMonth(rec, 2026, 9)).toBe(false);
+    });
+
+    it("false antes do startDate", () => {
+      const rec = Recurrence.create({ ...BASE_REC, startDate: new Date("2026-10-01") });
+      expect(generator.isActiveInMonth(rec, 2026, 9)).toBe(false);
+    });
+
+    it("false depois do endDate", () => {
+      const rec = Recurrence.create({ ...BASE_REC, endDate: new Date("2026-08-31") });
+      expect(generator.isActiveInMonth(rec, 2026, 9)).toBe(false);
+    });
+
+    it("true para uma recorrência trimestral num mês em que não fatura — vigente ≠ fatura este mês", () => {
+      const rec = Recurrence.create({ ...BASE_REC, frequency: "quarterly", startDate: new Date("2026-01-01") });
+      // Fevereiro está fora do ciclo trimestral (Jan/Abr/Jul/Out), mas a recorrência continua vigente
+      expect(generator.generateForMonth(rec, 2026, 2)).toBeNull();
+      expect(generator.isActiveInMonth(rec, 2026, 2)).toBe(true);
+    });
+  });
 });

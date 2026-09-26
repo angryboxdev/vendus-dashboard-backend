@@ -232,3 +232,52 @@ export class RecurrenceOccurrence {
     };
   }
 }
+
+// ── Display state (computed, not persisted) ─────────────────────────────────────
+//
+// Spec Task_Recorrencias_Conciliacao_AngryBox.md §7 lists 7 estados: Previsto,
+// Aguardando fatura, Fatura vinculada, Aguardando pagamento, Pago, Pago
+// parcialmente, Vencido. "Fatura vinculada" and "Previsto" collapse into
+// "awaiting_payment" here: once an occurrence has no invoice gate left (either
+// it never required one, or the invoice is already linked), there is no real
+// behavioural difference in this system between "still just a forecast" and
+// "ready to be paid" — both are equally reconcilable at any time. Splitting
+// them would need an arbitrary days-before-due-date threshold with no
+// business rule backing it yet.
+
+export type OccurrenceDisplayState =
+  | "awaiting_invoice"
+  | "awaiting_payment"
+  | "partially_paid"
+  | "paid"
+  | "overdue"
+  | "cancelled";
+
+/** Same tolerance used for bank reconciliation partial-match detection (bank-statements' PARTIAL_TOLERANCE_CENTS). */
+export const DISPLAY_STATE_TOLERANCE_CENTS = 100;
+
+/**
+ * Computed live from `paidAmountCents` (sum of whatever bank movements/invoice
+ * allocations back this occurrence — resolved by the caller, since that
+ * depends on cross-module reads the entity itself has no access to) and
+ * today's date. Never stored: an unreconciliation, a newly-linked bank
+ * movement, or the day simply passing all change the result on next read
+ * without needing any write-back to this entity.
+ */
+export function computeOccurrenceDisplayState(
+  occurrence: RecurrenceOccurrence,
+  paidAmountCents: number,
+  today: Date = new Date(),
+): OccurrenceDisplayState {
+  if (occurrence.status === "cancelled") return "cancelled";
+  if (occurrence.status === "awaiting_invoice") return "awaiting_invoice";
+
+  const remaining = occurrence.effectiveAmountCents - paidAmountCents;
+  if (occurrence.status === "paid" || remaining <= DISPLAY_STATE_TOLERANCE_CENTS) return "paid";
+  if (paidAmountCents > 0) return "partially_paid";
+
+  const due = occurrence.dueDate;
+  const dueDateOnly = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return dueDateOnly < todayOnly ? "overdue" : "awaiting_payment";
+}

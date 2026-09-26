@@ -102,6 +102,17 @@ describe("ConfirmImportedInvoiceUseCase", () => {
     expect(payableWrite.created).toHaveLength(0);
   });
 
+  it("does not create payable entry for a credit note, even with saveAsPayable=true and dueDate set (PayableEntry.amount exige > 0)", async () => {
+    const draft = makeDraftInvoice({ documentType: "credit_note" });
+    await invoiceRepo.save(ORG_ID, draft);
+
+    const result = await useCase.execute({ organizationId: ORG_ID, id: draft.id, saveAsPayable: true });
+
+    expect(result.documentType).toBe("credit_note");
+    expect(result.totalWithVat).toBe(-123000);
+    expect(payableWrite.created).toHaveLength(0);
+  });
+
   it("saves optional lines provided during confirmation", async () => {
     const draft = makeDraftInvoice();
     await invoiceRepo.save(ORG_ID, draft);

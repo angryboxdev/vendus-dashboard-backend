@@ -17,6 +17,7 @@ export class FakeOccurrenceMatchReadAdapter implements OccurrenceMatchReadPort {
       q?: string;
       dateFrom?: string;
       dateTo?: string;
+      referenceDate?: string;
       limit?: number;
     }
   ): Promise<OccurrenceMatchCandidate[]> {
@@ -33,6 +34,13 @@ export class FakeOccurrenceMatchReadAdapter implements OccurrenceMatchReadPort {
         (c) =>
           c.recurrenceName.toLowerCase().includes(needle) ||
           c.supplierName.toLowerCase().includes(needle),
+      );
+    }
+
+    if (opts.referenceDate) {
+      const reference = Date.parse(opts.referenceDate);
+      results = [...results].sort(
+        (a, b) => Math.abs(Date.parse(a.dueDate) - reference) - Math.abs(Date.parse(b.dueDate) - reference),
       );
     }
 

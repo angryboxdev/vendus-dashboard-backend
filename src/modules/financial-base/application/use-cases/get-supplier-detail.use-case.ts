@@ -55,6 +55,7 @@ export class GetSupplierDetailUseCase implements GetSupplierDetailPort {
         totalWithoutVat: inv.totalWithoutVat,
         vatAmount: inv.vatAmount,
         totalWithVat: inv.totalWithVat,
+        documentType: inv.documentType,
         status: inv.status,
         paidAt: inv.paidAt,
         attachmentUrl: inv.attachmentUrl,

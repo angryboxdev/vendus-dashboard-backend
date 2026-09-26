@@ -30,6 +30,9 @@ function toEntity(row: Record<string, unknown>): Recurrence {
     status: row.status as RecurrenceStatus,
     notes: (row.notes as string | null) ?? null,
     documentUrl: (row.document_url as string | null) ?? null,
+    closedAt: row.closed_at ? new Date(row.closed_at as string) : null,
+    vatRate: (row.vat_rate as number | null) ?? null,
+    vatIncluded: (row.vat_included as boolean | null) ?? null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   });
@@ -56,6 +59,9 @@ function toRow(r: Recurrence): Record<string, unknown> {
     status: r.status,
     notes: r.notes,
     document_url: r.documentUrl,
+    closed_at: r.closedAt ? r.closedAt.toISOString().slice(0, 10) : null,
+    vat_rate: r.vatRate,
+    vat_included: r.vatIncluded,
     created_at: r.createdAt.toISOString(),
     updated_at: r.updatedAt.toISOString(),
   };

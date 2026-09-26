@@ -53,6 +53,7 @@ export interface SupplierInvoiceRowDTO {
   totalWithoutVat: number;
   vatAmount: number;
   totalWithVat: number;
+  documentType: string;
   status: string;
   paidAt: Date | null;
   attachmentUrl: string | null;

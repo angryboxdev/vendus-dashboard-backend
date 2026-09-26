@@ -182,4 +182,18 @@ describe("ListInvoicesUseCase", () => {
     const result = await useCase.execute(ORG_ID);
     expect(result.every((dto) => !dto.isDuplicate)).toBe(true);
   });
+
+  it("filtra por documentType (usado pelos pickers de vínculo para excluir notas de crédito)", async () => {
+    await repo.save(ORG_ID, makeInvoice({ invoiceNumber: "INV-001" }));
+    await repo.save(ORG_ID, makeInvoice({ invoiceNumber: "NC-001", documentType: "credit_note" }));
+
+    const invoicesOnly = await useCase.execute(ORG_ID, { documentType: "invoice" });
+    expect(invoicesOnly).toHaveLength(1);
+    expect(invoicesOnly[0]!.invoiceNumber).toBe("INV-001");
+
+    const creditNotesOnly = await useCase.execute(ORG_ID, { documentType: "credit_note" });
+    expect(creditNotesOnly).toHaveLength(1);
+    expect(creditNotesOnly[0]!.invoiceNumber).toBe("NC-001");
+    expect(creditNotesOnly[0]!.totalWithVat).toBeLessThan(0);
+  });
 });

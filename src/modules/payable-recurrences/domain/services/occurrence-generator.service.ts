@@ -24,16 +24,7 @@ export class OccurrenceGeneratorService {
     year: number,
     month: number, // 1-based (1 = January)
   ): RecurrenceOccurrence | null {
-    if (recurrence.status !== "active") return null;
-
-    const firstOfMonth = new Date(year, month - 1, 1);
-    const lastOfMonth = new Date(year, month, 0); // day 0 of next month = last day of this month
-
-    // Recurrence hasn't started yet (startDate is after the last day of this month)
-    if (recurrence.startDate > lastOfMonth) return null;
-
-    // Recurrence already ended (endDate is before the first day of this month)
-    if (recurrence.endDate && recurrence.endDate < firstOfMonth) return null;
+    if (!this.isActiveInMonth(recurrence, year, month)) return null;
 
     // Frequency check — only generate when this month falls in the recurrence cycle
     if (!this.isInFrequency(recurrence, year, month)) return null;
@@ -55,6 +46,28 @@ export class OccurrenceGeneratorService {
    */
   toPeriod(year: number, month: number): OccurrencePeriod {
     return `${year}-${String(month).padStart(2, "0")}`;
+  }
+
+  /**
+   * Whether the recurrence is "in force" during the given month — status
+   * active and the month overlaps [startDate, endDate]. Deliberately ignores
+   * frequency: a quarterly/annual recurrence can still be "vigente" in a
+   * month it doesn't bill. Used both here (as a stricter pre-check before
+   * generating) and by GetMonthlySummaryUseCase's "Ativas" KPI.
+   */
+  isActiveInMonth(recurrence: Recurrence, year: number, month: number): boolean {
+    if (recurrence.status !== "active") return false;
+
+    const firstOfMonth = new Date(year, month - 1, 1);
+    const lastOfMonth = new Date(year, month, 0); // day 0 of next month = last day of this month
+
+    // Recurrence hasn't started yet (startDate is after the last day of this month)
+    if (recurrence.startDate > lastOfMonth) return false;
+
+    // Recurrence already ended (endDate is before the first day of this month)
+    if (recurrence.endDate && recurrence.endDate < firstOfMonth) return false;
+
+    return true;
   }
 
   /**

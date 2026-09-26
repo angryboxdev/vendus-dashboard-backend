@@ -18,6 +18,8 @@ import type {
   CancelOccurrencePort,
   GetLinkedInvoiceIdsPort,
   GetRecurrenceSummaryPort,
+  GetMonthlySummaryPort,
+  ListOccurrencesForPeriodPort,
 } from "../../domain/ports/in/occurrence.ports.js";
 import type { GenerateBatchOccurrencesPort } from "../../domain/ports/in/batch.ports.js";
 import type { UploadRecurrenceDocumentUseCase } from "../../application/use-cases/upload-recurrence-document.use-case.js";
@@ -59,6 +61,8 @@ interface RecurrencePorts {
   uploadOccurrenceDocument: UploadOccurrenceDocumentUseCase;
   deleteOccurrenceDocument: DeleteOccurrenceDocumentUseCase;
   getRecurrenceSummary: GetRecurrenceSummaryPort;
+  getMonthlySummary: GetMonthlySummaryPort;
+  listOccurrencesForPeriod: ListOccurrencesForPeriodPort;
 }
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -122,6 +126,21 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
       const occ = occs[0]!;
       const rec = await ports.getRecurrence.execute({ organizationId, id: occ.recurrenceId });
       res.json({ occurrence: occ, recurrenceName: rec.name });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // GET /payable-recurrences/occurrences?period=YYYY-MM  (cross-recorrência — vista mensal)
+  router.get("/payable-recurrences/occurrences", async (req, res) => {
+    try {
+      const period = (req.query as Record<string, string | undefined>).period;
+      if (!period || !/^\d{4}-\d{2}$/.test(period)) {
+        res.status(400).json({ error: "period (YYYY-MM) é obrigatório" });
+        return;
+      }
+      const occs = await ports.listOccurrencesForPeriod.execute({ organizationId: req.auth!.orgId, period });
+      res.json(occs);
     } catch (err) {
       handleError(res, err);
     }
@@ -194,6 +213,21 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   router.get("/payable-recurrences/summary", async (req, res) => {
     try {
       const summary = await ports.getRecurrenceSummary.execute({ organizationId: req.auth!.orgId });
+      res.json(summary);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // GET /payable-recurrences/summary/monthly?period=YYYY-MM  (must be before /:id)
+  router.get("/payable-recurrences/summary/monthly", async (req, res) => {
+    try {
+      const period = (req.query as Record<string, string | undefined>).period;
+      if (!period || !/^\d{4}-\d{2}$/.test(period)) {
+        res.status(400).json({ error: "period (YYYY-MM) é obrigatório" });
+        return;
+      }
+      const summary = await ports.getMonthlySummary.execute({ organizationId: req.auth!.orgId, period });
       res.json(summary);
     } catch (err) {
       handleError(res, err);
@@ -278,10 +312,15 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
     }
   });
 
-  // PATCH /payable-recurrences/:id/close
+  // PATCH /payable-recurrences/:id/close — body: { closedAt: "YYYY-MM-DD" } (obrigatório, spec §10)
   router.patch("/payable-recurrences/:id/close", async (req, res) => {
     try {
-      const rec = await ports.closeRecurrence.execute({ organizationId: req.auth!.orgId, id: req.params.id });
+      const closedAt = (req.body as { closedAt?: unknown }).closedAt;
+      if (typeof closedAt !== "string" || !closedAt.trim()) {
+        res.status(400).json({ error: "closedAt (YYYY-MM-DD) é obrigatório para fechar a recorrência" });
+        return;
+      }
+      const rec = await ports.closeRecurrence.execute({ organizationId: req.auth!.orgId, id: req.params.id, closedAt });
       res.json(rec);
     } catch (err) {
       handleError(res, err);

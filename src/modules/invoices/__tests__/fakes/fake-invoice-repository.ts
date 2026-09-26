@@ -25,6 +25,7 @@ export class FakeInvoiceRepository implements InvoiceRepositoryPort {
     if (filter?.status) result = result.filter((i) => i.status === filter.status);
     if (filter?.reconciliationStatus) result = result.filter((i) => i.reconciliationStatus === filter.reconciliationStatus);
     if (filter?.isDirectDebit !== undefined) result = result.filter((i) => i.isDirectDebit === filter.isDirectDebit);
+    if (filter?.documentType) result = result.filter((i) => i.documentType === filter.documentType);
     if (filter?.from) {
       const from = filter.from;
       result = result.filter((i) => i.invoiceDate >= from);

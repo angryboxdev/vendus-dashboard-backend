@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { Invoice, InvoiceStatus, ReconciliationStatus } from "../../entities/invoice.js";
+import type { Invoice, InvoiceStatus, InvoiceDocumentType, ReconciliationStatus } from "../../entities/invoice.js";
 
 export interface InvoiceFilter {
   supplierId?: string;
@@ -9,6 +9,7 @@ export interface InvoiceFilter {
   from?: Date;
   to?: Date;
   isDirectDebit?: boolean;
+  documentType?: InvoiceDocumentType;
   search?: string; // matches supplier_name or invoice_number (case-insensitive)
 }
 

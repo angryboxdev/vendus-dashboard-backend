@@ -3,6 +3,7 @@ import type {
   InvoiceStatus,
   InvoiceLineType,
   InvoiceSource,
+  InvoiceDocumentType,
   AiExtractionStatus,
   ReconciliationStatus,
   LineDetailMode,
@@ -54,6 +55,7 @@ export interface InvoiceDTO {
   subtotalWithoutVat: number;
   totalVat: number;
   totalWithVat: number;
+  documentType: InvoiceDocumentType;
   status: InvoiceStatus;
   reconciliationStatus: ReconciliationStatus;
   lineDetailMode: LineDetailMode;
@@ -177,6 +179,7 @@ export interface CreateInvoiceCommand {
   subtotalWithoutVat: number;
   totalVat: number;
   totalWithVat: number;
+  documentType?: InvoiceDocumentType;
   notes?: string | null;
   attachmentUrl?: string | null;
   costCenterGroupId?: string | null;
@@ -203,6 +206,7 @@ export interface UpdateInvoiceCommand {
   subtotalWithoutVat?: number;
   totalVat?: number;
   totalWithVat?: number;
+  documentType?: InvoiceDocumentType;
   notes?: string | null;
   attachmentUrl?: string | null;
   costCenterGroupId?: string | null;
@@ -256,6 +260,7 @@ export interface ListInvoicesFilter {
   from?: string; // YYYY-MM-DD
   to?: string;
   isDirectDebit?: boolean;
+  documentType?: InvoiceDocumentType;
   search?: string; // free-text: supplier name or invoice number
 }
 
@@ -273,6 +278,8 @@ export interface ImportInvoiceCommand {
   fileBuffer: Buffer;
   filename: string;
   mimeType: string;
+  /** Escolha explícita do utilizador antes do upload — tem prioridade sobre a deteção automática da IA. */
+  documentType?: InvoiceDocumentType;
 }
 
 export interface NewSupplierCommand {
@@ -303,6 +310,7 @@ export interface ConfirmImportedInvoiceCommand {
   subtotalWithoutVat?: number;
   totalVat?: number;
   totalWithVat?: number;
+  documentType?: InvoiceDocumentType;
   notes?: string | null;
   costCenterGroupId?: string | null;
   costCenterCategoryId?: string | null;

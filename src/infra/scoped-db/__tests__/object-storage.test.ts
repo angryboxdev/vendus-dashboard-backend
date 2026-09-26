@@ -164,9 +164,10 @@ describe("objectStorage", () => {
     expect(removes).toEqual([{ bucket: "hr-documents", paths: ["employee-1/doc-1/contract.pdf"] }]);
   });
 
-  it("registers exactly the five known buckets, with the two fiscal-document buckets opted into prefixing", () => {
+  it("registers exactly the six known buckets, with hr-documents/hr-photos/invoice-documents opted into prefixing", () => {
     expect(STORAGE_BUCKET_REGISTRY).toEqual({
       "hr-documents": { prefixByOrganization: true },
+      "hr-photos": { prefixByOrganization: true },
       "invoice-documents": { prefixByOrganization: true },
       "recurrence-documents": { prefixByOrganization: false },
       "bank-statement-documents": { prefixByOrganization: false },

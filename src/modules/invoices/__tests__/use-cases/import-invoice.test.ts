@@ -424,4 +424,59 @@ describe("ImportInvoiceUseCase", () => {
     expect(result.supplierMatch?.id).toBe("sup-gold-energy");
     expect(result.invoice.supplierName).toBe("Gold Energy");
   });
+
+  describe("deteção de Nota de Crédito", () => {
+    it("documentType='credit_note' extraído: fatura criada com totais negativos e requiresReview forçado (credit_note_detected)", async () => {
+      aiExtraction.setResult({
+        documentType: "credit_note",
+        totalWithVat: 19281, // como aparece no documento — positivo
+        subtotalWithoutVat: 15676,
+        vatAmount: 3603,
+        dueDate: new Date("2026-10-01"), // evita ruído de outras validationIssues
+        confidence: 0.95,
+      });
+
+      const result = await useCase.execute({
+        organizationId: ORG_ID,
+        fileBuffer: makeBuffer(),
+        filename: "nc.pdf",
+        mimeType: "application/pdf",
+      });
+
+      expect(result.invoice.documentType).toBe("credit_note");
+      expect(result.invoice.totalWithVat).toBe(-19281);
+      expect(result.validationIssues).toContain("credit_note_detected");
+      expect(result.invoice.requiresReview).toBe(true);
+    });
+
+    it("escolha explícita do utilizador (antes do upload) tem prioridade sobre a deteção da IA, e não gera credit_note_detected", async () => {
+      aiExtraction.setResult({ documentType: "invoice", totalWithVat: 19281, dueDate: new Date("2026-10-01"), confidence: 0.95 });
+
+      const result = await useCase.execute({
+        organizationId: ORG_ID,
+        fileBuffer: makeBuffer(),
+        filename: "nc.pdf",
+        mimeType: "application/pdf",
+        documentType: "credit_note",
+      });
+
+      expect(result.invoice.documentType).toBe("credit_note");
+      expect(result.invoice.totalWithVat).toBe(-19281);
+      expect(result.validationIssues).not.toContain("credit_note_detected");
+    });
+
+    it("documentType null (IA não determinou): assume 'invoice', sem credit_note_detected", async () => {
+      aiExtraction.setResult({ documentType: null, dueDate: new Date("2026-10-01"), confidence: 0.95 });
+
+      const result = await useCase.execute({
+        organizationId: ORG_ID,
+        fileBuffer: makeBuffer(),
+        filename: "fatura.pdf",
+        mimeType: "application/pdf",
+      });
+
+      expect(result.invoice.documentType).toBe("invoice");
+      expect(result.validationIssues).not.toContain("credit_note_detected");
+    });
+  });
 });

@@ -6,6 +6,7 @@ import { SupabaseCostCenterGroupRepository } from "./adapters/out/supabase-cost-
 import { SupabaseCostCenterCategoryRepository } from "./adapters/out/supabase-cost-center-category.repository.js";
 import { SupabaseSupplierRepository } from "./adapters/out/supabase-supplier.repository.js";
 import { SupabaseSupplierInvoiceStatsAdapter } from "./adapters/out/supabase-supplier-invoice-stats.adapter.js";
+import { SupabaseInvoicePaymentReadAdapter } from "./adapters/out/supabase-invoice-payment-read.adapter.js";
 import { SupabaseChannelRepository } from "./adapters/out/supabase-channel.repository.js";
 import { SupabaseOrganizationIdentityRepository } from "./adapters/out/supabase-organization-identity.repository.js";
 
@@ -57,6 +58,7 @@ export function createFinancialBaseModule(): { router: Router; createSupplier: C
   const categoryRepository = new SupabaseCostCenterCategoryRepository(createScopedQuery);
   const supplierRepository = new SupabaseSupplierRepository(createScopedQuery);
   const supplierInvoiceStats = new SupabaseSupplierInvoiceStatsAdapter(createScopedQuery);
+  const invoicePaymentRead = new SupabaseInvoicePaymentReadAdapter(createScopedQuery);
   const channelRepository = new SupabaseChannelRepository(createScopedQuery);
   const organizationIdentityRepository = new SupabaseOrganizationIdentityRepository(createScopedQuery);
 
@@ -101,7 +103,11 @@ export function createFinancialBaseModule(): { router: Router; createSupplier: C
   );
   const getSuppliersKpis = new GetSuppliersKpisUseCase(supplierRepository, supplierInvoiceStats);
   const getSupplierDetail = new GetSupplierDetailUseCase(supplierRepository, supplierInvoiceStats);
-  const getSupplierStatement = new GetSupplierStatementUseCase(supplierRepository, supplierInvoiceStats);
+  const getSupplierStatement = new GetSupplierStatementUseCase(
+    supplierRepository,
+    supplierInvoiceStats,
+    invoicePaymentRead,
+  );
 
   // Adapter de entrada (HTTP)
   const controller = new FinancialBaseController(

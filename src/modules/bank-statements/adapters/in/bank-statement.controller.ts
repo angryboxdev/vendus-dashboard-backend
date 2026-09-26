@@ -773,6 +773,7 @@ export class BankStatementController {
         if (q["q"]) searchQuery.q = q["q"];
         if (q["dateFrom"]) searchQuery.dateFrom = q["dateFrom"];
         if (q["dateTo"]) searchQuery.dateTo = q["dateTo"];
+        if (q["referenceDate"]) searchQuery.referenceDate = q["referenceDate"];
         if (q["limit"]) searchQuery.limit = parseInt(q["limit"], 10);
         const result = await this.searchOccurrenceCandidates.execute(searchQuery);
         res.json(result);

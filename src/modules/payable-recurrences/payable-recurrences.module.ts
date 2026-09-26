@@ -7,6 +7,7 @@ import { SupabaseOccurrenceRepository } from "./adapters/out/supabase-occurrence
 import { SupabaseInvoiceReadAdapter } from "./adapters/out/supabase-invoice-read.adapter.js";
 import { SupabaseRecurrenceDocumentStorageAdapter } from "./adapters/out/supabase-document-storage.adapter.js";
 import { SupabaseBankMovementLinkReadAdapter } from "./adapters/out/supabase-bank-movement-link-read.adapter.js";
+import { SupabaseInvoiceAllocatedAmountReadAdapter } from "./adapters/out/supabase-invoice-allocated-amount-read.adapter.js";
 
 // Use cases — recorrências
 import { CreateRecurrenceUseCase } from "./application/use-cases/create-recurrence.use-case.js";
@@ -33,6 +34,8 @@ import { DeleteRecurrenceDocumentUseCase } from "./application/use-cases/delete-
 import { UploadOccurrenceDocumentUseCase } from "./application/use-cases/upload-occurrence-document.use-case.js";
 import { DeleteOccurrenceDocumentUseCase } from "./application/use-cases/delete-occurrence-document.use-case.js";
 import { GetRecurrenceSummaryUseCase } from "./application/use-cases/get-summary.use-case.js";
+import { GetMonthlySummaryUseCase } from "./application/use-cases/get-monthly-summary.use-case.js";
+import { ListOccurrencesForPeriodUseCase } from "./application/use-cases/list-occurrences-for-period.use-case.js";
 
 // Adapter in
 import { createRecurrenceRouter } from "./adapters/in/recurrence.controller.js";
@@ -59,6 +62,7 @@ export function createPayableRecurrencesModule(): PayableRecurrencesModule {
   const invoiceRead = new SupabaseInvoiceReadAdapter(createScopedQuery);
   const documentStorage = new SupabaseRecurrenceDocumentStorageAdapter();
   const bankMovementLinkRead = new SupabaseBankMovementLinkReadAdapter(createScopedQuery);
+  const invoiceAllocatedAmountRead = new SupabaseInvoiceAllocatedAmountReadAdapter(createScopedQuery);
 
   // Controller
   const router = createRecurrenceRouter({
@@ -72,8 +76,8 @@ export function createPayableRecurrencesModule(): PayableRecurrencesModule {
     getRecurrence: new GetRecurrenceUseCase(recurrenceRepo),
     // Ocorrências
     generateOccurrence: new GenerateOccurrenceUseCase(recurrenceRepo, occurrenceRepo),
-    listOccurrences: new ListOccurrencesUseCase(occurrenceRepo, bankMovementLinkRead),
-    getOccurrence: new GetOccurrenceUseCase(occurrenceRepo, bankMovementLinkRead),
+    listOccurrences: new ListOccurrencesUseCase(occurrenceRepo, bankMovementLinkRead, invoiceAllocatedAmountRead),
+    getOccurrence: new GetOccurrenceUseCase(occurrenceRepo, bankMovementLinkRead, invoiceAllocatedAmountRead),
     linkInvoiceToOccurrence: new LinkInvoiceToOccurrenceUseCase(occurrenceRepo, invoiceRead),
     markOccurrenceAsPaid: new MarkOccurrenceAsPaidUseCase(occurrenceRepo),
     cancelOccurrence: new CancelOccurrenceUseCase(occurrenceRepo),
@@ -86,6 +90,18 @@ export function createPayableRecurrencesModule(): PayableRecurrencesModule {
     uploadOccurrenceDocument: new UploadOccurrenceDocumentUseCase(occurrenceRepo, documentStorage),
     deleteOccurrenceDocument: new DeleteOccurrenceDocumentUseCase(occurrenceRepo, documentStorage),
     getRecurrenceSummary: new GetRecurrenceSummaryUseCase(occurrenceRepo),
+    getMonthlySummary: new GetMonthlySummaryUseCase(
+      recurrenceRepo,
+      occurrenceRepo,
+      bankMovementLinkRead,
+      invoiceAllocatedAmountRead,
+    ),
+    listOccurrencesForPeriod: new ListOccurrencesForPeriodUseCase(
+      recurrenceRepo,
+      occurrenceRepo,
+      bankMovementLinkRead,
+      invoiceAllocatedAmountRead,
+    ),
   });
 
   return { router };

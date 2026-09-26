@@ -95,6 +95,7 @@ export function toInvoiceDTO(
     subtotalWithoutVat: invoice.subtotalWithoutVat,
     totalVat: invoice.totalVat,
     totalWithVat: invoice.totalWithVat,
+    documentType: invoice.documentType,
     status: invoice.status,
     reconciliationStatus: invoice.reconciliationStatus,
     lineDetailMode: invoice.lineDetailMode,

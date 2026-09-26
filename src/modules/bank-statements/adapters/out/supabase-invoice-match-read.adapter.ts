@@ -52,6 +52,12 @@ export class SupabaseInvoiceMatchReadAdapter implements InvoiceMatchReadPort {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("invoices")
       .select("id, supplier_id, supplier_name, invoice_number, total_with_vat, invoice_date, due_date, paid_at, status")
+      // Notas de crédito nunca são sugeridas como fatura a conciliar nesta
+      // fase (sem vínculo fatura↔NC ainda implementado) — na prática o total
+      // negativo já cairia fora da janela [min,max] para um amountCents
+      // positivo, mas o filtro explícito deixa a regra clara e não depende
+      // disso.
+      .eq("document_type", "invoice")
       .gte("total_with_vat", min)
       .lte("total_with_vat", max)
       .neq("reconciliation_status", "reconciled")

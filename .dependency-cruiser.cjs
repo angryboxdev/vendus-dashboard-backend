@@ -34,7 +34,10 @@ module.exports = {
         path: "node_modules",
         pathNot:
           // permita aqui libs puras que o domínio pode usar (ex.: validação, datas).
-          "node_modules/(zod|date-fns|uuid|ramda)",
+          // luxon: já é a lib de datas/timezone usada por todo o código de
+          // turnos/kiosk (src/utils/lisbonDayInstants.ts) — pura, sem I/O,
+          // mesma categoria que date-fns.
+          "node_modules/(zod|date-fns|luxon|uuid|ramda)",
       },
     },
     {

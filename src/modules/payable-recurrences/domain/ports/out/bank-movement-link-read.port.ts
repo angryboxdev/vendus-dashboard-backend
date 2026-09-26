@@ -16,11 +16,13 @@ export interface LinkedBankMovement {
 
 export interface BankMovementLinkReadPort {
   /**
-   * Returns a map of occurrenceId → LinkedBankMovement for the given occurrence IDs.
-   * Occurrences with no linked movement are absent from the map.
+   * Returns a map of occurrenceId → LinkedBankMovement[] for the given occurrence IDs.
+   * An occurrence can have more than one linked movement (partial payments —
+   * spec Task_Recorrencias_Conciliacao_AngryBox.md §8). Occurrences with no
+   * linked movement are absent from the map (never an empty array).
    */
   findByOccurrenceIds(
     organizationId: OrganizationId,
     occurrenceIds: string[],
-  ): Promise<Map<string, LinkedBankMovement>>;
+  ): Promise<Map<string, LinkedBankMovement[]>>;
 }

@@ -54,6 +54,7 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     if (command.subtotalWithoutVat !== undefined) confirmData.subtotalWithoutVat = command.subtotalWithoutVat;
     if (command.totalVat !== undefined) confirmData.totalVat = command.totalVat;
     if (command.totalWithVat !== undefined) confirmData.totalWithVat = command.totalWithVat;
+    if (command.documentType !== undefined) confirmData.documentType = command.documentType;
     if (command.notes !== undefined) confirmData.notes = command.notes;
     if (command.costCenterGroupId !== undefined) confirmData.costCenterGroupId = command.costCenterGroupId;
     if (command.costCenterCategoryId !== undefined) confirmData.costCenterCategoryId = command.costCenterCategoryId;
@@ -134,8 +135,10 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       );
     }
 
-    // Create payable entry if explicitly requested and due date is set
-    if (command.saveAsPayable && finalInvoice.dueDate) {
+    // Create payable entry if explicitly requested and due date is set — nunca
+    // para notas de crédito (não fazem sentido como "conta a pagar", e
+    // PayableEntry.amount exige > 0, o que rebentaria com o total negativo).
+    if (command.saveAsPayable && finalInvoice.dueDate && finalInvoice.documentType !== "credit_note") {
       await this.payableWrite.createForInvoice(command.organizationId, {
         invoiceId: finalInvoice.id,
         supplierId: finalInvoice.supplierId,

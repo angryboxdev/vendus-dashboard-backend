@@ -15,6 +15,7 @@ export class SearchOccurrenceCandidatesUseCase implements SearchOccurrenceCandid
     if (query.q) opts.q = query.q;
     if (query.dateFrom) opts.dateFrom = query.dateFrom;
     if (query.dateTo) opts.dateTo = query.dateTo;
+    if (query.referenceDate) opts.referenceDate = query.referenceDate;
     const results = await this.occurrenceRead.search(query.organizationId, opts);
 
     return results.map((o) => ({
@@ -27,6 +28,10 @@ export class SearchOccurrenceCandidatesUseCase implements SearchOccurrenceCandid
       effectiveAmountCents: o.effectiveAmountCents,
       dueDate: o.dueDate,
       status: o.status,
+      costCenterGroupId: o.costCenterGroupId,
+      costCenterCategoryId: o.costCenterCategoryId,
+      vatRate: o.vatRate,
+      vatIncluded: o.vatIncluded,
     }));
   }
 }

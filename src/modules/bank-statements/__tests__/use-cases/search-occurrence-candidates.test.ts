@@ -107,6 +107,16 @@ describe("SearchOccurrenceCandidatesUseCase", () => {
     expect(result).toHaveLength(2);
   });
 
+  it("referenceDate: prioriza a ocorrência mais próxima do mês do movimento, sem excluir as restantes", async () => {
+    port.seed(organizationId, [
+      makeCandidate({ id: "occ-longe", recurrenceName: "Salário Gabriel", dueDate: "2026-01-05" }),
+      makeCandidate({ id: "occ-perto", recurrenceName: "Salário Gabriel", dueDate: "2026-09-05" }),
+    ]);
+    const result = await useCase.execute({ organizationId, referenceDate: "2026-09-01" });
+    expect(result).toHaveLength(2);
+    expect(result[0]!.id).toBe("occ-perto");
+  });
+
   it("sem query retorna todas as ocorrências não canceladas", async () => {
     port.seed(organizationId, [
       makeCandidate({ id: "occ-forecast", status: "forecast" }),

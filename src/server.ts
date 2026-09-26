@@ -39,6 +39,7 @@ import { authRoutes } from "./routes/authRoutes.js";
 import { createLocationsModule } from "./modules/locations/locations.module.js";
 import { createLocationCredentialsModule } from "./modules/location-credentials/location-credentials.module.js";
 import { createSalesSummaryModule } from "./modules/sales-summary/sales-summary.module.js";
+import { createHrModule } from "./modules/hr/hr.module.js";
 
 const app = express();
 
@@ -188,6 +189,13 @@ app.use("/api", requireMinRole("manager"), preparationRoutes);
 app.use("/api/hr", hrRoutes);
 app.use("/api/hr", hrAuditRoutes);
 app.use("/api/hr", hrLeaveRoutes);
+
+// RH-02 (hexagonal) — superfície nova /api/hr/people, coexiste com o legacy
+// acima (mesmas tabelas hr_employees/hr_employee_documents); GETs allow
+// hr_viewer, writes têm requireMinRole("manager") inline no controller.
+// RH-01 (Visão Geral) — /api/hr/overview*, só leitura, mesmo módulo.
+const hrModule = createHrModule();
+app.use("/api", hrModule.router);
 
 // CRM: acessível a managers+
 const crmModule = createCrmModule();

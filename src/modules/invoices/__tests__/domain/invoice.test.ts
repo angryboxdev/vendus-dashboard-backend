@@ -10,6 +10,7 @@ const base = {
 };
 
 const baseReconstitute = {
+  documentType: "invoice" as const,
   supplierId: null,
   supplierNifSnapshot: null,
   dueDate: null,
@@ -212,5 +213,72 @@ describe("Invoice entity", () => {
     expect(confirmed.isDirectDebit).toBe(true);
     expect(confirmed.directDebitDate).toEqual(debitDate);
     expect(confirmed.status).toBe("pending");
+  });
+
+  // ── Notas de crédito (documentType) ──────────────────────────────────────
+
+  describe("documentType — sinal dos totais", () => {
+    it("create() com documentType 'invoice' (default): totais ficam positivos mesmo se passados negativos", () => {
+      const inv = Invoice.create({ ...base, subtotalWithoutVat: -100000, totalVat: -23000, totalWithVat: -123000 });
+      expect(inv.documentType).toBe("invoice");
+      expect(inv.subtotalWithoutVat).toBe(100000);
+      expect(inv.totalVat).toBe(23000);
+      expect(inv.totalWithVat).toBe(123000);
+    });
+
+    it("create() com documentType 'credit_note': totais ficam sempre negativos, mesmo passados positivos (como aparecem no documento)", () => {
+      const inv = Invoice.create({ ...base, documentType: "credit_note" });
+      expect(inv.documentType).toBe("credit_note");
+      expect(inv.subtotalWithoutVat).toBe(-100000);
+      expect(inv.totalVat).toBe(-23000);
+      expect(inv.totalWithVat).toBe(-123000);
+    });
+
+    it("createFromImport() normaliza o sinal da mesma forma", () => {
+      const inv = Invoice.createFromImport({
+        supplierName: "Goldenergy",
+        invoiceNumber: "NC-2026-001",
+        invoiceDate: new Date("2026-09-01"),
+        subtotalWithoutVat: 15676,
+        totalVat: 3603,
+        totalWithVat: 19281, // 192,81€ tal como aparece no documento — positivo
+        documentType: "credit_note",
+        source: "pdf_import",
+        aiConfidence: 0.9,
+        requiresReview: true,
+      });
+      expect(inv.totalWithVat).toBe(-19281);
+    });
+
+    it("update() só a trocar o tipo (sem tocar nos valores) reaplica o sinal aos totais já guardados", () => {
+      const inv = Invoice.create(base); // totalWithVat: 123000 (positivo)
+      const asCredit = inv.update({ documentType: "credit_note" });
+      expect(asCredit.totalWithVat).toBe(-123000);
+      expect(asCredit.totalVat).toBe(-23000);
+      expect(asCredit.subtotalWithoutVat).toBe(-100000);
+
+      const backToInvoice = asCredit.update({ documentType: "invoice" });
+      expect(backToInvoice.totalWithVat).toBe(123000);
+    });
+
+    it("confirmImport() aplica o sinal do documentType corrigido pelo utilizador na revisão", () => {
+      const inv = Invoice.createFromImport({
+        supplierName: "Goldenergy",
+        invoiceNumber: "NC-2026-001",
+        invoiceDate: new Date("2026-09-01"),
+        subtotalWithoutVat: 15676,
+        totalVat: 3603,
+        totalWithVat: 19281,
+        documentType: "invoice", // IA não detetou — utilizador corrige no confirm
+        source: "pdf_import",
+        aiConfidence: 0.9,
+        requiresReview: false,
+      });
+      expect(inv.totalWithVat).toBe(19281);
+
+      const confirmed = inv.confirmImport({ documentType: "credit_note" });
+      expect(confirmed.totalWithVat).toBe(-19281);
+      expect(confirmed.documentType).toBe("credit_note");
+    });
   });
 });

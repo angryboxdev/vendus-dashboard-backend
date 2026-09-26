@@ -100,7 +100,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   // GET /invoices
   router.get("/invoices", async (req, res) => {
     try {
-      const { supplierId, costCenterId, status, reconciliationStatus, from, to, isDirectDebit, search } = req.query as Record<string, string | undefined>;
+      const { supplierId, costCenterId, status, reconciliationStatus, from, to, isDirectDebit, documentType, search } = req.query as Record<string, string | undefined>;
       const filter: Parameters<typeof ports.listInvoices.execute>[1] = {};
       if (supplierId !== undefined) filter.supplierId = supplierId;
       if (costCenterId !== undefined) filter.costCenterId = costCenterId;
@@ -109,6 +109,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
       if (from !== undefined) filter.from = from;
       if (to !== undefined) filter.to = to;
       if (isDirectDebit !== undefined) filter.isDirectDebit = isDirectDebit === "true";
+      if (documentType !== undefined) filter.documentType = documentType as import("../../domain/entities/invoice.js").InvoiceDocumentType;
       if (search !== undefined) filter.search = search;
       const invoices = await ports.listInvoices.execute(req.auth!.orgId, filter);
       res.json(invoices);
@@ -325,12 +326,15 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
         res.status(400).json({ error: "No file uploaded. Use multipart field 'file'." });
         return;
       }
-      const result = await ports.importInvoice.execute({
+      const { documentType } = req.body as { documentType?: string };
+      const cmd: Parameters<typeof ports.importInvoice.execute>[0] = {
         organizationId: req.auth!.orgId,
         fileBuffer: req.file.buffer,
         filename: req.file.originalname,
         mimeType: req.file.mimetype,
-      });
+      };
+      if (documentType === "invoice" || documentType === "credit_note") cmd.documentType = documentType;
+      const result = await ports.importInvoice.execute(cmd);
       res.status(201).json(result);
     } catch (err) {
       handleError(res, err);
