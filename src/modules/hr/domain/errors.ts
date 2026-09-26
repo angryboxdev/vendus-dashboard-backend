@@ -39,3 +39,19 @@ export class DocumentNotCurrentError extends Error {
     this.name = "DocumentNotCurrentError";
   }
 }
+
+/** Definição de categoria de documento (configuração, não instância enviada) não encontrada. */
+export class DocumentCategoryConfigNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Categoria de documento não encontrada: ${id}`);
+    this.name = "DocumentCategoryConfigNotFoundError";
+  }
+}
+
+/** Já existe uma categoria de documento configurada com este slug/label nesta organização. */
+export class DocumentCategoryConfigAlreadyExistsError extends Error {
+  constructor(slug: string) {
+    super(`Já existe uma categoria de documento com este nome: "${slug}"`);
+    this.name = "DocumentCategoryConfigAlreadyExistsError";
+  }
+}

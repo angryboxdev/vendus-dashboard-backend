@@ -7,9 +7,14 @@ import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/empl
 import type { ShiftAttendanceReadPort, ShiftOccurrence } from "../../domain/ports/out/shift-attendance-read.port.js";
 import type { ActiveLeave, LeaveReadPort, LeaveType } from "../../domain/ports/out/leave-read.port.js";
 import type { PaymentReadPort } from "../../domain/ports/out/payment-read.port.js";
+import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
+import type { DocumentCategoryDefinition } from "../../domain/entities/document-category.js";
 import {
+  applicableCategoriesFor,
+  buildDynamicRequirements,
   computeMandatoryDocumentsSummary,
-  DEFAULT_MANDATORY_CATEGORIES,
+  DEFAULT_MANDATORY_REQUIREMENTS,
+  DOCUMENT_CATEGORY_BASE_LABELS,
 } from "../../domain/services/document-status.service.js";
 import { computeProfileCompletionPercent } from "../../domain/services/profile-completeness.service.js";
 import {
@@ -67,6 +72,7 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
     private readonly shiftAttendanceRead: ShiftAttendanceReadPort,
     private readonly leaveRead: LeaveReadPort,
     private readonly paymentRead: PaymentReadPort,
+    private readonly documentCategoryRepository: DocumentCategoryRepositoryPort,
   ) {}
 
   async execute(command: GetHrOverviewCommand): Promise<HrOverviewDTO> {
@@ -80,6 +86,13 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
     const employeeNameById = new Map<string, string>(
       employeesResult.ok ? employeesResult.data.map((e) => [e.id, e.fullName]) : [],
     );
+    // Falha isolada, como as restantes fontes: sem categorias configuráveis,
+    // o bloco "team"/os alertas de documento degradam para só o requisito
+    // fixo de identificação, em vez de derrubar a resposta inteira.
+    const categoryDefsResult = await settle(
+      this.documentCategoryRepository.findMany(command.organizationId, { activeOnly: true }),
+    );
+    const categoryDefs = categoryDefsResult.ok ? categoryDefsResult.data : [];
 
     const [documentsResult, shiftsResult, leaveResult, unpaidResult] = await Promise.all([
       employeesResult.ok
@@ -104,10 +117,10 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
     return {
       generatedAt: now.toISO()!,
       scope: { organizationId: String(command.organizationId), locationId: command.locationId ?? null },
-      team: this.buildTeamBlock(employeesResult, documentsResult, now),
+      team: this.buildTeamBlock(employeesResult, documentsResult, categoryDefs, now),
       today: this.buildTodayBlock(shiftsResult, leaveResult, now),
       pending: this.buildPendingBlock(shiftsResult, unpaidResult, now),
-      alerts: this.buildAlertsBlock(employeesResult, documentsResult, shiftsResult, employeeNameById, now),
+      alerts: this.buildAlertsBlock(employeesResult, documentsResult, shiftsResult, employeeNameById, categoryDefs, now),
       operation: this.buildOperationBlock(shiftsResult, leaveResult, employeeNameById, now),
     };
   }
@@ -115,6 +128,7 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
   private buildTeamBlock(
     employeesResult: Settled<Employee[]>,
     documentsResult: Settled<EmployeeDocument[]>,
+    categoryDefs: readonly DocumentCategoryDefinition[],
     now: DateTime,
   ): BlockResult<OverviewTeamDTO> {
     if (!employeesResult.ok) return unavailable(employeesResult.reason);
@@ -136,10 +150,9 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
         documentsByEmployee.set(doc.employeeId, list);
       }
       for (const e of activeEmployees) {
-        const summary = computeMandatoryDocumentsSummary(
-          DEFAULT_MANDATORY_CATEGORIES,
-          documentsByEmployee.get(e.id) ?? [],
-        );
+        const applicable = applicableCategoriesFor(categoryDefs, e.jobRole);
+        const requirements = [...DEFAULT_MANDATORY_REQUIREMENTS, ...buildDynamicRequirements(applicable)];
+        const summary = computeMandatoryDocumentsSummary(requirements, documentsByEmployee.get(e.id) ?? []);
         documentsExpiringSoon += summary.expiringSoonCount;
       }
     }
@@ -184,8 +197,13 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
     documentsResult: Settled<EmployeeDocument[]>,
     shiftsResult: Settled<ShiftOccurrence[]>,
     employeeNameById: Map<string, string>,
+    categoryDefs: readonly DocumentCategoryDefinition[],
     now: DateTime,
   ): BlockResult<OverviewAlertDTO[]> {
+    const labelBySlug = new Map<string, string>([
+      ...Object.entries(DOCUMENT_CATEGORY_BASE_LABELS),
+      ...categoryDefs.map((c): [string, string] => [c.slug, c.label]),
+    ]);
     if (!shiftsResult.ok && !(employeesResult.ok && documentsResult.ok)) {
       return unavailable("fontes de alertas indisponíveis");
     }
@@ -263,7 +281,7 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
               occurredAt: doc.expiresAt,
               employeeId: e.id,
               employeeName: e.fullName,
-              message: `Documento expirado (${doc.category})`,
+              message: `Documento expirado (${labelBySlug.get(doc.category) ?? doc.category})`,
             });
           }
         }

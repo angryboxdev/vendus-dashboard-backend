@@ -80,11 +80,37 @@ Este módulo é **aditivo**, não uma substituição imediata:
   remover não pode apagar a evidência anterior").
 - **`document-status.service`** — deriva o estado de exibição de um
   documento (`ok`/`expiring`/`expired`/`pending_validation`/`rejected`/
-  `removed`) e resume as categorias obrigatórias vs. as existentes
-  (`computeMandatoryDocumentsSummary`). `DEFAULT_MANDATORY_CATEGORIES` é uma
-  constante do módulo — **não configurável por organização nesta fase**
-  (dívida conhecida, ver abaixo). `EXPIRING_SOON_DAYS = 30` é igualmente uma
-  constante fixa.
+  `removed`) e resume os **requisitos documentais obrigatórios** vs. os
+  documentos existentes (`computeMandatoryDocumentsSummary`). Um requisito
+  (`MandatoryDocumentRequirement`) é satisfeito por **qualquer uma** das
+  suas categorias. Desde a introdução das **categorias de documento
+  configuráveis** (`hr_document_categories`, entidade
+  `DocumentCategoryDefinition`), a lista de requisitos obrigatórios já não é
+  toda fixa:
+  - **"Documento de identificação"** (Cartão de Cidadão OU Título de
+    Residência OU Passaporte) continua o único requisito fixo
+    (`DEFAULT_MANDATORY_REQUIREMENTS`) — decisão confirmada com o
+    utilizador, fica fora da tela de gestão.
+  - Todas as outras categorias (Contrato de trabalho, Comprovativo de IBAN,
+    Apólice de seguro AT, Certificado de morada, Ficha de colaborador,
+    Formação de segurança, Atestado de saúde, NIF, + qualquer categoria
+    nova criada pelo utilizador) vivem em `hr_document_categories`, uma por
+    organização, cada uma com `label`, `mandatory`, `jobRoles` (`[]` =
+    todos os cargos, ou uma lista de cargos específicos) e
+    `acceptedMimeTypes`. `applicableCategoriesFor(defs, jobRole)` filtra as
+    ativas e aplicáveis ao cargo do colaborador; `buildDynamicRequirements`
+    converte as `mandatory=true` num requisito de categoria única cada.
+  - **Pendências prioritárias e alertas do Overview só listam categorias
+    obrigatórias** (pedido explícito do utilizador) — `missingRequirements`
+    continua a ser a única fonte dessas pendências. Categorias opcionais em
+    falta só aparecem em `missingOptional`, dentro do perfil do próprio
+    colaborador (`computeMissingOptional`) — nunca nas pendências
+    prioritárias nem nos alertas do Overview.
+  - Gestão pela UI: botão "Categorias de documentos" em Pessoas &
+    Documentos → `hr-document-categories.controller.ts` (CRUD) — desativar
+    uma categoria (nunca apagar) para de a exigir/sugerir sem tocar nos
+    documentos já enviados nela.
+  `EXPIRING_SOON_DAYS = 30` continua uma constante fixa.
 - **`profile-completeness.service`** — completude do perfil (%) e por secção
   (dados pessoais/morada/contrato/conta bancária/contacto de emergência), a
   partir de um conjunto fixo de campos considerados "obrigatórios para
@@ -131,6 +157,10 @@ Este módulo é **aditivo**, não uma substituição imediata:
   falhar nunca derruba as outras nem vira `0` silenciosamente.
 - `ListShiftsToReviewPort` (RH-01) — fila "Turnos por conferir" paginada,
   filtrada por prioridade/local/pesquisa.
+- `ListDocumentCategoriesPort` / `CreateDocumentCategoryPort` /
+  `UpdateDocumentCategoryPort` / `SetDocumentCategoryActivePort` —
+  CRUD (desativar, nunca apagar) das categorias de documento configuráveis
+  por organização.
 
 ### Output (domain dependencies)
 
@@ -148,6 +178,11 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `hr_leave_requests`, `hr_employee_payments` — sem nenhum método de
   escrita (a não-mutação da Visão Geral é garantida pela própria forma das
   interfaces, não só por convenção).
+- `DocumentCategoryRepositoryPort` — persistência de
+  `DocumentCategoryDefinition` em `hr_document_categories` via
+  `ScopedQueryFactory`. Injetado também em `ListEmployeesUseCase`/
+  `GetPeopleKpisUseCase`/`GetHrOverviewUseCase`/`GetEmployeeProfileUseCase`
+  (constroem os requisitos obrigatórios dinâmicos a partir dele).
 
 ## Adapters
 
@@ -160,6 +195,10 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `GET /api/hr/overview/shifts-to-review`, ambos só leitura, `hr_viewer`+.
   A confirmação de conferência **não** tem rota aqui — continua a usar o
   endpoint legacy `PATCH /api/hr/shifts/:id/attendance`.
+- `HrDocumentCategoriesController` → `GET/POST /api/hr/document-categories`,
+  `PATCH /api/hr/document-categories/:id`,
+  `PATCH /api/hr/document-categories/:id/active`. GET aberto a `hr_viewer`+;
+  escritas exigem `requireMinRole("manager")`.
 
 ### Output
 
@@ -175,6 +214,8 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `SupabasePaymentReadAdapter` (RH-01) → leitura direta via
   `createScopedQuery`, sem importar `hrShiftService.ts`/
   `hrShiftAttendanceService.ts`/`hrLeaveService.ts`/`hrPaymentService.ts`.
+- `SupabaseDocumentCategoryRepository` → `hr_document_categories` via
+  `createScopedQuery`.
 
 ## Design decisions (ADR summary)
 
@@ -211,6 +252,24 @@ memória, sobre um conjunto já limitado a um teto alto (`FIND_MANY_LIMIT =
 500`) vindo do repositório. Não é uma paginação real de servidor para este
 filtro específico — mesma abordagem (e mesma limitação) que a listagem
 legacy de `hrEmployeeService.ts` já usava.
+
+### Documentos obrigatórios e completude de perfil só se aplicam a colaboradores ativos
+
+Um colaborador **inativo** não tem ações pendentes por definição — pedido
+confirmado com o utilizador. Tanto `ListEmployeesUseCase` como
+`GetEmployeeProfileUseCase` tratam `employee.status !== "active"` como um
+caso especial: devolvem sempre `documentSituation: "ok"`,
+`profileCompletionPercent: 100`, `sections` todas `true`,
+`missingRequirements: []`, `expiringSoonCount: 0`, `alerts: []` e
+`onboardingStatus: "completed"`, **independentemente** do estado real dos
+dados/documentos. Não é um cálculo estatístico fraco — é uma decisão
+deliberada de não gerar alerta/estado pendente para quem já saiu, mesmo que
+o registo histórico continue incompleto. `GetPeopleKpisUseCase` e
+`GetHrOverviewUseCase` já filtravam por `status: "active"` antes desta
+mudança, por isso não precisaram de alteração. A listagem
+(`PeopleListView.tsx`, frontend) mostra por omissão só ativos
+(`status=active` no URL) — colaboradores inativos continuam pesquisáveis
+trocando o filtro, mas nunca aparecem com badge de alerta.
 
 ### RH-01 — funcionalidades do mockup sem fonte real, deliberadamente omitidas
 
@@ -268,10 +327,14 @@ conferir há mais de 24h.
 
 ## Known gaps / open debt
 
-- **`DEFAULT_MANDATORY_CATEGORIES` e o threshold `EXPIRING_SOON_DAYS`** são
-  constantes fixas do módulo, não configuráveis por organização — uma
-  organização diferente da Angry Box não pode hoje definir as suas próprias
-  categorias obrigatórias nem o seu próprio prazo de "a expirar".
+- **`EXPIRING_SOON_DAYS`** continua uma constante fixa do módulo, não
+  configurável por organização — mudar o prazo de "a expirar" ainda é editar
+  `document-status.service.ts`, não uma tela.
+- **O grupo "Documento de identificação"** (Cartão de Cidadão OU Título de
+  Residência OU Passaporte, `DEFAULT_MANDATORY_REQUIREMENTS`) continua fixo
+  no código, propositadamente fora da tela "Categorias de documentos" —
+  decisão confirmada com o utilizador (não vale a pena a complexidade de
+  gerir grupos "ou" pela UI só para este caso único).
 - **Checklist de onboarding** do mockup (Documentos entregues / Contrato
   assinado / Formação de segurança / Fardamento / Acessos) não tem uma
   tabela de estado própria nesta fase — `onboardingStatus` no perfil é só

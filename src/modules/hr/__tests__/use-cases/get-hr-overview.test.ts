@@ -6,6 +6,7 @@ import { FakeEmployeeDocumentRepository } from "../fakes/fake-employee-document-
 import { FakeShiftAttendanceReadAdapter } from "../fakes/fake-shift-attendance-read.js";
 import { FakeLeaveReadAdapter } from "../fakes/fake-leave-read.js";
 import { FakePaymentReadAdapter } from "../fakes/fake-payment-read.js";
+import { FakeDocumentCategoryRepository } from "../fakes/fake-document-category-repository.js";
 import type { ShiftAttendanceReadPort } from "../../domain/ports/out/shift-attendance-read.port.js";
 
 const ORG = mintOrganizationId("org-test");
@@ -16,13 +17,15 @@ function makeUseCase(overrides: { shiftAttendanceRead?: ShiftAttendanceReadPort 
   const shifts = overrides.shiftAttendanceRead ?? new FakeShiftAttendanceReadAdapter();
   const leave = new FakeLeaveReadAdapter();
   const payments = new FakePaymentReadAdapter();
+  const categories = new FakeDocumentCategoryRepository();
   return {
     employees,
     documents,
     shifts,
     leave,
     payments,
-    useCase: new GetHrOverviewUseCase(employees, documents, shifts, leave, payments),
+    categories,
+    useCase: new GetHrOverviewUseCase(employees, documents, shifts, leave, payments, categories),
   };
 }
 
@@ -62,6 +65,7 @@ describe("GetHrOverviewUseCase", () => {
       new FakeShiftAttendanceReadAdapter(),
       new FakeLeaveReadAdapter(),
       payments,
+      new FakeDocumentCategoryRepository(),
     );
     payments.seedUnpaidCount(ORG, 3);
 
@@ -103,7 +107,7 @@ describe("GetHrOverviewUseCase", () => {
       },
     };
     // @ts-expect-error — fakes mínimos só para este teste
-    const useCase = new GetHrOverviewUseCase(failing, failing, failingShifts, failingLeave, failingPayments);
+    const useCase = new GetHrOverviewUseCase(failing, failing, failingShifts, failingLeave, failingPayments, failing);
     const result = await useCase.execute({ organizationId: ORG });
     expect(result.generatedAt).toBeTruthy();
     expect(result.scope.organizationId).toBe(String(ORG));

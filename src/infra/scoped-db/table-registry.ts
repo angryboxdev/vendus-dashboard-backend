@@ -88,6 +88,7 @@ export const TABLE_REGISTRY = {
   dre_custos_fixos: { organizationColumn: "org_id", locationBearing: false },
   dre_custos_variaveis: { organizationColumn: "org_id", locationBearing: false },
   hr_audit_logs: { organizationColumn: "org_id", locationBearing: false },
+  hr_document_categories: { organizationColumn: "org_id", locationBearing: false },
   hr_employee_documents: { organizationColumn: "org_id", locationBearing: false },
   hr_employee_payments: { organizationColumn: "org_id", locationBearing: false },
   hr_employees: { organizationColumn: "org_id", locationBearing: false },

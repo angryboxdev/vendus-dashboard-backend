@@ -5,6 +5,7 @@ import { ListEmployeesUseCase } from "../../application/use-cases/list-employees
 import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
 import { FakeEmployeeDocumentRepository } from "../fakes/fake-employee-document-repository.js";
 import { FakeHrFileStorage } from "../fakes/fake-hr-file-storage.js";
+import { FakeDocumentCategoryRepository } from "../fakes/fake-document-category-repository.js";
 
 const ORG = mintOrganizationId("org-test");
 
@@ -13,10 +14,11 @@ describe("ListEmployeesUseCase", () => {
     const employees = new FakeEmployeeRepository();
     const documents = new FakeEmployeeDocumentRepository();
     const storage = new FakeHrFileStorage();
+    const categories = new FakeDocumentCategoryRepository();
     const e = Employee.create({ fullName: "Andres Silva" });
     employees.seed(ORG, e);
 
-    const useCase = new ListEmployeesUseCase(employees, documents, storage);
+    const useCase = new ListEmployeesUseCase(employees, documents, storage, categories);
     const result = await useCase.execute({ organizationId: ORG, viewerRole: "manager", page: 1, pageSize: 10 });
 
     expect(result.items).toHaveLength(1);
@@ -28,10 +30,11 @@ describe("ListEmployeesUseCase", () => {
     const employees = new FakeEmployeeRepository();
     const documents = new FakeEmployeeDocumentRepository();
     const storage = new FakeHrFileStorage();
+    const categories = new FakeDocumentCategoryRepository();
     employees.seed(ORG, Employee.create({ fullName: "Falta Documentos" }));
     employees.seed(ORG, Employee.create({ fullName: "Com Documentos" }));
 
-    const useCase = new ListEmployeesUseCase(employees, documents, storage);
+    const useCase = new ListEmployeesUseCase(employees, documents, storage, categories);
     const result = await useCase.execute({
       organizationId: ORG,
       viewerRole: "manager",
@@ -48,11 +51,12 @@ describe("ListEmployeesUseCase", () => {
     const employees = new FakeEmployeeRepository();
     const documents = new FakeEmployeeDocumentRepository();
     const storage = new FakeHrFileStorage();
+    const categories = new FakeDocumentCategoryRepository();
     for (const name of ["Ana", "Bruno", "Carlos"]) {
       employees.seed(ORG, Employee.create({ fullName: name }));
     }
 
-    const useCase = new ListEmployeesUseCase(employees, documents, storage);
+    const useCase = new ListEmployeesUseCase(employees, documents, storage, categories);
     const page1 = await useCase.execute({ organizationId: ORG, viewerRole: "manager", page: 1, pageSize: 2 });
     const page2 = await useCase.execute({ organizationId: ORG, viewerRole: "manager", page: 2, pageSize: 2 });
 
@@ -65,10 +69,11 @@ describe("ListEmployeesUseCase", () => {
     const employees = new FakeEmployeeRepository();
     const documents = new FakeEmployeeDocumentRepository();
     const storage = new FakeHrFileStorage();
+    const categories = new FakeDocumentCategoryRepository();
     const e = Employee.create({ fullName: "Andres Silva" }).updatePhoto("org-a/andres.jpg");
     employees.seed(ORG, e);
 
-    const useCase = new ListEmployeesUseCase(employees, documents, storage);
+    const useCase = new ListEmployeesUseCase(employees, documents, storage, categories);
     const result = await useCase.execute({ organizationId: ORG, viewerRole: "manager", page: 1, pageSize: 10 });
 
     expect(result.items[0]!.photoUrl).toContain("org-a/andres.jpg");
@@ -78,6 +83,7 @@ describe("ListEmployeesUseCase", () => {
     const employees = new FakeEmployeeRepository();
     const documents = new FakeEmployeeDocumentRepository();
     const storage = new FakeHrFileStorage();
+    const categories = new FakeDocumentCategoryRepository();
     employees.seed(ORG, Employee.create({ fullName: "Perfil Incompleto" }));
     employees.seed(
       ORG,
@@ -98,7 +104,7 @@ describe("ListEmployeesUseCase", () => {
       }),
     );
 
-    const useCase = new ListEmployeesUseCase(employees, documents, storage);
+    const useCase = new ListEmployeesUseCase(employees, documents, storage, categories);
     const incomplete = await useCase.execute({
       organizationId: ORG,
       viewerRole: "manager",
@@ -122,20 +128,14 @@ describe("ListEmployeesUseCase", () => {
     const employees = new FakeEmployeeRepository();
     const documents = new FakeEmployeeDocumentRepository();
     const storage = new FakeHrFileStorage();
+    const categories = new FakeDocumentCategoryRepository();
     const e = Employee.create({ fullName: "Completo" });
     employees.seed(ORG, e);
 
-    const categories = [
-      "contrato_trabalho",
-      "cartao_cidadao",
-      "nif",
-      "certificado_morada",
-      "ficha_colaborador",
-      "comprovativo_iban",
-      "formacao_seguranca",
-      "atestado_saude",
-    ];
-    for (const category of categories) {
+    // Cumpre os 4 requisitos obrigatórios atuais (contrato, identificação — só
+    // uma das três categorias aceites —, IBAN, seguro AT).
+    const requiredCategories = ["contrato_trabalho", "cartao_cidadao", "comprovativo_iban", "apolice_seguro_at"];
+    for (const category of requiredCategories) {
       documents.seed(
         ORG,
         EmployeeDocument.createFirstVersion({
@@ -153,9 +153,51 @@ describe("ListEmployeesUseCase", () => {
       );
     }
 
-    const useCase = new ListEmployeesUseCase(employees, documents, storage);
+    const useCase = new ListEmployeesUseCase(employees, documents, storage, categories);
     const result = await useCase.execute({ organizationId: ORG, viewerRole: "manager", page: 1, pageSize: 10 });
 
     expect(result.items[0]!.documentSituation).toBe("ok");
+  });
+
+  it("colaborador inativo nunca mostra situação documental ou de perfil como pendente", async () => {
+    const employees = new FakeEmployeeRepository();
+    const documents = new FakeEmployeeDocumentRepository();
+    const storage = new FakeHrFileStorage();
+    const categories = new FakeDocumentCategoryRepository();
+    const e = Employee.create({ fullName: "Ex-Colaborador" }).deactivate();
+    employees.seed(ORG, e);
+
+    const useCase = new ListEmployeesUseCase(employees, documents, storage, categories);
+    const result = await useCase.execute({
+      organizationId: ORG,
+      viewerRole: "manager",
+      status: "all",
+      page: 1,
+      pageSize: 10,
+    });
+
+    expect(result.items[0]!.documentSituation).toBe("ok");
+    expect(result.items[0]!.profileCompletionPercent).toBe(100);
+  });
+
+  it("filtro profileComplete=incomplete nunca inclui colaboradores inativos", async () => {
+    const employees = new FakeEmployeeRepository();
+    const documents = new FakeEmployeeDocumentRepository();
+    const storage = new FakeHrFileStorage();
+    const categories = new FakeDocumentCategoryRepository();
+    employees.seed(ORG, Employee.create({ fullName: "Inativo Incompleto" }).deactivate());
+    employees.seed(ORG, Employee.create({ fullName: "Ativo Incompleto" }));
+
+    const useCase = new ListEmployeesUseCase(employees, documents, storage, categories);
+    const result = await useCase.execute({
+      organizationId: ORG,
+      viewerRole: "manager",
+      status: "all",
+      profileComplete: "incomplete",
+      page: 1,
+      pageSize: 10,
+    });
+
+    expect(result.items.map((i) => i.fullName)).toEqual(["Ativo Incompleto"]);
   });
 });

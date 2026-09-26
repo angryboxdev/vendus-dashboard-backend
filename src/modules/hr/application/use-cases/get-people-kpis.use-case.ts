@@ -1,23 +1,59 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
 import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
+import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
 import {
+  applicableCategoriesFor,
+  buildDynamicRequirements,
+  computeDocumentDisplayStatus,
   computeMandatoryDocumentsSummary,
-  DEFAULT_MANDATORY_CATEGORIES,
+  DEFAULT_MANDATORY_REQUIREMENTS,
+  DOCUMENT_CATEGORY_BASE_LABELS,
 } from "../../domain/services/document-status.service.js";
 import {
   computeProfileCompletionPercent,
   computeProfileSections,
 } from "../../domain/services/profile-completeness.service.js";
-import type { GetPeopleKpisPort, PeopleKpisDTO, PriorityPendencyDTO } from "../../domain/ports/in/employee.ports.js";
+import type {
+  GetPeopleKpisPort,
+  PeopleKpisDTO,
+  PriorityPendencyGroupDTO,
+} from "../../domain/ports/in/employee.ports.js";
 
 const PROFILE_COMPLETE_THRESHOLD = 100;
 const RECENTLY_HIRED_DAYS = 30;
+
+interface Candidate {
+  kind: PriorityPendencyGroupDTO["kind"];
+  detail: string;
+  employeeId: string;
+  employeeName: string;
+}
+
+function categoryLabel(category: string, labelBySlug: ReadonlyMap<string, string>): string {
+  return labelBySlug.get(category) ?? DOCUMENT_CATEGORY_BASE_LABELS[category] ?? category;
+}
+
+/** Agrupa candidatos por `kind`+`detail`, preservando a primeira ordem de aparição. */
+function groupPendencies(candidates: Candidate[]): PriorityPendencyGroupDTO[] {
+  const groups = new Map<string, PriorityPendencyGroupDTO>();
+  for (const c of candidates) {
+    const key = `${c.kind}:${c.detail}`;
+    const group = groups.get(key);
+    if (group) {
+      group.employees.push({ employeeId: c.employeeId, employeeName: c.employeeName });
+    } else {
+      groups.set(key, { kind: c.kind, detail: c.detail, employees: [{ employeeId: c.employeeId, employeeName: c.employeeName }] });
+    }
+  }
+  return [...groups.values()].sort((a, b) => b.employees.length - a.employees.length);
+}
 
 export class GetPeopleKpisUseCase implements GetPeopleKpisPort {
   constructor(
     private readonly employeeRepository: EmployeeRepositoryPort,
     private readonly employeeDocumentRepository: EmployeeDocumentRepositoryPort,
+    private readonly documentCategoryRepository: DocumentCategoryRepositoryPort,
   ) {}
 
   async execute(organizationId: OrganizationId): Promise<PeopleKpisDTO> {
@@ -33,24 +69,26 @@ export class GetPeopleKpisUseCase implements GetPeopleKpisPort {
       documentsByEmployee.set(doc.employeeId, list);
     }
 
+    const categoryDefs = await this.documentCategoryRepository.findMany(organizationId, { activeOnly: true });
+    const labelBySlug = new Map(categoryDefs.map((c): [string, string] => [c.slug, c.label]));
+
     const now = new Date();
     let onboardingPending = 0;
     let incompleteProfiles = 0;
     let documentsExpiringSoon = 0;
-    const priorityPendencies: PriorityPendencyDTO[] = [];
+    const candidates: Candidate[] = [];
 
     for (const employee of employees) {
-      const summary = computeMandatoryDocumentsSummary(
-        DEFAULT_MANDATORY_CATEGORIES,
-        documentsByEmployee.get(employee.id) ?? [],
-        now,
-      );
+      const employeeDocuments = documentsByEmployee.get(employee.id) ?? [];
+      const applicable = applicableCategoriesFor(categoryDefs, employee.jobRole);
+      const requirements = [...DEFAULT_MANDATORY_REQUIREMENTS, ...buildDynamicRequirements(applicable)];
+      const summary = computeMandatoryDocumentsSummary(requirements, employeeDocuments, now);
       const completionPercent = computeProfileCompletionPercent(employee);
       documentsExpiringSoon += summary.expiringSoonCount;
 
       if (completionPercent < PROFILE_COMPLETE_THRESHOLD) {
         incompleteProfiles++;
-        priorityPendencies.push({
+        candidates.push({
           kind: "missing_field",
           employeeId: employee.id,
           employeeName: employee.fullName,
@@ -61,21 +99,32 @@ export class GetPeopleKpisUseCase implements GetPeopleKpisPort {
       const hiredRecently =
         employee.hiredAt != null &&
         (now.getTime() - new Date(employee.hiredAt).getTime()) / (1000 * 60 * 60 * 24) <= RECENTLY_HIRED_DAYS;
-      if (hiredRecently && (summary.missingCategories.length > 0 || completionPercent < PROFILE_COMPLETE_THRESHOLD)) {
+      if (hiredRecently && (summary.missingRequirements.length > 0 || completionPercent < PROFILE_COMPLETE_THRESHOLD)) {
         onboardingPending++;
       }
 
-      for (const category of summary.missingCategories) {
-        priorityPendencies.push({
+      for (const label of summary.missingRequirements) {
+        candidates.push({
           kind: "missing_document",
           employeeId: employee.id,
           employeeName: employee.fullName,
-          detail: `Documento em falta: ${category}`,
+          detail: `${label} em falta`,
         });
       }
 
+      for (const doc of employeeDocuments) {
+        if (computeDocumentDisplayStatus(doc, now) === "expiring") {
+          candidates.push({
+            kind: "expiring_document",
+            employeeId: employee.id,
+            employeeName: employee.fullName,
+            detail: `${categoryLabel(doc.category, labelBySlug)} a expirar`,
+          });
+        }
+      }
+
       if (!computeProfileSections(employee).emergencyContact) {
-        priorityPendencies.push({
+        candidates.push({
           kind: "missing_field",
           employeeId: employee.id,
           employeeName: employee.fullName,
@@ -89,7 +138,7 @@ export class GetPeopleKpisUseCase implements GetPeopleKpisPort {
       onboardingPending,
       incompleteProfiles,
       documentsExpiringSoon,
-      priorityPendencies,
+      priorityPendencies: groupPendencies(candidates),
     };
   }
 }

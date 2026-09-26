@@ -2,6 +2,7 @@ import { Router } from "express";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import { SupabaseEmployeeRepository } from "./adapters/out/supabase-employee.repository.js";
 import { SupabaseEmployeeDocumentRepository } from "./adapters/out/supabase-employee-document.repository.js";
+import { SupabaseDocumentCategoryRepository } from "./adapters/out/supabase-document-category.repository.js";
 import { SupabaseHrFileStorageAdapter } from "./adapters/out/supabase-hr-file-storage.adapter.js";
 import { SupabaseHrAuditLogAdapter } from "./adapters/out/supabase-hr-audit-log.adapter.js";
 import { SupabaseShiftAttendanceReadAdapter } from "./adapters/out/supabase-shift-attendance-read.adapter.js";
@@ -24,9 +25,14 @@ import { GetEmployeeDocumentDownloadUrlUseCase } from "./application/use-cases/g
 import { GetEmployeeDocumentHistoryUseCase } from "./application/use-cases/get-employee-document-history.use-case.js";
 import { GetHrOverviewUseCase } from "./application/use-cases/get-hr-overview.use-case.js";
 import { ListShiftsToReviewUseCase } from "./application/use-cases/list-shifts-to-review.use-case.js";
+import { ListDocumentCategoriesUseCase } from "./application/use-cases/list-document-categories.use-case.js";
+import { CreateDocumentCategoryUseCase } from "./application/use-cases/create-document-category.use-case.js";
+import { UpdateDocumentCategoryUseCase } from "./application/use-cases/update-document-category.use-case.js";
+import { SetDocumentCategoryActiveUseCase } from "./application/use-cases/set-document-category-active.use-case.js";
 
 import { HrPeopleController } from "./adapters/in/hr-people.controller.js";
 import { HrOverviewController } from "./adapters/in/hr-overview.controller.js";
+import { HrDocumentCategoriesController } from "./adapters/in/hr-document-categories.controller.js";
 
 /**
  * Composition root do módulo `hr` (RH-02, Pessoas & Documentos).
@@ -40,15 +46,26 @@ import { HrOverviewController } from "./adapters/in/hr-overview.controller.js";
 export function createHrModule(): { router: Router } {
   const employeeRepository = new SupabaseEmployeeRepository(createScopedQuery);
   const employeeDocumentRepository = new SupabaseEmployeeDocumentRepository(createScopedQuery);
+  const documentCategoryRepository = new SupabaseDocumentCategoryRepository(createScopedQuery);
   const hrFileStorage = new SupabaseHrFileStorageAdapter();
   const auditLog = new SupabaseHrAuditLogAdapter(createScopedQuery);
   const shiftAttendanceRead = new SupabaseShiftAttendanceReadAdapter(createScopedQuery);
   const leaveRead = new SupabaseLeaveReadAdapter(createScopedQuery);
   const paymentRead = new SupabasePaymentReadAdapter(createScopedQuery);
 
-  const listEmployees = new ListEmployeesUseCase(employeeRepository, employeeDocumentRepository, hrFileStorage);
-  const getPeopleKpis = new GetPeopleKpisUseCase(employeeRepository, employeeDocumentRepository);
-  const getEmployeeProfile = new GetEmployeeProfileUseCase(employeeRepository, employeeDocumentRepository, hrFileStorage);
+  const listEmployees = new ListEmployeesUseCase(
+    employeeRepository,
+    employeeDocumentRepository,
+    hrFileStorage,
+    documentCategoryRepository,
+  );
+  const getPeopleKpis = new GetPeopleKpisUseCase(employeeRepository, employeeDocumentRepository, documentCategoryRepository);
+  const getEmployeeProfile = new GetEmployeeProfileUseCase(
+    employeeRepository,
+    employeeDocumentRepository,
+    hrFileStorage,
+    documentCategoryRepository,
+  );
   const createEmployee = new CreateEmployeeUseCase(employeeRepository, auditLog);
   const updateEmployee = new UpdateEmployeeUseCase(employeeRepository, auditLog);
   const setEmployeeStatus = new SetEmployeeStatusUseCase(employeeRepository, auditLog);
@@ -79,8 +96,14 @@ export function createHrModule(): { router: Router } {
     shiftAttendanceRead,
     leaveRead,
     paymentRead,
+    documentCategoryRepository,
   );
   const listShiftsToReview = new ListShiftsToReviewUseCase(employeeRepository, shiftAttendanceRead);
+
+  const listDocumentCategories = new ListDocumentCategoriesUseCase(documentCategoryRepository);
+  const createDocumentCategory = new CreateDocumentCategoryUseCase(documentCategoryRepository);
+  const updateDocumentCategory = new UpdateDocumentCategoryUseCase(documentCategoryRepository);
+  const setDocumentCategoryActive = new SetDocumentCategoryActiveUseCase(documentCategoryRepository);
 
   const controller = new HrPeopleController(
     listEmployees,
@@ -99,10 +122,17 @@ export function createHrModule(): { router: Router } {
     getEmployeeDocumentHistory,
   );
   const overviewController = new HrOverviewController(getHrOverview, listShiftsToReview);
+  const documentCategoriesController = new HrDocumentCategoriesController(
+    listDocumentCategories,
+    createDocumentCategory,
+    updateDocumentCategory,
+    setDocumentCategoryActive,
+  );
 
   const router = Router();
   router.use(controller.router);
   router.use(overviewController.router);
+  router.use(documentCategoriesController.router);
 
   return { router };
 }
