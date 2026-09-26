@@ -128,7 +128,16 @@ reconciliação ou relatórios financeiros.
   fornecedor são suportadas; o match usa substring case-insensitive (padrão mais longo vence);
   regra sem padrão serve de fallback genérico. Inclui `channelId` para sugerir canal.
 - **AiExtractionResult** — value object com os dados extraídos pela IA + confidence + validationIssues.
-- **InvoiceStatus**: `draft_ai | pending_review | pending | paid | overdue | cancelled | review`
+- **InvoiceStatus**: `draft_ai | pending_review | pending | paid | overdue | cancelled | review`.
+  `overdue` existe como valor do enum e a entidade tem `markOverdue()`, mas
+  **nada no sistema chama esse método** — não há cron nem trigger que
+  transite uma fatura para `overdue` automaticamente. Na prática nenhuma
+  fatura fica persistida com este status literal; é sempre calculado
+  on-the-fly (não paga/cancelada/rascunho + `dueDate` no passado — ver
+  `GetInvoiceAlertsUseCase` e `ListInvoicesUseCase`). Filtrar a listagem por
+  `status=overdue` teria de ser tratado como filtro derivado, nunca como
+  igualdade literal no repositório (bug corrigido, ver "Decisões de
+  design").
 - **ReconciliationStatus**: `none | pending_reconciliation | reconciled` — estado bancário, ortogonal ao `InvoiceStatus`. Após `markPaid()` fica `pending_reconciliation`; passa a `reconciled` via `markReconciled()` ou conciliação bancária.
 - **LineDetailMode**: `simple | detailed` — controla se a fatura usa linha única automática (derivada dos totais do cabeçalho, gerida pelo frontend) ou linhas reais persistidas e editáveis. Padrão: `simple`. Ao transitar para `simple`, todas as linhas são apagadas; ao transitar para `detailed`, parte de zero.
 - **InvoiceSource**: `manual | pdf_import | image_import`
@@ -258,6 +267,7 @@ módulo não importa `@supabase/supabase-js` em lado nenhum — só o folder
 - **Débito direto e "já paga" são mutuamente exclusivos**: o frontend impede selecionar ambos; o backend aceita `isDirectDebit` independentemente de `markAsPaid`, mas a semântica esperada é exclusiva.
 - **Débito direto não cria payable entry**: quando o utilizador confirma uma fatura com `isDirectDebit=true`, o `saveAsPayable` é forçado a `false` no frontend e ignorado no backend — não faz sentido ter uma entrada a pagar para algo que será debitado automaticamente. O processamento do cron sincroniza o payable entry existente (se houver) via `markPaidByInvoiceId`.
 - **Processamento de DD via cron**: `ProcessDirectDebitsUseCase` lê faturas com `directDebitDate ≤ hoje` e status não pago/cancelado (`paid`/`cancelled` excluídos; `overdue` é elegível), marca-as como pagas na `directDebitDate` e sincroniza o payable entry.
+- **Filtro `status=overdue` em `ListInvoicesUseCase` é sempre derivado, nunca reenviado ao repositório como igualdade literal**: como nada persiste `status="overdue"` (ver "Conceitos do domínio"), o repositório (`.eq("status", "overdue")`) devolvia sempre lista vazia — bug reportado pelo utilizador ("a filtrar as faturas vencidas não filtra nada"). O use case agora intercepta este valor antes de montar o filtro do repositório e aplica, em memória, o mesmo critério já usado em `GetInvoiceAlertsUseCase` (não paga/cancelada/rascunho + `dueDate` antes de hoje). Os restantes filtros (fornecedor, datas, pesquisa, etc.) continuam a combinar normalmente com este.
 - **`internalCronRoutes` como factory**: o ficheiro `src/routes/internalCronRoutes.ts` exporta `createInternalCronRouter(deps)` em vez de uma instância singleton. Isto evita que o módulo `invoices` seja instanciado duas vezes (uma no `server.ts` e outra na criação das rotas cron), o que criaria dois clientes Supabase separados. O `server.ts` passa `{ processDirectDebits: invoicesModule.processDirectDebits, listOrganizations }` já instanciados — `listOrganizations` vem de `src/infra/scoped-db/organization-listing.ts` (ticket 02), não do módulo `invoices`.
 - **Fan-out do cron de débitos diretos (spec C ticket 06)**: `POST /api/internal/cron/process-direct-debits` deixou de processar só o `UNATTENDED_SCOPE.organizationId` fixo — agora lista todas as organizações (`listOrganizations()`) e chama `ProcessDirectDebitsPort.execute(organizationId)` uma vez por organização através do utilitário genérico `fanOut` (`src/utils/fan-out.ts`, ticket 02). Ao contrário do cron `daily-vendus-consumption` (ticket 05, não implementado), este cron não depende de credenciais Vendus/AirMenu — opera sobre `invoices`/`payable_entries` já filtradas por `org_id` — por isso não há caso de skip "não configurado"; o processor nunca devolve `not_configured`, só falha isolada por organização (uma exceção numa organização não impede as restantes, apanhada e registada pelo `fanOut`). A resposta HTTP devolve o `FanOutSummary` completo (`succeeded`/`skipped`/`failed`); o log por organização (sucesso ou falha) é responsabilidade do `fanOut`, não deste route handler.
 - **Proteção contra duplicados — dois caminhos, com preferência por `supplierId`**:
