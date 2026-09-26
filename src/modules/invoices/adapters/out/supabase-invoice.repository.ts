@@ -4,6 +4,7 @@ import {
   Invoice,
   type InvoiceStatus,
   type InvoiceSource,
+  type InvoiceDocumentType,
   type AiExtractionStatus,
   type ReconciliationStatus,
   type LineDetailMode,
@@ -26,6 +27,7 @@ function toEntity(row: Record<string, unknown>): Invoice {
     subtotalWithoutVat: row.subtotal_without_vat as number,
     totalVat: row.total_vat as number,
     totalWithVat: row.total_with_vat as number,
+    documentType: ((row.document_type as string | null) ?? "invoice") as InvoiceDocumentType,
     status: row.status as InvoiceStatus,
     reconciliationStatus: ((row.reconciliation_status as string | null) ?? "none") as ReconciliationStatus,
     lineDetailMode: ((row.line_detail_mode as string | null) ?? "simple") as LineDetailMode,
@@ -66,6 +68,7 @@ function toRow(invoice: Invoice): Record<string, unknown> {
     subtotal_without_vat: invoice.subtotalWithoutVat,
     total_vat: invoice.totalVat,
     total_with_vat: invoice.totalWithVat,
+    document_type: invoice.documentType,
     status: invoice.status,
     reconciliation_status: invoice.reconciliationStatus,
     line_detail_mode: invoice.lineDetailMode,
@@ -138,6 +141,7 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
       if (filter.from) q = q.gte("invoice_date", filter.from.toISOString().slice(0, 10));
       if (filter.to) q = q.lte("invoice_date", filter.to.toISOString().slice(0, 10));
       if (filter.isDirectDebit !== undefined) q = q.eq("is_direct_debit", filter.isDirectDebit);
+      if (filter.documentType) q = q.eq("document_type", filter.documentType);
       if (filter.search) {
         const like = `%${filter.search}%`;
         q = q.or(`supplier_name.ilike.${like},invoice_number.ilike.${like}`);
@@ -158,6 +162,7 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
     if (filter?.from) q = q.gte("invoice_date", filter.from.toISOString().slice(0, 10));
     if (filter?.to) q = q.lte("invoice_date", filter.to.toISOString().slice(0, 10));
     if (filter?.isDirectDebit !== undefined) q = q.eq("is_direct_debit", filter.isDirectDebit);
+    if (filter?.documentType) q = q.eq("document_type", filter.documentType);
     if (filter?.search) {
       const like = `%${filter.search}%`;
       q = q.or(`supplier_name.ilike.${like},invoice_number.ilike.${like}`);

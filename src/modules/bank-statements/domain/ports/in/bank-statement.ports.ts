@@ -515,6 +515,11 @@ export interface OccurrenceCandidateDto {
   effectiveAmountCents: number;
   dueDate: string;            // YYYY-MM-DD
   status: string;
+  /** Classificação da recorrência-mãe, para auto-preencher o drawer (só campos ainda vazios). */
+  costCenterGroupId: string | null;
+  costCenterCategoryId: string | null;
+  vatRate: number | null;
+  vatIncluded: boolean | null;
 }
 
 export interface SearchOccurrenceCandidatesQuery {
@@ -522,6 +527,8 @@ export interface SearchOccurrenceCandidatesQuery {
   q?: string;
   dateFrom?: string; // YYYY-MM-DD
   dateTo?: string;   // YYYY-MM-DD
+  /** Normalmente a bookingDate do movimento a justificar — usada para ORDENAR os resultados por proximidade (nunca para os excluir). */
+  referenceDate?: string; // YYYY-MM-DD
   limit?: number;
 }
 

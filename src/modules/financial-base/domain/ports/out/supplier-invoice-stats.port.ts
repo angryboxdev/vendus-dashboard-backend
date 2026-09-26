@@ -18,6 +18,8 @@ export interface SupplierInvoiceRow {
   totalWithoutVat: number;
   vatAmount: number;
   totalWithVat: number;
+  /** "invoice" | "credit_note" — cross-module read, sem importar o tipo do módulo invoices (D10). */
+  documentType: string;
   status: string;
   paidAt: Date | null;
   attachmentUrl: string | null;

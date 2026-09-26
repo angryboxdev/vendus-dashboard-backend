@@ -29,6 +29,9 @@ export interface RecurrenceDTO {
   status: RecurrenceStatus;
   notes: string | null;
   documentUrl: string | null;
+  closedAt: string | null; // YYYY-MM-DD
+  vatRate: number | null;
+  vatIncluded: boolean | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -71,6 +74,8 @@ export interface UpdateRecurrenceCommand {
   autoCreatePayable?: boolean;
   requireInvoice?: boolean;
   notes?: string | null;
+  vatRate?: number | null;
+  vatIncluded?: boolean | null;
 }
 
 export interface PauseRecurrenceCommand {
@@ -86,6 +91,8 @@ export interface ResumeRecurrenceCommand {
 export interface CloseRecurrenceCommand {
   organizationId: OrganizationId;
   id: string;
+  /** Mandatory finalization date (YYYY-MM-DD) — spec Task_Recorrencias_Conciliacao_AngryBox.md §10. */
+  closedAt: string;
 }
 
 export interface ListRecurrencesQuery extends RecurrenceFilter {

@@ -106,6 +106,14 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     if (!extraction.dueDate) {
       validationIssues.push("no_due_date");
     }
+    // A escolha explícita do utilizador (feita antes do upload) tem sempre
+    // prioridade sobre a deteção automática da IA.
+    const documentType = command.documentType ?? extraction.documentType ?? "invoice";
+    if (command.documentType === undefined && extraction.documentType === "credit_note") {
+      // Só força revisão quando foi a IA a decidir — se o utilizador já
+      // escolheu explicitamente, não há nada de novo para rever aqui.
+      validationIssues.push("credit_note_detected");
+    }
     if (!supplierMatch) {
       validationIssues.push("no_supplier_match");
     } else if (supplierMatchMethod === "fuzzy") {
@@ -147,6 +155,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       subtotalWithoutVat: extraction.subtotalWithoutVat ?? 0,
       totalVat: extraction.vatAmount ?? 0,
       totalWithVat: extraction.totalWithVat ?? 0,
+      documentType,
       source,
       attachmentUrl: fileUrl,
       aiConfidence: extraction.confidence,

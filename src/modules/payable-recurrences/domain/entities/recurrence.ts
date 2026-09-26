@@ -64,6 +64,11 @@ interface RecurrenceProps {
   notes: string | null;
   /** URL of the base contract/document stored in Supabase Storage. */
   documentUrl: string | null;
+  /** Set when close() is called — mandatory finalization date (spec Task_Recorrencias_Conciliacao_AngryBox.md §10). Purely informational: generation is already blocked as soon as status !== "active". */
+  closedAt: Date | null;
+  /** IVA da recorrência — usado para auto-preencher o drawer de conciliação (Justificar despesa → Contrato/Recorrência) quando o campo ainda estiver vazio. */
+  vatRate: number | null;
+  vatIncluded: boolean | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -90,6 +95,9 @@ export class Recurrence {
   readonly status: RecurrenceStatus;
   readonly notes: string | null;
   readonly documentUrl: string | null;
+  readonly closedAt: Date | null;
+  readonly vatRate: number | null;
+  readonly vatIncluded: boolean | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 
@@ -113,6 +121,9 @@ export class Recurrence {
     this.status = props.status;
     this.notes = props.notes;
     this.documentUrl = props.documentUrl;
+    this.closedAt = props.closedAt;
+    this.vatRate = props.vatRate;
+    this.vatIncluded = props.vatIncluded;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
   }
@@ -169,6 +180,9 @@ export class Recurrence {
       status: "active",
       notes: props.notes ?? null,
       documentUrl: null,
+      closedAt: null,
+      vatRate: null,
+      vatIncluded: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -192,9 +206,9 @@ export class Recurrence {
     return new Recurrence({ ...this.toProps(), status: "active", updatedAt: new Date() });
   }
 
-  close(): Recurrence {
+  close(closedAt: Date): Recurrence {
     if (this.status === "closed") throw new RecurrenceClosedError(this.id);
-    return new Recurrence({ ...this.toProps(), status: "closed", updatedAt: new Date() });
+    return new Recurrence({ ...this.toProps(), status: "closed", closedAt, updatedAt: new Date() });
   }
 
   update(data: {
@@ -211,6 +225,8 @@ export class Recurrence {
     autoCreatePayable?: boolean;
     requireInvoice?: boolean;
     notes?: string | null;
+    vatRate?: number | null;
+    vatIncluded?: boolean | null;
   }): Recurrence {
     if (this.status === "closed") throw new RecurrenceClosedError(this.id);
 
@@ -232,6 +248,8 @@ export class Recurrence {
     if (data.endDate !== undefined) p.endDate = data.endDate;
     if (data.paymentMethod !== undefined) p.paymentMethod = data.paymentMethod;
     if (data.notes !== undefined) p.notes = data.notes;
+    if (data.vatRate !== undefined) p.vatRate = data.vatRate;
+    if (data.vatIncluded !== undefined) p.vatIncluded = data.vatIncluded;
 
     // requireInvoice and autoCreatePayable: only update if type allows it
     const newRequireInvoice =
@@ -295,6 +313,9 @@ export class Recurrence {
       status: this.status,
       notes: this.notes,
       documentUrl: this.documentUrl,
+      closedAt: this.closedAt,
+      vatRate: this.vatRate,
+      vatIncluded: this.vatIncluded,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };

@@ -46,11 +46,12 @@ describe("Pause / Resume / Close recurrence use cases", () => {
     expect(resumed.status).toBe("active");
   });
 
-  it("fecha uma recorrência activa", async () => {
+  it("fecha uma recorrência activa, guardando a data de finalização", async () => {
     const { create, close } = make();
     const dto = await create.execute(BASE_CMD);
-    const closed = await close.execute({ organizationId, id: dto.id });
+    const closed = await close.execute({ organizationId, id: dto.id, closedAt: "2026-09-30" });
     expect(closed.status).toBe("closed");
+    expect(closed.closedAt).toBe("2026-09-30");
   });
 
   it("lança RecurrenceNotFoundError para id inexistente", async () => {
@@ -77,7 +78,7 @@ describe("Pause / Resume / Close recurrence use cases", () => {
   it("lança RecurrenceClosedError ao fechar encerrada", async () => {
     const { create, close } = make();
     const dto = await create.execute(BASE_CMD);
-    await close.execute({ organizationId, id: dto.id });
-    await expect(close.execute({ organizationId, id: dto.id })).rejects.toThrow(RecurrenceClosedError);
+    await close.execute({ organizationId, id: dto.id, closedAt: "2026-09-30" });
+    await expect(close.execute({ organizationId, id: dto.id, closedAt: "2026-09-30" })).rejects.toThrow(RecurrenceClosedError);
   });
 });

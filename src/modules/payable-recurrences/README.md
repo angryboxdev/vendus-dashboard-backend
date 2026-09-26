@@ -236,19 +236,21 @@ Resumo aplicado aqui:
 - `UpdateRecurrencePort` — edita campos (não altera ocorrências existentes). `UpdateRecurrenceCommand = { organizationId, id, ... }`.
 - `PauseRecurrencePort` — pausa recorrência activa. `PauseRecurrenceCommand = { organizationId, id }`.
 - `ResumeRecurrencePort` — retoma recorrência pausada. `ResumeRecurrenceCommand = { organizationId, id }`.
-- `CloseRecurrencePort` — encerra recorrência definitivamente. `CloseRecurrenceCommand = { organizationId, id }`.
+- `CloseRecurrencePort` — encerra recorrência definitivamente; exige uma data de finalização (spec §10). `CloseRecurrenceCommand = { organizationId, id, closedAt }` (`closedAt` obrigatório, YYYY-MM-DD).
 - `ListRecurrencesPort` — lista com filtros opcionais (status, type, supplierId). `ListRecurrencesQuery = { organizationId, status?, type?, supplierId? }`.
 - `GetRecurrencePort` — detalhe de uma recorrência. `GetRecurrenceQuery = { organizationId, id }`.
 
 **Ocorrências:**
 - `GenerateOccurrencePort` — gera ocorrência para um mês específico. Se `autoCreatePayable=true`, cria conta a pagar imediatamente. `GenerateOccurrenceCommand` inclui `organizationId`.
-- `ListOccurrencesPort` — lista com filtros (recurrenceId, period, status). Cada DTO inclui `linkedBankMovement` (ou `null`) carregado em batch via `BankMovementLinkReadPort`. `ListOccurrencesQuery = { organizationId, recurrenceId?, period?, status?, invoiceId? }`.
-- `GetOccurrencePort` — detalhe de uma ocorrência. Inclui `linkedBankMovement` (ou `null`) via `BankMovementLinkReadPort`. `GetOccurrenceQuery = { organizationId, id }`.
+- `ListOccurrencesPort` — lista com filtros (recurrenceId, period, status). Cada DTO inclui `linkedBankMovements[]` (fluxo B, pode ter mais de um — pagamentos parciais), `paidAmountCents`, `differenceCents` e `displayState`, todos calculados ao vivo (ver `enrichOccurrencesWithPayments` em `application/use-cases/shared.ts`). `ListOccurrencesQuery = { organizationId, recurrenceId?, period?, status?, invoiceId? }`.
+- `GetOccurrencePort` — detalhe de uma ocorrência. Mesmo enriquecimento que `ListOccurrencesPort`. `GetOccurrenceQuery = { organizationId, id }`.
 - `LinkInvoiceToOccurrencePort` — vincula fatura à ocorrência e regista valor real. `LinkInvoiceCommand` inclui `organizationId`.
 - `MarkOccurrenceAsPaidPort` — marca ocorrência como paga (directamente ou após fatura vinculada). `MarkOccurrenceAsPaidCommand` inclui `organizationId`.
 - `CancelOccurrencePort` — cancela ocorrência (não permite cancelar `paid`). `CancelOccurrenceCommand = { organizationId, id }`.
 - `GenerateBatchOccurrencesPort` — gera ocorrências para todas as recorrências activas num mês; silencia duplicados (`skippedAlreadyExists`) e fora de scope (`skippedOutOfScope`). `GenerateBatchCommand` inclui `organizationId`.
 - `GetRecurrenceSummaryPort` — retorna contagem de ocorrências por estado relevante (ex: `awaitingInvoiceCount`). `GetRecurrenceSummaryQuery = { organizationId }`.
+- `GetMonthlySummaryPort` — KPIs agregados cross-recorrência para um mês (spec §1/§6/§12): `activeRecurrencesCount`, `forecastedAmountCents` (Previsto), `paidAmountCents` (Pago), `pendingCount`/`pendingAmountCents` (por realizar, dentro do prazo), `overdueCount`/`overdueAmountCents` (vencidas), `paidVsForecastedPercent` (só quando não há nada pendente/vencido). Chama `ensureOccurrencesForPeriod` primeiro (ver D11) — as ocorrências do mês existem mesmo antes de agregar. `GetMonthlySummaryQuery = { organizationId, period }` (`period` = YYYY-MM).
+- `ListOccurrencesForPeriodPort` — lista as ocorrências de todas as recorrências para um mês (vista mensal), depois de garantir (`ensureOccurrencesForPeriod`) que existem. `ListOccurrencesForPeriodQuery = { organizationId, period }`.
 - `GetLinkedInvoiceIdsPort` — retorna todos os invoice IDs já vinculados a ocorrências (usado para filtrar faturas disponíveis no UI). `GetLinkedInvoiceIdsQuery = { organizationId }`.
 
 **Documentos (sem interface de port formal — use cases concretos injetados directamente):**
@@ -267,7 +269,8 @@ excepto `DocumentStoragePort.store`, onde é o último (ver secção acima).
 - `PayableEntryWritePort` — cross-módulo: `create(organizationId, data)`, cria conta a pagar em `payable_entries`.
 - `InvoiceReadPort` — cross-módulo: `findById(organizationId, id)`, ler dados mínimos de uma fatura para vincular.
 - `DocumentStoragePort` — `store(buffer, filename, mimeType, organizationId)`, `delete(url)` — armazenamento de ficheiros (contrato base, faturas mensais). `store` recebe `organizationId` como último parâmetro (ADR-0015); `recurrence-documents` não optou por prefixação (DB4), pelo que o wrapper recebe-a sem alterar o caminho.
-- `BankMovementLinkReadPort` — cross-módulo: `findByOccurrenceIds(organizationId, occurrenceIds)`, devolve um `Map<occurrenceId, LinkedBankMovement>` com data, montante e descrição do movimento bancário que justificou cada ocorrência. Usado por `ListOccurrencesUseCase` e `GetOccurrenceUseCase` para enriquecer o DTO com `linkedBankMovement`. O adapter concreto lê directamente `bank_movements` sem importar código de `bank-statements`.
+- `BankMovementLinkReadPort` — cross-módulo: `findByOccurrenceIds(organizationId, occurrenceIds)`, devolve um `Map<occurrenceId, LinkedBankMovement[]>` (array — uma ocorrência pode ter mais de um movimento, pagamentos parciais) com data, montante e descrição de cada movimento bancário que justificou a ocorrência. O adapter concreto lê directamente `bank_movements` sem importar código de `bank-statements`.
+- `InvoiceAllocatedAmountReadPort` — cross-módulo: `findAllocatedAmounts(organizationId, invoiceIds)`, devolve um `Map<invoiceId, allocatedAmountCents>` somando `bank_movement_entity_links.allocated_amount_cents` por fatura (fluxo A — "Pago" vem do que já foi reconciliado no banco para a fatura, não do estado da fatura). O adapter lê `bank_movement_entity_links` directamente, sem importar código de `bank-statements`.
 
 ---
 
@@ -290,6 +293,7 @@ ticket 06).
 - `SupabaseInvoiceReadAdapter` → cross-módulo, acede directamente à tabela `invoices`, via `ScopedQueryFactory`.
 - `SupabaseRecurrenceDocumentStorageAdapter` → implementa `DocumentStoragePort` no bucket Supabase Storage `recurrence-documents`. Não recebe `SupabaseClient` nem `ScopedQueryFactory` no construtor: delega para o wrapper `objectStorage` de `src/infra/scoped-db/` (spec B2 ticket 01/D10) — esse folder é o único lugar em `src/**` autorizado a importar `@supabase/supabase-js`. `store()` passa `organizationId` ao wrapper (ADR-0015), mas este bucket não optou por prefixação (DB4) — o caminho fica igual.
 - `SupabaseBankMovementLinkReadAdapter` → cross-módulo; lê `bank_movements WHERE matched_entity_type = 'recurrence_occurrence' AND matched_entity_id IN (...)` via `ScopedQueryFactory`, sem importar código de `bank-statements`. Implementa `BankMovementLinkReadPort`.
+- `SupabaseInvoiceAllocatedAmountReadAdapter` → cross-módulo; lê `bank_movement_entity_links WHERE entity_type = 'invoice' AND entity_id IN (...)` via `ScopedQueryFactory`, sem importar código de `bank-statements`. Implementa `InvoiceAllocatedAmountReadPort`.
 
 ---
 
@@ -299,6 +303,8 @@ ticket 06).
 GET    /api/payable-recurrences                                          lista (filtros: status, type, supplierId)
 POST   /api/payable-recurrences                                          criar recorrência
 GET    /api/payable-recurrences/summary                                  resumo (awaitingInvoiceCount)
+GET    /api/payable-recurrences/summary/monthly?period=YYYY-MM           KPIs mensais cross-recorrência (Ativas, Previsto, Pago, Por realizar, Vencidas)
+GET    /api/payable-recurrences/occurrences?period=YYYY-MM               ocorrências de todas as recorrências nesse mês (vista mensal)
 POST   /api/payable-recurrences/batch/generate                           gerar para todas as ativas (body: {year, month})
 GET    /api/payable-recurrences/occurrences/linked-invoice-ids           lista invoice IDs já vinculados
 GET    /api/payable-recurrences/occurrences/by-invoice/:invoiceId        ocorrência + recurrenceName por fatura
@@ -321,9 +327,10 @@ POST   /api/payable-recurrences/:id/occurrences/generate                 gerar p
 
 Todas as rotas requerem role `manager` (via `requireMinRole` no server.ts).
 
-**Ordem de registo importante:** rotas com segmentos fixos (`/summary`, `/batch/generate`,
-`/occurrences/linked-invoice-ids`, `/occurrences/by-invoice/:invoiceId`, `/occurrences/:occId`)
-estão registadas antes de `/:id` para evitar que strings fixas sejam interpretadas como IDs.
+**Ordem de registo importante:** rotas com segmentos fixos (`/summary`, `/summary/monthly`,
+`/batch/generate`, `/occurrences` (bare, com `?period=`), `/occurrences/linked-invoice-ids`,
+`/occurrences/by-invoice/:invoiceId`, `/occurrences/:occId`) estão registadas antes de `/:id`
+para evitar que strings fixas sejam interpretadas como IDs.
 
 ---
 
@@ -389,12 +396,49 @@ cada ocorrência tem o seu `documentUrl` (fatura mensal / comprovativo). Fazer u
 quando já existe um documento substitui o anterior (deleta do storage primeiro).
 O bucket Supabase é `recurrence-documents`, partilhado entre os dois níveis.
 
-**D10 — `linkedBankMovement` enriquecido via cross-module read em batch.**
-`ListOccurrencesUseCase` e `GetOccurrenceUseCase` injectam `BankMovementLinkReadPort`
-para enriquecer cada `OccurrenceDTO` com o movimento bancário que o justificou (se
-existir). O port recebe todos os IDs de ocorrências de uma vez e devolve um `Map`
-— sem N+1 queries. O OccurrenceDTO inclui `linkedBankMovement: { id, bookingDate, amountCents, description } | null`.
-Esta informação é exibida no frontend como coluna "Banco" na lista de ocorrências.
+**D10 — `linkedBankMovements[]`/`paidAmountCents`/`displayState` enriquecidos via cross-module read em batch, nunca persistidos.**
+`ListOccurrencesUseCase` e `GetOccurrenceUseCase` chamam o helper partilhado
+`enrichOccurrencesWithPayments` (`application/use-cases/shared.ts`), que injecta
+`BankMovementLinkReadPort` (fluxo B — pode devolver mais de um movimento por
+ocorrência, pagamentos parciais) e `InvoiceAllocatedAmountReadPort` (fluxo A). Ambos
+recebem todos os IDs de uma vez e devolvem um `Map` — sem N+1 queries. A partir daí
+calcula-se ao vivo `paidAmountCents`, `differenceCents = paidAmountCents - effectiveAmountCents`
+e `displayState` (`computeOccurrenceDisplayState`, em `recurrence-occurrence.ts`) — nada
+disto é persistido; qualquer nova reconciliação ou o simples passar do dia muda o
+resultado na próxima leitura. Exibido no frontend como colunas "Banco"/"Pago"/"Diferença"
+e o badge de estado na lista de ocorrências.
+
+**D11 — KPI mensal cross-recorrência: `ensureOccurrencesForPeriod` garante geração real, não apenas cálculo em memória (substitui a versão anterior desta decisão).**
+`GetMonthlySummaryUseCase` e `ListOccurrencesForPeriodUseCase` (spec §1/§6/§12) chamam
+`ensureOccurrencesForPeriod` (`application/use-cases/shared.ts`) **antes** de agregar —
+o mesmo loop idempotente que já existia em `GenerateBatchOccurrencesUseCase` (verifica
+`findByRecurrenceAndPeriod` antes de criar). Isto foi uma mudança deliberada: a primeira
+versão desta decisão computava "Previsto no mês" apenas em memória para recorrências sem
+ocorrência gerada, sem persistir nada — correcto para um agregado só-de-leitura, mas
+insuficiente para a conciliação bancária, que precisa de um `occurrenceId` real para poder
+ligar um movimento (`matched_entity_id`) — uma linha virtual não pode ser conciliada. Por
+isso estas duas leituras deixam de ser "puras": ambas garantem a existência real das
+ocorrências do mês como efeito colateral deliberado e documentado.
+`activeRecurrencesCount` usa `OccurrenceGeneratorService.isActiveInMonth` (activa e dentro de
+`startDate`/`endDate` no mês consultado — ignora `frequency` deliberadamente: uma recorrência
+trimestral continua "vigente" num mês em que não fatura). "Vencidas" e "Pagamentos por
+realizar" continuam conjuntos disjuntos (tolerância de 100 cêntimos, ver D12 para o porquê de
+não ter sido alargada): vencida = prazo já passou e falta pagar; por realizar = ainda dentro
+do prazo. `paidVsForecastedPercent` só é calculado quando não há nada pendente/vencido nesse
+mês.
+
+**D12 — "Pago" vs "Pago parcialmente" com valor diferente do previsto: pergunta ao utilizador em vez de alargar a tolerância.**
+A tolerância de 100 cêntimos (`DISPLAY_STATE_TOLERANCE_CENTS`) é só para diferenças de
+arredondamento — nunca foi alargada para cobrir diferenças maiores (ex: um pagamento
+negociado por menos do que o previsto). Em vez disso, o frontend (`ClassifyDrawer.tsx`, fluxo
+sem fatura) pergunta explicitamente "é o pagamento total ou parcial?" sempre que o valor do
+movimento bancário difere do previsto da ocorrência por mais do que essa tolerância. Se o
+utilizador confirmar "total", o frontend chama `PATCH /occurrences/:occId/pay`
+(`MarkOccurrenceAsPaidUseCase`) — que já tem precedência sobre o cálculo por tolerância em
+`computeOccurrenceDisplayState` (`status === "paid"` vence mesmo com `paidAmountCents` abaixo
+do previsto) — eliminando a ambiguidade sem inventar um novo limiar arbitrário (percentual ou
+em cêntimos). Se for "parcial", só a ligação do movimento é criada, e o estado computado
+(`partially_paid`) reflecte isso normalmente até chegar outro movimento.
 
 ---
 
@@ -404,7 +448,7 @@ Esta informação é exibida no frontend como coluna "Banco" na lista de ocorrê
 - Todos os módulos financeiros: `npx jest --testPathPattern="payable-recurrences|payable-entries" --no-coverage`.
 - Adapters Supabase: requerem instância real — testar manualmente contra ambiente de desenvolvimento.
 
-**Cobertura atual:** 15 suites, 161+ testes, 0 falhos. Todos os 20 use cases cobertos. Inclui testes de enriquecimento `linkedBankMovement` via `FakeBankMovementLinkReadAdapter` e testes de isolamento cross-organização (spec B2) nos fluxos de leitura/escrita por id.
+**Cobertura atual:** 17 suites, 194 testes, 0 falhos. Todos os use cases cobertos, incluindo `GetMonthlySummaryUseCase` e `ListOccurrencesForPeriodUseCase`. Inclui testes de enriquecimento `linkedBankMovements`/`paidAmountCents`/`displayState` via `FakeBankMovementLinkReadAdapter`/`FakeInvoiceAllocatedAmountReadAdapter` e testes de isolamento cross-organização (spec B2) nos fluxos de leitura/escrita por id.
 
 ---
 

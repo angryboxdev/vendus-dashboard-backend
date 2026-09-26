@@ -24,6 +24,8 @@ export class UpdateRecurrenceUseCase implements UpdateRecurrencePort {
       ...(command.autoCreatePayable !== undefined && { autoCreatePayable: command.autoCreatePayable }),
       ...(command.requireInvoice !== undefined && { requireInvoice: command.requireInvoice }),
       ...(command.notes !== undefined && { notes: command.notes }),
+      ...(command.vatRate !== undefined && { vatRate: command.vatRate }),
+      ...(command.vatIncluded !== undefined && { vatIncluded: command.vatIncluded }),
     });
 
     await this.repo.update(command.organizationId, updated);

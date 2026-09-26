@@ -30,6 +30,10 @@ interface StorageBucketRegistryEntry {
 
 export const STORAGE_BUCKET_REGISTRY = {
   "hr-documents": { prefixByOrganization: true },
+  // RH-02: fotos de perfil do colaborador — privado, como hr-documents (dado
+  // pessoal, RGPD), mas servido com URL assinado de TTL mais longo (ver
+  // src/modules/hr/README.md) para não reassinar em cada render de lista.
+  "hr-photos": { prefixByOrganization: true },
   "invoice-documents": { prefixByOrganization: true },
   // DB4: shares the wrapper, deliberately not prefixed yet.
   "recurrence-documents": { prefixByOrganization: false },

@@ -13,11 +13,12 @@ Fields to extract:
 - invoiceNumber (string or null)
 - issueDate (string "YYYY-MM-DD" or null)
 - dueDate (string "YYYY-MM-DD" or null)
-- subtotalWithoutVat (integer in cents, or null) — amount before VAT
-- vatAmount (integer in cents, or null) — total VAT
-- totalWithVat (integer in cents, or null) — total amount including VAT
+- subtotalWithoutVat (integer in cents, or null) — amount before VAT, ALWAYS as a positive magnitude even if the document is a credit note
+- vatAmount (integer in cents, or null) — total VAT, always positive magnitude
+- totalWithVat (integer in cents, or null) — total amount including VAT, always positive magnitude
 - currency (string, e.g. "EUR", or null)
 - confidence (number 0.0–1.0) — your confidence in the overall extraction accuracy
+- documentType ("invoice" or "credit_note") — determine whether this document is a regular invoice or a CREDIT NOTE. Look for terms such as "Nota de Crédito", "Nota Crédito", "NC", "Credit Note" (in the title/header or near the document number). Default to "invoice" when unsure.
 - lines (array of objects with: description, quantity, unitPriceWithoutVat, vatRate, vatAmount, totalWithoutVat, totalWithVat — all optional integers in cents except vatRate and quantity which are decimals)
 - validationIssues (array of strings for any issues you detected, e.g. "values_unclear", "partial_document", "multiple_pages")
 
@@ -35,6 +36,7 @@ Return JSON only. Example structure:
   "totalWithVat": 123000,
   "currency": "EUR",
   "confidence": 0.95,
+  "documentType": "invoice",
   "lines": [],
   "validationIssues": []
 }`;
@@ -52,6 +54,7 @@ interface RawExtractionJson {
   totalWithVat?: number | null;
   currency?: string | null;
   confidence?: number;
+  documentType?: "invoice" | "credit_note" | null;
   lines?: Array<{
     description?: string;
     quantity?: number | null;
@@ -155,6 +158,7 @@ export class OpenAiExtractionAdapter implements AiExtractionPort {
       totalWithVat: raw.totalWithVat ?? null,
       currency: raw.currency ?? null,
       confidence: typeof raw.confidence === "number" ? Math.max(0, Math.min(1, raw.confidence)) : 0.5,
+      documentType: raw.documentType === "credit_note" ? "credit_note" : raw.documentType === "invoice" ? "invoice" : null,
       lines,
       validationIssues: raw.validationIssues ?? [],
     };
@@ -174,6 +178,7 @@ export class OpenAiExtractionAdapter implements AiExtractionPort {
       totalWithVat: null,
       currency: null,
       confidence: 0,
+      documentType: null,
       lines: [],
       validationIssues: [issue],
     };

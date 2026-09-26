@@ -97,7 +97,7 @@ export class SupabaseSupplierInvoiceStatsAdapter implements SupplierInvoiceStats
     let query = this.scopedQuery(organizationId)
       .table("invoices")
       .select(
-        "id, invoice_number, invoice_date, due_date, subtotal_without_vat, total_vat, total_with_vat, status, paid_at, attachment_url",
+        "id, invoice_number, invoice_date, due_date, subtotal_without_vat, total_vat, total_with_vat, document_type, status, paid_at, attachment_url",
       )
       .eq("supplier_id", supplierId)
       .neq("status", "draft_ai")
@@ -123,6 +123,7 @@ export class SupabaseSupplierInvoiceStatsAdapter implements SupplierInvoiceStats
       totalWithoutVat: fromCents(row.subtotal_without_vat as number),
       vatAmount: fromCents(row.total_vat as number),
       totalWithVat: fromCents(row.total_with_vat as number),
+      documentType: (row.document_type as string | null) ?? "invoice",
       status: row.status as string,
       paidAt: row.paid_at ? new Date(row.paid_at as string) : null,
       attachmentUrl: (row.attachment_url as string | null) ?? null,
