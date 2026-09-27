@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
-import type { ActiveLeave, LeaveReadPort } from "../../domain/ports/out/leave-read.port.js";
+import type { ActiveLeave, ActiveLeaveRange, LeaveReadPort } from "../../domain/ports/out/leave-read.port.js";
 
 export class FakeLeaveReadAdapter implements LeaveReadPort {
   private readonly leaves: Array<{ organizationId: string; startDate: string; endDate: string; leave: ActiveLeave }> = [];
@@ -12,5 +12,11 @@ export class FakeLeaveReadAdapter implements LeaveReadPort {
     return this.leaves
       .filter((l) => l.organizationId === String(organizationId) && l.startDate <= dateYmd && l.endDate >= dateYmd)
       .map((l) => l.leave);
+  }
+
+  async findActiveInRange(organizationId: OrganizationId, from: string, to: string): Promise<ActiveLeaveRange[]> {
+    return this.leaves
+      .filter((l) => l.organizationId === String(organizationId) && l.startDate <= to && l.endDate >= from)
+      .map((l) => ({ ...l.leave, startDate: l.startDate, endDate: l.endDate }));
   }
 }

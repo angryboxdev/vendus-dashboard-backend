@@ -13,6 +13,9 @@ interface ShiftRow {
   work_date: string;
   start_time: string;
   end_time: string;
+  ends_next_day: boolean;
+  second_start_time: string | null;
+  second_end_time: string | null;
   location_id: string;
 }
 
@@ -42,7 +45,7 @@ export class SupabaseShiftAttendanceReadAdapter implements ShiftAttendanceReadPo
   ): Promise<ShiftOccurrence[]> {
     let q = this.scopedQuery(organizationId)
       .table("hr_work_shifts")
-      .select("id, employee_id, work_date, start_time, end_time, location_id")
+      .select("id, employee_id, work_date, start_time, end_time, ends_next_day, second_start_time, second_end_time, location_id")
       .gte("work_date", range.from)
       .lte("work_date", range.to);
     if (range.locationId) q = q.eq("location_id", range.locationId);
@@ -72,6 +75,9 @@ export class SupabaseShiftAttendanceReadAdapter implements ShiftAttendanceReadPo
         workDate: s.work_date,
         startTime: formatHrTimeForApi(s.start_time),
         endTime: formatHrTimeForApi(s.end_time),
+        endsNextDay: s.ends_next_day,
+        secondStartTime: s.second_start_time ? formatHrTimeForApi(s.second_start_time) : null,
+        secondEndTime: s.second_end_time ? formatHrTimeForApi(s.second_end_time) : null,
         locationId: s.location_id,
         attendanceStatus: (attendance?.status as ShiftAttendanceStatus | undefined) ?? null,
         actualStartTime: attendance?.actual_start_time ? formatHrTimeForApi(attendance.actual_start_time) : null,

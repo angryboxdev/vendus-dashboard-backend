@@ -1,6 +1,7 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { EmploymentType, EmployeeStatus, JobRole, SalaryType } from "../../entities/employee.js";
 import type { ViewerRole } from "../../services/sensitive-field-masking.service.js";
+import type { HrAuditEntityType } from "../out/hr-audit-log.port.js";
 
 export interface EmployeeDTO {
   id: string;
@@ -209,7 +210,7 @@ export interface UploadEmployeePhotoPort {
 export interface EmployeeHistoryEntryDTO {
   id: string;
   createdAt: string;
-  entityType: "employee" | "employee_document";
+  entityType: HrAuditEntityType;
   action: string;
   actor: string;
   description: string;

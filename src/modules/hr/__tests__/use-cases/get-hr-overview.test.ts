@@ -1,12 +1,16 @@
+import { DateTime } from "luxon";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { Employee } from "../../domain/entities/employee.js";
+import { Location } from "../../../locations/domain/entities/location.js";
 import { GetHrOverviewUseCase } from "../../application/use-cases/get-hr-overview.use-case.js";
+import type { ShiftOccurrence } from "../../domain/ports/out/shift-attendance-read.port.js";
 import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
 import { FakeEmployeeDocumentRepository } from "../fakes/fake-employee-document-repository.js";
 import { FakeShiftAttendanceReadAdapter } from "../fakes/fake-shift-attendance-read.js";
 import { FakeLeaveReadAdapter } from "../fakes/fake-leave-read.js";
 import { FakePaymentReadAdapter } from "../fakes/fake-payment-read.js";
 import { FakeDocumentCategoryRepository } from "../fakes/fake-document-category-repository.js";
+import { FakeLocationRepository } from "../fakes/fake-location-repository.js";
 import type { ShiftAttendanceReadPort } from "../../domain/ports/out/shift-attendance-read.port.js";
 
 const ORG = mintOrganizationId("org-test");
@@ -18,6 +22,7 @@ function makeUseCase(overrides: { shiftAttendanceRead?: ShiftAttendanceReadPort 
   const leave = new FakeLeaveReadAdapter();
   const payments = new FakePaymentReadAdapter();
   const categories = new FakeDocumentCategoryRepository();
+  const locations = new FakeLocationRepository();
   return {
     employees,
     documents,
@@ -25,7 +30,8 @@ function makeUseCase(overrides: { shiftAttendanceRead?: ShiftAttendanceReadPort 
     leave,
     payments,
     categories,
-    useCase: new GetHrOverviewUseCase(employees, documents, shifts, leave, payments, categories),
+    locations,
+    useCase: new GetHrOverviewUseCase(employees, documents, shifts, leave, payments, categories, locations),
   };
 }
 
@@ -66,6 +72,7 @@ describe("GetHrOverviewUseCase", () => {
       new FakeLeaveReadAdapter(),
       payments,
       new FakeDocumentCategoryRepository(),
+      new FakeLocationRepository(),
     );
     payments.seedUnpaidCount(ORG, 3);
 
@@ -100,14 +107,22 @@ describe("GetHrOverviewUseCase", () => {
       findActiveOnDate: async () => {
         throw new Error("x");
       },
+      findActiveInRange: async () => {
+        throw new Error("x");
+      },
     };
     const failingPayments = {
       countUnpaid: async () => {
         throw new Error("x");
       },
     };
+    const failingLocations = {
+      findAllForOrganization: async () => {
+        throw new Error("x");
+      },
+    };
     // @ts-expect-error — fakes mínimos só para este teste
-    const useCase = new GetHrOverviewUseCase(failing, failing, failingShifts, failingLeave, failingPayments, failing);
+    const useCase = new GetHrOverviewUseCase(failing, failing, failingShifts, failingLeave, failingPayments, failing, failingLocations);
     const result = await useCase.execute({ organizationId: ORG });
     expect(result.generatedAt).toBeTruthy();
     expect(result.scope.organizationId).toBe(String(ORG));
@@ -115,5 +130,212 @@ describe("GetHrOverviewUseCase", () => {
     expect(result.today.status).toBe("unavailable");
     expect(result.pending.status).toBe("unavailable");
     expect(result.operation.status).toBe("unavailable");
+  });
+
+  describe("bloco 'operation' (Hoje na operação)", () => {
+    const TODAY = DateTime.now().setZone("Europe/Lisbon").toISODate()!;
+
+    function shiftToday(overrides: Partial<ShiftOccurrence> = {}): ShiftOccurrence {
+      return {
+        shiftId: "s1",
+        employeeId: "e1",
+        workDate: TODAY,
+        startTime: "09:00",
+        endTime: "17:00",
+        endsNextDay: false,
+        secondStartTime: null,
+        secondEndTime: null,
+        locationId: "loc1",
+        attendanceStatus: null,
+        actualStartTime: null,
+        actualEndTime: null,
+        lateMinutes: null,
+        ...overrides,
+      };
+    }
+
+    it("resolve o nome do local (nunca o UUID) e devolve turno/situação formatados", async () => {
+      const { employees, shifts, locations, useCase } = makeUseCase();
+      const emp = Employee.create({ fullName: "Gabriel Gomes" });
+      employees.seed(ORG, emp);
+      locations.seed(ORG, [Location.reconstitute({ id: "loc1", name: "Loja MBS", code: "MBS", timezone: "Europe/Lisbon", isActive: true })]);
+      shifts.seed(ORG, shiftToday({ employeeId: emp.id, actualStartTime: "09:05" }));
+
+      const result = await useCase.execute({ organizationId: ORG });
+      expect(result.operation.status).toBe("ok");
+      if (result.operation.status !== "ok") return;
+      const row = result.operation.data.find((r) => r.employeeId === emp.id)!;
+      expect(row.locationId).toBe("loc1");
+      expect(row.locationName).toBe("Loja MBS");
+      expect(row.state).toBe("PRESENTE");
+      expect(row.situation).toBe("Entrada 09:05");
+      expect(row.shiftToday).toEqual(["09:00–17:00"]);
+    });
+
+    it("nunca corta a lista a 5 linhas — mostra todos os colaboradores com turno/ausência hoje", async () => {
+      const { employees, shifts, useCase } = makeUseCase();
+      for (let i = 0; i < 8; i++) {
+        const emp = Employee.create({ fullName: `Colaborador ${i}` });
+        employees.seed(ORG, emp);
+        shifts.seed(ORG, shiftToday({ shiftId: `s${i}`, employeeId: emp.id, actualStartTime: "09:00" }));
+      }
+      const result = await useCase.execute({ organizationId: ORG });
+      expect(result.operation.status).toBe("ok");
+      if (result.operation.status !== "ok") return;
+      expect(result.operation.data).toHaveLength(8);
+    });
+
+    it("CONFLITO tem prioridade máxima e a situação mostra a contagem de marcações abertas", async () => {
+      const { employees, shifts, useCase } = makeUseCase();
+      const emp = Employee.create({ fullName: "Kleiton Carlos" });
+      employees.seed(ORG, emp);
+      shifts.seed(ORG, shiftToday({ shiftId: "s1", employeeId: emp.id, actualStartTime: "09:00" }));
+      shifts.seed(ORG, shiftToday({ shiftId: "s2", employeeId: emp.id, startTime: "10:00", endTime: "18:00", actualStartTime: "10:00" }));
+      // outro colaborador, ausente — devia ficar atrás do conflito na ordenação
+      const other = Employee.create({ fullName: "Outro Ausente" });
+      employees.seed(ORG, other);
+      const past = DateTime.now().setZone("Europe/Lisbon").minus({ hours: 3 });
+      shifts.seed(
+        ORG,
+        shiftToday({ shiftId: "s3", employeeId: other.id, startTime: past.toFormat("HH:mm"), endTime: past.plus({ minutes: 1 }).toFormat("HH:mm") }),
+      );
+
+      const result = await useCase.execute({ organizationId: ORG });
+      expect(result.operation.status).toBe("ok");
+      if (result.operation.status !== "ok") return;
+      expect(result.operation.data[0]!.employeeId).toBe(emp.id);
+      expect(result.operation.data[0]!.state).toBe("CONFLITO");
+      expect(result.operation.data[0]!.situation).toBe("2 marcações abertas");
+    });
+
+    it("colaborador em férias aparece com state FERIAS e situação 'Até DD/MM'", async () => {
+      const { employees, leave, useCase } = makeUseCase();
+      const emp = Employee.create({ fullName: "Mariana Costa" });
+      employees.seed(ORG, emp);
+      leave.seed(ORG, TODAY, "2026-09-30", { employeeId: emp.id, type: "vacation" });
+
+      const result = await useCase.execute({ organizationId: ORG });
+      expect(result.operation.status).toBe("ok");
+      if (result.operation.status !== "ok") return;
+      const row = result.operation.data.find((r) => r.employeeId === emp.id)!;
+      expect(row.state).toBe("FERIAS");
+      expect(row.situation).toBe("Até 30/09");
+      expect(row.shiftToday).toBeNull();
+      expect(row.locationName).toBeNull();
+    });
+
+    it("turno repartido em que só o 2º período teve entrada: state PRESENTE, situação mostra a entrada e situationWarning avisa do 1º período em falta", async () => {
+      const { employees, shifts, useCase } = makeUseCase();
+      const emp = Employee.create({ fullName: "Lucas Almeida" });
+      employees.seed(ORG, emp);
+      shifts.seed(
+        ORG,
+        shiftToday({
+          employeeId: emp.id,
+          startTime: "10:00",
+          endTime: "16:00",
+          secondStartTime: "18:00",
+          secondEndTime: "22:00",
+          actualStartTime: "18:02",
+        }),
+      );
+
+      const result = await useCase.execute({ organizationId: ORG });
+      expect(result.operation.status).toBe("ok");
+      if (result.operation.status !== "ok") return;
+      const row = result.operation.data.find((r) => r.employeeId === emp.id)!;
+      expect(row.state).toBe("PRESENTE");
+      expect(row.situation).toBe("Entrada 18:02");
+      expect(row.situationWarning).toBe("1º turno sem entrada");
+    });
+
+    it("situationWarning é null quando não há inconsistência a sinalizar", async () => {
+      const { employees, shifts, useCase } = makeUseCase();
+      const emp = Employee.create({ fullName: "Sem Ocorrência" });
+      employees.seed(ORG, emp);
+      shifts.seed(ORG, shiftToday({ employeeId: emp.id, actualStartTime: "09:00" }));
+
+      const result = await useCase.execute({ organizationId: ORG });
+      expect(result.operation.status).toBe("ok");
+      if (result.operation.status !== "ok") return;
+      const row = result.operation.data.find((r) => r.employeeId === emp.id)!;
+      expect(row.situationWarning).toBeNull();
+    });
+
+    it("2 turnos do mesmo colaborador no mesmo dia: shiftToday junta os períodos de TODOS, ordenados, numa única linha", async () => {
+      const { employees, shifts, useCase } = makeUseCase();
+      const emp = Employee.create({ fullName: "Dois Turnos" });
+      employees.seed(ORG, emp);
+      shifts.seed(ORG, shiftToday({ shiftId: "s1", employeeId: emp.id, startTime: "18:00", endTime: "22:00", actualStartTime: "18:00" }));
+      shifts.seed(ORG, shiftToday({ shiftId: "s2", employeeId: emp.id, startTime: "09:00", endTime: "13:00", actualStartTime: "09:00", actualEndTime: "13:00" }));
+
+      const result = await useCase.execute({ organizationId: ORG });
+      expect(result.operation.status).toBe("ok");
+      if (result.operation.status !== "ok") return;
+      const rowsForEmployee = result.operation.data.filter((r) => r.employeeId === emp.id);
+      expect(rowsForEmployee).toHaveLength(1); // nunca duplica a linha, mesmo com 2+ turnos no mesmo dia
+      expect(rowsForEmployee[0]!.shiftToday).toEqual(["09:00–13:00", "18:00–22:00"]);
+    });
+
+    it("ordenação: Ausente > Atrasado > Presente com ocorrência > Presente > Em tolerância > Agendado > Intervalo (secção 13)", async () => {
+      const { employees, shifts, useCase } = makeUseCase();
+      const past = DateTime.now().setZone("Europe/Lisbon").minus({ hours: 3 });
+      const future = DateTime.now().setZone("Europe/Lisbon").plus({ hours: 3 });
+
+      const ausente = Employee.create({ fullName: "Estado Ausente" });
+      employees.seed(ORG, ausente);
+      shifts.seed(ORG, shiftToday({ shiftId: "sa", employeeId: ausente.id, startTime: past.toFormat("HH:mm"), endTime: past.plus({ minutes: 30 }).toFormat("HH:mm") }));
+
+      const agendado = Employee.create({ fullName: "Estado Agendado" });
+      employees.seed(ORG, agendado);
+      shifts.seed(ORG, shiftToday({ shiftId: "sg", employeeId: agendado.id, startTime: future.toFormat("HH:mm"), endTime: future.plus({ hours: 4 }).toFormat("HH:mm") }));
+
+      const intervalo = Employee.create({ fullName: "Estado Intervalo" });
+      employees.seed(ORG, intervalo);
+      const breakStart = DateTime.now().setZone("Europe/Lisbon").minus({ hours: 1 });
+      shifts.seed(
+        ORG,
+        shiftToday({
+          shiftId: "si",
+          employeeId: intervalo.id,
+          startTime: breakStart.minus({ hours: 4 }).toFormat("HH:mm"),
+          endTime: breakStart.toFormat("HH:mm"),
+          secondStartTime: breakStart.plus({ hours: 2 }).toFormat("HH:mm"),
+          secondEndTime: breakStart.plus({ hours: 6 }).toFormat("HH:mm"),
+          actualStartTime: breakStart.minus({ hours: 4 }).toFormat("HH:mm"),
+        }),
+      );
+
+      const result = await useCase.execute({ organizationId: ORG });
+      expect(result.operation.status).toBe("ok");
+      if (result.operation.status !== "ok") return;
+      const order = result.operation.data.map((r) => r.employeeName);
+      expect(order.indexOf("Estado Ausente")).toBeLessThan(order.indexOf("Estado Agendado"));
+      expect(order.indexOf("Estado Agendado")).toBeLessThan(order.indexOf("Estado Intervalo"));
+    });
+
+    it("um turno 'por conferir' (sem saída, já terminado) devolve reviewShiftId para o drill-down direto", async () => {
+      const { employees, shifts, useCase } = makeUseCase();
+      const emp = Employee.create({ fullName: "Raul Afonso" });
+      employees.seed(ORG, emp);
+      const past = DateTime.now().setZone("Europe/Lisbon").minus({ hours: 5 });
+      shifts.seed(
+        ORG,
+        shiftToday({
+          shiftId: "shift-sem-saida",
+          employeeId: emp.id,
+          startTime: past.toFormat("HH:mm"),
+          endTime: past.plus({ minutes: 30 }).toFormat("HH:mm"),
+          actualStartTime: past.toFormat("HH:mm"),
+        }),
+      );
+
+      const result = await useCase.execute({ organizationId: ORG });
+      expect(result.operation.status).toBe("ok");
+      if (result.operation.status !== "ok") return;
+      const row = result.operation.data.find((r) => r.employeeId === emp.id)!;
+      expect(row.reviewShiftId).toBe("shift-sem-saida");
+      expect(row.situation).toBe("Sem saída");
+    });
   });
 });

@@ -14,6 +14,11 @@ export interface ShiftOccurrence {
   workDate: string;
   startTime: string;
   endTime: string;
+  /** Turno noturno (atravessa a meia-noite) — `endTime` refere-se ao dia seguinte a `workDate`. Nunca combinado com `secondStartTime` (regra V1 de `WorkShift`). */
+  endsNextDay: boolean;
+  /** 2º período de um turno repartido — null = turno direto (1 período). */
+  secondStartTime: string | null;
+  secondEndTime: string | null;
   locationId: string;
   attendanceStatus: ShiftAttendanceStatus | null;
   actualStartTime: string | null;

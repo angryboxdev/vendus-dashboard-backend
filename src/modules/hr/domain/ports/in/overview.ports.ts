@@ -36,9 +36,18 @@ export interface OverviewAlertDTO {
 export interface OverviewOperationRowDTO {
   employeeId: string;
   employeeName: string;
+  /** AGENDADO|EM_TOLERANCIA|PRESENTE|ATRASADO|AUSENTE|INTERVALO|FINALIZADO|FERIAS|BAIXA|FOLGA|CONFLITO — ver `OperationDisplayState`. */
   state: string;
-  lastEvent: string;
+  /** Texto contextual — nunca repete o que `state` já diz (ex: "Entrada 12:18 · atraso 18 min", "Sem entrada", "Até 30/09"). */
+  situation: string;
+  /** Linha secundária de alerta (ex: "1º turno sem entrada") — continua visível mesmo quando já não afeta `state`/`situation` atuais. Null = sem inconsistência a sinalizar. */
+  situationWarning: string | null;
+  /** 1 ou 2 partes por turno do dia (repartido inclui as 2; mais de 1 turno no mesmo dia soma todas, ordenadas); null quando não há turno hoje (ex: só ausência). */
+  shiftToday: string[] | null;
   locationId: string | null;
+  locationName: string | null;
+  /** Turno "por conferir" a que esta linha se refere — permite abrir a conferência diretamente a partir da Visão Geral. Null quando não há turno associado ou não precisa de conferência. */
+  reviewShiftId: string | null;
 }
 
 export interface HrOverviewDTO {
@@ -76,6 +85,17 @@ export interface ShiftToReviewDTO {
   exceptionLabel: string;
   priority: ReviewPriority;
   locationId: string;
+  locationName: string | null;
+}
+
+export interface GetShiftToReviewCommand {
+  organizationId: OrganizationId;
+  shiftId: string;
+}
+
+/** Busca 1 turno "por conferir" pelo id — permite abrir a conferência diretamente (ex: a partir da Visão Geral) sem primeiro carregar a lista paginada inteira. Null quando o turno não existe ou já não precisa de conferência. */
+export interface GetShiftToReviewPort {
+  execute(command: GetShiftToReviewCommand): Promise<ShiftToReviewDTO | null>;
 }
 
 export interface ListShiftsToReviewCommand {

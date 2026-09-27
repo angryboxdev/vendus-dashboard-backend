@@ -55,3 +55,73 @@ export class DocumentCategoryConfigAlreadyExistsError extends Error {
     this.name = "DocumentCategoryConfigAlreadyExistsError";
   }
 }
+
+// ── RH-03 — Escalas & Turnos ────────────────────────────────────────────────
+
+export class InvalidWorkShiftError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidWorkShiftError";
+  }
+}
+
+export class WorkShiftNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Turno não encontrado: ${id}`);
+    this.name = "WorkShiftNotFoundError";
+  }
+}
+
+/** Um turno com presença já registada não pode ser apagado — apagar arrastaria (cascade) a evidência de presença. Corrigir/apagar a presença primeiro. */
+export class WorkShiftHasAttendanceError extends Error {
+  constructor(id: string) {
+    super(`Turno ${id} já tem presença registada — remove a conferência antes de apagar o turno`);
+    this.name = "WorkShiftHasAttendanceError";
+  }
+}
+
+/** Dois turnos do mesmo colaborador, no mesmo dia, com horários sobrepostos. */
+export class ShiftOverlapError extends Error {
+  constructor(employeeId: string, workDate: string) {
+    super(`Já existe um turno sobreposto para este colaborador em ${workDate}`);
+    this.name = "ShiftOverlapError";
+  }
+}
+
+export class InvalidBaseScheduleTemplateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidBaseScheduleTemplateError";
+  }
+}
+
+export class InvalidShiftRotationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidShiftRotationError";
+  }
+}
+
+export class ShiftRotationNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Rotação não encontrada: ${id}`);
+    this.name = "ShiftRotationNotFoundError";
+  }
+}
+
+// ── "Novo turno" — padrão semanal / séries recorrentes ──────────────────────
+
+export class InvalidRecurrenceSpecError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidRecurrenceSpecError";
+  }
+}
+
+/** Pedido "este e os seguintes"/"toda a série" sobre um turno que não pertence a nenhuma série (avulso, ou já destacado por edição individual). */
+export class WorkShiftNotInSeriesError extends Error {
+  constructor(id: string) {
+    super(`Turno ${id} não pertence a nenhuma série — usa "Somente este turno"`);
+    this.name = "WorkShiftNotInSeriesError";
+  }
+}

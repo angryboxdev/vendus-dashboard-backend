@@ -1,6 +1,11 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 
-export type HrAuditEntityType = "employee" | "employee_document";
+export type HrAuditEntityType =
+  | "employee"
+  | "employee_document"
+  | "work_shift"
+  | "base_schedule_template"
+  | "shift_rotation";
 
 export interface HrAuditLogEntry {
   organizationId: OrganizationId;
