@@ -172,7 +172,11 @@ describe("GetHrOverviewUseCase", () => {
       const emp = Employee.create({ fullName: "Gabriel Gomes" });
       employees.seed(ORG, emp);
       locations.seed(ORG, [Location.reconstitute({ id: "loc1", name: "Loja MBS", code: "MBS", timezone: "Europe/Lisbon", isActive: true })]);
-      shifts.seed(ORG, shiftToday({ employeeId: emp.id, actualStartTime: "09:05" }));
+      // Horários relativos a "agora" (não absolutos) — o use case usa DateTime.now() real; um turno fixo 09:00–17:00 ficaria "Sem saída" em vez de "Presente" se o teste corresse depois das 17:00.
+      const now = DateTime.now().setZone("Europe/Lisbon");
+      const start = now.minus({ hours: 1 });
+      const end = now.plus({ hours: 4 });
+      shifts.seed(ORG, shiftToday({ employeeId: emp.id, startTime: start.toFormat("HH:mm"), endTime: end.toFormat("HH:mm"), actualStartTime: start.toFormat("HH:mm") }));
 
       const result = await useCase.execute({ organizationId: ORG });
       expect(result.operation.status).toBe("ok");
@@ -181,8 +185,8 @@ describe("GetHrOverviewUseCase", () => {
       expect(row.locationId).toBe("loc1");
       expect(row.locationName).toBe("Loja MBS");
       expect(row.state).toBe("PRESENTE");
-      expect(row.situation).toBe("Entrada 09:05");
-      expect(row.shiftToday).toEqual(["09:00–17:00"]);
+      expect(row.situation).toBe(`Entrada ${start.toFormat("HH:mm")}`);
+      expect(row.shiftToday).toEqual([`${start.toFormat("HH:mm")}–${end.toFormat("HH:mm")}`]);
     });
 
     it("nunca corta a lista a 5 linhas — mostra todos os colaboradores com turno/ausência hoje", async () => {

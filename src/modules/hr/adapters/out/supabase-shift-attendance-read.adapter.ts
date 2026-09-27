@@ -5,6 +5,7 @@ import type {
   ShiftAttendanceReadPort,
   ShiftAttendanceStatus,
   ShiftOccurrence,
+  UnscheduledAttendanceOccurrence,
 } from "../../domain/ports/out/shift-attendance-read.port.js";
 
 interface ShiftRow {
@@ -20,7 +21,19 @@ interface ShiftRow {
 }
 
 interface AttendanceRow {
+  id: string;
   work_shift_id: string;
+  status: string;
+  actual_start_time: string | null;
+  actual_end_time: string | null;
+  late_minutes: number | null;
+}
+
+interface UnscheduledAttendanceRow {
+  id: string;
+  employee_id: string;
+  work_date: string;
+  location_id: string;
   status: string;
   actual_start_time: string | null;
   actual_end_time: string | null;
@@ -58,7 +71,7 @@ export class SupabaseShiftAttendanceReadAdapter implements ShiftAttendanceReadPo
     const shiftIds = shifts.map((s) => s.id);
     const { data: attendanceRows, error: attendanceError } = await this.scopedQuery(organizationId)
       .table("hr_shift_attendance")
-      .select("work_shift_id, status, actual_start_time, actual_end_time, late_minutes")
+      .select("id, work_shift_id, status, actual_start_time, actual_end_time, late_minutes")
       .in("work_shift_id", shiftIds);
     if (attendanceError) throw new Error(attendanceError.message);
 
@@ -71,6 +84,7 @@ export class SupabaseShiftAttendanceReadAdapter implements ShiftAttendanceReadPo
       const attendance = attendanceByShiftId.get(s.id);
       return {
         shiftId: s.id,
+        attendanceId: attendance?.id ?? null,
         employeeId: s.employee_id,
         workDate: s.work_date,
         startTime: formatHrTimeForApi(s.start_time),
@@ -85,5 +99,32 @@ export class SupabaseShiftAttendanceReadAdapter implements ShiftAttendanceReadPo
         lateMinutes: attendance?.late_minutes ?? null,
       };
     });
+  }
+
+  async findUnscheduledInRange(
+    organizationId: OrganizationId,
+    range: { from: string; to: string; locationId?: string },
+  ): Promise<UnscheduledAttendanceOccurrence[]> {
+    let q = this.scopedQuery(organizationId)
+      .table("hr_shift_attendance")
+      .select("id, employee_id, work_date, location_id, status, actual_start_time, actual_end_time, late_minutes")
+      .is("work_shift_id", null)
+      .gte("work_date", range.from)
+      .lte("work_date", range.to);
+    if (range.locationId) q = q.eq("location_id", range.locationId);
+
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+
+    return ((data ?? []) as unknown as UnscheduledAttendanceRow[]).map((row) => ({
+      attendanceId: row.id,
+      employeeId: row.employee_id,
+      workDate: row.work_date,
+      locationId: row.location_id,
+      attendanceStatus: (row.status as ShiftAttendanceStatus | null) ?? null,
+      actualStartTime: row.actual_start_time ? formatHrTimeForApi(row.actual_start_time) : null,
+      actualEndTime: row.actual_end_time ? formatHrTimeForApi(row.actual_end_time) : null,
+      lateMinutes: row.late_minutes ?? null,
+    }));
   }
 }

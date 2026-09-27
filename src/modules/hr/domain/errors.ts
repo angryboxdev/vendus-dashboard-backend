@@ -125,3 +125,44 @@ export class WorkShiftNotInSeriesError extends Error {
     this.name = "WorkShiftNotInSeriesError";
   }
 }
+
+// ── Fase 2 — Assiduidade, Correções e Fecho Mensal ──────────────────────────
+
+/** Toda correção manual de assiduidade exige um motivo — nunca acontece "automaticamente" (task Fase 2, secção 12). */
+export class AttendanceCorrectionReasonRequiredError extends Error {
+  constructor() {
+    super("O motivo da correção é obrigatório");
+    this.name = "AttendanceCorrectionReasonRequiredError";
+  }
+}
+
+/** Tentativa de corrigir assiduidade ou editar dados de um mês já fechado — reabrir primeiro (role mais alto). */
+export class MonthlyClosureLockedError extends Error {
+  constructor(year: number, month: number) {
+    super(`O período ${String(month).padStart(2, "0")}/${year} está fechado — reabre-o antes de corrigir`);
+    this.name = "MonthlyClosureLockedError";
+  }
+}
+
+/** Fechar um período com pendências críticas por resolver (secção 21). */
+export class MonthlyClosureHasBlockersError extends Error {
+  constructor(count: number) {
+    super(`${count} pendência${count === 1 ? "" : "s"} impede${count === 1 ? "" : "m"} o fecho`);
+    this.name = "MonthlyClosureHasBlockersError";
+  }
+}
+
+export class MonthlyClosureNotFoundError extends Error {
+  constructor(year: number, month: number) {
+    super(`Não há fecho para o período ${String(month).padStart(2, "0")}/${year}`);
+    this.name = "MonthlyClosureNotFoundError";
+  }
+}
+
+/** Reabertura sem motivo explícito (secção 23). */
+export class MonthlyClosureReopenReasonRequiredError extends Error {
+  constructor() {
+    super("O motivo da reabertura é obrigatório");
+    this.name = "MonthlyClosureReopenReasonRequiredError";
+  }
+}

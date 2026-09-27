@@ -87,6 +87,7 @@ export const TABLE_REGISTRY = {
   crm_tags: { organizationColumn: "org_id", locationBearing: false },
   dre_custos_fixos: { organizationColumn: "org_id", locationBearing: false },
   dre_custos_variaveis: { organizationColumn: "org_id", locationBearing: false },
+  hr_attendance_corrections: { organizationColumn: "org_id", locationBearing: false },
   hr_audit_logs: { organizationColumn: "org_id", locationBearing: false },
   // RH-03: location_id nullable — um dia de folga da escala base não tem loja.
   hr_base_schedule_templates: { organizationColumn: "org_id", locationBearing: true },
@@ -96,6 +97,8 @@ export const TABLE_REGISTRY = {
   hr_employees: { organizationColumn: "org_id", locationBearing: false },
   hr_leave_balances: { organizationColumn: "org_id", locationBearing: false },
   hr_leave_requests: { organizationColumn: "org_id", locationBearing: false },
+  // Fase 2: fecho é por organização inteira, nunca por local.
+  hr_monthly_closures: { organizationColumn: "org_id", locationBearing: false },
   hr_public_holidays: { organizationColumn: "org_id", locationBearing: false },
   // D3/D4: event-grain table, location_id NOT NULL.
   hr_shift_attendance: { organizationColumn: "org_id", locationBearing: true },

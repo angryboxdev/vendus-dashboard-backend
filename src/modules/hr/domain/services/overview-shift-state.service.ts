@@ -41,7 +41,7 @@ export type ShiftException =
  * mesmo dia civil). Usado por todas as funções deste ficheiro — corrige-as
  * a todas de uma vez, sem duplicar a noção de "fim do turno".
  */
-function shiftWindow(shift: ShiftOccurrence): { start: DateTime; end: DateTime } {
+export function shiftWindow(shift: ShiftOccurrence): { start: DateTime; end: DateTime } {
   const start = DateTime.fromISO(`${shift.workDate}T${shift.startTime}`, { zone: REPORT_TIMEZONE });
   const lastSegmentEndTime = shift.secondEndTime ?? shift.endTime;
   let end = DateTime.fromISO(`${shift.workDate}T${lastSegmentEndTime}`, { zone: REPORT_TIMEZONE });

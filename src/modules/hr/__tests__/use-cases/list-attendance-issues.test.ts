@@ -1,0 +1,111 @@
+import { DateTime } from "luxon";
+import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+import { Employee } from "../../domain/entities/employee.js";
+import { Location } from "../../../locations/domain/entities/location.js";
+import { ListAttendanceIssuesUseCase } from "../../application/use-cases/list-attendance-issues.use-case.js";
+import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
+import { FakeShiftAttendanceReadAdapter } from "../fakes/fake-shift-attendance-read.js";
+import { FakeLeaveReadAdapter } from "../fakes/fake-leave-read.js";
+import { FakeLocationRepository } from "../fakes/fake-location-repository.js";
+import type { ShiftOccurrence } from "../../domain/ports/out/shift-attendance-read.port.js";
+
+const ORG = mintOrganizationId("org-test");
+
+function shift(overrides: Partial<ShiftOccurrence> = {}): ShiftOccurrence {
+  return {
+    shiftId: "s1",
+    employeeId: "e1",
+    workDate: "2026-09-05",
+    startTime: "09:00",
+    endTime: "17:00",
+    endsNextDay: false,
+    secondStartTime: null,
+    secondEndTime: null,
+    locationId: "loc1",
+    attendanceStatus: null,
+    actualStartTime: null,
+    actualEndTime: null,
+    lateMinutes: null,
+    ...overrides,
+  };
+}
+
+function makeUseCase() {
+  const employees = new FakeEmployeeRepository();
+  const shifts = new FakeShiftAttendanceReadAdapter();
+  const leave = new FakeLeaveReadAdapter();
+  const locations = new FakeLocationRepository();
+  return { employees, shifts, leave, locations, useCase: new ListAttendanceIssuesUseCase(employees, shifts, leave, locations) };
+}
+
+describe("ListAttendanceIssuesUseCase", () => {
+  it("só devolve turnos com pendência, com nome do colaborador e do local resolvidos", async () => {
+    const { employees, shifts, locations, useCase } = makeUseCase();
+    const emp = Employee.create({ fullName: "Gabriel Gomes" });
+    employees.seed(ORG, emp);
+    locations.seed(ORG, [Location.reconstitute({ id: "loc1", name: "Loja MBS", code: "MBS", timezone: "Europe/Lisbon", isActive: true })]);
+    // Terminado há 2h (não fixo 09:00–17:00) — garante "Em aberto" independente da hora real em que o teste corre.
+    const now = DateTime.now().setZone("Europe/Lisbon");
+    const recentEnd = now.minus({ hours: 2 });
+    const recentStart = recentEnd.minus({ hours: 8 });
+    shifts.seed(
+      ORG,
+      shift({
+        shiftId: "s1",
+        employeeId: emp.id,
+        workDate: recentEnd.toISODate()!,
+        startTime: recentStart.toFormat("HH:mm"),
+        endTime: recentEnd.toFormat("HH:mm"),
+        actualStartTime: recentStart.toFormat("HH:mm"),
+      }),
+    ); // sem saída → pendência
+    shifts.seed(
+      ORG,
+      shift({ shiftId: "s2", employeeId: emp.id, workDate: recentEnd.toISODate()!, actualStartTime: "09:00", actualEndTime: "17:00" }),
+    ); // regular
+
+    const result = await useCase.execute({ organizationId: ORG, year: now.year, month: now.month });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]!.employeeName).toBe("Gabriel Gomes");
+    expect(result.items[0]!.locationName).toBe("Loja MBS");
+    expect(result.items[0]!.state).toBe("EM_ABERTO");
+  });
+
+  it("KPIs: pendingCount/lateCount/horas somam a partir da mesma lista, sem 2ª agregação", async () => {
+    const { employees, shifts, useCase } = makeUseCase();
+    const emp = Employee.create({ fullName: "Carlos Andrés" });
+    employees.seed(ORG, emp);
+    shifts.seed(ORG, shift({ shiftId: "s1", employeeId: emp.id, actualStartTime: "09:18", actualEndTime: "17:00", attendanceStatus: "late", lateMinutes: 18 }));
+
+    const result = await useCase.execute({ organizationId: ORG, year: 2026, month: 9 });
+
+    expect(result.kpis.pendingCount).toBe(1);
+    expect(result.kpis.lateCount).toBe(1);
+    expect(result.kpis.plannedMinutesTotal).toBe(480); // 09:00-17:00
+    expect(result.kpis.actualMinutesTotal).toBe(462); // 09:18-17:00
+    expect(result.kpis.balanceMinutes).toBe(-18);
+  });
+
+  it("presença sem escala aparece na lista mesmo sem nenhum turno planeado", async () => {
+    const { employees, shifts, useCase } = makeUseCase();
+    const emp = Employee.create({ fullName: "João Victor" });
+    employees.seed(ORG, emp);
+    shifts.seedUnscheduled(ORG, {
+      attendanceId: "att-1",
+      employeeId: emp.id,
+      workDate: "2026-09-10",
+      locationId: "loc1",
+      attendanceStatus: "worked_as_planned",
+      actualStartTime: "10:00",
+      actualEndTime: "18:00",
+      lateMinutes: null,
+    });
+
+    const result = await useCase.execute({ organizationId: ORG, year: 2026, month: 9 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]!.state).toBe("CONFLITO");
+    expect(result.items[0]!.occurrenceLabel).toBe("Presença sem escala");
+  });
+});

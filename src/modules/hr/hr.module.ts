@@ -13,6 +13,9 @@ import { SupabaseWorkShiftRepository } from "./adapters/out/supabase-work-shift.
 import { SupabaseBaseScheduleRepository } from "./adapters/out/supabase-base-schedule.repository.js";
 import { SupabaseShiftRotationRepository } from "./adapters/out/supabase-shift-rotation.repository.js";
 import { SupabaseLocationRepository } from "../locations/adapters/out/supabase-location.repository.js";
+import { SupabaseAttendanceWriteAdapter } from "./adapters/out/supabase-attendance-write.adapter.js";
+import { SupabaseAttendanceCorrectionRepository } from "./adapters/out/supabase-attendance-correction.repository.js";
+import { SupabaseMonthlyClosureRepository } from "./adapters/out/supabase-monthly-closure.repository.js";
 
 import { ListEmployeesUseCase } from "./application/use-cases/list-employees.use-case.js";
 import { GetPeopleKpisUseCase } from "./application/use-cases/get-people-kpis.use-case.js";
@@ -57,11 +60,18 @@ import { UpdateWorkShiftSeriesScopeUseCase } from "./application/use-cases/updat
 import { ClearWorkShiftsUseCase } from "./application/use-cases/clear-work-shifts.use-case.js";
 import { PreviewRepeatCalendarWeekUseCase } from "./application/use-cases/preview-repeat-calendar-week.use-case.js";
 import { RepeatCalendarWeekUseCase } from "./application/use-cases/repeat-calendar-week.use-case.js";
+import { ListAttendanceIssuesUseCase } from "./application/use-cases/list-attendance-issues.use-case.js";
+import { GetAttendanceIssueDetailUseCase } from "./application/use-cases/get-attendance-issue-detail.use-case.js";
+import { CorrectShiftAttendanceUseCase } from "./application/use-cases/correct-shift-attendance.use-case.js";
+import { GetMonthlyClosureStatusUseCase } from "./application/use-cases/get-monthly-closure-status.use-case.js";
+import { CloseMonthlyPeriodUseCase } from "./application/use-cases/close-monthly-period.use-case.js";
+import { ReopenMonthlyPeriodUseCase } from "./application/use-cases/reopen-monthly-period.use-case.js";
 
 import { HrPeopleController } from "./adapters/in/hr-people.controller.js";
 import { HrOverviewController } from "./adapters/in/hr-overview.controller.js";
 import { HrDocumentCategoriesController } from "./adapters/in/hr-document-categories.controller.js";
 import { HrSchedulesController } from "./adapters/in/hr-schedules.controller.js";
+import { HrAttendanceController } from "./adapters/in/hr-attendance.controller.js";
 
 /**
  * Composition root do módulo `hr` (RH-02, Pessoas & Documentos).
@@ -87,6 +97,9 @@ export function createHrModule(): { router: Router } {
   const shiftRotationRepository = new SupabaseShiftRotationRepository(createScopedQuery);
   // Cross-module (D10): resolve locationId → nome amigável para a Visão Geral, sem importar código do módulo `locations` além do seu próprio port/adapter.
   const locationRepository = new SupabaseLocationRepository(createScopedQuery);
+  const attendanceWrite = new SupabaseAttendanceWriteAdapter(createScopedQuery);
+  const attendanceCorrectionRepository = new SupabaseAttendanceCorrectionRepository(createScopedQuery);
+  const monthlyClosureRepository = new SupabaseMonthlyClosureRepository(createScopedQuery);
 
   const listEmployees = new ListEmployeesUseCase(
     employeeRepository,
@@ -191,6 +204,30 @@ export function createHrModule(): { router: Router } {
   const previewRepeatCalendarWeek = new PreviewRepeatCalendarWeekUseCase(workShiftRepository, employeeRepository, leaveRead, holidayRead);
   const repeatCalendarWeek = new RepeatCalendarWeekUseCase(workShiftRepository, employeeRepository, leaveRead, holidayRead, auditLog);
 
+  const listAttendanceIssues = new ListAttendanceIssuesUseCase(employeeRepository, shiftAttendanceRead, leaveRead, locationRepository);
+  const getAttendanceIssueDetail = new GetAttendanceIssueDetailUseCase(
+    employeeRepository,
+    shiftAttendanceRead,
+    leaveRead,
+    locationRepository,
+    attendanceCorrectionRepository,
+  );
+  const correctShiftAttendance = new CorrectShiftAttendanceUseCase(
+    attendanceWrite,
+    attendanceCorrectionRepository,
+    monthlyClosureRepository,
+    auditLog,
+    getAttendanceIssueDetail,
+  );
+  const getMonthlyClosureStatus = new GetMonthlyClosureStatusUseCase(
+    listAttendanceIssues,
+    monthlyClosureRepository,
+    shiftAttendanceRead,
+    leaveRead,
+  );
+  const closeMonthlyPeriod = new CloseMonthlyPeriodUseCase(getMonthlyClosureStatus, monthlyClosureRepository, auditLog);
+  const reopenMonthlyPeriod = new ReopenMonthlyPeriodUseCase(monthlyClosureRepository, auditLog, getMonthlyClosureStatus);
+
   const controller = new HrPeopleController(
     listEmployees,
     getPeopleKpis,
@@ -238,12 +275,21 @@ export function createHrModule(): { router: Router } {
     previewRepeatCalendarWeek,
     repeatCalendarWeek,
   );
+  const attendanceController = new HrAttendanceController(
+    listAttendanceIssues,
+    getAttendanceIssueDetail,
+    correctShiftAttendance,
+    getMonthlyClosureStatus,
+    closeMonthlyPeriod,
+    reopenMonthlyPeriod,
+  );
 
   const router = Router();
   router.use(controller.router);
   router.use(overviewController.router);
   router.use(documentCategoriesController.router);
   router.use(schedulesController.router);
+  router.use(attendanceController.router);
 
   return { router };
 }

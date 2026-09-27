@@ -5,7 +5,10 @@ export type HrAuditEntityType =
   | "employee_document"
   | "work_shift"
   | "base_schedule_template"
-  | "shift_rotation";
+  | "shift_rotation"
+  // Fase 2 — nomes distintos do vocabulário legacy ("attendance", sem "_correction") para não colidir semanticamente na mesma tabela partilhada `hr_audit_logs`.
+  | "attendance_correction"
+  | "monthly_closure";
 
 export interface HrAuditLogEntry {
   organizationId: OrganizationId;

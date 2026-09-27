@@ -16,7 +16,12 @@ agrega, só em leitura, KPIs de equipa/operação do dia/pendências a partir de
 dados reais já existentes (turnos, presença, férias, pagamentos) — e, desde
 a RH-03, também **cria/edita/publica turnos planeados**, gere uma **escala
 base semanal** por colaborador e **rotações automáticas** entre 2
-colaboradores da mesma função (ver secção RH-03 abaixo).
+colaboradores da mesma função (ver secção RH-03 abaixo). Desde a Fase 2
+("Assiduidade, Correções, Ausências e Fecho Mensal"), fecha também o ciclo
+planeado→realizado: **Conferência** (compara escala vs. presença real,
+com correção estruturada e motivo obrigatório pelo gestor) e **Fecho
+mensal** (bloqueia/reabre um período, com auditoria de quem/quando/
+porquê).
 
 **O problema que resolve:**
 A área antiga concentrava cadastro, turnos, pagamentos, férias e documentos
@@ -402,6 +407,29 @@ Este módulo é **aditivo**, não uma substituição imediata:
   conflitos, nunca férias/ausência/feriado) e o mesmo `publish` global
   para o lote todo. `rotateEmployees` (novo) alterna o horário de cada
   colaborador com o do seguinte em `employeeIds` — ver Design decisions.
+- `ListAttendanceIssuesPort` / `GetAttendanceIssueDetailPort` (Fase 2,
+  "Assiduidade") — "Conferência": só turnos/presenças que precisam de
+  intervenção (nunca turnos regulares), com `state`
+  (`REGULAR|PRESENTE|CONCLUIDO|PARCIAL|AUSENTE|EM_ABERTO|CONFLITO`) e
+  `occurrenceLabel` sempre separados (nunca 1 única string). KPIs do topo
+  (turnos com pendência/atrasos/horas realizadas/planeadas/saldo)
+  calculados a partir da mesma lista, sem 2ª agregação. Detalhe inclui
+  `corrections` — histórico estruturado de `AttendanceCorrectionRepositoryPort`.
+- `CorrectShiftAttendancePort` (Fase 2) — único write path de assiduidade
+  a partir do módulo novo: motivo sempre obrigatório
+  (`AttendanceCorrectionReasonRequiredError`), rejeita escrita num mês
+  fechado (`MonthlyClosureLockedError`), preserva sempre o valor original
+  numa 2ª tabela (`hr_attendance_corrections`) — nunca sobrescreve
+  silenciosamente. A rota legacy `PATCH /api/hr/shifts/:id/attendance`
+  (usada pelo `ShiftReviewModal` já existente) continua a existir em
+  paralelo — ver Design decisions.
+- `GetMonthlyClosureStatusPort` / `CloseMonthlyPeriodPort` /
+  `ReopenMonthlyPeriodPort` (Fase 2, "Fecho mensal") — por organização
+  inteira (nunca por local). `Close` rejeita com
+  `MonthlyClosureHasBlockersError` quando há qualquer pendência crítica
+  (`PARCIAL|EM_ABERTO|CONFLITO`); `Reopen` exige motivo
+  (`MonthlyClosureReopenReasonRequiredError`) e só existe para reabrir um
+  período já fechado (`MonthlyClosureNotFoundError` caso contrário).
 
 ### Output (domain dependencies)
 
@@ -452,6 +480,19 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `src/routes/hrLeaveRoutes.ts`) diretamente, padrão D10. `LeaveReadPort`
   ganhou `findActiveInRange` (além do já existente `findActiveOnDate`) para
   varrer uma semana inteira de uma vez.
+- `ShiftAttendanceReadPort` (Fase 2) ganhou `findUnscheduledInRange` —
+  presenças sem turno (`work_shift_id` NULL), nunca incluídas em
+  `findShiftsInRange` (que parte sempre de `hr_work_shifts`). `ShiftOccurrence`
+  ganhou `attendanceId` opcional (id da linha `hr_shift_attendance`, para a
+  Fase 2 referenciá-la diretamente).
+- `AttendanceWritePort` (Fase 2, novo) — write path de `hr_shift_attendance`
+  a partir do módulo novo (`findById`/`upsert` por `id` explícito, nunca por
+  `work_shift_id` — permite atualizar também presença sem escala).
+- `AttendanceCorrectionRepositoryPort` (Fase 2, novo) — ledger só de
+  inserção em `hr_attendance_corrections` (`record`/`findByShiftId`).
+- `MonthlyClosureRepositoryPort` (Fase 2, novo) — `hr_monthly_closures`,
+  1 linha por (organização, ano, mês); ausência de linha = período em
+  aberto por omissão.
 
 ## Adapters
 
@@ -895,6 +936,98 @@ cobertura a partir do nada). Isto também significa que a "cobertura"
 raciocina por colaborador, não por "a loja X precisa de N pessoas às
 terças" (esse segundo conceito não existe em lado nenhum do sistema).
 
+### Fase 2 ("Assiduidade, Correções, Ausências e Fecho Mensal") — nova tabela `hr_attendance_corrections`, não reaproveitar só `payload_before`/`payload_after`
+
+A trilha "valor original + corrigido + responsável + motivo" (secção 11)
+já existia parcialmente em `hr_audit_logs` (par `payload_before`/
+`payload_after` em JSON), mas sem motivo nenhum e sem estrutura
+pesquisável (ex: filtrar "todas as correções de entrada de um
+colaborador"). Decisão: nova tabela dedicada
+`hr_attendance_corrections` — `CorrectShiftAttendanceUseCase` grava aqui
+E em `hr_audit_logs` (este último com `entityType: "attendance_correction"`,
+distinto do `"attendance"` legacy para não colidir semanticamente na
+mesma tabela partilhada). `hr_shift_attendance` continua a ser a única
+fonte do estado "efetivo" — a tabela nova é só o ledger ao lado, nunca
+editado depois de escrito.
+
+### Fase 2 — `hr_shift_attendance.work_shift_id` passa a nullable (Presença sem escala)
+
+Antes desta fase, uma linha de presença sem turno era estruturalmente
+impossível (`work_shift_id not null unique`, e o kiosk do colaborador
+rejeita check-in sem turno agendado — 404 "Não tens turno agendado para
+hoje"). A única fonte real de "Presença sem escala" (secção 13) é o
+**gestor** a registar manualmente uma entrada/saída para um (colaborador,
+dia) sem turno nenhum. Em vez de inventar uma tabela paralela, a migração
+relaxa a constraint (nullable + índice único parcial `where work_shift_id
+is not null`) e acrescenta `employee_id`/`work_date` (só preenchidos
+quando `work_shift_id` é nulo) — aditivo, sem tocar em nenhuma linha
+existente. Nenhuma escala é criada automaticamente a partir disto (a task
+é explícita: "não criar ou alterar escala automaticamente sem
+confirmação") — a presença fica "solta", o gestor decide depois em
+Escalas & Turnos se quer formalizá-la.
+
+### Fase 2 — write path novo para correções, `ShiftReviewModal` existente fica intocado
+
+A rota legacy `PATCH /api/hr/shifts/:id/attendance` (reaproveitada pelo
+`ShiftReviewModal` da Visão Geral) continua a existir exatamente como
+estava — mexer nela não fazia parte do pedido, e teria risco desnecessário
+sobre um fluxo já em produção. A nova "Conferência" (Assiduidade) usa
+exclusivamente `CorrectShiftAttendanceUseCase`/`AttendanceWritePort` — um
+segundo write path para a mesma tabela, mas com motivo obrigatório e
+trilha estruturada que a rota legacy nunca teve. Se o utilizador vier a
+pedir a unificação dos dois fluxos numa ronda futura, é uma migração de
+UI (apontar `ShiftReviewModal` para o novo use case), não de esquema.
+
+### Fase 2 — `computeAttendanceIssue`/`computeUnscheduledAttendanceIssue` reaproveitam `overview-shift-state.service.ts`, nunca duplicam
+
+`attendance-conference.service.ts` importa `shiftWindow` (agora exportada)
+do serviço já existente da Visão Geral, em vez de recalcular "quando é
+que um turno termina" (turno repartido/noturno) uma segunda vez. Só
+acrescenta o que a Visão Geral não precisa: Estado/Ocorrência separados
+para fins de auditoria histórica (não só "agora"), deteção de conflito
+com ausências, e o corte específico da secção 8 (`REGULAR`/`PRESENTE`/
+`CONCLUIDO`/`PARCIAL`/`AUSENTE`/`EM_ABERTO`/`CONFLITO`, diferente do
+`ShiftState` da Visão Geral).
+
+### Fase 2 — limitação conhecida: turno repartido nunca é representável como "os 2 períodos genuinamente cumpridos"
+
+`hr_shift_attendance` só guarda 1 par entrada/saída por turno (não 2,
+mesmo para turno repartido) — limitação já identificada e aceite na
+ronda anterior ("Hoje na operação"). Consequência para a Fase 2: mesmo
+quando um colaborador cumpriu os 2 períodos de um turno repartido, a
+função `attributeActualToPeriods` só consegue atribuir o par real a UM
+dos períodos, e o outro aparece como "sem entrada" — não há forma de
+representar "ambos cumpridos" com o esquema atual. Documentado no código
+(`attendance-conference.service.ts`); corrigir isto exigiria guardar 2
+pares entrada/saída por turno, uma mudança de esquema fora do escopo
+desta fase.
+
+### Fase 2 — Fecho mensal é por organização inteira, `GetMonthlyClosureStatusUseCase` reaproveita `ListAttendanceIssuesUseCase`
+
+Confirmado com o utilizador: 1 fecho por (organização, ano, mês), sem
+`location_id` — nunca por loja. Os "bloqueadores" do fecho (secção 21)
+são exatamente as linhas de `ListAttendanceIssuesUseCase` cujo `state`
+está em `PARCIAL|EM_ABERTO|CONFLITO` — `GetMonthlyClosureStatusUseCase`
+chama esse use case internamente em vez de recalcular a deteção de
+pendências uma segunda vez. `reopen` exige `requireMinRole("admin")` (o
+role mais alto do sistema — só 3 níveis, `hr_viewer < manager < admin`),
+`close`/correções usam `requireMinRole("manager")` como o resto do
+módulo.
+
+### Fase 2 — Resumo mensal/Horas & saldos completos, migração de Férias & Ausências e exportação ficam para rondas seguintes
+
+A task tem 29 secções; esta ronda (Fase A) entrega Conferência (lista +
+detalhe + correção estruturada) e Fecho mensal (status + fechar +
+reabrir), com os 2 números do topo (Horas realizadas/planeadas) já
+corretos porque reaproveitam os mesmos períodos por turno. As 2 abas
+"Resumo mensal"/"Horas & saldos" completos (separar horas confirmadas/
+pendentes/corrigidas/cobertas por ausência, secção 18), a migração da
+escrita de Férias & Ausências para o módulo novo (secção 14-16, hoje só
+leitura via `LeaveReadPort`, escrita continua na rota legacy
+`hrLeaveRoutes.ts`), e a exportação Excel/CSV (secção 25) ficam
+explicitamente para rondas seguintes — confirmado com o utilizador antes
+de começar.
+
 ## How to test
 
 - Domínio/use cases: `npx jest src/modules/hr --testPathIgnorePatterns=integration`
@@ -904,6 +1037,28 @@ terças" (esse segundo conceito não existe em lado nenhum do sistema).
 
 ## Known gaps / open debt
 
+- **Fase 2 ("Assiduidade, Correções, Ausências e Fecho Mensal") — Resumo
+  mensal/Horas & saldos completos, migração de Férias & Ausências, e
+  exportação Excel/CSV ficam para rondas seguintes** (confirmado com o
+  utilizador antes de começar) — ver "Design decisions".
+- **Fase 2 — migrações ainda não aplicadas**
+  (`20260927150000_hr_attendance_corrections.sql`,
+  `20260927160000_hr_monthly_closures.sql`,
+  `20260927170000_hr_shift_attendance_unscheduled.sql`) — ficam pendentes
+  de aplicação manual pelo Raul no Supabase, mesmo processo já usado para
+  as migrações anteriores desta sessão.
+- **Fase 2 — turno repartido nunca é representável como "os 2 períodos
+  genuinamente cumpridos"** — limitação de esquema (só 1 par entrada/
+  saída por turno), documentada em `attendance-conference.service.ts`.
+- **Fase 2 — `ShiftReviewModal` (Visão Geral) continua a usar a rota
+  legacy**, sem motivo obrigatório nem trilha estruturada — só a nova
+  Conferência (Assiduidade) usa o write path novo. Unificar os dois é
+  possível numa ronda futura, sem mudança de esquema.
+- **Fase 2 — sem verificação de "mês fechado" na escrita de ausências**
+  (`hr_leave_requests` continua só CRUD legacy, sem ligação a
+  `hr_monthly_closures`) — um gestor pode ainda criar/editar uma ausência
+  num mês já fechado. Fica para a Fase C (migração da escrita de leave
+  para o módulo novo).
 - **"Melhorar Visão Geral e reorganizar Pessoas" — Admissão não construída**
   (pedido explícito do utilizador para ignorar essa parte desta ronda) —
   ver "Design decisions".
