@@ -28,6 +28,7 @@ import { ReplaceEmployeeDocumentUseCase } from "./application/use-cases/replace-
 import { RemoveEmployeeDocumentUseCase } from "./application/use-cases/remove-employee-document.use-case.js";
 import { GetEmployeeDocumentDownloadUrlUseCase } from "./application/use-cases/get-employee-document-download-url.use-case.js";
 import { GetEmployeeDocumentHistoryUseCase } from "./application/use-cases/get-employee-document-history.use-case.js";
+import { GetDocumentOverviewUseCase } from "./application/use-cases/get-document-overview.use-case.js";
 import { GetHrOverviewUseCase } from "./application/use-cases/get-hr-overview.use-case.js";
 import { ListShiftsToReviewUseCase } from "./application/use-cases/list-shifts-to-review.use-case.js";
 import { GetShiftToReviewUseCase } from "./application/use-cases/get-shift-to-review.use-case.js";
@@ -94,6 +95,7 @@ export function createHrModule(): { router: Router } {
     documentCategoryRepository,
   );
   const getPeopleKpis = new GetPeopleKpisUseCase(employeeRepository, employeeDocumentRepository, documentCategoryRepository);
+  const getDocumentOverview = new GetDocumentOverviewUseCase(employeeRepository, employeeDocumentRepository, documentCategoryRepository);
   const getEmployeeProfile = new GetEmployeeProfileUseCase(
     employeeRepository,
     employeeDocumentRepository,
@@ -204,6 +206,7 @@ export function createHrModule(): { router: Router } {
     removeEmployeeDocument,
     getEmployeeDocumentDownloadUrl,
     getEmployeeDocumentHistory,
+    getDocumentOverview,
   );
   const overviewController = new HrOverviewController(getHrOverview, listShiftsToReview, getShiftToReview);
   const documentCategoriesController = new HrDocumentCategoriesController(

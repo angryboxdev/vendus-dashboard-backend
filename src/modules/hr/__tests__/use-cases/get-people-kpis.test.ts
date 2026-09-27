@@ -108,7 +108,9 @@ describe("GetPeopleKpisUseCase", () => {
     const group = result.priorityPendencies.find((p) => p.kind === "expiring_document");
     expect(group).toBeDefined();
     expect(group!.detail).toBe("Cartão de Cidadão a expirar");
-    expect(group!.employees).toEqual([{ employeeId: e.id, employeeName: "Andres" }]);
+    expect(group!.employees).toEqual([
+      { employeeId: e.id, employeeName: "Andres", expiresAt: soon.toISOString().slice(0, 10) },
+    ]);
   });
 
   it("nunca gera missing_document para categorias opcionais (só obrigatórias)", async () => {

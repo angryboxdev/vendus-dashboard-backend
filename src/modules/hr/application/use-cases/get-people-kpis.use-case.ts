@@ -28,6 +28,7 @@ interface Candidate {
   detail: string;
   employeeId: string;
   employeeName: string;
+  expiresAt?: string;
 }
 
 function categoryLabel(category: string, labelBySlug: ReadonlyMap<string, string>): string {
@@ -40,10 +41,11 @@ function groupPendencies(candidates: Candidate[]): PriorityPendencyGroupDTO[] {
   for (const c of candidates) {
     const key = `${c.kind}:${c.detail}`;
     const group = groups.get(key);
+    const ref = { employeeId: c.employeeId, employeeName: c.employeeName, ...(c.expiresAt && { expiresAt: c.expiresAt }) };
     if (group) {
-      group.employees.push({ employeeId: c.employeeId, employeeName: c.employeeName });
+      group.employees.push(ref);
     } else {
-      groups.set(key, { kind: c.kind, detail: c.detail, employees: [{ employeeId: c.employeeId, employeeName: c.employeeName }] });
+      groups.set(key, { kind: c.kind, detail: c.detail, employees: [ref] });
     }
   }
   return [...groups.values()].sort((a, b) => b.employees.length - a.employees.length);
@@ -119,6 +121,7 @@ export class GetPeopleKpisUseCase implements GetPeopleKpisPort {
             employeeId: employee.id,
             employeeName: employee.fullName,
             detail: `${categoryLabel(doc.category, labelBySlug)} a expirar`,
+            ...(doc.expiresAt && { expiresAt: doc.expiresAt }),
           });
         }
       }

@@ -304,6 +304,10 @@ Este módulo é **aditivo**, não uma substituição imediata:
 
 - `ListEmployeesPort` / `GetPeopleKpisPort` / `GetEmployeeProfilePort` —
   leitura da lista, dos KPIs+pendências prioritárias, e do perfil 360º.
+  `PriorityPendencyEmployeeRef.expiresAt` (novo, opcional — só preenchido
+  para `kind: "expiring_document"`) permite ao drawer de pendências da
+  Visão Geral mostrar a validade/dias restantes sem uma 2ª chamada — ver
+  "Design decisions".
 - `CreateEmployeePort` / `UpdateEmployeePort` / `SetEmployeeStatusPort` /
   `UploadEmployeePhotoPort` — escrita de colaborador.
 - `GetEmployeeHistoryPort` — histórico agregado de auditoria de um
@@ -313,6 +317,14 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `GetEmployeeDocumentDownloadUrlPort` / `GetEmployeeDocumentHistoryPort` —
   dossiê documental (upload de categoria nova, substituir versão, remoção
   lógica, URL de download, histórico de versões).
+- `GetDocumentOverviewPort` (novo, task "Melhorar Visão Geral e reorganizar
+  Pessoas") — 1 linha por (colaborador ativo × requisito documental
+  aplicável ao seu cargo), cobrindo os 4 estados (`ok`/`expiring`/
+  `expired`/`missing`) — não só pendências, ao contrário de
+  `GetPeopleKpisPort`. Única fonte de verdade da aba "Pessoas >
+  Documentos" do frontend. Reaproveita `computeDocumentRequirementRows`
+  (nova função pura em `document-status.service.ts`) — nunca duplica a
+  lógica de estado documental já usada pelos KPIs/perfil.
 - `GetHrOverviewPort` (RH-01) — KPIs/alertas/snapshot do dia, com blocos
   independentes `team`/`today`/`pending`/`alerts`/`operation`, cada um
   `{status: "ok", data} | {status: "unavailable", reason}` — uma fonte
@@ -329,7 +341,11 @@ Este módulo é **aditivo**, não uma substituição imediata:
   colaboradores com turno/ausência hoje, ordenados por prioridade
   operacional (lista numerada da task "Hoje na operação refinado", secção
   13); o frontend é que decide mostrar isto num contentor com scroll
-  próprio.
+  próprio. `OverviewTeamDTO.missingDocumentsCount` (novo, task "Melhorar
+  Visão Geral e reorganizar Pessoas") soma requisitos obrigatórios em
+  falta por colaborador (nunca colaboradores) — o detalhe por categoria
+  vem de `GetPeopleKpisPort.priorityPendencies` (kind="missing_document"),
+  reaproveitado pelo drawer da Visão Geral em vez de uma 2ª agregação.
 - `ListShiftsToReviewPort` (RH-01) — fila "Turnos por conferir" paginada,
   filtrada por prioridade/local/pesquisa. `ShiftToReviewDTO.locationName`
   (novo) resolve o local — mesmo bug corrigido que no bloco `operation`.
@@ -709,6 +725,44 @@ início, numa lista só. "Um funcionário = uma linha" (task, secção 1)
 continua garantido: `byEmployee` já agrupa por `employeeId` antes disto,
 só o conteúdo da célula "Turno hoje" é que passou a ser mais completo.
 
+### "Melhorar Visão Geral e reorganizar Pessoas" — `GetDocumentOverviewUseCase` reaproveita a lógica, não a agregação, de `GetPeopleKpisUseCase`
+
+As duas continuam use cases separados, cada um com a sua orquestração
+(loop por colaborador, chamadas aos mesmos 3 repositórios) — mas ambas
+chamam as MESMAS funções puras do domínio (`applicableCategoriesFor`,
+agora também `computeDocumentRequirementRows`, que generaliza
+`computeMandatoryDocumentsSummary` para incluir também as categorias
+opcionais e os estados "válido"/"a expirar"/"expirado", não só "em
+falta"). Alternativa descartada: fazer `GetDocumentOverviewUseCase` chamar
+`GetPeopleKpisUseCase` internamente — os dois têm formas de agregação
+genuinamente diferentes (1 linha por colaborador vs. 1 linha por
+colaborador×requisito) e forçar um a depender do outro só para "não
+duplicar" trocaria uma duplicação pequena e visível (2 loops parecidos)
+por um acoplamento maior entre 2 casos de uso com propósitos distintos.
+
+### "Melhorar Visão Geral e reorganizar Pessoas" — drawer da Visão Geral reaproveita `GetPeopleKpisPort`, não uma rota nova
+
+O pedido era "centralizar os resumos de pendências na Visão Geral" e
+"remover duplicações entre Visão Geral e Pessoas" — a duplicação real era
+o painel "Pendências prioritárias" existir em 2 sítios (Pessoas E,
+implicitamente, a Visão Geral). Em vez de criar uma rota/DTO novo só para
+o drawer, o frontend chama `GET /api/hr/people/kpis` a partir da própria
+Visão Geral (mesma `queryKey` do React Query que "Pessoas" já usava) e
+filtra `priorityPendencies` pelo `kind` clicado — 1 única fonte, 2 pontos
+de entrada. `OverviewTeamDTO` só ganhou a CONTAGEM de "Documentos em
+falta" (`missingDocumentsCount`), não a lista agrupada — o detalhe
+continua a vir de `GetPeopleKpisPort`, nunca duplicado ali.
+
+### "Melhorar Visão Geral e reorganizar Pessoas" — Admissão fica fora desta ronda
+
+A task original pedia uma 3ª aba "Admissão" dentro de "Pessoas"
+(acompanhamento de checklist de onboarding). O utilizador pediu
+explicitamente para ignorar essa parte "não vejo necessário na nossa
+operação" — nada foi construído para isso (nem endpoint, nem aba, nem
+componente). `PeopleTabs` só tem Colaboradores/Documentos. Se vier a ser
+pedida no futuro, o `onboardingPending` KPI (já existente em
+`GetPeopleKpisPort`) já dá o ponto de partida para a contagem.
+
 ### RH-03 — `status`/`source` como único par de campos para tudo
 
 Em vez de tabelas/colunas separadas para "rascunho vs. publicado" e para
@@ -850,6 +904,17 @@ terças" (esse segundo conceito não existe em lado nenhum do sistema).
 
 ## Known gaps / open debt
 
+- **"Melhorar Visão Geral e reorganizar Pessoas" — Admissão não construída**
+  (pedido explícito do utilizador para ignorar essa parte desta ronda) —
+  ver "Design decisions".
+- **`GetDocumentOverviewUseCase` simplifica `pending_validation`/
+  `rejected`/`removed` para `"missing"`** na aba "Pessoas > Documentos" —
+  o detalhe completo desses estados continua só no perfil do colaborador
+  (`EmployeeDocumentsTab`). Ver comentário em `DocumentRequirementRow`.
+- **`GetDocumentOverviewUseCase` não pagina** — devolve todas as linhas de
+  uma vez (colaboradores ativos × requisitos aplicáveis). Aceitável para o
+  volume de equipa desta organização; precisaria de paginação server-side
+  se a equipa crescesse muito.
 - **`EXPIRING_SOON_DAYS`** continua uma constante fixa do módulo, não
   configurável por organização — mudar o prazo de "a expirar" ainda é editar
   `document-status.service.ts`, não uma tela.

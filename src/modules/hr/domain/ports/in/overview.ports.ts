@@ -9,6 +9,8 @@ export interface OverviewTeamDTO {
   admissionsThisMonth: number;
   incompleteProfiles: number;
   documentsExpiringSoon: number;
+  /** Nº de requisitos documentais obrigatórios em falta (soma por colaborador — 1 colaborador com 2 documentos em falta conta 2), não nº de colaboradores. Drill-down: drawer da Visão Geral reaproveita `GetPeopleKpisPort.priorityPendencies` (kind="missing_document") para o detalhe por categoria. */
+  missingDocumentsCount: number;
 }
 
 export interface OverviewTodayDTO {

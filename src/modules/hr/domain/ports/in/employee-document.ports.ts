@@ -102,3 +102,26 @@ export interface GetEmployeeDocumentHistoryCommand {
 export interface GetEmployeeDocumentHistoryPort {
   execute(command: GetEmployeeDocumentHistoryCommand): Promise<EmployeeDocumentDTO[]>;
 }
+
+// ── Visão agregada (aba "Pessoas > Documentos") ──────────────────────────
+
+export interface DocumentOverviewRowDTO {
+  employeeId: string;
+  employeeName: string;
+  /** "identificacao" (grupo fixo) ou o slug da categoria configurável. */
+  requirementId: string;
+  requirementLabel: string;
+  mandatory: boolean;
+  status: "ok" | "expiring" | "expired" | "missing";
+  expiresAt: string | null;
+  documentId: string | null;
+}
+
+export interface GetDocumentOverviewCommand {
+  organizationId: OrganizationId;
+}
+
+/** 1 linha por (colaborador ativo × requisito documental aplicável ao seu cargo) — única fonte de verdade da aba "Pessoas > Documentos" (task "Melhorar Visão Geral e reorganizar Pessoas"). */
+export interface GetDocumentOverviewPort {
+  execute(command: GetDocumentOverviewCommand): Promise<DocumentOverviewRowDTO[]>;
+}

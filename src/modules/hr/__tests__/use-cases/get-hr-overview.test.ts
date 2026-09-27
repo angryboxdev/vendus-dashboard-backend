@@ -54,6 +54,19 @@ describe("GetHrOverviewUseCase", () => {
     }
   });
 
+  it("bloco 'team': missingDocumentsCount soma requisitos em falta por colaborador (nunca colaboradores)", async () => {
+    const { employees, useCase } = makeUseCase();
+    // Sem nenhum documento enviado: identificação + 3 categorias obrigatórias por omissão (ver FakeDocumentCategoryRepository) = 4 requisitos em falta.
+    employees.seed(ORG, Employee.create({ fullName: "Sem Documentos" }));
+
+    const result = await useCase.execute({ organizationId: ORG });
+
+    expect(result.team.status).toBe("ok");
+    if (result.team.status === "ok") {
+      expect(result.team.data.missingDocumentsCount).toBe(4);
+    }
+  });
+
   it("uma fonte a falhar não derruba as outras — 'team' fica indisponível mas 'pending' continua ok", async () => {
     const failingEmployees = {
       findById: async () => null,
@@ -228,15 +241,22 @@ describe("GetHrOverviewUseCase", () => {
       const { employees, shifts, useCase } = makeUseCase();
       const emp = Employee.create({ fullName: "Lucas Almeida" });
       employees.seed(ORG, emp);
+      // Horários relativos a "agora" (não absolutos): o use case usa DateTime.now() real, e um "actualStartTime" absoluto no futuro relativamente à execução do teste tornaria o teste inconsistente/instável (o overlay de intervalo depende de "now" vs. os horários do turno).
+      const now = DateTime.now().setZone("Europe/Lisbon");
+      const seg1Start = now.minus({ hours: 6 });
+      const seg1End = now.minus({ hours: 4 });
+      const seg2Start = now.minus({ hours: 1 });
+      const seg2End = now.plus({ hours: 2 });
+      const actual = seg2Start.plus({ minutes: 2 });
       shifts.seed(
         ORG,
         shiftToday({
           employeeId: emp.id,
-          startTime: "10:00",
-          endTime: "16:00",
-          secondStartTime: "18:00",
-          secondEndTime: "22:00",
-          actualStartTime: "18:02",
+          startTime: seg1Start.toFormat("HH:mm"),
+          endTime: seg1End.toFormat("HH:mm"),
+          secondStartTime: seg2Start.toFormat("HH:mm"),
+          secondEndTime: seg2End.toFormat("HH:mm"),
+          actualStartTime: actual.toFormat("HH:mm"),
         }),
       );
 
@@ -245,7 +265,7 @@ describe("GetHrOverviewUseCase", () => {
       if (result.operation.status !== "ok") return;
       const row = result.operation.data.find((r) => r.employeeId === emp.id)!;
       expect(row.state).toBe("PRESENTE");
-      expect(row.situation).toBe("Entrada 18:02");
+      expect(row.situation).toBe(`Entrada ${actual.toFormat("HH:mm")}`);
       expect(row.situationWarning).toBe("1º turno sem entrada");
     });
 

@@ -77,6 +77,8 @@ export interface ListEmployeesPort {
 export interface PriorityPendencyEmployeeRef {
   employeeId: string;
   employeeName: string;
+  /** Só preenchido para `kind: "expiring_document"` — permite ao drawer da Visão Geral mostrar a validade/dias restantes sem uma 2ª chamada (task "Melhorar Visão Geral e reorganizar Pessoas", secção 10). */
+  expiresAt?: string;
 }
 
 /**

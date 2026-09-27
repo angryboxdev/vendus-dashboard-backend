@@ -152,6 +152,7 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
     const incompleteProfiles = activeEmployees.filter((e) => computeProfileCompletionPercent(e) < 100).length;
 
     let documentsExpiringSoon = 0;
+    let missingDocumentsCount = 0;
     if (documentsResult.ok) {
       const documentsByEmployee = new Map<string, EmployeeDocument[]>();
       for (const doc of documentsResult.data) {
@@ -164,6 +165,7 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
         const requirements = [...DEFAULT_MANDATORY_REQUIREMENTS, ...buildDynamicRequirements(applicable)];
         const summary = computeMandatoryDocumentsSummary(requirements, documentsByEmployee.get(e.id) ?? []);
         documentsExpiringSoon += summary.expiringSoonCount;
+        missingDocumentsCount += summary.missingRequirements.length;
       }
     }
 
@@ -174,6 +176,7 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
         admissionsThisMonth,
         incompleteProfiles,
         documentsExpiringSoon,
+        missingDocumentsCount,
       },
     };
   }

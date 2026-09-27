@@ -135,6 +135,65 @@ export const DOCUMENT_CATEGORY_BASE_LABELS: Record<string, string> = {
   passaporte: "Passaporte",
 };
 
+export interface DocumentRequirementRow {
+  requirementId: string;
+  requirementLabel: string;
+  mandatory: boolean;
+  /** Simplificação face a `DocumentDisplayStatus`: "pending_validation"/"rejected"/"removed" contam como "missing" nesta vista agregada (task "Melhorar Visão Geral e reorganizar Pessoas" — a aba Documentos só distingue 4 estados). O detalhe completo continua disponível no perfil do colaborador. */
+  status: "ok" | "expiring" | "expired" | "missing";
+  expiresAt: string | null;
+  /** Null só quando nunca houve nenhum upload para este requisito ("Adicionar"). Não-null sempre que existe um documento — mesmo "pending_validation"/"rejected" (status="missing" aqui) — para a Ação poder ser "Ver", não "Adicionar" do zero. */
+  documentId: string | null;
+}
+
+interface DocumentRequirementDef {
+  id: string;
+  label: string;
+  categories: readonly string[];
+  mandatory: boolean;
+}
+
+/** 1 requisito por categoria aplicável (obrigatória ou opcional) + o grupo fixo de identificação — para a aba "Pessoas > Documentos" mostrar TODOS os estados (não só os em falta, ao contrário de `computeMandatoryDocumentsSummary`/`computeMissingOptional`). */
+function buildAllDocumentRequirements(
+  applicableCategories: readonly DocumentCategoryDefinition[],
+): DocumentRequirementDef[] {
+  return [
+    {
+      id: "identificacao",
+      label: "Documento de identificação",
+      categories: IDENTIFICATION_DOCUMENT_CATEGORIES,
+      mandatory: true,
+    },
+    ...applicableCategories.map((c) => ({ id: c.slug, label: c.label, categories: [c.slug], mandatory: c.mandatory })),
+  ];
+}
+
+/**
+ * 1 linha por requisito aplicável ao colaborador (identificação + cada
+ * categoria configurável), com o estado atual — usado pela aba "Pessoas >
+ * Documentos" (visão agregada de todos os colaboradores, todos os
+ * estados). Ao contrário de `computeMandatoryDocumentsSummary`, não filtra
+ * só os que faltam — devolve sempre uma linha por requisito, para a tabela
+ * mostrar "válidos" também.
+ */
+export function computeDocumentRequirementRows(
+  applicableCategories: readonly DocumentCategoryDefinition[],
+  currentDocuments: readonly Pick<EmployeeDocument, "id" | "category" | "status" | "expiresAt" | "isCurrent">[],
+  now: Date = new Date(),
+): DocumentRequirementRow[] {
+  const byCategory = new Map(currentDocuments.map((d) => [d.category, d]));
+  return buildAllDocumentRequirements(applicableCategories).map((req) => {
+    const doc = req.categories.map((c) => byCategory.get(c)).find((d) => d != null);
+    if (!doc) {
+      return { requirementId: req.id, requirementLabel: req.label, mandatory: req.mandatory, status: "missing", expiresAt: null, documentId: null };
+    }
+    const displayStatus = computeDocumentDisplayStatus(doc, now);
+    const status: DocumentRequirementRow["status"] =
+      displayStatus === "ok" || displayStatus === "expiring" || displayStatus === "expired" ? displayStatus : "missing";
+    return { requirementId: req.id, requirementLabel: req.label, mandatory: req.mandatory, status, expiresAt: doc.expiresAt, documentId: doc.id };
+  });
+}
+
 /** Categorias de uma organização aplicáveis a um cargo — ativas e sem restrição de cargo, ou cujo `jobRoles` inclui este cargo. */
 export function applicableCategoriesFor(
   definitions: readonly DocumentCategoryDefinition[],
