@@ -240,18 +240,24 @@ export function createHrModule(): { router: Router } {
     shiftAttendanceRead,
     leaveRead,
   );
-  const closeMonthlyPeriod = new CloseMonthlyPeriodUseCase(getMonthlyClosureStatus, monthlyClosureRepository, auditLog);
-  const reopenMonthlyPeriod = new ReopenMonthlyPeriodUseCase(monthlyClosureRepository, auditLog, getMonthlyClosureStatus);
-  const getAttendanceRules = new GetAttendanceRulesUseCase(attendanceRulesRepository);
-  const updateAttendanceRules = new UpdateAttendanceRulesUseCase(attendanceRulesRepository, auditLog, getAttendanceRules);
-  const listAttendanceRuleChanges = new ListAttendanceRuleChangesUseCase(attendanceRulesRepository);
   const getMonthlyAttendanceSummary = new GetMonthlyAttendanceSummaryUseCase(
     employeeRepository,
     shiftAttendanceRead,
     leaveRead,
     attendanceRulesRepository,
     attendanceCorrectionRepository,
+    monthlyClosureRepository,
   );
+  const closeMonthlyPeriod = new CloseMonthlyPeriodUseCase(
+    getMonthlyClosureStatus,
+    monthlyClosureRepository,
+    auditLog,
+    getMonthlyAttendanceSummary,
+  );
+  const reopenMonthlyPeriod = new ReopenMonthlyPeriodUseCase(monthlyClosureRepository, auditLog, getMonthlyClosureStatus);
+  const getAttendanceRules = new GetAttendanceRulesUseCase(attendanceRulesRepository);
+  const updateAttendanceRules = new UpdateAttendanceRulesUseCase(attendanceRulesRepository, auditLog, getAttendanceRules);
+  const listAttendanceRuleChanges = new ListAttendanceRuleChangesUseCase(attendanceRulesRepository);
   const getAttendanceEmployeeDetail = new GetAttendanceEmployeeDetailUseCase(
     employeeRepository,
     shiftAttendanceRead,

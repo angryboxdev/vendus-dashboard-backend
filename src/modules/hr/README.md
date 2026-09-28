@@ -1,7 +1,7 @@
 # Module: hr
 
 > Status: active
-> Last updated: 2026-09-27
+> Last updated: 2026-09-28
 
 ---
 
@@ -470,10 +470,14 @@ Este módulo é **aditivo**, não uma substituição imediata:
 - `GetMonthlyClosureStatusPort` / `CloseMonthlyPeriodPort` /
   `ReopenMonthlyPeriodPort` (Fase 2, "Fecho mensal") — por organização
   inteira (nunca por local). `Close` rejeita com
-  `MonthlyClosureHasBlockersError` quando há qualquer pendência crítica
-  (`PARCIAL|EM_ABERTO|CONFLITO`); `Reopen` exige motivo
-  (`MonthlyClosureReopenReasonRequiredError`) e só existe para reabrir um
-  período já fechado (`MonthlyClosureNotFoundError` caso contrário).
+  `MonthlyClosureHasBlockersError` quando `blockerCount > 0`
+  (`= issuesResult.kpis.pendingCount` — ver Design decisions); `Reopen`
+  exige motivo (`MonthlyClosureReopenReasonRequiredError`) e só existe
+  para reabrir um período já fechado (`MonthlyClosureNotFoundError`
+  caso contrário). `Close` grava um snapshot do resumo por colaborador
+  no momento do fecho (ver Design decisions) — `Get`/`GetMonthlyAttendanceSummaryPort`
+  passam a servir esse snapshot em vez de recalcular enquanto o período
+  estiver fechado.
 - `GetAttendanceRulesPort`/`UpdateAttendanceRulesPort`/
   `ListAttendanceRuleChangesPort` (Fase 2.1) — `Get` devolve a versão
   vigente (ou o default, nunca bloqueia à espera de configuração);
@@ -579,7 +583,9 @@ Este módulo é **aditivo**, não uma substituição imediata:
   atraso/ausência).
 - `MonthlyClosureRepositoryPort` (Fase 2, novo) — `hr_monthly_closures`,
   1 linha por (organização, ano, mês); ausência de linha = período em
-  aberto por omissão.
+  aberto por omissão. Ganhou a coluna `snapshot` (jsonb, nullable — task
+  "Simplificar Assiduidade em Conferência + Fecho Mensal", ver Design
+  decisions).
 - `AttendanceRulesRepositoryPort` (Fase 2.1, novo) —
   `listVersions`/`save`; cada `save` é sempre um INSERT (nunca há UPDATE
   nesta tabela).
@@ -1111,14 +1117,53 @@ desta fase.
 ### Fase 2 — Fecho mensal é por organização inteira, `GetMonthlyClosureStatusUseCase` reaproveita `ListAttendanceIssuesUseCase`
 
 Confirmado com o utilizador: 1 fecho por (organização, ano, mês), sem
-`location_id` — nunca por loja. Os "bloqueadores" do fecho (secção 21)
-são exatamente as linhas de `ListAttendanceIssuesUseCase` cujo `state`
-está em `PARCIAL|EM_ABERTO|CONFLITO` — `GetMonthlyClosureStatusUseCase`
-chama esse use case internamente em vez de recalcular a deteção de
-pendências uma segunda vez. `reopen` exige `requireMinRole("admin")` (o
-role mais alto do sistema — só 3 níveis, `hr_viewer < manager < admin`),
-`close`/correções usam `requireMinRole("manager")` como o resto do
-módulo.
+`location_id` — nunca por loja. `GetMonthlyClosureStatusUseCase` chama
+`ListAttendanceIssuesUseCase` internamente em vez de recalcular a
+deteção de pendências uma segunda vez. `reopen` exige
+`requireMinRole("admin")` (o role mais alto do sistema — só 3 níveis,
+`hr_viewer < manager < admin`), `close`/correções usam
+`requireMinRole("manager")` como o resto do módulo.
+
+**`blockerCount` — correção (task "Simplificar Assiduidade em
+Conferência + Fecho Mensal"):** a versão original calculava os
+"bloqueadores" filtrando as linhas de `ListAttendanceIssuesUseCase` por
+`state ∈ {PARCIAL, EM_ABERTO, CONFLITO}` — isto **excluía** `AUSENTE`
+(possível ausência não classificada), que a própria task lista
+explicitamente como bloqueador, e também podia continuar a contar como
+bloqueador uma linha já resolvida por uma correção que não muda o
+`state` (`keep_as_is`/`justify_no_impact`). Corrigido para
+`blockerCount = issuesResult.kpis.pendingCount` — exatamente o mesmo
+número já mostrado como "Por conferir" em Conferência, o que também
+garante que os 2 ecrãs nunca divergem na contagem do mesmo período
+(requisito explícito da task). Teste de regressão:
+`close-monthly-period.test.ts` ("bloqueia o fecho com uma 'possível
+ausência' não classificada").
+
+### Fase 2 — Fecho mensal grava um snapshot no momento do fecho (task "Simplificar Assiduidade em Conferência + Fecho Mensal")
+
+`MonthlyClosure.close(actor, now, snapshot)` passou a exigir um 3º
+parâmetro: uma fotografia (`MonthlyAttendanceSummaryResultDTO`, tipada
+como `unknown` na entidade para não acoplar o domínio ao DTO da
+aplicação) do resumo por colaborador **no momento exato do fecho**,
+persistida na nova coluna `hr_monthly_closures.snapshot` (migração
+`20260928110000_hr_monthly_closures_snapshot.sql`, aditiva). Quem
+calcula essa fotografia é `CloseMonthlyPeriodUseCase`, chamando
+`GetMonthlyAttendanceSummaryUseCase.execute()` **antes** de gravar o
+fecho (o período ainda está "aberto" nesse instante, por isso calcula
+sempre ao vivo, nunca recursivamente serve-se a si próprio um snapshot
+antigo). Por sua vez, `GetMonthlyAttendanceSummaryUseCase.execute()`
+passou a começar por consultar `MonthlyClosureRepositoryPort
+.findByPeriod` — se o período estiver fechado e tiver snapshot,
+devolve-o tal e qual, ignorando completamente os dados reais (mesmo que
+uma correção manual tenha sido escrita depois, o que não deveria
+acontecer graças ao `MonthlyClosureLockedError`, mas o snapshot garante
+a consistência de qualquer forma). Reabrir o período
+(`reopen()`) volta a servir sempre ao vivo — o snapshot do fecho
+anterior fica preservado no histórico (`reopened.snapshot` continua
+igual ao fecho anterior), mas deixa de ser consultado enquanto o
+período estiver aberto. Sem isto, "Fecho mensal" (frontend) não tinha
+como proteger os dados consolidados de recomputações — requisito
+explícito da task.
 
 ### Fase 2 — Resumo mensal/Horas & saldos completos, migração de Férias & Ausências e exportação ficam para rondas seguintes
 

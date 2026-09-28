@@ -3,6 +3,7 @@ import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { Employee } from "../../domain/entities/employee.js";
 import { CloseMonthlyPeriodUseCase } from "../../application/use-cases/close-monthly-period.use-case.js";
 import { GetMonthlyClosureStatusUseCase } from "../../application/use-cases/get-monthly-closure-status.use-case.js";
+import { GetMonthlyAttendanceSummaryUseCase } from "../../application/use-cases/get-monthly-attendance-summary.use-case.js";
 import { ListAttendanceIssuesUseCase } from "../../application/use-cases/list-attendance-issues.use-case.js";
 import { MonthlyClosureHasBlockersError } from "../../domain/errors.js";
 import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
@@ -47,7 +48,15 @@ function makeUseCase() {
   const attendanceCorrections = new FakeAttendanceCorrectionRepository();
   const listAttendanceIssues = new ListAttendanceIssuesUseCase(employees, shifts, leave, locations, attendanceRules, attendanceCorrections);
   const getMonthlyClosureStatus = new GetMonthlyClosureStatusUseCase(listAttendanceIssues, monthlyClosureRepository, shifts, leave);
-  const useCase = new CloseMonthlyPeriodUseCase(getMonthlyClosureStatus, monthlyClosureRepository, auditLog);
+  const getMonthlyAttendanceSummary = new GetMonthlyAttendanceSummaryUseCase(
+    employees,
+    shifts,
+    leave,
+    attendanceRules,
+    attendanceCorrections,
+    monthlyClosureRepository,
+  );
+  const useCase = new CloseMonthlyPeriodUseCase(getMonthlyClosureStatus, monthlyClosureRepository, auditLog, getMonthlyAttendanceSummary);
   return { employees, shifts, monthlyClosureRepository, auditLog, useCase };
 }
 
@@ -75,7 +84,28 @@ describe("CloseMonthlyPeriodUseCase", () => {
     ).rejects.toThrow(MonthlyClosureHasBlockersError);
   });
 
-  it("fecha o período quando não há pendências, e regista no histórico", async () => {
+  it("bloqueia o fecho com uma 'possível ausência' não classificada (state AUSENTE — nunca esteve em BLOCKER_STATES antigo, mas é bloqueador explícito na secção 16 da task)", async () => {
+    const { employees, shifts, useCase } = makeUseCase();
+    const emp = Employee.create({ fullName: "Lucas Almeida" });
+    employees.seed(ORG, emp);
+    const now = DateTime.now().setZone("Europe/Lisbon");
+    const recentEnd = now.minus({ hours: 2 });
+    shifts.seed(
+      ORG,
+      shift({
+        employeeId: emp.id,
+        workDate: recentEnd.toISODate()!,
+        startTime: recentEnd.minus({ hours: 8 }).toFormat("HH:mm"),
+        endTime: recentEnd.toFormat("HH:mm"),
+      }),
+    ); // nunca chegou, turno já terminou → Ausente/possível ausência
+
+    await expect(
+      useCase.execute({ organizationId: ORG, actor: "gestor@angrybox.com", year: now.year, month: now.month }),
+    ).rejects.toThrow(MonthlyClosureHasBlockersError);
+  });
+
+  it("fecha o período quando não há pendências, regista no histórico, e grava um snapshot", async () => {
     const { employees, shifts, monthlyClosureRepository, auditLog, useCase } = makeUseCase();
     const emp = Employee.create({ fullName: "Gabriel Gomes" });
     employees.seed(ORG, emp);
@@ -87,6 +117,8 @@ describe("CloseMonthlyPeriodUseCase", () => {
     expect(result.closedBy).toBe("gestor@angrybox.com");
     const stored = await monthlyClosureRepository.findByPeriod(ORG, 2026, 9);
     expect(stored?.isClosed).toBe(true);
+    expect(stored?.snapshot).not.toBeNull();
+    expect((stored?.snapshot as { rows: unknown[] }).rows.length).toBeGreaterThan(0);
     expect(auditLog.entries.some((e) => e.entityType === "monthly_closure" && e.action === "closed")).toBe(true);
   });
 });

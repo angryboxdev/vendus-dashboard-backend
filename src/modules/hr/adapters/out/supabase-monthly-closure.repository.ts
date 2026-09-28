@@ -4,6 +4,8 @@ import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-quer
 import { MonthlyClosure } from "../../domain/entities/monthly-closure.js";
 import type { MonthlyClosureRepositoryPort } from "../../domain/ports/out/monthly-closure-repository.port.js";
 
+const SELECT = "id, year, month, status, closed_by, closed_at, reopened_by, reopened_at, reopen_reason, created_at, snapshot";
+
 interface Row {
   id: string;
   year: number;
@@ -15,6 +17,7 @@ interface Row {
   reopened_at: string | null;
   reopen_reason: string | null;
   created_at: string;
+  snapshot: unknown | null;
 }
 
 function rowToEntity(row: Row, organizationId: string): MonthlyClosure {
@@ -30,6 +33,7 @@ function rowToEntity(row: Row, organizationId: string): MonthlyClosure {
     reopenedAt: row.reopened_at,
     reopenReason: row.reopen_reason,
     createdAt: row.created_at,
+    snapshot: row.snapshot ?? null,
   });
 }
 
@@ -39,7 +43,7 @@ export class SupabaseMonthlyClosureRepository implements MonthlyClosureRepositor
   async findByPeriod(organizationId: OrganizationId, year: number, month: number): Promise<MonthlyClosure | null> {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("hr_monthly_closures")
-      .select("id, year, month, status, closed_by, closed_at, reopened_by, reopened_at, reopen_reason, created_at")
+      .select(SELECT)
       .eq("year", year)
       .eq("month", month)
       .maybeSingle();
@@ -58,6 +62,7 @@ export class SupabaseMonthlyClosureRepository implements MonthlyClosureRepositor
       reopened_by: props.reopenedBy,
       reopened_at: props.reopenedAt,
       reopen_reason: props.reopenReason,
+      snapshot: props.snapshot,
       updated_at: new Date().toISOString(),
     };
 
@@ -66,7 +71,7 @@ export class SupabaseMonthlyClosureRepository implements MonthlyClosureRepositor
         .table("hr_monthly_closures")
         .update(payload)
         .eq("id", props.id)
-        .select("id, year, month, status, closed_by, closed_at, reopened_by, reopened_at, reopen_reason, created_at")
+        .select(SELECT)
         .single();
       if (error) throw new Error(error.message);
       return rowToEntity(data as unknown as Row, String(organizationId));
@@ -75,7 +80,7 @@ export class SupabaseMonthlyClosureRepository implements MonthlyClosureRepositor
     const { data, error } = await this.scopedQuery(organizationId)
       .table("hr_monthly_closures")
       .insert({ id: randomUUID(), ...payload })
-      .select("id, year, month, status, closed_by, closed_at, reopened_by, reopened_at, reopen_reason, created_at")
+      .select(SELECT)
       .single();
     if (error) throw new Error(error.message);
     return rowToEntity(data as unknown as Row, String(organizationId));

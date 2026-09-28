@@ -8,9 +8,22 @@ import type {
 } from "../../domain/ports/in/attendance-conference.ports.js";
 import { ListAttendanceIssuesUseCase, monthRange } from "./list-attendance-issues.use-case.js";
 
-const BLOCKER_STATES = new Set(["PARCIAL", "EM_ABERTO", "CONFLITO"]);
-
-/** Contagens do rodapé "Fecho mensal" (secção 20/21) — reaproveita `ListAttendanceIssuesUseCase`, nunca recalcula a deteção de pendências. */
+/**
+ * Contagens do rodapé "Fecho mensal" (secções 16/20/21) — reaproveita
+ * `ListAttendanceIssuesUseCase`, nunca recalcula a deteção de pendências.
+ * `blockerCount` = nº de ocorrências ainda `reviewStatus: "pending"`
+ * (mesmo número que "Por conferir" na Conferência, garantindo a secção 21:
+ * "não permitir diferenças... sem causa explícita"). Antes desta task
+ * usava um subconjunto de `state` (`PARCIAL|EM_ABERTO|CONFLITO`), que
+ * deixava "Possível ausência" (state `AUSENTE`) fora do bloqueio — errado
+ * face à secção 16, que lista "possível ausência não classificada" como
+ * bloqueador explícito. `reviewStatus === "pending"` cobre exatamente os
+ * bloqueadores da secção 16 (nunca inclui férias/folga/saldo negativo/
+ * dados cadastrais, que não geram ocorrência nenhuma) e deixa de bloquear
+ * assim que o gestor resolve (`reviewStatus` passa a `"conferred"`),
+ * mesmo quando a correção não muda o `state` do turno (ex: "Manter como
+ * está"/"Justificar sem impacto").
+ */
 export class GetMonthlyClosureStatusUseCase implements GetMonthlyClosureStatusPort {
   constructor(
     private readonly listAttendanceIssues: ListAttendanceIssuesUseCase,
@@ -28,7 +41,7 @@ export class GetMonthlyClosureStatusUseCase implements GetMonthlyClosureStatusPo
       this.leaveRead.findActiveInRange(command.organizationId, from, to),
     ]);
 
-    const blockerCount = issuesResult.items.filter((i) => BLOCKER_STATES.has(i.state)).length;
+    const blockerCount = issuesResult.kpis.pendingCount;
     const plannedShiftsCount = shifts.filter((s) => s.attendanceStatus !== "cancelled").length;
     const issuedShiftIds = new Set(issuesResult.items.map((i) => i.shiftId).filter((id): id is string => id != null));
     const regularShiftsCount = plannedShiftsCount - issuedShiftIds.size;

@@ -18,6 +18,8 @@ export class MonthlyClosure {
   readonly reopenedAt: string | null;
   readonly reopenReason: string | null;
   readonly createdAt: string;
+  /** Foto do "Por colaborador"/Fecho mensal no momento exato do fecho (task "Simplificar Assiduidade", secção 18: "criar snapshot do período") — protege os dados consolidados de recomputações futuras enquanto o período estiver fechado. `null` enquanto o período nunca foi fechado. */
+  readonly snapshot: unknown | null;
 
   private constructor(props: {
     id: string;
@@ -31,6 +33,7 @@ export class MonthlyClosure {
     reopenedAt: string | null;
     reopenReason: string | null;
     createdAt: string;
+    snapshot: unknown | null;
   }) {
     this.id = props.id;
     this.organizationId = props.organizationId;
@@ -43,6 +46,7 @@ export class MonthlyClosure {
     this.reopenedAt = props.reopenedAt;
     this.reopenReason = props.reopenReason;
     this.createdAt = props.createdAt;
+    this.snapshot = props.snapshot;
   }
 
   static reconstitute(props: {
@@ -57,6 +61,7 @@ export class MonthlyClosure {
     reopenedAt: string | null;
     reopenReason: string | null;
     createdAt: string;
+    snapshot: unknown | null;
   }): MonthlyClosure {
     return new MonthlyClosure(props);
   }
@@ -74,6 +79,7 @@ export class MonthlyClosure {
       reopenedAt: null,
       reopenReason: null,
       createdAt: "",
+      snapshot: null,
     });
   }
 
@@ -81,10 +87,11 @@ export class MonthlyClosure {
     return this.status === "closed";
   }
 
-  close(actor: string, now: string): MonthlyClosure {
-    return new MonthlyClosure({ ...this.toProps(), status: "closed", closedBy: actor, closedAt: now });
+  close(actor: string, now: string, snapshot: unknown): MonthlyClosure {
+    return new MonthlyClosure({ ...this.toProps(), status: "closed", closedBy: actor, closedAt: now, snapshot });
   }
 
+  /** O snapshot do fecho anterior nunca é apagado ao reabrir — só deixa de ser servido (o use case volta a calcular ao vivo enquanto o período estiver aberto); um novo fecho grava um snapshot novo. */
   reopen(actor: string, reason: string, now: string): MonthlyClosure {
     return new MonthlyClosure({ ...this.toProps(), status: "open", reopenedBy: actor, reopenedAt: now, reopenReason: reason });
   }
@@ -102,6 +109,7 @@ export class MonthlyClosure {
       reopenedAt: this.reopenedAt,
       reopenReason: this.reopenReason,
       createdAt: this.createdAt,
+      snapshot: this.snapshot,
     };
   }
 }

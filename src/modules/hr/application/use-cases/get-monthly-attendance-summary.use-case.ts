@@ -5,6 +5,7 @@ import type { ShiftAttendanceReadPort } from "../../domain/ports/out/shift-atten
 import type { LeaveReadPort, ActiveLeaveRange } from "../../domain/ports/out/leave-read.port.js";
 import type { AttendanceRulesRepositoryPort } from "../../domain/ports/out/attendance-rules-repository.port.js";
 import type { AttendanceCorrectionDTO, AttendanceCorrectionRepositoryPort } from "../../domain/ports/out/attendance-correction-repository.port.js";
+import type { MonthlyClosureRepositoryPort } from "../../domain/ports/out/monthly-closure-repository.port.js";
 import { attributeActualToPeriods, sumActualMinutes, sumPlannedMinutes } from "../../domain/services/attendance-conference.service.js";
 import { hasOverlappingOpenAttendance } from "../../domain/services/overview-shift-state.service.js";
 import { classifyScheduledShift } from "../../domain/services/attendance-occurrence.service.js";
@@ -72,9 +73,19 @@ export class GetMonthlyAttendanceSummaryUseCase implements GetMonthlyAttendanceS
     private readonly leaveRead: LeaveReadPort,
     private readonly attendanceRulesRepository: AttendanceRulesRepositoryPort,
     private readonly attendanceCorrectionRepository: AttendanceCorrectionRepositoryPort,
+    private readonly monthlyClosureRepository: MonthlyClosureRepositoryPort,
   ) {}
 
   async execute(command: GetMonthlyAttendanceSummaryCommand): Promise<MonthlyAttendanceSummaryResultDTO> {
+    // Período fechado com snapshot guardado → serve a foto do momento do
+    // fecho, nunca recalcula ao vivo (task "Simplificar Assiduidade",
+    // secção 18: "proteger os dados consolidados"). Sem snapshot (fechos
+    // antigos, antes desta funcionalidade) cai no cálculo normal abaixo.
+    const closure = await this.monthlyClosureRepository.findByPeriod(command.organizationId, command.year, command.month);
+    if (closure?.isClosed && closure.snapshot) {
+      return closure.snapshot as MonthlyAttendanceSummaryResultDTO;
+    }
+
     const now = DateTime.now().setZone(REPORT_TIMEZONE);
     const { from, to } = monthRange(command.year, command.month);
 

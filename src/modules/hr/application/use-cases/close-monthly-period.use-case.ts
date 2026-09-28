@@ -10,6 +10,7 @@ import type {
   MonthlyClosureStatusDTO,
 } from "../../domain/ports/in/attendance-conference.ports.js";
 import { GetMonthlyClosureStatusUseCase } from "./get-monthly-closure-status.use-case.js";
+import type { GetMonthlyAttendanceSummaryUseCase } from "./get-monthly-attendance-summary.use-case.js";
 
 /** "Fechar período" (secção 22) — rejeita se houver qualquer bloqueador (secção 21); nunca fecha "à força". */
 export class CloseMonthlyPeriodUseCase implements CloseMonthlyPeriodPort {
@@ -17,6 +18,7 @@ export class CloseMonthlyPeriodUseCase implements CloseMonthlyPeriodPort {
     private readonly getMonthlyClosureStatus: GetMonthlyClosureStatusUseCase,
     private readonly monthlyClosureRepository: MonthlyClosureRepositoryPort,
     private readonly auditLog: HrAuditLogPort,
+    private readonly getMonthlyAttendanceSummary: GetMonthlyAttendanceSummaryUseCase,
   ) {}
 
   async execute(command: CloseMonthlyPeriodCommand): Promise<MonthlyClosureStatusDTO> {
@@ -27,10 +29,19 @@ export class CloseMonthlyPeriodUseCase implements CloseMonthlyPeriodPort {
     });
     if (status.blockerCount > 0) throw new MonthlyClosureHasBlockersError(status.blockerCount);
 
+    // Calculado ANTES de gravar o fecho — enquanto o período ainda está
+    // "open", `GetMonthlyAttendanceSummaryUseCase` calcula ao vivo (nunca
+    // serve um snapshot de si próprio).
+    const snapshot = await this.getMonthlyAttendanceSummary.execute({
+      organizationId: command.organizationId,
+      year: command.year,
+      month: command.month,
+    });
+
     const existing = await this.monthlyClosureRepository.findByPeriod(command.organizationId, command.year, command.month);
     const base = existing ?? MonthlyClosure.openDefault(String(command.organizationId), command.year, command.month);
     const now = DateTime.now().toISO()!;
-    const closed = base.close(command.actor, now);
+    const closed = base.close(command.actor, now, snapshot);
     await this.monthlyClosureRepository.save(command.organizationId, closed);
 
     await this.auditLog.record({

@@ -1,12 +1,14 @@
 import { DateTime } from "luxon";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { Employee } from "../../domain/entities/employee.js";
+import { MonthlyClosure } from "../../domain/entities/monthly-closure.js";
 import { GetMonthlyAttendanceSummaryUseCase, deriveEmployeeStatus } from "../../application/use-cases/get-monthly-attendance-summary.use-case.js";
 import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
 import { FakeShiftAttendanceReadAdapter } from "../fakes/fake-shift-attendance-read.js";
 import { FakeLeaveReadAdapter } from "../fakes/fake-leave-read.js";
 import { FakeAttendanceRulesRepository } from "../fakes/fake-attendance-rules-repository.js";
 import { FakeAttendanceCorrectionRepository } from "../fakes/fake-attendance-correction-repository.js";
+import { FakeMonthlyClosureRepository } from "../fakes/fake-monthly-closure-repository.js";
 import type { ShiftOccurrence } from "../../domain/ports/out/shift-attendance-read.port.js";
 
 const ORG = mintOrganizationId("org-test");
@@ -36,12 +38,14 @@ function makeUseCase() {
   const leave = new FakeLeaveReadAdapter();
   const attendanceRules = new FakeAttendanceRulesRepository();
   const attendanceCorrections = new FakeAttendanceCorrectionRepository();
+  const monthlyClosureRepository = new FakeMonthlyClosureRepository();
   return {
     employees,
     shifts,
     attendanceRules,
     attendanceCorrections,
-    useCase: new GetMonthlyAttendanceSummaryUseCase(employees, shifts, leave, attendanceRules, attendanceCorrections),
+    monthlyClosureRepository,
+    useCase: new GetMonthlyAttendanceSummaryUseCase(employees, shifts, leave, attendanceRules, attendanceCorrections, monthlyClosureRepository),
   };
 }
 
@@ -128,5 +132,37 @@ describe("GetMonthlyAttendanceSummaryUseCase", () => {
     const result = await useCase.execute({ organizationId: ORG, year: 2026, month: 9 });
 
     expect(result.rows.find((r) => r.employeeId === emp.id)).toBeDefined();
+  });
+
+  it("período fechado com snapshot: devolve a foto do momento do fecho, nunca recalcula ao vivo", async () => {
+    const { employees, shifts, monthlyClosureRepository, useCase } = makeUseCase();
+    const emp = Employee.create({ fullName: "Gabriel Gomes" });
+    employees.seed(ORG, emp);
+    shifts.seed(ORG, shift({ employeeId: emp.id, workDate: "2026-09-05", actualStartTime: "09:00", actualEndTime: "17:00" }));
+
+    const frozenSnapshot = { kpis: { employeeCount: 1 }, rows: [{ employeeId: emp.id, employeeName: "Snapshot Congelado" }] };
+    await monthlyClosureRepository.save(ORG, MonthlyClosure.openDefault(String(ORG), 2026, 9).close("gestor@angrybox.com", new Date().toISOString(), frozenSnapshot));
+
+    const result = await useCase.execute({ organizationId: ORG, year: 2026, month: 9 });
+
+    // Ignora completamente os turnos reais seedados acima — devolve exatamente o snapshot gravado no fecho.
+    expect(result).toEqual(frozenSnapshot);
+  });
+
+  it("período aberto (nunca fechado, ou reaberto): sempre calcula ao vivo, mesmo que exista um snapshot de um fecho anterior", async () => {
+    const { employees, shifts, monthlyClosureRepository, useCase } = makeUseCase();
+    const emp = Employee.create({ fullName: "Gabriel Gomes" });
+    employees.seed(ORG, emp);
+    shifts.seed(ORG, shift({ employeeId: emp.id, workDate: "2026-09-05", actualStartTime: "09:00", actualEndTime: "17:00" }));
+
+    const staleSnapshot = { kpis: { employeeCount: 99 }, rows: [] };
+    const closed = MonthlyClosure.openDefault(String(ORG), 2026, 9).close("gestor@angrybox.com", new Date().toISOString(), staleSnapshot);
+    const reopened = closed.reopen("admin@angrybox.com", "Corrigir um turno", new Date().toISOString());
+    await monthlyClosureRepository.save(ORG, reopened);
+
+    const result = await useCase.execute({ organizationId: ORG, year: 2026, month: 9 });
+
+    expect(result.rows.find((r) => r.employeeId === emp.id)).toBeDefined();
+    expect(result.kpis.employeeCount).not.toBe(99);
   });
 });
