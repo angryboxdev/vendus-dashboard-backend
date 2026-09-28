@@ -43,6 +43,19 @@ describe("UpdateCostCenterCategoryUseCase", () => {
     expect(result.code).toBe("OPD.01");
   });
 
+  it("permite ao gestor marcar/desmarcar vatDeductible manualmente", async () => {
+    const { updateCategory, category } = await makeUseCases();
+    expect(category.vatDeductible).toBe(true);
+
+    const result = await updateCategory.execute({
+      organizationId: ORG_ID,
+      id: category.id,
+      data: { vatDeductible: false },
+    });
+
+    expect(result.vatDeductible).toBe(false);
+  });
+
   it("lança NotFound para id inexistente", async () => {
     const { updateCategory } = await makeUseCases();
 

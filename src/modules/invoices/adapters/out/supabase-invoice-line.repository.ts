@@ -33,6 +33,8 @@ function toEntity(row: Record<string, unknown>): InvoiceLine {
     aiSuggestedCategoryId: (row.ai_suggested_category_id as string | null) ?? null,
     aiConfidence: (row.ai_confidence as number | null) ?? null,
     createdAt: new Date(row.created_at as string),
+    deductiblePercentage: (row.deductible_percentage as number | null) ?? null,
+    deductibilityOverrideReason: (row.deductibility_override_reason as string | null) ?? null,
   });
 }
 
@@ -74,6 +76,8 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
       ai_suggested_category_id: l.aiSuggestedCategoryId,
       ai_confidence: l.aiConfidence,
       created_at: l.createdAt.toISOString(),
+      deductible_percentage: l.deductiblePercentage,
+      deductibility_override_reason: l.deductibilityOverrideReason,
     }));
     const { error } = await this.scopedQuery(organizationId).table("invoice_lines").insert(rows);
     if (error) throw new Error(error.message);
@@ -126,6 +130,8 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
         requires_allocation: line.requiresAllocation,
         ai_suggested_category_id: line.aiSuggestedCategoryId,
         ai_confidence: line.aiConfidence,
+        deductible_percentage: line.deductiblePercentage,
+        deductibility_override_reason: line.deductibilityOverrideReason,
       })
       .eq("id", line.id);
     if (error) throw new Error(error.message);

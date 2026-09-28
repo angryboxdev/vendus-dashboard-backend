@@ -99,3 +99,50 @@ subtracts credit note values for the period — see ADR-0011. The
 pre-cancellation total (invoices only, before NC subtraction) is called
 Faturado Total and is shown as a secondary informative card.
 _Avoid_: Total Revenue (ambiguous across contexts).
+
+## Accounting
+
+**VAT Deductible** (`vat_deductible` on `cost_center_categories`):
+A manual, per-subcategory flag set by the manager in Centros de Custo
+(`financial-base`). It only *suggests* a default (100% or 0%) for a
+Document's or invoice line's VAT deductibility — the manager can override
+it with an explicit percentage, but only with a justification
+(`deductibilityOverrideReason`, both on `accounting_documents` and on
+`invoice_lines`). Never inferred from a tax rule by the application, and
+never decided by the category alone once a human overrides it. A
+line/document with no category and no override counts as deductible by
+default, so it never silently vanishes from the balance (it surfaces
+instead as a classification pending item).
+_Avoid_: Tax-exempt, non-recoverable (use the exact term above so it's
+searchable across `financial-base`, `invoices` and `accounting`).
+
+**AccountingDocument ("Documento")**:
+Any accounting/fiscal document that doesn't flow through the company's own
+bank account/card/cash (`documentType`: fatura paga por sócio, fatura paga
+por funcionário, comissão de plataforma, nota de crédito, documento
+manual, regularização, outro; `fundingSource`: partner/employee/platform/
+other). The one entity the `accounting` module actually creates — regular
+invoices and credit notes paid through the company's own funds are
+read-only there, authored exclusively in the `invoices` module. Never hard
+deleted — `cancel(reason)` is the only way to "remove" one. Duplicate
+detection cross-checks NIF+document number+date+total against both this
+table and `invoices`.
+_Avoid_: Fatura, despesa, Partner Expense (superseded term — qualify as
+"Documento"/`AccountingDocument` when referring to this specific entity).
+
+**Documentos (Accounting)**:
+The aggregated, read-only list in the `accounting` module that combines
+`invoices` (Faturas/Notas de Crédito) with `AccountingDocument`s. Never a
+parallel CRUD for invoices — editing one still happens only in the
+`invoices` module.
+_Avoid_: Document list, invoice list (ambiguous with the `invoices`
+module's own Faturas screen).
+
+**VAT Period / Período de IVA**:
+The accounting module's own generalization of "trimestre" to also cover
+"mês" — which one applies is a per-organization setting
+(`accounting_settings.vat_periodicity`, `monthly`|`quarterly`, default
+`quarterly`), never hardcoded. `getVatPeriodRange(periodicity, year,
+period)` resolves it to a calendar date range.
+_Avoid_: Trimestre (only correct when periodicity is actually quarterly —
+use "período" when periodicity is unknown or configurable).

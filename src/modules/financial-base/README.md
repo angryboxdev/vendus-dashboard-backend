@@ -1,7 +1,7 @@
 # Módulo: financial-base
 
 > Status: ativo
-> Última atualização: 2026-08-12
+> Última atualização: 2026-09-29
 
 ---
 
@@ -51,7 +51,10 @@ Manager (backoffice)
   São 7 grupos fixos no MVP, mas podem ser criados manualmente.
 - **Subcategoria** — classificação específica dentro de um grupo.
   Exemplos: "OPD.01 — CMV / Ingredientes", "EST.01 — Renda / Aluguel".
-  Cada subcategoria tem tipo financeiro e três flags de impacto.
+  Cada subcategoria tem tipo financeiro, três flags de impacto (DRE/
+  Fluxo de Caixa/Rentabilidade) e, desde o módulo `accounting`,
+  `vatDeductible` (dedutibilidade de IVA — decisão manual do gestor,
+  nunca uma regra fiscal automática; default `true`).
 - **Tipo financeiro** — natureza da despesa: `cmv`, `variable_cost`,
   `fixed_opex`, `personnel`, `administrative`, `marketing`, `financial`,
   `capex`, `fiscal`, `off_dre`, `internal_transfer`, `transitory`.
@@ -288,10 +291,19 @@ precisas em vez de inferir comportamento a partir de um enum de categoria.
 ### Regras financeiras na subcategoria, não no grupo
 
 Os flags `affectsDre`, `affectsCashflow`, `affectsProfitability`,
-`requiresChannel`, `requiresAllocation` vivem na subcategoria. O grupo
-é apenas organização gerencial. Assim, subcategorias do mesmo grupo podem
-ter comportamentos diferentes (ex: `OPD.03 — Embalagens` exige canal,
-`OPD.01 — CMV` não).
+`requiresChannel`, `requiresAllocation`, `vatDeductible` vivem na
+subcategoria. O grupo é apenas organização gerencial. Assim,
+subcategorias do mesmo grupo podem ter comportamentos diferentes (ex:
+`OPD.03 — Embalagens` exige canal, `OPD.01 — CMV` não).
+
+### `vatDeductible` (módulo `accounting`) — decisão manual, nunca uma regra fiscal automática
+
+Adicionado pelo módulo `accounting` (Fase 1) para separar IVA dedutível/
+não-dedutível no "Controlo de IVA". Vive aqui (não em `accounting`)
+porque é uma propriedade da própria subcategoria, no mesmo espírito dos
+outros flags de impacto — mas a decisão de marcar `false` é sempre
+manual do gestor. Default `true`; nenhum use case deste módulo nem do
+`accounting` infere este valor a partir de uma regra fiscal.
 
 ### `isActive` em vez de `status: "active" | "inactive"`
 

@@ -39,6 +39,9 @@ export interface InvoiceLineDTO {
   /** Valor para Fluxo de Caixa: totalWithVat (com IVA) */
   cashflowValue: number;
   createdAt: string;
+  /** Módulo Contabilidade — override de dedutibilidade de IVA (`null` = usa a sugestão da subcategoria). */
+  deductiblePercentage: number | null;
+  deductibilityOverrideReason: string | null;
 }
 
 export interface InvoiceDTO {
@@ -435,4 +438,17 @@ export interface UpdateInvoiceLinePort {
 
 export interface DeleteInvoiceLinePort {
   execute(organizationId: OrganizationId, invoiceId: string, lineId: string): Promise<void>;
+}
+
+export interface SetInvoiceLineDeductibilityOverrideCommand {
+  organizationId: OrganizationId;
+  invoiceId: string;
+  lineId: string;
+  /** `null` volta a usar a sugestão da subcategoria. */
+  deductiblePercentage: number | null;
+  deductibilityOverrideReason: string | null;
+}
+
+export interface SetInvoiceLineDeductibilityOverridePort {
+  execute(command: SetInvoiceLineDeductibilityOverrideCommand): Promise<InvoiceLineDTO>;
 }

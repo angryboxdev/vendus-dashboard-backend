@@ -30,6 +30,7 @@ export function toCostCenterCategoryDTO(c: CostCenterCategory): CostCenterCatego
     affectsProfitability: c.affectsProfitability,
     requiresChannel: c.requiresChannel,
     requiresAllocation: c.requiresAllocation,
+    vatDeductible: c.vatDeductible,
     isActive: c.isActive,
     description: c.description,
     createdAt: c.createdAt,

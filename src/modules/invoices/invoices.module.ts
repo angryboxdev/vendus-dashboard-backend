@@ -20,6 +20,7 @@ import { AddInvoiceLineUseCase } from "./application/use-cases/add-invoice-line.
 import { UpdateInvoiceLineUseCase } from "./application/use-cases/update-invoice-line.use-case.js";
 import { DeleteInvoiceLineUseCase } from "./application/use-cases/delete-invoice-line.use-case.js";
 import { ClassifyInvoiceLineUseCase } from "./application/use-cases/classify-invoice-line.use-case.js";
+import { SetInvoiceLineDeductibilityOverrideUseCase } from "./application/use-cases/set-invoice-line-deductibility-override.use-case.js";
 import { SuggestLineClassificationUseCase } from "./application/use-cases/suggest-line-classification.use-case.js";
 import { ListInvoicesUseCase } from "./application/use-cases/list-invoices.use-case.js";
 import { ListInvoiceLinesUseCase } from "./application/use-cases/list-invoice-lines.use-case.js";
@@ -32,12 +33,15 @@ import { ProcessDirectDebitsUseCase } from "./application/use-cases/process-dire
 import { SetLineDetailModeUseCase } from "./application/use-cases/set-line-detail-mode.use-case.js";
 import { createInvoiceRouter } from "./adapters/in/invoice.controller.js";
 import type { CreateSupplierPort } from "../financial-base/domain/ports/in/supplier.ports.js";
-import type { ProcessDirectDebitsPort } from "./domain/ports/in/invoice.ports.js";
+import type { ProcessDirectDebitsPort, ListInvoicesPort, ListInvoiceLinesPort } from "./domain/ports/in/invoice.ports.js";
 import type { Router } from "express";
 
 export interface InvoicesModule {
   router: Router;
   processDirectDebits: ProcessDirectDebitsPort;
+  /** Módulo Contabilidade (D10) — lê faturas/notas de crédito já existentes, nunca duplica o CRUD. */
+  listInvoices: ListInvoicesPort;
+  listInvoiceLines: ListInvoiceLinesPort;
 }
 
 /**
@@ -71,6 +75,8 @@ export function createInvoicesModule(createSupplierPort: CreateSupplierPort): In
   const aiExtraction = new OpenAiExtractionAdapter(openaiApiKey);
 
   const processDirectDebits = new ProcessDirectDebitsUseCase(invoiceRepo, payableWrite);
+  const listInvoices = new ListInvoicesUseCase(invoiceRepo, categoryReader);
+  const listInvoiceLines = new ListInvoiceLinesUseCase(lineRepo);
 
   const router = createInvoiceRouter({
     createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite),
@@ -82,8 +88,9 @@ export function createInvoicesModule(createSupplierPort: CreateSupplierPort): In
     updateInvoiceLine: new UpdateInvoiceLineUseCase(invoiceRepo, lineRepo),
     deleteInvoiceLine: new DeleteInvoiceLineUseCase(invoiceRepo, lineRepo),
     classifyInvoiceLine: new ClassifyInvoiceLineUseCase(invoiceRepo, lineRepo, ruleRepo, categoryReader),
-    listInvoices: new ListInvoicesUseCase(invoiceRepo, categoryReader),
-    listInvoiceLines: new ListInvoiceLinesUseCase(lineRepo),
+    setInvoiceLineDeductibilityOverride: new SetInvoiceLineDeductibilityOverrideUseCase(lineRepo),
+    listInvoices,
+    listInvoiceLines,
     getInvoice: new GetInvoiceUseCase(invoiceRepo, lineRepo, categoryReader),
     deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage, payableWrite, reconciliationCleanup),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),
@@ -93,5 +100,5 @@ export function createInvoicesModule(createSupplierPort: CreateSupplierPort): In
     processDirectDebits,
   });
 
-  return { router, processDirectDebits };
+  return { router, processDirectDebits, listInvoices, listInvoiceLines };
 }

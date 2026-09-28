@@ -19,6 +19,7 @@ import type {
   GetInvoiceAlertsPort,
   ProcessDirectDebitsPort,
   SetLineDetailModePort,
+  SetInvoiceLineDeductibilityOverridePort,
 } from "../../domain/ports/in/invoice.ports.js";
 import type { InvoiceStatus, InvoiceLineType, LineDetailMode } from "../../domain/entities/invoice.js";
 import {
@@ -38,6 +39,7 @@ interface InvoicePorts {
   setLineDetailMode: SetLineDetailModePort;
   addInvoiceLine: AddInvoiceLinePort;
   classifyInvoiceLine: ClassifyInvoiceLinePort;
+  setInvoiceLineDeductibilityOverride: SetInvoiceLineDeductibilityOverridePort;
   updateInvoiceLine: UpdateInvoiceLinePort;
   deleteInvoiceLine: DeleteInvoiceLinePort;
   listInvoices: ListInvoicesPort;
@@ -292,6 +294,26 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
       };
       if (saveAsRule !== undefined) classifyCmd.saveAsRule = saveAsRule;
       const line = await ports.classifyInvoiceLine.execute(classifyCmd);
+      res.json(line);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // PATCH /invoices/:invoiceId/lines/:lineId/deductibility — módulo Contabilidade
+  router.patch("/invoices/:invoiceId/lines/:lineId/deductibility", async (req, res) => {
+    try {
+      const { deductiblePercentage, deductibilityOverrideReason } = req.body as {
+        deductiblePercentage: number | null;
+        deductibilityOverrideReason: string | null;
+      };
+      const line = await ports.setInvoiceLineDeductibilityOverride.execute({
+        organizationId: req.auth!.orgId,
+        invoiceId: req.params.invoiceId,
+        lineId: req.params.lineId,
+        deductiblePercentage,
+        deductibilityOverrideReason,
+      });
       res.json(line);
     } catch (err) {
       handleError(res, err);

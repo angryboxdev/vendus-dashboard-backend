@@ -165,5 +165,7 @@ export function toInvoiceLineDTO(line: InvoiceLine): InvoiceLineDTO {
     dreValue: line.totalWithVat - line.vatAmount,
     cashflowValue: line.totalWithVat,
     createdAt: line.createdAt.toISOString(),
+    deductiblePercentage: line.deductiblePercentage,
+    deductibilityOverrideReason: line.deductibilityOverrideReason,
   };
 }

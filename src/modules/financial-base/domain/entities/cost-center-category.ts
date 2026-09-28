@@ -37,6 +37,8 @@ export interface UpdateCostCenterCategoryData {
   affectsProfitability?: boolean;
   requiresChannel?: boolean;
   requiresAllocation?: boolean;
+  /** Módulo Contabilidade — nunca inferido por regra fiscal automática; o gestor decide por subcategoria. Default `true` (dedutível). */
+  vatDeductible?: boolean;
   description?: string | null;
 }
 
@@ -51,6 +53,7 @@ interface CostCenterCategoryProps {
   affectsProfitability: boolean;
   requiresChannel: boolean;
   requiresAllocation: boolean;
+  vatDeductible: boolean;
   isActive: boolean;
   description: string | null;
   createdAt: Date;
@@ -68,6 +71,7 @@ export class CostCenterCategory {
   readonly affectsProfitability: boolean;
   readonly requiresChannel: boolean;
   readonly requiresAllocation: boolean;
+  readonly vatDeductible: boolean;
   readonly isActive: boolean;
   readonly description: string | null;
   readonly createdAt: Date;
@@ -84,6 +88,7 @@ export class CostCenterCategory {
     this.affectsProfitability = props.affectsProfitability;
     this.requiresChannel = props.requiresChannel;
     this.requiresAllocation = props.requiresAllocation;
+    this.vatDeductible = props.vatDeductible;
     this.isActive = props.isActive;
     this.description = props.description;
     this.createdAt = props.createdAt;
@@ -100,6 +105,7 @@ export class CostCenterCategory {
     affectsProfitability: boolean;
     requiresChannel?: boolean;
     requiresAllocation?: boolean;
+    vatDeductible?: boolean;
     description?: string | null;
   }): CostCenterCategory {
     if (!FINANCIAL_TYPES.includes(props.financialType as FinancialType)) {
@@ -117,6 +123,7 @@ export class CostCenterCategory {
       affectsProfitability: props.affectsProfitability,
       requiresChannel: props.requiresChannel ?? false,
       requiresAllocation: props.requiresAllocation ?? false,
+      vatDeductible: props.vatDeductible ?? true,
       isActive: true,
       description: props.description ?? null,
       createdAt: now,
@@ -141,6 +148,7 @@ export class CostCenterCategory {
       affectsProfitability: data.affectsProfitability ?? this.affectsProfitability,
       requiresChannel: data.requiresChannel ?? this.requiresChannel,
       requiresAllocation: data.requiresAllocation ?? this.requiresAllocation,
+      vatDeductible: data.vatDeductible ?? this.vatDeductible,
       description: data.description !== undefined ? data.description : this.description,
       updatedAt: new Date(),
     });
@@ -166,6 +174,7 @@ export class CostCenterCategory {
       affectsProfitability: this.affectsProfitability,
       requiresChannel: this.requiresChannel,
       requiresAllocation: this.requiresAllocation,
+      vatDeductible: this.vatDeductible,
       isActive: this.isActive,
       description: this.description,
       createdAt: this.createdAt,

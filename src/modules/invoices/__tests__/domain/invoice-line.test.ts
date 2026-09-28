@@ -1,5 +1,5 @@
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
-import { ChannelRequiredError } from "../../domain/errors.js";
+import { ChannelRequiredError, InvalidDeductibilityOverrideError } from "../../domain/errors.js";
 
 const base = {
   invoiceId: "inv-1",
@@ -232,5 +232,38 @@ describe("InvoiceLine.classifyFromCategory", () => {
     expect(afterB.costCenterCategoryId).toBe("cat-b");
     expect(afterB.financialType).toBe("marketing");
     expect(afterB.affectsProfitability).toBe(true);
+  });
+});
+
+describe("InvoiceLine.applyDeductibilityOverride", () => {
+  it("null por omissão — usa a sugestão da subcategoria", () => {
+    const line = InvoiceLine.create(base);
+    expect(line.deductiblePercentage).toBeNull();
+    expect(line.deductibilityOverrideReason).toBeNull();
+  });
+
+  it("exige motivo quando a percentagem é explícita", () => {
+    const line = InvoiceLine.create(base);
+    expect(() => line.applyDeductibilityOverride(50, null)).toThrow(InvalidDeductibilityOverrideError);
+  });
+
+  it("rejeita uma percentagem fora de 0-100", () => {
+    const line = InvoiceLine.create(base);
+    expect(() => line.applyDeductibilityOverride(150, "motivo")).toThrow(InvalidDeductibilityOverrideError);
+  });
+
+  it("aplica o override quando percentagem e motivo são dados", () => {
+    const line = InvoiceLine.create(base);
+    const overridden = line.applyDeductibilityOverride(30, "Uso misto");
+    expect(overridden.deductiblePercentage).toBe(30);
+    expect(overridden.deductibilityOverrideReason).toBe("Uso misto");
+    expect(line.deductiblePercentage).toBeNull(); // imutável
+  });
+
+  it("percentage: null remove o override e limpa o motivo", () => {
+    const line = InvoiceLine.create(base).applyDeductibilityOverride(30, "Uso misto");
+    const cleared = line.applyDeductibilityOverride(null, null);
+    expect(cleared.deductiblePercentage).toBeNull();
+    expect(cleared.deductibilityOverrideReason).toBeNull();
   });
 });
