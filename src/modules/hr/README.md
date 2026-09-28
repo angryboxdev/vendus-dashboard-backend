@@ -492,7 +492,15 @@ Este módulo é **aditivo**, não uma substituição imediata:
   vez). Linha ganhou `plannedShiftsCount`/`actualShiftsCount`/
   `pendingCount`/`status` (`pronto_para_fecho|pendencias|
   requer_atencao` — ver Design decisions); `balanceMinutes` passa a usar
-  "planeado até agora", nunca o total do mês (task, secção 12).
+  "planeado até agora", nunca o total do mês (task, secção 12). **Redesign
+  do Fecho Mensal**: linha ganhou `jobRole` (de `Employee.jobRole`, já
+  carregado em memória por `employeeRepository.findMany` — sem query
+  nova) para o subtítulo do nome na tabela geral do frontend
+  ("Operador"). O ratio "Conferência X/Y" e a célula "Ocorrências" que o
+  frontend mostra são só reapresentação de campos já existentes aqui
+  (`plannedShiftsCount - pendingCount`, `absenceDaysCount`/
+  `lateDaysCount`/`lateMinutesTotal`) — nenhum campo novo precisou de
+  ser adicionado para isso.
 - `GetAttendanceEmployeeDetailPort` (novo, evolução "Por Colaborador") —
   ficha individual "Assiduidade — Nome": KPIs (turnos planeados/
   realizados/pendências/dias em atraso/horas em atraso/ausências/
@@ -500,6 +508,12 @@ Este módulo é **aditivo**, não uma substituição imediata:
   últimas excluem linhas ainda `reviewStatus: "pending"`, task secção
   18) + `rows: AttendanceIssueRowDTO[]` com o extrato diário completo
   (nunca pula "Regular", ao contrário da Conferência — task, secção 19).
+  **Redesign do Fecho Mensal**: resultado ganhou `jobRole` (mesmo motivo
+  do ponto acima, para o subtítulo do cabeçalho da nova página de
+  detalhe). A "loja" que aparece ao lado não vem daqui — o frontend
+  deriva-a client-side da localização mais frequente entre `rows`
+  (`locationName` já vem por linha), evitando resolver localização aqui
+  também.
 - `ListAttendanceIssuesPort`/`GetAttendanceIssueDetailPort`
   (Fase 2.1) — `AttendanceIssueRowDTO` ganhou `occurrenceKind`
   (`late_entry|early_exit|no_entry|no_exit|absence|
@@ -1164,6 +1178,23 @@ igual ao fecho anterior), mas deixa de ser consultado enquanto o
 período estiver aberto. Sem isto, "Fecho mensal" (frontend) não tinha
 como proteger os dados consolidados de recomputações — requisito
 explícito da task.
+
+### Redesign do Fecho Mensal — "fechar mês do colaborador" é só um indicador visual, sem estado novo no backend
+
+A task de redesign trazia um mockup com um botão "Fechar mês do
+colaborador" e um estado "Setembro de 2026 fechado / Fechado em: ... /
+Por: ..." na página individual — o que implicaria um conceito NOVO de
+fecho por colaborador, distinto do fecho por organização já existente
+(`hr_monthly_closures`, sem `employee_id`). Confirmado com o utilizador
+antes de implementar: **não se cria nenhum estado de fecho por
+colaborador**. A página individual só mostra "✓ Conferência concluída —
+pronto para fechar" (derivado de `pendingCount === 0`, já calculado)
+quando não há pendências, e devolve o utilizador ao Fecho Mensal geral
+— o fecho real continua a acontecer uma única vez, a nível do mês
+inteiro, exatamente como documentado na secção anterior. Nenhum backend
+foi tocado para isto (é puramente frontend); registado aqui para
+qualquer pedido futuro de "fecho por colaborador" saber que já foi
+avaliado e recusado deliberadamente nesta ronda, não esquecido.
 
 ### Fase 2 — Resumo mensal/Horas & saldos completos, migração de Férias & Ausências e exportação ficam para rondas seguintes
 

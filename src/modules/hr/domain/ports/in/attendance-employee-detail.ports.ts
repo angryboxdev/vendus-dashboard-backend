@@ -1,4 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+import type { JobRole } from "../../entities/employee.js";
 import type { AttendanceIssueRowDTO } from "./attendance-conference.ports.js";
 
 /**
@@ -29,6 +30,8 @@ export interface AttendanceEmployeeDetailKpisDTO {
 export interface AttendanceEmployeeDetailResultDTO {
   employeeId: string;
   employeeName: string;
+  /** Redesign do Fecho Mensal — subtítulo do cabeçalho da ficha individual. */
+  jobRole: JobRole;
   kpis: AttendanceEmployeeDetailKpisDTO;
   rows: AttendanceIssueRowDTO[];
 }
