@@ -1176,14 +1176,29 @@ constraint (nunca edita a migração original). Seguro fazer isto como
 substituição, não extensão, mesmo já havendo linhas reais gravadas com os
 valores antigos (confirmado com o utilizador — o fluxo já tinha sido
 testado em produção): a migração remapeia essas linhas para o
-equivalente mais próximo do conjunto novo ANTES de trocar o constraint
-(ver Known gaps), nunca falha nem perde histórico; nada além deste write
-path consome o tipo. `remove_marking` é lógica genuinamente nova (nenhum
-tipo anterior limpava
+equivalente mais próximo do conjunto novo (ver Known gaps); nada além
+deste write path consome o tipo. `remove_marking` é lógica genuinamente
+nova (nenhum tipo anterior limpava
 `actual_start_time`/`actual_end_time`); `justify_no_impact` não altera
 `hr_shift_attendance` — só grava a trilha e passa a excluir a ocorrência
 das somas de KPI (`lateDaysCount`/`lateMinutesTotal`/`absenceDaysCount`)
 sempre que a correção mais recente dessa linha for esse tipo.
+
+### Fase 2.1 — bug real na 1ª versão da migração de correção: `UPDATE` antes do `DROP CONSTRAINT`
+
+A 1ª tentativa de aplicar `20260927190000_hr_attendance_correction_types_v2.sql`
+em produção falhou: `ERROR: 23514: new row for relation
+"hr_attendance_corrections" violates check constraint
+"hr_attendance_corrections_correction_type_check"`. Causa: o `UPDATE`
+que remapeia os valores antigos para os novos (`fix_times`/`keep_as_is`)
+corria ANTES do `DROP CONSTRAINT` — o CHECK constraint ANTIGO ainda
+estava ativo nesse momento, e não permite os valores NOVOS que o próprio
+`UPDATE` está a escrever. Corrigido invertendo a ordem: `DROP CONSTRAINT
+IF EXISTS` primeiro (remove qualquer restrição), depois os 2 `UPDATE`,
+só no fim `ADD CONSTRAINT` com os valores novos (que agora valida também
+qualquer linha que já tivesse sido escrita, por qualquer via, com um
+valor fora do esperado). A migração ficou idempotente — pode ser corrida
+de novo sem efeito colateral se precisar.
 
 ### Fase 2.1 — `hr_attendance_corrections` não tem `attendance_id`, presença sem escala é identificada por `employee_id`+`work_date`
 
@@ -1331,20 +1346,23 @@ ronda — ver Known gaps. O extrato só mostra dias com registo real
   `20260927160000_hr_monthly_closures.sql`,
   `20260927170000_hr_shift_attendance_unscheduled.sql`)~~ — já aplicadas
   em produção (confirmado 2026-09-27).
-- **Fase 2.1 — 2 migrações ainda não aplicadas**
-  (`20260927180000_hr_attendance_rules.sql`,
-  `20260927190000_hr_attendance_correction_types_v2.sql`) — ficam
-  pendentes de aplicação manual no Supabase. Confirmado com o utilizador:
-  já existiam linhas reais em `hr_attendance_corrections` com os 7
-  valores antigos (o fluxo de correção já tinha sido testado em produção)
-  — por isso `..._correction_types_v2.sql` remapeia essas linhas
-  (`add_entry`/`add_exit`/`fix_entry`/`fix_exit` → `fix_times`;
-  `confirm`/`observation` → `keep_as_is`) ANTES de trocar o CHECK
-  constraint, nunca falha nem perde histórico. Até estas 2 migrações
-  serem aplicadas, `GET /api/hr/attendance/rules`/`/summary`/os campos
-  novos de `/issues` falham ou vêm vazios — o frontend
-  (`vendus-dashboard-frontend`) já trata isto com "Indisponível" em vez
-  de dado incorreto.
+- ~~**Fase 2.1 — `20260927180000_hr_attendance_rules.sql` ainda não
+  aplicada**~~ — a tabela foi criada, mas **incompleta**: verificado
+  diretamente em produção (2026-09-28) que a coluna `control_start_date`
+  nunca chegou a ser criada (todas as outras colunas da mesma migração
+  existem), causando `column hr_attendance_rules.control_start_date does
+  not exist` em qualquer chamada a "Configurar regras" (mostrava
+  "Indisponível" no frontend — nunca foi falta de migração nenhuma,
+  como o comentário do componente sugeria, mas sim esta divergência
+  pontual). Corrigido por
+  `20260928100000_hr_attendance_rules_control_start_date.sql` (aditiva,
+  `add column if not exists`) — **pendente de aplicação manual**.
+- ~~**Fase 2.1 — `20260927190000_hr_attendance_correction_types_v2.sql`
+  ainda não aplicada**~~ — verificado diretamente em produção
+  (2026-09-28): já aplicada com sucesso (linhas reais em
+  `hr_attendance_corrections` já têm `correction_type` nos valores novos,
+  `fix_times`/`keep_as_is`) — a nota anterior de "ainda não aplicada"
+  estava desatualizada.
 - **Fase 2.1 — sem endpoint para "reverter"/"apagar" uma versão de regra
   criada por engano**: `hr_attendance_rules` só cresce (INSERT); corrigir
   um valor errado exige criar uma nova versão com o valor certo, nunca
