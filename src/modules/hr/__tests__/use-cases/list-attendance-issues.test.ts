@@ -7,6 +7,8 @@ import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
 import { FakeShiftAttendanceReadAdapter } from "../fakes/fake-shift-attendance-read.js";
 import { FakeLeaveReadAdapter } from "../fakes/fake-leave-read.js";
 import { FakeLocationRepository } from "../fakes/fake-location-repository.js";
+import { FakeAttendanceRulesRepository } from "../fakes/fake-attendance-rules-repository.js";
+import { FakeAttendanceCorrectionRepository } from "../fakes/fake-attendance-correction-repository.js";
 import type { ShiftOccurrence } from "../../domain/ports/out/shift-attendance-read.port.js";
 
 const ORG = mintOrganizationId("org-test");
@@ -35,7 +37,17 @@ function makeUseCase() {
   const shifts = new FakeShiftAttendanceReadAdapter();
   const leave = new FakeLeaveReadAdapter();
   const locations = new FakeLocationRepository();
-  return { employees, shifts, leave, locations, useCase: new ListAttendanceIssuesUseCase(employees, shifts, leave, locations) };
+  const attendanceRules = new FakeAttendanceRulesRepository();
+  const attendanceCorrections = new FakeAttendanceCorrectionRepository();
+  return {
+    employees,
+    shifts,
+    leave,
+    locations,
+    attendanceRules,
+    attendanceCorrections,
+    useCase: new ListAttendanceIssuesUseCase(employees, shifts, leave, locations, attendanceRules, attendanceCorrections),
+  };
 }
 
 describe("ListAttendanceIssuesUseCase", () => {
@@ -72,19 +84,48 @@ describe("ListAttendanceIssuesUseCase", () => {
     expect(result.items[0]!.state).toBe("EM_ABERTO");
   });
 
-  it("KPIs: pendingCount/lateCount/horas somam a partir da mesma lista, sem 2ª agregação", async () => {
+  it("KPIs: todos escopados a reviewStatus 'pending' (task 'Por Colaborador', secção 3 — Conferência é uma fila, não um resumo do período)", async () => {
     const { employees, shifts, useCase } = makeUseCase();
     const emp = Employee.create({ fullName: "Carlos Andrés" });
     employees.seed(ORG, emp);
-    shifts.seed(ORG, shift({ shiftId: "s1", employeeId: emp.id, actualStartTime: "09:18", actualEndTime: "17:00", attendanceStatus: "late", lateMinutes: 18 }));
+    shifts.seed(ORG, shift({ shiftId: "s1", employeeId: emp.id, workDate: "2026-09-05", actualStartTime: "09:18", actualEndTime: "17:00", attendanceStatus: "late", lateMinutes: 18 }));
 
     const result = await useCase.execute({ organizationId: ORG, year: 2026, month: 9 });
 
     expect(result.kpis.pendingCount).toBe(1);
-    expect(result.kpis.lateCount).toBe(1);
-    expect(result.kpis.plannedMinutesTotal).toBe(480); // 09:00-17:00
-    expect(result.kpis.actualMinutesTotal).toBe(462); // 09:18-17:00
-    expect(result.kpis.balanceMinutes).toBe(-18);
+    // Fase 2.1 — classificação automática por tolerância (default 10 min): 18 min de atraso real excede a tolerância.
+    expect(result.kpis.lateDaysCount).toBe(1);
+    expect(result.kpis.lateOccurrencesCount).toBe(1);
+    expect(result.kpis.lateMinutesTotal).toBe(18);
+    expect(result.kpis.possibleAbsencesCount).toBe(0);
+    expect(result.kpis.noExitCount).toBe(0);
+    expect(result.kpis.conflictsCount).toBe(0);
+  });
+
+  it("KPIs ignoram ocorrências já conferidas (reviewStatus 'conferred') — Conferência é só a fila de pendências", async () => {
+    const { employees, shifts, attendanceCorrections, useCase } = makeUseCase();
+    const emp = Employee.create({ fullName: "Carlos Andrés" });
+    employees.seed(ORG, emp);
+    shifts.seed(ORG, shift({ shiftId: "s1", employeeId: emp.id, workDate: "2026-09-05", actualStartTime: "09:18", actualEndTime: "17:00" }));
+    await attendanceCorrections.record({
+      organizationId: ORG,
+      workShiftId: "s1",
+      employeeId: emp.id,
+      workDate: "2026-09-05",
+      correctionType: "keep_as_is",
+      original: null,
+      corrected: null,
+      reason: "Confirmado",
+      notes: null,
+      actor: "gestor@angrybox.com",
+    });
+
+    const result = await useCase.execute({ organizationId: ORG, year: 2026, month: 9 });
+
+    expect(result.items[0]!.reviewStatus).toBe("conferred");
+    expect(result.kpis.pendingCount).toBe(0);
+    expect(result.kpis.lateDaysCount).toBe(0);
+    expect(result.kpis.lateMinutesTotal).toBe(0);
   });
 
   it("presença sem escala aparece na lista mesmo sem nenhum turno planeado", async () => {
@@ -107,5 +148,19 @@ describe("ListAttendanceIssuesUseCase", () => {
     expect(result.items).toHaveLength(1);
     expect(result.items[0]!.state).toBe("CONFLITO");
     expect(result.items[0]!.occurrenceLabel).toBe("Presença sem escala");
+  });
+
+  it("regressão: se hr_attendance_rules/hr_attendance_corrections ainda não existirem (migração Fase 2.1 pendente), a Conferência continua a funcionar — nunca derruba o que já era Fase 2", async () => {
+    const { employees, shifts, attendanceRules, attendanceCorrections, useCase } = makeUseCase();
+    const emp = Employee.create({ fullName: "Carlos Andrés" });
+    employees.seed(ORG, emp);
+    shifts.seed(ORG, shift({ shiftId: "s1", employeeId: emp.id, workDate: "2026-09-05", attendanceStatus: "late", lateMinutes: 18 }));
+    jest.spyOn(attendanceRules, "listVersions").mockRejectedValue(new Error('relation "hr_attendance_rules" does not exist'));
+    jest.spyOn(attendanceCorrections, "listInRange").mockRejectedValue(new Error('relation "hr_attendance_rule_changes" does not exist'));
+
+    const result = await useCase.execute({ organizationId: ORG, year: 2026, month: 9 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.kpis.pendingCount).toBe(1);
   });
 });

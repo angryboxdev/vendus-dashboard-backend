@@ -66,7 +66,7 @@ function minutesBetween(startHm: string, endHm: string, endsNextDay = false): nu
  * ponto de vista desta função. Corrigir isto exigiria guardar 2 pares
  * entrada/saída por turno (mudança de esquema fora do escopo desta fase).
  */
-function attributeActualToPeriods(shift: ShiftOccurrence): AttendancePeriod[] {
+export function attributeActualToPeriods(shift: ShiftOccurrence): AttendancePeriod[] {
   const isSplit = shift.secondStartTime != null && shift.secondEndTime != null;
   if (!isSplit) {
     return [{ plannedStart: shift.startTime, plannedEnd: shift.endTime, actualStart: shift.actualStartTime, actualEnd: shift.actualEndTime }];
@@ -84,13 +84,13 @@ function attributeActualToPeriods(shift: ShiftOccurrence): AttendancePeriod[] {
   ];
 }
 
-function sumPlannedMinutes(periods: AttendancePeriod[], endsNextDay: boolean): number {
+export function sumPlannedMinutes(periods: AttendancePeriod[], endsNextDay: boolean): number {
   let total = 0;
   for (const p of periods) if (p.plannedStart && p.plannedEnd) total += minutesBetween(p.plannedStart, p.plannedEnd, endsNextDay);
   return total;
 }
 
-function sumActualMinutes(periods: AttendancePeriod[], endsNextDay: boolean): number {
+export function sumActualMinutes(periods: AttendancePeriod[], endsNextDay: boolean): number {
   let total = 0;
   for (const p of periods) if (p.actualStart && p.actualEnd) total += minutesBetween(p.actualStart, p.actualEnd, endsNextDay);
   return total;

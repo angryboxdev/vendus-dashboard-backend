@@ -14,13 +14,11 @@ import type {
 import { GetAttendanceIssueDetailUseCase } from "./get-attendance-issue-detail.use-case.js";
 
 const CORRECTION_ACTION_LABELS: Record<string, string> = {
-  add_entry: "Entrada adicionada",
-  add_exit: "Saída adicionada",
-  fix_entry: "Entrada corrigida",
-  fix_exit: "Saída corrigida",
+  keep_as_is: "Mantido como atraso",
+  fix_times: "Entrada/saída corrigidas",
+  justify_no_impact: "Ocorrência justificada (sem impacto nos KPIs)",
   mark_absence: "Período marcado como ausência",
-  confirm: "Registos confirmados",
-  observation: "Observação adicionada",
+  remove_marking: "Marcação removida",
 };
 
 /**
@@ -53,19 +51,23 @@ export class CorrectShiftAttendanceUseCase implements CorrectShiftAttendancePort
     let status = original?.status ?? "worked_as_planned";
 
     switch (command.correctionType) {
-      case "add_entry":
-      case "fix_entry":
-        actualStartTime = command.actualStartTime ?? null;
-        break;
-      case "add_exit":
-      case "fix_exit":
-        actualEndTime = command.actualEndTime ?? null;
+      case "fix_times":
+        if (command.actualStartTime !== undefined) actualStartTime = command.actualStartTime;
+        if (command.actualEndTime !== undefined) actualEndTime = command.actualEndTime;
         break;
       case "mark_absence":
         status = "cancelled";
         break;
-      case "confirm":
-      case "observation":
+      case "remove_marking":
+        actualStartTime = null;
+        actualEndTime = null;
+        status = "worked_as_planned";
+        break;
+      case "keep_as_is":
+      case "justify_no_impact":
+        // Nenhuma alteração a hr_shift_attendance — só a trilha de correção/auditoria abaixo.
+        // "justify_no_impact" exclui esta ocorrência dos KPIs de atraso/ausência
+        // (ver list-attendance-issues.use-case.ts / get-monthly-attendance-summary.use-case.ts).
         break;
     }
 

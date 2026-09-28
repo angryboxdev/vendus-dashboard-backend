@@ -7,6 +7,7 @@ import { FakeShiftAttendanceReadAdapter } from "../fakes/fake-shift-attendance-r
 import { FakeLeaveReadAdapter } from "../fakes/fake-leave-read.js";
 import { FakeLocationRepository } from "../fakes/fake-location-repository.js";
 import { FakeAttendanceCorrectionRepository } from "../fakes/fake-attendance-correction-repository.js";
+import { FakeAttendanceRulesRepository } from "../fakes/fake-attendance-rules-repository.js";
 import type { ShiftOccurrence } from "../../domain/ports/out/shift-attendance-read.port.js";
 
 const ORG = mintOrganizationId("org-test");
@@ -36,11 +37,12 @@ function makeUseCase() {
   const leave = new FakeLeaveReadAdapter();
   const locations = new FakeLocationRepository();
   const corrections = new FakeAttendanceCorrectionRepository();
+  const attendanceRules = new FakeAttendanceRulesRepository();
   return {
     employees,
     shifts,
     corrections,
-    useCase: new GetAttendanceIssueDetailUseCase(employees, shifts, leave, locations, corrections),
+    useCase: new GetAttendanceIssueDetailUseCase(employees, shifts, leave, locations, corrections, attendanceRules),
   };
 }
 
@@ -85,7 +87,7 @@ describe("GetAttendanceIssueDetailUseCase", () => {
       workShiftId: "s1",
       employeeId: emp.id,
       workDate,
-      correctionType: "add_entry",
+      correctionType: "fix_times",
       original: null,
       corrected: { status: "worked_as_planned", actualStartTime: recentStart.toFormat("HH:mm"), actualEndTime: null },
       reason: "Esquecimento de marcação",

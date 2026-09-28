@@ -45,7 +45,7 @@ export class GetMonthlyClosureStatusUseCase implements GetMonthlyClosureStatusPo
       blockerCount,
       plannedShiftsCount,
       regularShiftsCount,
-      lateCount: issuesResult.kpis.lateCount,
+      lateCount: issuesResult.kpis.lateOccurrencesCount,
       leaveDaysCount: leaves.length,
     };
   }

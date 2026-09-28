@@ -1,5 +1,6 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { AttendanceCorrectionType } from "../out/attendance-correction-repository.port.js";
+import type { AttendanceOccurrenceKind } from "../../services/attendance-occurrence.service.js";
 
 export type AttendanceStateDTO = "REGULAR" | "PRESENTE" | "CONCLUIDO" | "PARCIAL" | "AUSENTE" | "EM_ABERTO" | "CONFLITO";
 
@@ -9,6 +10,9 @@ export interface AttendancePeriodDTO {
   actualStart: string | null;
   actualEnd: string | null;
 }
+
+/** Fase 2.1 — classificação automática por tolerância (paralela ao `state`/`occurrenceLabel` manuais). */
+export type AttendanceOccurrenceKindDTO = AttendanceOccurrenceKind;
 
 export interface AttendanceIssueRowDTO {
   shiftId: string | null;
@@ -24,14 +28,35 @@ export interface AttendanceIssueRowDTO {
   occurrenceLabel: string;
   plannedMinutes: number;
   actualMinutes: number;
+  /** Fase 2.1 */
+  occurrenceKind: AttendanceOccurrenceKindDTO;
+  /** Fase 2.1 — diferença real (minutos, com sinal) entre planeado e registado; `null` quando não aplicável (ex.: sem entrada). */
+  diffMinutes: number | null;
+  /** Fase 2.1 — "pending" até existir ≥1 correção para este turno/colaborador+dia; "conferred" depois. */
+  reviewStatus: "pending" | "conferred";
 }
 
+/**
+ * Task "Assiduidade — Conferência, Por Colaborador e Horas & Saldos"
+ * (secção 3): a Conferência é uma FILA de trabalho por fazer, não um
+ * resumo do período — todos os KPIs contam só `reviewStatus: "pending"`.
+ * Horas planeadas/realizadas/Saldo saíram daqui (secção 3, explícito) —
+ * vivem em "Por colaborador"/"Horas & saldos" (`MonthlyAttendanceSummaryResultDTO`).
+ */
 export interface AttendanceIssuesKpisDTO {
   pendingCount: number;
-  lateCount: number;
-  actualMinutesTotal: number;
-  plannedMinutesTotal: number;
-  balanceMinutes: number;
+  /** Dias de trabalho (colaborador+data), só pendentes, com ≥1 atraso acima da tolerância. */
+  lateDaysCount: number;
+  /** Soma do atraso real (minutos) de todas as entradas pendentes fora da tolerância. */
+  lateMinutesTotal: number;
+  /** Nº de ocorrências de atraso pendentes (não confundir com `lateDaysCount`). */
+  lateOccurrencesCount: number;
+  /** "Possíveis ausências" — pendentes com `occurrenceKind: "absence"` (ainda não confirmadas/justificadas pelo gestor). */
+  possibleAbsencesCount: number;
+  /** "Sem saída" — pendentes com `occurrenceKind: "no_exit"`. */
+  noExitCount: number;
+  /** "Conflitos" — pendentes com `occurrenceKind: "conflict"`. */
+  conflictsCount: number;
 }
 
 export interface ListAttendanceIssuesCommand {

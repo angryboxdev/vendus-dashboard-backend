@@ -16,6 +16,7 @@ import { SupabaseLocationRepository } from "../locations/adapters/out/supabase-l
 import { SupabaseAttendanceWriteAdapter } from "./adapters/out/supabase-attendance-write.adapter.js";
 import { SupabaseAttendanceCorrectionRepository } from "./adapters/out/supabase-attendance-correction.repository.js";
 import { SupabaseMonthlyClosureRepository } from "./adapters/out/supabase-monthly-closure.repository.js";
+import { SupabaseAttendanceRulesRepository } from "./adapters/out/supabase-attendance-rules.repository.js";
 
 import { ListEmployeesUseCase } from "./application/use-cases/list-employees.use-case.js";
 import { GetPeopleKpisUseCase } from "./application/use-cases/get-people-kpis.use-case.js";
@@ -66,6 +67,11 @@ import { CorrectShiftAttendanceUseCase } from "./application/use-cases/correct-s
 import { GetMonthlyClosureStatusUseCase } from "./application/use-cases/get-monthly-closure-status.use-case.js";
 import { CloseMonthlyPeriodUseCase } from "./application/use-cases/close-monthly-period.use-case.js";
 import { ReopenMonthlyPeriodUseCase } from "./application/use-cases/reopen-monthly-period.use-case.js";
+import { GetAttendanceRulesUseCase } from "./application/use-cases/get-attendance-rules.use-case.js";
+import { UpdateAttendanceRulesUseCase } from "./application/use-cases/update-attendance-rules.use-case.js";
+import { ListAttendanceRuleChangesUseCase } from "./application/use-cases/list-attendance-rule-changes.use-case.js";
+import { GetMonthlyAttendanceSummaryUseCase } from "./application/use-cases/get-monthly-attendance-summary.use-case.js";
+import { GetAttendanceEmployeeDetailUseCase } from "./application/use-cases/get-attendance-employee-detail.use-case.js";
 
 import { HrPeopleController } from "./adapters/in/hr-people.controller.js";
 import { HrOverviewController } from "./adapters/in/hr-overview.controller.js";
@@ -100,6 +106,7 @@ export function createHrModule(): { router: Router } {
   const attendanceWrite = new SupabaseAttendanceWriteAdapter(createScopedQuery);
   const attendanceCorrectionRepository = new SupabaseAttendanceCorrectionRepository(createScopedQuery);
   const monthlyClosureRepository = new SupabaseMonthlyClosureRepository(createScopedQuery);
+  const attendanceRulesRepository = new SupabaseAttendanceRulesRepository(createScopedQuery);
 
   const listEmployees = new ListEmployeesUseCase(
     employeeRepository,
@@ -204,13 +211,21 @@ export function createHrModule(): { router: Router } {
   const previewRepeatCalendarWeek = new PreviewRepeatCalendarWeekUseCase(workShiftRepository, employeeRepository, leaveRead, holidayRead);
   const repeatCalendarWeek = new RepeatCalendarWeekUseCase(workShiftRepository, employeeRepository, leaveRead, holidayRead, auditLog);
 
-  const listAttendanceIssues = new ListAttendanceIssuesUseCase(employeeRepository, shiftAttendanceRead, leaveRead, locationRepository);
+  const listAttendanceIssues = new ListAttendanceIssuesUseCase(
+    employeeRepository,
+    shiftAttendanceRead,
+    leaveRead,
+    locationRepository,
+    attendanceRulesRepository,
+    attendanceCorrectionRepository,
+  );
   const getAttendanceIssueDetail = new GetAttendanceIssueDetailUseCase(
     employeeRepository,
     shiftAttendanceRead,
     leaveRead,
     locationRepository,
     attendanceCorrectionRepository,
+    attendanceRulesRepository,
   );
   const correctShiftAttendance = new CorrectShiftAttendanceUseCase(
     attendanceWrite,
@@ -227,6 +242,24 @@ export function createHrModule(): { router: Router } {
   );
   const closeMonthlyPeriod = new CloseMonthlyPeriodUseCase(getMonthlyClosureStatus, monthlyClosureRepository, auditLog);
   const reopenMonthlyPeriod = new ReopenMonthlyPeriodUseCase(monthlyClosureRepository, auditLog, getMonthlyClosureStatus);
+  const getAttendanceRules = new GetAttendanceRulesUseCase(attendanceRulesRepository);
+  const updateAttendanceRules = new UpdateAttendanceRulesUseCase(attendanceRulesRepository, auditLog, getAttendanceRules);
+  const listAttendanceRuleChanges = new ListAttendanceRuleChangesUseCase(attendanceRulesRepository);
+  const getMonthlyAttendanceSummary = new GetMonthlyAttendanceSummaryUseCase(
+    employeeRepository,
+    shiftAttendanceRead,
+    leaveRead,
+    attendanceRulesRepository,
+    attendanceCorrectionRepository,
+  );
+  const getAttendanceEmployeeDetail = new GetAttendanceEmployeeDetailUseCase(
+    employeeRepository,
+    shiftAttendanceRead,
+    leaveRead,
+    locationRepository,
+    attendanceRulesRepository,
+    attendanceCorrectionRepository,
+  );
 
   const controller = new HrPeopleController(
     listEmployees,
@@ -282,6 +315,11 @@ export function createHrModule(): { router: Router } {
     getMonthlyClosureStatus,
     closeMonthlyPeriod,
     reopenMonthlyPeriod,
+    getAttendanceRules,
+    updateAttendanceRules,
+    listAttendanceRuleChanges,
+    getMonthlyAttendanceSummary,
+    getAttendanceEmployeeDetail,
   );
 
   const router = Router();

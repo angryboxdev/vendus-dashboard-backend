@@ -8,7 +8,9 @@ export type HrAuditEntityType =
   | "shift_rotation"
   // Fase 2 — nomes distintos do vocabulário legacy ("attendance", sem "_correction") para não colidir semanticamente na mesma tabela partilhada `hr_audit_logs`.
   | "attendance_correction"
-  | "monthly_closure";
+  | "monthly_closure"
+  // Fase 2.1
+  | "attendance_rules";
 
 export interface HrAuditLogEntry {
   organizationId: OrganizationId;

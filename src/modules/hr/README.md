@@ -302,6 +302,50 @@ Este módulo é **aditivo**, não uma substituição imediata:
   cumprido por "Novo Turno Padrão Semanal"). Um colaborador com turnos em
   2 lojas diferentes na semana de origem gera 2 grupos (2 séries, uma por
   loja) — nunca mistura locais na mesma série.
+- **`attendance-tolerance.service.ts`** (Fase 2.1 — "Regras de
+  Assiduidade, Tolerâncias e Conferência") — classificador puro NOVO, em
+  **paralelo** ao existente (`attendance-conference.service.ts`, que
+  continua 100% intocado). Antes desta fase, `late`/`left_early`/
+  `late_minutes` eram sempre uma decisão MANUAL do gestor, gravada
+  diretamente em `hr_shift_attendance` por quem chama
+  `PATCH /api/hr/shifts/:id/attendance` — nada recalculava isso a partir
+  de tolerâncias. `classifyByTolerance(periods, workDate, endsNextDay,
+  rules, now)` calcula, a partir dos horários brutos (planeado vs.
+  registado) + `AttendanceRulesValues` vigentes: `late_entry`/
+  `early_exit`/`no_entry`/`no_exit`/`absence`/`before_window`/
+  `incomplete_period`/`ok`, com `diffMinutes` real (nunca só o excedente
+  da tolerância — task, secção 2). Aplica a regra a cada período
+  separadamente (turno repartido) e reduz ao mais grave
+  (`SEVERITY_ORDER`) — exceto quando 1 período está "ok" e o outro tem
+  marcação em falta, aí devolve `incomplete_period` (evolução "Por
+  Colaborador", ver Design decisions). `resolveEffectiveRules(versions,
+  forDate)` escolhe a versão vigente numa data (a de `effectiveFrom` mais
+  recente `<= forDate`) — nunca uma alteração posterior, o que já evita
+  ter de "congelar" meses fechados (ver Design decisions). Turnos com
+  `workDate` anterior a `rules.controlStartDate` são sempre classificados
+  como `ok` (deteção automática desligada, sinal manual continua
+  independente — ver Design decisions).
+- **`attendance-occurrence.service.ts`** (Fase 2.1) —
+  `classifyScheduledShift(shift, now, opts)` une os DOIS sinais (manual +
+  tolerância) num único resultado (`AttendanceOccurrenceClassification`),
+  partilhado por `ListAttendanceIssuesUseCase`/
+  `GetAttendanceIssueDetailUseCase`/`GetMonthlyAttendanceSummaryUseCase`/
+  `GetAttendanceEmployeeDetailUseCase` — nunca duplicado. Devolve `null`
+  só quando NENHUM dos dois sinaliza nada (turno "Regular").
+- **`AttendanceRulesVersion`** (Fase 2.1) — configuração global da
+  organização (sem regras por colaborador/função/local nesta fase — task,
+  secção 3), com histórico versionado: cada alteração insere uma NOVA
+  linha em `hr_attendance_rules` (nunca UPDATE), com os 5 valores
+  completos + `controlStartDate`/`effectiveFrom`/`changedBy`/`createdAt`.
+  "Vigente" é sempre resolvido em runtime (`resolveEffectiveRules`), nunca
+  por uma flag `is_current` na BD. `controlStartDate` ("início do
+  controlo de assiduidade", evolução "Por Colaborador") não entra no
+  histórico por campo (`ATTENDANCE_RULES_FIELDS`/`ListAttendanceRuleChangesUseCase`
+  só cobrem os 5 campos numéricos — ver Known gaps).
+- **Estado por colaborador** (`pronto_para_fecho`/`pendencias`/
+  `requer_atencao`, evolução "Por Colaborador") — derivado em
+  `GetMonthlyAttendanceSummaryUseCase.deriveEmployeeStatus`, nunca
+  persistido (ver Design decisions para a fórmula).
 
 ## Ports
 
@@ -430,6 +474,42 @@ Este módulo é **aditivo**, não uma substituição imediata:
   (`PARCIAL|EM_ABERTO|CONFLITO`); `Reopen` exige motivo
   (`MonthlyClosureReopenReasonRequiredError`) e só existe para reabrir um
   período já fechado (`MonthlyClosureNotFoundError` caso contrário).
+- `GetAttendanceRulesPort`/`UpdateAttendanceRulesPort`/
+  `ListAttendanceRuleChangesPort` (Fase 2.1) — `Get` devolve a versão
+  vigente (ou o default, nunca bloqueia à espera de configuração);
+  `Update` insere uma NOVA versão com `effectiveFrom = hoje` (sem
+  seletor de data passada no frontend — uma alteração nunca reclassifica
+  um período já decorrido); `ListChanges` deriva o histórico por campo
+  comparando cada par de versões consecutivas (a 1ª nunca gera entradas —
+  é a baseline).
+- `GetMonthlyAttendanceSummaryPort` (Fase 2.1 + evolução "Por
+  Colaborador") — 1 linha por colaborador, reaproveita
+  `classifyScheduledShift` (nunca recalcula tolerância/atraso uma 2ª
+  vez). Linha ganhou `plannedShiftsCount`/`actualShiftsCount`/
+  `pendingCount`/`status` (`pronto_para_fecho|pendencias|
+  requer_atencao` — ver Design decisions); `balanceMinutes` passa a usar
+  "planeado até agora", nunca o total do mês (task, secção 12).
+- `GetAttendanceEmployeeDetailPort` (novo, evolução "Por Colaborador") —
+  ficha individual "Assiduidade — Nome": KPIs (turnos planeados/
+  realizados/pendências/dias em atraso/horas em atraso/ausências/
+  horas planeadas/`actualMinutesConfirmed`/`balanceConfirmed` — as 2
+  últimas excluem linhas ainda `reviewStatus: "pending"`, task secção
+  18) + `rows: AttendanceIssueRowDTO[]` com o extrato diário completo
+  (nunca pula "Regular", ao contrário da Conferência — task, secção 19).
+- `ListAttendanceIssuesPort`/`GetAttendanceIssueDetailPort`
+  (Fase 2.1) — `AttendanceIssueRowDTO` ganhou `occurrenceKind`
+  (`late_entry|early_exit|no_entry|no_exit|absence|
+  unscheduled_presence|conflict|before_window|incomplete_period|ok`,
+  sempre calculado — nunca `undefined`), `diffMinutes` (real, com sinal)
+  e `reviewStatus` (`pending|conferred`, derivado de existir ≥1
+  correção para a linha). Uma linha passa a aparecer mesmo sem nenhum
+  sinal manual, só por tolerância (`classifyScheduledShift` nunca
+  devolve "nada" quando a tolerância acusa algo) — ver Design decisions.
+  `AttendanceIssuesKpisDTO` (evolução "Por Colaborador") perdeu
+  `plannedMinutesTotal`/`actualMinutesTotal`/`balanceMinutes` (mudaram
+  para `GetMonthlyAttendanceSummaryPort`) e todos os campos que ficaram
+  passam a contar só `reviewStatus: "pending"` — ganhou
+  `possibleAbsencesCount`/`noExitCount`/`conflictsCount`.
 
 ### Output (domain dependencies)
 
@@ -490,9 +570,19 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `work_shift_id` — permite atualizar também presença sem escala).
 - `AttendanceCorrectionRepositoryPort` (Fase 2, novo) — ledger só de
   inserção em `hr_attendance_corrections` (`record`/`findByShiftId`).
+  **Fase 2.1**: `AttendanceCorrectionType` substituído por completo
+  (`keep_as_is|fix_times|justify_no_impact|mark_absence|remove_marking` —
+  ver Design decisions); ganhou `listInRange(organizationId, from, to)`
+  (1 query para todo o período, nunca N+1 por linha da Conferência/Resumo
+  mensal) — usado para derivar `reviewStatus` e para saber se a correção
+  mais recente de uma linha é `justify_no_impact` (exclui dos KPIs de
+  atraso/ausência).
 - `MonthlyClosureRepositoryPort` (Fase 2, novo) — `hr_monthly_closures`,
   1 linha por (organização, ano, mês); ausência de linha = período em
   aberto por omissão.
+- `AttendanceRulesRepositoryPort` (Fase 2.1, novo) —
+  `listVersions`/`save`; cada `save` é sempre um INSERT (nunca há UPDATE
+  nesta tabela).
 
 ## Adapters
 
@@ -530,6 +620,15 @@ Este módulo é **aditivo**, não uma substituição imediata:
   - **"Repetir escala pelo calendário":**
     `POST /work-shifts/repeat-week/preview` (sem guarda de role — só
     leitura), `POST /work-shifts/repeat-week`.
+- `HrAttendanceController` (Fase 2 + Fase 2.1) → `/api/hr/attendance/*`:
+  `GET /issues`, `GET /issues/detail`, `POST /issues/correct`
+  (`manager`), `GET /closure`, `POST /closure/close` (`manager`),
+  `POST /closure/reopen` (`admin`) — Fase 2. **Fase 2.1**: `GET /rules`,
+  `PUT /rules` (`manager` — mesmo nível de `issues/correct`/
+  `closure/close`, nunca `admin`: é config do dia a dia, não uma reversão
+  de um estado já fechado), `GET /rules/history`, `GET /summary`,
+  `GET /employee/:employeeId` (ficha individual, 404 se o colaborador não
+  existir).
 
 ### Output
 
@@ -556,6 +655,13 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `ListShiftsToReviewUseCase`/`GetShiftToReviewUseCase` passaram a receber
   `SupabaseLocationRepository` (módulo `locations`, já existente), o mesmo
   adapter que `location-credentials` já reutiliza fora do seu módulo.
+- `SupabaseAttendanceWriteAdapter` (Fase 2) → `hr_shift_attendance`,
+  `findById`/`upsert` por `id` explícito. `SupabaseAttendanceCorrectionRepository`
+  (Fase 2) → `hr_attendance_corrections`, ledger append-only; ganhou
+  `listInRange` (Fase 2.1). `SupabaseMonthlyClosureRepository` (Fase 2) →
+  `hr_monthly_closures`.
+- `SupabaseAttendanceRulesRepository` (Fase 2.1, novo) →
+  `hr_attendance_rules`; `save` é sempre `insert`, nunca `update`.
 
 ## Design decisions (ADR summary)
 
@@ -1019,14 +1125,172 @@ módulo.
 A task tem 29 secções; esta ronda (Fase A) entrega Conferência (lista +
 detalhe + correção estruturada) e Fecho mensal (status + fechar +
 reabrir), com os 2 números do topo (Horas realizadas/planeadas) já
-corretos porque reaproveitam os mesmos períodos por turno. As 2 abas
-"Resumo mensal"/"Horas & saldos" completos (separar horas confirmadas/
-pendentes/corrigidas/cobertas por ausência, secção 18), a migração da
-escrita de Férias & Ausências para o módulo novo (secção 14-16, hoje só
-leitura via `LeaveReadPort`, escrita continua na rota legacy
-`hrLeaveRoutes.ts`), e a exportação Excel/CSV (secção 25) ficam
-explicitamente para rondas seguintes — confirmado com o utilizador antes
-de começar.
+corretos porque reaproveitam os mesmos períodos por turno. ~~As 2 abas
+"Resumo mensal"/"Horas & saldos" completos~~ — "Resumo mensal"
+implementado na Fase 2.1 (`GetMonthlyAttendanceSummaryUseCase`, ver
+acima); "Horas & saldos" completo (separar horas confirmadas/pendentes/
+corrigidas/cobertas por ausência, secção 18), a migração da escrita de
+Férias & Ausências para o módulo novo (secção 14-16, hoje só leitura via
+`LeaveReadPort`, escrita continua na rota legacy `hrLeaveRoutes.ts`), e a
+exportação Excel/CSV (secção 25) continuam para rondas seguintes —
+confirmado com o utilizador antes de começar.
+
+### Fase 2.1 ("Regras de Assiduidade, Tolerâncias e Conferência") — classificação por tolerância em paralelo, nunca substitui a manual
+
+Descoberta central desta ronda: `late`/`left_early`/`late_minutes` nunca
+foram calculados automaticamente — são sempre um valor que o gestor
+escreve manualmente ao confirmar presença (`PATCH /api/hr/shifts/:id/attendance`,
+`ShiftReviewModal`). Construir tolerância configurável, então, não é
+"consertar" um cálculo existente — é lógica de domínio inteiramente
+nova. Decisão: `attendance-tolerance.service.ts`/
+`attendance-occurrence.service.ts` vivem ao lado de
+`attendance-conference.service.ts` (que fica 100% intocado) — nunca
+substituem o sinal manual, apenas ACRESCENTAM um sinal automático em
+paralelo (`occurrenceKind`/`diffMinutes`). Uma linha entra na Conferência
+se QUALQUER um dos dois sinalizar algo — antes desta fase só entrava o
+que o gestor já tinha marcado; agora entra também o que a tolerância
+deteta sozinha, sem esperar por confirmação manual.
+
+### Fase 2.1 — regras com histórico: 1 tabela, cada linha uma versão completa, sem "congelar" meses fechados
+
+Em vez de guardar só o "estado atual" (como `hr_monthly_closures`) mais
+uma tabela de log separada, `hr_attendance_rules` guarda cada alteração
+como uma linha própria com os 5 valores completos (nunca um diff) — mesmo
+princípio de "versionamento por nova linha" já usado em
+`hr_employee_documents`. O histórico por campo que o frontend mostra é
+**derivado** (`ListAttendanceRuleChangesUseCase`, diff entre versões
+consecutivas), nunca persistido separadamente. Como o frontend só permite
+`effectiveFrom = hoje` ao criar uma versão (sem seletor de data passada),
+uma alteração nunca reclassifica um período já decorrido —
+`resolveEffectiveRules` escolhe sempre a versão que já estava em vigor
+nessa data. Não foi preciso nenhuma lógica extra de "congelar" meses
+fechados (task, secção 4) só por causa disto.
+
+### Fase 2.1 — `AttendanceCorrectionType` substituído por completo, não estendido
+
+O conjunto anterior (`add_entry`/`add_exit`/`fix_entry`/`fix_exit`/
+`confirm`/`observation`) foi trocado pelas 5 ações do mockup de resolução
+de ocorrência (`keep_as_is`/`fix_times`/`justify_no_impact`/
+`mark_absence`/`remove_marking`) via nova migração que troca o CHECK
+constraint (nunca edita a migração original). Seguro fazer isto como
+substituição, não extensão, mesmo já havendo linhas reais gravadas com os
+valores antigos (confirmado com o utilizador — o fluxo já tinha sido
+testado em produção): a migração remapeia essas linhas para o
+equivalente mais próximo do conjunto novo ANTES de trocar o constraint
+(ver Known gaps), nunca falha nem perde histórico; nada além deste write
+path consome o tipo. `remove_marking` é lógica genuinamente nova (nenhum
+tipo anterior limpava
+`actual_start_time`/`actual_end_time`); `justify_no_impact` não altera
+`hr_shift_attendance` — só grava a trilha e passa a excluir a ocorrência
+das somas de KPI (`lateDaysCount`/`lateMinutesTotal`/`absenceDaysCount`)
+sempre que a correção mais recente dessa linha for esse tipo.
+
+### Fase 2.1 — `hr_attendance_corrections` não tem `attendance_id`, presença sem escala é identificada por `employee_id`+`work_date`
+
+`reviewStatus`/a exclusão por `justify_no_impact` precisam de saber "há
+correções para esta linha?" tanto para turnos planeados (`work_shift_id`)
+como para presença sem escala (`work_shift_id` NULL). Como o schema não
+tem uma coluna `attendance_id`, a chave usada em todo o lado
+(`ListAttendanceIssuesUseCase`/`GetMonthlyAttendanceSummaryUseCase`/
+`GetAttendanceIssueDetailUseCase`) é `shift:<workShiftId>` quando há
+turno, ou `emp:<employeeId>:<workDate>` caso contrário — nunca inventa
+uma coluna nova só para isto.
+
+### Fase 2.1 — dependências novas nunca derrubam a Conferência (Fase 2) já em produção
+
+Regressão real detetada em sessão: `ListAttendanceIssuesUseCase`/
+`GetAttendanceIssueDetailUseCase` passaram a consultar
+`attendanceRulesRepository.listVersions` dentro do mesmo `Promise.all`
+que já buscava os dados da Conferência (Fase 2, já em produção). Antes
+de `hr_attendance_rules` ser migrada num ambiente, essa chamada rejeita
+("relation does not exist"), e por estar no mesmo `Promise.all` sem
+tratamento, derrubava a Conferência inteira — uma funcionalidade que já
+funcionava ficou indisponível por causa de uma dependência de uma
+funcionalidade nova ainda não migrada. Corrigido com
+`.catch(() => [])` nessas 2 chamadas (nunca no resto do `Promise.all`):
+sem versões de regra, `resolveEffectiveRules` já sabe usar o default;
+sem correções, todas as linhas ficam `reviewStatus: "pending"` sem
+exclusão por `justify_no_impact`. Coberto por teste de regressão em
+`list-attendance-issues.test.ts`.
+
+**Correção seguinte (mesma sessão):** `GetMonthlyAttendanceSummaryUseCase`
+("Por colaborador") tinha ficado de fora desta 1ª correção — a
+justificação inicial ("é 100% nova, não há nada para derrubar") estava
+errada: mesmo sendo nova, não há razão para ficar indisponível só por
+causa de uma dependência opcional. Aplicado o mesmo `.catch(() => [])`,
+com o mesmo teste de regressão em `get-monthly-attendance-summary.test.ts`.
+`GetAttendanceEmployeeDetailUseCase` já tinha o tratamento desde que foi
+escrito.
+
+### "Assiduidade — Conferência, Por Colaborador e Horas & Saldos" (evolução) — Conferência vira uma fila, os totais mudam de aba
+
+Task nova, explícita (secção 3): "Não usar como KPIs principais desta
+aba: Horas planeadas/Horas realizadas/Saldo — esses indicadores
+pertencem às outras abas." `AttendanceIssuesKpisDTO` perdeu
+`plannedMinutesTotal`/`actualMinutesTotal`/`balanceMinutes` (confirmado
+por grep: nada mais os lia) e todos os KPIs que sobraram
+(`pendingCount`/`lateDaysCount`/`lateMinutesTotal`/
+`lateOccurrencesCount`/`possibleAbsencesCount`/`noExitCount`/
+`conflictsCount`) passaram a contar só `reviewStatus: "pending"` — antes
+contavam tudo menos justificado. `GetMonthlyAttendanceSummaryUseCase`
+("Por colaborador") continua com a semântica antiga (todo o mês, exclui
+só justificado) — é ele que agora é dono desses totais.
+
+### "Planeado até agora" — turnos futuros nunca reduzem saldo
+
+Task, secção 12, literal. `plannedMinutesToDate` (só `workDate <= hoje`)
+é acumulado em paralelo a `plannedMinutes` (mês inteiro, informativo) em
+`GetMonthlyAttendanceSummaryUseCase`/`GetAttendanceEmployeeDetailUseCase`
+— `balanceMinutes`/`balanceConfirmed` usam sempre o "até agora". Nunca
+exposto como campo próprio (ninguém pediu mostrá-lo separadamente ainda)
+— só afeta o cálculo do saldo internamente.
+
+### `incomplete_period` — período isolado de um turno repartido nunca aparece como se fosse do turno inteiro
+
+Quando um turno repartido tem 1 período genuinamente cumprido e o outro
+com marcação em falta (`no_entry`/`absence`/`no_exit`),
+`classifyByTolerance` devolve `incomplete_period` para a linha inteira em
+vez de, por exemplo, "Sem entrada" — que sozinho sugeriria que o
+colaborador não apareceu de todo, quando na verdade cumpriu metade do
+turno (mockup, exemplo Lucas Almeida: `12–15 | 18–23` → `— | 18:02–23:01`
+→ "1º período sem entrada"). Só se aplica a turno repartido — turno
+direto nunca produz este kind.
+
+### `controlStartDate` — suprime só a deteção automática, nunca o sinal manual
+
+Turnos com `workDate` anterior ao início do controlo (task, secção 11)
+nunca são classificados por `classifyByTolerance` (força `{kind: "ok"}`)
+— mas `computeAttendanceIssue` (sinal manual, baseado em
+`attendanceStatus` já gravado pelo gestor) é chamado à parte em
+`classifyScheduledShift` e continua a funcionar normalmente. Ou seja: se
+o gestor já tinha marcado manualmente um atraso antes do início do
+controlo, essa marcação continua visível — só a deteção automática por
+ausência de marcação é que fica desligada antes dessa data.
+
+### Estado por colaborador (`pronto_para_fecho`/`pendencias`/`requer_atencao`) — regra própria, task não define fórmula
+
+A task (secção 17) só nomeia os 3 estados possíveis, sem fórmula, e o
+mockup mostra um 4º rótulo não documentado ("Com ausências") que não foi
+replicado — ausências já aparecem como coluna própria na tabela, não
+precisam de duplicar-se num estado à parte (mesmo precedente já usado
+neste módulo para a prioridade da fila RH-01, "prioridade... é uma regra
+nova, documentada"). Regra implementada
+(`deriveEmployeeStatus`, `get-monthly-attendance-summary.use-case.ts`):
+`pendingCount === 0` → pronto para fecho; senão, `requer_atencao` se
+houver ≥1 pendente com `occurrenceKind` em
+`absence|conflict|no_exit`, OU `lateDaysCount >= 3`; senão só
+`pendencias`. Fácil de ajustar num único ponto se o utilizador validar
+outra fórmula depois de usar a tela.
+
+### Ficha individual (`GetAttendanceEmployeeDetailUseCase`) — extrato SEM sintetizar "Folga"
+
+Ao contrário da Conferência, a ficha individual nunca pula um turno
+"Regular" (task, secção 19: extrato diário completo) — mas **não**
+sintetiza uma linha "Folga" para dias sem nenhum `WorkShift`/presença
+registados, como o mockup mostra. Isso exigiria reconstruir a escala
+base/feriados também aqui (cross-module com RH-03), fora do âmbito desta
+ronda — ver Known gaps. O extrato só mostra dias com registo real
+(turno planeado ou presença sem escala).
 
 ## How to test
 
@@ -1037,19 +1301,65 @@ de começar.
 
 ## Known gaps / open debt
 
-- **Fase 2 ("Assiduidade, Correções, Ausências e Fecho Mensal") — Resumo
-  mensal/Horas & saldos completos, migração de Férias & Ausências, e
-  exportação Excel/CSV ficam para rondas seguintes** (confirmado com o
-  utilizador antes de começar) — ver "Design decisions".
-- **Fase 2 — migrações ainda não aplicadas**
+- **Evolução "Por Colaborador" — ficha individual não sintetiza "Folga"**
+  para dias sem nenhum `WorkShift`/presença (o mockup mostra essas
+  linhas) — exigiria reconstruir escala base/feriados também aqui
+  (cross-module com RH-03), fora do âmbito desta ronda. O extrato só
+  mostra dias com registo real.
+- **Evolução "Por Colaborador" — `controlStartDate` não entra no
+  histórico por campo** (`ListAttendanceRuleChangesUseCase` só cobre os
+  5 campos numéricos, `AttendanceRuleChangeEntryDTO.previousValue` é
+  `number`) — uma alteração ao início do controlo fica no `updatedBy`/
+  `updatedAt` da config atual, mas não gera uma entrada própria no
+  "Histórico de alterações".
+- **Evolução "Por Colaborador" — sem filtro de função/vínculo** na
+  ficha "Por colaborador" (o mockup mostra "Todas as funções"/"Todos os
+  vínculos"/"Mais filtros") — nem pedido no texto da task, nem
+  imediatamente disponível neste endpoint sem juntar dados do módulo
+  `people`; fica para pedido futuro se confirmado.
+- **Evolução "Por Colaborador" — Estado por colaborador é fórmula
+  própria**, a task (secção 17) só nomeia os 3 estados sem definir
+  cálculo — ver Design decisions, fácil de ajustar num único ponto
+  (`deriveEmployeeStatus`) se o utilizador validar outra regra depois de
+  usar a tela.
+- ~~**Fase 2 — Resumo mensal completo fica para ronda seguinte**~~ —
+  implementado na Fase 2.1 (ver acima). **Horas & saldos completo,
+  migração de Férias & Ausências, e exportação Excel/CSV continuam para
+  rondas seguintes** (confirmado com o utilizador antes de começar).
+- ~~**Fase 2 — migrações ainda não aplicadas**
   (`20260927150000_hr_attendance_corrections.sql`,
   `20260927160000_hr_monthly_closures.sql`,
-  `20260927170000_hr_shift_attendance_unscheduled.sql`) — ficam pendentes
-  de aplicação manual pelo Raul no Supabase, mesmo processo já usado para
-  as migrações anteriores desta sessão.
+  `20260927170000_hr_shift_attendance_unscheduled.sql`)~~ — já aplicadas
+  em produção (confirmado 2026-09-27).
+- **Fase 2.1 — 2 migrações ainda não aplicadas**
+  (`20260927180000_hr_attendance_rules.sql`,
+  `20260927190000_hr_attendance_correction_types_v2.sql`) — ficam
+  pendentes de aplicação manual no Supabase. Confirmado com o utilizador:
+  já existiam linhas reais em `hr_attendance_corrections` com os 7
+  valores antigos (o fluxo de correção já tinha sido testado em produção)
+  — por isso `..._correction_types_v2.sql` remapeia essas linhas
+  (`add_entry`/`add_exit`/`fix_entry`/`fix_exit` → `fix_times`;
+  `confirm`/`observation` → `keep_as_is`) ANTES de trocar o CHECK
+  constraint, nunca falha nem perde histórico. Até estas 2 migrações
+  serem aplicadas, `GET /api/hr/attendance/rules`/`/summary`/os campos
+  novos de `/issues` falham ou vêm vazios — o frontend
+  (`vendus-dashboard-frontend`) já trata isto com "Indisponível" em vez
+  de dado incorreto.
+- **Fase 2.1 — sem endpoint para "reverter"/"apagar" uma versão de regra
+  criada por engano**: `hr_attendance_rules` só cresce (INSERT); corrigir
+  um valor errado exige criar uma nova versão com o valor certo, nunca
+  apagar a errada — decisão deliberada (nunca reescrever o histórico,
+  task secção 4), mas significa que uma versão criada por engano fica
+  visível no histórico para sempre.
+- **Fase 2.1 — sem UI/endpoint de regras por colaborador/função/local**
+  — fora do âmbito desta fase (task, secção 3), decisão confirmada.
 - **Fase 2 — turno repartido nunca é representável como "os 2 períodos
   genuinamente cumpridos"** — limitação de esquema (só 1 par entrada/
   saída por turno), documentada em `attendance-conference.service.ts`.
+  A mesma limitação aplica-se à classificação por tolerância (Fase 2.1):
+  `classifyByTolerance` recebe os mesmos períodos já atribuídos por
+  `attributeActualToPeriods`, logo herda a mesma imprecisão quando ambos
+  os períodos foram genuinamente cumpridos.
 - **Fase 2 — `ShiftReviewModal` (Visão Geral) continua a usar a rota
   legacy**, sem motivo obrigatório nem trilha estruturada — só a nova
   Conferência (Assiduidade) usa o write path novo. Unificar os dois é

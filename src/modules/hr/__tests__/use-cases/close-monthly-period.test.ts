@@ -11,6 +11,8 @@ import { FakeLeaveReadAdapter } from "../fakes/fake-leave-read.js";
 import { FakeLocationRepository } from "../fakes/fake-location-repository.js";
 import { FakeMonthlyClosureRepository } from "../fakes/fake-monthly-closure-repository.js";
 import { FakeHrAuditLog } from "../fakes/fake-hr-audit-log.js";
+import { FakeAttendanceRulesRepository } from "../fakes/fake-attendance-rules-repository.js";
+import { FakeAttendanceCorrectionRepository } from "../fakes/fake-attendance-correction-repository.js";
 import type { ShiftOccurrence } from "../../domain/ports/out/shift-attendance-read.port.js";
 
 const ORG = mintOrganizationId("org-test");
@@ -41,7 +43,9 @@ function makeUseCase() {
   const locations = new FakeLocationRepository();
   const monthlyClosureRepository = new FakeMonthlyClosureRepository();
   const auditLog = new FakeHrAuditLog();
-  const listAttendanceIssues = new ListAttendanceIssuesUseCase(employees, shifts, leave, locations);
+  const attendanceRules = new FakeAttendanceRulesRepository();
+  const attendanceCorrections = new FakeAttendanceCorrectionRepository();
+  const listAttendanceIssues = new ListAttendanceIssuesUseCase(employees, shifts, leave, locations, attendanceRules, attendanceCorrections);
   const getMonthlyClosureStatus = new GetMonthlyClosureStatusUseCase(listAttendanceIssues, monthlyClosureRepository, shifts, leave);
   const useCase = new CloseMonthlyPeriodUseCase(getMonthlyClosureStatus, monthlyClosureRepository, auditLog);
   return { employees, shifts, monthlyClosureRepository, auditLog, useCase };

@@ -94,4 +94,15 @@ export class SupabaseAttendanceCorrectionRepository implements AttendanceCorrect
     if (error) throw new Error(error.message);
     return ((data ?? []) as unknown as Row[]).map(rowToDto);
   }
+
+  async listInRange(organizationId: OrganizationId, from: string, to: string): Promise<AttendanceCorrectionDTO[]> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("hr_attendance_corrections")
+      .select(SELECT)
+      .gte("work_date", from)
+      .lte("work_date", to)
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as unknown as Row[]).map(rowToDto);
+  }
 }

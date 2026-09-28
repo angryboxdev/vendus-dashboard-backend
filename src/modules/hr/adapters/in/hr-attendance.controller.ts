@@ -16,8 +16,15 @@ import type {
   CloseMonthlyPeriodPort,
   ReopenMonthlyPeriodPort,
 } from "../../domain/ports/in/attendance-conference.ports.js";
+import type { GetAttendanceRulesPort, ListAttendanceRuleChangesPort, UpdateAttendanceRulesPort } from "../../domain/ports/in/attendance-rules.ports.js";
+import type { GetMonthlyAttendanceSummaryPort } from "../../domain/ports/in/attendance-summary.ports.js";
+import type { GetAttendanceEmployeeDetailPort } from "../../domain/ports/in/attendance-employee-detail.ports.js";
 
-const CORRECTION_TYPES = new Set<string>(["add_entry", "add_exit", "fix_entry", "fix_exit", "mark_absence", "confirm", "observation"]);
+const CORRECTION_TYPES = new Set<string>(["keep_as_is", "fix_times", "justify_no_impact", "mark_absence", "remove_marking"]);
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
 
 export class HrAttendanceController {
   readonly router: Router;
@@ -29,6 +36,11 @@ export class HrAttendanceController {
     private readonly getMonthlyClosureStatus: GetMonthlyClosureStatusPort,
     private readonly closeMonthlyPeriod: CloseMonthlyPeriodPort,
     private readonly reopenMonthlyPeriod: ReopenMonthlyPeriodPort,
+    private readonly getAttendanceRules: GetAttendanceRulesPort,
+    private readonly updateAttendanceRules: UpdateAttendanceRulesPort,
+    private readonly listAttendanceRuleChanges: ListAttendanceRuleChangesPort,
+    private readonly getMonthlyAttendanceSummary: GetMonthlyAttendanceSummaryPort,
+    private readonly getAttendanceEmployeeDetail: GetAttendanceEmployeeDetailPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -188,6 +200,111 @@ export class HrAttendanceController {
           res.status(404).json({ error: e.message });
           return;
         }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /** GET /api/hr/attendance/rules — Fase 2.1, "Configurar regras". */
+    this.router.get("/hr/attendance/rules", async (req, res) => {
+      try {
+        const result = await this.getAttendanceRules.execute({ organizationId: req.auth!.orgId });
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /** PUT /api/hr/attendance/rules — insere uma nova versão (nunca sobrescreve a anterior). */
+    this.router.put("/hr/attendance/rules", requireMinRole("manager"), async (req, res) => {
+      try {
+        const body = req.body as Record<string, unknown>;
+        const fields = [
+          "entryToleranceMinutes",
+          "earlyExitToleranceMinutes",
+          "absenceThresholdMinutes",
+          "preShiftWindowMinutes",
+          "postShiftWindowMinutes",
+        ] as const;
+        for (const field of fields) {
+          if (!isFiniteNumber(body[field]) || (body[field] as number) < 0) {
+            res.status(400).json({ error: `${field} deve ser um número >= 0` });
+            return;
+          }
+        }
+        if (body.controlStartDate !== undefined && body.controlStartDate !== null && typeof body.controlStartDate !== "string") {
+          res.status(400).json({ error: "controlStartDate deve ser uma data (YYYY-MM-DD) ou null" });
+          return;
+        }
+        const result = await this.updateAttendanceRules.execute({
+          organizationId: req.auth!.orgId,
+          actor: req.auth!.email,
+          entryToleranceMinutes: body.entryToleranceMinutes as number,
+          earlyExitToleranceMinutes: body.earlyExitToleranceMinutes as number,
+          absenceThresholdMinutes: body.absenceThresholdMinutes as number,
+          preShiftWindowMinutes: body.preShiftWindowMinutes as number,
+          postShiftWindowMinutes: body.postShiftWindowMinutes as number,
+          controlStartDate: (body.controlStartDate as string | null | undefined) ?? null,
+        });
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /** GET /api/hr/attendance/rules/history — Fase 2.1, auditoria por campo. */
+    this.router.get("/hr/attendance/rules/history", async (req, res) => {
+      try {
+        const result = await this.listAttendanceRuleChanges.execute({ organizationId: req.auth!.orgId });
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /** GET /api/hr/attendance/summary?year=&month=&locationId= — Fase 2.1, "Resumo mensal". */
+    this.router.get("/hr/attendance/summary", async (req, res) => {
+      try {
+        const q = req.query as Record<string, string | undefined>;
+        const year = Number(q.year);
+        const month = Number(q.month);
+        if (!year || !month) {
+          res.status(400).json({ error: "year e month são obrigatórios" });
+          return;
+        }
+        const result = await this.getMonthlyAttendanceSummary.execute({
+          organizationId: req.auth!.orgId,
+          year,
+          month,
+          ...(q.locationId && { locationId: q.locationId }),
+        });
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /** GET /api/hr/attendance/employee/:employeeId?year=&month= — ficha individual ("Assiduidade — Nome"). */
+    this.router.get("/hr/attendance/employee/:employeeId", async (req, res) => {
+      try {
+        const q = req.query as Record<string, string | undefined>;
+        const year = Number(q.year);
+        const month = Number(q.month);
+        if (!year || !month) {
+          res.status(400).json({ error: "year e month são obrigatórios" });
+          return;
+        }
+        const result = await this.getAttendanceEmployeeDetail.execute({
+          organizationId: req.auth!.orgId,
+          employeeId: req.params.employeeId!,
+          year,
+          month,
+        });
+        if (!result) {
+          res.status(404).json({ error: "Colaborador não encontrado" });
+          return;
+        }
+        res.json(result);
+      } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
       }
     });

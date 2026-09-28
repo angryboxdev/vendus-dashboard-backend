@@ -30,4 +30,8 @@ export class FakeAttendanceCorrectionRepository implements AttendanceCorrectionR
   async findByShiftId(_organizationId: OrganizationId, workShiftId: string): Promise<AttendanceCorrectionDTO[]> {
     return this.entries.filter((e) => e.workShiftId === workShiftId);
   }
+
+  async listInRange(_organizationId: OrganizationId, from: string, to: string): Promise<AttendanceCorrectionDTO[]> {
+    return this.entries.filter((e) => e.workDate >= from && e.workDate <= to);
+  }
 }

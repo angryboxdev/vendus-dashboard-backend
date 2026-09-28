@@ -88,6 +88,8 @@ export const TABLE_REGISTRY = {
   dre_custos_fixos: { organizationColumn: "org_id", locationBearing: false },
   dre_custos_variaveis: { organizationColumn: "org_id", locationBearing: false },
   hr_attendance_corrections: { organizationColumn: "org_id", locationBearing: false },
+  // Fase 2.1: regras globais à organização, nunca por local.
+  hr_attendance_rules: { organizationColumn: "org_id", locationBearing: false },
   hr_audit_logs: { organizationColumn: "org_id", locationBearing: false },
   // RH-03: location_id nullable — um dia de folga da escala base não tem loja.
   hr_base_schedule_templates: { organizationColumn: "org_id", locationBearing: true },

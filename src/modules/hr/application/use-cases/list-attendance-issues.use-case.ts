@@ -4,13 +4,11 @@ import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-rep
 import type { LocationRepositoryPort } from "../../../locations/domain/ports/out/location-repository.port.js";
 import type { ShiftAttendanceReadPort, ShiftOccurrence } from "../../domain/ports/out/shift-attendance-read.port.js";
 import type { LeaveReadPort, ActiveLeaveRange } from "../../domain/ports/out/leave-read.port.js";
-import {
-  computeAttendanceIssue,
-  computeUnscheduledAttendanceIssue,
-  describeAttendanceOccurrence,
-  type AttendanceIssue,
-} from "../../domain/services/attendance-conference.service.js";
+import type { AttendanceRulesRepositoryPort } from "../../domain/ports/out/attendance-rules-repository.port.js";
+import type { AttendanceCorrectionDTO, AttendanceCorrectionRepositoryPort } from "../../domain/ports/out/attendance-correction-repository.port.js";
+import { attributeActualToPeriods, computeUnscheduledAttendanceIssue, describeAttendanceOccurrence } from "../../domain/services/attendance-conference.service.js";
 import { hasOverlappingOpenAttendance } from "../../domain/services/overview-shift-state.service.js";
+import { classifyScheduledShift } from "../../domain/services/attendance-occurrence.service.js";
 import type {
   AttendanceIssueRowDTO,
   AttendanceIssuesKpisDTO,
@@ -28,11 +26,27 @@ function leaveCoversDate(leaves: ActiveLeaveRange[], employeeId: string, workDat
   return leaves.find((l) => l.employeeId === employeeId && l.startDate <= workDate && workDate <= l.endDate) ?? null;
 }
 
+/** Chave de correção — `hr_attendance_corrections` não tem `attendance_id`, só `work_shift_id`/`employee_id`+`work_date` (ver schema). */
+function correctionKey(shiftId: string | null, employeeId: string, workDate: string): string {
+  return shiftId ? `shift:${shiftId}` : `emp:${employeeId}:${workDate}`;
+}
+
+function latestCorrectionByKey(corrections: AttendanceCorrectionDTO[]): Map<string, AttendanceCorrectionDTO> {
+  const map = new Map<string, AttendanceCorrectionDTO>();
+  // `corrections` já vem ordenado created_at desc (ver listInRange) — a 1ª ocorrência de cada chave é a mais recente.
+  for (const c of corrections) {
+    const key = correctionKey(c.workShiftId, c.employeeId, c.workDate);
+    if (!map.has(key)) map.set(key, c);
+  }
+  return map;
+}
+
 /**
- * "Conferência" (Fase 2) — só mostra situações que exigem intervenção
- * (secção 4); turnos "Regular" nunca aparecem aqui (filtrados por
- * `computeAttendanceIssue` devolver `null`). KPIs calculados a partir da
- * MESMA lista, sem 2ª agregação.
+ * "Conferência" (Fase 2 + Fase 2.1) — mostra situações que exigem
+ * intervenção segundo DOIS sinais em paralelo (ver
+ * `classifyScheduledShift`): o manual existente (pode não sinalizar
+ * nada) e o automático novo por tolerância (nunca omisso). KPIs
+ * calculados a partir da MESMA lista, sem 2ª agregação.
  */
 export class ListAttendanceIssuesUseCase implements ListAttendanceIssuesPort {
   constructor(
@@ -40,13 +54,15 @@ export class ListAttendanceIssuesUseCase implements ListAttendanceIssuesPort {
     private readonly shiftAttendanceRead: ShiftAttendanceReadPort,
     private readonly leaveRead: LeaveReadPort,
     private readonly locationRepository: LocationRepositoryPort,
+    private readonly attendanceRulesRepository: AttendanceRulesRepositoryPort,
+    private readonly attendanceCorrectionRepository: AttendanceCorrectionRepositoryPort,
   ) {}
 
   async execute(command: ListAttendanceIssuesCommand): Promise<ListAttendanceIssuesResultDTO> {
     const now = DateTime.now().setZone(REPORT_TIMEZONE);
     const { from, to } = monthRange(command.year, command.month);
 
-    const [shifts, unscheduled, employees, leaves, locations] = await Promise.all([
+    const [shifts, unscheduled, employees, leaves, locations, ruleVersions, corrections] = await Promise.all([
       this.shiftAttendanceRead.findShiftsInRange(command.organizationId, {
         from,
         to,
@@ -60,10 +76,19 @@ export class ListAttendanceIssuesUseCase implements ListAttendanceIssuesPort {
       this.employeeRepository.findMany(command.organizationId, { status: "all" }),
       this.leaveRead.findActiveInRange(command.organizationId, from, to),
       this.locationRepository.findAllForOrganization(command.organizationId),
+      // Fase 2.1 — dependências novas, tabelas ainda não migradas em todos os
+      // ambientes: uma falha aqui nunca deve derrubar a Conferência (Fase 2,
+      // já em produção). Sem regras → `resolveEffectiveRules` usa o default;
+      // sem correções → todas as linhas ficam "pending", sem exclusão por
+      // `justify_no_impact` — nunca `0`/dado inventado, só a classificação
+      // por tolerância fica indisponível até a migração ser aplicada.
+      this.attendanceRulesRepository.listVersions(command.organizationId).catch(() => []),
+      this.attendanceCorrectionRepository.listInRange(command.organizationId, from, to).catch(() => []),
     ]);
 
     const employeeNameById = new Map(employees.map((e) => [e.id, e.fullName]));
     const locationNameById = new Map(locations.map((l) => [l.id, l.name]));
+    const latestCorrectionByRowKey = latestCorrectionByKey(corrections);
 
     const overlapGroups = new Map<string, ShiftOccurrence[]>();
     for (const s of shifts) {
@@ -73,71 +98,92 @@ export class ListAttendanceIssuesUseCase implements ListAttendanceIssuesPort {
       overlapGroups.set(key, list);
     }
 
-    const issues: AttendanceIssue[] = [];
+    const items: AttendanceIssueRowDTO[] = [];
+
     for (const shift of shifts) {
       const key = `${shift.employeeId}:${shift.workDate}`;
       const group = overlapGroups.get(key)!;
       const hasOverlap = group.length > 1 && hasOverlappingOpenAttendance(group, now);
       const activeLeave = leaveCoversDate(leaves, shift.employeeId, shift.workDate);
-      const issue = computeAttendanceIssue(shift, now, { hasOverlap, activeLeave });
-      if (issue) issues.push(issue);
-    }
-    for (const row of unscheduled) {
-      issues.push(computeUnscheduledAttendanceIssue(row));
+      const classification = classifyScheduledShift(shift, now, { hasOverlap, activeLeave, ruleVersions });
+      if (!classification) continue; // Regular — nem sinal manual nem tolerância acusam nada.
+
+      const periods = attributeActualToPeriods(shift);
+      const rowKey = correctionKey(shift.shiftId, shift.employeeId, shift.workDate);
+      items.push({
+        shiftId: shift.shiftId,
+        attendanceId: shift.attendanceId ?? null,
+        employeeId: shift.employeeId,
+        employeeName: employeeNameById.get(shift.employeeId) ?? shift.employeeId,
+        workDate: shift.workDate,
+        locationId: shift.locationId,
+        locationName: shift.locationId ? (locationNameById.get(shift.locationId) ?? null) : null,
+        endsNextDay: shift.endsNextDay,
+        periods,
+        state: classification.state,
+        occurrenceLabel: classification.occurrenceLabel,
+        plannedMinutes: classification.issue?.plannedMinutes ?? 0,
+        actualMinutes: classification.issue?.actualMinutes ?? 0,
+        occurrenceKind: classification.occurrenceKind,
+        diffMinutes: classification.diffMinutes,
+        reviewStatus: latestCorrectionByRowKey.has(rowKey) ? "conferred" : "pending",
+      });
     }
 
-    const items: AttendanceIssueRowDTO[] = issues
-      .sort((a, b) => (a.workDate === b.workDate ? 0 : a.workDate < b.workDate ? -1 : 1))
-      .map((issue) => ({
-        shiftId: issue.shiftId,
+    for (const row of unscheduled) {
+      const issue = computeUnscheduledAttendanceIssue(row);
+      const rowKey = correctionKey(null, issue.employeeId, issue.workDate);
+      items.push({
+        shiftId: null,
         attendanceId: issue.attendanceId,
         employeeId: issue.employeeId,
         employeeName: employeeNameById.get(issue.employeeId) ?? issue.employeeId,
         workDate: issue.workDate,
         locationId: issue.locationId,
         locationName: issue.locationId ? (locationNameById.get(issue.locationId) ?? null) : null,
-        endsNextDay: issue.endsNextDay,
+        endsNextDay: false,
         periods: issue.periods,
         state: issue.state,
         occurrenceLabel: describeAttendanceOccurrence(issue),
         plannedMinutes: issue.plannedMinutes,
         actualMinutes: issue.actualMinutes,
-      }));
+        occurrenceKind: "unscheduled_presence",
+        diffMinutes: null,
+        reviewStatus: latestCorrectionByRowKey.has(rowKey) ? "conferred" : "pending",
+      });
+    }
 
-    // Horas realizadas/planeadas somam TODOS os turnos do mês (não só os
-    // com pendência) — o Resumo mensal/Horas & saldos completos ficam para
-    // a Fase B, mas os 2 números do topo da Conferência já podem ser
-    // corretos agora, reaproveitando os mesmos períodos por turno.
-    let plannedTotal = 0;
-    let actualTotal = 0;
-    for (const shift of shifts) {
-      if (shift.attendanceStatus === "cancelled") continue;
-      const periods = [
-        { start: shift.startTime, end: shift.endTime },
-        ...(shift.secondStartTime && shift.secondEndTime ? [{ start: shift.secondStartTime, end: shift.secondEndTime }] : []),
-      ];
-      for (const p of periods) plannedTotal += minutesBetween(p.start, p.end, shift.endsNextDay);
-      if (shift.actualStartTime && shift.actualEndTime) {
-        actualTotal += minutesBetween(shift.actualStartTime, shift.actualEndTime, shift.endsNextDay);
+    items.sort((a, b) => (a.workDate === b.workDate ? 0 : a.workDate < b.workDate ? -1 : 1));
+
+    // Conferência é uma fila de pendências (task, secção 3) — todos os KPIs contam só reviewStatus "pending".
+    const pendingItems = items.filter((i) => i.reviewStatus === "pending");
+    const lateDayKeys = new Set<string>();
+    let lateMinutesTotal = 0;
+    let lateOccurrencesCount = 0;
+    let possibleAbsencesCount = 0;
+    let noExitCount = 0;
+    let conflictsCount = 0;
+    for (const item of pendingItems) {
+      if (item.occurrenceKind === "late_entry") {
+        lateDayKeys.add(`${item.employeeId}:${item.workDate}`);
+        lateOccurrencesCount += 1;
+        if (item.diffMinutes != null && item.diffMinutes > 0) lateMinutesTotal += item.diffMinutes;
       }
+      if (item.occurrenceKind === "absence") possibleAbsencesCount += 1;
+      if (item.occurrenceKind === "no_exit") noExitCount += 1;
+      if (item.occurrenceKind === "conflict") conflictsCount += 1;
     }
 
     const kpis: AttendanceIssuesKpisDTO = {
-      pendingCount: items.length,
-      lateCount: issues.filter((i) => i.occurrences.includes("ATRASO")).length,
-      plannedMinutesTotal: plannedTotal,
-      actualMinutesTotal: actualTotal,
-      balanceMinutes: actualTotal - plannedTotal,
+      pendingCount: pendingItems.length,
+      lateDaysCount: lateDayKeys.size,
+      lateMinutesTotal,
+      lateOccurrencesCount,
+      possibleAbsencesCount,
+      noExitCount,
+      conflictsCount,
     };
 
     return { items, kpis };
   }
-}
-
-function minutesBetween(startHm: string, endHm: string, endsNextDay: boolean): number {
-  const [sh, sm] = startHm.split(":").map(Number) as [number, number];
-  const [eh, em] = endHm.split(":").map(Number) as [number, number];
-  let mins = eh * 60 + em - (sh * 60 + sm);
-  if (endsNextDay || mins < 0) mins += 24 * 60;
-  return mins;
 }
