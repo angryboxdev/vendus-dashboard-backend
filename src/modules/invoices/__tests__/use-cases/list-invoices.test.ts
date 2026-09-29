@@ -183,6 +183,36 @@ describe("ListInvoicesUseCase", () => {
     expect(result.every((dto) => !dto.isDuplicate)).toBe(true);
   });
 
+  // ── status "overdue" (derivado, nunca persistido) ───────────────────────────
+
+  it("filtra por status='overdue' mesmo sem nenhuma fatura com esse status literal persistido", async () => {
+    const past = new Date();
+    past.setDate(past.getDate() - 5);
+    const future = new Date();
+    future.setDate(future.getDate() + 5);
+
+    await repo.save(ORG_ID, makeInvoice({ invoiceNumber: "OVERDUE-001", dueDate: past }));
+    await repo.save(ORG_ID, makeInvoice({ invoiceNumber: "NOT-DUE-001", dueDate: future }));
+    await repo.save(ORG_ID, makeInvoice({ invoiceNumber: "NO-DUE-DATE-001" }));
+
+    const result = await useCase.execute(ORG_ID, { status: "overdue" });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.invoiceNumber).toBe("OVERDUE-001");
+  });
+
+  it("status='overdue' exclui faturas pagas/canceladas mesmo com vencimento passado", async () => {
+    const past = new Date();
+    past.setDate(past.getDate() - 5);
+
+    const paid = makeInvoice({ invoiceNumber: "PAID-001", dueDate: past }).markPaid(new Date());
+    const cancelled = makeInvoice({ invoiceNumber: "CANC-001", dueDate: past }).cancel();
+    await repo.save(ORG_ID, paid);
+    await repo.save(ORG_ID, cancelled);
+
+    const result = await useCase.execute(ORG_ID, { status: "overdue" });
+    expect(result).toHaveLength(0);
+  });
+
   it("filtra por documentType (usado pelos pickers de vínculo para excluir notas de crédito)", async () => {
     await repo.save(ORG_ID, makeInvoice({ invoiceNumber: "INV-001" }));
     await repo.save(ORG_ID, makeInvoice({ invoiceNumber: "NC-001", documentType: "credit_note" }));

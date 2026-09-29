@@ -2,9 +2,11 @@ import { DateTime } from "luxon";
 import { REPORT_TIMEZONE } from "../../../../utils/lisbonDayInstants.js";
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
 import type { ShiftAttendanceReadPort } from "../../domain/ports/out/shift-attendance-read.port.js";
+import type { LocationRepositoryPort } from "../../../locations/domain/ports/out/location-repository.port.js";
 import {
   assignReviewPriority,
   computeShiftExceptions,
+  describeExceptionLabel,
   shiftNeedsReview,
 } from "../../domain/services/overview-shift-state.service.js";
 import type {
@@ -24,18 +26,11 @@ import type {
  */
 const REVIEW_LOOKBACK_DAYS = 30;
 
-function exceptionLabel(exceptions: ReturnType<typeof computeShiftExceptions>, lateMinutes: number | null): string {
-  if (exceptions.includes("SEM_SAIDA")) return "Sem saída";
-  if (exceptions.includes("SEM_ENTRADA")) return "Sem entrada";
-  if (exceptions.includes("CHEGADA_ATRASADA")) return `Atraso${lateMinutes != null ? ` +${lateMinutes} min` : ""}`;
-  if (exceptions.includes("SAIDA_ANTECIPADA")) return "Saída antecipada";
-  return "Por conferir";
-}
-
 export class ListShiftsToReviewUseCase implements ListShiftsToReviewPort {
   constructor(
     private readonly employeeRepository: EmployeeRepositoryPort,
     private readonly shiftAttendanceRead: ShiftAttendanceReadPort,
+    private readonly locationRepository: LocationRepositoryPort,
   ) {}
 
   async execute(command: ListShiftsToReviewCommand): Promise<ListShiftsToReviewResultDTO> {
@@ -43,15 +38,17 @@ export class ListShiftsToReviewUseCase implements ListShiftsToReviewPort {
     const today = now.toISODate()!;
     const from = now.minus({ days: REVIEW_LOOKBACK_DAYS }).toISODate()!;
 
-    const [employees, shifts] = await Promise.all([
+    const [employees, shifts, locations] = await Promise.all([
       this.employeeRepository.findMany(command.organizationId, { status: "all" }),
       this.shiftAttendanceRead.findShiftsInRange(command.organizationId, {
         from,
         to: today,
         ...(command.locationId && { locationId: command.locationId }),
       }),
+      this.locationRepository.findAllForOrganization(command.organizationId),
     ]);
     const employeeNameById = new Map(employees.map((e) => [e.id, e.fullName]));
+    const locationNameById = new Map(locations.map((l) => [l.id, l.name]));
 
     let items: Array<ShiftToReviewDTO & { occurredAtSort: string }> = shifts
       .filter((s) => shiftNeedsReview(s, now))
@@ -66,9 +63,10 @@ export class ListShiftsToReviewUseCase implements ListShiftsToReviewPort {
           plannedEndTime: s.endTime,
           actualStartTime: s.actualStartTime,
           actualEndTime: s.actualEndTime,
-          exceptionLabel: exceptionLabel(exceptions, s.lateMinutes),
+          exceptionLabel: describeExceptionLabel(exceptions, s.lateMinutes),
           priority: assignReviewPriority(s, exceptions, now),
           locationId: s.locationId,
+          locationName: locationNameById.get(s.locationId) ?? null,
           occurredAtSort: `${s.workDate}T${s.startTime}`,
         };
       });

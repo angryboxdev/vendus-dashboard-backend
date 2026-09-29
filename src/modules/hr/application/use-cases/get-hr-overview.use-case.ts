@@ -5,18 +5,26 @@ import type { EmployeeDocument } from "../../domain/entities/employee-document.j
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
 import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
 import type { ShiftAttendanceReadPort, ShiftOccurrence } from "../../domain/ports/out/shift-attendance-read.port.js";
-import type { ActiveLeave, LeaveReadPort, LeaveType } from "../../domain/ports/out/leave-read.port.js";
+import type { ActiveLeaveRange, LeaveReadPort, LeaveType } from "../../domain/ports/out/leave-read.port.js";
 import type { PaymentReadPort } from "../../domain/ports/out/payment-read.port.js";
+import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
+import type { DocumentCategoryDefinition } from "../../domain/entities/document-category.js";
+import type { LocationRepositoryPort } from "../../../locations/domain/ports/out/location-repository.port.js";
 import {
+  applicableCategoriesFor,
+  buildDynamicRequirements,
   computeMandatoryDocumentsSummary,
-  DEFAULT_MANDATORY_CATEGORIES,
+  DEFAULT_MANDATORY_REQUIREMENTS,
+  DOCUMENT_CATEGORY_BASE_LABELS,
 } from "../../domain/services/document-status.service.js";
 import { computeProfileCompletionPercent } from "../../domain/services/profile-completeness.service.js";
 import {
+  computeOperationDisplayState,
   computeShiftExceptions,
   computeShiftState,
+  describeShiftSchedule,
+  describeSituation,
   shiftNeedsReview,
-  type ShiftState,
 } from "../../domain/services/overview-shift-state.service.js";
 import { computeConflictEmployeeIds, computeTodayOperationKpis } from "../../domain/services/overview-kpi.service.js";
 import { prioritizeAndDedupAlerts, type OverviewAlert } from "../../domain/services/overview-alert.service.js";
@@ -33,16 +41,20 @@ import type {
 } from "../../domain/ports/in/overview.ports.js";
 
 const MAX_ALERTS = 5;
-const MAX_OPERATION_ROWS = 5;
 const ADMISSION_ALERT_LOOKAHEAD_DAYS = 30;
 
-const LEAVE_LABELS: Record<LeaveType, string> = {
-  vacation: "Férias",
-  sick_leave: "Baixa",
-  justified: "Falta justificada",
-  unjustified: "Falta injustificada",
-  compensatory: "Folga",
+const LEAVE_STATE: Record<LeaveType, string> = {
+  vacation: "FERIAS",
+  sick_leave: "BAIXA",
+  compensatory: "FOLGA",
+  justified: "AUSENTE",
+  unjustified: "AUSENTE",
 };
+
+function formatEndDate(iso: string): string {
+  const d = DateTime.fromISO(iso, { zone: REPORT_TIMEZONE });
+  return d.isValid ? d.toFormat("dd/MM") : iso;
+}
 
 type Settled<T> = { ok: true; data: T } | { ok: false; reason: string };
 
@@ -58,8 +70,6 @@ function unavailable<T>(reason: string): BlockResult<T> {
   return { status: "unavailable", reason };
 }
 
-type OperationState = ShiftState | "CONFLITO" | "FERIAS" | "BAIXA" | "FOLGA";
-
 export class GetHrOverviewUseCase implements GetHrOverviewPort {
   constructor(
     private readonly employeeRepository: EmployeeRepositoryPort,
@@ -67,6 +77,8 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
     private readonly shiftAttendanceRead: ShiftAttendanceReadPort,
     private readonly leaveRead: LeaveReadPort,
     private readonly paymentRead: PaymentReadPort,
+    private readonly documentCategoryRepository: DocumentCategoryRepositoryPort,
+    private readonly locationRepository: LocationRepositoryPort,
   ) {}
 
   async execute(command: GetHrOverviewCommand): Promise<HrOverviewDTO> {
@@ -80,8 +92,15 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
     const employeeNameById = new Map<string, string>(
       employeesResult.ok ? employeesResult.data.map((e) => [e.id, e.fullName]) : [],
     );
+    // Falha isolada, como as restantes fontes: sem categorias configuráveis,
+    // o bloco "team"/os alertas de documento degradam para só o requisito
+    // fixo de identificação, em vez de derrubar a resposta inteira.
+    const categoryDefsResult = await settle(
+      this.documentCategoryRepository.findMany(command.organizationId, { activeOnly: true }),
+    );
+    const categoryDefs = categoryDefsResult.ok ? categoryDefsResult.data : [];
 
-    const [documentsResult, shiftsResult, leaveResult, unpaidResult] = await Promise.all([
+    const [documentsResult, shiftsResult, leaveResult, unpaidResult, locationsResult] = await Promise.all([
       employeesResult.ok
         ? settle(
             this.employeeDocumentRepository.findCurrentByEmployeeIds(
@@ -97,24 +116,29 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
           ...(command.locationId && { locationId: command.locationId }),
         }),
       ),
-      settle(this.leaveRead.findActiveOnDate(command.organizationId, today)),
+      settle(this.leaveRead.findActiveInRange(command.organizationId, today, today)),
       settle(this.paymentRead.countUnpaid(command.organizationId)),
+      settle(this.locationRepository.findAllForOrganization(command.organizationId)),
     ]);
+    const locationNameById = new Map<string, string>(
+      locationsResult.ok ? locationsResult.data.map((l) => [l.id, l.name]) : [],
+    );
 
     return {
       generatedAt: now.toISO()!,
       scope: { organizationId: String(command.organizationId), locationId: command.locationId ?? null },
-      team: this.buildTeamBlock(employeesResult, documentsResult, now),
+      team: this.buildTeamBlock(employeesResult, documentsResult, categoryDefs, now),
       today: this.buildTodayBlock(shiftsResult, leaveResult, now),
       pending: this.buildPendingBlock(shiftsResult, unpaidResult, now),
-      alerts: this.buildAlertsBlock(employeesResult, documentsResult, shiftsResult, employeeNameById, now),
-      operation: this.buildOperationBlock(shiftsResult, leaveResult, employeeNameById, now),
+      alerts: this.buildAlertsBlock(employeesResult, documentsResult, shiftsResult, employeeNameById, categoryDefs, now),
+      operation: this.buildOperationBlock(shiftsResult, leaveResult, employeeNameById, locationNameById, now),
     };
   }
 
   private buildTeamBlock(
     employeesResult: Settled<Employee[]>,
     documentsResult: Settled<EmployeeDocument[]>,
+    categoryDefs: readonly DocumentCategoryDefinition[],
     now: DateTime,
   ): BlockResult<OverviewTeamDTO> {
     if (!employeesResult.ok) return unavailable(employeesResult.reason);
@@ -128,6 +152,7 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
     const incompleteProfiles = activeEmployees.filter((e) => computeProfileCompletionPercent(e) < 100).length;
 
     let documentsExpiringSoon = 0;
+    let missingDocumentsCount = 0;
     if (documentsResult.ok) {
       const documentsByEmployee = new Map<string, EmployeeDocument[]>();
       for (const doc of documentsResult.data) {
@@ -136,11 +161,11 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
         documentsByEmployee.set(doc.employeeId, list);
       }
       for (const e of activeEmployees) {
-        const summary = computeMandatoryDocumentsSummary(
-          DEFAULT_MANDATORY_CATEGORIES,
-          documentsByEmployee.get(e.id) ?? [],
-        );
+        const applicable = applicableCategoriesFor(categoryDefs, e.jobRole);
+        const requirements = [...DEFAULT_MANDATORY_REQUIREMENTS, ...buildDynamicRequirements(applicable)];
+        const summary = computeMandatoryDocumentsSummary(requirements, documentsByEmployee.get(e.id) ?? []);
         documentsExpiringSoon += summary.expiringSoonCount;
+        missingDocumentsCount += summary.missingRequirements.length;
       }
     }
 
@@ -151,13 +176,14 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
         admissionsThisMonth,
         incompleteProfiles,
         documentsExpiringSoon,
+        missingDocumentsCount,
       },
     };
   }
 
   private buildTodayBlock(
     shiftsResult: Settled<ShiftOccurrence[]>,
-    leaveResult: Settled<ActiveLeave[]>,
+    leaveResult: Settled<ActiveLeaveRange[]>,
     now: DateTime,
   ): BlockResult<OverviewTodayDTO> {
     if (!shiftsResult.ok) return unavailable(shiftsResult.reason);
@@ -184,8 +210,13 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
     documentsResult: Settled<EmployeeDocument[]>,
     shiftsResult: Settled<ShiftOccurrence[]>,
     employeeNameById: Map<string, string>,
+    categoryDefs: readonly DocumentCategoryDefinition[],
     now: DateTime,
   ): BlockResult<OverviewAlertDTO[]> {
+    const labelBySlug = new Map<string, string>([
+      ...Object.entries(DOCUMENT_CATEGORY_BASE_LABELS),
+      ...categoryDefs.map((c): [string, string] => [c.slug, c.label]),
+    ]);
     if (!shiftsResult.ok && !(employeesResult.ok && documentsResult.ok)) {
       return unavailable("fontes de alertas indisponíveis");
     }
@@ -263,7 +294,7 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
               occurredAt: doc.expiresAt,
               employeeId: e.id,
               employeeName: e.fullName,
-              message: `Documento expirado (${doc.category})`,
+              message: `Documento expirado (${labelBySlug.get(doc.category) ?? doc.category})`,
             });
           }
         }
@@ -284,16 +315,28 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
     return { status: "ok", data: prioritizeAndDedupAlerts(candidates).slice(0, MAX_ALERTS) };
   }
 
+  /**
+   * "Hoje na operação" — task "Melhorar Hoje na operação": Estado (curto)
+   * separado de Situação (contextual), horário do turno (repartido/
+   * noturno incluídos), Local resolvido para nome, e o `shiftId` de um
+   * turno "por conferir" para permitir abrir a conferência diretamente a
+   * partir daqui. Sem limite de linhas (a antiga `MAX_OPERATION_ROWS`
+   * mostrava só os 5 primeiros por urgência, escondendo o resto da
+   * equipa) — o frontend mostra tudo num contentor com scroll próprio, sem
+   * alterar o resto do layout da Visão Geral (ver README, "Design
+   * decisions").
+   */
   private buildOperationBlock(
     shiftsResult: Settled<ShiftOccurrence[]>,
-    leaveResult: Settled<ActiveLeave[]>,
+    leaveResult: Settled<ActiveLeaveRange[]>,
     employeeNameById: Map<string, string>,
+    locationNameById: Map<string, string>,
     now: DateTime,
   ): BlockResult<OverviewOperationRowDTO[]> {
     if (!shiftsResult.ok) return unavailable(shiftsResult.reason);
     if (!leaveResult.ok) return unavailable(leaveResult.reason);
 
-    const leaveByEmployee = new Map(leaveResult.data.map((l) => [l.employeeId, l.type]));
+    const leaveByEmployee = new Map(leaveResult.data.map((l) => [l.employeeId, l]));
     const conflictIds = new Set(computeConflictEmployeeIds(shiftsResult.data, now));
 
     const byEmployee = new Map<string, ShiftOccurrence[]>();
@@ -303,41 +346,78 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
       byEmployee.set(s.employeeId, list);
     }
 
-    const rows: Array<OverviewOperationRowDTO & { urgencyRank: number }> = [];
+    const rows: Array<OverviewOperationRowDTO & { urgencyRank: number; sortKey: string }> = [];
     const seenEmployeeIds = new Set<string>();
 
     for (const [employeeId, shifts] of byEmployee) {
       seenEmployeeIds.add(employeeId);
       const representative = this.pickRepresentativeShift(shifts, now);
-      const state: OperationState = conflictIds.has(employeeId) ? "CONFLITO" : computeShiftState(representative, now);
+      // "Um funcionário = uma linha" mesmo com 2+ turnos no mesmo dia (raro — o caso comum de turno repartido já é 1 só registo com 2 períodos): junta os períodos de TODOS os turnos do dia, não só o do representativo escolhido para o Estado.
+      const shiftToday = [...shifts]
+        .sort((a, b) => a.startTime.localeCompare(b.startTime))
+        .flatMap((s) => describeShiftSchedule(s));
+      const employeeName = employeeNameById.get(employeeId) ?? employeeId;
+      const locationName = locationNameById.get(representative.locationId) ?? null;
+
+      if (conflictIds.has(employeeId)) {
+        const openCount = shifts.filter((s) => computeShiftState(s, now) === "PRESENTE").length;
+        rows.push({
+          employeeId,
+          employeeName,
+          state: "CONFLITO",
+          situation: `${openCount} marcações abertas`,
+          situationWarning: null,
+          shiftToday,
+          locationId: representative.locationId,
+          locationName,
+          reviewShiftId: null,
+          urgencyRank: 0,
+          sortKey: representative.startTime,
+        });
+        continue;
+      }
+
+      const displayState = computeOperationDisplayState(representative, now);
+      const needsReview = shiftNeedsReview(representative, now);
+      const { situation, situationWarning } = describeSituation(representative, displayState, now);
+      const hasOccurrence = representative.attendanceStatus === "late" || situationWarning != null;
       rows.push({
         employeeId,
-        employeeName: employeeNameById.get(employeeId) ?? employeeId,
-        state,
-        lastEvent: this.formatLastEvent(representative, state),
+        employeeName,
+        state: displayState,
+        situation,
+        situationWarning,
+        shiftToday,
         locationId: representative.locationId,
-        urgencyRank: this.urgencyRank(state),
+        locationName,
+        reviewShiftId: needsReview ? representative.shiftId : null,
+        urgencyRank: this.urgencyRank(displayState, needsReview, hasOccurrence),
+        sortKey: representative.startTime,
       });
     }
 
-    for (const [employeeId, type] of leaveByEmployee) {
+    for (const [employeeId, leave] of leaveByEmployee) {
       if (seenEmployeeIds.has(employeeId)) continue;
-      const state: OperationState =
-        type === "vacation" ? "FERIAS" : type === "sick_leave" ? "BAIXA" : type === "compensatory" ? "FOLGA" : "AUSENTE_OPERACIONAL";
+      const state = LEAVE_STATE[leave.type];
       rows.push({
         employeeId,
         employeeName: employeeNameById.get(employeeId) ?? employeeId,
         state,
-        lastEvent: LEAVE_LABELS[type],
+        situation: `Até ${formatEndDate(leave.endDate)}`,
+        situationWarning: null,
+        shiftToday: null,
         locationId: null,
-        urgencyRank: this.urgencyRank(state),
+        locationName: null,
+        reviewShiftId: null,
+        urgencyRank: this.urgencyRank(state, false, false),
+        sortKey: "99:99",
       });
     }
 
-    rows.sort((a, b) => a.urgencyRank - b.urgencyRank);
+    rows.sort((a, b) => (a.urgencyRank !== b.urgencyRank ? a.urgencyRank - b.urgencyRank : a.sortKey.localeCompare(b.sortKey)));
     return {
       status: "ok",
-      data: rows.slice(0, MAX_OPERATION_ROWS).map(({ urgencyRank: _urgencyRank, ...row }) => row),
+      data: rows.map(({ urgencyRank: _urgencyRank, sortKey: _sortKey, ...row }) => row),
     };
   }
 
@@ -348,34 +428,30 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
     return notFinalized ?? shifts[0]!;
   }
 
-  private formatLastEvent(shift: ShiftOccurrence, state: OperationState): string {
-    if (shift.actualStartTime && shift.actualEndTime) return `Saída ${shift.actualEndTime}`;
-    if (shift.actualStartTime) return `Entrada ${shift.actualStartTime}`;
-    if (state === "AGENDADO" || state === "EM_TOLERANCIA") return `Turno previsto ${shift.startTime}`;
-    return "Sem marcação registada";
-  }
-
-  private urgencyRank(state: OperationState): number {
-    switch (state) {
-      case "CONFLITO":
-        return 0;
-      case "AUSENTE_OPERACIONAL":
-        return 1;
-      case "ATRASADO_AGUARDANDO_ENTRADA":
-        return 2;
-      case "EM_TOLERANCIA":
-        return 3;
-      case "PRESENTE":
-        return 4;
-      case "AGENDADO":
-        return 5;
-      case "FERIAS":
-      case "BAIXA":
-      case "FOLGA":
-        return 6;
-      case "FINALIZADO":
-      default:
-        return 7;
-    }
+  /**
+   * Prioridade operacional ("Melhorar Hoje na operação — refinado", secção
+   * 13): Conflito > Ausente > Atrasado > outras inconsistências
+   * (`needsReview`, ex: turno "Sem saída" há muito tempo) > presente com
+   * ocorrência (atraso registado OU inconsistência sinalizada, ex: "1º
+   * turno sem entrada") > presente normal > em tolerância > agendado >
+   * intervalo > férias/folga/baixa > finalizado (mais baixa — já resolvido,
+   * sem nada a decidir, a task não o enumera). Nota: o exemplo da secção 14
+   * do documento mostra "Em tolerância" antes de "Presente com ocorrência"
+   * — contradiz a própria lista numerada da secção 13 (que dá prioridade
+   * mais alta a "presente com ocorrência"); seguiu-se a lista numerada, por
+   * ser a regra explícita, não o exemplo ilustrativo.
+   */
+  private urgencyRank(state: string, needsReview: boolean, hasOccurrence: boolean): number {
+    if (state === "CONFLITO") return 0;
+    if (state === "AUSENTE") return 1;
+    if (state === "ATRASADO") return 2;
+    if (needsReview) return 3;
+    if (state === "PRESENTE" && hasOccurrence) return 4;
+    if (state === "PRESENTE") return 5;
+    if (state === "EM_TOLERANCIA") return 6;
+    if (state === "AGENDADO") return 7;
+    if (state === "INTERVALO") return 8;
+    if (state === "FERIAS" || state === "BAIXA" || state === "FOLGA") return 9;
+    return 10; // FINALIZADO
   }
 }

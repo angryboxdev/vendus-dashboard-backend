@@ -1,7 +1,9 @@
 import type { Employee } from "../../domain/entities/employee.js";
 import type { EmployeeDocument } from "../../domain/entities/employee-document.js";
+import type { DocumentCategoryDefinition } from "../../domain/entities/document-category.js";
 import type { EmployeeDTO } from "../../domain/ports/in/employee.ports.js";
 import type { EmployeeDocumentDTO } from "../../domain/ports/in/employee-document.ports.js";
+import type { DocumentCategoryDTO } from "../../domain/ports/in/document-category.ports.js";
 import { computeDocumentDisplayStatus } from "../../domain/services/document-status.service.js";
 import {
   maskSensitiveValue,
@@ -61,5 +63,19 @@ export function toEmployeeDocumentDTO(doc: EmployeeDocument): EmployeeDocumentDT
     displayStatus: computeDocumentDisplayStatus(doc),
     uploadedBy: doc.uploadedBy,
     uploadedAt: doc.uploadedAt,
+  };
+}
+
+export function toDocumentCategoryDTO(def: DocumentCategoryDefinition): DocumentCategoryDTO {
+  return {
+    id: def.id,
+    slug: def.slug,
+    label: def.label,
+    mandatory: def.mandatory,
+    jobRoles: def.jobRoles,
+    acceptedMimeTypes: def.acceptedMimeTypes,
+    active: def.active,
+    createdAt: def.createdAt,
+    updatedAt: def.updatedAt,
   };
 }

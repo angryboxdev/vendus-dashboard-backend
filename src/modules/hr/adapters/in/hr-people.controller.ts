@@ -28,6 +28,7 @@ import type {
   RemoveEmployeeDocumentPort,
   GetEmployeeDocumentDownloadUrlPort,
   GetEmployeeDocumentHistoryPort,
+  GetDocumentOverviewPort,
 } from "../../domain/ports/in/employee-document.ports.js";
 
 const photoUpload = multer({
@@ -102,6 +103,7 @@ export class HrPeopleController {
     private readonly removeEmployeeDocument: RemoveEmployeeDocumentPort,
     private readonly getEmployeeDocumentDownloadUrl: GetEmployeeDocumentDownloadUrlPort,
     private readonly getEmployeeDocumentHistory: GetEmployeeDocumentHistoryPort,
+    private readonly getDocumentOverview: GetDocumentOverviewPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -139,6 +141,16 @@ export class HrPeopleController {
     this.router.get("/hr/people/kpis", async (req, res) => {
       try {
         const result = await this.getPeopleKpis.execute(req.auth!.orgId);
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /** GET /api/hr/document-overview — 1 linha por (colaborador ativo × requisito documental), fonte única da aba "Pessoas > Documentos". Caminho próprio (fora de `/hr/people/`) para nunca colidir com `/hr/people/:id`. */
+    this.router.get("/hr/document-overview", async (req, res) => {
+      try {
+        const result = await this.getDocumentOverview.execute({ organizationId: req.auth!.orgId });
         res.json(result);
       } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });

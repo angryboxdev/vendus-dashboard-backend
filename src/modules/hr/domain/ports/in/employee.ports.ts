@@ -1,6 +1,7 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { EmploymentType, EmployeeStatus, JobRole, SalaryType } from "../../entities/employee.js";
 import type { ViewerRole } from "../../services/sensitive-field-masking.service.js";
+import type { HrAuditEntityType } from "../out/hr-audit-log.port.js";
 
 export interface EmployeeDTO {
   id: string;
@@ -73,11 +74,23 @@ export interface ListEmployeesPort {
 
 // ── KPIs ──────────────────────────────────────────────────────────────────
 
-export interface PriorityPendencyDTO {
-  kind: "missing_field" | "missing_document" | "expiring_document";
+export interface PriorityPendencyEmployeeRef {
   employeeId: string;
   employeeName: string;
+  /** Só preenchido para `kind: "expiring_document"` — permite ao drawer da Visão Geral mostrar a validade/dias restantes sem uma 2ª chamada (task "Melhorar Visão Geral e reorganizar Pessoas", secção 10). */
+  expiresAt?: string;
+}
+
+/**
+ * Uma pendência agrupada por tipo (mesmo `kind`+`detail`) — várias linhas de
+ * `hr_employees` com o mesmo problema (ex: "NIF em falta") viram um único
+ * grupo com a lista de colaboradores afetados, em vez de uma linha por
+ * pessoa. O agrupamento é feito aqui (backend), não no frontend.
+ */
+export interface PriorityPendencyGroupDTO {
+  kind: "missing_field" | "missing_document" | "expiring_document";
   detail: string;
+  employees: PriorityPendencyEmployeeRef[];
 }
 
 export interface PeopleKpisDTO {
@@ -85,7 +98,7 @@ export interface PeopleKpisDTO {
   onboardingPending: number;
   incompleteProfiles: number;
   documentsExpiringSoon: number;
-  priorityPendencies: PriorityPendencyDTO[];
+  priorityPendencies: PriorityPendencyGroupDTO[];
 }
 
 export interface GetPeopleKpisPort {
@@ -107,7 +120,10 @@ export interface EmployeeProfileDTO {
   documents: {
     mandatoryTotal: number;
     mandatoryCompleted: number;
-    missingCategories: string[];
+    /** Nomes amigáveis dos requisitos obrigatórios por cumprir (ex: "Documento de identificação"), não slugs de categoria. */
+    missingRequirements: string[];
+    /** Categorias opcionais (configuráveis) ainda sem documento — só aparece aqui, nunca nas pendências prioritárias. */
+    missingOptional: string[];
     expiringSoonCount: number;
   };
   onboardingStatus: "completed" | "pending";
@@ -196,7 +212,7 @@ export interface UploadEmployeePhotoPort {
 export interface EmployeeHistoryEntryDTO {
   id: string;
   createdAt: string;
-  entityType: "employee" | "employee_document";
+  entityType: HrAuditEntityType;
   action: string;
   actor: string;
   description: string;

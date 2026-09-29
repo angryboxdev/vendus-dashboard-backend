@@ -1,10 +1,13 @@
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
 import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
 import type { HrFileStoragePort } from "../../domain/ports/out/hr-file-storage.port.js";
+import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
 import {
+  applicableCategoriesFor,
+  buildDynamicRequirements,
   computeMandatoryDocumentsSummary,
   deriveOverallDocumentSituation,
-  DEFAULT_MANDATORY_CATEGORIES,
+  DEFAULT_MANDATORY_REQUIREMENTS,
 } from "../../domain/services/document-status.service.js";
 import { computeProfileCompletionPercent } from "../../domain/services/profile-completeness.service.js";
 import type {
@@ -28,6 +31,7 @@ export class ListEmployeesUseCase implements ListEmployeesPort {
     private readonly employeeRepository: EmployeeRepositoryPort,
     private readonly employeeDocumentRepository: EmployeeDocumentRepositoryPort,
     private readonly hrFileStorage: HrFileStoragePort,
+    private readonly documentCategoryRepository: DocumentCategoryRepositoryPort,
   ) {}
 
   async execute(command: ListEmployeesCommand): Promise<ListEmployeesResultDTO> {
@@ -41,6 +45,7 @@ export class ListEmployeesUseCase implements ListEmployeesPort {
       command.organizationId,
       employees.map((e) => e.id),
     );
+    const categoryDefs = await this.documentCategoryRepository.findMany(command.organizationId, { activeOnly: true });
     const documentsByEmployee = new Map<string, typeof documents>();
     for (const doc of documents) {
       const list = documentsByEmployee.get(doc.employeeId) ?? [];
@@ -50,10 +55,13 @@ export class ListEmployeesUseCase implements ListEmployeesPort {
 
     let rows: EmployeeListRowDTO[] = await Promise.all(
       employees.map(async (employee) => {
-        const summary = computeMandatoryDocumentsSummary(
-          DEFAULT_MANDATORY_CATEGORIES,
-          documentsByEmployee.get(employee.id) ?? [],
-        );
+        // Documentos obrigatórios e completude de perfil só geram estado de
+        // alerta para colaboradores ativos — um inativo não tem ações
+        // pendentes por definição (ver README, "Design decisions").
+        const isActive = employee.status === "active";
+        const applicable = applicableCategoriesFor(categoryDefs, employee.jobRole);
+        const requirements = [...DEFAULT_MANDATORY_REQUIREMENTS, ...buildDynamicRequirements(applicable)];
+        const summary = computeMandatoryDocumentsSummary(requirements, documentsByEmployee.get(employee.id) ?? []);
         const photoUrl = employee.photoStoragePath
           ? await this.hrFileStorage.getSignedUrl(
               "photo",
@@ -71,8 +79,8 @@ export class ListEmployeesUseCase implements ListEmployeesPort {
           phone: employee.phone,
           status: employee.status,
           photoUrl,
-          profileCompletionPercent: computeProfileCompletionPercent(employee),
-          documentSituation: deriveOverallDocumentSituation(summary),
+          profileCompletionPercent: isActive ? computeProfileCompletionPercent(employee) : 100,
+          documentSituation: isActive ? deriveOverallDocumentSituation(summary) : "ok",
           updatedAt: employee.updatedAt,
         };
       }),

@@ -2,10 +2,15 @@ import { EmployeeNotFoundError } from "../../domain/errors.js";
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
 import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
 import type { HrFileStoragePort } from "../../domain/ports/out/hr-file-storage.port.js";
+import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
 import {
+  applicableCategoriesFor,
+  buildDynamicRequirements,
   computeDocumentDisplayStatus,
   computeMandatoryDocumentsSummary,
-  DEFAULT_MANDATORY_CATEGORIES,
+  computeMissingOptional,
+  DEFAULT_MANDATORY_REQUIREMENTS,
+  DOCUMENT_CATEGORY_BASE_LABELS,
 } from "../../domain/services/document-status.service.js";
 import {
   computeProfileCompletionPercent,
@@ -24,6 +29,7 @@ export class GetEmployeeProfileUseCase implements GetEmployeeProfilePort {
     private readonly employeeRepository: EmployeeRepositoryPort,
     private readonly employeeDocumentRepository: EmployeeDocumentRepositoryPort,
     private readonly hrFileStorage: HrFileStoragePort,
+    private readonly documentCategoryRepository: DocumentCategoryRepositoryPort,
   ) {}
 
   async execute(command: GetEmployeeProfileCommand): Promise<EmployeeProfileDTO> {
@@ -34,9 +40,27 @@ export class GetEmployeeProfileUseCase implements GetEmployeeProfilePort {
       command.organizationId,
       employee.id,
     );
-    const summary = computeMandatoryDocumentsSummary(DEFAULT_MANDATORY_CATEGORIES, currentDocuments);
-    const sections = computeProfileSections(employee);
-    const completionPercent = computeProfileCompletionPercent(employee);
+    const categoryDefs = await this.documentCategoryRepository.findMany(command.organizationId, { activeOnly: true });
+    const applicable = applicableCategoriesFor(categoryDefs, employee.jobRole);
+    const requirements = [...DEFAULT_MANDATORY_REQUIREMENTS, ...buildDynamicRequirements(applicable)];
+    const categoryLabelBySlug = new Map<string, string>([
+      ...Object.entries(DOCUMENT_CATEGORY_BASE_LABELS),
+      ...applicable.map((c): [string, string] => [c.slug, c.label]),
+    ]);
+
+    // Documentos obrigatórios e completude de perfil só geram alerta/estado
+    // pendente para colaboradores ativos — um colaborador inativo não tem
+    // ações pendentes por definição (ver README, "Design decisions").
+    const isActive = employee.status === "active";
+    const rawSummary = computeMandatoryDocumentsSummary(requirements, currentDocuments);
+    const summary = isActive
+      ? rawSummary
+      : { ...rawSummary, mandatoryCompleted: rawSummary.mandatoryTotal, missingRequirements: [], expiringSoonCount: 0 };
+    const missingOptional = isActive ? computeMissingOptional(applicable, currentDocuments) : [];
+    const sections = isActive
+      ? computeProfileSections(employee)
+      : { personalData: true, address: true, contractData: true, bankAccount: true, emergencyContact: true };
+    const completionPercent = isActive ? computeProfileCompletionPercent(employee) : 100;
 
     const photoUrl = employee.photoStoragePath
       ? await this.hrFileStorage.getSignedUrl(
@@ -48,23 +72,23 @@ export class GetEmployeeProfileUseCase implements GetEmployeeProfilePort {
       : null;
 
     const alerts: EmployeeProfileDTO["alerts"] = [];
-    for (const doc of currentDocuments) {
-      if (computeDocumentDisplayStatus(doc) === "expiring") {
-        alerts.push({
-          type: "document_expiring",
-          message: `${doc.category} expira em breve`,
-        });
+    if (isActive) {
+      for (const doc of currentDocuments) {
+        if (computeDocumentDisplayStatus(doc) === "expiring") {
+          const label = categoryLabelBySlug.get(doc.category) ?? doc.category;
+          alerts.push({ type: "document_expiring", message: `${label} expira em breve` });
+        }
       }
-    }
-    for (const category of summary.missingCategories) {
-      alerts.push({ type: "document_missing", message: `Documento em falta: ${category}` });
-    }
-    if (!isEmergencyContactComplete(employee)) {
-      alerts.push({ type: "emergency_contact_pending", message: "Contacto de emergência por confirmar" });
+      for (const label of summary.missingRequirements) {
+        alerts.push({ type: "document_missing", message: `Documento em falta: ${label}` });
+      }
+      if (!isEmergencyContactComplete(employee)) {
+        alerts.push({ type: "emergency_contact_pending", message: "Contacto de emergência por confirmar" });
+      }
     }
 
     const onboardingStatus: EmployeeProfileDTO["onboardingStatus"] =
-      summary.missingCategories.length > 0 || completionPercent < 100 ? "pending" : "completed";
+      isActive && (summary.missingRequirements.length > 0 || completionPercent < 100) ? "pending" : "completed";
 
     return {
       employee: toEmployeeDTO(employee, command.viewerRole, photoUrl),
@@ -73,7 +97,8 @@ export class GetEmployeeProfileUseCase implements GetEmployeeProfilePort {
       documents: {
         mandatoryTotal: summary.mandatoryTotal,
         mandatoryCompleted: summary.mandatoryCompleted,
-        missingCategories: summary.missingCategories,
+        missingRequirements: summary.missingRequirements,
+        missingOptional,
         expiringSoonCount: summary.expiringSoonCount,
       },
       onboardingStatus,
