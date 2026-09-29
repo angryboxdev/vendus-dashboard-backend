@@ -10,6 +10,9 @@ create table if not exists public.accounting_settings (
 
 alter table public.accounting_settings enable row level security;
 
+-- `drop policy if exists` antes de `create policy` (Postgres não tem
+-- `create policy if not exists`) — torna a migration reexecutável.
+drop policy if exists "accounting_settings: org-scoped all" on public.accounting_settings;
 create policy "accounting_settings: org-scoped all"
   on public.accounting_settings
   for all
