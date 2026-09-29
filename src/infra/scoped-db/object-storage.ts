@@ -35,6 +35,8 @@ export const STORAGE_BUCKET_REGISTRY = {
   // src/modules/hr/README.md) para não reassinar em cada render de lista.
   "hr-photos": { prefixByOrganization: true },
   "invoice-documents": { prefixByOrganization: true },
+  // Módulo Contabilidade (Fase 1) — anexo de "documento especial" (despesa de sócio/funcionário/plataforma), privado como hr-documents.
+  "accounting-documents": { prefixByOrganization: true },
   // DB4: shares the wrapper, deliberately not prefixed yet.
   "recurrence-documents": { prefixByOrganization: false },
   "bank-statement-documents": { prefixByOrganization: false },

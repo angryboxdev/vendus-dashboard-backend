@@ -60,3 +60,18 @@ export class InvoiceNotPaidError extends Error {
     this.name = "InvoiceNotPaidError";
   }
 }
+
+/**
+ * Override de dedutibilidade de IVA por linha (módulo Contabilidade) — a
+ * subcategoria só sugere; um override explícito (0-100) exige sempre motivo.
+ */
+export class InvalidDeductibilityOverrideError extends Error {
+  constructor(reason: "range" | "reason_required", percentage: number) {
+    super(
+      reason === "range"
+        ? `Percentagem dedutível inválida: ${percentage} (tem de estar entre 0 e 100)`
+        : "É obrigatório indicar o motivo quando a percentagem dedutível diverge da sugestão da subcategoria",
+    );
+    this.name = "InvalidDeductibilityOverrideError";
+  }
+}

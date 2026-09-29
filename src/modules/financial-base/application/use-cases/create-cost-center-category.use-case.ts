@@ -35,6 +35,7 @@ export class CreateCostCenterCategoryUseCase implements CreateCostCenterCategory
       affectsProfitability: command.affectsProfitability,
       requiresChannel: command.requiresChannel ?? false,
       requiresAllocation: command.requiresAllocation ?? false,
+      vatDeductible: command.vatDeductible ?? true,
       description: command.description ?? null,
     });
 

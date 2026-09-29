@@ -552,6 +552,7 @@ export class FinancialBaseController {
           affectsProfitability: body.affectsProfitability as boolean,
           requiresChannel: (body.requiresChannel as boolean | undefined) ?? false,
           requiresAllocation: (body.requiresAllocation as boolean | undefined) ?? false,
+          vatDeductible: (body.vatDeductible as boolean | undefined) ?? true,
           description: (body.description as string | null | undefined) ?? null,
         });
         res.status(201).json(result);
@@ -589,6 +590,7 @@ export class FinancialBaseController {
         if (body.requiresChannel !== undefined) data.requiresChannel = body.requiresChannel as boolean;
         if (body.requiresAllocation !== undefined)
           data.requiresAllocation = body.requiresAllocation as boolean;
+        if (body.vatDeductible !== undefined) data.vatDeductible = body.vatDeductible as boolean;
         if ("description" in body) data.description = (body.description as string | null) ?? null;
         const result = await this.updateCostCenterCategory.execute({
           organizationId: req.auth!.orgId,

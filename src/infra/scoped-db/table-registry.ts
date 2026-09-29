@@ -56,6 +56,15 @@ export const TABLE_REGISTRY = {
   locations: { organizationColumn: "org_id", locationBearing: false },
   org_members: { organizationColumn: "org_id", locationBearing: false },
 
+  // Módulo Contabilidade — "Documento" (qualquer documento contabilístico/
+  // fiscal sem fluxo bancário normal da empresa: fatura paga por sócio/
+  // funcionário, comissão de plataforma, nota de crédito fora do fluxo
+  // normal, documento manual, regularização, outro).
+  accounting_documents: { organizationColumn: "org_id", locationBearing: false },
+  accounting_document_attachments: { organizationColumn: "org_id", locationBearing: false },
+  accounting_audit_logs: { organizationColumn: "org_id", locationBearing: false },
+  accounting_settings: { organizationColumn: "org_id", locationBearing: false },
+
   // org-integration-credentials spec, ticket 04: AirMenu credentials (one
   // row per org) and per-location config — see
   // supabase/migrations/20260905090000_create_airmenu_credentials_tables.sql.

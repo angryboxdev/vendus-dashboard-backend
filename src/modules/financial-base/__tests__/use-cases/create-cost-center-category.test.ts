@@ -42,6 +42,41 @@ describe("CreateCostCenterCategoryUseCase", () => {
     expect(categoryRepo.getAll()).toHaveLength(1);
   });
 
+  it("vatDeductible por omissão é true — nunca marca uma subcategoria como não dedutível sozinho", async () => {
+    const { createCategory, group } = await makeUseCases();
+
+    const result = await createCategory.execute({
+      organizationId: ORG_ID,
+      groupId: group.id,
+      code: "OPD.02",
+      name: "Combustíveis",
+      financialType: "cmv",
+      affectsDre: true,
+      affectsCashflow: true,
+      affectsProfitability: true,
+    });
+
+    expect(result.vatDeductible).toBe(true);
+  });
+
+  it("vatDeductible pode ser marcado explicitamente como false (decisão manual do gestor, módulo Contabilidade)", async () => {
+    const { createCategory, group } = await makeUseCases();
+
+    const result = await createCategory.execute({
+      organizationId: ORG_ID,
+      groupId: group.id,
+      code: "OPD.03",
+      name: "Despesas de representação",
+      financialType: "cmv",
+      affectsDre: true,
+      affectsCashflow: true,
+      affectsProfitability: true,
+      vatDeductible: false,
+    });
+
+    expect(result.vatDeductible).toBe(false);
+  });
+
   it("lança NotFound se o grupo não existe", async () => {
     const { createCategory } = await makeUseCases();
 

@@ -1,5 +1,5 @@
 import type { InvoiceLineType } from "./invoice.js";
-import { ChannelRequiredError } from "../errors.js";
+import { ChannelRequiredError, InvalidDeductibilityOverrideError } from "../errors.js";
 
 interface InvoiceLineProps {
   id: string;
@@ -38,6 +38,10 @@ interface InvoiceLineProps {
   aiSuggestedCategoryId: string | null;
   aiConfidence: number | null;
   createdAt: Date;
+  // Módulo Contabilidade — override de dedutibilidade de IVA (nunca decidida
+  // sozinha pela subcategoria; `null` = usa `vat_deductible` da categoria).
+  deductiblePercentage: number | null;
+  deductibilityOverrideReason: string | null;
 }
 
 export interface ClassifyLineData {
@@ -84,6 +88,8 @@ export class InvoiceLine {
   readonly aiSuggestedCategoryId: string | null;
   readonly aiConfidence: number | null;
   readonly createdAt: Date;
+  readonly deductiblePercentage: number | null;
+  readonly deductibilityOverrideReason: string | null;
 
   private constructor(props: InvoiceLineProps) {
     this.id = props.id;
@@ -113,6 +119,8 @@ export class InvoiceLine {
     this.aiSuggestedCategoryId = props.aiSuggestedCategoryId;
     this.aiConfidence = props.aiConfidence;
     this.createdAt = props.createdAt;
+    this.deductiblePercentage = props.deductiblePercentage;
+    this.deductibilityOverrideReason = props.deductibilityOverrideReason;
   }
 
   static create(props: {
@@ -163,6 +171,8 @@ export class InvoiceLine {
       aiSuggestedCategoryId: null,
       aiConfidence: null,
       createdAt: new Date(),
+      deductiblePercentage: null,
+      deductibilityOverrideReason: null,
     });
   }
 
@@ -220,6 +230,27 @@ export class InvoiceLine {
     return new InvoiceLine({ ...this.toProps(), stockEntryId });
   }
 
+  /**
+   * `percentage: null` volta a usar a sugestão da subcategoria
+   * (`vat_deductible`). Um valor explícito exige sempre motivo — nunca a
+   * subcategoria decide sozinha quando o gestor diverge.
+   */
+  applyDeductibilityOverride(percentage: number | null, reason: string | null): InvoiceLine {
+    if (percentage !== null) {
+      if (percentage < 0 || percentage > 100) {
+        throw new InvalidDeductibilityOverrideError("range", percentage);
+      }
+      if (!reason || reason.trim().length === 0) {
+        throw new InvalidDeductibilityOverrideError("reason_required", percentage);
+      }
+    }
+    return new InvoiceLine({
+      ...this.toProps(),
+      deductiblePercentage: percentage,
+      deductibilityOverrideReason: percentage !== null ? reason : null,
+    });
+  }
+
   private toProps(): InvoiceLineProps {
     return {
       id: this.id,
@@ -249,6 +280,8 @@ export class InvoiceLine {
       aiSuggestedCategoryId: this.aiSuggestedCategoryId,
       aiConfidence: this.aiConfidence,
       createdAt: this.createdAt,
+      deductiblePercentage: this.deductiblePercentage,
+      deductibilityOverrideReason: this.deductibilityOverrideReason,
     };
   }
 }

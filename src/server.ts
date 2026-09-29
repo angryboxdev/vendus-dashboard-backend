@@ -40,6 +40,7 @@ import { createLocationsModule } from "./modules/locations/locations.module.js";
 import { createLocationCredentialsModule } from "./modules/location-credentials/location-credentials.module.js";
 import { createSalesSummaryModule } from "./modules/sales-summary/sales-summary.module.js";
 import { createHrModule } from "./modules/hr/hr.module.js";
+import { createAccountingModule } from "./modules/accounting/accounting.module.js";
 
 const app = express();
 
@@ -207,6 +208,17 @@ app.use("/api", requireMinRole("manager"), financialBaseModule.router);
 
 // Invoices module (hexagonal) — instantiated above, before requireAuth
 app.use("/api", requireMinRole("manager"), invoicesModule.router);
+
+// Accounting module (hexagonal) — Fase 1 (Documentos agregados, despesas de
+// sócio/plataforma, Controlo de IVA em acompanhamento). Cross-module reads
+// (D10) de vendus/invoices/financial-base, nunca duplica os seus cálculos.
+const accountingModule = createAccountingModule(
+  vendusModule.getSummary,
+  invoicesModule.listInvoices,
+  invoicesModule.listInvoiceLines,
+  financialBaseModule.listCostCenterCategories,
+);
+app.use("/api", requireMinRole("manager"), accountingModule.router);
 
 // Payable entries module (hexagonal)
 const payableEntriesModule = createPayableEntriesModule();

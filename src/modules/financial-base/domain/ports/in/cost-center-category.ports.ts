@@ -13,6 +13,7 @@ export interface CostCenterCategoryDTO {
   affectsProfitability: boolean;
   requiresChannel: boolean;
   requiresAllocation: boolean;
+  vatDeductible: boolean;
   isActive: boolean;
   description: string | null;
   createdAt: Date;
@@ -52,6 +53,7 @@ export interface CreateCostCenterCategoryCommand {
   affectsProfitability: boolean;
   requiresChannel?: boolean;
   requiresAllocation?: boolean;
+  vatDeductible?: boolean;
   description?: string | null;
 }
 

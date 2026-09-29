@@ -1,6 +1,7 @@
 import type { Router } from "express";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import type { CreateSupplierPort } from "./domain/ports/in/supplier.ports.js";
+import type { ListCostCenterCategoriesPort } from "./domain/ports/in/cost-center-category.ports.js";
 
 import { SupabaseCostCenterGroupRepository } from "./adapters/out/supabase-cost-center-group.repository.js";
 import { SupabaseCostCenterCategoryRepository } from "./adapters/out/supabase-cost-center-category.repository.js";
@@ -52,7 +53,11 @@ import { FinancialBaseController } from "./adapters/in/financial-base.controller
  * (`src/infra/scoped-db/unattended-scope.ts`, D6) em qualquer caminho sem
  * utilizador.
  */
-export function createFinancialBaseModule(): { router: Router; createSupplier: CreateSupplierPort } {
+export function createFinancialBaseModule(): {
+  router: Router;
+  createSupplier: CreateSupplierPort;
+  listCostCenterCategories: ListCostCenterCategoriesPort;
+} {
   // Adapters de saída
   const groupRepository = new SupabaseCostCenterGroupRepository(createScopedQuery);
   const categoryRepository = new SupabaseCostCenterCategoryRepository(createScopedQuery);
@@ -135,5 +140,5 @@ export function createFinancialBaseModule(): { router: Router; createSupplier: C
     getOrganizationIdentity,
   );
 
-  return { router: controller.router, createSupplier };
+  return { router: controller.router, createSupplier, listCostCenterCategories };
 }
