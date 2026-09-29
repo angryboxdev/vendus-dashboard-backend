@@ -1,4 +1,4 @@
-import { describe, it, expect } from "@jest/globals";
+import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateRecurrenceUseCase } from "../../application/use-cases/create-recurrence.use-case.js";
 import { GenerateOccurrenceUseCase } from "../../application/use-cases/generate-occurrence.use-case.js";
@@ -11,7 +11,6 @@ import { FakeOccurrenceRepository } from "../fakes/fake-occurrence-repository.js
 import { FakeBankMovementLinkReadAdapter } from "../fakes/fake-bank-movement-link-read.js";
 import { FakeInvoiceAllocatedAmountReadAdapter } from "../fakes/fake-invoice-allocated-amount-read.js";
 
-// Data de "hoje" do sistema durante esta sessão: 2026-09-25.
 const organizationId = mintOrganizationId("org-a");
 
 const BASE_CMD = {
@@ -51,6 +50,22 @@ function make() {
 }
 
 describe("GetMonthlySummaryUseCase", () => {
+  // `GetMonthlySummaryUseCase` compara `dueDate` com `new Date()` real para decidir
+  // pendente vs. vencida (correto em produção — ver o próprio use case). Os testes
+  // abaixo dependem de uma data de "hoje" fixa (ex: "dia 28 ainda não chegou"), por
+  // isso fixam o relógio em vez de assumir a data real da máquina que corre o CI —
+  // antes disto, este ficheiro ficava vermelho sempre que o dia do mês real
+  // ultrapassava os dias hardcoded nos comentários dos testes (bug real, já
+  // confirmado a bloquear o deploy no Render).
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-09-25T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it("ocorrência paga via banco (link cobrindo o total): conta em Previsto e Pago, não em pendente/vencida", async () => {
     const { create, generate, summary, bankLinkRead } = make();
     const rec = await create.execute(BASE_CMD); // dayOfMonth 5, estimated 100_000
