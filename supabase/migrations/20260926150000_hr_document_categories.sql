@@ -6,7 +6,7 @@
 -- confirmada com o utilizador). Tabela nova, aditiva — não altera
 -- hr_employee_documents.
 
-create table public.hr_document_categories (
+create table if not exists public.hr_document_categories (
   id                    uuid primary key default gen_random_uuid(),
   org_id                uuid not null references public.organizations(id),
   slug                  text not null,
@@ -22,7 +22,7 @@ create table public.hr_document_categories (
     check (job_roles <@ array['manager','prep','service']::text[])
 );
 
-create index hr_document_categories_org_id_idx on public.hr_document_categories (org_id);
+create index if not exists hr_document_categories_org_id_idx on public.hr_document_categories (org_id);
 
 alter table public.hr_document_categories enable row level security;
 

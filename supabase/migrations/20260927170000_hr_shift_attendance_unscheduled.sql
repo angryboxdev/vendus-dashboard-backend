@@ -13,7 +13,7 @@ alter table public.hr_shift_attendance
 alter table public.hr_shift_attendance
   drop constraint if exists hr_shift_attendance_work_shift_id_key;
 
-create unique index hr_shift_attendance_work_shift_id_key
+create unique index if not exists hr_shift_attendance_work_shift_id_key
   on public.hr_shift_attendance (work_shift_id)
   where work_shift_id is not null;
 
@@ -21,6 +21,8 @@ alter table public.hr_shift_attendance
   add column if not exists employee_id uuid references public.hr_employees(id),
   add column if not exists work_date date;
 
+alter table public.hr_shift_attendance
+  drop constraint if exists hr_shift_attendance_shift_or_standalone;
 alter table public.hr_shift_attendance
   add constraint hr_shift_attendance_shift_or_standalone check (
     work_shift_id is not null
