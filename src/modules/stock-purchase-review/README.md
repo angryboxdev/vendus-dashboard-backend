@@ -1,7 +1,10 @@
 # Module: stock-purchase-review
 
 > Status: active
-> Last updated: 2026-09-30
+> Last updated: 2026-09-30 (`DeleteDraftStockPurchaseReviewUseCase` +
+> `GetStockPurchaseReviewStatusForInvoiceUseCase` — nova exceção estreita ao
+> "nunca hard delete", chamada por `invoices` para resolver o crash de FK ao
+> editar "Impacto no stock"/descartar linhas com uma revisão associada)
 
 ---
 
@@ -103,6 +106,12 @@ estruturadas (ver Known gaps).
   sugestão aprendida.
 - `DecideUnresolvedReviewPort` — a única forma de sair de
   `decisionSource: unresolved`.
+- `GetStockPurchaseReviewStatusPort` — leitura fina (`reviewId`+`status`)
+  para `invoices` (D10) — usada pelo guard de edição de fatura contra
+  revisão de stock bloqueante/pendente (ver Design decisions).
+- `DeleteDraftStockPurchaseReviewPort` — chamado por `invoices` (D10)
+  quando o utilizador confirma explicitamente que quer descartar uma
+  revisão ainda não aplicada; hard-delete real, ver Design decisions.
 - `SuggestLineMappingPort` — sugestão de mapeamento aprendido, nunca
   auto-aplicada.
 - `ConfirmStockPurchaseReviewPort` — revalida a fatura de origem (hash),
@@ -113,7 +122,11 @@ estruturadas (ver Known gaps).
 
 - `StockPurchaseReviewRepositoryPort` — persistência de
   `StockPurchaseReview`/`StockReviewLine`; `save()` com lock otimista
-  (`expectedVersion`).
+  (`expectedVersion`). `hardDelete(organizationId, reviewId)` — única
+  exceção deliberada à regra "nunca hard delete" do módulo, ver Design
+  decisions; apaga `stock_review_lines` antes de `stock_purchase_reviews`
+  (ordem FK). O chamador (`DeleteDraftStockPurchaseReviewUseCase`) garante
+  que a revisão nunca está `applied` antes de chamar.
 - `StockReviewLearnedMappingPort` — mapeamento aprendido, procura por
   referência primeiro, descrição normalizada como fallback.
 - `StockReviewAuditLogPort` — mirror exato de `AccountingAuditLogPort`.
@@ -204,6 +217,41 @@ estende o serviço legacy, só partilha o schema.
 `SuggestLineMappingPort` devolve só uma sugestão; `resolve-review-line`
 exige sempre uma ação humana explícita mesmo quando a sugestão existe.
 
+### Exceção deliberada e estreita a "nunca hard delete": rascunho nunca aplicado, descartado por `invoices`
+
+O módulo inteiro é desenhado à volta de "nunca hard delete" —
+`cancel(reason)` é a única forma de "remover" uma revisão, sempre com
+motivo, sempre auditada, sempre recuperável. `DeleteDraftStockPurchaseReviewUseCase`
+é a ÚNICA exceção, e só entra em jogo num cenário muito específico: o
+utilizador de `invoices` muda o "Impacto no stock" de uma fatura, ou
+descarta as linhas detalhadas (`detailed → simple`), e a revisão associada
+(criada automaticamente pelo gancho de finalização) ainda não foi
+**aplicada** — ou seja, nenhum `stock_movement` real chegou a existir a
+partir dela. Não há nada de real ou auditado a preservar: um `cancel()`
+deixaria um registo morto na tabela só para satisfazer a mesma regra que
+`cancel()` protege — dados que já viraram compromissos reais. Guard-rails
+que mantêm a exceção estreita:
+
+- **Nunca aplicável a revisões `applied`** — `DeleteDraftStockPurchaseReviewUseCase`
+  verifica `review.status === "applied"` e lança `ReviewAlreadyAppliedError`
+  antes de tocar em qualquer linha; o chamador (`invoices`, via o guard
+  partilhado `shared-stock-review-guard.ts`) nunca sequer tenta chamar isto
+  quando a revisão já gerou movimentos — bloqueia a edição em vez disso,
+  sempre, sem opção de confirmação.
+- **Nunca silencioso** — só é chamado depois de `invoices` ter pedido
+  confirmação explícita ao utilizador (`confirmRemoveStockReview: true` no
+  pedido HTTP); sem essa fatura ainda ter revisão nenhuma associada, é um
+  no-op idempotente (`{deleted: false}`), nunca um erro.
+- **Sempre auditado antes de apagar** — grava uma entrada
+  `draft_deleted_due_to_invoice_edit` em `StockReviewAuditLogPort` (com o
+  `before` completo da revisão) antes de chamar `hardDelete` — o rasto de
+  "isto existiu e foi removido por causa de X" sobrevive mesmo à remoção
+  física da linha.
+- **Só alcançável por este único caminho** — não há endpoint HTTP deste
+  módulo que exponha `hardDelete`; só `invoices` (D10, via
+  `DeleteDraftStockPurchaseReviewPort`) pode desencadear isto, nunca um
+  humano diretamente em "Compras por rever".
+
 ## Como testar
 
 - `npx jest src/modules/stock-purchase-review` (fakes para todas as portas
@@ -216,6 +264,10 @@ exige sempre uma ação humana explícita mesmo quando a sugestão existe.
   `alreadyApplied`).
 - Testes de integração (Supabase real) para as 2 RPCs ficam pendentes
   desta ronda — ver Known gaps.
+- `DeleteDraftStockPurchaseReviewUseCase`/`GetStockPurchaseReviewStatusForInvoiceUseCase`
+  (`delete-draft-stock-purchase-review.test.ts`) cobrem: no-op sem revisão,
+  hard-delete com auditoria quando ainda não aplicada, e
+  `ReviewAlreadyAppliedError` (nunca apaga) quando já aplicada.
 
 ## Known gaps / open debt
 

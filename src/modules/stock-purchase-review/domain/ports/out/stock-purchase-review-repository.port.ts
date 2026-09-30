@@ -19,4 +19,11 @@ export interface StockPurchaseReviewRepositoryPort {
   findLinesByReviewId(organizationId: OrganizationId, reviewId: string): Promise<StockReviewLine[]>;
   saveLines(organizationId: OrganizationId, lines: StockReviewLine[]): Promise<void>;
   saveLine(organizationId: OrganizationId, line: StockReviewLine): Promise<void>;
+  /**
+   * Única exceção deliberada à regra "nunca hard delete" deste módulo —
+   * ver `DeleteDraftStockPurchaseReviewUseCase` e o README (Design
+   * decisions). Apaga `stock_review_lines` antes de `stock_purchase_reviews`
+   * (ordem FK). O chamador garante que a revisão nunca está `applied`.
+   */
+  hardDelete(organizationId: OrganizationId, reviewId: string): Promise<void>;
 }
