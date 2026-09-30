@@ -1,6 +1,6 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
-import { Supplier, type SupplierStatus } from "../../domain/entities/supplier.js";
+import { Supplier, type DefaultStockPolicy, type SupplierStatus } from "../../domain/entities/supplier.js";
 import type {
   SupplierFilter,
   SupplierRepositoryPort,
@@ -20,6 +20,7 @@ function toEntity(row: Record<string, unknown>): Supplier {
     paymentTermsDays: row.payment_terms_days != null ? Number(row.payment_terms_days) : null,
     notes: (row.notes as string | null) ?? null,
     status: row.status as SupplierStatus,
+    defaultStockPolicy: (row.default_stock_policy as DefaultStockPolicy | undefined) ?? "inherit",
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   });
@@ -47,6 +48,7 @@ export class SupabaseSupplierRepository implements SupplierRepositoryPort {
       payment_terms_days: supplier.paymentTermsDays,
       notes: supplier.notes,
       status: supplier.status,
+      default_stock_policy: supplier.defaultStockPolicy,
       created_at: supplier.createdAt.toISOString(),
       updated_at: supplier.updatedAt.toISOString(),
     });
@@ -93,6 +95,7 @@ export class SupabaseSupplierRepository implements SupplierRepositoryPort {
         payment_terms_days: supplier.paymentTermsDays,
         notes: supplier.notes,
         status: supplier.status,
+        default_stock_policy: supplier.defaultStockPolicy,
         updated_at: supplier.updatedAt.toISOString(),
       })
       .eq("id", supplier.id);

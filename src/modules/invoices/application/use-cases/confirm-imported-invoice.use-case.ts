@@ -9,6 +9,7 @@ import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-l
 import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry-write.port.js";
 import type { SupplierCreatePort } from "../../domain/ports/out/supplier-create.port.js";
 import type { SupplierHintPort } from "../../domain/ports/out/supplier-hint.port.js";
+import type { StockDecisionNotifyPort } from "../../domain/ports/out/stock-decision-notify.port.js";
 import { normalizeSupplierName } from "../../domain/utils/supplier-name.js";
 import { InvoiceNotFoundError, DuplicateInvoiceError } from "../../domain/errors.js";
 import { toInvoiceDTO } from "./shared.js";
@@ -20,6 +21,7 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     private readonly payableWrite: PayableEntryWritePort,
     private readonly supplierCreate: SupplierCreatePort,
     private readonly supplierHint: SupplierHintPort,
+    private readonly stockDecisionNotify: StockDecisionNotifyPort,
   ) {}
 
   async execute(command: ConfirmImportedInvoiceCommand): Promise<InvoiceDTO> {
@@ -63,6 +65,8 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     if (command.affectsCashflow !== undefined) confirmData.affectsCashflow = command.affectsCashflow;
     if (command.affectsProfitability !== undefined) confirmData.affectsProfitability = command.affectsProfitability;
     if (command.currency !== undefined) confirmData.currency = command.currency;
+    if (command.stockReviewOverride !== undefined) confirmData.stockReviewOverride = command.stockReviewOverride;
+    if (command.stockReviewOverrideReason !== undefined) confirmData.stockReviewOverrideReason = command.stockReviewOverrideReason;
 
     let confirmed = existing.confirmImport(confirmData);
     if (command.markAsPaid) {
@@ -147,6 +151,32 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
         dueDate: finalInvoice.dueDate,
         amount: finalInvoice.totalWithVat,
       });
+    }
+
+    try {
+      await this.stockDecisionNotify.notifyInvoiceFinalized(command.organizationId, {
+        invoiceId: finalInvoice.id,
+        invoiceNumber: finalInvoice.invoiceNumber,
+        invoiceDate: finalInvoice.invoiceDate.toISOString().slice(0, 10),
+        supplierId: finalInvoice.supplierId,
+        supplierName: finalInvoice.supplierName,
+        supplierNif: finalInvoice.supplierNifSnapshot,
+        override: finalInvoice.stockReviewOverride,
+        overrideReason: finalInvoice.stockReviewOverrideReason,
+        lines: lines.map((l) => ({
+          id: l.id,
+          description: l.description,
+          quantity: l.quantity,
+          unit: l.unit,
+          unitCostWithoutVat: l.unitCostWithoutVat,
+          totalWithVat: l.totalWithVat,
+          costCenterCategoryId: l.costCenterCategoryId,
+          locationId: l.locationId,
+        })),
+        actor: null,
+      });
+    } catch (e) {
+      console.error("[invoices] falha ao notificar stock-purchase-review (ignorada, sweep fará retry):", e);
     }
 
     return toInvoiceDTO(finalInvoice, lines);

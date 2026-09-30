@@ -41,6 +41,10 @@ import { createLocationCredentialsModule } from "./modules/location-credentials/
 import { createSalesSummaryModule } from "./modules/sales-summary/sales-summary.module.js";
 import { createHrModule } from "./modules/hr/hr.module.js";
 import { createAccountingModule } from "./modules/accounting/accounting.module.js";
+import { createStockPurchaseReviewModule } from "./modules/stock-purchase-review/stock-purchase-review.module.js";
+import type { RecordInvoiceFinalizedForStockPort } from "./modules/stock-purchase-review/domain/ports/in/stock-purchase-review.ports.js";
+import { createStockCountModule } from "./modules/stock-count/stock-count.module.js";
+import { createStockPlanningModule } from "./modules/stock-planning/stock-planning.module.js";
 
 const app = express();
 
@@ -144,11 +148,50 @@ app.use("/api", kdsModule.router);
 const locationCredentialsModule = createLocationCredentialsModule();
 app.use("/api", locationCredentialsModule.deviceRouter);
 
-// Financial base + invoices modules instantiated here (ahead of their
-// protected route registration below) so processDirectDebits is available
-// for the internal cron router, which must be mounted before requireAuth.
+// Financial base + invoices + locations + stock-purchase-review modules
+// instantiated here (ahead of their protected route registration below) so
+// processDirectDebits/reprocessMissingStockReviews are available for the
+// internal cron router, which must be mounted before requireAuth.
+//
+// `invoices` → `stock-purchase-review` (gancho fire-and-forget de
+// finalização de fatura) e `stock-purchase-review` → `invoices` (D10,
+// leitura, para revalidação e para a varredura de recuperação) formam um
+// ciclo de construção: nenhum dos dois pode ser construído primeiro na
+// forma direta. Resolvido com um indirection object — `invoicesModule` é
+// construído já com um `RecordInvoiceFinalizedForStockPort` funcional que
+// delega para `recordInvoiceFinalizedForStockRef.current`, que só é
+// atribuído ao use case real depois de `stockPurchaseReviewModule` existir.
 const financialBaseModule = createFinancialBaseModule();
-const invoicesModule = createInvoicesModule(financialBaseModule.createSupplier);
+const locationsModule = createLocationsModule();
+const recordInvoiceFinalizedForStockRef: { current: RecordInvoiceFinalizedForStockPort } = {
+  current: { execute: async () => {} },
+};
+const recordInvoiceFinalizedForStockProxy: RecordInvoiceFinalizedForStockPort = {
+  execute: (command) => recordInvoiceFinalizedForStockRef.current.execute(command),
+};
+const invoicesModule = createInvoicesModule(financialBaseModule.createSupplier, recordInvoiceFinalizedForStockProxy);
+const stockPurchaseReviewModule = createStockPurchaseReviewModule(
+  invoicesModule.getInvoice,
+  invoicesModule.listInvoices,
+  financialBaseModule.listCostCenterCategories,
+  financialBaseModule.getSupplier,
+  locationsModule.listLocations,
+);
+recordInvoiceFinalizedForStockRef.current = stockPurchaseReviewModule.recordInvoiceFinalizedForStock;
+
+// Stock planning module (hexagonal) — "Planeamento de Stock" (Stock
+// Intelligence 3.0). Instanciado aqui (antes do cron interno) para expor
+// runDailyForecast/detectForecastDeviation ao cron — só lê financial-base
+// (D10: getSupplier/listSupplierDeliverySchedules) e locations (D10,
+// listLocations); sem dependência das instâncias de
+// stockPurchaseReviewModule/stockCountModule (lê as suas tabelas
+// partilhadas diretamente via ScopedQuery, ver README do módulo), por isso
+// não entra no ciclo de construção acima.
+const stockPlanningModule = createStockPlanningModule(
+  locationsModule.listLocations,
+  financialBaseModule.getSupplier,
+  financialBaseModule.listSupplierDeliverySchedules,
+);
 
 // Internal cron routes: authenticated via requireCronSecret (Bearer
 // CRON_SECRET), not user sessions — must be mounted before the global
@@ -158,6 +201,9 @@ if (ENV.CRON_SECRET) {
     "/api",
     createInternalCronRouter({
       processDirectDebits: invoicesModule.processDirectDebits,
+      reprocessMissingStockReviews: stockPurchaseReviewModule.reprocessMissingStockReviews,
+      runDailyForecast: stockPlanningModule.runDailyForecast,
+      detectForecastDeviation: stockPlanningModule.detectForecastDeviation,
       listOrganizations,
     }),
   );
@@ -170,7 +216,6 @@ app.use(requireAuth);
 app.use("/api/auth", requireMinRole("admin"), authRoutes);
 
 // Locations module (hexagonal) — org-scoped read, any authenticated role (D15)
-const locationsModule = createLocationsModule();
 app.use("/api", locationsModule.router);
 
 // Location credentials admin routes (generate pairing code, list/revoke tokens)
@@ -219,6 +264,25 @@ const accountingModule = createAccountingModule(
   financialBaseModule.listCostCenterCategories,
 );
 app.use("/api", requireMinRole("manager"), accountingModule.router);
+
+// Stock purchase review module (hexagonal) — "Compra por rever". Instanciado
+// acima (antes do requireAuth) para expor recordInvoiceFinalizedForStock a
+// `invoices` e reprocessMissingStockReviews ao cron interno.
+app.use("/api", requireMinRole("manager"), stockPurchaseReviewModule.router);
+
+// Stock count module (hexagonal) — "Contagem Física de Stock 2.0". Sem
+// dependência de invoices/financial-base/stock-purchase-review — só lê
+// locations (D10, mesmo ListLocationsPort já usado por
+// stock-purchase-review). requireMinRole("manager") no mount, com checks
+// inline de admin dentro do controller para confirmar/forçar
+// sobreposição/definir valor final manual (secção 64).
+const stockCountModule = createStockCountModule(locationsModule.listLocations);
+app.use("/api", requireMinRole("manager"), stockCountModule.router);
+
+// Stock planning module (hexagonal) — "Planeamento de Stock". Instanciado
+// acima (antes do cron interno) para expor runDailyForecast/
+// detectForecastDeviation; router só montado aqui.
+app.use("/api", requireMinRole("manager"), stockPlanningModule.router);
 
 // Payable entries module (hexagonal)
 const payableEntriesModule = createPayableEntriesModule();

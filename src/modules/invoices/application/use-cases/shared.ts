@@ -117,6 +117,8 @@ export function toInvoiceDTO(
     affectsCashflow: invoice.affectsCashflow,
     affectsProfitability: invoice.affectsProfitability,
     currency: invoice.currency,
+    stockReviewOverride: invoice.stockReviewOverride,
+    stockReviewOverrideReason: invoice.stockReviewOverrideReason,
     createdAt: invoice.createdAt.toISOString(),
     updatedAt: invoice.updatedAt.toISOString(),
     classificationSummary: computeClassificationSummary(invoice, lines ?? [], categoryMap),

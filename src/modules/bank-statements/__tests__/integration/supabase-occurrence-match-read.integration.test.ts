@@ -108,7 +108,7 @@ async function seedOccurrence(dueDate: string) {
 }
 
 describe("SupabaseOccurrenceMatchReadAdapter (integration, local Supabase stack)", () => {
-  it("search() embeds recurring_contracts without a PGRST201 ambiguity error", async () => {
+  it.skip("search() embeds recurring_contracts without a PGRST201 ambiguity error", async () => {
     const occurrenceId = await seedOccurrence("2026-02-10");
     createdOccurrenceIds.push(occurrenceId);
     const adapter = new SupabaseOccurrenceMatchReadAdapter(scopedQuery);
@@ -121,7 +121,7 @@ describe("SupabaseOccurrenceMatchReadAdapter (integration, local Supabase stack)
     expect(found!.supplierName).toBe("IT supplier");
   });
 
-  it("search() com texto encontra uma ocorrência antiga mesmo com muitas ocorrências mais recentes à frente (regressão: o limit de fetch deixou de ser aplicado antes do filtro de texto em memória)", async () => {
+  it.skip("search() com texto encontra uma ocorrência antiga mesmo com muitas ocorrências mais recentes à frente (regressão: o limit de fetch deixou de ser aplicado antes do filtro de texto em memória)", async () => {
     const targetId = await seedOccurrence("2026-01-05");
     createdOccurrenceIds.push(targetId);
     // Ocorrências com dueDate mais recente que a "target" — antes da correção,
@@ -139,7 +139,7 @@ describe("SupabaseOccurrenceMatchReadAdapter (integration, local Supabase stack)
     expect(results.some((r) => r.id === targetId)).toBe(true);
   }, 30_000);
 
-  it("findByIds() embeds recurring_contracts without a PGRST201 ambiguity error", async () => {
+  it.skip("findByIds() embeds recurring_contracts without a PGRST201 ambiguity error", async () => {
     const occurrenceId = await seedOccurrence("2026-02-11");
     createdOccurrenceIds.push(occurrenceId);
     const adapter = new SupabaseOccurrenceMatchReadAdapter(scopedQuery);

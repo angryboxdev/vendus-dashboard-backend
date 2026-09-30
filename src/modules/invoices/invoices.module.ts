@@ -11,6 +11,7 @@ import { SupabaseSupplierLookupAdapter } from "./adapters/out/supabase-supplier-
 import { SupabaseSupplierHintAdapter } from "./adapters/out/supabase-supplier-hint.adapter.js";
 import { SupabaseOrganizationIdentityReadAdapter } from "./adapters/out/supabase-organization-identity-read.adapter.js";
 import { FinancialBaseSupplierCreateAdapter } from "./adapters/out/financial-base-supplier-create.adapter.js";
+import { StockPurchaseReviewDecisionAdapter } from "./adapters/out/stock-purchase-review-decision-adapter.js";
 import { OpenAiExtractionAdapter } from "./adapters/out/openai-extraction.adapter.js";
 import { CreateInvoiceUseCase } from "./application/use-cases/create-invoice.use-case.js";
 import { UpdateInvoiceUseCase } from "./application/use-cases/update-invoice.use-case.js";
@@ -33,7 +34,8 @@ import { ProcessDirectDebitsUseCase } from "./application/use-cases/process-dire
 import { SetLineDetailModeUseCase } from "./application/use-cases/set-line-detail-mode.use-case.js";
 import { createInvoiceRouter } from "./adapters/in/invoice.controller.js";
 import type { CreateSupplierPort } from "../financial-base/domain/ports/in/supplier.ports.js";
-import type { ProcessDirectDebitsPort, ListInvoicesPort, ListInvoiceLinesPort } from "./domain/ports/in/invoice.ports.js";
+import type { RecordInvoiceFinalizedForStockPort } from "../stock-purchase-review/domain/ports/in/stock-purchase-review.ports.js";
+import type { ProcessDirectDebitsPort, ListInvoicesPort, ListInvoiceLinesPort, GetInvoicePort } from "./domain/ports/in/invoice.ports.js";
 import type { Router } from "express";
 
 export interface InvoicesModule {
@@ -42,6 +44,8 @@ export interface InvoicesModule {
   /** Módulo Contabilidade (D10) — lê faturas/notas de crédito já existentes, nunca duplica o CRUD. */
   listInvoices: ListInvoicesPort;
   listInvoiceLines: ListInvoiceLinesPort;
+  /** Módulo Stock — Compra por rever (D10): revalidação antes de confirmar e varredura de recuperação. */
+  getInvoice: GetInvoicePort;
 }
 
 /**
@@ -56,7 +60,10 @@ export interface InvoicesModule {
  * `UNATTENDED_SCOPE` (`src/infra/scoped-db/unattended-scope.ts`, D6) porque
  * não tem pedido nenhum.
  */
-export function createInvoicesModule(createSupplierPort: CreateSupplierPort): InvoicesModule {
+export function createInvoicesModule(
+  createSupplierPort: CreateSupplierPort,
+  recordInvoiceFinalizedForStock: RecordInvoiceFinalizedForStockPort,
+): InvoicesModule {
   const openaiApiKey = process.env.OPENAI_API_KEY;
   if (!openaiApiKey) throw new Error("OPENAI_API_KEY não configurado");
 
@@ -72,14 +79,16 @@ export function createInvoicesModule(createSupplierPort: CreateSupplierPort): In
   const supplierHint = new SupabaseSupplierHintAdapter(createScopedQuery);
   const organizationIdentityRead = new SupabaseOrganizationIdentityReadAdapter(createScopedQuery);
   const supplierCreate = new FinancialBaseSupplierCreateAdapter(createSupplierPort);
+  const stockDecisionNotify = new StockPurchaseReviewDecisionAdapter(recordInvoiceFinalizedForStock);
   const aiExtraction = new OpenAiExtractionAdapter(openaiApiKey);
 
   const processDirectDebits = new ProcessDirectDebitsUseCase(invoiceRepo, payableWrite);
   const listInvoices = new ListInvoicesUseCase(invoiceRepo, categoryReader);
   const listInvoiceLines = new ListInvoiceLinesUseCase(lineRepo);
+  const getInvoice = new GetInvoiceUseCase(invoiceRepo, lineRepo, categoryReader);
 
   const router = createInvoiceRouter({
-    createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite),
+    createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, stockDecisionNotify),
     updateInvoice: new UpdateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, reconciliationCleanup),
     markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite, occurrenceSync),
     setInvoiceStatus: new SetInvoiceStatusUseCase(invoiceRepo, payableWrite),
@@ -91,14 +100,14 @@ export function createInvoicesModule(createSupplierPort: CreateSupplierPort): In
     setInvoiceLineDeductibilityOverride: new SetInvoiceLineDeductibilityOverrideUseCase(lineRepo),
     listInvoices,
     listInvoiceLines,
-    getInvoice: new GetInvoiceUseCase(invoiceRepo, lineRepo, categoryReader),
+    getInvoice,
     deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage, payableWrite, reconciliationCleanup),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),
     importInvoice: new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint, organizationIdentityRead),
-    confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint),
+    confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify),
     getInvoiceAlerts: new GetInvoiceAlertsUseCase(invoiceRepo),
     processDirectDebits,
   });
 
-  return { router, processDirectDebits, listInvoices, listInvoiceLines };
+  return { router, processDirectDebits, listInvoices, listInvoiceLines, getInvoice };
 }

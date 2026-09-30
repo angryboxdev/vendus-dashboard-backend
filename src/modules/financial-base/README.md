@@ -149,6 +149,10 @@ módulo.
 **Identidade da organização**
 - `GetOrganizationIdentityPort` — `execute({ organizationId })`; lança `OrganizationNotFoundError`. Já não recebe um `orgId` à parte — a organização a procurar *é* a organização do pedido (ver port de saída abaixo).
 
+**Calendário de entrega de fornecedores** (novo — módulo Stock — Planeamento, D10)
+- `ListSupplierDeliverySchedulesPort` — lista os calendários de um fornecedor em todas as lojas.
+- `UpsertSupplierDeliverySchedulePort` — cria ou actualiza o calendário de um par fornecedor×loja (uma linha cada, nunca duplicada); valida dias da semana (1-7).
+
 ### Saída (dependências do domínio)
 
 - `CostCenterGroupRepositoryPort` — `save(organizationId, group)`, `findById(organizationId, id)`, `findByCode(organizationId, code)`, `findAll(organizationId, filter?)`, `update(organizationId, group)`.
@@ -157,6 +161,7 @@ módulo.
 - `SupplierInvoiceStatsPort` — `getSummariesForSuppliers(organizationId, ids)`, `listInvoicesBySupplier(organizationId, id, filter?)`. Lê da tabela `invoices` para agregar dados financeiros por fornecedor. `SupplierInvoiceRow` inclui `totalWithoutVat`, `vatAmount`, `totalWithVat`; `filter` aceita `startDate?`/`endDate?`.
 - `ChannelRepositoryPort` — `findAll(organizationId, isActive?)`, `findById(organizationId, id)`.
 - `OrganizationIdentityPort` — `findById(organizationId)`. Um único parâmetro: a tabela `organizations` está registada no `TABLE_REGISTRY` (`src/infra/scoped-db/`) com a sua própria PK (`id`) como coluna de organização, pelo que escopar por `organizationId` já é a própria consulta — não há um id de organização separado a passar (ver decisão de design abaixo).
+- `SupplierDeliveryScheduleRepositoryPort` — `findAllForSupplier(organizationId, supplierId)`, `findOne(organizationId, supplierId, locationId)`, `upsert(organizationId, schedule)`.
 
 ## Adapters
 
@@ -173,6 +178,7 @@ módulo.
 - `SupabaseSupplierInvoiceStatsAdapter` → implementa `SupplierInvoiceStatsPort` lendo da tabela `invoices`, via `ScopedQuery`. Agrega stats em TypeScript após fetch por `supplier_id`. **Atenção:** a tabela `invoices` guarda valores monetários em cêntimos (inteiros); o adapter divide por 100 ao mapear para euros — consistente com o módulo `invoices`.
 - `SupabaseChannelRepository` → implementa `ChannelRepositoryPort` na tabela `channels` (read-only; canais geridos por migration), via `ScopedQuery`.
 - `SupabaseOrganizationIdentityRepository` → implementa `OrganizationIdentityPort` na tabela `organizations` (tenant root; read-only aqui), via `ScopedQuery`.
+- `SupabaseSupplierDeliveryScheduleRepository` → implementa `SupplierDeliveryScheduleRepositoryPort` na tabela `supplier_delivery_schedules` (nova, módulo Stock — Planeamento), via `ScopedQuery`.
 
 Nenhum destes adapters guarda um `SupabaseClient` — todos recebem o factory
 `createScopedQuery` (`ScopedQueryFactory`) injectado pelo composition root
@@ -207,6 +213,9 @@ PATCH  /api/financial-base/suppliers/:id                     actualizar
 PATCH  /api/financial-base/suppliers/:id/status              activar/desactivar
 
 GET    /api/financial-base/channels                          lista (query: isActive?)
+
+GET    /api/financial-base/suppliers/:id/delivery-schedule   lista o calendário de entrega em todas as lojas (módulo Stock — Planeamento, D10)
+PUT    /api/financial-base/suppliers/:id/delivery-schedule   cria/actualiza o calendário de um par fornecedor×loja (body: locationId, weekdays, cutoffTime?, active?)
 ```
 
 ## Tabelas Supabase
@@ -278,7 +287,32 @@ suppliers (
 a lê, através de `SupabaseOrganizationIdentityRepository`. Shape completo em
 `.scratch/org-location-foundation/spec.md` D9.
 
+```sql
+-- Nova (módulo Stock — Planeamento, D10) — supabase/migrations/20260930120100_supplier_delivery_schedules.sql
+supplier_delivery_schedules (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id      uuid        NOT NULL REFERENCES organizations(id),
+  supplier_id uuid        NOT NULL REFERENCES suppliers(id),
+  location_id uuid        NOT NULL REFERENCES locations(id),
+  weekdays    int[],      -- 1=Segunda … 7=Domingo; null = sem calendário configurado
+  cutoff_time time,
+  active      boolean     NOT NULL DEFAULT true,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (org_id, supplier_id, location_id)
+);
+```
+
 ## Decisões de design (ADR resumido)
+
+### Calendário de entrega de fornecedores — puramente informativo, nunca um compromisso
+
+`supplier_delivery_schedules` (uma linha por par fornecedor×loja) é
+consumida pelo módulo `stock-planning` (D10, via `ListSupplierDeliverySchedulesPort`)
+para calcular as próximas janelas de entrega (D1/D2) e sugerir quando
+repor stock. Nunca é tratado como um SLA/compromisso rastreado — sem
+calendário configurado, `stock-planning` simplesmente não tem essa
+informação e usa um lead time por omissão (ver README desse módulo).
 
 ### Dois níveis, não um — hierarquia Grupo + Subcategoria
 
@@ -304,6 +338,17 @@ porque é uma propriedade da própria subcategoria, no mesmo espírito dos
 outros flags de impacto — mas a decisão de marcar `false` é sempre
 manual do gestor. Default `true`; nenhum use case deste módulo nem do
 `accounting` infere este valor a partir de uma regra fiscal.
+
+### `stockReviewPolicy` (subcategoria) e `defaultStockPolicy` (fornecedor) — módulo `stock-purchase-review`
+
+Mesmo espírito do `vatDeductible`: propriedades da própria subcategoria/
+fornecedor, mas a decisão de impacto físico em stock vive e é lida pelo
+módulo `stock-purchase-review` (D10). `stockReviewPolicy`
+(`CREATE_REVIEW|NO_STOCK_EFFECT|UNDEFINED`, default `UNDEFINED`) é o sinal
+principal — nunca decidido pelo Centro de Custo. `defaultStockPolicy`
+(`inherit|usually_creates_review|usually_skips_review`, default
+`inherit`) no fornecedor é só uma preferência complementar, nunca capaz de
+ignorar um `stockReviewPolicy` explícito de categoria.
 
 ### `isActive` em vez de `status: "active" | "inactive"`
 

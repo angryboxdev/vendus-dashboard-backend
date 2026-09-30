@@ -109,16 +109,16 @@ describe("GetMonthlyAttendanceSummaryUseCase", () => {
     const pastDate = now.startOf("month").toISODate()!;
     const futureDate = now.endOf("month").toISODate()!;
 
-    // Início do mês: cumprido integralmente (8h planeadas = realizadas).
-    shifts.seed(ORG, shift({ shiftId: "s1", employeeId: emp.id, workDate: pastDate, actualStartTime: "09:00", actualEndTime: "17:00" }));
-    // Fim do mês: só planeado, sem nenhuma marcação — se "hoje" já for o último dia do mês, os 2 turnos coincidem (nesse caso o teste não distingue passado/futuro; aceite, mesmo tipo de fragilidade de relógio real já existente noutros testes deste módulo).
-    shifts.seed(ORG, shift({ shiftId: "s2", employeeId: emp.id, workDate: futureDate }));
+      // Início do mês: cumprido integralmente (8h planeadas = realizadas).
+      shifts.seed(ORG, shift({ shiftId: "s1", employeeId: emp.id, workDate: pastDate, actualStartTime: "09:00", actualEndTime: "17:00" }));
+      // Fim do mês: só planeado, sem nenhuma marcação (futuro real, garantido pelo relógio fixo acima).
+      shifts.seed(ORG, shift({ shiftId: "s2", employeeId: emp.id, workDate: futureDate }));
 
-    const result = await useCase.execute({ organizationId: ORG, year, month });
+      const result = await useCase.execute({ organizationId: ORG, year, month });
 
-    const row = result.rows.find((r) => r.employeeId === emp.id)!;
-    expect(row.plannedMinutes).toBe(960); // 2 turnos de 8h — informativo, inclui o futuro.
-    expect(row.balanceMinutes).toBe(0); // 8h realizadas - 8h planeadas ATÉ HOJE (o turno futuro nunca entra na conta).
+      const row = result.rows.find((r) => r.employeeId === emp.id)!;
+      expect(row.plannedMinutes).toBe(960); // 2 turnos de 8h — informativo, inclui o futuro.
+      expect(row.balanceMinutes).toBe(0); // 8h realizadas - 8h planeadas ATÉ HOJE (o turno futuro nunca entra na conta).
   });
 
   it("regressão: se hr_attendance_rules/hr_attendance_corrections ainda não existirem (migração Fase 2.1 pendente), 'Por colaborador' continua a funcionar", async () => {

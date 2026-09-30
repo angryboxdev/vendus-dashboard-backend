@@ -9,7 +9,13 @@ import { FakeLocationRepository } from "../fakes/fake-location-repository.js";
 import type { ShiftOccurrence } from "../../domain/ports/out/shift-attendance-read.port.js";
 
 const ORG = mintOrganizationId("org-test");
-const TODAY = DateTime.now().setZone("Europe/Lisbon").toISODate()!;
+// Relógio fixo a meio da tarde (Lisboa) — "3 horas atrás" nunca pode
+// atravessar a meia-noite para trás do `workDate` fixo abaixo. Sem isto, o
+// teste ficava dependente da hora real a que corria (falhava sempre que
+// executado entre ~00:00 e ~03:00 Lisboa, porque "agora - 3h" caía no dia
+// anterior enquanto `workDate` continuava a ser hoje).
+const FIXED_NOW = DateTime.fromISO("2026-09-30T14:00:00", { zone: "Europe/Lisbon" });
+const TODAY = FIXED_NOW.toISODate()!;
 
 function makeShift(overrides: Partial<ShiftOccurrence> = {}): ShiftOccurrence {
   return {
@@ -39,6 +45,15 @@ function setup() {
 }
 
 describe("GetShiftToReviewUseCase", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(FIXED_NOW.toJSDate());
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it("devolve o turno com nome do colaborador e nome do local resolvidos", async () => {
     const { employees, shifts, locations, useCase } = setup();
     const emp = Employee.create({ fullName: "Carlos Andrés" });

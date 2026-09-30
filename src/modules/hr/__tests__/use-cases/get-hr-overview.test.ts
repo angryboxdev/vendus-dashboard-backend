@@ -146,7 +146,23 @@ describe("GetHrOverviewUseCase", () => {
   });
 
   describe("bloco 'operation' (Hoje na operação)", () => {
-    const TODAY = DateTime.now().setZone("Europe/Lisbon").toISODate()!;
+    // Relógio fixo a meio da tarde (Lisboa) — vários testes deste bloco usam
+    // offsets de horas relativos a "agora" (o use case usa DateTime.now()
+    // real); com o relógio real, um offset como "-5h"/"+4h" podia atravessar
+    // a meia-noite e deixar de bater com `TODAY`, dependendo da hora real a
+    // que os testes corriam. 14:00 dá margem suficiente para todos os
+    // offsets usados abaixo (até ±5h) nunca saírem do mesmo dia civil.
+    const FIXED_NOW = DateTime.fromISO("2026-09-30T14:00:00", { zone: "Europe/Lisbon" });
+    const TODAY = FIXED_NOW.toISODate()!;
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      jest.setSystemTime(FIXED_NOW.toJSDate());
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
 
     function shiftToday(overrides: Partial<ShiftOccurrence> = {}): ShiftOccurrence {
       return {

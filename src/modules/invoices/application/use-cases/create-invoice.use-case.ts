@@ -8,6 +8,7 @@ import type {
 import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
 import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
 import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry-write.port.js";
+import type { StockDecisionNotifyPort } from "../../domain/ports/out/stock-decision-notify.port.js";
 import { toInvoiceDTO } from "./shared.js";
 import { DuplicateInvoiceError } from "../../domain/errors.js";
 
@@ -16,6 +17,7 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     private readonly invoiceRepo: InvoiceRepositoryPort,
     private readonly lineRepo: InvoiceLineRepositoryPort,
     private readonly payableWrite: PayableEntryWritePort,
+    private readonly stockDecisionNotify: StockDecisionNotifyPort,
   ) {}
 
   async execute(command: CreateInvoiceCommand): Promise<InvoiceDTO> {
@@ -36,6 +38,8 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     if (command.financialType !== undefined) invoiceProps.financialType = command.financialType;
     if (command.isDirectDebit !== undefined) invoiceProps.isDirectDebit = command.isDirectDebit;
     if (command.directDebitDate !== undefined) invoiceProps.directDebitDate = command.directDebitDate ? new Date(command.directDebitDate) : null;
+    if (command.stockReviewOverride !== undefined) invoiceProps.stockReviewOverride = command.stockReviewOverride;
+    if (command.stockReviewOverrideReason !== undefined) invoiceProps.stockReviewOverrideReason = command.stockReviewOverrideReason;
     const invoice = Invoice.create(invoiceProps);
 
     // Duplicate check — only when supplier is known
@@ -77,6 +81,32 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
         dueDate: invoice.dueDate,
         amount: invoice.totalWithVat,
       });
+    }
+
+    try {
+      await this.stockDecisionNotify.notifyInvoiceFinalized(command.organizationId, {
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        invoiceDate: invoice.invoiceDate.toISOString().slice(0, 10),
+        supplierId: invoice.supplierId,
+        supplierName: invoice.supplierName,
+        supplierNif: invoice.supplierNifSnapshot,
+        override: invoice.stockReviewOverride,
+        overrideReason: invoice.stockReviewOverrideReason,
+        lines: lines.map((l) => ({
+          id: l.id,
+          description: l.description,
+          quantity: l.quantity,
+          unit: l.unit,
+          unitCostWithoutVat: l.unitCostWithoutVat,
+          totalWithVat: l.totalWithVat,
+          costCenterCategoryId: l.costCenterCategoryId,
+          locationId: l.locationId,
+        })),
+        actor: null,
+      });
+    } catch (e) {
+      console.error("[invoices] falha ao notificar stock-purchase-review (ignorada, sweep fará retry):", e);
     }
 
     return toInvoiceDTO(invoice, lines);

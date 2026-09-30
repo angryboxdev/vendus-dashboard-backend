@@ -1,6 +1,6 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
-import { CostCenterCategory, type FinancialType } from "../../domain/entities/cost-center-category.js";
+import { CostCenterCategory, type FinancialType, type StockReviewPolicy } from "../../domain/entities/cost-center-category.js";
 import type {
   CostCenterCategoryFilter,
   CostCenterCategoryRepositoryPort,
@@ -19,6 +19,7 @@ function toEntity(row: Record<string, unknown>): CostCenterCategory {
     requiresChannel: Boolean(row.requires_channel),
     requiresAllocation: Boolean(row.requires_allocation),
     vatDeductible: row.vat_deductible === undefined ? true : Boolean(row.vat_deductible),
+    stockReviewPolicy: (row.stock_review_policy as StockReviewPolicy | undefined) ?? "UNDEFINED",
     isActive: Boolean(row.is_active),
     description: (row.description as string | null) ?? null,
     createdAt: new Date(row.created_at as string),
@@ -47,6 +48,7 @@ export class SupabaseCostCenterCategoryRepository implements CostCenterCategoryR
       requires_channel: category.requiresChannel,
       requires_allocation: category.requiresAllocation,
       vat_deductible: category.vatDeductible,
+      stock_review_policy: category.stockReviewPolicy,
       is_active: category.isActive,
       description: category.description,
       created_at: category.createdAt.toISOString(),
@@ -116,6 +118,7 @@ export class SupabaseCostCenterCategoryRepository implements CostCenterCategoryR
         requires_channel: category.requiresChannel,
         requires_allocation: category.requiresAllocation,
         vat_deductible: category.vatDeductible,
+        stock_review_policy: category.stockReviewPolicy,
         is_active: category.isActive,
         description: category.description,
         updated_at: category.updatedAt.toISOString(),

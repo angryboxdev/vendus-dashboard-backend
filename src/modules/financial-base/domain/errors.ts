@@ -33,6 +33,20 @@ export class InvalidFinancialTypeError extends Error {
   }
 }
 
+export class InvalidStockReviewPolicyError extends Error {
+  constructor(value: string) {
+    super(`Política de revisão de stock inválida: "${value}"`);
+    this.name = "InvalidStockReviewPolicyError";
+  }
+}
+
+export class InvalidDefaultStockPolicyError extends Error {
+  constructor(value: string) {
+    super(`Política padrão de stock inválida: "${value}"`);
+    this.name = "InvalidDefaultStockPolicyError";
+  }
+}
+
 export class SupplierNotFoundError extends Error {
   constructor(id: string) {
     super(`Fornecedor "${id}" não encontrado`);
@@ -44,5 +58,12 @@ export class OrganizationNotFoundError extends Error {
   constructor(orgId: string) {
     super(`Organização "${orgId}" não encontrada`);
     this.name = "OrganizationNotFoundError";
+  }
+}
+
+export class InvalidDeliveryWeekdayError extends Error {
+  constructor(value: number) {
+    super(`Dia da semana inválido no calendário de entrega: ${value} (tem de ser 1=Segunda a 7=Domingo)`);
+    this.name = "InvalidDeliveryWeekdayError";
   }
 }
