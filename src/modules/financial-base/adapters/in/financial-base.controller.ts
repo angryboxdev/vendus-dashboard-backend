@@ -10,7 +10,8 @@ import {
   InvalidFinancialTypeError,
   SupplierNotFoundError,
 } from "../../domain/errors.js";
-import { FINANCIAL_TYPES, type FinancialType } from "../../domain/entities/cost-center-category.js";
+import { FINANCIAL_TYPES, type FinancialType, type StockReviewPolicy } from "../../domain/entities/cost-center-category.js";
+import type { DefaultStockPolicy } from "../../domain/entities/supplier.js";
 import type { ListCostCenterGroupsPort } from "../../domain/ports/in/cost-center-group.ports.js";
 import type { GetCostCenterGroupPort } from "../../domain/ports/in/cost-center-group.ports.js";
 import type { CreateCostCenterGroupPort } from "../../domain/ports/in/cost-center-group.ports.js";
@@ -553,6 +554,7 @@ export class FinancialBaseController {
           requiresChannel: (body.requiresChannel as boolean | undefined) ?? false,
           requiresAllocation: (body.requiresAllocation as boolean | undefined) ?? false,
           vatDeductible: (body.vatDeductible as boolean | undefined) ?? true,
+          ...(body.stockReviewPolicy !== undefined && { stockReviewPolicy: body.stockReviewPolicy as StockReviewPolicy }),
           description: (body.description as string | null | undefined) ?? null,
         });
         res.status(201).json(result);
@@ -591,6 +593,7 @@ export class FinancialBaseController {
         if (body.requiresAllocation !== undefined)
           data.requiresAllocation = body.requiresAllocation as boolean;
         if (body.vatDeductible !== undefined) data.vatDeductible = body.vatDeductible as boolean;
+        if (body.stockReviewPolicy !== undefined) data.stockReviewPolicy = body.stockReviewPolicy as StockReviewPolicy;
         if ("description" in body) data.description = (body.description as string | null) ?? null;
         const result = await this.updateCostCenterCategory.execute({
           organizationId: req.auth!.orgId,
@@ -852,6 +855,7 @@ export class FinancialBaseController {
           paymentTermsDays:
             body.paymentTermsDays != null ? Number(body.paymentTermsDays) : null,
           notes: (body.notes as string | null | undefined) ?? null,
+          ...(body.defaultStockPolicy !== undefined && { defaultStockPolicy: body.defaultStockPolicy as DefaultStockPolicy }),
         });
         res.status(201).json(result);
       } catch (e) {
@@ -883,6 +887,8 @@ export class FinancialBaseController {
           data.paymentTermsDays =
             body.paymentTermsDays != null ? Number(body.paymentTermsDays) : null;
         if ("notes" in body) data.notes = (body.notes as string | null) ?? null;
+        if (body.defaultStockPolicy !== undefined)
+          data.defaultStockPolicy = body.defaultStockPolicy as DefaultStockPolicy;
         const result = await this.updateSupplier.execute({
           organizationId: req.auth!.orgId,
           id: req.params["id"] as string,

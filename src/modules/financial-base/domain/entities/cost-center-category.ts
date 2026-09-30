@@ -1,4 +1,18 @@
-import { InvalidFinancialTypeError } from "../errors.js";
+import { InvalidFinancialTypeError, InvalidStockReviewPolicyError } from "../errors.js";
+
+/**
+ * Módulo Stock (Compra por rever) — nunca decidida pelo Centro de Custo,
+ * só pela categoria/subcategoria financeira. `UNDEFINED` cai para a
+ * preferência do fornecedor; nunca decide sozinha se uma fatura gera
+ * inventário — só se deve gerar uma revisão para um humano decidir.
+ */
+export type StockReviewPolicy = "CREATE_REVIEW" | "NO_STOCK_EFFECT" | "UNDEFINED";
+
+export const STOCK_REVIEW_POLICIES: StockReviewPolicy[] = [
+  "CREATE_REVIEW",
+  "NO_STOCK_EFFECT",
+  "UNDEFINED",
+];
 
 export type FinancialType =
   | "cmv"
@@ -39,6 +53,8 @@ export interface UpdateCostCenterCategoryData {
   requiresAllocation?: boolean;
   /** Módulo Contabilidade — nunca inferido por regra fiscal automática; o gestor decide por subcategoria. Default `true` (dedutível). */
   vatDeductible?: boolean;
+  /** Módulo Stock — nunca decidido pelo Centro de Custo. Default `UNDEFINED` (cai para a preferência do fornecedor). */
+  stockReviewPolicy?: StockReviewPolicy;
   description?: string | null;
 }
 
@@ -54,6 +70,7 @@ interface CostCenterCategoryProps {
   requiresChannel: boolean;
   requiresAllocation: boolean;
   vatDeductible: boolean;
+  stockReviewPolicy: StockReviewPolicy;
   isActive: boolean;
   description: string | null;
   createdAt: Date;
@@ -72,6 +89,7 @@ export class CostCenterCategory {
   readonly requiresChannel: boolean;
   readonly requiresAllocation: boolean;
   readonly vatDeductible: boolean;
+  readonly stockReviewPolicy: StockReviewPolicy;
   readonly isActive: boolean;
   readonly description: string | null;
   readonly createdAt: Date;
@@ -89,6 +107,7 @@ export class CostCenterCategory {
     this.requiresChannel = props.requiresChannel;
     this.requiresAllocation = props.requiresAllocation;
     this.vatDeductible = props.vatDeductible;
+    this.stockReviewPolicy = props.stockReviewPolicy;
     this.isActive = props.isActive;
     this.description = props.description;
     this.createdAt = props.createdAt;
@@ -106,10 +125,14 @@ export class CostCenterCategory {
     requiresChannel?: boolean;
     requiresAllocation?: boolean;
     vatDeductible?: boolean;
+    stockReviewPolicy?: string;
     description?: string | null;
   }): CostCenterCategory {
     if (!FINANCIAL_TYPES.includes(props.financialType as FinancialType)) {
       throw new InvalidFinancialTypeError(props.financialType);
+    }
+    if (props.stockReviewPolicy !== undefined && !STOCK_REVIEW_POLICIES.includes(props.stockReviewPolicy as StockReviewPolicy)) {
+      throw new InvalidStockReviewPolicyError(props.stockReviewPolicy);
     }
     const now = new Date();
     return new CostCenterCategory({
@@ -124,6 +147,7 @@ export class CostCenterCategory {
       requiresChannel: props.requiresChannel ?? false,
       requiresAllocation: props.requiresAllocation ?? false,
       vatDeductible: props.vatDeductible ?? true,
+      stockReviewPolicy: (props.stockReviewPolicy as StockReviewPolicy) ?? "UNDEFINED",
       isActive: true,
       description: props.description ?? null,
       createdAt: now,
@@ -139,6 +163,9 @@ export class CostCenterCategory {
     if (data.financialType !== undefined && !FINANCIAL_TYPES.includes(data.financialType)) {
       throw new InvalidFinancialTypeError(data.financialType);
     }
+    if (data.stockReviewPolicy !== undefined && !STOCK_REVIEW_POLICIES.includes(data.stockReviewPolicy)) {
+      throw new InvalidStockReviewPolicyError(data.stockReviewPolicy);
+    }
     return new CostCenterCategory({
       ...this.toProps(),
       name: data.name !== undefined ? data.name.trim() : this.name,
@@ -149,6 +176,7 @@ export class CostCenterCategory {
       requiresChannel: data.requiresChannel ?? this.requiresChannel,
       requiresAllocation: data.requiresAllocation ?? this.requiresAllocation,
       vatDeductible: data.vatDeductible ?? this.vatDeductible,
+      stockReviewPolicy: data.stockReviewPolicy ?? this.stockReviewPolicy,
       description: data.description !== undefined ? data.description : this.description,
       updatedAt: new Date(),
     });
@@ -175,6 +203,7 @@ export class CostCenterCategory {
       requiresChannel: this.requiresChannel,
       requiresAllocation: this.requiresAllocation,
       vatDeductible: this.vatDeductible,
+      stockReviewPolicy: this.stockReviewPolicy,
       isActive: this.isActive,
       description: this.description,
       createdAt: this.createdAt,

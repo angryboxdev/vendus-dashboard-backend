@@ -146,3 +146,38 @@ The accounting module's own generalization of "trimestre" to also cover
 period)` resolves it to a calendar date range.
 _Avoid_: Trimestre (only correct when periodicity is actually quarterly —
 use "período" when periodicity is unknown or configurable).
+
+## Stock (integração Financeiro→Stock)
+
+**Compra por rever / Stock Purchase Review**:
+The bridge between a finalized invoice and physical stock, owned by the
+`stock-purchase-review` module. Never a second invoice, never a second
+OCR/import — only a reference to the same `invoice_id` (UNIQUE: one
+invoice never has two active reviews). Created only when the decision
+engine (category/supplier/override — never Centro de Custo) says the
+invoice should affect stock; a human must resolve every line and
+explicitly confirm before any `stock_movements` row is written.
+_Avoid_: Fatura de stock, segunda fatura (this is never a parallel
+invoice — editing an invoice always happens only in `invoices`).
+
+**Origem dos fundos (Funding Source) vs. Centro de Custo**:
+"Funding source" (`partner|employee|platform|other` on `accounting`'s
+`AccountingDocument`) is who actually paid. Centro de Custo is where the
+cost belongs operationally/financially. Neither ever decides whether an
+invoice affects physical stock — that's `stockReviewPolicy` (category)
+and `defaultStockPolicy` (supplier) alone, both on `financial-base`
+entities but read by `stock-purchase-review` (D10). Centro de Custo is
+reserved for a possible future location inference, never a stock-impact
+signal.
+_Avoid_: using "Centro de Custo" or "origem dos fundos" interchangeably
+with "decisão de impacto em stock" — they're related concepts owned by
+different modules, never the same field.
+
+**Resolução de linha (Line Resolution)**:
+Every `StockReviewLine` in a review must end as exactly one of
+`existing_item` (mapped to a stock item, with a unit conversion factor),
+`new_item` (creates a catalog item starting at quantity 0 — creating the
+catalog entry is never the same as adding inventory), or
+`no_stock_effect` (service/fee/discount, still auditable and learnable).
+_Avoid_: "classificação" (used elsewhere for `invoices`' cost-center
+classification — a different concept, don't conflate the two).

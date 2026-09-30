@@ -33,6 +33,20 @@ export class InvalidFinancialTypeError extends Error {
   }
 }
 
+export class InvalidStockReviewPolicyError extends Error {
+  constructor(value: string) {
+    super(`Política de revisão de stock inválida: "${value}"`);
+    this.name = "InvalidStockReviewPolicyError";
+  }
+}
+
+export class InvalidDefaultStockPolicyError extends Error {
+  constructor(value: string) {
+    super(`Política padrão de stock inválida: "${value}"`);
+    this.name = "InvalidDefaultStockPolicyError";
+  }
+}
+
 export class SupplierNotFoundError extends Error {
   constructor(id: string) {
     super(`Fornecedor "${id}" não encontrado`);

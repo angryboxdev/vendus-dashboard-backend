@@ -3,6 +3,7 @@ import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import { SupabaseLocationRepository } from "./adapters/out/supabase-location.repository.js";
 import { ListLocationsUseCase } from "./application/use-cases/list-locations.use-case.js";
 import { LocationController } from "./adapters/in/location.controller.js";
+import type { ListLocationsPort } from "./domain/ports/in/list-locations.port.js";
 
 /**
  * Composition root do módulo locations (spec B2 ticket 01/D15).
@@ -12,10 +13,10 @@ import { LocationController } from "./adapters/in/location.controller.js";
  * seu próprio `ScopedQuery`: recebe o factory `createScopedQuery` injectado
  * aqui, no composition root, e constrói um helper escopado por chamada.
  */
-export function createLocationsModule(): { router: Router } {
+export function createLocationsModule(): { router: Router; listLocations: ListLocationsPort } {
   const locationRepository = new SupabaseLocationRepository(createScopedQuery);
   const listLocations = new ListLocationsUseCase(locationRepository);
   const controller = new LocationController(listLocations);
 
-  return { router: controller.router };
+  return { router: controller.router, listLocations };
 }

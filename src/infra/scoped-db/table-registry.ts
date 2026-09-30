@@ -65,6 +65,22 @@ export const TABLE_REGISTRY = {
   accounting_audit_logs: { organizationColumn: "org_id", locationBearing: false },
   accounting_settings: { organizationColumn: "org_id", locationBearing: false },
 
+  // Módulo Stock — "Compra por rever" (integração Financeiro→Stock).
+  stock_purchase_reviews: { organizationColumn: "org_id", locationBearing: false },
+  stock_review_lines: { organizationColumn: "org_id", locationBearing: true },
+  stock_review_learned_mappings: { organizationColumn: "org_id", locationBearing: false },
+  stock_review_audit_logs: { organizationColumn: "org_id", locationBearing: false },
+
+  // Módulo Stock — Contagem Física de Stock 2.0.
+  stock_count_sessions: { organizationColumn: "org_id", locationBearing: true },
+  stock_count_lines: { organizationColumn: "org_id", locationBearing: false },
+  stock_count_attempts: { organizationColumn: "org_id", locationBearing: false },
+  stock_count_components: { organizationColumn: "org_id", locationBearing: false },
+  stock_count_zones: { organizationColumn: "org_id", locationBearing: true },
+  stock_item_count_units: { organizationColumn: "org_id", locationBearing: false },
+  stock_count_settings: { organizationColumn: "org_id", locationBearing: false },
+  stock_count_audit_logs: { organizationColumn: "org_id", locationBearing: false },
+
   // org-integration-credentials spec, ticket 04: AirMenu credentials (one
   // row per org) and per-location config — see
   // supabase/migrations/20260905090000_create_airmenu_credentials_tables.sql.

@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { FinancialType, UpdateCostCenterCategoryData } from "../../entities/cost-center-category.js";
+import type { FinancialType, StockReviewPolicy, UpdateCostCenterCategoryData } from "../../entities/cost-center-category.js";
 
 // ---- Shared DTO ----
 export interface CostCenterCategoryDTO {
@@ -14,6 +14,7 @@ export interface CostCenterCategoryDTO {
   requiresChannel: boolean;
   requiresAllocation: boolean;
   vatDeductible: boolean;
+  stockReviewPolicy: StockReviewPolicy;
   isActive: boolean;
   description: string | null;
   createdAt: Date;
@@ -54,6 +55,7 @@ export interface CreateCostCenterCategoryCommand {
   requiresChannel?: boolean;
   requiresAllocation?: boolean;
   vatDeductible?: boolean;
+  stockReviewPolicy?: StockReviewPolicy;
   description?: string | null;
 }
 

@@ -7,6 +7,7 @@ import type {
   AiExtractionStatus,
   ReconciliationStatus,
   LineDetailMode,
+  StockReviewOverride,
 } from "../../entities/invoice.js";
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
@@ -81,6 +82,9 @@ export interface InvoiceDTO {
   affectsCashflow: boolean;
   affectsProfitability: boolean;
   currency: string;
+  /** Módulo Stock (Compra por rever) — `null` = automático (categoria/fornecedor decidem, nunca o Centro de Custo). */
+  stockReviewOverride: StockReviewOverride;
+  stockReviewOverrideReason: string | null;
   createdAt: string;
   updatedAt: string;
   lines?: InvoiceLineDTO[];
@@ -192,6 +196,8 @@ export interface CreateInvoiceCommand {
   affectsCashflow?: boolean;
   affectsProfitability?: boolean;
   currency?: string;
+  stockReviewOverride?: StockReviewOverride;
+  stockReviewOverrideReason?: string | null;
   lines?: CreateInvoiceLineCommand[];
 }
 
@@ -219,6 +225,8 @@ export interface UpdateInvoiceCommand {
   affectsCashflow?: boolean;
   affectsProfitability?: boolean;
   currency?: string;
+  stockReviewOverride?: StockReviewOverride;
+  stockReviewOverrideReason?: string | null;
 }
 
 export interface MarkInvoicePaidCommand {
@@ -322,6 +330,8 @@ export interface ConfirmImportedInvoiceCommand {
   affectsCashflow?: boolean;
   affectsProfitability?: boolean;
   currency?: string;
+  stockReviewOverride?: StockReviewOverride;
+  stockReviewOverrideReason?: string | null;
   saveAsPayable?: boolean;
   markAsPaid?: boolean;
   paidAt?: string; // YYYY-MM-DD — used when markAsPaid is true; defaults to invoiceDate

@@ -33,6 +33,17 @@ export type InvoiceDocumentType = "invoice" | "credit_note";
 
 export type AiExtractionStatus = "processing" | "done" | "failed";
 
+/**
+ * Módulo Stock (Compra por rever) — decisão de impacto físico. `auto` é o
+ * default: a categoria/subcategoria da linha e a preferência do fornecedor
+ * decidem (nunca o Centro de Custo). `force_skip` exige motivo sempre que a
+ * categoria/fornecedor normalmente geraria revisão (protege contra
+ * desativar stock por acidente); `force_create` nunca exige motivo.
+ */
+export type StockReviewOverride = "auto" | "force_create" | "force_skip";
+
+export const STOCK_REVIEW_OVERRIDES: StockReviewOverride[] = ["auto", "force_create", "force_skip"];
+
 export const INVOICE_STATUSES: InvoiceStatus[] = [
   "draft_ai", "pending_review", "pending", "paid", "overdue", "cancelled", "review",
 ];
@@ -77,6 +88,8 @@ interface InvoiceProps {
   affectsCashflow: boolean;
   affectsProfitability: boolean;
   currency: string;
+  stockReviewOverride: StockReviewOverride;
+  stockReviewOverrideReason: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -104,6 +117,8 @@ export interface UpdateInvoiceData {
   affectsProfitability?: boolean;
   currency?: string;
   competenceDate?: Date | null;
+  stockReviewOverride?: StockReviewOverride;
+  stockReviewOverrideReason?: string | null;
 }
 
 export interface ConfirmImportData {
@@ -127,6 +142,8 @@ export interface ConfirmImportData {
   affectsCashflow?: boolean;
   affectsProfitability?: boolean;
   currency?: string;
+  stockReviewOverride?: StockReviewOverride;
+  stockReviewOverrideReason?: string | null;
 }
 
 export class Invoice {
@@ -164,6 +181,8 @@ export class Invoice {
   readonly affectsCashflow: boolean;
   readonly affectsProfitability: boolean;
   readonly currency: string;
+  readonly stockReviewOverride: StockReviewOverride;
+  readonly stockReviewOverrideReason: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 
@@ -202,6 +221,8 @@ export class Invoice {
     this.affectsCashflow = props.affectsCashflow;
     this.affectsProfitability = props.affectsProfitability;
     this.currency = props.currency;
+    this.stockReviewOverride = props.stockReviewOverride;
+    this.stockReviewOverrideReason = props.stockReviewOverrideReason;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
   }
@@ -231,6 +252,8 @@ export class Invoice {
     currency?: string;
     competenceDate?: Date | null;
     lineDetailMode?: LineDetailMode;
+    stockReviewOverride?: StockReviewOverride;
+    stockReviewOverrideReason?: string | null;
   }): Invoice {
     const now = new Date();
     const documentType = props.documentType ?? "invoice";
@@ -269,6 +292,8 @@ export class Invoice {
       affectsCashflow: props.affectsCashflow ?? true,
       affectsProfitability: props.affectsProfitability ?? false,
       currency: props.currency ?? "EUR",
+      stockReviewOverride: props.stockReviewOverride ?? "auto",
+      stockReviewOverrideReason: props.stockReviewOverrideReason ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -331,6 +356,8 @@ export class Invoice {
       affectsCashflow: true,
       affectsProfitability: false,
       currency: props.currency ?? "EUR",
+      stockReviewOverride: "auto",
+      stockReviewOverrideReason: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -366,6 +393,8 @@ export class Invoice {
     if (data.affectsProfitability !== undefined) p.affectsProfitability = data.affectsProfitability;
     if (data.currency !== undefined) p.currency = data.currency;
     if (data.competenceDate !== undefined) p.competenceDate = data.competenceDate;
+    if (data.stockReviewOverride !== undefined) p.stockReviewOverride = data.stockReviewOverride;
+    if (data.stockReviewOverrideReason !== undefined) p.stockReviewOverrideReason = data.stockReviewOverrideReason;
     p.subtotalWithoutVat = Invoice.normalizeAmountSign(p.subtotalWithoutVat, p.documentType);
     p.totalVat = Invoice.normalizeAmountSign(p.totalVat, p.documentType);
     p.totalWithVat = Invoice.normalizeAmountSign(p.totalWithVat, p.documentType);
@@ -395,6 +424,8 @@ export class Invoice {
     if (data.affectsCashflow !== undefined) p.affectsCashflow = data.affectsCashflow;
     if (data.affectsProfitability !== undefined) p.affectsProfitability = data.affectsProfitability;
     if (data.currency !== undefined) p.currency = data.currency;
+    if (data.stockReviewOverride !== undefined) p.stockReviewOverride = data.stockReviewOverride;
+    if (data.stockReviewOverrideReason !== undefined) p.stockReviewOverrideReason = data.stockReviewOverrideReason;
     p.subtotalWithoutVat = Invoice.normalizeAmountSign(p.subtotalWithoutVat, p.documentType);
     p.totalVat = Invoice.normalizeAmountSign(p.totalVat, p.documentType);
     p.totalWithVat = Invoice.normalizeAmountSign(p.totalWithVat, p.documentType);
@@ -487,6 +518,8 @@ export class Invoice {
       affectsCashflow: this.affectsCashflow,
       affectsProfitability: this.affectsProfitability,
       currency: this.currency,
+      stockReviewOverride: this.stockReviewOverride,
+      stockReviewOverrideReason: this.stockReviewOverrideReason,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };

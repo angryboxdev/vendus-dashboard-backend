@@ -36,6 +36,7 @@ export class CreateCostCenterCategoryUseCase implements CreateCostCenterCategory
       requiresChannel: command.requiresChannel ?? false,
       requiresAllocation: command.requiresAllocation ?? false,
       vatDeductible: command.vatDeductible ?? true,
+      stockReviewPolicy: command.stockReviewPolicy ?? "UNDEFINED",
       description: command.description ?? null,
     });
 

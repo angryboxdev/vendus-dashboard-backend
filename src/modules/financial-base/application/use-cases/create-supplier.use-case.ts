@@ -22,6 +22,7 @@ export class CreateSupplierUseCase implements CreateSupplierPort {
       defaultCostCenterCategoryId: command.defaultCostCenterCategoryId ?? null,
       paymentTermsDays: command.paymentTermsDays ?? null,
       notes: command.notes ?? null,
+      ...(command.defaultStockPolicy !== undefined && { defaultStockPolicy: command.defaultStockPolicy }),
     });
 
     await this.repository.save(command.organizationId, supplier);

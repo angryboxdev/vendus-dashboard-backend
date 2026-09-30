@@ -1,4 +1,19 @@
+import { InvalidDefaultStockPolicyError } from "../errors.js";
+
 export type SupplierStatus = "active" | "inactive";
+
+/**
+ * Módulo Stock (Compra por rever) — só preferência complementar; nunca
+ * pode ignorar uma classificação financeira explícita (`CREATE_REVIEW`/
+ * `NO_STOCK_EFFECT` na categoria) que determine impacto em stock.
+ */
+export type DefaultStockPolicy = "inherit" | "usually_creates_review" | "usually_skips_review";
+
+export const DEFAULT_STOCK_POLICIES: DefaultStockPolicy[] = [
+  "inherit",
+  "usually_creates_review",
+  "usually_skips_review",
+];
 
 interface SupplierProps {
   id: string;
@@ -13,6 +28,7 @@ interface SupplierProps {
   paymentTermsDays: number | null;
   notes: string | null;
   status: SupplierStatus;
+  defaultStockPolicy: DefaultStockPolicy;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,6 +44,7 @@ export interface UpdateSupplierData {
   defaultCostCenterCategoryId?: string | null;
   paymentTermsDays?: number | null;
   notes?: string | null;
+  defaultStockPolicy?: DefaultStockPolicy;
 }
 
 export class Supplier {
@@ -43,6 +60,7 @@ export class Supplier {
   readonly paymentTermsDays: number | null;
   readonly notes: string | null;
   readonly status: SupplierStatus;
+  readonly defaultStockPolicy: DefaultStockPolicy;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 
@@ -59,6 +77,7 @@ export class Supplier {
     this.paymentTermsDays = props.paymentTermsDays;
     this.notes = props.notes;
     this.status = props.status;
+    this.defaultStockPolicy = props.defaultStockPolicy;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
   }
@@ -74,7 +93,11 @@ export class Supplier {
     defaultCostCenterCategoryId?: string | null;
     paymentTermsDays?: number | null;
     notes?: string | null;
+    defaultStockPolicy?: string;
   }): Supplier {
+    if (props.defaultStockPolicy !== undefined && !DEFAULT_STOCK_POLICIES.includes(props.defaultStockPolicy as DefaultStockPolicy)) {
+      throw new InvalidDefaultStockPolicyError(props.defaultStockPolicy);
+    }
     const now = new Date();
     return new Supplier({
       id: crypto.randomUUID(),
@@ -89,6 +112,7 @@ export class Supplier {
       paymentTermsDays: props.paymentTermsDays ?? null,
       notes: props.notes ?? null,
       status: "active",
+      defaultStockPolicy: (props.defaultStockPolicy as DefaultStockPolicy) ?? "inherit",
       createdAt: now,
       updatedAt: now,
     });
@@ -99,6 +123,9 @@ export class Supplier {
   }
 
   update(data: UpdateSupplierData): Supplier {
+    if (data.defaultStockPolicy !== undefined && !DEFAULT_STOCK_POLICIES.includes(data.defaultStockPolicy)) {
+      throw new InvalidDefaultStockPolicyError(data.defaultStockPolicy);
+    }
     return new Supplier({
       id: this.id,
       name: data.name !== undefined ? data.name.trim() : this.name,
@@ -119,6 +146,7 @@ export class Supplier {
         data.paymentTermsDays !== undefined ? data.paymentTermsDays : this.paymentTermsDays,
       notes: data.notes !== undefined ? data.notes : this.notes,
       status: this.status,
+      defaultStockPolicy: data.defaultStockPolicy ?? this.defaultStockPolicy,
       createdAt: this.createdAt,
       updatedAt: new Date(),
     });
@@ -146,6 +174,7 @@ export class Supplier {
       paymentTermsDays: this.paymentTermsDays,
       notes: this.notes,
       status: this.status,
+      defaultStockPolicy: this.defaultStockPolicy,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };

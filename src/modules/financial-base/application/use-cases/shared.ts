@@ -31,6 +31,7 @@ export function toCostCenterCategoryDTO(c: CostCenterCategory): CostCenterCatego
     requiresChannel: c.requiresChannel,
     requiresAllocation: c.requiresAllocation,
     vatDeductible: c.vatDeductible,
+    stockReviewPolicy: c.stockReviewPolicy,
     isActive: c.isActive,
     description: c.description,
     createdAt: c.createdAt,
@@ -52,6 +53,7 @@ export function toSupplierDTO(s: Supplier): SupplierDTO {
     paymentTermsDays: s.paymentTermsDays,
     notes: s.notes,
     status: s.status,
+    defaultStockPolicy: s.defaultStockPolicy,
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,
   };

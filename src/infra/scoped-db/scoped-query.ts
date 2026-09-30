@@ -50,7 +50,11 @@ export class ScopedQuery {
   }
 
   /**
-   * The one stored procedure in the codebase (D17, ADR-0008):
+   * The first stored procedure in the codebase (D17, ADR-0008) — two more
+   * (`fn_stock_review_create_from_invoice`/`fn_stock_review_confirm`, module
+   * `stock-purchase-review`) were added later for the same reason: PostgREST
+   * gives no ad-hoc multi-table transaction, so atomic multi-row writes with
+   * business-rule branching go through a named `plpgsql` function instead.
    * `get_stock_quantities_with_last_purchase` aggregated `stock_movements`
    * for a set of item identifiers with no organization predicate at all, and
    * was executable by anonymous callers — a hole in the "the helper is the
@@ -63,6 +67,111 @@ export class ScopedQuery {
     return this.client.rpc("get_stock_quantities_with_last_purchase", {
       p_org_id: this.organizationId,
       p_item_ids: itemIds,
+    });
+  }
+
+  /**
+   * Módulo `stock-purchase-review` — cria a Compra por rever + linhas numa
+   * única transação, idempotente por construção
+   * (`ON CONFLICT (invoice_id) DO NOTHING`). Ver
+   * `20260930100100_stock_purchase_review_rpcs.sql`.
+   */
+  createStockPurchaseReviewFromInvoice(review: Record<string, unknown>, lines: Record<string, unknown>[]) {
+    return this.client.rpc("fn_stock_review_create_from_invoice", {
+      p_org_id: this.organizationId,
+      p_invoice_id: review.invoice_id,
+      p_review: review,
+      p_lines: lines,
+    });
+  }
+
+  /**
+   * Módulo `stock-purchase-review` — "Confirmar e adicionar ao stock":
+   * transação atómica com lock otimista e curto-circuito quando já
+   * `applied`. Ver `20260930100100_stock_purchase_review_rpcs.sql`.
+   */
+  confirmStockPurchaseReview(
+    reviewId: string,
+    expectedVersion: number,
+    confirmedBy: string,
+    effectiveDate: string,
+    fallbackLocationId: string | null,
+  ) {
+    return this.client.rpc("fn_stock_review_confirm", {
+      p_org_id: this.organizationId,
+      p_review_id: reviewId,
+      p_expected_version: expectedVersion,
+      p_confirmed_by: confirmedBy,
+      p_effective_date: effectiveDate,
+      p_location_id: fallbackLocationId,
+    });
+  }
+
+  /**
+   * Módulo `stock-count` — materializa o escopo de uma sessão em linhas
+   * (idempotente, `ON CONFLICT DO NOTHING`), verifica sobreposição com
+   * outra sessão ativa na mesma loja. Ver
+   * `20260930110100_stock_count_rpcs.sql`.
+   */
+  startStockCountSession(
+    sessionId: string,
+    expectedVersion: number,
+    lines: Record<string, unknown>[],
+    startedBy: string,
+    overrideOverlap: boolean,
+    overrideReason: string | null,
+  ) {
+    return this.client.rpc("fn_stock_count_start_session", {
+      p_org_id: this.organizationId,
+      p_session_id: sessionId,
+      p_expected_version: expectedVersion,
+      p_lines: lines,
+      p_started_by: startedBy,
+      p_override_overlap: overrideOverlap,
+      p_override_reason: overrideReason,
+    });
+  }
+
+  /**
+   * Módulo `stock-count` — regista uma tentativa de contagem: snapshot
+   * teórico + deteção de movimento durante a contagem + lock otimista da
+   * linha. Ver `20260930110100_stock_count_rpcs.sql`.
+   */
+  submitStockCountAttempt(
+    countLineId: string,
+    expectedLineVersion: number,
+    countedQuantity: number,
+    components: Record<string, unknown>[],
+    countedBy: string,
+    countStartedAt: string,
+    toleranceSnapshot: Record<string, unknown> | null,
+    reason: string | null,
+  ) {
+    return this.client.rpc("fn_stock_count_submit_attempt", {
+      p_org_id: this.organizationId,
+      p_count_line_id: countLineId,
+      p_expected_line_version: expectedLineVersion,
+      p_counted_quantity: countedQuantity,
+      p_components: components,
+      p_counted_by: countedBy,
+      p_count_started_at: countStartedAt,
+      p_tolerance_snapshot: toleranceSnapshot,
+      p_reason: reason,
+    });
+  }
+
+  /**
+   * Módulo `stock-count` — "Confirmar contagem e ajustar stock": transação
+   * atómica com lock otimista e curto-circuito quando já `completed`. Ver
+   * `20260930110100_stock_count_rpcs.sql`.
+   */
+  confirmStockCountSession(sessionId: string, expectedVersion: number, approvedBy: string, businessDate: string) {
+    return this.client.rpc("fn_stock_count_confirm", {
+      p_org_id: this.organizationId,
+      p_session_id: sessionId,
+      p_expected_version: expectedVersion,
+      p_approved_by: approvedBy,
+      p_business_date: businessDate,
     });
   }
 

@@ -305,6 +305,17 @@ outros flags de impacto — mas a decisão de marcar `false` é sempre
 manual do gestor. Default `true`; nenhum use case deste módulo nem do
 `accounting` infere este valor a partir de uma regra fiscal.
 
+### `stockReviewPolicy` (subcategoria) e `defaultStockPolicy` (fornecedor) — módulo `stock-purchase-review`
+
+Mesmo espírito do `vatDeductible`: propriedades da própria subcategoria/
+fornecedor, mas a decisão de impacto físico em stock vive e é lida pelo
+módulo `stock-purchase-review` (D10). `stockReviewPolicy`
+(`CREATE_REVIEW|NO_STOCK_EFFECT|UNDEFINED`, default `UNDEFINED`) é o sinal
+principal — nunca decidido pelo Centro de Custo. `defaultStockPolicy`
+(`inherit|usually_creates_review|usually_skips_review`, default
+`inherit`) no fornecedor é só uma preferência complementar, nunca capaz de
+ignorar um `stockReviewPolicy` explícito de categoria.
+
 ### `isActive` em vez de `status: "active" | "inactive"`
 
 Grupos e categorias usam `isActive: boolean` — mais directo e consistente

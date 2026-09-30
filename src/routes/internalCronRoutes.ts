@@ -2,6 +2,7 @@ import { ENV } from "../config/env.js";
 import { Router, type Request, type Response } from "express";
 import { runDailyVendusConsumptionJob } from "../services/dailyVendusConsumptionJobService.js";
 import type { ProcessDirectDebitsPort } from "../modules/invoices/domain/ports/in/invoice.ports.js";
+import type { ReprocessMissingStockReviewsPort } from "../modules/stock-purchase-review/domain/ports/in/stock-purchase-review.ports.js";
 import { UNATTENDED_SCOPE } from "../infra/scoped-db/unattended-scope.js";
 import { fanOut } from "../utils/fan-out.js";
 import type { OrganizationRow } from "../infra/scoped-db/organization-listing.js";
@@ -20,6 +21,7 @@ function requireCronSecret(req: Request, res: Response): boolean {
 
 export function createInternalCronRouter(deps: {
   processDirectDebits: ProcessDirectDebitsPort;
+  reprocessMissingStockReviews: ReprocessMissingStockReviewsPort;
   listOrganizations: () => Promise<OrganizationRow[]>;
 }): Router {
   const router = Router();
@@ -75,6 +77,37 @@ export function createInternalCronRouter(deps: {
           async (org) => {
             await deps.processDirectDebits.execute(org.organizationId);
             return { status: "success" as const };
+          },
+          { describeItem: (org) => org.organizationId },
+        );
+        res.json(summary);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : "Erro no job";
+        res.status(500).json({ error: message });
+      }
+    }
+  );
+
+  /**
+   * POST /api/internal/cron/reprocess-missing-stock-reviews
+   * Header: Authorization: Bearer <CRON_SECRET>
+   *
+   * Rede de segurança do módulo `stock-purchase-review` (sem outbox formal
+   * — ver README): reexecuta o caminho de decisão+criação de "Compra por
+   * rever" para faturas finalizadas recentes sem revisão correspondente.
+   * Sempre seguro correr redundantemente — a criação já é idempotente.
+   */
+  router.post(
+    "/internal/cron/reprocess-missing-stock-reviews",
+    async (req: Request, res: Response) => {
+      if (!requireCronSecret(req, res)) return;
+      try {
+        const organizations = await deps.listOrganizations();
+        const summary = await fanOut(
+          organizations,
+          async (org) => {
+            const result = await deps.reprocessMissingStockReviews.execute({ organizationId: org.organizationId });
+            return { status: "success" as const, ...result };
           },
           { describeItem: (org) => org.organizationId },
         );

@@ -8,6 +8,7 @@ import {
   type AiExtractionStatus,
   type ReconciliationStatus,
   type LineDetailMode,
+  type StockReviewOverride,
 } from "../../domain/entities/invoice.js";
 import type { InvoiceFilter, InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
 import { normalizeNif } from "../../domain/utils/nif.js";
@@ -48,6 +49,8 @@ function toEntity(row: Record<string, unknown>): Invoice {
     affectsCashflow: (row.affects_cashflow as boolean | null) ?? true,
     affectsProfitability: (row.affects_profitability as boolean | null) ?? false,
     currency: (row.currency as string | null) ?? "EUR",
+    stockReviewOverride: ((row.stock_review_override as string | null) ?? "auto") as StockReviewOverride,
+    stockReviewOverrideReason: (row.stock_review_override_reason as string | null) ?? null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   });
@@ -89,6 +92,8 @@ function toRow(invoice: Invoice): Record<string, unknown> {
     affects_cashflow: invoice.affectsCashflow,
     affects_profitability: invoice.affectsProfitability,
     currency: invoice.currency,
+    stock_review_override: invoice.stockReviewOverride,
+    stock_review_override_reason: invoice.stockReviewOverrideReason,
     created_at: invoice.createdAt.toISOString(),
     updated_at: invoice.updatedAt.toISOString(),
   };

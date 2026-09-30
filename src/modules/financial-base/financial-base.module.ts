@@ -1,6 +1,6 @@
 import type { Router } from "express";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
-import type { CreateSupplierPort } from "./domain/ports/in/supplier.ports.js";
+import type { CreateSupplierPort, GetSupplierPort } from "./domain/ports/in/supplier.ports.js";
 import type { ListCostCenterCategoriesPort } from "./domain/ports/in/cost-center-category.ports.js";
 
 import { SupabaseCostCenterGroupRepository } from "./adapters/out/supabase-cost-center-group.repository.js";
@@ -57,6 +57,8 @@ export function createFinancialBaseModule(): {
   router: Router;
   createSupplier: CreateSupplierPort;
   listCostCenterCategories: ListCostCenterCategoriesPort;
+  /** Módulo Stock — Compra por rever (D10): preferência de stock do fornecedor. */
+  getSupplier: GetSupplierPort;
 } {
   // Adapters de saída
   const groupRepository = new SupabaseCostCenterGroupRepository(createScopedQuery);
@@ -140,5 +142,5 @@ export function createFinancialBaseModule(): {
     getOrganizationIdentity,
   );
 
-  return { router: controller.router, createSupplier, listCostCenterCategories };
+  return { router: controller.router, createSupplier, listCostCenterCategories, getSupplier };
 }
