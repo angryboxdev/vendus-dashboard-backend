@@ -14,7 +14,7 @@
 -- só suprime a deteção automática, nunca um sinal manual já existente.
 -- `null` = sem limite (comportamento anterior, controla desde sempre).
 
-create table public.hr_attendance_rules (
+create table if not exists public.hr_attendance_rules (
   id                            uuid primary key default gen_random_uuid(),
   org_id                        uuid not null references public.organizations(id),
   entry_tolerance_minutes       integer not null check (entry_tolerance_minutes >= 0),
@@ -31,7 +31,7 @@ create table public.hr_attendance_rules (
 comment on table public.hr_attendance_rules is
   'Regras de assiduidade (Fase 2.1) — cada linha é uma versão completa (nunca editada depois de criada); a vigente é resolvida em runtime, nunca por flag.';
 
-create index hr_attendance_rules_org_id_idx on public.hr_attendance_rules (org_id);
-create index hr_attendance_rules_org_id_effective_from_idx on public.hr_attendance_rules (org_id, effective_from desc);
+create index if not exists hr_attendance_rules_org_id_idx on public.hr_attendance_rules (org_id);
+create index if not exists hr_attendance_rules_org_id_effective_from_idx on public.hr_attendance_rules (org_id, effective_from desc);
 
 alter table public.hr_attendance_rules enable row level security;

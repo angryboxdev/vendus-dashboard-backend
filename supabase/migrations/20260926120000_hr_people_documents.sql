@@ -51,6 +51,11 @@ insert into storage.buckets (id, name, public)
 values ('hr-photos', 'hr-photos', false)
 on conflict (id) do nothing;
 
+-- `drop policy if exists` antes de cada `create policy` (Postgres não tem
+-- `create policy if not exists`) — torna a migration reexecutável quando já
+-- foi aplicada manualmente e o histórico de migrations da CLI da Supabase
+-- não o sabe (foi exatamente isto que bloqueou um deploy no Render).
+drop policy if exists "hr-photos: org-scoped select" on storage.objects;
 create policy "hr-photos: org-scoped select"
   on storage.objects for select
   to authenticated
@@ -59,6 +64,7 @@ create policy "hr-photos: org-scoped select"
     and (storage.foldername(name))[1] = current_org()::text
   );
 
+drop policy if exists "hr-photos: org-scoped insert" on storage.objects;
 create policy "hr-photos: org-scoped insert"
   on storage.objects for insert
   to authenticated
@@ -67,6 +73,7 @@ create policy "hr-photos: org-scoped insert"
     and (storage.foldername(name))[1] = current_org()::text
   );
 
+drop policy if exists "hr-photos: org-scoped update" on storage.objects;
 create policy "hr-photos: org-scoped update"
   on storage.objects for update
   to authenticated
@@ -79,6 +86,7 @@ create policy "hr-photos: org-scoped update"
     and (storage.foldername(name))[1] = current_org()::text
   );
 
+drop policy if exists "hr-photos: org-scoped delete" on storage.objects;
 create policy "hr-photos: org-scoped delete"
   on storage.objects for delete
   to authenticated

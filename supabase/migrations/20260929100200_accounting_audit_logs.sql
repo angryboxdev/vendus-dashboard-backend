@@ -22,6 +22,9 @@ create index if not exists accounting_audit_logs_entity_idx
 
 alter table public.accounting_audit_logs enable row level security;
 
+-- `drop policy if exists` antes de `create policy` (Postgres não tem
+-- `create policy if not exists`) — torna a migration reexecutável.
+drop policy if exists "accounting_audit_logs: org-scoped all" on public.accounting_audit_logs;
 create policy "accounting_audit_logs: org-scoped all"
   on public.accounting_audit_logs
   for all

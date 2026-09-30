@@ -10,9 +10,13 @@ alter table public.invoice_lines
   add column if not exists deductibility_override_reason text;
 
 alter table public.invoice_lines
+  drop constraint if exists invoice_lines_deductible_percentage_range;
+alter table public.invoice_lines
   add constraint invoice_lines_deductible_percentage_range
     check (deductible_percentage is null or deductible_percentage between 0 and 100);
 
+alter table public.invoice_lines
+  drop constraint if exists invoice_lines_override_requires_reason;
 alter table public.invoice_lines
   add constraint invoice_lines_override_requires_reason
     check (deductible_percentage is null or deductibility_override_reason is not null);
