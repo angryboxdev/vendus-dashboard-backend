@@ -1,7 +1,7 @@
 # Módulo: bank-statements
 
 > Status: ativo
-> Última atualização: 2026-09-09 (`kiosk-pin-storage-prefix` ticket 03 — `DocumentStoragePort.store`/`objectStorage` ganham `organizationId`; `bank-statement-documents` não opta por prefixação, ADR-0015 DB4)
+> Última atualização: 2026-09-30 ("Liquidação agrupada" — um movimento liquida N faturas/NC do mesmo fornecedor numa transação atómica; ver secção dedicada abaixo)
 
 ---
 
@@ -268,6 +268,8 @@ ou nada, o `execute()` passou a tomar um objecto nomeado.
 - `GetMovementsLinkedToInvoicePort` — dado um `invoiceId`, devolve todos os movimentos bancários que têm links para essa fatura (`InvoiceLinkedMovement[]`), com data, descrição, montante alocado e tipo de movimento. Usado pelo drawer de detalhe da fatura para mostrar o histórico de pagamentos conciliados. `GetMovementsLinkedToInvoiceQuery = { organizationId, invoiceId }` (antes `execute(invoiceId)`).
 - `GetInvoiceOpenBalancesPort` — recebe uma lista de IDs de faturas e devolve `Record<invoiceId, openBalanceCents>` (saldo em aberto de cada uma). Usado no drawer de conciliação para mostrar o saldo real em faturas pesquisadas manualmente que não estejam na lista de auto-sugestões. `GetInvoiceOpenBalancesQuery = { organizationId, invoiceIds }` (antes `execute(invoiceIds)`).
 - `SearchOccurrenceCandidatesPort` — dado um movimento, retorna ocorrências de recorrências candidatas a ser justificadas (`OccurrenceMatchCandidate[]`), com filtros opcionais por texto (`q`), período (`dateFrom`/`dateTo`) e limite. Exclui ocorrências canceladas. Usado pelo drawer "Justificar despesa" quando o tipo é `contrato_recorrencia`. `SearchOccurrenceCandidatesQuery` inclui `organizationId`.
+- **`GetGroupedSettlementSuggestionsPort`** — "Liquidação agrupada": tenta primeiro um match simples 1:1 (reaproveitando `FindMovementCandidatesPort`); se não houver, identifica o fornecedor (hint → candidato de topo → nome do fornecedor na descrição, sem aprendizagem nova — ver "Bug corrigido" na secção "Liquidação agrupada") e procura combinações de soma exacta entre as faturas/NC em aberto desse fornecedor, na mesma moeda, datadas até à data do movimento. Devolve também o pool elegível completo (para pesquisa manual multi-seleção) — nunca inclui documentos já totalmente liquidados. Só de leitura, tal como `GetMonthlySuggestionsPort`. `GetGroupedSettlementSuggestionsQuery = { organizationId, movementId }`.
+- **`ConfirmGroupedSettlementPort`** — confirma atomicamente a liquidação de um movimento contra N documentos (faturas + notas de crédito). Delega toda a atomicidade/revalidação/idempotência ao `GroupedSettlementWritePort` (RPC) — ver secção "Liquidação agrupada" abaixo. `ConfirmGroupedSettlementCommand = { organizationId, movementId, entityLinks }`.
 - **`GetMonthlySuggestionsPort`** — sugestões para a aba "Sugestões" da vista de mês: para cada movimento pendente (`!isResolved`) do mês pedido, tenta (1) um match de fatura/conta a pagar reaproveitando o próprio `FindMovementCandidatesPort` (mesmo motor usado no drawer, chamado uma vez por movimento pendente, em paralelo) e, só quando não há match de entidade, (2) verifica se a descrição normalizada (`normalizeBankDescription`) coincide com a de um movimento **anterior** da mesma conta que tenha sido classificado sem fatura (`justificationType` definido e `matchedEntityType === null` — exclui créditos auto-resolvidos e movimentos ligados a fatura/ocorrência); se sim, propõe repetir essa classificação (tipo, centro de custo, fornecedor, notas, IVA). Quando há mais de uma ocorrência histórica com a mesma descrição, usa a mais recente. Não escreve nada na BD nem muta o `reconciliationStatus` do movimento (ao contrário de `SuggestMatchesUseCase`) — é só leitura; aplicar uma sugestão passa pelos endpoints normais de `reconcile`/`classify`. `GetMonthlySuggestionsQuery = { organizationId, bankAccountId, year, month }`.
 
 ### Saída (dependências do domínio)
@@ -284,10 +286,11 @@ o último (ver secção "Isolamento por organização" acima).
 - `DocumentStoragePort` — `store(buffer, filename, mimeType, organizationId)` → URL pública. `bank-statement-documents` não optou por prefixação (ADR-0015 DB4), pelo que `organizationId` passa pelo wrapper sem alterar o caminho.
 - `BankMovementEntityLinkRepositoryPort` — `saveAll`, `findByMovementIds` (bulk por movimento — usado para carregar links do próprio movimento em re-conciliação), `findByEntityIds(entityType, entityIds)` (bulk por entidade — usado para calcular alocações existentes e saldo em aberto), `findAllByEntityType(entityType)` (sem filtro de ID — usado em `FindMovementCandidatesUseCase` para encontrar faturas parcialmente conciliadas por saldo em aberto), `deleteByMovementId` (para re-conciliação e anulação).
 - `MovementMatchHintPort` — `findSupplierByDescription(normalizedDesc)` para sugestões; `save(normalizedDesc, supplierId)` para aprendizagem.
-- `InvoiceMatchReadPort` *(cross-module)* — `findCandidates(opts)` por amount + date range (exclui faturas com `reconciliation_status = 'reconciled'`); `findByIds` para lookup bulk na reconciliação e cálculo de saldos em aberto.
+- `InvoiceMatchReadPort` *(cross-module)* — `findCandidates(opts)` por amount + date range (exclui faturas com `reconciliation_status = 'reconciled'`, só `document_type = 'invoice'`); `findByIds` para lookup bulk na reconciliação e cálculo de saldos em aberto. `findBySupplier(opts)` — candidatos de "Liquidação agrupada": TODOS os documentos não conciliados (`invoice` **e** `credit_note`) de um fornecedor, numa moeda, datados até à data do movimento (ver secção "Liquidação agrupada" abaixo). `InvoiceMatchCandidate` ganhou os campos `currency` e `documentType`.
 - `PayableEntryMatchReadPort` *(cross-module)* — `findCandidates(opts)` por amount + date range; `findByIds` para lookup bulk na reconciliação.
 - `InvoiceReconciliationWritePort` *(cross-module)* — `markReconciled(invoiceId, movementDate)`, `markPartiallyReconciled(invoiceId)`, `markUnreconciled(invoiceId)`; actualiza o campo `reconciliation_status` (e `status`/`paid_at` em `markReconciled`) directamente na tabela `invoices`. Invocado pelo `ReconcileMovementUseCase` e `UnreconcileMovementUseCase` após cada alteração de links.
 - `OccurrenceMatchReadPort` *(cross-module)* — `search(opts)`: lê `recurring_occurrences` com join a `recurring_contracts` directamente (embed não filtrado por organização — D16); não importa código de `payable-recurrences`. `findByIds` para lookup bulk. Devolve `OccurrenceMatchCandidate[]` com campos de nome, fornecedor, período, montante e estado.
+- `GroupedSettlementWritePort` *(cross-module, escrita atómica)* — `confirm(organizationId, movementId, links)`: liquida um movimento contra N documentos numa única chamada RPC transacional. Ver secção "Liquidação agrupada" abaixo para o porquê de ser um port separado de `BankMovementEntityLinkRepositoryPort`.
 
 ---
 
@@ -317,6 +320,7 @@ dois parsers (`CsvStatementParser`/`XlsxStatementParser`, sem I/O nenhum).
 - `SupabasePayableEntryMatchReadAdapter` → cross-module; acede à tabela `payable_entries` directamente, via `ScopedQueryFactory`.
 - `SupabaseInvoiceReconciliationWriteAdapter` → cross-module; acede à tabela `invoices` directamente para actualizar `reconciliation_status` (e `status`/`paid_at` quando aplicável), via `ScopedQueryFactory`, sem importar nenhum código do módulo `invoices`.
 - `SupabaseOccurrenceMatchReadAdapter` → cross-module; acede à tabela `recurring_occurrences` com join à tabela `recurring_contracts` (não a `payable_recurrences`; embed não filtrado por organização — D16), via `ScopedQueryFactory`. Implementa `OccurrenceMatchReadPort`.
+- `SupabaseGroupedSettlementWriteAdapter` → cross-module; chama o RPC `fn_reconcile_movement_grouped` via `ScopedQuery.confirmGroupedSettlement`, sem acesso directo a tabelas. Traduz `stale_document:<id>` → `StaleDocumentBalanceError` (409) e `movement_not_found` → `MovementNotFoundError` (404).
 - `CsvStatementParser` → parse de ficheiro CSV (formato Millennium BCP). Sem I/O, sem organização.
 - `XlsxStatementParser` → parse de ficheiro XLSX. Sem I/O, sem organização.
 
@@ -351,6 +355,8 @@ GET    /api/bank-statements/accounts/:accountId/calendar?year=YYYY            ca
 GET    /api/bank-statements/accounts/:accountId/calendar/:year/:month         detalhe mensal (DaySlot[])
 GET    /api/bank-statements/accounts/:accountId/calendar/:year/:month/suggestions  sugestões do mês (entity matches + repetição de classificação recorrente)
 GET    /api/bank-statements/occurrences/candidates                            candidatos de ocorrências de recorrências (?q, ?dateFrom, ?dateTo, ?limit)
+GET    /api/bank-statements/movements/:movId/grouped-suggestions             "Liquidação agrupada" — sugestões (match simples 1:1 ou combinações exactas)
+POST   /api/bank-statements/movements/:movId/grouped-settlement              "Liquidação agrupada" — confirma atomicamente contra N documentos
 ```
 
 ---
@@ -412,6 +418,142 @@ GET    /api/bank-statements/occurrences/candidates                            ca
 
 ---
 
+## Liquidação agrupada
+
+Um único movimento bancário pode liquidar N documentos (faturas + notas de
+crédito) do mesmo fornecedor de uma só vez, com sugestão automática de
+combinações de soma exacta. Mantém o fluxo existente (movimento → aloca
+documentos → "Classificar") na mesma forma — o que muda é permitir N
+documentos e adicionar um caminho de escrita atómico e seguro para esse caso.
+
+**Decisões de design (respostas às escolhas em aberto do ticket):**
+
+**Subset-sum via meet-in-the-middle, nunca força bruta sobre a base toda** —
+`GroupedSettlementMatcherService` (domínio puro, sem I/O) recebe um pool já
+pré-filtrado (mesmo fornecedor, mesma moeda, em aberto, tipo compatível,
+datado até ao movimento) e capado a 40 documentos (`DEFAULT_MAX_CANDIDATES`,
+escolhidos pelos mais próximos da data do movimento — mesma noção de
+"recência" da secção de calendário). Divide o pool em duas metades, enumera
+todas as somas de subconjuntos de cada metade via DP de bitmask (`sums[mask]
+= sums[mask sem o bit mais baixo] + valor desse documento`, O(2^n) em vez de
+O(2^n·n)), e faz um hash-join das duas metades para encontrar TODAS as
+combinações de soma exacta — nunca só a primeira. Só uma diferença de **0
+cêntimos** é alguma vez apresentada como "Correspondência exata"; a
+tolerância opcional de ±0,01€ do ticket foi deliberadamente omitida esta
+ronda (ver nota abaixo) para não introduzir uma segunda noção ambígua de
+"match". O número de combinações devolvidas está limitado a
+`DEFAULT_MAX_COMBINATIONS = 20` como válvula de segurança adicional.
+
+**Tolerância de ±0,01€ omitida, não implementada** — o ticket permite-a como
+opcional; a esta ronda decidimos não a implementar: uma correspondência com
+diferença não-nula teria sempre de ser mostrada com "Diferença: X€" e exigir
+decisão manual (nunca absorvida em silêncio), o que a tornaria equivalente,
+na prática, a simplesmente não encontrar combinação automática nenhuma e
+deixar para a seleção manual — sem o risco de o utilizador confundir uma
+correspondência de 1 cêntimo com uma exacta. Mais simples e sem ambiguidade;
+documentado aqui para não ser re-derivado como "faltou implementar".
+
+**Deteção de "stale document" por comparação de saldo esperado, não por
+coluna de versão nova** — ao contrário de `stock-purchase-review`/
+`stock-count` (que têm uma coluna `version` explícita para lock optimista),
+este módulo nunca teve nenhuma coluna de versão em nenhuma das suas tabelas.
+Introduzir uma só para este caso quebraria a convenção do módulo e obrigaria
+a todo o resto do fluxo de conciliação (que continua sem versão) a conviver
+com uma exceção. Em vez disso, o RPC recalcula o saldo em aberto
+**verdadeiro** de cada documento dentro da própria transação (excluindo
+sempre as ligações do próprio movimento, que estão prestes a ser
+substituídas) e compara ao `expectedOpenBalanceCents` que o chamador
+observou ao construir a selecção — uma leitura solta nunca decide isto, só a
+leitura feita com `for update` dentro da transação do RPC. Qualquer
+divergência (outro utilizador liquidou entretanto um dos documentos)
+rejeita o lote inteiro com `StaleDocumentBalanceError` → HTTP 409 e a
+mensagem exacta "Um ou mais documentos foram alterados ou já foram
+liquidados. Atualize a conciliação para continuar." Esta mesma mecânica dá
+idempotência "de borla": reenviar a mesma selecção ainda válida (duplo-clique,
+refresh, retry de API) recalcula o mesmo saldo verdadeiro (nada mudou nas
+alocações de outros movimentos) e reescreve o mesmo estado final.
+
+**RPC único para leitura+escrita atómica, novo endpoint em vez de reaproveitar
+`PATCH .../reconcile`** — `ReconcileMovementUseCase`/`ReconcileMovementPort`
+(o caminho existente) ficam tal como estavam: sequência de awaits sem
+transação, sem revalidação de saldo, só para faturas/payables sem notas de
+crédito. Em vez de o reescrever para forçar todos os casos (incluindo os
+simples, já testados, N:1/1:N sem risco de concorrência real) pelo RPC,
+criámos um caminho novo e paralelo (`ConfirmGroupedSettlementPort` → `POST
+.../grouped-settlement`) que é o único a passar pelo `fn_reconcile_movement_grouped`
+RPC. Razão: (1) o caminho antigo tem 23 testes unitários que assumem
+alocações só positivas — misturá-lo com notas de crédito (alocação
+negativa) teria exigido reescrever essa validação de qualquer forma; (2) o
+ticket✓ não pede a remoção do caminho simples, só que o agrupado seja seguro;
+(3) menos superfície de risco — um bug no RPC novo não pode voltar a
+quebrar o fluxo simples já em produção. `FindMovementCandidatesUseCase`
+(usado por ambos os caminhos) ganhou o filtro de moeda (ver abaixo) — essa
+correção é partilhada porque é um gap real do motor de scoring existente,
+não específico da liquidação agrupada.
+
+**Notas de crédito incluídas só no caminho de candidatos agrupados** —
+`InvoiceMatchReadPort.findCandidates` (usado pelo drawer de classificação
+normal, `FindMovementCandidatesUseCase`, `SuggestMatchesUseCase`) continua a
+excluir `document_type = 'invoice'` só, tal como antes — mudar esse
+comportamento arriscaria alterar sugestões já em uso para o fluxo de
+classificação simples, que nunca lidou com o conceito de "NC compensa
+fatura". O método novo `findBySupplier` é que devolve ambos os tipos,
+usado exclusivamente por `GetGroupedSettlementSuggestionsUseCase`.
+`Invoice.normalizeAmountSign()` já garante que o total de uma NC chega
+sempre negativo — nenhuma inversão de sinal é feita neste módulo.
+
+**Gap de moeda fechado** — `movement.currency` e `invoice.currency` estavam
+guardados mas nunca comparados. `FindMovementCandidatesUseCase` (caminho
+simples, ambos os endpoints) e `GetGroupedSettlementSuggestionsUseCase`
+(via `findBySupplier`) agora exigem `currency` igual — um documento noutra
+moeda nunca é elegível, mesmo que o montante coincida por acaso.
+`payable_entries` não tem coluna de moeda (implicitamente EUR em toda a
+base de dados actual) — o filtro de moeda não se aplica a essa entidade por
+não haver dado nenhum para comparar; documentado aqui para não ser
+confundido com uma omissão.
+
+**Isolamento por fornecedor: filtro na query E guarda dura no RPC** — o
+`findBySupplier` já filtra por `supplier_id`, mas o RPC valida de novo,
+independentemente da query que gerou a selecção
+(`count(distinct supplier_id) > 1 → mixed_suppliers`), porque a selecção
+manual multi-seleção pode em teoria misturar IDs vindos de pesquisas
+diferentes — a garantia de "nunca combina fornecedores diferentes" não pode
+depender só de a UI ter filtrado bem.
+
+**`GetGroupedSettlementSuggestionsUseCase` reaproveita `FindMovementCandidatesPort`
+e `MovementMatchHintPort`, não implementa nova pontuação de fornecedor** —
+tenta primeiro o match simples 1:1 através do motor já existente (mesmo
+filtro de moeda, mesmo hint, mesmo fallback substring nome↔descrição); só
+quando isso falha é que identifica o fornecedor. Nenhuma heurística nova de
+reconhecimento de fornecedor foi criada — cumpre a secção 4 do ticket ("sem
+aprendizagem/scoring novo esta ronda"). Escopo deliberado: este fluxo só
+considera `entityType === "invoice"` (faturas e NC vivem na mesma tabela);
+`payable_entry` fica de fora da "Liquidação agrupada" — é um conceito de
+domínio diferente, sem moeda, sem agrupamento por fornecedor desta forma.
+
+**Bug corrigido em produção local (30/09/2026) — identificação de fornecedor
+tinha só 2 sinais, ambos inúteis no caso exacto que a feature existe para
+resolver**: a implementação inicial identificava o fornecedor por (1) hint
+aprendido ou (2) `supplierId` do candidato de topo de `FindMovementCandidatesPort`.
+O sinal (2) só existe quando pelo menos um documento individual tem um valor
+próximo do movimento inteiro — exatamente a condição que **não** se verifica
+no cenário "Justdrinks" (7 documentos, nenhum perto de 815,97€ sozinho).
+Testado ao vivo contra dados reais (fornecedor "Justdrinks Lda" com 20
+faturas/NC em aberto): "Sugestões automáticas" e a pesquisa manual mostravam
+sempre 0 resultados, porque `supplierId` nunca era resolvido. **Terceiro
+sinal adicionado**: `SupplierNameReadPort` (D10 novo, `adapters/out/
+financial-base-supplier-name-read.adapter.ts`, sobre `financial-base`'s
+`ListSuppliersPort` já existente) lista os fornecedores ativos da
+organização e `supplierNameMatchesDescription` (nova função exportada em
+`domain/utils/bank-description.ts`, mesma heurística de substring por
+palavra >3 caracteres já usada nos outros 2 sinais) compara cada nome
+diretamente contra a descrição normalizada do movimento — sem depender de
+já ter encontrado um candidato por montante. Só corre quando os 2 primeiros
+sinais falham e não há match simples 1:1 (custo extra: 1 query de
+fornecedores ativos, só no caminho "sem sinal ainda"). Teste de regressão:
+`get-grouped-settlement-suggestions.test.ts` → "finds a grouped combination
+via supplier-name fallback when there's no hint AND no single candidate".
+
 ## Como testar
 
 ```bash
@@ -429,3 +571,5 @@ npx jest --testPathPattern="bank-statements|list-invoices"
 - `calculatedClosingBalance` no `ListBankStatementsUseCase` usa o valor persistido (pode estar desatualizado se movimentos forem alterados sem update ao header); o `GetBankStatementUseCase` recalcula ao vivo.
 - O bucket `bank-statement-documents` no Supabase Storage deve ser criado manualmente com política de acesso público de leitura.
 - Créditos (entradas) ficam automaticamente como `conciliado_sem_fatura` ao importar. No drawer de classificação, ao clicar num crédito já conciliado, é exibido um cartão informativo a explicar que foi auto-resolvido — o gestor pode sempre usar "Alterar classificação" para reclassificar manualmente se necessário.
+- **Liquidação agrupada — rollback transacional real não é testável sem BD viva**: `fn_reconcile_movement_grouped` conta com o Postgres reverter automaticamente todas as escritas de uma função ao dar `raise exception` (garantia da própria linguagem `plpgsql`/transação), incluindo uma falha a meio do loop de inserts (ex: 6º de 7 documentos). Os testes unitários deste ticket cobrem a rejeição-antes-de-escrever (validação falha → nada é escrito, via `FakeGroupedSettlementWrite`) mas não conseguem simular uma falha a meio da escrita em si sem uma BD real — essa parte fica coberta pela garantia da própria transação Postgres, não por um teste automatizado deste repositório. Nenhuma migração foi corrida contra uma BD viva como parte deste ticket (pedido explícito).
+- **Liquidação agrupada — `payable_entries` fora do filtro de moeda**: essa tabela não tem coluna `currency` (implicitamente EUR); o filtro de moeda introduzido este ticket só se aplica a `invoices` por não haver dado do outro lado para comparar.

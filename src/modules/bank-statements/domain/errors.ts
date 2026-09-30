@@ -63,3 +63,24 @@ export class EntityAlreadyReconciledError extends Error {
     this.name = "EntityAlreadyReconciledError";
   }
 }
+
+/**
+ * Thrown by `ConfirmGroupedSettlementUseCase` when the RPC
+ * `fn_reconcile_movement_grouped` detects that at least one document's true
+ * open balance (recomputed inside the transaction, row-locked) no longer
+ * matches the `expectedOpenBalanceCents` the caller observed when building
+ * the selection — i.e. someone else settled it concurrently. The whole
+ * grouped write is rolled back; nothing is partially applied.
+ */
+export class StaleDocumentBalanceError extends Error {
+  readonly entityIds: string[];
+
+  constructor(entityIds: string[]) {
+    super(
+      "Um ou mais documentos foram alterados ou já foram liquidados. " +
+        "Atualize a conciliação para continuar."
+    );
+    this.name = "StaleDocumentBalanceError";
+    this.entityIds = entityIds;
+  }
+}

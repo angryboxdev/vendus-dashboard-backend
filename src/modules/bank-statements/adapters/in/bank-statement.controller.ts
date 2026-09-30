@@ -14,6 +14,7 @@ import {
   BlockingMovementsError,
   EntityAlreadyReconciledError,
   DuplicateMovementError,
+  StaleDocumentBalanceError,
 } from "../../domain/errors.js";
 import type { ImportBankStatementPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { ListBankStatementsPort } from "../../domain/ports/in/bank-statement.ports.js";
@@ -38,6 +39,8 @@ import type { GetInvoiceOpenBalancesPort } from "../../domain/ports/in/bank-stat
 import type { UnreconcileMovementPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { SearchOccurrenceCandidatesPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { GetMonthlySuggestionsPort } from "../../domain/ports/in/bank-statement.ports.js";
+import type { GetGroupedSettlementSuggestionsPort } from "../../domain/ports/in/bank-statement.ports.js";
+import type { ConfirmGroupedSettlementPort } from "../../domain/ports/in/bank-statement.ports.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const csvParser = new CsvStatementParser();
@@ -70,6 +73,8 @@ export class BankStatementController {
     private readonly unreconcileMovement: UnreconcileMovementPort,
     private readonly searchOccurrenceCandidates: SearchOccurrenceCandidatesPort,
     private readonly getMonthlySuggestions: GetMonthlySuggestionsPort,
+    private readonly getGroupedSettlementSuggestions: GetGroupedSettlementSuggestionsPort,
+    private readonly confirmGroupedSettlement: ConfirmGroupedSettlementPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -545,6 +550,92 @@ export class BankStatementController {
       } catch (e) {
         if (e instanceof MovementNotFoundError) {
           res.status(404).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * GET /bank-statements/movements/:movId/grouped-suggestions
+     * "Liquidação agrupada" — read-only. Tries a simple 1:1 match first;
+     * failing that, identifies the supplier (hint + existing candidate
+     * scoring, no new learning) and searches exact-sum combinations of that
+     * supplier's open invoices/credit notes. Nothing is persisted — applying
+     * a suggestion or a manual multi-select goes through the
+     * grouped-settlement confirm endpoint below.
+     */
+    this.router.get("/bank-statements/movements/:movId/grouped-suggestions", async (req, res) => {
+      try {
+        const result = await this.getGroupedSettlementSuggestions.execute({
+          organizationId: req.auth!.orgId,
+          movementId: req.params["movId"]!,
+        });
+        res.json(result);
+      } catch (e) {
+        if (e instanceof MovementNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * POST /bank-statements/movements/:movId/grouped-settlement
+     * Body: { entityLinks: Array<{ entityId, documentType, allocatedAmountCents, expectedOpenBalanceCents }> }
+     * Atomically settles the movement against N documents (invoices +
+     * credit notes) — see ConfirmGroupedSettlementPort / the RPC behind it.
+     * Idempotent: retrying with the same still-valid selection is safe.
+     * Rejects (409) when any document's open balance changed since the
+     * caller observed it (concurrent settlement elsewhere).
+     */
+    this.router.post("/bank-statements/movements/:movId/grouped-settlement", async (req, res) => {
+      try {
+        const body = req.body as Record<string, unknown>;
+        if (!Array.isArray(body.entityLinks) || (body.entityLinks as unknown[]).length === 0) {
+          res.status(400).json({ error: "entityLinks must be a non-empty array" });
+          return;
+        }
+        let entityLinks: import("../../domain/ports/in/bank-statement.ports.js").GroupedEntityLinkInput[];
+        try {
+          entityLinks = (body.entityLinks as Record<string, unknown>[]).map((el) => {
+            const allocatedAmountCents = Number(el["allocatedAmountCents"]);
+            const expectedOpenBalanceCents = Number(el["expectedOpenBalanceCents"]);
+            if (!Number.isFinite(allocatedAmountCents) || allocatedAmountCents === 0) {
+              throw new Error(`allocatedAmountCents must be a non-zero number (got ${el["allocatedAmountCents"]})`);
+            }
+            if (!Number.isFinite(expectedOpenBalanceCents)) {
+              throw new Error(`expectedOpenBalanceCents must be a number (got ${el["expectedOpenBalanceCents"]})`);
+            }
+            const documentType = el["documentType"];
+            if (documentType !== "invoice" && documentType !== "credit_note") {
+              throw new Error(`documentType must be "invoice" or "credit_note" (got ${documentType})`);
+            }
+            return {
+              entityId: el["entityId"] as string,
+              documentType,
+              allocatedAmountCents: Math.round(allocatedAmountCents),
+              expectedOpenBalanceCents: Math.round(expectedOpenBalanceCents),
+            };
+          });
+        } catch (parseErr) {
+          res.status(400).json({ error: parseErr instanceof Error ? parseErr.message : "Invalid entityLinks" });
+          return;
+        }
+        const result = await this.confirmGroupedSettlement.execute({
+          organizationId: req.auth!.orgId,
+          movementId: req.params["movId"]!,
+          entityLinks,
+        });
+        res.json(result);
+      } catch (e) {
+        if (e instanceof MovementNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        if (e instanceof StaleDocumentBalanceError) {
+          res.status(409).json({ error: e.message, entityIds: e.entityIds });
           return;
         }
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });

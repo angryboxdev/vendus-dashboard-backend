@@ -297,7 +297,7 @@ const bankAccountsModule = createBankAccountsModule();
 app.use("/api", requireMinRole("manager"), bankAccountsModule.router);
 
 // Bank statements module (hexagonal) — receives bank account read port for auto-linking
-const bankStatementsModule = createBankStatementsModule(bankAccountsModule.accountRepo);
+const bankStatementsModule = createBankStatementsModule(bankAccountsModule.accountRepo, financialBaseModule.listSuppliers);
 app.use("/api", requireMinRole("manager"), bankStatementsModule.router);
 
 // Air Menu: rota protegida (módulo já instanciado acima)

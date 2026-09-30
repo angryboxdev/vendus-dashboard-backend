@@ -171,6 +171,12 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
     const results: MovementCandidate[] = [];
 
     for (const inv of invoiceCandidates) {
+      // Currency gap closed: a candidate in a different currency than the
+      // movement is never eligible, even if the amount happens to line up
+      // (previously stored but unchecked — task's grouped-settlement brief,
+      // test #7).
+      if (inv.currency !== movement.currency) continue;
+
       const openBalanceCents = inv.totalWithVat - (allocByEntity.get(inv.id) ?? 0);
       if (openBalanceCents <= 0) continue; // fully paid, skip
 
