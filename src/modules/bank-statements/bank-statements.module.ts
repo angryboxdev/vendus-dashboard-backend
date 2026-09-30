@@ -10,6 +10,8 @@ import { SupabasePayableEntryMatchReadAdapter } from "./adapters/out/supabase-pa
 import { SupabaseMovementMatchHintAdapter } from "./adapters/out/supabase-movement-match-hint.adapter.js";
 import { SupabaseBankMovementEntityLinkRepository } from "./adapters/out/supabase-bank-movement-entity-link.repository.js";
 import { SupabaseInvoiceReconciliationWriteAdapter } from "./adapters/out/supabase-invoice-reconciliation-write.adapter.js";
+import { SupabaseGroupedSettlementWriteAdapter } from "./adapters/out/supabase-grouped-settlement-write.adapter.js";
+import { FinancialBaseSupplierNameReadAdapter } from "./adapters/out/financial-base-supplier-name-read.adapter.js";
 
 // Use cases
 import { ImportBankStatementUseCase } from "./application/use-cases/import-bank-statement.use-case.js";
@@ -35,6 +37,8 @@ import { GetInvoiceOpenBalancesUseCase } from "./application/use-cases/get-invoi
 import { UnreconcileMovementUseCase } from "./application/use-cases/unreconcile-movement.use-case.js";
 import { SearchOccurrenceCandidatesUseCase } from "./application/use-cases/search-occurrence-candidates.use-case.js";
 import { GetMonthlySuggestionsUseCase } from "./application/use-cases/get-monthly-suggestions.use-case.js";
+import { GetGroupedSettlementSuggestionsUseCase } from "./application/use-cases/get-grouped-settlement-suggestions.use-case.js";
+import { ConfirmGroupedSettlementUseCase } from "./application/use-cases/confirm-grouped-settlement.use-case.js";
 import { SupabaseBankDocumentStorageAdapter } from "./adapters/out/supabase-bank-document-storage.adapter.js";
 import { SupabaseOccurrenceMatchReadAdapter } from "./adapters/out/supabase-occurrence-match-read.adapter.js";
 
@@ -43,6 +47,7 @@ import { BankStatementController } from "./adapters/in/bank-statement.controller
 
 // Cross-module port
 import type { BankAccountReadPort } from "./domain/ports/out/bank-account-read.port.js";
+import type { ListSuppliersPort } from "../financial-base/domain/ports/in/supplier.ports.js";
 
 /**
  * Composition root for the bank-statements module (spec B2 ticket 09).
@@ -61,7 +66,7 @@ import type { BankAccountReadPort } from "./domain/ports/out/bank-account-read.p
  * temporary fallback that used to query `bank_accounts` directly is gone
  * (see the module README's Ports section for the cross-module note).
  */
-export function createBankStatementsModule(bankAccountRead: BankAccountReadPort): { router: Router } {
+export function createBankStatementsModule(bankAccountRead: BankAccountReadPort, listSuppliers: ListSuppliersPort): { router: Router } {
   // Adapters out
   const statementRepo = new SupabaseBankStatementImportRepository(createScopedQuery);
   const movementRepo = new SupabaseBankMovementRepository(createScopedQuery);
@@ -72,6 +77,8 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort)
   const entityLinkRepo = new SupabaseBankMovementEntityLinkRepository(createScopedQuery);
   const invoiceReconciliationWrite = new SupabaseInvoiceReconciliationWriteAdapter(createScopedQuery);
   const occurrenceRead = new SupabaseOccurrenceMatchReadAdapter(createScopedQuery);
+  const groupedSettlementWrite = new SupabaseGroupedSettlementWriteAdapter(createScopedQuery);
+  const supplierNameRead = new FinancialBaseSupplierNameReadAdapter(listSuppliers);
 
   // Use cases
   const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo, bankAccountRead);
@@ -104,6 +111,15 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort)
   const unreconcileMovement = new UnreconcileMovementUseCase(movementRepo, entityLinkRepo, invoiceRead, invoiceReconciliationWrite);
   const searchOccurrenceCandidates = new SearchOccurrenceCandidatesUseCase(occurrenceRead);
   const getMonthlySuggestions = new GetMonthlySuggestionsUseCase(movementRepo, findMovementCandidates);
+  const getGroupedSettlementSuggestions = new GetGroupedSettlementSuggestionsUseCase(
+    movementRepo,
+    findMovementCandidates,
+    movementHint,
+    invoiceRead,
+    entityLinkRepo,
+    supplierNameRead,
+  );
+  const confirmGroupedSettlement = new ConfirmGroupedSettlementUseCase(groupedSettlementWrite);
 
   // Adapter in
   const controller = new BankStatementController(
@@ -130,6 +146,8 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort)
     unreconcileMovement,
     searchOccurrenceCandidates,
     getMonthlySuggestions,
+    getGroupedSettlementSuggestions,
+    confirmGroupedSettlement,
   );
 
   return { router: controller.router };

@@ -85,3 +85,29 @@ export function normalizeBankDescription(desc: string): string {
     )
     .join(" ");
 }
+
+/**
+ * Verifica se o nome de um fornecedor "aparece" numa descrição bancária já
+ * normalizada — mesma heurística (palavra com mais de 3 caracteres, match
+ * por substring) já usada em `find-movement-candidates.use-case.ts`/
+ * `suggest-matches.use-case.ts` para inferir fornecedor a partir de um
+ * candidato já encontrado por montante. Extraída aqui porque a liquidação
+ * agrupada precisa do mesmo sinal *sem* depender de já ter encontrado um
+ * candidato individual por montante (secção 6 da task: quando não há
+ * correspondência simples, o próprio movimento pode não ter nenhum
+ * candidato de montante único para inferir o fornecedor a partir dele).
+ *
+ * Exemplo: "Justdrinks Lda" → token "justdrinks" (len 10) encontrado em
+ * "trf justdrinks lda" (a descrição já normalizada).
+ */
+export function supplierNameMatchesDescription(supplierName: string, normalizedDescription: string): boolean {
+  if (!normalizedDescription) return false;
+  const words = supplierName
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 3);
+  return words.some((w) => normalizedDescription.includes(w));
+}

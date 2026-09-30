@@ -175,6 +175,22 @@ export class ScopedQuery {
     });
   }
 
+  /**
+   * Módulo `bank-statements` — "Liquidação agrupada": liquida um movimento
+   * contra N documentos (faturas + notas de crédito) numa única transação
+   * atómica, com o saldo em aberto de cada documento recalculado e
+   * comparado ao valor observado pelo chamador (deteção de "stale
+   * document" sem coluna de versão — ver
+   * `20260930130000_bank_statements_grouped_settlement_rpc.sql`).
+   */
+  confirmGroupedSettlement(movementId: string, entityLinks: Record<string, unknown>[]) {
+    return this.client.rpc("fn_reconcile_movement_grouped", {
+      p_org_id: this.organizationId,
+      p_movement_id: movementId,
+      p_entity_links: entityLinks,
+    });
+  }
+
   table<T extends TableName>(name: T) {
     const entry = TABLE_REGISTRY[name];
     const organizationId = this.organizationId;

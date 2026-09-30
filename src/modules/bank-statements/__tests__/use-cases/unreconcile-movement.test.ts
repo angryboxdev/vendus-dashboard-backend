@@ -86,6 +86,8 @@ function makeInvoice(id: string, totalWithVat: number): InvoiceMatchCandidate {
     dueDate: "2026-07-31",
     paidAt: null,
     status: "paid",
+    currency: "EUR",
+    documentType: "invoice",
   };
 }
 
