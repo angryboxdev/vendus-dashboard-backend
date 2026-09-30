@@ -81,6 +81,18 @@ export const TABLE_REGISTRY = {
   stock_count_settings: { organizationColumn: "org_id", locationBearing: false },
   stock_count_audit_logs: { organizationColumn: "org_id", locationBearing: false },
 
+  // Módulo Stock — Planeamento de Stock (Stock Intelligence 3.0).
+  sales_demand_actuals_daily: { organizationColumn: "org_id", locationBearing: true },
+  forecast_runs: { organizationColumn: "org_id", locationBearing: true },
+  forecast_demand_points: { organizationColumn: "org_id", locationBearing: false },
+  forecast_stock_requirements: { organizationColumn: "org_id", locationBearing: false },
+  replenishment_recommendations: { organizationColumn: "org_id", locationBearing: false },
+  recommendation_reviews: { organizationColumn: "org_id", locationBearing: false },
+  planning_alerts: { organizationColumn: "org_id", locationBearing: true },
+  forecast_feedback: { organizationColumn: "org_id", locationBearing: true },
+  // financial-base — calendário de entrega de fornecedor (D10 para o módulo acima).
+  supplier_delivery_schedules: { organizationColumn: "org_id", locationBearing: true },
+
   // org-integration-credentials spec, ticket 04: AirMenu credentials (one
   // row per org) and per-location config — see
   // supabase/migrations/20260905090000_create_airmenu_credentials_tables.sql.

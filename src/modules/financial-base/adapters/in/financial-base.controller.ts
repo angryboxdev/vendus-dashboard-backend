@@ -37,6 +37,10 @@ import type { GetSupplierStatementPort } from "../../domain/ports/in/supplier-st
 import type { SupplierStatementDTO } from "../../domain/ports/in/supplier-statement.ports.js";
 import type { ListChannelsPort } from "../../domain/ports/in/channel.ports.js";
 import type { GetOrganizationIdentityPort } from "../../domain/ports/in/organization-identity.ports.js";
+import type {
+  ListSupplierDeliverySchedulesPort,
+  UpsertSupplierDeliverySchedulePort,
+} from "../../domain/ports/in/supplier-delivery-schedule.ports.js";
 
 // ── Helpers de formatação ─────────────────────────────────────────────────────
 
@@ -327,6 +331,8 @@ export class FinancialBaseController {
     private readonly getSupplierStatement: GetSupplierStatementPort,
     private readonly listChannels: ListChannelsPort,
     private readonly getOrganizationIdentity: GetOrganizationIdentityPort,
+    private readonly listSupplierDeliverySchedules: ListSupplierDeliverySchedulesPort,
+    private readonly upsertSupplierDeliverySchedule: UpsertSupplierDeliverySchedulePort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -927,6 +933,51 @@ export class FinancialBaseController {
           return;
         }
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    // ── Calendário de entrega (módulo Stock — Planeamento, D10) ──────────────
+
+    /**
+     * GET /financial-base/suppliers/:id/delivery-schedule
+     * Devolve o calendário de entrega deste fornecedor em todas as lojas
+     * (informativo, nunca um compromisso — secção 5 da task de Planeamento).
+     */
+    this.router.get("/financial-base/suppliers/:id/delivery-schedule", async (req, res) => {
+      try {
+        const result = await this.listSupplierDeliverySchedules.execute({
+          organizationId: req.auth!.orgId,
+          supplierId: req.params["id"] as string,
+        });
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * PUT /financial-base/suppliers/:id/delivery-schedule
+     * Body: { locationId, weekdays: number[] | null, cutoffTime?, active? }
+     * Cria ou atualiza o calendário deste par fornecedor×loja (uma linha cada, nunca duplicada).
+     */
+    this.router.put("/financial-base/suppliers/:id/delivery-schedule", async (req, res) => {
+      try {
+        const body = req.body as Record<string, unknown>;
+        if (typeof body.locationId !== "string" || body.locationId.trim().length === 0) {
+          res.status(400).json({ error: "locationId é obrigatório" });
+          return;
+        }
+        const result = await this.upsertSupplierDeliverySchedule.execute({
+          organizationId: req.auth!.orgId,
+          supplierId: req.params["id"] as string,
+          locationId: body.locationId,
+          weekdays: (body.weekdays as number[] | null | undefined) ?? null,
+          cutoffTime: (body.cutoffTime as string | null | undefined) ?? null,
+          ...(body.active !== undefined && { active: Boolean(body.active) }),
+        });
+        res.json(result);
+      } catch (e) {
+        res.status(400).json({ error: e instanceof Error ? e.message : "Internal error" });
       }
     });
   }

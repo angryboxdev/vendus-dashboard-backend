@@ -60,3 +60,10 @@ export class OrganizationNotFoundError extends Error {
     this.name = "OrganizationNotFoundError";
   }
 }
+
+export class InvalidDeliveryWeekdayError extends Error {
+  constructor(value: number) {
+    super(`Dia da semana inválido no calendário de entrega: ${value} (tem de ser 1=Segunda a 7=Domingo)`);
+    this.name = "InvalidDeliveryWeekdayError";
+  }
+}

@@ -44,6 +44,7 @@ import { createAccountingModule } from "./modules/accounting/accounting.module.j
 import { createStockPurchaseReviewModule } from "./modules/stock-purchase-review/stock-purchase-review.module.js";
 import type { RecordInvoiceFinalizedForStockPort } from "./modules/stock-purchase-review/domain/ports/in/stock-purchase-review.ports.js";
 import { createStockCountModule } from "./modules/stock-count/stock-count.module.js";
+import { createStockPlanningModule } from "./modules/stock-planning/stock-planning.module.js";
 
 const app = express();
 
@@ -178,6 +179,20 @@ const stockPurchaseReviewModule = createStockPurchaseReviewModule(
 );
 recordInvoiceFinalizedForStockRef.current = stockPurchaseReviewModule.recordInvoiceFinalizedForStock;
 
+// Stock planning module (hexagonal) — "Planeamento de Stock" (Stock
+// Intelligence 3.0). Instanciado aqui (antes do cron interno) para expor
+// runDailyForecast/detectForecastDeviation ao cron — só lê financial-base
+// (D10: getSupplier/listSupplierDeliverySchedules) e locations (D10,
+// listLocations); sem dependência das instâncias de
+// stockPurchaseReviewModule/stockCountModule (lê as suas tabelas
+// partilhadas diretamente via ScopedQuery, ver README do módulo), por isso
+// não entra no ciclo de construção acima.
+const stockPlanningModule = createStockPlanningModule(
+  locationsModule.listLocations,
+  financialBaseModule.getSupplier,
+  financialBaseModule.listSupplierDeliverySchedules,
+);
+
 // Internal cron routes: authenticated via requireCronSecret (Bearer
 // CRON_SECRET), not user sessions — must be mounted before the global
 // requireAuth below, or Supabase JWT auth rejects the request first.
@@ -187,6 +202,8 @@ if (ENV.CRON_SECRET) {
     createInternalCronRouter({
       processDirectDebits: invoicesModule.processDirectDebits,
       reprocessMissingStockReviews: stockPurchaseReviewModule.reprocessMissingStockReviews,
+      runDailyForecast: stockPlanningModule.runDailyForecast,
+      detectForecastDeviation: stockPlanningModule.detectForecastDeviation,
       listOrganizations,
     }),
   );
@@ -261,6 +278,11 @@ app.use("/api", requireMinRole("manager"), stockPurchaseReviewModule.router);
 // sobreposição/definir valor final manual (secção 64).
 const stockCountModule = createStockCountModule(locationsModule.listLocations);
 app.use("/api", requireMinRole("manager"), stockCountModule.router);
+
+// Stock planning module (hexagonal) — "Planeamento de Stock". Instanciado
+// acima (antes do cron interno) para expor runDailyForecast/
+// detectForecastDeviation; router só montado aqui.
+app.use("/api", requireMinRole("manager"), stockPlanningModule.router);
 
 // Payable entries module (hexagonal)
 const payableEntriesModule = createPayableEntriesModule();

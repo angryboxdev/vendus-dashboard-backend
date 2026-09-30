@@ -10,6 +10,7 @@ import { SupabaseSupplierInvoiceStatsAdapter } from "./adapters/out/supabase-sup
 import { SupabaseInvoicePaymentReadAdapter } from "./adapters/out/supabase-invoice-payment-read.adapter.js";
 import { SupabaseChannelRepository } from "./adapters/out/supabase-channel.repository.js";
 import { SupabaseOrganizationIdentityRepository } from "./adapters/out/supabase-organization-identity.repository.js";
+import { SupabaseSupplierDeliveryScheduleRepository } from "./adapters/out/supabase-supplier-delivery-schedule.repository.js";
 
 import { ListCostCenterGroupsUseCase } from "./application/use-cases/list-cost-center-groups.use-case.js";
 import { GetCostCenterGroupUseCase } from "./application/use-cases/get-cost-center-group.use-case.js";
@@ -35,8 +36,11 @@ import { GetSupplierDetailUseCase } from "./application/use-cases/get-supplier-d
 import { GetSupplierStatementUseCase } from "./application/use-cases/get-supplier-statement.use-case.js";
 import { ListChannelsUseCase } from "./application/use-cases/list-channels.use-case.js";
 import { GetOrganizationIdentityUseCase } from "./application/use-cases/get-organization-identity.use-case.js";
+import { ListSupplierDeliverySchedulesUseCase } from "./application/use-cases/list-supplier-delivery-schedules.use-case.js";
+import { UpsertSupplierDeliveryScheduleUseCase } from "./application/use-cases/upsert-supplier-delivery-schedule.use-case.js";
 
 import { FinancialBaseController } from "./adapters/in/financial-base.controller.js";
+import type { ListSupplierDeliverySchedulesPort } from "./domain/ports/in/supplier-delivery-schedule.ports.js";
 
 /**
  * Composition root do módulo financial-base.
@@ -59,6 +63,8 @@ export function createFinancialBaseModule(): {
   listCostCenterCategories: ListCostCenterCategoriesPort;
   /** Módulo Stock — Compra por rever (D10): preferência de stock do fornecedor. */
   getSupplier: GetSupplierPort;
+  /** Módulo Stock — Planeamento (D10): calendário de entrega por fornecedor×loja. */
+  listSupplierDeliverySchedules: ListSupplierDeliverySchedulesPort;
 } {
   // Adapters de saída
   const groupRepository = new SupabaseCostCenterGroupRepository(createScopedQuery);
@@ -68,6 +74,7 @@ export function createFinancialBaseModule(): {
   const invoicePaymentRead = new SupabaseInvoicePaymentReadAdapter(createScopedQuery);
   const channelRepository = new SupabaseChannelRepository(createScopedQuery);
   const organizationIdentityRepository = new SupabaseOrganizationIdentityRepository(createScopedQuery);
+  const supplierDeliveryScheduleRepository = new SupabaseSupplierDeliveryScheduleRepository(createScopedQuery);
 
   // Use cases — grupos de centros de custo
   const listCostCenterGroups = new ListCostCenterGroupsUseCase(groupRepository);
@@ -97,6 +104,10 @@ export function createFinancialBaseModule(): {
 
   // Use cases — identidade da organização
   const getOrganizationIdentity = new GetOrganizationIdentityUseCase(organizationIdentityRepository);
+
+  // Use cases — calendário de entrega de fornecedores (módulo Stock — Planeamento)
+  const listSupplierDeliverySchedules = new ListSupplierDeliverySchedulesUseCase(supplierDeliveryScheduleRepository);
+  const upsertSupplierDeliverySchedule = new UpsertSupplierDeliveryScheduleUseCase(supplierDeliveryScheduleRepository);
 
   // Use cases — fornecedores
   const createSupplier = new CreateSupplierUseCase(supplierRepository);
@@ -140,7 +151,15 @@ export function createFinancialBaseModule(): {
     getSupplierStatement,
     listChannels,
     getOrganizationIdentity,
+    listSupplierDeliverySchedules,
+    upsertSupplierDeliverySchedule,
   );
 
-  return { router: controller.router, createSupplier, listCostCenterCategories, getSupplier };
+  return {
+    router: controller.router,
+    createSupplier,
+    listCostCenterCategories,
+    getSupplier,
+    listSupplierDeliverySchedules,
+  };
 }

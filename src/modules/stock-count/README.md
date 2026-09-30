@@ -273,6 +273,17 @@ sobreposição, definir valor final manual — mesmo padrão já usado no módul
   especificou o comportamento exato ao atingir o limite (bloquear? só
   avisar?), por isso ficou como campo de configuração sem efeito nesta
   ronda.
+- **`slow_moving_days_threshold`** (`stock_count_settings`) — coluna
+  aditiva nova (migration do módulo `stock-planning`,
+  `20260930120000_stock_planning_tables.sql`), nullable, **não exposta
+  neste módulo** (nem em `StockCountSettingsPort`/`CompanyCountSettings`,
+  nem no controller) porque só é lida por `stock-planning`
+  (`StockCountSignalReadAdapter`, direto por `ScopedQuery`) para detetar
+  item parado/excesso de stock — este módulo continua sem nenhum
+  comportamento de "slow moving" próprio. Reaproveita esta tabela em vez
+  de criar uma 3ª tabela de configurações, por já ser "as definições da
+  empresa sobre stock" mais próxima do conceito (ver README de
+  `stock-planning`).
 - **Fase 2 (mockups completos)** — o frontend fica para uma ronda seguinte
   (fase 1 = backend completo + UI funcional simples, mesma decisão já
   confirmada com o utilizador na task Financeiro→Stock).

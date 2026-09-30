@@ -3,6 +3,7 @@ import { Router, type Request, type Response } from "express";
 import { runDailyVendusConsumptionJob } from "../services/dailyVendusConsumptionJobService.js";
 import type { ProcessDirectDebitsPort } from "../modules/invoices/domain/ports/in/invoice.ports.js";
 import type { ReprocessMissingStockReviewsPort } from "../modules/stock-purchase-review/domain/ports/in/stock-purchase-review.ports.js";
+import type { DetectForecastDeviationPort, RunDailyForecastPort } from "../modules/stock-planning/domain/ports/in/stock-planning.ports.js";
 import { UNATTENDED_SCOPE } from "../infra/scoped-db/unattended-scope.js";
 import { fanOut } from "../utils/fan-out.js";
 import type { OrganizationRow } from "../infra/scoped-db/organization-listing.js";
@@ -22,6 +23,8 @@ function requireCronSecret(req: Request, res: Response): boolean {
 export function createInternalCronRouter(deps: {
   processDirectDebits: ProcessDirectDebitsPort;
   reprocessMissingStockReviews: ReprocessMissingStockReviewsPort;
+  runDailyForecast: RunDailyForecastPort;
+  detectForecastDeviation: DetectForecastDeviationPort;
   listOrganizations: () => Promise<OrganizationRow[]>;
 }): Router {
   const router = Router();
@@ -108,6 +111,41 @@ export function createInternalCronRouter(deps: {
           async (org) => {
             const result = await deps.reprocessMissingStockReviews.execute({ organizationId: org.organizationId });
             return { status: "success" as const, ...result };
+          },
+          { describeItem: (org) => org.organizationId },
+        );
+        res.json(summary);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : "Erro no job";
+        res.status(500).json({ error: message });
+      }
+    }
+  );
+
+  /**
+   * POST /internal/cron/run-daily-forecast
+   * Header: Authorization: Bearer <CRON_SECRET>
+   *
+   * Módulo `stock-planning` — pipeline diário completo (incrementa vendas,
+   * prevê, converte para consumo, projeta stock, gera recomendações e
+   * alertas) seguido da deteção de desvio do dia anterior (mesmo cron,
+   * passo adicional — secções 31-38). Fan-out por organização, mesmo
+   * padrão de `reprocess-missing-stock-reviews`. Sempre seguro correr
+   * redundantemente — escrita idempotente por construção (`is_latest`
+   * flip, upsert de alertas/feedback por fingerprint/chave única).
+   */
+  router.post(
+    "/internal/cron/run-daily-forecast",
+    async (req: Request, res: Response) => {
+      if (!requireCronSecret(req, res)) return;
+      try {
+        const organizations = await deps.listOrganizations();
+        const summary = await fanOut(
+          organizations,
+          async (org) => {
+            const forecastResult = await deps.runDailyForecast.execute({ organizationId: org.organizationId });
+            const deviationResult = await deps.detectForecastDeviation.execute({ organizationId: org.organizationId });
+            return { status: "success" as const, forecastResult, deviationResult };
           },
           { describeItem: (org) => org.organizationId },
         );
