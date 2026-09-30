@@ -276,6 +276,105 @@ describe('GetOrdersUseCase — sem orders', () => {
   });
 });
 
+// ─── batching de getOrders ────────────────────────────────────────────────────
+
+describe('GetOrdersUseCase — batching', () => {
+  it('nunca excede batchSize chamadas getOrders em simultâneo e processa todas', async () => {
+    const session = AirMenuSession.create('sess-test', []);
+    const sessionManager = { getValidSession: async () => session } as unknown as SessionManagerService;
+    const ids = Array.from({ length: 12 }, (_, i) => `o${i}`);
+    let inFlight = 0;
+    let maxInFlight = 0;
+    let calls = 0;
+    const gateway = {
+      getOrderIds: async () => ids,
+      getOrders: async () => {
+        calls++;
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight--;
+        return {};
+      },
+    } as unknown as AirMenuGatewayPort;
+
+    await new GetOrdersUseCase(sessionManager, gateway, 5, 0).execute(ENT_ID, START, END);
+
+    expect(calls).toBe(12);
+    expect(maxInFlight).toBe(5);
+  });
+});
+
+describe('GetOrdersUseCase — delay entre batches', () => {
+  it('espera batchDelayMs entre batches, sem espera antes do primeiro', async () => {
+    const session = AirMenuSession.create('sess-test', []);
+    const sessionManager = { getValidSession: async () => session } as unknown as SessionManagerService;
+    const ids = Array.from({ length: 6 }, (_, i) => `o${i}`);
+    const callTimes: number[] = [];
+    const gateway = {
+      getOrderIds: async () => ids,
+      getOrders: async () => {
+        callTimes.push(Date.now());
+        return {};
+      },
+    } as unknown as AirMenuGatewayPort;
+
+    await new GetOrdersUseCase(sessionManager, gateway, 3, 50).execute(ENT_ID, START, END);
+
+    expect(callTimes).toHaveLength(6);
+    expect(callTimes[1]! - callTimes[0]!).toBeGreaterThanOrEqual(45);
+    expect(callTimes[3]! - callTimes[2]!).toBeLessThan(45);
+    expect(callTimes[4]! - callTimes[3]!).toBeGreaterThanOrEqual(45);
+  });
+});
+
+describe('GetOrdersUseCase — probe + reauth', () => {
+  function makeReauthStubs(getOrders: (sid: string, orderId: string) => Promise<Record<string, RawOrderItemInstance[]>>, ids: string[]) {
+    let sessionCount = 0;
+    const invalidate = jest.fn();
+    const sessionManager = {
+      getValidSession: async () => AirMenuSession.create(`sess-${++sessionCount}`, []),
+      invalidate,
+    } as unknown as SessionManagerService;
+    const gateway = {
+      getOrderIds: async () => ids,
+      getOrders: async (sid: string, _eid: string, orderId: string) => getOrders(sid, orderId),
+    } as unknown as AirMenuGatewayPort;
+    return { uc: new GetOrdersUseCase(sessionManager, gateway, 5, 0), invalidate };
+  }
+
+  it('sonda uma ordem sozinha: se falha, reautentica e não dispara o resto com sessão obsoleta', async () => {
+    const calls: string[] = [];
+    const { uc, invalidate } = makeReauthStubs(async (sid, orderId) => {
+      calls.push(`${sid}:${orderId}`);
+      if (sid === 'sess-1') throw new Error('stale');
+      return {};
+    }, ['a', 'b', 'c', 'd']);
+
+    await uc.execute(ENT_ID, START, END);
+
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual(['sess-1:a', 'sess-2:a', 'sess-2:b', 'sess-2:c', 'sess-2:d']);
+  });
+
+  it('propaga o erro e não dispara o resto quando a sonda falha também após reauth', async () => {
+    const calls: string[] = [];
+    const { uc } = makeReauthStubs(async (_sid, orderId) => {
+      calls.push(orderId);
+      throw new Error('down');
+    }, ['a', 'b', 'c']);
+
+    await expect(uc.execute(ENT_ID, START, END)).rejects.toThrow('down');
+    expect(calls).toEqual(['a', 'a']);
+  });
+
+  it('não reautentica quando a sonda tem sucesso', async () => {
+    const { uc, invalidate } = makeReauthStubs(async () => ({}), ['a', 'b']);
+    await uc.execute(ENT_ID, START, END);
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+});
+
 // ─── upgrade complement (Dobre a sua pizza) ───────────────────────────────────
 
 describe('GetOrdersUseCase — upgrade complement "Dobre a sua pizza"', () => {
