@@ -22,6 +22,8 @@ alter table public.hr_work_shifts
 -- 2º segmento (turno repartido) só suportado para turnos no mesmo dia civil
 -- (não combinado com ends_next_day nesta V1 — dívida documentada no README).
 alter table public.hr_work_shifts
+  drop constraint if exists hr_work_shifts_second_segment_shape;
+alter table public.hr_work_shifts
   add constraint hr_work_shifts_second_segment_shape check (
     second_start_time is null
     or (
@@ -32,7 +34,7 @@ alter table public.hr_work_shifts
     )
   );
 
-create index hr_work_shifts_series_id_idx on public.hr_work_shifts (series_id) where series_id is not null;
+create index if not exists hr_work_shifts_series_id_idx on public.hr_work_shifts (series_id) where series_id is not null;
 
 comment on column public.hr_work_shifts.series_id is
   'Tag partilhada por todos os turnos criados numa mesma série recorrente (sem tabela pai). NULL = turno avulso/manual, ou já destacado da série por edição individual ("Somente este turno").';

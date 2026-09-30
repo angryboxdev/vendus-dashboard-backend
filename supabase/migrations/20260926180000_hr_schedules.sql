@@ -7,7 +7,7 @@
 
 -- ── hr_shift_rotations (criada antes, para a FK de hr_work_shifts) ─────────
 
-create table public.hr_shift_rotations (
+create table if not exists public.hr_shift_rotations (
   id                    uuid primary key default gen_random_uuid(),
   org_id                uuid not null references public.organizations(id),
   job_role              text not null check (job_role in ('manager', 'prep', 'service')),
@@ -35,7 +35,7 @@ create table public.hr_shift_rotations (
   constraint hr_shift_rotations_pattern_b_order check (pattern_b_start_time < pattern_b_end_time)
 );
 
-create index hr_shift_rotations_org_id_idx on public.hr_shift_rotations (org_id);
+create index if not exists hr_shift_rotations_org_id_idx on public.hr_shift_rotations (org_id);
 
 alter table public.hr_shift_rotations enable row level security;
 
@@ -54,12 +54,12 @@ comment on column public.hr_work_shifts.status is
 comment on column public.hr_work_shifts.source is
   'Proveniência do turno — manual (criado/editado à mão, protegido contra reaplicação silenciosa de escala base/rotação), base_schedule (gerado por aplicar escala base), rotation (gerado por uma rotação ativa).';
 
-create index hr_work_shifts_status_idx on public.hr_work_shifts (status);
-create index hr_work_shifts_rotation_id_idx on public.hr_work_shifts (rotation_id) where rotation_id is not null;
+create index if not exists hr_work_shifts_status_idx on public.hr_work_shifts (status);
+create index if not exists hr_work_shifts_rotation_id_idx on public.hr_work_shifts (rotation_id) where rotation_id is not null;
 
 -- ── hr_base_schedule_templates ──────────────────────────────────────────────
 
-create table public.hr_base_schedule_templates (
+create table if not exists public.hr_base_schedule_templates (
   id             uuid primary key default gen_random_uuid(),
   org_id         uuid not null references public.organizations(id),
   employee_id    uuid not null,
@@ -79,9 +79,13 @@ create table public.hr_base_schedule_templates (
   )
 );
 
-create index hr_base_schedule_templates_org_employee_idx
+create index if not exists hr_base_schedule_templates_org_employee_idx
   on public.hr_base_schedule_templates (org_id, employee_id);
 
+-- `drop constraint if exists` antes do `add constraint` (Postgres não tem
+-- `add constraint if not exists`) — torna a migration reexecutável.
+alter table public.hr_base_schedule_templates
+  drop constraint if exists hr_base_schedule_templates_org_id_employee_id_fkey;
 alter table public.hr_base_schedule_templates
   add constraint hr_base_schedule_templates_org_id_employee_id_fkey
   foreign key (org_id, employee_id) references public.hr_employees (org_id, id);

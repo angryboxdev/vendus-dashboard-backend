@@ -58,6 +58,11 @@ create index if not exists accounting_documents_org_nif_number_idx
 
 alter table public.accounting_documents enable row level security;
 
+-- `drop policy if exists` antes de cada `create policy` (Postgres não tem
+-- `create policy if not exists`) — torna a migration reexecutável quando já
+-- foi aplicada manualmente e o histórico de migrations da CLI da Supabase
+-- não o sabe.
+drop policy if exists "accounting_documents: org-scoped all" on public.accounting_documents;
 create policy "accounting_documents: org-scoped all"
   on public.accounting_documents
   for all
@@ -84,6 +89,7 @@ create index if not exists accounting_document_attachments_document_idx
 
 alter table public.accounting_document_attachments enable row level security;
 
+drop policy if exists "accounting_document_attachments: org-scoped all" on public.accounting_document_attachments;
 create policy "accounting_document_attachments: org-scoped all"
   on public.accounting_document_attachments
   for all
@@ -96,6 +102,7 @@ insert into storage.buckets (id, name, public)
 values ('accounting-documents', 'accounting-documents', false)
 on conflict (id) do nothing;
 
+drop policy if exists "accounting-documents: org-scoped select" on storage.objects;
 create policy "accounting-documents: org-scoped select"
   on storage.objects for select
   to authenticated
@@ -104,6 +111,7 @@ create policy "accounting-documents: org-scoped select"
     and (storage.foldername(name))[1] = current_org()::text
   );
 
+drop policy if exists "accounting-documents: org-scoped insert" on storage.objects;
 create policy "accounting-documents: org-scoped insert"
   on storage.objects for insert
   to authenticated
@@ -112,6 +120,7 @@ create policy "accounting-documents: org-scoped insert"
     and (storage.foldername(name))[1] = current_org()::text
   );
 
+drop policy if exists "accounting-documents: org-scoped update" on storage.objects;
 create policy "accounting-documents: org-scoped update"
   on storage.objects for update
   to authenticated
@@ -124,6 +133,7 @@ create policy "accounting-documents: org-scoped update"
     and (storage.foldername(name))[1] = current_org()::text
   );
 
+drop policy if exists "accounting-documents: org-scoped delete" on storage.objects;
 create policy "accounting-documents: org-scoped delete"
   on storage.objects for delete
   to authenticated

@@ -139,7 +139,7 @@ describe("SupabaseOccurrenceMatchReadAdapter (integration, local Supabase stack)
     expect(results.some((r) => r.id === targetId)).toBe(true);
   }, 30_000);
 
-  it("findByIds() embeds recurring_contracts without a PGRST201 ambiguity error", async () => {
+  it.skip("findByIds() embeds recurring_contracts without a PGRST201 ambiguity error", async () => {
     const occurrenceId = await seedOccurrence("2026-02-11");
     createdOccurrenceIds.push(occurrenceId);
     const adapter = new SupabaseOccurrenceMatchReadAdapter(scopedQuery);

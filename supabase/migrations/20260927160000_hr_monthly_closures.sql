@@ -3,7 +3,7 @@
 -- Único ponto de verdade para "este período está fechado"; qualquer
 -- escrita de correção de assiduidade passa a verificar esta tabela.
 
-create table public.hr_monthly_closures (
+create table if not exists public.hr_monthly_closures (
   id              uuid primary key default gen_random_uuid(),
   org_id          uuid not null references public.organizations(id),
   year            integer not null,
@@ -22,6 +22,6 @@ create table public.hr_monthly_closures (
 comment on table public.hr_monthly_closures is
   'Fecho mensal de assiduidade (Fase 2) — 1 linha por (org, ano, mês); ausência de linha = período em aberto por omissão.';
 
-create index hr_monthly_closures_org_id_idx on public.hr_monthly_closures (org_id);
+create index if not exists hr_monthly_closures_org_id_idx on public.hr_monthly_closures (org_id);
 
 alter table public.hr_monthly_closures enable row level security;

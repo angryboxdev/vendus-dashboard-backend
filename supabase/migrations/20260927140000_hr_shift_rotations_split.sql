@@ -9,6 +9,8 @@ alter table public.hr_shift_rotations
   add column if not exists pattern_b_second_end_time time;
 
 alter table public.hr_shift_rotations
+  drop constraint if exists hr_shift_rotations_pattern_a_second_segment_shape;
+alter table public.hr_shift_rotations
   add constraint hr_shift_rotations_pattern_a_second_segment_shape check (
     pattern_a_second_start_time is null
     or (
@@ -18,6 +20,8 @@ alter table public.hr_shift_rotations
     )
   );
 
+alter table public.hr_shift_rotations
+  drop constraint if exists hr_shift_rotations_pattern_b_second_segment_shape;
 alter table public.hr_shift_rotations
   add constraint hr_shift_rotations_pattern_b_second_segment_shape check (
     pattern_b_second_start_time is null
