@@ -12,6 +12,8 @@ import { SupabaseSupplierHintAdapter } from "./adapters/out/supabase-supplier-hi
 import { SupabaseOrganizationIdentityReadAdapter } from "./adapters/out/supabase-organization-identity-read.adapter.js";
 import { FinancialBaseSupplierCreateAdapter } from "./adapters/out/financial-base-supplier-create.adapter.js";
 import { StockPurchaseReviewDecisionAdapter } from "./adapters/out/stock-purchase-review-decision-adapter.js";
+import { StockPurchaseReviewStatusReadAdapter } from "./adapters/out/stock-purchase-review-status-read.adapter.js";
+import { StockPurchaseReviewDraftDeleteAdapter } from "./adapters/out/stock-purchase-review-draft-delete.adapter.js";
 import { OpenAiExtractionAdapter } from "./adapters/out/openai-extraction.adapter.js";
 import { CreateInvoiceUseCase } from "./application/use-cases/create-invoice.use-case.js";
 import { UpdateInvoiceUseCase } from "./application/use-cases/update-invoice.use-case.js";
@@ -34,7 +36,11 @@ import { ProcessDirectDebitsUseCase } from "./application/use-cases/process-dire
 import { SetLineDetailModeUseCase } from "./application/use-cases/set-line-detail-mode.use-case.js";
 import { createInvoiceRouter } from "./adapters/in/invoice.controller.js";
 import type { CreateSupplierPort } from "../financial-base/domain/ports/in/supplier.ports.js";
-import type { RecordInvoiceFinalizedForStockPort } from "../stock-purchase-review/domain/ports/in/stock-purchase-review.ports.js";
+import type {
+  RecordInvoiceFinalizedForStockPort,
+  GetStockPurchaseReviewStatusPort,
+  DeleteDraftStockPurchaseReviewPort,
+} from "../stock-purchase-review/domain/ports/in/stock-purchase-review.ports.js";
 import type { ProcessDirectDebitsPort, ListInvoicesPort, ListInvoiceLinesPort, GetInvoicePort } from "./domain/ports/in/invoice.ports.js";
 import type { Router } from "express";
 
@@ -63,6 +69,8 @@ export interface InvoicesModule {
 export function createInvoicesModule(
   createSupplierPort: CreateSupplierPort,
   recordInvoiceFinalizedForStock: RecordInvoiceFinalizedForStockPort,
+  getStockPurchaseReviewStatus: GetStockPurchaseReviewStatusPort,
+  deleteDraftStockPurchaseReview: DeleteDraftStockPurchaseReviewPort,
 ): InvoicesModule {
   const openaiApiKey = process.env.OPENAI_API_KEY;
   if (!openaiApiKey) throw new Error("OPENAI_API_KEY não configurado");
@@ -80,6 +88,8 @@ export function createInvoicesModule(
   const organizationIdentityRead = new SupabaseOrganizationIdentityReadAdapter(createScopedQuery);
   const supplierCreate = new FinancialBaseSupplierCreateAdapter(createSupplierPort);
   const stockDecisionNotify = new StockPurchaseReviewDecisionAdapter(recordInvoiceFinalizedForStock);
+  const stockReviewStatusRead = new StockPurchaseReviewStatusReadAdapter(getStockPurchaseReviewStatus);
+  const stockReviewDraftDelete = new StockPurchaseReviewDraftDeleteAdapter(deleteDraftStockPurchaseReview);
   const aiExtraction = new OpenAiExtractionAdapter(openaiApiKey);
 
   const processDirectDebits = new ProcessDirectDebitsUseCase(invoiceRepo, payableWrite);
@@ -89,10 +99,10 @@ export function createInvoicesModule(
 
   const router = createInvoiceRouter({
     createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, stockDecisionNotify),
-    updateInvoice: new UpdateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, reconciliationCleanup),
+    updateInvoice: new UpdateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete),
     markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite, occurrenceSync),
     setInvoiceStatus: new SetInvoiceStatusUseCase(invoiceRepo, payableWrite),
-    setLineDetailMode: new SetLineDetailModeUseCase(invoiceRepo, lineRepo),
+    setLineDetailMode: new SetLineDetailModeUseCase(invoiceRepo, lineRepo, stockReviewStatusRead, stockReviewDraftDelete),
     addInvoiceLine: new AddInvoiceLineUseCase(invoiceRepo, lineRepo),
     updateInvoiceLine: new UpdateInvoiceLineUseCase(invoiceRepo, lineRepo),
     deleteInvoiceLine: new DeleteInvoiceLineUseCase(invoiceRepo, lineRepo),
@@ -101,7 +111,7 @@ export function createInvoicesModule(
     listInvoices,
     listInvoiceLines,
     getInvoice,
-    deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage, payableWrite, reconciliationCleanup),
+    deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),
     importInvoice: new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint, organizationIdentityRead),
     confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify),

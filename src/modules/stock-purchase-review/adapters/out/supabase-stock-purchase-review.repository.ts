@@ -174,4 +174,12 @@ export class SupabaseStockPurchaseReviewRepository implements StockPurchaseRevie
     const { error } = await this.scopedQuery(organizationId).table("stock_review_lines").update(row).eq("id", id as string);
     if (error) throw new Error(error.message);
   }
+
+  /** Única exceção deliberada à regra "nunca hard delete" (ver README) — linhas primeiro, depois a revisão (ordem FK). */
+  async hardDelete(organizationId: OrganizationId, reviewId: string): Promise<void> {
+    const linesResult = await this.scopedQuery(organizationId).table("stock_review_lines").delete().eq("review_id", reviewId);
+    if (linesResult.error) throw new Error(linesResult.error.message);
+    const reviewResult = await this.scopedQuery(organizationId).table("stock_purchase_reviews").delete().eq("id", reviewId);
+    if (reviewResult.error) throw new Error(reviewResult.error.message);
+  }
 }

@@ -1,7 +1,7 @@
 # Módulo: invoices
 
 > Status: ativo
-> Última atualização: 2026-09-29 (módulo `accounting`: `InvoicesModule` passou a expor `listInvoices`/`listInvoiceLines` para leitura cross-module, D10)
+> Última atualização: 2026-09-30 (fix: crash ao mudar "Impacto no stock"/descartar linhas detalhadas/**eliminar fatura** contra uma revisão de stock existente — guard partilhado `shared-stock-review-guard.ts` aplicado agora também a `DeleteInvoiceUseCase` + bug do `stockReviewOverride` silenciosamente ignorado em `UpdateInvoiceUseCase`; ver "Decisões de design")
 
 ---
 
@@ -168,11 +168,11 @@ upload (ver "Decisões de design").
 ### Entrada (use cases)
 
 - `CreateInvoiceUseCase` — criação manual com linhas opcionais; cria payable entry se dueDate presente.
-- `UpdateInvoiceUseCase` — actualiza campos do cabeçalho (inclui novos campos de classificação financeira). Quando `invoiceNumber` muda: (1) valida duplicado por NIF (se disponível) ou por `supplierId`; (2) propaga o novo número ao payable entry (`renumberByInvoiceId`) e aos links de conciliação bancária (`renumberLinksForInvoice`).
+- `UpdateInvoiceUseCase` — actualiza campos do cabeçalho (inclui novos campos de classificação financeira, incluindo `stockReviewOverride`/`stockReviewOverrideReason`). Quando `invoiceNumber` muda: (1) valida duplicado por NIF (se disponível) ou por `supplierId`; (2) propaga o novo número ao payable entry (`renumberByInvoiceId`) e aos links de conciliação bancária (`renumberLinksForInvoice`). Quando `stockReviewOverride` muda, corre primeiro o guard partilhado contra revisão de stock órfã (ver "Decisões de design").
 - `MarkInvoicePaidUseCase` — transita para `paid` + `reconciliationStatus=pending_reconciliation`; aceita `bankAccountId`, `paymentMethod` e `paymentNotes` opcionais; sincroniza payable entry.
 - `MarkInvoiceReconciledUseCase` — transita `reconciliationStatus` de `pending_reconciliation` para `reconciled`. Requer fatura já paga.
 - `SetInvoiceStatusUseCase` — força estado arbitrário; cancela payable entry se `cancelled`.
-- `SetLineDetailModeUseCase` — alterna entre `simple` e `detailed`. Na transição `detailed → simple`, apaga todas as linhas da fatura (`deleteByInvoiceId`) — em modo simples a linha automática é derivada dos totais do cabeçalho, e linhas armazenadas ficariam ambíguas para analytics. A transição nunca é bloqueada por divergência de totais.
+- `SetLineDetailModeUseCase` — alterna entre `simple` e `detailed`. Na transição `detailed → simple`, apaga todas as linhas da fatura (`deleteByInvoiceId`) — em modo simples a linha automática é derivada dos totais do cabeçalho, e linhas armazenadas ficariam ambíguas para analytics. A transição nunca é bloqueada por divergência de totais. Antes de apagar, corre o guard partilhado contra revisão de stock órfã (ver "Decisões de design") — só quando há mesmo linhas a apagar.
 - `AddInvoiceLineUseCase` — adiciona linha a fatura existente (requer `lineDetailMode=detailed`). Valida que a soma das linhas não excede `totalWithVat` da fatura (tolerância: 1 cêntimo). Aceita `locationId` opcional (D4) — ver "Alocação de linha a uma loja" abaixo.
 - `UpdateInvoiceLineUseCase` — actualiza valores de uma linha existente (descrição, quantidade, unidade, preço unitário, IVA, total, `locationId`). Requer `lineDetailMode=detailed`. Valida que a soma das linhas não excede `totalWithVat` da fatura (tolerância: 1 cêntimo).
 - `DeleteInvoiceLineUseCase` — elimina uma linha de uma fatura em modo `detailed`. Requer `lineDetailMode=detailed`; lança `LineDetailModeError` caso contrário.
@@ -182,7 +182,7 @@ upload (ver "Decisões de design").
 - **`ProcessDirectDebitsUseCase`** — busca faturas de DD com `directDebitDate ≤ hoje` e status não pago/cancelado; marca-as como pagas na `directDebitDate` e sincroniza payable entries.
 - `ListInvoiceLinesUseCase` — todas as linhas (para analytics por CC).
 - `GetInvoiceUseCase` — detalhe com linhas. Inclui sempre `classificationSummary` (ver abaixo). Quando `lineDetailMode=detailed`, o DTO inclui também `linesSummary = { subtotalWithoutVat, totalVat, totalWithVat, totalsMismatch }` com tolerância de 1 cêntimo.
-- `DeleteInvoiceUseCase` — remove fatura, linhas e ficheiro em storage (se tiver `attachmentUrl`). Antes de apagar: cancela o payable entry associado (`cancelByInvoiceId`) e remove os links de conciliação bancária (`removeLinksForInvoice`), actualizando os movimentos bancários afectados.
+- `DeleteInvoiceUseCase` — remove fatura, linhas e ficheiro em storage (se tiver `attachmentUrl`). Antes de apagar as linhas, corre o guard partilhado contra revisão de stock órfã (ver "Decisões de design") — mesmo risco de violação da FK `stock_review_lines_invoice_line_id_fkey` já tratado em `UpdateInvoiceUseCase`/`SetLineDetailModeUseCase`. Depois: cancela o payable entry associado (`cancelByInvoiceId`) e remove os links de conciliação bancária (`removeLinksForInvoice`), actualizando os movimentos bancários afectados.
 - **`ImportInvoiceUseCase`** — armazena ficheiro, extrai dados via IA, procura fornecedor por NIF, aplica defaults, cria `Invoice` em `draft_ai`.
 - **`ConfirmImportedInvoiceUseCase`** — aplica correções do utilizador, transita `draft_ai`/`pending_review` → `pending`; salva linhas opcionais (com `locationId` opcional por linha); cria payable entry se pedido. Suporta `newSupplier` (cria fornecedor via `SupplierCreatePort` antes de guardar) e propaga `costCenterCategoryId` para todas as linhas. Quando linhas são fornecidas, define automaticamente `lineDetailMode=detailed`.
 - **`GetInvoiceAlertsUseCase`** — devolve contagens e valores para os 8 tipos de alerta.
@@ -202,6 +202,8 @@ upload (ver "Decisões de design").
 - **`SupplierHintPort`** — `findByNormalizedName(organizationId, normalizedName)` + `save(organizationId, normalizedName, supplierId)`.
 - **`OrganizationIdentityReadPort`** *(cross-module)* — `getNif(organizationId)`. Usado só por `ImportInvoiceUseCase` para nunca aceitar o NIF da própria organização como fornecedor de uma fatura importada (ver "Decisões de design").
 - **`OccurrenceSyncPort`** — `markPaidByInvoiceId(organizationId, invoiceId, paidAt)`.
+- **`InvoiceStockReviewStatusReadPort`** *(D10)* — `findForInvoice(organizationId, invoiceId)`: existe uma revisão de stock (módulo `stock-purchase-review`) para esta fatura, e em que estado. Usado só pelo guard de edição (ver "Decisões de design").
+- **`InvoiceStockReviewDraftDeletePort`** *(D10)* — `deleteDraft(organizationId, invoiceId, actor)`: pede ao módulo `stock-purchase-review` para apagar (hard delete) uma revisão ainda não aplicada, quando o utilizador confirma explicitamente. Nunca chamado sem confirmação explícita (ver guard).
 
 ## Adapters
 
@@ -222,6 +224,7 @@ módulo não importa `@supabase/supabase-js` em lado nenhum — só o folder
 - `SupabaseInvoiceLineRepository` → tabela `invoice_lines`; inclui `updateCostCenterCategoryForInvoice`, `deleteLineById` e o mapeamento de `location_id` (nullable).
 - `SupabaseInvoiceReconciliationCleanupAdapter` → acede directamente às tabelas `bank_movement_entity_links` e `bank_movements` sem importar código do módulo `bank-statements`. Implementa `removeLinksForInvoice` (apaga links + recalcula status dos movimentos) e `renumberLinksForInvoice` (actualiza `entity_label`).
 - **`FinancialBaseSupplierCreateAdapter`** → delega criação de fornecedor ao financial-base, passando adiante o `organizationId` recebido (já não usa o `UNATTENDED_SCOPE`, que era o stopgap antes desta conversão).
+- **`StockPurchaseReviewStatusReadAdapter`/`StockPurchaseReviewDraftDeleteAdapter`** *(D10)* → delegam diretamente para os input ports `GetStockPurchaseReviewStatusPort`/`DeleteDraftStockPurchaseReviewPort` do módulo `stock-purchase-review`, sem tradução (mesmo padrão de `StockPurchaseReviewDecisionAdapter`).
 - `SupabaseClassificationRuleRepository` → tabela `classification_rules`.
 - `SupabasePayableEntryWriteAdapter` → tabela `payable_entries`.
 - **`SupabaseDocumentStorageAdapter`** → bucket Supabase Storage `invoice-documents`. Não recebe `SupabaseClient` no construtor: delega para o wrapper `objectStorage` de `src/infra/scoped-db/` (spec B2 ticket 01/D10; organização em ADR-0015, ticket 03) — esse folder é o único lugar em `src/**` autorizado a importar `@supabase/supabase-js`. `store()` recebe `organizationId` do use case e devolve o path efectivo (prefixado, ver Ports acima) que `getPublicUrl` usa para montar o URL.
@@ -243,10 +246,10 @@ módulo não importa `@supabase/supabase-js` em lado nenhum — só o folder
 | POST | `/api/invoices` | Criar fatura manualmente (com linhas opcionais) |
 | POST | `/api/invoices/import` | **Novo** — importar PDF/imagem via IA (multipart `file`) |
 | POST | `/api/invoices/:id/confirm` | **Novo** — confirmar fatura importada |
-| PATCH | `/api/invoices/:id` | Actualizar cabeçalho |
+| PATCH | `/api/invoices/:id` | Actualizar cabeçalho — body aceita `confirmRemoveStockReview?: boolean` (ver "Decisões de design") |
 | PATCH | `/api/invoices/:id/paid` | Marcar como paga — body: `{ paidAt?, bankAccountId?, paymentMethod?, paymentNotes? }` |
 | PATCH | `/api/invoices/:id/reconcile` | **Novo** — marcar como conciliada (requer `status=paid`) |
-| PATCH | `/api/invoices/:id/line-detail-mode` | **Novo** — alternar modo de linhas — body: `{ mode: "simple"|"detailed" }` |
+| PATCH | `/api/invoices/:id/line-detail-mode` | **Novo** — alternar modo de linhas — body: `{ mode: "simple"\|"detailed", confirmRemoveStockReview?: boolean }` |
 | PATCH | `/api/invoices/:id/status` | Forçar estado |
 | DELETE | `/api/invoices/:id` | Eliminar fatura e linhas |
 | POST | `/api/invoices/:invoiceId/lines` | Adicionar linha a fatura existente |
@@ -307,6 +310,10 @@ módulo não importa `@supabase/supabase-js` em lado nenhum — só o folder
   - **Nunca cria payable entry para uma nota de crédito**: `ConfirmImportedInvoiceUseCase` ignora `saveAsPayable` quando `documentType === "credit_note"` — `PayableEntry.amount` exige `> 0` e uma nota de crédito não é "conta a pagar".
   - **Excluída dos *pickers* de vínculo/conciliação (não da listagem principal)**: `ListInvoicesFilter.documentType` (usado por quem quer só faturas, ex. `LinkInvoiceModal` de `payable-recurrences`, picker "Justificar com fatura" de `bank-statements`) e `InvoiceMatchReadPort.findCandidates` (`bank-statements`, sugestões automáticas de conciliação) filtram `document_type = 'invoice'`. `findByIds` fica sem filtro (lookup por id já conhecido).
   - **Fora desta fase, deliberadamente**: vínculo Nota de Crédito ↔ Fatura específica (abater o saldo de uma fatura em concreto), "crédito disponível do fornecedor" como saldo rastreado à parte, e o badge "NC" no PDF do extrato do fornecedor (`GetSupplierStatementUseCase` já devolve `documentType`, mas o renderer do PDF no frontend ainda não o usa).
+
+- **Bug corrigido (set/2026) — `stockReviewOverride`/`stockReviewOverrideReason` silenciosamente ignorados em `UpdateInvoiceUseCase`**: `UpdateInvoiceCommand` já declarava estes dois campos (e `UpdateInvoiceData`/`Invoice.update()` já os suportavam, herdados de `createFromImport`/`confirmImport`), mas `UpdateInvoiceUseCase.execute()` nunca os copiava para o `data` passado a `existing.update(data)` — mudar "Impacto no stock" numa fatura já finalizada não tinha **nenhum** efeito, sem erro nenhum, só descoberto ao reproduzir o bug do crash abaixo. Corrigido: os dois campos são aplicados a `data` como qualquer outro campo opcional do comando.
+- **Guard partilhado contra revisão de stock órfã (`shared-stock-review-guard.ts`) — o crash original e o fix**: mudar "Impacto no stock" (`stockReviewOverride`), voltar de `detailed` para `simple` (que apaga `invoice_lines` via `deleteByInvoiceId`), ou **eliminar a fatura por completo** (`DeleteInvoiceUseCase`, mesmo `deleteByInvoiceId`) podia colidir com uma revisão de stock (`stock_purchase_reviews`/`stock_review_lines`, módulo `stock-purchase-review`) já criada a partir dessas linhas pelo gancho fire-and-forget de finalização — a FK `stock_review_lines_invoice_line_id_fkey` não tem `ON DELETE CASCADE` (D2/regra "nunca hard delete" desse módulo) e o Postgres recusava o delete, surgindo como erro bruto na UI (ex.: "Eliminar fatura" a falhar sempre que a fatura tinha uma revisão associada, set/2026). Corrigido com um guard partilhado por `UpdateInvoiceUseCase` (quando `stockReviewOverride` muda), `SetLineDetailModeUseCase` (quando `detailed → simple` ia mesmo apagar linhas) e `DeleteInvoiceUseCase` (sempre, antes de qualquer cleanup): lê o estado da revisão via `InvoiceStockReviewStatusReadPort` (D10) e decide — sem revisão associada, prossegue normalmente; revisão já `applied` (gerou movimentos reais), bloqueia sempre com `InvoiceLinesLockedByAppliedStockReviewError` (409), nunca aceita confirmação — mesmo ao eliminar a fatura, o utilizador tem de desfazer a entrada de stock primeiro; revisão ainda não aplicada, só prossegue com `confirmRemoveStockReview: true` explícito no pedido — sem essa confirmação lança `StockReviewRemovalConfirmationRequiredError` (409 `{error, requiresConfirmation: true}`), nunca descarta a revisão silenciosamente. Com a confirmação, o guard pede a `stock-purchase-review` (via `InvoiceStockReviewDraftDeletePort`, D10) para apagar fisicamente esse rascunho — a única forma de tornar o `deleteByInvoiceId` seguro sem introduzir `ON DELETE CASCADE` na FK (que apagaria dados legítimos de outros fluxos sem auditoria).
+- **Padrão HTTP "confirmar-depois-repetir" em dois passos (409 com `requiresConfirmation`)**: quando o guard acima exige confirmação, o controller devolve 409 com `{ error, requiresConfirmation: true }` — um sinal estruturado distinguível de um 409 de bloqueio puro (`DuplicateInvoiceError`, `InvoiceLinesLockedByAppliedStockReviewError`, sem esse campo), mesma convenção de anexar campos extra ao 409 já usada por `StaleReviewVersionError` (`currentVersion`) no módulo `stock-purchase-review`. O frontend mostra um diálogo com a mensagem do erro e, se o utilizador confirmar, reenvia o mesmo pedido com `confirmRemoveStockReview: true` — nunca assume a confirmação silenciosamente. Em `PATCH /invoices/:id` e `PATCH /invoices/:id/line-detail-mode` vai no corpo; em `DELETE /invoices/:id` (sem corpo) vai como query string (`?confirmRemoveStockReview=true`), lido em `req.query`.
 
 ## SQL — alterações às tabelas
 

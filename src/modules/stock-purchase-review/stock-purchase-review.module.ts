@@ -24,14 +24,24 @@ import { DecideUnresolvedReviewUseCase } from "./application/use-cases/decide-un
 import { SuggestLineMappingUseCase } from "./application/use-cases/suggest-line-mapping.use-case.js";
 import { ConfirmStockPurchaseReviewUseCase } from "./application/use-cases/confirm-stock-purchase-review.use-case.js";
 import { CancelStockPurchaseReviewUseCase } from "./application/use-cases/cancel-stock-purchase-review.use-case.js";
+import { GetStockPurchaseReviewStatusForInvoiceUseCase } from "./application/use-cases/get-stock-purchase-review-status-for-invoice.use-case.js";
+import { DeleteDraftStockPurchaseReviewUseCase } from "./application/use-cases/delete-draft-stock-purchase-review.use-case.js";
 
 import { StockPurchaseReviewController } from "./adapters/in/stock-purchase-review.controller.js";
-import type { RecordInvoiceFinalizedForStockPort, ReprocessMissingStockReviewsPort } from "./domain/ports/in/stock-purchase-review.ports.js";
+import type {
+  RecordInvoiceFinalizedForStockPort,
+  ReprocessMissingStockReviewsPort,
+  GetStockPurchaseReviewStatusPort,
+  DeleteDraftStockPurchaseReviewPort,
+} from "./domain/ports/in/stock-purchase-review.ports.js";
 
 export interface StockPurchaseReviewModule {
   router: Router;
   recordInvoiceFinalizedForStock: RecordInvoiceFinalizedForStockPort;
   reprocessMissingStockReviews: ReprocessMissingStockReviewsPort;
+  /** Módulo `invoices` (D10) — guard de edição contra revisão de stock bloqueante/pendente. */
+  getStockPurchaseReviewStatus: GetStockPurchaseReviewStatusPort;
+  deleteDraftStockPurchaseReview: DeleteDraftStockPurchaseReviewPort;
 }
 
 /**
@@ -62,6 +72,8 @@ export function createStockPurchaseReviewModule(
 
   const recordInvoiceFinalizedForStock = new RecordInvoiceFinalizedForStockUseCase(stockMovementWrite, categoryRead, supplierRead);
   const reprocessMissingStockReviews = new ReprocessMissingStockReviewsUseCase(invoiceRead, reviewRepository, recordInvoiceFinalizedForStock);
+  const getStockPurchaseReviewStatus = new GetStockPurchaseReviewStatusForInvoiceUseCase(reviewRepository);
+  const deleteDraftStockPurchaseReview = new DeleteDraftStockPurchaseReviewUseCase(reviewRepository, auditLog);
 
   const controller = new StockPurchaseReviewController(
     new ListStockPurchaseReviewsUseCase(reviewRepository),
@@ -73,5 +85,11 @@ export function createStockPurchaseReviewModule(
     new CancelStockPurchaseReviewUseCase(reviewRepository, auditLog),
   );
 
-  return { router: controller.router, recordInvoiceFinalizedForStock, reprocessMissingStockReviews };
+  return {
+    router: controller.router,
+    recordInvoiceFinalizedForStock,
+    reprocessMissingStockReviews,
+    getStockPurchaseReviewStatus,
+    deleteDraftStockPurchaseReview,
+  };
 }

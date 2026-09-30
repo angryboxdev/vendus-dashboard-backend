@@ -7,9 +7,16 @@ import type { OrganizationId } from "../../../../../kernel/organization-id.js";
  */
 export interface InvoicePayment {
   invoiceId: string;
+  /**
+   * O movimento bancário que originou esta alocação — permite ao
+   * consumidor agrupar várias faturas/NC liquidadas de uma só vez (mesmo
+   * `movementId`) num único evento de "Liquidação" no extrato, em vez de
+   * mostrar N linhas para o que foi, na realidade, um único pagamento.
+   */
+  movementId: string;
   /** Data do movimento bancário que liquidou (total ou parcialmente) a fatura. */
   date: Date;
-  /** Valor alocado desse movimento a esta fatura, em euros (mesma unidade que o resto deste DTO — ver SupplierInvoiceRowDTO). */
+  /** Valor alocado desse movimento a esta fatura, em euros — sinal preservado (negativo para nota de crédito consumida na mesma liquidação). */
   amount: number;
 }
 

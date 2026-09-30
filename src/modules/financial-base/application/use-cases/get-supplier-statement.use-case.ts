@@ -110,23 +110,47 @@ export class GetSupplierStatementUseCase implements GetSupplierStatementPort {
       }
     }
 
-    // Pagamentos reais confirmados por conciliação bancária — só faz sentido
-    // para faturas (uma nota de crédito não é "paga"), e uma fatura pode ter
-    // vários pagamentos parciais em datas diferentes.
-    const payableInvoiceIds = activeDocs
-      .filter((inv) => inv.documentType !== "credit_note")
-      .map((inv) => inv.id);
+    // Pagamentos/liquidações reais confirmados por conciliação bancária.
+    // Inclui faturas E notas de crédito deste fornecedor — uma "liquidação
+    // agrupada" (um movimento que salda várias faturas + consome notas de
+    // crédito de uma só vez) tem ligações para ambas em
+    // `bank_movement_entity_links`, e só somando as duas é que o valor
+    // agrupado por movimento bate certo com o que saiu do banco.
+    const allDocIds = activeDocs.map((inv) => inv.id);
     const payments = await this.invoicePaymentRead.findByInvoiceIds(
       command.organizationId,
-      payableInvoiceIds,
+      allDocIds,
     );
+
+    // Um único movimento bancário pode ter liquidado várias faturas (+ NC) de
+    // uma só vez — o extrato deve mostrar isso como UM evento na data do
+    // movimento, pelo valor total realmente transferido, nunca uma linha por
+    // documento (secção "liquidação agrupada" da task de Conciliação
+    // Bancária). Agrupa por `movementId` antes de gerar as linhas.
+    const paymentsByMovement = new Map<string, { date: Date; invoiceIds: string[]; total: number }>();
     for (const payment of payments) {
+      const group = paymentsByMovement.get(payment.movementId);
+      if (group) {
+        group.total += payment.amount;
+        group.invoiceIds.push(payment.invoiceId);
+      } else {
+        paymentsByMovement.set(payment.movementId, {
+          date: payment.date,
+          invoiceIds: [payment.invoiceId],
+          total: payment.amount,
+        });
+      }
+    }
+    for (const group of paymentsByMovement.values()) {
+      const label = group.invoiceIds.length === 1
+        ? (invoiceNumberById.get(group.invoiceIds[0]!) ?? "")
+        : `${group.invoiceIds.length} documentos`;
       candidates.push({
-        date: payment.date,
-        documentNumber: invoiceNumberById.get(payment.invoiceId) ?? "",
+        date: group.date,
+        documentNumber: label,
         kind: "payment",
         invoicedAmount: null,
-        creditOrSettlementAmount: payment.amount,
+        creditOrSettlementAmount: group.total,
       });
     }
 
