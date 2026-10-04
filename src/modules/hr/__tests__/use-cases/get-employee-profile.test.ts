@@ -47,7 +47,7 @@ describe("GetEmployeeProfileUseCase", () => {
     expect(asManager.employee.nif).toBe("271234567");
   });
 
-  it("onboardingStatus 'pending' quando falta um documento obrigatório", async () => {
+  it("alerta de documento em falta quando falta um documento obrigatório (sem estado de onboarding — removido na Base Organizacional)", async () => {
     const employees = new FakeEmployeeRepository();
     const e = Employee.create({ fullName: "Andres Silva" });
     employees.seed(ORG, e);
@@ -60,7 +60,7 @@ describe("GetEmployeeProfileUseCase", () => {
     );
     const result = await useCase.execute({ organizationId: ORG, viewerRole: "manager", id: e.id });
 
-    expect(result.onboardingStatus).toBe("pending");
+    expect(result).not.toHaveProperty("onboardingStatus");
     expect(result.alerts.some((a) => a.type === "document_missing")).toBe(true);
   });
 
@@ -80,7 +80,7 @@ describe("GetEmployeeProfileUseCase", () => {
     expect(result.alerts.some((a) => a.type === "emergency_contact_pending")).toBe(true);
   });
 
-  it("colaborador inativo não gera alertas de documentos/perfil nem fica 'pending'", async () => {
+  it("colaborador inativo não gera alertas de documentos/perfil", async () => {
     const employees = new FakeEmployeeRepository();
     const e = Employee.create({ fullName: "Ex-Colaborador" }).deactivate();
     employees.seed(ORG, e);
@@ -94,7 +94,6 @@ describe("GetEmployeeProfileUseCase", () => {
     const result = await useCase.execute({ organizationId: ORG, viewerRole: "manager", id: e.id });
 
     expect(result.alerts).toEqual([]);
-    expect(result.onboardingStatus).toBe("completed");
     expect(result.profileCompletionPercent).toBe(100);
     expect(result.documents.missingRequirements).toEqual([]);
     expect(result.documents.mandatoryCompleted).toBe(result.documents.mandatoryTotal);

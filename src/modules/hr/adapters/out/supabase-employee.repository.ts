@@ -4,7 +4,7 @@ import { Employee, type EmploymentType, type EmployeeStatus, type JobRole, type 
 import type { EmployeeFilter, EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
 
 const SELECT =
-  "id, full_name, email, phone, role_or_notes, employment_type, job_role, status, hired_at, ended_at, base_salary, salary_type, hourly_rate, nif, iban, address, birth_date, social_security_number, id_card_number, nationality, emergency_contact_name, emergency_contact_phone, photo_storage_path, created_at, updated_at";
+  "id, full_name, email, phone, role_or_notes, employment_type, job_role, position_id, primary_location_id, status, hired_at, ended_at, base_salary, salary_type, hourly_rate, nif, iban, address, birth_date, social_security_number, id_card_number, nationality, emergency_contact_name, emergency_contact_phone, photo_storage_path, created_at, updated_at";
 
 /** Limite alto usado como "praticamente todos" — mesma abordagem já usada pela listagem legacy (ver README). */
 const FIND_MANY_LIMIT = 500;
@@ -17,6 +17,8 @@ interface Row {
   role_or_notes: string | null;
   employment_type: string;
   job_role: string;
+  position_id: string | null;
+  primary_location_id: string | null;
   status: string;
   hired_at: string | null;
   ended_at: string | null;
@@ -37,7 +39,7 @@ interface Row {
   updated_at: string;
 }
 
-function rowToEmployee(row: Row): Employee {
+function rowToEmployee(row: Row, authorizedLocationIds: string[]): Employee {
   const employmentType = row.employment_type as EmploymentType;
   const jobRole = row.job_role as JobRole;
   return Employee.reconstitute({
@@ -48,6 +50,9 @@ function rowToEmployee(row: Row): Employee {
     roleOrNotes: row.role_or_notes,
     employmentType: ["permanent", "contract", "extra"].includes(employmentType) ? employmentType : "permanent",
     jobRole: ["manager", "prep", "service"].includes(jobRole) ? jobRole : "service",
+    positionId: row.position_id,
+    primaryLocationId: row.primary_location_id,
+    authorizedLocationIds,
     status: row.status as EmployeeStatus,
     hiredAt: row.hired_at,
     endedAt: row.ended_at,
@@ -79,6 +84,8 @@ function employeeToInsert(employee: Employee): Record<string, unknown> {
     role_or_notes: p.roleOrNotes,
     employment_type: p.employmentType,
     job_role: p.jobRole,
+    position_id: p.positionId,
+    primary_location_id: p.primaryLocationId,
     status: p.status,
     hired_at: p.hiredAt,
     ended_at: p.endedAt,
@@ -100,8 +107,40 @@ function employeeToInsert(employee: Employee): Record<string, unknown> {
   };
 }
 
+/**
+ * `hr_employees` + `hr_employee_locations` (outros locais autorizados,
+ * Base Organizacional ticket 08). Os locais autorizados são sempre
+ * reescritos como conjunto ao gravar o colaborador.
+ */
 export class SupabaseEmployeeRepository implements EmployeeRepositoryPort {
   constructor(private readonly scopedQuery: ScopedQueryFactory) {}
+
+  /** `employeeIds` omitido = todos os da organização (tabela pequena — mesma ordem de grandeza de `hr_employees`). */
+  private async authorizedLocationsByEmployee(
+    organizationId: OrganizationId,
+    employeeIds?: string[],
+  ): Promise<Map<string, string[]>> {
+    let q = this.scopedQuery(organizationId).table("hr_employee_locations").select("employee_id, location_id");
+    if (employeeIds) q = q.in("employee_id", employeeIds);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    const byEmployee = new Map<string, string[]>();
+    for (const row of (data ?? []) as unknown as { employee_id: string; location_id: string }[]) {
+      byEmployee.set(row.employee_id, [...(byEmployee.get(row.employee_id) ?? []), row.location_id]);
+    }
+    return byEmployee;
+  }
+
+  private async replaceAuthorizedLocations(organizationId: OrganizationId, employee: Employee): Promise<void> {
+    const scoped = this.scopedQuery(organizationId).table("hr_employee_locations");
+    const { error: deleteError } = await scoped.delete().eq("employee_id", employee.id);
+    if (deleteError) throw new Error(deleteError.message);
+    if (employee.authorizedLocationIds.length === 0) return;
+    const { error } = await this.scopedQuery(organizationId)
+      .table("hr_employee_locations")
+      .insert(employee.authorizedLocationIds.map((locationId) => ({ employee_id: employee.id, location_id: locationId })));
+    if (error) throw new Error(error.message);
+  }
 
   async findById(organizationId: OrganizationId, id: string): Promise<Employee | null> {
     const { data, error } = await this.scopedQuery(organizationId)
@@ -111,7 +150,8 @@ export class SupabaseEmployeeRepository implements EmployeeRepositoryPort {
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return rowToEmployee(data as unknown as Row);
+    const authorized = await this.authorizedLocationsByEmployee(organizationId, [id]);
+    return rowToEmployee(data as unknown as Row, authorized.get(id) ?? []);
   }
 
   async findMany(organizationId: OrganizationId, filter: EmployeeFilter): Promise<Employee[]> {
@@ -127,7 +167,8 @@ export class SupabaseEmployeeRepository implements EmployeeRepositoryPort {
 
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    return ((data ?? []) as unknown as Row[]).map(rowToEmployee);
+    const authorized = await this.authorizedLocationsByEmployee(organizationId);
+    return ((data ?? []) as unknown as Row[]).map((row) => rowToEmployee(row, authorized.get(row.id) ?? []));
   }
 
   async create(organizationId: OrganizationId, employee: Employee): Promise<Employee> {
@@ -137,7 +178,8 @@ export class SupabaseEmployeeRepository implements EmployeeRepositoryPort {
       .select(SELECT)
       .single();
     if (error) throw new Error(error.message);
-    return rowToEmployee(data as unknown as Row);
+    await this.replaceAuthorizedLocations(organizationId, employee);
+    return rowToEmployee(data as unknown as Row, employee.authorizedLocationIds);
   }
 
   async update(organizationId: OrganizationId, employee: Employee): Promise<Employee> {
@@ -149,6 +191,7 @@ export class SupabaseEmployeeRepository implements EmployeeRepositoryPort {
       .select(SELECT)
       .single();
     if (error) throw new Error(error.message);
-    return rowToEmployee(data as unknown as Row);
+    await this.replaceAuthorizedLocations(organizationId, employee);
+    return rowToEmployee(data as unknown as Row, employee.authorizedLocationIds);
   }
 }

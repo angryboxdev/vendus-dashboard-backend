@@ -23,6 +23,14 @@ import { GetPeopleKpisUseCase } from "./application/use-cases/get-people-kpis.us
 import { GetEmployeeProfileUseCase } from "./application/use-cases/get-employee-profile.use-case.js";
 import { CreateEmployeeUseCase } from "./application/use-cases/create-employee.use-case.js";
 import { UpdateEmployeeUseCase } from "./application/use-cases/update-employee.use-case.js";
+import {
+  CreatePositionUseCase,
+  ListPositionsUseCase,
+  SetPositionActiveUseCase,
+  UpdatePositionUseCase,
+} from "./application/use-cases/positions.use-cases.js";
+import { SupabasePositionRepository } from "./adapters/out/supabase-position.repository.js";
+import { HrPositionsController } from "./adapters/in/hr-positions.controller.js";
 import { SetEmployeeStatusUseCase } from "./application/use-cases/set-employee-status.use-case.js";
 import { UploadEmployeePhotoUseCase } from "./application/use-cases/upload-employee-photo.use-case.js";
 import { GetEmployeeHistoryUseCase } from "./application/use-cases/get-employee-history.use-case.js";
@@ -107,6 +115,8 @@ export function createHrModule(): { router: Router } {
   const attendanceCorrectionRepository = new SupabaseAttendanceCorrectionRepository(createScopedQuery);
   const monthlyClosureRepository = new SupabaseMonthlyClosureRepository(createScopedQuery);
   const attendanceRulesRepository = new SupabaseAttendanceRulesRepository(createScopedQuery);
+  // Base Organizacional — Cargos (ticket 07).
+  const positionRepository = new SupabasePositionRepository(createScopedQuery);
 
   const listEmployees = new ListEmployeesUseCase(
     employeeRepository,
@@ -122,8 +132,8 @@ export function createHrModule(): { router: Router } {
     hrFileStorage,
     documentCategoryRepository,
   );
-  const createEmployee = new CreateEmployeeUseCase(employeeRepository, auditLog);
-  const updateEmployee = new UpdateEmployeeUseCase(employeeRepository, auditLog);
+  const createEmployee = new CreateEmployeeUseCase(employeeRepository, auditLog, positionRepository, locationRepository);
+  const updateEmployee = new UpdateEmployeeUseCase(employeeRepository, auditLog, positionRepository, locationRepository);
   const setEmployeeStatus = new SetEmployeeStatusUseCase(employeeRepository, auditLog);
   const uploadEmployeePhoto = new UploadEmployeePhotoUseCase(employeeRepository, hrFileStorage, auditLog);
   const getEmployeeHistory = new GetEmployeeHistoryUseCase(auditLog);
@@ -328,8 +338,16 @@ export function createHrModule(): { router: Router } {
     getAttendanceEmployeeDetail,
   );
 
+  const positionsController = new HrPositionsController(
+    new ListPositionsUseCase(positionRepository, employeeRepository),
+    new CreatePositionUseCase(positionRepository, auditLog),
+    new UpdatePositionUseCase(positionRepository, employeeRepository, auditLog),
+    new SetPositionActiveUseCase(positionRepository, employeeRepository, auditLog),
+  );
+
   const router = Router();
   router.use(controller.router);
+  router.use(positionsController.router);
   router.use(overviewController.router);
   router.use(documentCategoriesController.router);
   router.use(schedulesController.router);

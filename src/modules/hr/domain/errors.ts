@@ -166,3 +166,43 @@ export class MonthlyClosureReopenReasonRequiredError extends Error {
     this.name = "MonthlyClosureReopenReasonRequiredError";
   }
 }
+
+// ── Base Organizacional — Cargos (ticket 07) e Local principal (ticket 08) ──
+
+export class PositionNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Cargo não encontrado: ${id}`);
+    this.name = "PositionNotFoundError";
+  }
+}
+
+export class InvalidPositionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidPositionError";
+  }
+}
+
+/** Já existe um cargo com o mesmo nome normalizado ("Preparador" = "preparador" = " PREPARADOR "). */
+export class DuplicatePositionNameError extends Error {
+  constructor(name: string) {
+    super(`Já existe um cargo com o nome "${name}"`);
+    this.name = "DuplicatePositionNameError";
+  }
+}
+
+/** Atribuir a um colaborador um cargo inativo — quem já o tinha mantém-no, mas nunca se atribui de novo. */
+export class InactivePositionError extends Error {
+  constructor(name: string) {
+    super(`O cargo "${name}" está inativo e não pode ser atribuído`);
+    this.name = "InactivePositionError";
+  }
+}
+
+/** Local inexistente na organização, ou inativo numa nova atribuição. */
+export class InvalidEmployeeLocationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidEmployeeLocationError";
+  }
+}

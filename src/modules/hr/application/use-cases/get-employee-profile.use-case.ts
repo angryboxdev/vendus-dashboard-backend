@@ -87,9 +87,6 @@ export class GetEmployeeProfileUseCase implements GetEmployeeProfilePort {
       }
     }
 
-    const onboardingStatus: EmployeeProfileDTO["onboardingStatus"] =
-      isActive && (summary.missingRequirements.length > 0 || completionPercent < 100) ? "pending" : "completed";
-
     return {
       employee: toEmployeeDTO(employee, command.viewerRole, photoUrl),
       profileCompletionPercent: completionPercent,
@@ -101,7 +98,6 @@ export class GetEmployeeProfileUseCase implements GetEmployeeProfilePort {
         missingOptional,
         expiringSoonCount: summary.expiringSoonCount,
       },
-      onboardingStatus,
       alerts,
     };
   }

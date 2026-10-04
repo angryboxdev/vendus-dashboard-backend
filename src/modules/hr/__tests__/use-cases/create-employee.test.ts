@@ -1,3 +1,5 @@
+import { FakePositionRepository } from "../fakes/fake-position-repository.js";
+import { FakeLocationRepository } from "../fakes/fake-location-repository.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateEmployeeUseCase } from "../../application/use-cases/create-employee.use-case.js";
 import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
@@ -9,7 +11,7 @@ describe("CreateEmployeeUseCase", () => {
   it("cria o colaborador e regista auditoria com actor real (corrige a lacuna do legacy)", async () => {
     const employees = new FakeEmployeeRepository();
     const auditLog = new FakeHrAuditLog();
-    const useCase = new CreateEmployeeUseCase(employees, auditLog);
+    const useCase = new CreateEmployeeUseCase(employees, auditLog, new FakePositionRepository(), new FakeLocationRepository());
 
     const result = await useCase.execute({
       organizationId: ORG,
