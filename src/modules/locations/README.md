@@ -1,89 +1,103 @@
 # Módulo: locations
 
 > Status: ativo
-> Última atualização: 2026-08-26
+> Última atualização: 2026-10-04
 
 ---
 
 ## O que é e para que serve (perspectiva de negócio)
 
-Uma organização pode ter mais do que uma loja/restaurante ("location"). A
-aplicação precisa de saber quais são as locations de uma organização para,
-por exemplo, deixar um manager escolher em que loja registou um movimento de
-stock ou um turno de trabalho.
+Uma organização pode ter mais do que uma loja/restaurante ou espaço
+("location" — ex.: Mercado, Gaia, Escritório, Armazém). O Local é
+**transversal**: RH, Stock, Financeiro e os restantes módulos referenciam-no
+por `location_id`, nunca por texto. Desde a Base Organizacional (ticket 02)
+o admin gere os Locais na aba **Empresa & Estrutura → Locais**.
 
 **O problema que resolve:**
-Sem este endpoint, o front end não tem forma de listar as locations do
-chamador para preencher um seletor de loja — teria de assumir sempre "a
-única loja que existe", o que deixa de ser verdade a partir da segunda
-organização.
+Sem este módulo o front end não tem forma de listar as lojas do chamador
+para um seletor, e criar/corrigir um Local exigia o script de provisioning.
 
 **O fluxo do ponto de vista do negócio:**
 
 ```
-Manager (frontend)
-────────────────────────────────────────────────────
-1. Abre um ecrã de escrita que pede uma loja (ex.: registar stock)
-2. Frontend chama GET /api/locations
-3. Vê só as lojas da sua própria organização
-4. Escolhe uma loja (ou o seletor nem aparece, se só existir uma)
+Admin (Empresa & Estrutura → Locais)      Qualquer utilizador
+──────────────────────────────────        ──────────────────────────────
+1. Cria/edita um Local (morada,           3. Escolhe o Local num seletor
+   município, fuso, telefone…)               (só aparecem os ativos)
+2. Inativa um Local que fechou     →      4. Registos antigos desse Local
+   (nunca o apaga)                           continuam válidos e visíveis
 ```
 
 **Key concepts for the business:**
 
-- **Location** — uma loja/restaurante físico pertencente a uma organização.
-  Tem nome, código e fuso-horário.
+- **Local (Location)** — loja ou espaço físico/operacional da organização.
+  Não é a Empresa: NIF, NISS e razão social pertencem à Empresa (módulo
+  `organization`), nunca ao Local.
+- **Inativo** — Local que deixou de operar: some dos seletores de escrita,
+  mas todo o histórico continua ligado a ele.
 
 ---
 
 ## Technical purpose
 
-Módulo mínimo — leitura apenas — que prova o caminho ponta-a-ponta da spec B2:
-pedido → claim verificada → use case → `ScopedQuery` → base de dados,
-devolvendo apenas as locations da organização do chamador (spec.md D15;
-ticket `01-foundation-scoped-helper-and-enforcement`). Não cria, edita nem
-desactiva locations — isso continua a ser feito pelo script de provisioning
-(`runOrganizationProvisioning`, spec B1). Desde a spec E (location-credentials),
-também expõe um segundo read — `findOneForOrganization` — usado por esse
-módulo para confirmar posse de uma location antes de emitir um pairing code.
+Lista os Locais da organização do chamador (spec B2, D15 — leitura escopada
+pela organização) e, desde a Base Organizacional, cria, edita e
+ativa/inativa Locais com auditoria. Nunca apaga um Local (o único `delete`
+de `locations` no código é o rollback do script de provisioning). Também
+expõe `findOneForOrganization`, usado por `location-credentials` para
+confirmar posse antes de emitir um pairing code.
 
 ## Domain concepts
 
-- **Location** — entidade só de leitura neste módulo: `id`, `name`, `code`,
-  `timezone`, `isActive`. Sem invariantes próprias — é reconstituída a partir
-  da base de dados, nunca criada aqui (`Location.reconstitute`, sem
-  `Location.create`).
+- **Location** — imutável; `create(id, details, now)` e `update(changes,
+  now)` normalizam (trim, código em maiúsculas, vazio → `null`) e validam,
+  reportando **todos** os campos inválidos (`InvalidLocationError`):
+  nome obrigatório (≤ 120), código opcional (`[A-Z0-9_-]{1,20}`), país ISO
+  de 2 letras, código postal `NNNN-NNN` se `country = PT`, telefone,
+  fuso IANA válido. `deactivate`/`activate` só mudam `isActive`.
+  `reconstitute` aceita registos antigos só com os 5 campos originais
+  (`id`, `name`, `code`, `timezone`, `isActive`).
+- **Código interno** — opcional, único por organização quando preenchido
+  (`DuplicateLocationCodeError`).
 
 ## Ports
 
 ### Input (use cases)
 
-- `ListLocationsPort` — lista as locations de uma organização; recebe
-  `organizationId` (branded `OrganizationId`, `src/kernel/`).
+- `ListLocationsPort` — todas as Locais (ativas e inativas) da organização;
+  cada consumidor filtra `isActive` (os `LocationReadPort` de stock já o
+  fazem).
+- `CreateLocationPort` — cria ativa + auditoria `create`.
+- `UpdateLocationPort` — alteração parcial dos dados + auditoria `update`.
+- `SetLocationActivePort` — ativar/inativar; idempotente (o estado atual
+  não grava nem audita) + auditoria `activate`/`deactivate`.
+- `ListLocationHistoryPort` — histórico de um Local (404 se não for da
+  organização).
 
 ### Output (domain dependencies)
 
-- `LocationRepositoryPort` — `findAllForOrganization(organizationId)`;
-  `findOneForOrganization(organizationId, locationId)` — ownership check
-  added for `location-credentials` (spec E D11/D19): confirms a location
-  belongs to the calling organization before minting a pairing code, without
-  re-implementing that check outside this module.
+- `LocationRepositoryPort` — `findAllForOrganization`,
+  `findOneForOrganization` (ownership check), `insert`, `update` (sem
+  delete).
+- `LocationAuditLogPort` — fire-and-forget, mirror de
+  `OrganizationAuditLogPort`.
 
 ## Adapters
 
 ### Input
 
-- `LocationController` → expõe `GET /locations`. Montado depois do
-  `requireAuth` global em `server.ts`, sem `requireMinRole` adicional —
-  qualquer role autenticado pode listar as locations da sua organização.
+- `LocationController` → `GET /locations` (qualquer role autenticado);
+  `POST /locations`, `PATCH /locations/:id`, `PATCH /locations/:id/active`
+  (`{ active: boolean }`) e `GET /locations/:id/history` com
+  `requireMinRole("admin")` inline. 400 devolve `fieldErrors`; 409 (código
+  duplicado) devolve `fieldErrors: [{ field: "code" }]`. Não existe DELETE.
 
 ### Output
 
-- `SupabaseLocationRepository` → tabela `locations`. Não recebe nem guarda um
-  `SupabaseClient` — recebe o factory `createScopedQuery`
-  (`ScopedQueryFactory`, `src/infra/scoped-db/`) injectado pelo composition
-  root e constrói um `ScopedQuery` por chamada (D2). É por isso que este
-  adapter não aparece na lista de violações da regra `supabase-so-no-scoped-db`.
+- `SupabaseLocationRepository` → tabela `locations` via `ScopedQuery`
+  (factory injectado, D2). Traduz a violação de `unique (org_id, code)`
+  (`23505`) para `DuplicateLocationCodeError`.
+- `SupabaseLocationAuditLogAdapter` → `location_audit_logs`.
 
 ## Design decisions (ADR summary)
 
@@ -91,27 +105,41 @@ módulo para confirmar posse de uma location antes de emitir um pairing code.
 
 O endpoint devolve todas as locations da organização do chamador — não há
 filtro por location, porque quem lista é precisamente o ecrã que ainda não
-sabe qual location escolher (D15). Filtrar por location neste módulo não faz
-sentido.
+sabe qual location escolher (D15).
 
-### Sem `requireMinRole`
+### `GET /locations` sem `requireMinRole`; gestão só `admin`
 
-`GET /locations` fica acessível a qualquer role autenticado (admin, manager,
-hr_viewer), ao contrário da maioria dos endpoints de escrita/gestão que
-exigem `manager`. Um seletor de loja pode aparecer em ecrãs usados por
-qualquer papel (ex.: HR a registar um turno).
+Um seletor de loja aparece em ecrãs usados por qualquer papel. Criar,
+editar e inativar é configuração da organização — `admin`, como a Empresa.
+
+### Inativar, nunca apagar
+
+Cerca de 20 tabelas referenciam `location_id` (FK compostas). Inativar só
+muda `is_active`, por isso todas as relações históricas continuam
+válidas; os seletores de escrita é que deixam de oferecer o Local.
+
+### Código interno opcional
+
+`code` deixou de ser `NOT NULL` (`20261004110000_locations_management.sql`);
+a restrição `unique (org_id, code)` mantém-se (vários `NULL` não colidem).
+Nenhum código lê `code` fora do provisioning.
+
+### Sem ligação a centro de custo (por agora)
+
+A task marca "centro de custo associado" como opcional; os `cost_center_*`
+do `financial-base` são classificação de despesa, não centros de custo por
+loja — fica fora até existir esse conceito (spec D7).
 
 ## How to test
 
-- Domínio/use cases: `npx jest src/modules/locations --silent` (rápido, sem
-  base de dados nem rede — usa `FakeLocationRepository`).
-- Todos os testes: `npm test`.
-- Lint de fronteiras: `npx depcruise src/modules/locations --config .dependency-cruiser.cjs`.
+- Domínio/use cases: `npx jest src/modules/locations --testPathIgnorePatterns=integration`
+  (fakes, sem BD).
+- Adapters: `npx jest src/modules/locations/__tests__/integration`
+  (requer `supabase start` + `supabase db reset`).
+- Lint de fronteiras: `npm run lint:deps`.
 
 ## Known gaps / open debt
 
-- Não há teste de integração contra o Supabase real — deliberadamente fora
-  de scope da spec B2 (D11): a verificação ponta-a-ponta é o smoke de duas
-  organizações, não um harness Supabase.
-- `isActive` é devolvido mas o frontend ainda não o usa para esconder lojas
-  inactivas do seletor — fica para quando esse ecrã for construído.
+- `Location.timezone` continua a não ser lido por nenhum módulo (o sistema
+  usa `REPORT_TIMEZONE`).
+- Sem filtro de leitura por location (ADR-0009, provisório).
