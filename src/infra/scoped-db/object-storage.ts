@@ -37,6 +37,8 @@ export const STORAGE_BUCKET_REGISTRY = {
   "invoice-documents": { prefixByOrganization: true },
   // Módulo Contabilidade (Fase 1) — anexo de "documento especial" (despesa de sócio/funcionário/plataforma), privado como hr-documents.
   "accounting-documents": { prefixByOrganization: true },
+  // Módulo organization (Base Organizacional — Empresa): logotipo, privado como hr-photos.
+  "organization-assets": { prefixByOrganization: true },
   // DB4: shares the wrapper, deliberately not prefixed yet.
   "recurrence-documents": { prefixByOrganization: false },
   "bank-statement-documents": { prefixByOrganization: false },

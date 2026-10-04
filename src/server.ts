@@ -37,6 +37,7 @@ import { resolveClosingEnterpriseId } from "./modules/air-menu/domain/services/r
 import { populateAuth, requireAuth, requireMinRole } from "./middleware/auth.js";
 import { authRoutes } from "./routes/authRoutes.js";
 import { createLocationsModule } from "./modules/locations/locations.module.js";
+import { createOrganizationModule } from "./modules/organization/organization.module.js";
 import { createLocationCredentialsModule } from "./modules/location-credentials/location-credentials.module.js";
 import { createSalesSummaryModule } from "./modules/sales-summary/sales-summary.module.js";
 import { createHrModule } from "./modules/hr/hr.module.js";
@@ -217,6 +218,11 @@ app.use("/api/auth", requireMinRole("admin"), authRoutes);
 
 // Locations module (hexagonal) — org-scoped read, any authenticated role (D15)
 app.use("/api", locationsModule.router);
+
+// Organization module (hexagonal, Base Organizacional — Empresa): GET qualquer
+// role autenticado; PATCH/logo/histórico com requireMinRole("admin") inline.
+const organizationModule = createOrganizationModule();
+app.use("/api", organizationModule.router);
 
 // Location credentials admin routes (generate pairing code, list/revoke tokens)
 app.use("/api", locationCredentialsModule.adminRouter);

@@ -54,6 +54,8 @@ export const TABLE_REGISTRY = {
   organizations: { organizationColumn: "id", locationBearing: false },
 
   locations: { organizationColumn: "org_id", locationBearing: false },
+  // Módulo organization (Base Organizacional — Empresa).
+  organization_audit_logs: { organizationColumn: "org_id", locationBearing: false },
   org_members: { organizationColumn: "org_id", locationBearing: false },
 
   // Módulo Contabilidade — "Documento" (qualquer documento contabilístico/
