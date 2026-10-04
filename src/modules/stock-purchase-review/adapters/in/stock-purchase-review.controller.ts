@@ -20,6 +20,7 @@ import type {
   SuggestLineMappingPort,
   ConfirmStockPurchaseReviewPort,
   CancelStockPurchaseReviewPort,
+  CancelEmptyStockPurchaseReviewsPort,
 } from "../../domain/ports/in/stock-purchase-review.ports.js";
 
 function handleError(e: unknown, res: import("express").Response): void {
@@ -59,12 +60,27 @@ export class StockPurchaseReviewController {
     private readonly suggestLineMapping: SuggestLineMappingPort,
     private readonly confirmStockPurchaseReview: ConfirmStockPurchaseReviewPort,
     private readonly cancelStockPurchaseReview: CancelStockPurchaseReviewPort,
+    private readonly cancelEmptyStockPurchaseReviews: CancelEmptyStockPurchaseReviewsPort,
   ) {
     this.router = Router();
     this.registerRoutes();
   }
 
   private registerRoutes(): void {
+    // Antes de `/:id` — literal, nunca ambíguo com o `GetStockPurchaseReviewPort`
+    // (métodos diferentes), mas mantido primeiro por clareza.
+    this.router.post("/stock-purchase-reviews/cancel-empty", async (req, res) => {
+      try {
+        const result = await this.cancelEmptyStockPurchaseReviews.execute({
+          organizationId: req.auth!.orgId,
+          actor: req.auth!.email,
+        });
+        res.json(result);
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+
     this.router.get("/stock-purchase-reviews", async (req, res) => {
       try {
         const { status, supplierId, from, to, search } = req.query as Record<string, string | undefined>;

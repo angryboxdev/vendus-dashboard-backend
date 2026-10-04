@@ -25,6 +25,17 @@ export class RecordInvoiceFinalizedForStockUseCase implements RecordInvoiceFinal
   ) {}
 
   async execute(command: RecordInvoiceFinalizedForStockCommand): Promise<void> {
+    // Sem linhas (fatura em `lineDetailMode=simple`, sem `invoice_lines`
+    // persistidas) não há quantidade/item nenhum para converter em stock —
+    // uma revisão criada aqui ficaria presa para sempre em `refreshLinesProgress`
+    // (nunca há uma linha cuja resolução a leve a "ready"). Nunca criar a
+    // revisão neste caso, mesmo com override `force_create` ou política do
+    // fornecedor/categoria a indicar "cria revisão" — o utilizador tem de
+    // detalhar a fatura por linha primeiro para o Stock ter o que resolver.
+    if (command.lines.length === 0) {
+      return;
+    }
+
     const categoryIds = [...new Set(command.lines.map((l) => l.costCenterCategoryId).filter((id): id is string => id !== null))];
     const categoryPolicies = await Promise.all(
       categoryIds.map((id) => this.categoryRead.getStockReviewPolicy(command.organizationId, id)),

@@ -24,6 +24,7 @@ import { DecideUnresolvedReviewUseCase } from "./application/use-cases/decide-un
 import { SuggestLineMappingUseCase } from "./application/use-cases/suggest-line-mapping.use-case.js";
 import { ConfirmStockPurchaseReviewUseCase } from "./application/use-cases/confirm-stock-purchase-review.use-case.js";
 import { CancelStockPurchaseReviewUseCase } from "./application/use-cases/cancel-stock-purchase-review.use-case.js";
+import { CancelEmptyStockPurchaseReviewsUseCase } from "./application/use-cases/cancel-empty-stock-purchase-reviews.use-case.js";
 
 import { StockPurchaseReviewController } from "./adapters/in/stock-purchase-review.controller.js";
 import type { RecordInvoiceFinalizedForStockPort, ReprocessMissingStockReviewsPort } from "./domain/ports/in/stock-purchase-review.ports.js";
@@ -71,6 +72,7 @@ export function createStockPurchaseReviewModule(
     new SuggestLineMappingUseCase(reviewRepository, learnedMapping),
     new ConfirmStockPurchaseReviewUseCase(reviewRepository, stockMovementWrite, invoiceRead, locationRead, auditLog),
     new CancelStockPurchaseReviewUseCase(reviewRepository, auditLog),
+    new CancelEmptyStockPurchaseReviewsUseCase(reviewRepository, auditLog),
   );
 
   return { router: controller.router, recordInvoiceFinalizedForStock, reprocessMissingStockReviews };

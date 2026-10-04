@@ -108,6 +108,10 @@ estruturadas (ver Known gaps).
 - `ConfirmStockPurchaseReviewPort` — revalida a fatura de origem (hash),
   resolve a loja quando em falta, delega a aplicação atómica à RPC.
 - `CancelStockPurchaseReviewPort` — nunca hard delete, exige motivo.
+- `CancelEmptyStockPurchaseReviewsPort` — remediação em lote: cancela
+  (com motivo fixo, auditado) todas as revisões não-terminais sem
+  nenhuma linha. `POST /stock-purchase-reviews/cancel-empty`. Ver "Bug
+  corrigido (30/09/2026)".
 
 ### Output (domain dependencies)
 
@@ -203,6 +207,30 @@ estende o serviço legacy, só partilha o schema.
 
 `SuggestLineMappingPort` devolve só uma sugestão; `resolve-review-line`
 exige sempre uma ação humana explícita mesmo quando a sugestão existe.
+
+### Bug corrigido (30/09/2026) — fatura sem linhas nunca pode criar revisão
+
+`refreshLinesProgress` só recalcula o estado para `"ready"` a partir da
+resolução de uma linha (`ResolveReviewLineUseCase`); uma revisão sem
+nenhuma `stock_review_line` **nunca** tem esse gatilho, ficando presa para
+sempre em `pending`/`in_review` — o botão "Confirmar e adicionar ao stock"
+fica indisponível para sempre, sem indicar porquê. Isto acontecia sempre
+que `RecordInvoiceFinalizedForStockUseCase` recebia `command.lines: []`
+— faturas em `lineDetailMode=simple` (sem `invoice_lines` persistidas,
+incluindo o novo default "classificação única" do módulo `invoices`) e
+notas de crédito sem linhas. Encontrámos 28 revisões presas em produção
+nesta condição ao diagnosticar o sintoma. Corrigido fazendo
+`RecordInvoiceFinalizedForStockUseCase` nunca criar revisão quando
+`command.lines.length === 0` — mesmo com override `force_create` ou
+política de categoria/fornecedor a indicar criação — não há
+quantidade/item nenhum para resolver sem linhas. As 28 revisões já presas
+não são corrigidas retroativamente por este fix (não há como recalcular
+`refreshLinesProgress` sem linhas); para as regularizar existe
+`CancelEmptyStockPurchaseReviewsUseCase` (`POST
+/stock-purchase-reviews/cancel-empty`, botão na lista de revisões no
+frontend), que faz exatamente o mesmo que "Cancelar revisão" uma a uma —
+`cancel(reason)` com motivo fixo, auditado, nunca hard delete — e nunca
+toca em revisões `applied`/`cancelled` nem em revisões com linhas.
 
 ## Como testar
 
