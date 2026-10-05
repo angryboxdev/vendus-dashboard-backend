@@ -27,6 +27,7 @@ import type {
   PreviewShiftRotationPort,
   ApplyShiftRotationPort,
   SetShiftRotationActivePort,
+  DeleteShiftRotationPort,
   GetScheduleAlertsPort,
   PreviewWorkShiftSeriesPort,
   CreateWorkShiftSeriesPort,
@@ -87,6 +88,7 @@ export class HrSchedulesController {
     private readonly clearWorkShifts: ClearWorkShiftsPort,
     private readonly previewRepeatCalendarWeek: PreviewRepeatCalendarWeekPort,
     private readonly repeatCalendarWeek: RepeatCalendarWeekPort,
+    private readonly deleteShiftRotation: DeleteShiftRotationPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -347,6 +349,21 @@ export class HrSchedulesController {
           active: body.active === true,
         });
         res.json(result);
+      } catch (e) {
+        const { status, body } = errorResponse(e);
+        res.status(status).json(body);
+      }
+    });
+
+    /** DELETE /api/hr/schedules/rotations/:id — apaga a rotação; os turnos já criados ficam na escala. */
+    this.router.delete("/hr/schedules/rotations/:id", requireMinRole("manager"), async (req, res) => {
+      try {
+        await this.deleteShiftRotation.execute({
+          organizationId: req.auth!.orgId,
+          actor: req.auth!.email,
+          rotationId: req.params["id"] as string,
+        });
+        res.status(204).send();
       } catch (e) {
         const { status, body } = errorResponse(e);
         res.status(status).json(body);

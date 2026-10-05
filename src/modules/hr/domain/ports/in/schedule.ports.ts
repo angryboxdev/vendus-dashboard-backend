@@ -274,6 +274,17 @@ export interface SetShiftRotationActivePort {
   execute(command: SetShiftRotationActiveCommand): Promise<ShiftRotationDTO>;
 }
 
+export interface DeleteShiftRotationCommand {
+  organizationId: OrganizationId;
+  actor: string;
+  rotationId: string;
+}
+
+/** Apaga a rotação; os turnos já criados por ela ficam (só perdem a referência). */
+export interface DeleteShiftRotationPort {
+  execute(command: DeleteShiftRotationCommand): Promise<void>;
+}
+
 // ── Alertas ──────────────────────────────────────────────────────────────────
 
 export interface ScheduleAlertsDTO {

@@ -765,6 +765,15 @@ Este módulo é **aditivo**, não uma substituição imediata:
 - Nome único por organização sem distinguir maiúsculas/espaços (como os
   Cargos); local padrão tem de estar ativo.
 
+### Rotações A/B — apagar (2026-10-06)
+
+- `DELETE /api/hr/schedules/rotations/:id` (`manager`, `DeleteShiftRotationUseCase`):
+  o utilizador deixou de usar as rotações A/B (substituídas pelas
+  Automatizações). Apagar remove só a regra — os turnos já criados ficam
+  na escala (FK `hr_work_shifts.rotation_id` é `on delete set null`) — e
+  fica no histórico de cada participante. No frontend deixa de ser possível
+  criar rotações novas.
+
 ### RH 2.0 — Automatizações (ticket 03)
 
 - **Regra guardada** (`ShiftAutomation`): modelo + público + local

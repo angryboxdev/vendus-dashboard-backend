@@ -6,4 +6,6 @@ export interface ShiftRotationRepositoryPort {
   findById(organizationId: OrganizationId, id: string): Promise<ShiftRotation | null>;
   create(organizationId: OrganizationId, rotation: ShiftRotation): Promise<ShiftRotation>;
   update(organizationId: OrganizationId, rotation: ShiftRotation): Promise<ShiftRotation>;
+  /** Hard delete da regra — `hr_work_shifts.rotation_id` passa a NULL (FK `on delete set null`); os turnos ficam. */
+  delete(organizationId: OrganizationId, id: string): Promise<void>;
 }

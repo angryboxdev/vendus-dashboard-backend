@@ -86,6 +86,7 @@ import { ListShiftRotationsUseCase } from "./application/use-cases/list-shift-ro
 import { CreateShiftRotationUseCase } from "./application/use-cases/create-shift-rotation.use-case.js";
 import { PreviewShiftRotationUseCase } from "./application/use-cases/preview-shift-rotation.use-case.js";
 import { ApplyShiftRotationUseCase } from "./application/use-cases/apply-shift-rotation.use-case.js";
+import { DeleteShiftRotationUseCase } from "./application/use-cases/delete-shift-rotation.use-case.js";
 import { SetShiftRotationActiveUseCase } from "./application/use-cases/set-shift-rotation-active.use-case.js";
 import { GetScheduleAlertsUseCase } from "./application/use-cases/get-schedule-alerts.use-case.js";
 import { PreviewWorkShiftSeriesUseCase } from "./application/use-cases/preview-work-shift-series.use-case.js";
@@ -341,6 +342,7 @@ export function createHrModule(): { router: Router; generateAllAutomations: Gene
     clearWorkShifts,
     previewRepeatCalendarWeek,
     repeatCalendarWeek,
+    new DeleteShiftRotationUseCase(shiftRotationRepository, auditLog),
   );
   const attendanceController = new HrAttendanceController(
     listAttendanceIssues,
