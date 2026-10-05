@@ -7,7 +7,6 @@ import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-rep
 import type { PdfTextExtractorPort } from "../../domain/ports/out/pdf-text-extractor.port.js";
 import type { ReplaceEmployeeDocumentPort, UploadEmployeeDocumentPort } from "../../domain/ports/in/employee-document.ports.js";
 import {
-  PAYSLIP_CATEGORY_SLUG,
   type ImportPayslipsCommand,
   type ImportPayslipsPort,
   type PayslipImportResultDTO,
@@ -26,10 +25,10 @@ function assertUniqueFileNames(fileNames: string[]): void {
   if (new Set(fileNames).size !== fileNames.length) throw new InvalidDocumentError("Há ficheiros com o mesmo nome no lote");
 }
 
-async function assertPayslipCategory(categories: DocumentCategoryRepositoryPort, organizationId: OrganizationId): Promise<void> {
-  const definition = await categories.findBySlug(organizationId, PAYSLIP_CATEGORY_SLUG);
+async function assertPayslipCategory(categories: DocumentCategoryRepositoryPort, organizationId: OrganizationId, slug: string): Promise<void> {
+  const definition = await categories.findBySlug(organizationId, slug);
   if (!definition || !definition.active || !definition.requiresPeriod) {
-    throw new InvalidDocumentError('A categoria "Recibo de vencimento" não está ativa nesta organização');
+    throw new InvalidDocumentError(`A categoria "${definition?.label ?? slug}" não está ativa nesta organização`);
   }
 }
 
@@ -49,14 +48,14 @@ export class PreviewPayslipImportUseCase implements PreviewPayslipImportPort {
   async execute(command: PreviewPayslipImportCommand): Promise<PayslipPreviewRowDTO[]> {
     assertPeriod(command.period);
     assertUniqueFileNames(command.files.map((f) => f.fileName));
-    await assertPayslipCategory(this.documentCategoryRepository, command.organizationId);
+    await assertPayslipCategory(this.documentCategoryRepository, command.organizationId, command.category);
 
     // Inclui inativos: quem saiu durante o mês ainda recebe o último recibo.
     const employees = await this.employeeRepository.findMany(command.organizationId, { status: "all" });
     const nameById = new Map(employees.map((e) => [e.id, e.fullName]));
     const current = await this.employeeDocumentRepository.findCurrentByOwners(command.organizationId, "employee", employees.map((e) => e.id));
     const existingByEmployee = new Map(
-      current.filter((d) => d.category === PAYSLIP_CATEGORY_SLUG && d.period === command.period).map((d) => [d.ownerId, d.id]),
+      current.filter((d) => d.category === command.category && d.period === command.period).map((d) => [d.ownerId, d.id]),
     );
     const candidates = employees.map((e) => ({ id: e.id, fullName: e.fullName, nif: e.nif }));
 
@@ -132,7 +131,7 @@ export class ImportPayslipsUseCase implements ImportPayslipsPort {
     if (new Set(command.items.map((i) => i.employeeId)).size !== command.items.length) {
       throw new InvalidDocumentError("Cada colaborador só pode receber um recibo por período");
     }
-    await assertPayslipCategory(this.documentCategoryRepository, command.organizationId);
+    await assertPayslipCategory(this.documentCategoryRepository, command.organizationId, command.category);
 
     const importBatchId = randomUUID();
     const results: PayslipImportResultDTO[] = [];
@@ -141,7 +140,7 @@ export class ImportPayslipsUseCase implements ImportPayslipsPort {
       try {
         if (item.action === "replace") {
           const current = await this.employeeDocumentRepository.findCurrentByOwners(command.organizationId, "employee", [item.employeeId]);
-          const existing = current.find((d) => d.category === PAYSLIP_CATEGORY_SLUG && d.period === command.period);
+          const existing = current.find((d) => d.category === command.category && d.period === command.period);
           if (!existing) {
             results.push({ ...base, outcome: "failed", documentId: null, message: "Não existe recibo deste colaborador para este período" });
             continue;
@@ -163,7 +162,7 @@ export class ImportPayslipsUseCase implements ImportPayslipsPort {
           organizationId: command.organizationId,
           actor: command.actor,
           employeeId: item.employeeId,
-          category: PAYSLIP_CATEGORY_SLUG,
+          category: command.category,
           mandatory: false,
           origin: "rh",
           expiresAt: null,

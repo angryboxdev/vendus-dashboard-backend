@@ -22,6 +22,7 @@ describe("ListDocumentCategoriesUseCase", () => {
         "formacao_seguranca",
         "nif",
         "recibo_vencimento",
+        "recibo_verde",
       ].sort(),
     );
   });

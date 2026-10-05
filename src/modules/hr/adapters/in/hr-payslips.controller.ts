@@ -2,6 +2,7 @@ import { Router, type Response } from "express";
 import multer from "multer";
 import { requireMinRole } from "../../../../middleware/auth.js";
 import { InvalidDocumentError } from "../../domain/errors.js";
+import { isPayslipCategory } from "../../domain/ports/in/payslip-import.ports.js";
 import type {
   ImportPayslipsPort,
   PayslipFile,
@@ -53,6 +54,12 @@ function readMapping(raw: unknown): MappingEntry[] | null {
   }
 }
 
+/** "category" — recibo_vencimento (omissão) ou recibo_verde; `null` se inválida. */
+function readCategory(raw: unknown) {
+  if (raw === undefined || raw === "") return "recibo_vencimento" as const;
+  return isPayslipCategory(raw) ? raw : null;
+}
+
 function handleError(e: unknown, res: Response): void {
   if (e instanceof InvalidDocumentError) {
     res.status(400).json({ error: e.message });
@@ -79,16 +86,18 @@ export class HrPayslipsController {
   }
 
   private registerRoutes(): void {
-    /** POST /api/hr/payslips/import/preview (multipart "files" + "period" YYYY-MM). */
+    /** POST /api/hr/payslips/import/preview (multipart "files" + "period" YYYY-MM + "category" opcional). */
     this.router.post("/hr/payslips/import/preview", requireMinRole("admin"), payslipUpload.array("files", MAX_FILES), async (req, res) => {
       try {
         const files = readFiles(req.files);
-        const period = (req.body as Record<string, unknown>)?.period;
-        if (files.length === 0 || typeof period !== "string") {
-          res.status(400).json({ error: "period e pelo menos um PDF (campo 'files') são obrigatórios" });
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const period = body.period;
+        const category = readCategory(body.category);
+        if (files.length === 0 || typeof period !== "string" || !category) {
+          res.status(400).json({ error: "category (recibo_vencimento|recibo_verde), period e pelo menos um PDF (campo 'files') são obrigatórios" });
           return;
         }
-        res.json(await this.previewPayslipImport.execute({ organizationId: req.auth!.orgId, period, files }));
+        res.json(await this.previewPayslipImport.execute({ organizationId: req.auth!.orgId, category, period, files }));
       } catch (e) {
         handleError(e, res);
       }
@@ -99,8 +108,9 @@ export class HrPayslipsController {
       try {
         const body = (req.body ?? {}) as Record<string, unknown>;
         const mapping = readMapping(body.mapping);
-        if (typeof body.period !== "string" || !mapping || mapping.length === 0) {
-          res.status(400).json({ error: "period, mapping e pelo menos um recibo são obrigatórios" });
+        const category = readCategory(body.category);
+        if (typeof body.period !== "string" || !mapping || mapping.length === 0 || !category) {
+          res.status(400).json({ error: "category (recibo_vencimento|recibo_verde), period, mapping e pelo menos um recibo são obrigatórios" });
           return;
         }
         const byName = new Map(readFiles(req.files).map((f) => [f.fileName, f]));
@@ -113,7 +123,7 @@ export class HrPayslipsController {
           }
           items.push({ ...file, employeeId: m.employeeId, action: m.action });
         }
-        res.json(await this.importPayslips.execute({ organizationId: req.auth!.orgId, actor: req.auth!.email, period: body.period, items }));
+        res.json(await this.importPayslips.execute({ organizationId: req.auth!.orgId, category, actor: req.auth!.email, period: body.period, items }));
       } catch (e) {
         handleError(e, res);
       }

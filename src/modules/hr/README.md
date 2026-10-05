@@ -731,6 +731,12 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `recibo_vencimento` (semeada pela migração
   `20261006120000_payslips_period.sql`) com `requiresPeriod`; cada
   documento guarda `period` (`YYYY-MM`). Sem tabela nem módulo próprios.
+- **Recibo verde = categoria à parte** (`recibo_verde`, migração
+  `20261006130000_recibo_verde_category.sql`): prestadores independentes
+  emitem fatura-recibo; mesma mecânica (período, duplicados, importação),
+  categoria separada para não se misturar com os recibos de vencimento. A
+  importação recebe `category` (`PAYSLIP_CATEGORY_SLUGS`; omissão
+  `recibo_vencimento`).
 - **Um atual por colaborador × categoria × período** (§26): o upload recusa
   com `DocumentPeriodAlreadyExistsError` (409 `period_already_exists`, com
   o id do atual) — o utilizador cancela ou usa "Substituir versão". Regra na

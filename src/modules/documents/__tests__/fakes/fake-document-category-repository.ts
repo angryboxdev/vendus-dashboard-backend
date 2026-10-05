@@ -22,6 +22,8 @@ const DEFAULT_SEED: Array<{ slug: string; label: string; mandatory: boolean; job
   { slug: "nif", label: "NIF", mandatory: false, jobRoles: [] },
   // `20261006120000_payslips_period.sql` (ticket 10).
   { slug: "recibo_vencimento", label: "Recibo de vencimento", mandatory: false, jobRoles: [], requiresPeriod: true },
+  // `20261006130000_recibo_verde_category.sql`.
+  { slug: "recibo_verde", label: "Recibo verde", mandatory: false, jobRoles: [], requiresPeriod: true },
 ];
 
 export class FakeDocumentCategoryRepository implements DocumentCategoryRepositoryPort {

@@ -13,6 +13,7 @@ import { FakeDocumentCategoryRepository } from "../../../documents/__tests__/fak
 
 const ORG = mintOrganizationId("org-test");
 const PERIOD = "2026-09";
+const RV = "recibo_vencimento" as const;
 const ACTOR = "admin@exemplo.pt";
 const pdf = (text: string) => ({ buffer: Buffer.from(text), mimeType: "application/pdf" });
 
@@ -39,15 +40,15 @@ function setup() {
   };
 }
 
-async function payslipsOf(documents: FakeDocumentRepository, employeeId: string) {
-  return (await documents.findCurrentByOwners(ORG, "employee", [employeeId])).filter((d) => d.category === "recibo_vencimento");
+async function payslipsOf(documents: FakeDocumentRepository, employeeId: string, category: string = RV) {
+  return (await documents.findCurrentByOwners(ORG, "employee", [employeeId])).filter((d) => d.category === category);
 }
 
 describe("Importação de recibos — pré-visualização", () => {
   it("identifica pelo texto e pelo nome do ficheiro; ficheiro sem pistas fica em Rever (sem associação)", async () => {
     const { preview, carlos, gabriel } = setup();
     const rows = await preview.execute({
-      organizationId: ORG,
+      organizationId: ORG, category: RV,
       period: PERIOD,
       files: [
         { fileName: "carlos.pdf", ...pdf("") },
@@ -66,22 +67,22 @@ describe("Importação de recibos — pré-visualização", () => {
   it("recibo já existente no período aparece como duplicado, com o documento atual", async () => {
     const { preview, importer, carlos } = setup();
     const [created] = await importer.execute({
-      organizationId: ORG,
+      organizationId: ORG, category: RV,
       actor: ACTOR,
       period: PERIOD,
       items: [{ fileName: "carlos.pdf", ...pdf(""), employeeId: carlos.id, action: "create" }],
     });
-    const [row] = await preview.execute({ organizationId: ORG, period: PERIOD, files: [{ fileName: "carlos.pdf", ...pdf("") }] });
+    const [row] = await preview.execute({ organizationId: ORG, category: RV, period: PERIOD, files: [{ fileName: "carlos.pdf", ...pdf("") }] });
     expect(row).toMatchObject({ status: "duplicate", employeeId: carlos.id, existingDocumentId: created!.documentId });
     // Noutro período não é duplicado.
-    const [other] = await preview.execute({ organizationId: ORG, period: "2026-10", files: [{ fileName: "carlos.pdf", ...pdf("") }] });
+    const [other] = await preview.execute({ organizationId: ORG, category: RV, period: "2026-10", files: [{ fileName: "carlos.pdf", ...pdf("") }] });
     expect(other!.status).toBe("identified");
   });
 
   it("dois ficheiros do lote para o mesmo colaborador → ambos em Rever", async () => {
     const { preview, carlos } = setup();
     const rows = await preview.execute({
-      organizationId: ORG,
+      organizationId: ORG, category: RV,
       period: PERIOD,
       files: [
         { fileName: "carlos.pdf", ...pdf("") },
@@ -94,7 +95,7 @@ describe("Importação de recibos — pré-visualização", () => {
 
   it("período inválido é recusado", async () => {
     const { preview } = setup();
-    await expect(preview.execute({ organizationId: ORG, period: "09/2026", files: [{ fileName: "a.pdf", ...pdf("") }] })).rejects.toThrow(
+    await expect(preview.execute({ organizationId: ORG, category: RV, period: "09/2026", files: [{ fileName: "a.pdf", ...pdf("") }] })).rejects.toThrow(
       InvalidDocumentError,
     );
   });
@@ -104,14 +105,14 @@ describe("Importação de recibos — gravar", () => {
   it("recibo duplicado (Carlos / 09/2026): bloqueia a duplicação e permite substituir versão", async () => {
     const { importer, documents, carlos } = setup();
     const item = { fileName: "carlos.pdf", ...pdf(""), employeeId: carlos.id };
-    await importer.execute({ organizationId: ORG, actor: ACTOR, period: PERIOD, items: [{ ...item, action: "create" }] });
+    await importer.execute({ organizationId: ORG, category: RV, actor: ACTOR, period: PERIOD, items: [{ ...item, action: "create" }] });
 
-    const [blocked] = await importer.execute({ organizationId: ORG, actor: ACTOR, period: PERIOD, items: [{ ...item, action: "create" }] });
+    const [blocked] = await importer.execute({ organizationId: ORG, category: RV, actor: ACTOR, period: PERIOD, items: [{ ...item, action: "create" }] });
     expect(blocked).toMatchObject({ outcome: "duplicate", message: "Já existe um recibo deste colaborador para este período." });
     expect(await payslipsOf(documents, carlos.id)).toHaveLength(1);
 
     const [replaced] = await importer.execute({
-      organizationId: ORG,
+      organizationId: ORG, category: RV,
       actor: ACTOR,
       period: PERIOD,
       items: [{ ...item, fileName: "carlos-corrigido.pdf", action: "replace" }],
@@ -125,7 +126,7 @@ describe("Importação de recibos — gravar", () => {
   it("um recibo por colaborador e por período — meses diferentes coexistem; o lote partilha o histórico", async () => {
     const { importer, documents, auditLog, carlos, gabriel } = setup();
     const results = await importer.execute({
-      organizationId: ORG,
+      organizationId: ORG, category: RV,
       actor: ACTOR,
       period: PERIOD,
       items: [
@@ -135,7 +136,7 @@ describe("Importação de recibos — gravar", () => {
     });
     expect(results.map((r) => r.outcome)).toEqual(["created", "created"]);
     await importer.execute({
-      organizationId: ORG,
+      organizationId: ORG, category: RV,
       actor: ACTOR,
       period: "2026-10",
       items: [{ fileName: "carlos.pdf", ...pdf(""), employeeId: carlos.id, action: "create" }],
@@ -147,11 +148,27 @@ describe("Importação de recibos — gravar", () => {
     expect(batch[0]!.description).toContain("importação de recibos");
   });
 
+  it("recibo verde é uma categoria à parte: não conta como duplicado do recibo de vencimento", async () => {
+    const { importer, preview, documents, carlos } = setup();
+    const item = { fileName: "carlos.pdf", ...pdf(""), employeeId: carlos.id, action: "create" as const };
+    await importer.execute({ organizationId: ORG, category: RV, actor: ACTOR, period: PERIOD, items: [item] });
+
+    const [row] = await preview.execute({ organizationId: ORG, category: "recibo_verde", period: PERIOD, files: [{ fileName: "carlos.pdf", ...pdf("") }] });
+    expect(row!.status).toBe("identified");
+    const [created] = await importer.execute({ organizationId: ORG, category: "recibo_verde", actor: ACTOR, period: PERIOD, items: [item] });
+    expect(created!.outcome).toBe("created");
+    expect(await payslipsOf(documents, carlos.id, "recibo_verde")).toHaveLength(1);
+    expect(await payslipsOf(documents, carlos.id)).toHaveLength(1);
+
+    const [again] = await importer.execute({ organizationId: ORG, category: "recibo_verde", actor: ACTOR, period: PERIOD, items: [item] });
+    expect(again!.outcome).toBe("duplicate");
+  });
+
   it("recusa o mesmo colaborador duas vezes no lote", async () => {
     const { importer, carlos } = setup();
     await expect(
       importer.execute({
-        organizationId: ORG,
+        organizationId: ORG, category: RV,
         actor: ACTOR,
         period: PERIOD,
         items: [

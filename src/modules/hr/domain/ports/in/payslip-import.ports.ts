@@ -1,8 +1,18 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { PayslipMatchReason, PayslipReviewReason } from "../../services/payslip-identification.service.js";
 
-/** Categoria semeada pela migração `20261006120000_payslips_period.sql`. */
-export const PAYSLIP_CATEGORY_SLUG = "recibo_vencimento";
+/**
+ * Categorias periódicas que a importação em massa aceita: recibo de
+ * vencimento (contratados) e recibo verde (prestadores independentes) —
+ * migrações `20261006120000_payslips_period.sql` e
+ * `20261006130000_recibo_verde_category.sql`.
+ */
+export const PAYSLIP_CATEGORY_SLUGS = ["recibo_vencimento", "recibo_verde"] as const;
+export type PayslipCategorySlug = (typeof PAYSLIP_CATEGORY_SLUGS)[number];
+
+export function isPayslipCategory(value: unknown): value is PayslipCategorySlug {
+  return typeof value === "string" && (PAYSLIP_CATEGORY_SLUGS as readonly string[]).includes(value);
+}
 
 export interface PayslipFile {
   fileName: string;
@@ -14,6 +24,7 @@ export interface PayslipFile {
 
 export interface PreviewPayslipImportCommand {
   organizationId: OrganizationId;
+  category: PayslipCategorySlug;
   /** `YYYY-MM`. */
   period: string;
   files: PayslipFile[];
@@ -58,6 +69,7 @@ export interface PayslipImportItem extends PayslipFile {
 
 export interface ImportPayslipsCommand {
   organizationId: OrganizationId;
+  category: PayslipCategorySlug;
   actor: string;
   period: string;
   items: PayslipImportItem[];
