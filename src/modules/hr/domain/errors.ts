@@ -180,3 +180,27 @@ export class InvalidEmployeeLocationError extends Error {
     this.name = "InvalidEmployeeLocationError";
   }
 }
+
+// ── RH 2.0 — Modelos de turno ───────────────────────────────────────────────
+
+export class InvalidShiftTemplateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidShiftTemplateError";
+  }
+}
+
+export class ShiftTemplateNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Modelo de turno não encontrado: ${id}`);
+    this.name = "ShiftTemplateNotFoundError";
+  }
+}
+
+/** Já existe um modelo com o mesmo nome normalizado ("Manhã 1" = "manhã 1"). */
+export class DuplicateShiftTemplateNameError extends Error {
+  constructor(name: string) {
+    super(`Já existe um modelo de turno com o nome "${name}"`);
+    this.name = "DuplicateShiftTemplateNameError";
+  }
+}

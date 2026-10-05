@@ -416,6 +416,9 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `UpdateDocumentCategoryPort` / `SetDocumentCategoryActivePort` —
   CRUD (desativar, nunca apagar) das categorias de documento configuráveis
   por organização.
+- `ListShiftTemplatesPort` / `CreateShiftTemplatePort` /
+  `UpdateShiftTemplatePort` / `SetShiftTemplateActivePort` (RH 2.0, ticket
+  01) — Modelos de turno: CRUD, inativar (nunca apagar).
 - `PreviewPayslipImportPort` / `ImportPayslipsPort` (Base Organizacional,
   ticket 10) — importação em massa de recibos de vencimento: pré-visualizar
   (identifica o colaborador de cada PDF, assinala duplicados, nada é
@@ -592,6 +595,8 @@ Este módulo é **aditivo**, não uma substituição imediata:
   (constroem os requisitos obrigatórios dinâmicos a partir dele). Também em
   `UploadEmployeeDocumentUseCase` (sabe se a categoria é periódica) e nos
   use cases de importação de recibos.
+- `ShiftTemplateRepositoryPort` (RH 2.0) — `hr_shift_templates`; nome
+  único por organização (`DuplicateShiftTemplateNameError`).
 - `PdfTextExtractorPort` (ticket 10) — texto de um PDF para identificar o
   colaborador de um recibo; `null` se o PDF não tiver texto. Sem OCR/IA.
 - `WorkShiftRepositoryPort` (RH-03) — CRUD de `hr_work_shifts` +
@@ -642,6 +647,9 @@ Este módulo é **aditivo**, não uma substituição imediata:
 - `HrPositionsController` (Base Organizacional) → `GET /api/hr/positions`
   (`hr_viewer`+), `POST /api/hr/positions`, `PATCH /api/hr/positions/:id`,
   `PATCH /api/hr/positions/:id/active` (`manager`). 409 em nome duplicado.
+- `HrShiftTemplatesController` (RH 2.0) → `GET /api/hr/schedules/templates`
+  (`hr_viewer`+), `POST`, `PATCH /:id`, `PATCH /:id/active` (`manager`).
+  409 em nome duplicado.
 - `HrPayslipsController` (ticket 10) → `POST /api/hr/payslips/import/preview`
   e `POST /api/hr/payslips/import` (multipart `files` + `period`; o 2.º
   com `mapping` JSON `[{ fileName, employeeId, action }]`). Só `admin`
@@ -709,6 +717,7 @@ Este módulo é **aditivo**, não uma substituição imediata:
 - `SupabaseDocumentRepository` / `SupabaseDocumentCategoryRepository` — do
   módulo `documents`, instanciados em `hr.module.ts` (mesmo padrão de
   `SupabaseLocationRepository`).
+- `SupabaseShiftTemplateRepository` (RH 2.0) → `hr_shift_templates`.
 - `PdfParseTextExtractorAdapter` (ticket 10) → `pdf-parse` (já usado na
   importação de faturas), só a camada de texto.
 - **"Melhorar Hoje na operação"**: nenhum adapter novo — `GetHrOverviewUseCase`/
@@ -724,6 +733,19 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `hr_attendance_rules`; `save` é sempre `insert`, nunca `update`.
 
 ## Design decisions (ADR summary)
+
+### RH 2.0 — Modelos de turno (ticket 01)
+
+- **Modelo ≠ Turno** (task RH 2.0 §1): o Modelo (`ShiftTemplate`) é um
+  horário reutilizável (direto/repartido/noturno, local padrão opcional,
+  ativo/inativo); o turno gerado copia o horário/local (snapshot) e guarda
+  só a referência `templateId` (`source: "template"`). Alterar ou inativar
+  um modelo nunca toca turnos existentes. Spec completa e decisões
+  R1–R5/T1–T7 em `.scratch/rh-2-0/spec.md`.
+- **Mesma regra de horários dos turnos** (`assertShiftShape`, exportada de
+  `work-shift.ts`): repartido nunca combinado com noturno.
+- Nome único por organização sem distinguir maiúsculas/espaços (como os
+  Cargos); local padrão tem de estar ativo.
 
 ### Base Organizacional — recibos de vencimento (ticket 10)
 

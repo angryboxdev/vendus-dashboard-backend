@@ -34,6 +34,14 @@ import {
 import { SupabasePositionRepository } from "./adapters/out/supabase-position.repository.js";
 import { HrPositionsController } from "./adapters/in/hr-positions.controller.js";
 import { HrPayslipsController } from "./adapters/in/hr-payslips.controller.js";
+import { HrShiftTemplatesController } from "./adapters/in/hr-shift-templates.controller.js";
+import { SupabaseShiftTemplateRepository } from "./adapters/out/supabase-shift-template.repository.js";
+import {
+  CreateShiftTemplateUseCase,
+  ListShiftTemplatesUseCase,
+  SetShiftTemplateActiveUseCase,
+  UpdateShiftTemplateUseCase,
+} from "./application/use-cases/shift-templates.use-cases.js";
 import { PdfParseTextExtractorAdapter } from "./adapters/out/pdf-parse-text-extractor.adapter.js";
 import { ImportPayslipsUseCase, PreviewPayslipImportUseCase } from "./application/use-cases/payslip-import.use-cases.js";
 import { SetEmployeeStatusUseCase } from "./application/use-cases/set-employee-status.use-case.js";
@@ -341,8 +349,17 @@ export function createHrModule(): { router: Router } {
     new ImportPayslipsUseCase(employeeDocumentRepository, documentCategoryRepository, uploadEmployeeDocument, replaceEmployeeDocument),
   );
 
+  const shiftTemplateRepository = new SupabaseShiftTemplateRepository(createScopedQuery);
+  const shiftTemplatesController = new HrShiftTemplatesController(
+    new ListShiftTemplatesUseCase(shiftTemplateRepository),
+    new CreateShiftTemplateUseCase(shiftTemplateRepository, locationRepository, auditLog),
+    new UpdateShiftTemplateUseCase(shiftTemplateRepository, locationRepository, auditLog),
+    new SetShiftTemplateActiveUseCase(shiftTemplateRepository, auditLog),
+  );
+
   const router = Router();
   router.use(controller.router);
+  router.use(shiftTemplatesController.router);
   router.use(positionsController.router);
   router.use(payslipsController.router);
   router.use(overviewController.router);

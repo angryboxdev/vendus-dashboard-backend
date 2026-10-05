@@ -8,7 +8,7 @@ import type {
 } from "../../domain/ports/out/work-shift-repository.port.js";
 
 const SELECT =
-  "id, employee_id, work_date, start_time, end_time, ends_next_day, second_start_time, second_end_time, location_id, break_minutes, notes, status, source, rotation_id, series_id, created_at, updated_at";
+  "id, employee_id, work_date, start_time, end_time, ends_next_day, second_start_time, second_end_time, location_id, break_minutes, notes, status, source, rotation_id, series_id, template_id, created_at, updated_at";
 
 interface Row {
   id: string;
@@ -26,6 +26,7 @@ interface Row {
   source: string;
   rotation_id: string | null;
   series_id: string | null;
+  template_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -47,6 +48,7 @@ function rowToShift(row: Row): WorkShift {
     source: row.source as ShiftSource,
     rotationId: row.rotation_id,
     seriesId: row.series_id,
+    templateId: row.template_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
@@ -70,6 +72,7 @@ function shiftToRow(shift: WorkShift): Record<string, unknown> {
     source: props.source,
     rotation_id: props.rotationId,
     series_id: props.seriesId,
+    template_id: props.templateId,
     updated_at: props.updatedAt,
   };
 }

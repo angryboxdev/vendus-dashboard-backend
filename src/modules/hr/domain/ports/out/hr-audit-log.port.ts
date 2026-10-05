@@ -12,7 +12,9 @@ export type HrAuditEntityType =
   // Fase 2.1
   | "attendance_rules"
   // Base Organizacional — Cargos (ticket 07): entidade da organização, sem colaborador associado.
-  | "position";
+  | "position"
+  // RH 2.0 — Modelos de turno (entidade da organização, sem colaborador associado).
+  | "shift_template";
 
 export interface HrAuditLogEntry {
   organizationId: OrganizationId;

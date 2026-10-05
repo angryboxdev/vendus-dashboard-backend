@@ -154,6 +154,7 @@ export const TABLE_REGISTRY = {
   // D3/D4: event-grain table, location_id NOT NULL.
   hr_shift_attendance: { organizationColumn: "org_id", locationBearing: true },
   hr_shift_rotations: { organizationColumn: "org_id", locationBearing: true },
+  hr_shift_templates: { organizationColumn: "org_id", locationBearing: true },
   // D3/D4: event-grain table, location_id NOT NULL.
   hr_work_shifts: { organizationColumn: "org_id", locationBearing: true },
   // D3/D4/D5: the allocation grain — location_id nullable (org-wide cost vs.
