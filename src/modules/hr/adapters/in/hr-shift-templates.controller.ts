@@ -1,7 +1,20 @@
 import { Router, type Response } from "express";
 import { requireMinRole } from "../../../../middleware/auth.js";
-import { DuplicateShiftTemplateNameError, InvalidShiftTemplateError, ShiftTemplateNotFoundError } from "../../domain/errors.js";
+import {
+  DuplicateShiftTemplateNameError,
+  InvalidShiftTemplateError,
+  InvalidTemplateApplicationError,
+  ShiftTemplateNotFoundError,
+} from "../../domain/errors.js";
 import type {
+  ApplicationAudience,
+  ApplicationDays,
+  OccurrenceDecision,
+} from "../../domain/services/template-application.service.js";
+import type {
+  ApplyTemplatePort,
+  PreviewTemplateApplicationPort,
+  TemplateApplicationConfig,
   CreateShiftTemplatePort,
   ListShiftTemplatesPort,
   SetShiftTemplateActivePort,
@@ -10,7 +23,7 @@ import type {
 } from "../../domain/ports/in/shift-template.ports.js";
 
 function handleError(e: unknown, res: Response): void {
-  if (e instanceof InvalidShiftTemplateError) {
+  if (e instanceof InvalidShiftTemplateError || e instanceof InvalidTemplateApplicationError) {
     res.status(400).json({ error: e.message });
     return;
   }
@@ -47,6 +60,58 @@ function readInput(body: Record<string, unknown>): Partial<ShiftTemplateInput> {
   return out;
 }
 
+const isString = (v: unknown): v is string => typeof v === "string" && v.length > 0;
+const stringArray = (v: unknown): string[] | null => (Array.isArray(v) && v.every(isString) ? v : null);
+
+function readAudience(v: unknown): ApplicationAudience | null {
+  const a = (v ?? {}) as Record<string, unknown>;
+  switch (a.kind) {
+    case "employees": {
+      const ids = stringArray(a.employeeIds);
+      return ids ? { kind: "employees", employeeIds: ids } : null;
+    }
+    case "all":
+      return { kind: "all" };
+    case "position":
+      return isString(a.positionId) ? { kind: "position", positionId: a.positionId, locationId: isString(a.locationId) ? a.locationId : null } : null;
+    case "location":
+      return isString(a.locationId) ? { kind: "location", locationId: a.locationId } : null;
+    default:
+      return null;
+  }
+}
+
+function readDays(v: unknown): ApplicationDays | null {
+  const d = (v ?? {}) as Record<string, unknown>;
+  if (d.kind === "dates") {
+    const dates = stringArray(d.dates);
+    return dates ? { kind: "dates", dates } : null;
+  }
+  if (d.kind === "range" && isString(d.from) && isString(d.to) && Array.isArray(d.weekdays)) {
+    const weekdays = d.weekdays.filter((w): w is 0 | 1 | 2 | 3 | 4 | 5 | 6 => Number.isInteger(w) && (w as number) >= 0 && (w as number) <= 6);
+    return { kind: "range", from: d.from, to: d.to, weekdays };
+  }
+  return null;
+}
+
+function readDecisions(v: unknown): Record<string, OccurrenceDecision> {
+  const out: Record<string, OccurrenceDecision> = {};
+  for (const [key, raw] of Object.entries((v ?? {}) as Record<string, unknown>)) {
+    const d = (raw ?? {}) as Record<string, unknown>;
+    if (d.action === "create" || d.action === "skip") out[key] = { action: d.action };
+    else if (d.action === "replace" && isString(d.existingShiftId)) out[key] = { action: "replace", existingShiftId: d.existingShiftId };
+  }
+  return out;
+}
+
+/** Corpo comum a pré-visualizar/aplicar; `null` se faltar algo estrutural. */
+function readConfig(templateId: string, body: Record<string, unknown>): TemplateApplicationConfig | null {
+  const audience = readAudience(body.audience);
+  const days = readDays(body.days);
+  if (!audience || !days) return null;
+  return { templateId, audience, days, locationId: isString(body.locationId) ? body.locationId : null };
+}
+
 /**
  * Escalas & Turnos → Modelos & Automatizações → Modelos de turno (RH 2.0,
  * ticket 01). Leitura para qualquer role do RH; escrita `manager`, como o
@@ -60,6 +125,8 @@ export class HrShiftTemplatesController {
     private readonly createShiftTemplate: CreateShiftTemplatePort,
     private readonly updateShiftTemplate: UpdateShiftTemplatePort,
     private readonly setShiftTemplateActive: SetShiftTemplateActivePort,
+    private readonly previewTemplateApplication: PreviewTemplateApplicationPort,
+    private readonly applyTemplate: ApplyTemplatePort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -112,6 +179,42 @@ export class HrShiftTemplatesController {
             actor: req.auth!.email,
             id: req.params["id"] as string,
             ...readInput((req.body ?? {}) as Record<string, unknown>),
+          }),
+        );
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+
+    /** POST /api/hr/schedules/templates/:id/apply/preview — body `{ audience, days, locationId? }`. Não grava nada. */
+    this.router.post("/hr/schedules/templates/:id/apply/preview", requireMinRole("manager"), async (req, res) => {
+      try {
+        const config = readConfig(req.params["id"] as string, (req.body ?? {}) as Record<string, unknown>);
+        if (!config) {
+          res.status(400).json({ error: "audience e days são obrigatórios" });
+          return;
+        }
+        res.json(await this.previewTemplateApplication.execute({ organizationId: req.auth!.orgId, ...config }));
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+
+    /** POST /api/hr/schedules/templates/:id/apply — body `{ audience, days, locationId?, decisions }`. Revalida tudo antes de gravar. */
+    this.router.post("/hr/schedules/templates/:id/apply", requireMinRole("manager"), async (req, res) => {
+      try {
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const config = readConfig(req.params["id"] as string, body);
+        if (!config) {
+          res.status(400).json({ error: "audience e days são obrigatórios" });
+          return;
+        }
+        res.json(
+          await this.applyTemplate.execute({
+            organizationId: req.auth!.orgId,
+            actor: req.auth!.email,
+            ...config,
+            decisions: readDecisions(body.decisions),
           }),
         );
       } catch (e) {

@@ -36,6 +36,7 @@ import { HrPositionsController } from "./adapters/in/hr-positions.controller.js"
 import { HrPayslipsController } from "./adapters/in/hr-payslips.controller.js";
 import { HrShiftTemplatesController } from "./adapters/in/hr-shift-templates.controller.js";
 import { SupabaseShiftTemplateRepository } from "./adapters/out/supabase-shift-template.repository.js";
+import { ApplyTemplateUseCase, PreviewTemplateApplicationUseCase } from "./application/use-cases/apply-shift-template.use-cases.js";
 import {
   CreateShiftTemplateUseCase,
   ListShiftTemplatesUseCase,
@@ -350,11 +351,21 @@ export function createHrModule(): { router: Router } {
   );
 
   const shiftTemplateRepository = new SupabaseShiftTemplateRepository(createScopedQuery);
+  const templateApplicationDeps = {
+    templates: shiftTemplateRepository,
+    employees: employeeRepository,
+    workShifts: workShiftRepository,
+    locations: locationRepository,
+    leaveRead,
+    holidayRead,
+  };
   const shiftTemplatesController = new HrShiftTemplatesController(
     new ListShiftTemplatesUseCase(shiftTemplateRepository),
     new CreateShiftTemplateUseCase(shiftTemplateRepository, locationRepository, auditLog),
     new UpdateShiftTemplateUseCase(shiftTemplateRepository, locationRepository, auditLog),
     new SetShiftTemplateActiveUseCase(shiftTemplateRepository, auditLog),
+    new PreviewTemplateApplicationUseCase(templateApplicationDeps),
+    new ApplyTemplateUseCase(templateApplicationDeps, auditLog),
   );
 
   const router = Router();

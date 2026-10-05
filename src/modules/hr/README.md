@@ -418,6 +418,11 @@ Este módulo é **aditivo**, não uma substituição imediata:
 - `ListShiftTemplatesPort` / `CreateShiftTemplatePort` /
   `UpdateShiftTemplatePort` / `SetShiftTemplateActivePort` (RH 2.0, ticket
   01) — Modelos de turno: CRUD, inativar (nunca apagar).
+- `PreviewTemplateApplicationPort` / `ApplyTemplatePort` (RH 2.0, ticket 02) —
+  "Aplicar modelo": público (um/vários/todos/por cargo/por local), dias
+  (datas ou intervalo + dias da semana) e local; pré-visualização com
+  estado por ocorrência e confirmação com decisões (criar/ignorar/
+  substituir).
 - `PreviewPayslipImportPort` / `ImportPayslipsPort` (Base Organizacional,
   ticket 10) — importação em massa de recibos de vencimento: pré-visualizar
   (identifica o colaborador de cada PDF, assinala duplicados, nada é
@@ -648,7 +653,8 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `PATCH /api/hr/positions/:id/active` (`manager`). 409 em nome duplicado.
 - `HrShiftTemplatesController` (RH 2.0) → `GET /api/hr/schedules/templates`
   (`hr_viewer`+), `POST`, `PATCH /:id`, `PATCH /:id/active` (`manager`).
-  409 em nome duplicado.
+  409 em nome duplicado. `POST /:id/apply/preview` e `POST /:id/apply`
+  (`manager`) — aplicar modelo (ticket 02).
 - `HrPayslipsController` (ticket 10) → `POST /api/hr/payslips/import/preview`
   e `POST /api/hr/payslips/import` (multipart `files` + `period`; o 2.º
   com `mapping` JSON `[{ fileName, employeeId, action }]`). Só `admin`
@@ -745,6 +751,32 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `work-shift.ts`): repartido nunca combinado com noturno.
 - Nome único por organização sem distinguir maiúsculas/espaços (como os
   Cargos); local padrão tem de estar ativo.
+
+### RH 2.0 — Aplicar modelo (ticket 02)
+
+- **Um motor puro para pré-visualizar e confirmar**
+  (`template-application.service`): `planTemplateApplication` classifica
+  cada ocorrência (colaborador × data) em `valid` / `duplicate` (turno
+  idêntico já existe) / `overlap` / `leave` / `inactive_employee` /
+  `no_location` / `inactive_location`, com o feriado assinalado (R4 — cria-se
+  na mesma). A confirmação recalcula tudo com os dados atuais e
+  `resolveConfirmation` só aplica o que o utilizador decidiu **e** continua
+  igual: o resto sai como `changed` (revalidação, task §5). Uma ocorrência
+  que não estava na pré-visualização (sem decisão) nunca é criada.
+- **Idempotente:** um turno idêntico já existente é `duplicate` — repetir a
+  aplicação (duplo clique, reenvio) não cria nada. Sobreposição usa a mesma
+  regra do motor de séries (`occurrenceOverlapsShift`, cobre repartido e
+  noturnos de dias vizinhos).
+- **Local:** aplicação → local padrão do modelo → local principal do
+  colaborador (task §4); sem nenhum → `no_location`.
+- **Substituir** só turnos sem presença (R3), verificado de novo
+  imediatamente antes de apagar o turno antigo (rascunho/publicado sem
+  presença — mesma regra do "apagar turno" atual). Turnos novos em
+  rascunho (R1), `source: "template"` + `templateId`.
+- Limite: 366 dias por aplicação. Dois gestores a aplicar **ao mesmo tempo**
+  sobre o mesmo colaborador/dia ainda podem criar duplicado (não há índice
+  único na BD — dados antigos podem ter repetidos); a revalidação cobre o
+  caso sequencial (retry, preview desatualizado).
 
 ### Base Organizacional — recibos de vencimento (ticket 10)
 

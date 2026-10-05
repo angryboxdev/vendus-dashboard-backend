@@ -204,3 +204,11 @@ export class DuplicateShiftTemplateNameError extends Error {
     this.name = "DuplicateShiftTemplateNameError";
   }
 }
+
+/** Pedido de aplicação de modelo inválido (datas, público, modelo inativo…). */
+export class InvalidTemplateApplicationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidTemplateApplicationError";
+  }
+}
