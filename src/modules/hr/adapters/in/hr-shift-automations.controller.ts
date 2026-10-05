@@ -160,7 +160,7 @@ export class HrShiftAutomationsController {
     this.router.post("/hr/schedules/automation-issues/:id/dismiss", requireMinRole("manager"), async (req, res) => {
       try {
         await this.dismissAutomationIssue.execute({ organizationId: req.auth!.orgId, actor: req.auth!.email, id: req.params["id"] as string });
-        res.status(204).send();
+        res.json({ dismissed: true });
       } catch (e) {
         handleError(e, res);
       }
