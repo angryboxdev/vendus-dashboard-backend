@@ -11,9 +11,8 @@ import type {
   UpdateDocumentCategoryPort,
   SetDocumentCategoryActivePort,
 } from "../../domain/ports/in/document-category.ports.js";
-import type { DocumentCategoryScope, OperationalCategory } from "../../domain/entities/document-category.js";
+import type { DocumentCategoryScope } from "../../domain/entities/document-category.js";
 
-const JOB_ROLES = new Set(["manager", "prep", "service"]);
 const SCOPES = new Set<DocumentCategoryScope>(["employee", "company", "both"]);
 const ACCEPTED_MIME_TYPES = new Set(["application/pdf", "image/jpeg", "image/png"]);
 
@@ -25,9 +24,9 @@ const ACCEPTED_MIME_TYPES = new Set(["application/pdf", "image/jpeg", "image/png
  */
 const PREFIXES = ["/hr/document-categories", "/document-categories"];
 
-function readJobRoles(value: unknown): OperationalCategory[] | undefined {
+function readPositionIds(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  return value.filter((v): v is OperationalCategory => typeof v === "string" && JOB_ROLES.has(v));
+  return [...new Set(value.filter((v): v is string => typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v)))];
 }
 
 function readAcceptedMimeTypes(value: unknown): string[] | undefined {
@@ -101,7 +100,7 @@ export class DocumentCategoriesController {
           organizationId: req.auth!.orgId,
           label: body.label,
           mandatory: body.mandatory === true,
-          jobRoles: readJobRoles(body.jobRoles) ?? [],
+          positionIds: readPositionIds(body.positionIds) ?? [],
           acceptedMimeTypes: readAcceptedMimeTypes(body.acceptedMimeTypes) ?? [...ACCEPTED_MIME_TYPES],
           ...(scope && { scope }),
         });
@@ -119,16 +118,16 @@ export class DocumentCategoriesController {
           res.status(400).json({ error: "scope inválido (employee|company|both)" });
           return;
         }
-        const jobRoles = readJobRoles(body.jobRoles);
         const acceptedMimeTypes = readAcceptedMimeTypes(body.acceptedMimeTypes);
         const scope = readScope(body.scope);
+        const positionIds = readPositionIds(body.positionIds);
         res.json(
           await this.updateDocumentCategory.execute({
             organizationId: req.auth!.orgId,
             id: req.params["id"] as string,
             ...(typeof body.label === "string" && { label: body.label }),
             ...(typeof body.mandatory === "boolean" && { mandatory: body.mandatory }),
-            ...(jobRoles !== undefined && { jobRoles }),
+            ...(positionIds !== undefined && { positionIds }),
             ...(acceptedMimeTypes !== undefined && { acceptedMimeTypes }),
             ...(scope && { scope }),
           }),

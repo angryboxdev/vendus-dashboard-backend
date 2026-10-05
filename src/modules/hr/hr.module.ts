@@ -33,6 +33,18 @@ import {
 } from "./application/use-cases/positions.use-cases.js";
 import { SupabasePositionRepository } from "./adapters/out/supabase-position.repository.js";
 import { HrPositionsController } from "./adapters/in/hr-positions.controller.js";
+import { HrPayslipsController } from "./adapters/in/hr-payslips.controller.js";
+import { HrShiftTemplatesController } from "./adapters/in/hr-shift-templates.controller.js";
+import { SupabaseShiftTemplateRepository } from "./adapters/out/supabase-shift-template.repository.js";
+import { ApplyTemplateUseCase, PreviewTemplateApplicationUseCase } from "./application/use-cases/apply-shift-template.use-cases.js";
+import {
+  CreateShiftTemplateUseCase,
+  ListShiftTemplatesUseCase,
+  SetShiftTemplateActiveUseCase,
+  UpdateShiftTemplateUseCase,
+} from "./application/use-cases/shift-templates.use-cases.js";
+import { PdfParseTextExtractorAdapter } from "./adapters/out/pdf-parse-text-extractor.adapter.js";
+import { ImportPayslipsUseCase, PreviewPayslipImportUseCase } from "./application/use-cases/payslip-import.use-cases.js";
 import { SetEmployeeStatusUseCase } from "./application/use-cases/set-employee-status.use-case.js";
 import { UploadEmployeePhotoUseCase } from "./application/use-cases/upload-employee-photo.use-case.js";
 import { GetEmployeeHistoryUseCase } from "./application/use-cases/get-employee-history.use-case.js";
@@ -140,6 +152,7 @@ export function createHrModule(): { router: Router } {
     employeeDocumentRepository,
     hrFileStorage,
     auditLog,
+    documentCategoryRepository,
   );
   const replaceEmployeeDocument = new ReplaceEmployeeDocumentUseCase(
     employeeRepository,
@@ -332,9 +345,34 @@ export function createHrModule(): { router: Router } {
     new SetPositionActiveUseCase(positionRepository, employeeRepository, auditLog),
   );
 
+  const payslipsController = new HrPayslipsController(
+    new PreviewPayslipImportUseCase(employeeRepository, employeeDocumentRepository, documentCategoryRepository, new PdfParseTextExtractorAdapter()),
+    new ImportPayslipsUseCase(employeeDocumentRepository, documentCategoryRepository, uploadEmployeeDocument, replaceEmployeeDocument),
+  );
+
+  const shiftTemplateRepository = new SupabaseShiftTemplateRepository(createScopedQuery);
+  const templateApplicationDeps = {
+    templates: shiftTemplateRepository,
+    employees: employeeRepository,
+    workShifts: workShiftRepository,
+    locations: locationRepository,
+    leaveRead,
+    holidayRead,
+  };
+  const shiftTemplatesController = new HrShiftTemplatesController(
+    new ListShiftTemplatesUseCase(shiftTemplateRepository),
+    new CreateShiftTemplateUseCase(shiftTemplateRepository, locationRepository, auditLog),
+    new UpdateShiftTemplateUseCase(shiftTemplateRepository, locationRepository, auditLog),
+    new SetShiftTemplateActiveUseCase(shiftTemplateRepository, auditLog),
+    new PreviewTemplateApplicationUseCase(templateApplicationDeps),
+    new ApplyTemplateUseCase(templateApplicationDeps, auditLog),
+  );
+
   const router = Router();
   router.use(controller.router);
+  router.use(shiftTemplatesController.router);
   router.use(positionsController.router);
+  router.use(payslipsController.router);
   router.use(overviewController.router);
   router.use(schedulesController.router);
   router.use(attendanceController.router);

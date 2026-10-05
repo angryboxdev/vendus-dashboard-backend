@@ -10,7 +10,7 @@ import {
 import type { DocumentRepositoryPort } from "../../domain/ports/out/document-repository.port.js";
 
 const SELECT =
-  "id, org_id, owner_type, employee_id, category, mandatory, file_name, storage_path, mime_type, file_size_bytes, status, origin, issued_at, expires_at, visibility, version, previous_version_id, is_current, uploaded_by, uploaded_at";
+  "id, org_id, owner_type, employee_id, category, mandatory, file_name, storage_path, mime_type, file_size_bytes, status, origin, issued_at, expires_at, visibility, period, version, previous_version_id, is_current, uploaded_by, uploaded_at";
 
 interface Row {
   id: string;
@@ -28,6 +28,7 @@ interface Row {
   issued_at: string | null;
   expires_at: string | null;
   visibility: string | null;
+  period: string | null;
   version: number;
   previous_version_id: string | null;
   is_current: boolean;
@@ -56,6 +57,7 @@ function rowToDocument(row: Row): Document {
     issuedAt: row.issued_at,
     expiresAt: row.expires_at,
     visibility: row.visibility as DocumentVisibility | null,
+    period: row.period ?? null,
     version: row.version,
     previousVersionId: row.previous_version_id,
     isCurrent: row.is_current,
@@ -82,6 +84,7 @@ function documentToRow(doc: Document): Record<string, unknown> {
     issued_at: p.issuedAt,
     expires_at: p.expiresAt,
     visibility: p.visibility,
+    period: p.period,
     version: p.version,
     previous_version_id: p.previousVersionId,
     is_current: p.isCurrent,

@@ -13,7 +13,6 @@ describe("SetDocumentCategoryActiveUseCase", () => {
       organizationId: ORG,
       label: "Seguro de saúde",
       mandatory: false,
-      jobRoles: [],
       acceptedMimeTypes: ["application/pdf"],
     });
 
@@ -30,7 +29,6 @@ describe("SetDocumentCategoryActiveUseCase", () => {
       organizationId: ORG,
       label: "Seguro de saúde",
       mandatory: false,
-      jobRoles: [],
       acceptedMimeTypes: ["application/pdf"],
     });
     const useCase = new SetDocumentCategoryActiveUseCase(categories);

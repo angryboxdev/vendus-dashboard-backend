@@ -54,6 +54,9 @@ export const TABLE_REGISTRY = {
   organizations: { organizationColumn: "id", locationBearing: false },
 
   locations: { organizationColumn: "org_id", locationBearing: false },
+  // Módulo calendar (Base Organizacional — eventos empresariais e auditoria; os feriados são `hr_public_holidays`).
+  company_events: { organizationColumn: "org_id", locationBearing: true },
+  calendar_audit_logs: { organizationColumn: "org_id", locationBearing: false },
   // Módulo documents (Base Organizacional — auditoria dos documentos da Empresa).
   document_audit_logs: { organizationColumn: "org_id", locationBearing: false },
   // Módulo locations (Base Organizacional — Locais).
@@ -151,6 +154,7 @@ export const TABLE_REGISTRY = {
   // D3/D4: event-grain table, location_id NOT NULL.
   hr_shift_attendance: { organizationColumn: "org_id", locationBearing: true },
   hr_shift_rotations: { organizationColumn: "org_id", locationBearing: true },
+  hr_shift_templates: { organizationColumn: "org_id", locationBearing: true },
   // D3/D4: event-grain table, location_id NOT NULL.
   hr_work_shifts: { organizationColumn: "org_id", locationBearing: true },
   // D3/D4/D5: the allocation grain — location_id nullable (org-wide cost vs.

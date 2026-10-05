@@ -66,7 +66,7 @@ export class ListEmployeesUseCase implements ListEmployeesPort {
         // alerta para colaboradores ativos — um inativo não tem ações
         // pendentes por definição (ver README, "Design decisions").
         const isActive = employee.status === "active";
-        const applicable = applicableCategoriesFor(categoryDefs, employee.jobRole);
+        const applicable = applicableCategoriesFor(categoryDefs, employee);
         const requirements = [...DEFAULT_MANDATORY_REQUIREMENTS, ...buildDynamicRequirements(applicable)];
         const summary = computeMandatoryDocumentsSummary(requirements, documentsByEmployee.get(employee.id) ?? []);
         const photoUrl = employee.photoStoragePath
@@ -80,7 +80,6 @@ export class ListEmployeesUseCase implements ListEmployeesPort {
         return {
           id: employee.id,
           fullName: employee.fullName,
-          jobRole: employee.jobRole,
           positionId: employee.positionId,
           primaryLocationId: employee.primaryLocationId,
           employmentType: employee.employmentType,

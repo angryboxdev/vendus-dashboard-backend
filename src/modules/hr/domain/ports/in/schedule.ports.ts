@@ -1,5 +1,4 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { JobRole } from "../../entities/employee.js";
 import type { ShiftStatus, ShiftSource } from "../../entities/work-shift.js";
 import type { Weekday } from "../../entities/base-schedule-template.js";
 
@@ -22,6 +21,8 @@ export interface WorkShiftDTO {
   source: ShiftSource;
   rotationId: string | null;
   seriesId: string | null;
+  /** Modelo de turno de origem (RH 2.0); null = não veio de um modelo. */
+  templateId: string | null;
   /** Estado de presença já registado (lido de hr_shift_attendance), quando existe — para a bolinha "Pendente"/"Conferido" do calendário. */
   attendanceStatus: "worked_as_planned" | "late" | "left_early" | "cancelled" | null;
   createdAt: string;
@@ -186,7 +187,6 @@ export interface ShiftRotationPatternDTO {
 
 export interface ShiftRotationDTO {
   id: string;
-  jobRole: JobRole;
   participantEmployeeIds: [string, string];
   participantNames: [string, string];
   patternA: ShiftRotationPatternDTO;
@@ -208,7 +208,6 @@ export interface ListShiftRotationsPort {
 export interface CreateShiftRotationCommand {
   organizationId: OrganizationId;
   actor: string;
-  jobRole: JobRole;
   participantEmployeeIds: [string, string];
   patternA: { startTime: string; endTime: string; secondStartTime?: string | null; secondEndTime?: string | null };
   patternB: { startTime: string; endTime: string; secondStartTime?: string | null; secondEndTime?: string | null };

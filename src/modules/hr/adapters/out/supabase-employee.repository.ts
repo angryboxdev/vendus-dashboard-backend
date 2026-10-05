@@ -1,10 +1,10 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
-import { Employee, type EmploymentType, type EmployeeStatus, type JobRole, type SalaryType } from "../../domain/entities/employee.js";
+import { Employee, type EmploymentType, type EmployeeStatus, type SalaryType } from "../../domain/entities/employee.js";
 import type { EmployeeFilter, EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
 
 const SELECT =
-  "id, full_name, email, phone, role_or_notes, employment_type, job_role, position_id, primary_location_id, status, hired_at, ended_at, base_salary, salary_type, hourly_rate, nif, iban, address, birth_date, social_security_number, id_card_number, nationality, emergency_contact_name, emergency_contact_phone, photo_storage_path, created_at, updated_at";
+  "id, full_name, email, phone, role_or_notes, employment_type, position_id, primary_location_id, status, hired_at, ended_at, base_salary, salary_type, hourly_rate, nif, iban, address, birth_date, social_security_number, id_card_number, nationality, emergency_contact_name, emergency_contact_phone, photo_storage_path, created_at, updated_at";
 
 /** Limite alto usado como "praticamente todos" — mesma abordagem já usada pela listagem legacy (ver README). */
 const FIND_MANY_LIMIT = 500;
@@ -16,7 +16,6 @@ interface Row {
   phone: string | null;
   role_or_notes: string | null;
   employment_type: string;
-  job_role: string;
   position_id: string | null;
   primary_location_id: string | null;
   status: string;
@@ -41,7 +40,6 @@ interface Row {
 
 function rowToEmployee(row: Row, authorizedLocationIds: string[]): Employee {
   const employmentType = row.employment_type as EmploymentType;
-  const jobRole = row.job_role as JobRole;
   return Employee.reconstitute({
     id: row.id,
     fullName: row.full_name,
@@ -49,7 +47,6 @@ function rowToEmployee(row: Row, authorizedLocationIds: string[]): Employee {
     phone: row.phone,
     roleOrNotes: row.role_or_notes,
     employmentType: ["permanent", "contract", "extra"].includes(employmentType) ? employmentType : "permanent",
-    jobRole: ["manager", "prep", "service"].includes(jobRole) ? jobRole : "service",
     positionId: row.position_id,
     primaryLocationId: row.primary_location_id,
     authorizedLocationIds,
@@ -83,7 +80,6 @@ function employeeToInsert(employee: Employee): Record<string, unknown> {
     phone: p.phone,
     role_or_notes: p.roleOrNotes,
     employment_type: p.employmentType,
-    job_role: p.jobRole,
     position_id: p.positionId,
     primary_location_id: p.primaryLocationId,
     status: p.status,

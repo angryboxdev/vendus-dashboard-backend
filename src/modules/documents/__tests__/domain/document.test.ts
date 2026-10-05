@@ -1,4 +1,4 @@
-import { Document } from "../../domain/entities/document.js";
+import { Document, isValidDocumentPeriod } from "../../domain/entities/document.js";
 import { DocumentNotCurrentError } from "../../domain/errors.js";
 
 function makeDoc(origin: "rh" | "colaborador" | "sistema" = "rh") {
@@ -17,6 +17,32 @@ function makeDoc(origin: "rh" | "colaborador" | "sistema" = "rh") {
 }
 
 describe("Document", () => {
+  it("período (ticket 10): guardado na criação e mantido em supersede()", () => {
+    const v1 = Document.createFirstVersion({
+      owner: { type: "employee", id: "e1" },
+      category: "recibo_vencimento",
+      mandatory: false,
+      fileName: "recibo.pdf",
+      storagePath: "e1/recibo.pdf",
+      mimeType: "application/pdf",
+      fileSizeBytes: 100,
+      origin: "rh",
+      expiresAt: null,
+      period: "2026-09",
+      uploadedBy: "rh@exemplo.pt",
+    });
+    const v2 = v1.supersede({ fileName: "recibo-v2.pdf", storagePath: "e1/recibo-v2.pdf", mimeType: "application/pdf", fileSizeBytes: 100, expiresAt: null, uploadedBy: "rh@exemplo.pt" });
+    expect(v1.period).toBe("2026-09");
+    expect(v2.period).toBe("2026-09");
+    expect(makeDoc().period).toBeNull();
+  });
+
+  it("isValidDocumentPeriod aceita só YYYY-MM", () => {
+    expect(isValidDocumentPeriod("2026-09")).toBe(true);
+    expect(isValidDocumentPeriod("2026-13")).toBe(false);
+    expect(isValidDocumentPeriod("09/2026")).toBe(false);
+  });
+
   it("createFirstVersion(): versão 1, atual, sem versão anterior", () => {
     const doc = makeDoc();
     expect(doc.version).toBe(1);

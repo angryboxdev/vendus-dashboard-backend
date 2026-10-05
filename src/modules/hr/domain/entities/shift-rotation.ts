@@ -1,5 +1,4 @@
 import { InvalidShiftRotationError } from "../errors.js";
-import type { JobRole } from "./employee.js";
 
 export interface ShiftPattern {
   startTime: string;
@@ -11,7 +10,6 @@ export interface ShiftPattern {
 
 export interface ShiftRotationProps {
   id: string;
-  jobRole: JobRole;
   /** Exactamente 2 no MVP (RH-03: "MVP: 2 colaboradores + Turno A / Turno B"). */
   participantEmployeeIds: [string, string];
   patternA: ShiftPattern;
@@ -52,7 +50,6 @@ function assertPattern(label: string, pattern: ShiftPattern): void {
  */
 export class ShiftRotation {
   readonly id: string;
-  readonly jobRole: JobRole;
   readonly participantEmployeeIds: [string, string];
   readonly patternA: ShiftPattern;
   readonly patternB: ShiftPattern;
@@ -66,7 +63,6 @@ export class ShiftRotation {
 
   private constructor(props: ShiftRotationProps) {
     this.id = props.id;
-    this.jobRole = props.jobRole;
     this.participantEmployeeIds = props.participantEmployeeIds;
     this.patternA = props.patternA;
     this.patternB = props.patternB;
@@ -80,7 +76,6 @@ export class ShiftRotation {
   }
 
   static create(props: {
-    jobRole: JobRole;
     participantEmployeeIds: [string, string];
     patternA: { startTime: string; endTime: string; secondStartTime?: string | null; secondEndTime?: string | null };
     patternB: { startTime: string; endTime: string; secondStartTime?: string | null; secondEndTime?: string | null };
@@ -109,7 +104,6 @@ export class ShiftRotation {
     const now = new Date().toISOString();
     return new ShiftRotation({
       id: crypto.randomUUID(),
-      jobRole: props.jobRole,
       participantEmployeeIds: props.participantEmployeeIds,
       patternA,
       patternB,
@@ -134,7 +128,6 @@ export class ShiftRotation {
   toProps(): ShiftRotationProps {
     return {
       id: this.id,
-      jobRole: this.jobRole,
       participantEmployeeIds: this.participantEmployeeIds,
       patternA: this.patternA,
       patternB: this.patternB,

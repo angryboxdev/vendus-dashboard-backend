@@ -1,6 +1,5 @@
 import type { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
 import type { DocumentCategoryDefinition } from "../../../documents/domain/entities/document-category.js";
-import type { JobRole } from "../entities/employee.js";
 
 // Estado de validade genérico — vive no motor de documentos (Base Organizacional, ticket 03).
 export {
@@ -121,6 +120,8 @@ export interface DocumentRequirementRow {
   expiresAt: string | null;
   /** Null só quando nunca houve nenhum upload para este requisito ("Adicionar"). Não-null sempre que existe um documento — mesmo "pending_validation"/"rejected" (status="missing" aqui) — para a Ação poder ser "Ver", não "Adicionar" do zero. */
   documentId: string | null;
+  /** `YYYY-MM` nas linhas de categorias periódicas; `null` nas restantes. */
+  period: string | null;
 }
 
 interface DocumentRequirementDef {
@@ -162,27 +163,67 @@ export function computeDocumentRequirementRows(
   return buildAllDocumentRequirements(applicableCategories).map((req) => {
     const doc = req.categories.map((c) => byCategory.get(c)).find((d) => d != null);
     if (!doc) {
-      return { requirementId: req.id, requirementLabel: req.label, mandatory: req.mandatory, status: "missing", expiresAt: null, documentId: null };
+      return { requirementId: req.id, requirementLabel: req.label, mandatory: req.mandatory, status: "missing", expiresAt: null, documentId: null, period: null };
     }
-    const displayStatus = computeDocumentDisplayStatus(doc, now);
-    const status: DocumentRequirementRow["status"] =
-      displayStatus === "ok" || displayStatus === "expiring" || displayStatus === "expired" ? displayStatus : "missing";
-    return { requirementId: req.id, requirementLabel: req.label, mandatory: req.mandatory, status, expiresAt: doc.expiresAt, documentId: doc.id };
+    return { requirementId: req.id, requirementLabel: req.label, mandatory: req.mandatory, status: overviewStatus(doc, now), expiresAt: doc.expiresAt, documentId: doc.id, period: null };
   });
 }
 
-/** Categorias de uma organização aplicáveis a um cargo — ativas e sem restrição de cargo, ou cujo `jobRoles` inclui este cargo. */
+function overviewStatus(doc: Pick<EmployeeDocument, "status" | "expiresAt" | "isCurrent">, now: Date): DocumentRequirementRow["status"] {
+  const displayStatus = computeDocumentDisplayStatus(doc, now);
+  return displayStatus === "ok" || displayStatus === "expiring" || displayStatus === "expired" ? displayStatus : "missing";
+}
+
+/**
+ * 1 linha por documento atual de uma categoria periódica (ex: Recibo de
+ * vencimento, ticket 10), com o período — nunca uma linha "Em falta" (§26).
+ * Mais recente primeiro.
+ */
+export function computePeriodicDocumentRows(
+  definitions: readonly DocumentCategoryDefinition[],
+  currentDocuments: readonly Pick<EmployeeDocument, "id" | "category" | "status" | "expiresAt" | "isCurrent" | "period">[],
+  now: Date = new Date(),
+): DocumentRequirementRow[] {
+  const periodic = new Map(definitions.filter((d) => d.active && d.requiresPeriod && d.scope !== "company").map((d) => [d.slug, d]));
+  return currentDocuments
+    .filter((d) => periodic.has(d.category) && d.period !== null)
+    .sort((a, b) => (b.period as string).localeCompare(a.period as string))
+    .map((d) => ({
+      requirementId: d.category,
+      requirementLabel: periodic.get(d.category)!.label,
+      mandatory: false,
+      status: overviewStatus(d, now),
+      expiresAt: d.expiresAt,
+      documentId: d.id,
+      period: d.period,
+    }));
+}
+
+/** O que decide se uma categoria se aplica a um colaborador: o seu Cargo. */
+export interface CategoryApplicabilitySubject {
+  positionId: string | null;
+}
+
+/**
+ * Categorias de uma organização aplicáveis a um colaborador (Base
+ * Organizacional, ticket 09 — "Todos os colaboradores" ou "Cargos
+ * selecionados"):
+ * - ativas e nunca só da Empresa (§11: um documento empresarial nunca gera
+ *   requisito nem "Em falta" individual);
+ * - nunca periódicas (ex: Recibo de vencimento, ticket 10 — §26: um recibo
+ *   não é um requisito permanente; ver `computePeriodicDocumentRows`);
+ * - `positionIds` preenchido → só para colaboradores com um desses cargos;
+ * - vazio → todos os colaboradores.
+ */
 export function applicableCategoriesFor(
   definitions: readonly DocumentCategoryDefinition[],
-  jobRole: JobRole,
+  subject: CategoryApplicabilitySubject,
 ): DocumentCategoryDefinition[] {
-  return definitions.filter(
-    (d) =>
-      d.active &&
-      // Base Organizacional §11: uma categoria só da Empresa nunca gera requisito (nem "Em falta") individual.
-      d.scope !== "company" &&
-      (d.jobRoles.length === 0 || d.jobRoles.includes(jobRole)),
-  );
+  return definitions.filter((d) => {
+    if (!d.active || d.scope === "company" || d.requiresPeriod) return false;
+    if (d.positionIds.length > 0) return subject.positionId !== null && d.positionIds.includes(subject.positionId);
+    return true;
+  });
 }
 
 /** Converte cada categoria configurável obrigatória num requisito de categoria única, para somar a `DEFAULT_MANDATORY_REQUIREMENTS`. */

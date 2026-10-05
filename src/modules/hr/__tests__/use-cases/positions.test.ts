@@ -20,7 +20,7 @@ function setup() {
   const positions = new FakePositionRepository();
   const employees = new FakeEmployeeRepository();
   const auditLog = new FakeHrAuditLog();
-  const prep = Position.create("pos-prep", { name: "Preparador", description: null, operationalCategory: "prep" }, NOW());
+  const prep = Position.create("pos-prep", { name: "Preparador", description: null }, NOW());
   positions.seed(ORG, prep);
   return { positions, employees, auditLog, prep };
 }
@@ -31,11 +31,8 @@ describe("Position", () => {
     expect(normalizePositionName("Gerente  de   Loja")).toBe("gerente de loja");
   });
 
-  it("recusa nome vazio e categoria operacional inválida", () => {
-    expect(() => Position.create("p", { name: "  ", description: null, operationalCategory: "prep" }, NOW())).toThrow(InvalidPositionError);
-    expect(() =>
-      Position.create("p", { name: "X", description: null, operationalCategory: "admin" as never }, NOW()),
-    ).toThrow(InvalidPositionError);
+  it("recusa nome vazio", () => {
+    expect(() => Position.create("p", { name: "  ", description: null }, NOW())).toThrow(InvalidPositionError);
   });
 });
 
@@ -45,7 +42,7 @@ describe("CreatePositionUseCase", () => {
     const useCase = new CreatePositionUseCase(positions, auditLog, NOW, () => "pos-new");
 
     await expect(
-      useCase.execute({ organizationId: ORG, actor: "rh@exemplo.pt", name: " preparador ", description: null, operationalCategory: "prep" }),
+      useCase.execute({ organizationId: ORG, actor: "rh@exemplo.pt", name: " preparador ", description: null }),
     ).rejects.toBeInstanceOf(DuplicatePositionNameError);
     expect(await positions.findAll(ORG)).toHaveLength(1);
   });
@@ -59,7 +56,6 @@ describe("CreatePositionUseCase", () => {
       actor: "rh@exemplo.pt",
       name: "Gerente de Loja",
       description: "Responsável pela loja",
-      operationalCategory: "manager",
     });
 
     expect(dto).toMatchObject({ id: "pos-new", name: "Gerente de Loja", active: true, employeeCount: 0 });
@@ -71,7 +67,7 @@ describe("CreatePositionUseCase", () => {
     const { positions, auditLog } = setup();
     const useCase = new CreatePositionUseCase(positions, auditLog, NOW, () => "pos-other");
     await expect(
-      useCase.execute({ organizationId: OTHER_ORG, actor: "a", name: "Preparador", description: null, operationalCategory: "prep" }),
+      useCase.execute({ organizationId: OTHER_ORG, actor: "a", name: "Preparador", description: null }),
     ).resolves.toMatchObject({ name: "Preparador" });
   });
 });
@@ -79,8 +75,8 @@ describe("CreatePositionUseCase", () => {
 describe("ListPositionsUseCase", () => {
   it("conta só colaboradores ativos com o cargo", async () => {
     const { positions, employees } = setup();
-    employees.seed(ORG, Employee.create({ fullName: "Colaborador A", positionId: "pos-prep", jobRole: "prep" }));
-    employees.seed(ORG, Employee.create({ fullName: "Colaborador B", positionId: "pos-prep", jobRole: "prep" }).deactivate());
+    employees.seed(ORG, Employee.create({ fullName: "Colaborador A", positionId: "pos-prep" }));
+    employees.seed(ORG, Employee.create({ fullName: "Colaborador B", positionId: "pos-prep" }).deactivate());
 
     const [dto] = await new ListPositionsUseCase(positions, employees).execute(ORG);
 
@@ -89,27 +85,9 @@ describe("ListPositionsUseCase", () => {
 });
 
 describe("UpdatePositionUseCase", () => {
-  it("mudar a categoria operacional propaga-se ao jobRole de quem tem o cargo (D4)", async () => {
-    const { positions, employees, auditLog } = setup();
-    const holder = Employee.create({ fullName: "Colaborador A", positionId: "pos-prep", jobRole: "prep" });
-    const other = Employee.create({ fullName: "Colaborador B", jobRole: "prep" });
-    employees.seed(ORG, holder);
-    employees.seed(ORG, other);
-
-    await new UpdatePositionUseCase(positions, employees, auditLog, NOW).execute({
-      organizationId: ORG,
-      actor: "rh@exemplo.pt",
-      id: "pos-prep",
-      operationalCategory: "service",
-    });
-
-    expect((await employees.findById(ORG, holder.id))?.jobRole).toBe("service");
-    expect((await employees.findById(ORG, other.id))?.jobRole).toBe("prep");
-  });
-
   it("renomear para um nome já existente é recusado", async () => {
     const { positions, employees, auditLog } = setup();
-    positions.seed(ORG, Position.create("pos-mgr", { name: "Gerente", description: null, operationalCategory: "manager" }, NOW()));
+    positions.seed(ORG, Position.create("pos-mgr", { name: "Gerente", description: null }, NOW()));
 
     await expect(
       new UpdatePositionUseCase(positions, employees, auditLog, NOW).execute({ organizationId: ORG, actor: "a", id: "pos-mgr", name: "PREPARADOR" }),
@@ -120,7 +98,7 @@ describe("UpdatePositionUseCase", () => {
 describe("SetPositionActiveUseCase", () => {
   it("inativa sem apagar e sem tirar o cargo a quem já o tem", async () => {
     const { positions, employees, auditLog } = setup();
-    const holder = Employee.create({ fullName: "Colaborador A", positionId: "pos-prep", jobRole: "prep" });
+    const holder = Employee.create({ fullName: "Colaborador A", positionId: "pos-prep" });
     employees.seed(ORG, holder);
 
     const dto = await new SetPositionActiveUseCase(positions, employees, auditLog, NOW).execute({

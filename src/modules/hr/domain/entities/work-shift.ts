@@ -1,7 +1,8 @@
 import { InvalidWorkShiftError } from "../errors.js";
 
 export type ShiftStatus = "draft" | "published";
-export type ShiftSource = "manual" | "base_schedule" | "rotation";
+/** `template`/`automation`: gerado por um Modelo de turno aplicado / por uma Automatização (RH 2.0). */
+export type ShiftSource = "manual" | "base_schedule" | "rotation" | "template" | "automation";
 export type ShiftKind = "direct" | "split";
 
 export interface WorkShiftSegment {
@@ -31,6 +32,8 @@ export interface WorkShiftProps {
   rotationId: string | null;
   /** Tag partilhada por todos os turnos da mesma série recorrente (sem tabela pai) — null = avulso, ou já destacado por edição individual. */
   seriesId: string | null;
+  /** Modelo de turno de origem (RH 2.0) — só referência; o horário/local acima são cópia (snapshot). */
+  templateId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -40,8 +43,12 @@ function toMinutes(hhmm: string): number {
   return (h ?? 0) * 60 + (m ?? 0);
 }
 
-/** Valida a forma completa de horários de um turno (direto/repartido/noturno) — mesma regra usada em create/edição manual/reaplicação de template. */
-function assertShape(props: {
+/**
+ * Valida a forma completa de horários de um turno (direto/repartido/noturno)
+ * — mesma regra usada em create/edição manual/reaplicação de template e nos
+ * Modelos de turno (RH 2.0). Lança `InvalidWorkShiftError`.
+ */
+export function assertShiftShape(props: {
   startTime: string;
   endTime: string;
   endsNextDay: boolean;
@@ -95,6 +102,7 @@ export class WorkShift {
   readonly source: ShiftSource;
   readonly rotationId: string | null;
   readonly seriesId: string | null;
+  readonly templateId: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 
@@ -114,6 +122,7 @@ export class WorkShift {
     this.source = props.source;
     this.rotationId = props.rotationId;
     this.seriesId = props.seriesId;
+    this.templateId = props.templateId;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
   }
@@ -157,11 +166,12 @@ export class WorkShift {
     source?: ShiftSource;
     rotationId?: string | null;
     seriesId?: string | null;
+    templateId?: string | null;
   }): WorkShift {
     const endsNextDay = props.endsNextDay ?? false;
     const secondStartTime = props.secondStartTime ?? null;
     const secondEndTime = props.secondEndTime ?? null;
-    assertShape({ startTime: props.startTime, endTime: props.endTime, endsNextDay, secondStartTime, secondEndTime });
+    assertShiftShape({ startTime: props.startTime, endTime: props.endTime, endsNextDay, secondStartTime, secondEndTime });
     const now = new Date().toISOString();
     return new WorkShift({
       id: crypto.randomUUID(),
@@ -179,6 +189,7 @@ export class WorkShift {
       source: props.source ?? "manual",
       rotationId: props.rotationId ?? null,
       seriesId: props.seriesId ?? null,
+      templateId: props.templateId ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -210,7 +221,7 @@ export class WorkShift {
     const endsNextDay = patch.endsNextDay ?? this.endsNextDay;
     const secondStartTime = patch.secondStartTime !== undefined ? patch.secondStartTime : this.secondStartTime;
     const secondEndTime = patch.secondEndTime !== undefined ? patch.secondEndTime : this.secondEndTime;
-    assertShape({ startTime, endTime, endsNextDay, secondStartTime, secondEndTime });
+    assertShiftShape({ startTime, endTime, endsNextDay, secondStartTime, secondEndTime });
     return new WorkShift({
       ...this.toProps(),
       ...patch,
@@ -247,7 +258,7 @@ export class WorkShift {
     const endsNextDay = patch.endsNextDay ?? false;
     const secondStartTime = patch.secondStartTime ?? null;
     const secondEndTime = patch.secondEndTime ?? null;
-    assertShape({ startTime: patch.startTime, endTime: patch.endTime, endsNextDay, secondStartTime, secondEndTime });
+    assertShiftShape({ startTime: patch.startTime, endTime: patch.endTime, endsNextDay, secondStartTime, secondEndTime });
     return new WorkShift({
       ...this.toProps(),
       startTime: patch.startTime,
@@ -283,7 +294,7 @@ export class WorkShift {
     const endsNextDay = patch.endsNextDay ?? this.endsNextDay;
     const secondStartTime = patch.secondStartTime !== undefined ? patch.secondStartTime : this.secondStartTime;
     const secondEndTime = patch.secondEndTime !== undefined ? patch.secondEndTime : this.secondEndTime;
-    assertShape({ startTime, endTime, endsNextDay, secondStartTime, secondEndTime });
+    assertShiftShape({ startTime, endTime, endsNextDay, secondStartTime, secondEndTime });
     return new WorkShift({
       ...this.toProps(),
       ...patch,
@@ -317,6 +328,7 @@ export class WorkShift {
       source: this.source,
       rotationId: this.rotationId,
       seriesId: this.seriesId,
+      templateId: this.templateId,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };

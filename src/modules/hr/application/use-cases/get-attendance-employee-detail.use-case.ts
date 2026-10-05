@@ -178,7 +178,7 @@ export class GetAttendanceEmployeeDetailUseCase implements GetAttendanceEmployee
     return {
       employeeId: employee.id,
       employeeName: employee.fullName,
-      jobRole: employee.jobRole,
+      positionId: employee.positionId,
       kpis: {
         plannedShiftsCount,
         actualShiftsCount,

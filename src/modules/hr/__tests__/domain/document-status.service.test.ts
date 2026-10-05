@@ -10,13 +10,13 @@ import {
 } from "../../domain/services/document-status.service.js";
 import { DocumentCategoryDefinition } from "../../../documents/domain/entities/document-category.js";
 import type { DocumentStatus } from "../../../documents/domain/entities/document.js";
-import type { JobRole } from "../../domain/entities/employee.js";
 
 function categoryDef(overrides: {
   slug: string;
   label?: string;
   mandatory?: boolean;
-  jobRoles?: JobRole[];
+  positionIds?: string[];
+  scope?: "employee" | "company" | "both";
   active?: boolean;
 }): DocumentCategoryDefinition {
   const def = DocumentCategoryDefinition.create({
@@ -24,8 +24,9 @@ function categoryDef(overrides: {
     slug: overrides.slug,
     label: overrides.label ?? overrides.slug,
     mandatory: overrides.mandatory ?? false,
-    jobRoles: overrides.jobRoles ?? [],
+    positionIds: overrides.positionIds ?? [],
     acceptedMimeTypes: ["application/pdf"],
+    scope: overrides.scope ?? "employee",
   });
   return overrides.active === false ? def.setActive(false) : def;
 }
@@ -155,20 +156,21 @@ describe("deriveOverallDocumentSituation", () => {
 });
 
 describe("applicableCategoriesFor", () => {
-  it("inclui categorias sem restrição de cargo (jobRoles vazio)", () => {
-    const defs = [categoryDef({ slug: "a", jobRoles: [] })];
-    expect(applicableCategoriesFor(defs, "service").map((d) => d.slug)).toEqual(["a"]);
+  it("ticket 09: 'Cargos selecionados' aplica só a colaboradores com um desses cargos", () => {
+    const defs = [categoryDef({ slug: "curso_gerente", positionIds: ["pos-gerente"] }), categoryDef({ slug: "contrato" })];
+    expect(applicableCategoriesFor(defs, { positionId: "pos-gerente" }).map((d) => d.slug)).toEqual(["curso_gerente", "contrato"]);
+    expect(applicableCategoriesFor(defs, { positionId: "pos-prep" }).map((d) => d.slug)).toEqual(["contrato"]);
+    expect(applicableCategoriesFor(defs, { positionId: null }).map((d) => d.slug)).toEqual(["contrato"]);
   });
 
-  it("só inclui categorias cujo jobRoles inclui o cargo do colaborador", () => {
-    const defs = [categoryDef({ slug: "a", jobRoles: ["manager"] }), categoryDef({ slug: "b", jobRoles: ["service", "prep"] })];
-    expect(applicableCategoriesFor(defs, "service").map((d) => d.slug)).toEqual(["b"]);
-    expect(applicableCategoriesFor(defs, "manager").map((d) => d.slug)).toEqual(["a"]);
+  it("categoria só da Empresa nunca se aplica a colaboradores; 'Ambos' aplica", () => {
+    const defs = [categoryDef({ slug: "apolice_empresa", scope: "company" }), categoryDef({ slug: "apolice_at", scope: "both" })];
+    expect(applicableCategoriesFor(defs, { positionId: null }).map((d) => d.slug)).toEqual(["apolice_at"]);
   });
 
   it("exclui categorias desativadas mesmo que o cargo aplique", () => {
     const defs = [categoryDef({ slug: "a", active: false })];
-    expect(applicableCategoriesFor(defs, "service")).toEqual([]);
+    expect(applicableCategoriesFor(defs, { positionId: null })).toEqual([]);
   });
 });
 
@@ -204,8 +206,8 @@ describe("computeDocumentRequirementRows", () => {
     const applicable = [categoryDef({ slug: "contrato_trabalho", label: "Contrato de trabalho", mandatory: true })];
     const rows = computeDocumentRequirementRows(applicable, [], NOW);
     expect(rows).toEqual([
-      { requirementId: "identificacao", requirementLabel: "Documento de identificação", mandatory: true, status: "missing", expiresAt: null, documentId: null },
-      { requirementId: "contrato_trabalho", requirementLabel: "Contrato de trabalho", mandatory: true, status: "missing", expiresAt: null, documentId: null },
+      { requirementId: "identificacao", requirementLabel: "Documento de identificação", mandatory: true, status: "missing", expiresAt: null, documentId: null, period: null },
+      { requirementId: "contrato_trabalho", requirementLabel: "Contrato de trabalho", mandatory: true, status: "missing", expiresAt: null, documentId: null, period: null },
     ]);
   });
 
@@ -213,7 +215,7 @@ describe("computeDocumentRequirementRows", () => {
     const applicable = [categoryDef({ slug: "certificado_morada", label: "Certificado de morada", mandatory: false })];
     const rows = computeDocumentRequirementRows(applicable, [], NOW);
     const row = rows.find((r) => r.requirementId === "certificado_morada");
-    expect(row).toEqual({ requirementId: "certificado_morada", requirementLabel: "Certificado de morada", mandatory: false, status: "missing", expiresAt: null, documentId: null });
+    expect(row).toEqual({ requirementId: "certificado_morada", requirementLabel: "Certificado de morada", mandatory: false, status: "missing", expiresAt: null, documentId: null, period: null });
   });
 
   it("documento 'ok' aparece com o seu id e validade", () => {
@@ -221,7 +223,7 @@ describe("computeDocumentRequirementRows", () => {
     const currentDoc = { id: "doc-1", category: "contrato_trabalho", status: "valid" as DocumentStatus, expiresAt: "2027-01-01", isCurrent: true };
     const rows = computeDocumentRequirementRows(applicable, [currentDoc], NOW);
     const row = rows.find((r) => r.requirementId === "contrato_trabalho");
-    expect(row).toEqual({ requirementId: "contrato_trabalho", requirementLabel: "Contrato de trabalho", mandatory: true, status: "ok", expiresAt: "2027-01-01", documentId: "doc-1" });
+    expect(row).toEqual({ requirementId: "contrato_trabalho", requirementLabel: "Contrato de trabalho", mandatory: true, status: "ok", expiresAt: "2027-01-01", documentId: "doc-1", period: null });
   });
 
   it("documento 'a expirar'/'expirado' mantém o estado real (não vira 'ok' nem 'missing')", () => {
@@ -243,6 +245,6 @@ describe("computeDocumentRequirementRows", () => {
   it("identificação é satisfeita por qualquer uma das 3 categorias (cartão de cidadão OU título de residência OU passaporte)", () => {
     const passaporte = { id: "doc-1", category: "passaporte", status: "valid" as DocumentStatus, expiresAt: null, isCurrent: true };
     const row = computeDocumentRequirementRows([], [passaporte], NOW).find((r) => r.requirementId === "identificacao");
-    expect(row).toEqual({ requirementId: "identificacao", requirementLabel: "Documento de identificação", mandatory: true, status: "ok", expiresAt: null, documentId: "doc-1" });
+    expect(row).toEqual({ requirementId: "identificacao", requirementLabel: "Documento de identificação", mandatory: true, status: "ok", expiresAt: null, documentId: "doc-1", period: null });
   });
 });

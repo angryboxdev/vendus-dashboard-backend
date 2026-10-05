@@ -52,7 +52,6 @@ async function setup() {
         slug: "apolice_empresa",
         label: "Apólice de seguro",
         mandatory: false,
-        jobRoles: [],
         acceptedMimeTypes: ["application/pdf"],
         scope: "company",
       }),

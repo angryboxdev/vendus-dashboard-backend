@@ -26,8 +26,8 @@ function setup() {
   const auditLog = new FakeHrAuditLog();
   const positions = new FakePositionRepository();
   const locations = new FakeLocationRepository();
-  positions.seed(ORG, Position.create("pos-mgr", { name: "Gerente de Loja", description: null, operationalCategory: "manager" }, NOW));
-  positions.seed(ORG, Position.create("pos-old", { name: "Copeiro", description: null, operationalCategory: "service" }, NOW).setActive(false, NOW));
+  positions.seed(ORG, Position.create("pos-mgr", { name: "Gerente de Loja", description: null }, NOW));
+  positions.seed(ORG, Position.create("pos-old", { name: "Copeiro", description: null }, NOW).setActive(false, NOW));
   locations.seed(ORG, [location("loc-mbs", "Mercado"), location("loc-gaia", "Gaia"), location("loc-closed", "Antiga loja", false)]);
   return {
     employees,
@@ -38,14 +38,6 @@ function setup() {
 }
 
 describe("Cargo e locais do colaborador", () => {
-  it("o jobRole passa a ser a categoria operacional do cargo (D4)", async () => {
-    const { create } = setup();
-
-    const dto = await create.execute({ organizationId: ORG, actor: "rh", fullName: "Colaborador A", positionId: "pos-mgr" });
-
-    expect(dto).toMatchObject({ positionId: "pos-mgr", jobRole: "manager" });
-  });
-
   it("cargo inexistente ou inativo não pode ser atribuído", async () => {
     const { create } = setup();
 
@@ -59,7 +51,7 @@ describe("Cargo e locais do colaborador", () => {
 
   it("quem já tem um cargo entretanto inativado continua a poder ser editado", async () => {
     const { employees, update } = setup();
-    const existing = Employee.create({ fullName: "Colaborador A", positionId: "pos-old", jobRole: "service" });
+    const existing = Employee.create({ fullName: "Colaborador A", positionId: "pos-old" });
     employees.seed(ORG, existing);
 
     const dto = await update.execute({ organizationId: ORG, actor: "rh", id: existing.id, data: { phone: "910000000", positionId: "pos-old" } });

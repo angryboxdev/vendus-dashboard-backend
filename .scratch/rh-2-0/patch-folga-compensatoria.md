@@ -1,6 +1,6 @@
 # PATCH CORRETIVO — Folga Compensatória (à task RH 2.0)
 
-Status: blocked — aguarda a task RH 2.0 (ainda não recebida; verificado em 2026-10-05 que nada disto existe no código: o Fecho Mensal não trata feriado trabalhado e a folga compensatória só existe como tipo de ausência legacy `compensatory` em `hrLeaveService.ts`, sem crédito/saldo).
+Status: incorporado na spec (`spec.md`, tickets 07–08) — task RH 2.0 recebida em 2026-10-05.
 Recebido: 2026-10-05 (versão consolidada colada pelo utilizador; substitui a primeira versão "Task_Corretiva_Fecho_Mensal_Folga_Compensatoria.md", com o mesmo conteúdo).
 Dependências: Base Organizacional ticket 04 (feriados) — o feriado trabalhado precisa dos feriados.
 

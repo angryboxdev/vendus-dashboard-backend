@@ -1,7 +1,7 @@
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
 import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
 import type { DocumentCategoryRepositoryPort } from "../../../documents/domain/ports/out/document-category-repository.port.js";
-import { applicableCategoriesFor, computeDocumentRequirementRows } from "../../domain/services/document-status.service.js";
+import { applicableCategoriesFor, computeDocumentRequirementRows, computePeriodicDocumentRows } from "../../domain/services/document-status.service.js";
 import type {
   DocumentOverviewRowDTO,
   GetDocumentOverviewCommand,
@@ -9,7 +9,9 @@ import type {
 } from "../../domain/ports/in/employee-document.ports.js";
 
 /**
- * Visão agregada de todos os documentos de todos os colaboradores ativos —
+ * Visão agregada dos documentos de todos os colaboradores ativos: todos os
+ * requisitos obrigatórios (com ou sem documento) e os opcionais que já têm
+ * documento —
  * fonte única da aba "Pessoas > Documentos" (task "Melhorar Visão Geral e
  * reorganizar Pessoas"). Reaproveita `computeDocumentRequirementRows`
  * (mesma função pura já usada, de forma mais restrita, pelos KPIs/perfil)
@@ -37,9 +39,17 @@ export class GetDocumentOverviewUseCase implements GetDocumentOverviewPort {
 
     const rows: DocumentOverviewRowDTO[] = [];
     for (const employee of employees) {
-      const applicable = applicableCategoriesFor(categoryDefs, employee.jobRole);
+      const applicable = applicableCategoriesFor(categoryDefs, employee);
       const requirementRows = computeDocumentRequirementRows(applicable, documentsByEmployee.get(employee.id) ?? []);
       for (const r of requirementRows) {
+        // Ticket 09: uma categoria opcional sem documento não é pendência — não
+        // aparece como "Em falta" (evita KPIs falsos). Com documento aparece,
+        // para se acompanhar a validade.
+        if (!r.mandatory && r.documentId === null) continue;
+        rows.push({ employeeId: employee.id, employeeName: employee.fullName, ...r });
+      }
+      // Ticket 10: recibos (e outras categorias periódicas) — uma linha por período.
+      for (const r of computePeriodicDocumentRows(categoryDefs, documentsByEmployee.get(employee.id) ?? [])) {
         rows.push({ employeeId: employee.id, employeeName: employee.fullName, ...r });
       }
     }

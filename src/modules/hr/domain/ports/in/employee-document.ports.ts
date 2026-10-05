@@ -12,6 +12,8 @@ export interface EmployeeDocumentDTO {
   fileSizeBytes: number | null;
   origin: DocumentOrigin;
   expiresAt: string | null;
+  /** `YYYY-MM` nas categorias periódicas (ex: Recibo de vencimento); `null` nas restantes. */
+  period: string | null;
   version: number;
   previousVersionId: string | null;
   displayStatus: DocumentDisplayStatus;
@@ -40,9 +42,13 @@ export interface UploadEmployeeDocumentCommand {
   mandatory: boolean;
   origin: DocumentOrigin;
   expiresAt: string | null;
+  /** Obrigatório (`YYYY-MM`) se a categoria for periódica; proibido nas restantes. */
+  period?: string | null;
   buffer: Buffer;
   filename: string;
   mimeType: string;
+  /** Preenchido pela importação em massa de recibos: liga as entradas do histórico do mesmo lote. */
+  importBatchId?: string;
 }
 
 export interface UploadEmployeeDocumentPort {
@@ -60,6 +66,8 @@ export interface ReplaceEmployeeDocumentCommand {
   buffer: Buffer;
   filename: string;
   mimeType: string;
+  /** Ver `UploadEmployeeDocumentCommand.importBatchId`. */
+  importBatchId?: string;
 }
 
 export interface ReplaceEmployeeDocumentPort {
@@ -115,6 +123,8 @@ export interface DocumentOverviewRowDTO {
   status: "ok" | "expiring" | "expired" | "missing";
   expiresAt: string | null;
   documentId: string | null;
+  /** `YYYY-MM` nas linhas de categorias periódicas (uma por documento atual); `null` nas restantes. */
+  period: string | null;
 }
 
 export interface GetDocumentOverviewCommand {

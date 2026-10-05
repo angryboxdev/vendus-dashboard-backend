@@ -3,11 +3,10 @@ import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-quer
 import {
   DocumentCategoryDefinition,
   type DocumentCategoryScope,
-  type OperationalCategory,
 } from "../../domain/entities/document-category.js";
 import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
 
-const SELECT = "id, org_id, slug, label, mandatory, job_roles, accepted_mime_types, scope, active, created_at, updated_at";
+const SELECT = "id, org_id, slug, label, mandatory, position_ids, accepted_mime_types, scope, requires_period, active, created_at, updated_at";
 
 interface Row {
   id: string;
@@ -15,9 +14,10 @@ interface Row {
   slug: string;
   label: string;
   mandatory: boolean;
-  job_roles: string[];
+  position_ids: string[] | null;
   accepted_mime_types: string[];
   scope: string;
+  requires_period: boolean | null;
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -30,9 +30,10 @@ function rowToDefinition(row: Row): DocumentCategoryDefinition {
     slug: row.slug,
     label: row.label,
     mandatory: row.mandatory,
-    jobRoles: row.job_roles as OperationalCategory[],
+    positionIds: row.position_ids ?? [],
     acceptedMimeTypes: row.accepted_mime_types,
     scope: row.scope as DocumentCategoryScope,
+    requiresPeriod: row.requires_period ?? false,
     active: row.active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -46,7 +47,7 @@ function definitionToRow(def: DocumentCategoryDefinition): Record<string, unknow
     slug: props.slug,
     label: props.label,
     mandatory: props.mandatory,
-    job_roles: props.jobRoles,
+    position_ids: props.positionIds,
     accepted_mime_types: props.acceptedMimeTypes,
     scope: props.scope,
     active: props.active,

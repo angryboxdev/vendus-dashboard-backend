@@ -1,6 +1,5 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import { DocumentCategoryDefinition } from "../../domain/entities/document-category.js";
-import type { OperationalCategory as JobRole } from "../../domain/entities/document-category.js";
 import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
 
 const DEFAULT_ACCEPTED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png"];
@@ -11,15 +10,19 @@ const DEFAULT_ACCEPTED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png
  * existiam antes desta feature (e não mexem com categorias) continuem a
  * passar sem alterar nenhuma asserção.
  */
-const DEFAULT_SEED: Array<{ slug: string; label: string; mandatory: boolean; jobRoles: JobRole[] }> = [
-  { slug: "contrato_trabalho", label: "Contrato de trabalho", mandatory: true, jobRoles: [] },
-  { slug: "comprovativo_iban", label: "Comprovativo de IBAN", mandatory: true, jobRoles: [] },
-  { slug: "apolice_seguro_at", label: "Apólice de seguro de acidentes de trabalho", mandatory: true, jobRoles: [] },
-  { slug: "certificado_morada", label: "Certificado de morada", mandatory: false, jobRoles: [] },
-  { slug: "ficha_colaborador", label: "Ficha de colaborador", mandatory: false, jobRoles: [] },
-  { slug: "formacao_seguranca", label: "Formação de segurança", mandatory: false, jobRoles: [] },
-  { slug: "atestado_saude", label: "Atestado de saúde", mandatory: false, jobRoles: [] },
-  { slug: "nif", label: "NIF", mandatory: false, jobRoles: [] },
+const DEFAULT_SEED: Array<{ slug: string; label: string; mandatory: boolean; requiresPeriod?: boolean }> = [
+  { slug: "contrato_trabalho", label: "Contrato de trabalho", mandatory: true },
+  { slug: "comprovativo_iban", label: "Comprovativo de IBAN", mandatory: true },
+  { slug: "apolice_seguro_at", label: "Apólice de seguro de acidentes de trabalho", mandatory: true },
+  { slug: "certificado_morada", label: "Certificado de morada", mandatory: false },
+  { slug: "ficha_colaborador", label: "Ficha de colaborador", mandatory: false },
+  { slug: "formacao_seguranca", label: "Formação de segurança", mandatory: false },
+  { slug: "atestado_saude", label: "Atestado de saúde", mandatory: false },
+  { slug: "nif", label: "NIF", mandatory: false },
+  // `20261006120000_payslips_period.sql` (ticket 10).
+  { slug: "recibo_vencimento", label: "Recibo de vencimento", mandatory: false, requiresPeriod: true },
+  // `20261006130000_recibo_verde_category.sql`.
+  { slug: "recibo_verde", label: "Recibo verde", mandatory: false, requiresPeriod: true },
 ];
 
 export class FakeDocumentCategoryRepository implements DocumentCategoryRepositoryPort {
@@ -37,8 +40,8 @@ export class FakeDocumentCategoryRepository implements DocumentCategoryRepositor
           slug: seed.slug,
           label: seed.label,
           mandatory: seed.mandatory,
-          jobRoles: seed.jobRoles,
-          acceptedMimeTypes: DEFAULT_ACCEPTED_MIME_TYPES,
+          acceptedMimeTypes: seed.requiresPeriod ? ["application/pdf"] : DEFAULT_ACCEPTED_MIME_TYPES,
+          requiresPeriod: seed.requiresPeriod ?? false,
         });
         this.byOrg.get(key)!.set(def.id, def);
       }

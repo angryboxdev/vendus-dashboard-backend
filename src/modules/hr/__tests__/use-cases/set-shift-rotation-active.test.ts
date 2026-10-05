@@ -20,7 +20,6 @@ describe("SetShiftRotationActiveUseCase", () => {
     employees.seed(ORG, andres);
     employees.seed(ORG, gabriel);
     const rotation = ShiftRotation.create({
-      jobRole: "service",
       participantEmployeeIds: [andres.id, gabriel.id],
       patternA: { startTime: "11:30", endTime: "15:30" },
       patternB: { startTime: "17:00", endTime: "23:00" },

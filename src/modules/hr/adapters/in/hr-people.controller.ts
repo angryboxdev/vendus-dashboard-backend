@@ -11,6 +11,8 @@ import {
   PositionNotFoundError,
   DocumentCategoryAlreadyExistsError,
   DocumentNotCurrentError,
+  DocumentPeriodAlreadyExistsError,
+  InvalidDocumentError,
 } from "../../domain/errors.js";
 import type { ViewerRole } from "../../domain/services/sensitive-field-masking.service.js";
 import type {
@@ -69,7 +71,7 @@ function readEmployeeFields(body: Record<string, unknown>): EmployeeOptionalFiel
   if (typeof body.employmentType === "string" && EMPLOYMENT_TYPES.has(body.employmentType)) {
     out.employmentType = body.employmentType;
   }
-  // Cargo/locais (Base Organizacional, tickets 07/08) — `jobRole` deixou de ser aceite: deriva do cargo (D4).
+  // Cargo/locais (Base Organizacional, tickets 07/08) — a antiga "Função" (`jobRole`) já não é aceite nem usada.
   if ("positionId" in body) out.positionId = typeof body.positionId === "string" && body.positionId ? body.positionId : null;
   if ("primaryLocationId" in body)
     out.primaryLocationId = typeof body.primaryLocationId === "string" && body.primaryLocationId ? body.primaryLocationId : null;
@@ -322,7 +324,7 @@ export class HrPeopleController {
       }
     });
 
-    /** POST /api/hr/people/:id/documents (multipart "file") — nova categoria. */
+    /** POST /api/hr/people/:id/documents (multipart "file") — nova categoria (ou novo período, nas categorias periódicas: campo "period" YYYY-MM). */
     this.router.post("/hr/people/:id/documents", requireMinRole("manager"), documentUpload.single("file"), async (req, res) => {
       try {
         if (!req.file) {
@@ -343,6 +345,7 @@ export class HrPeopleController {
           mandatory: body.mandatory === "true",
           origin,
           expiresAt: body.expiresAt || null,
+          period: body.period || null,
           buffer: req.file.buffer,
           filename: req.file.originalname,
           mimeType: req.file.mimetype,
@@ -355,6 +358,14 @@ export class HrPeopleController {
         }
         if (e instanceof DocumentCategoryAlreadyExistsError) {
           res.status(409).json({ error: e.message });
+          return;
+        }
+        if (e instanceof DocumentPeriodAlreadyExistsError) {
+          res.status(409).json({ error: e.message, code: "period_already_exists", existingDocumentId: e.existingDocumentId });
+          return;
+        }
+        if (e instanceof InvalidDocumentError) {
+          res.status(400).json({ error: e.message });
           return;
         }
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });

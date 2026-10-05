@@ -75,6 +75,9 @@ export async function getPublicHolidays(
   let query = createScopedQuery(organizationId)
     .table("hr_public_holidays")
     .select("*")
+    // Base Organizacional D6: só feriados da empresa inteira (os de um Local
+    // específico são geridos no Calendário e não afetam Férias/Escalas).
+    .is("location_id", null)
     .order("date");
   if (year != null) {
     query = query
@@ -134,6 +137,7 @@ export async function calculateWorkingDays(
   const { data } = await createScopedQuery(organizationId)
     .table("hr_public_holidays")
     .select("date")
+    .is("location_id", null)
     .gte("date", `${startYear}-01-01`)
     .lte("date", `${endYear}-12-31`);
   ((data ?? []) as unknown as { date: string }[]).forEach((r) => holidaySet.add(r.date));

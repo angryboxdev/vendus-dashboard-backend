@@ -1,5 +1,4 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { JobRole } from "../../entities/employee.js";
 
 /**
  * Task "Assiduidade — Conferência, Por Colaborador e Horas & Saldos":
@@ -13,7 +12,8 @@ export interface MonthlyAttendanceSummaryRowDTO {
   employeeId: string;
   employeeName: string;
   /** Redesign do Fecho Mensal — subtítulo do nome na tabela geral. */
-  jobRole: JobRole;
+  /** Cargo do colaborador (o nome resolve-se pela lista de cargos). */
+  positionId: string | null;
   /** Turnos planeados no mês (task, secção 17, coluna "Turnos"). */
   plannedShiftsCount: number;
   actualShiftsCount: number;

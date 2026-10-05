@@ -1,6 +1,6 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { LocationRepositoryPort } from "../../../locations/domain/ports/out/location-repository.port.js";
-import type { Employee, JobRole } from "../../domain/entities/employee.js";
+import type { Employee } from "../../domain/entities/employee.js";
 import {
   InactivePositionError,
   InvalidEmployeeLocationError,
@@ -16,8 +16,6 @@ export interface AssignmentInput {
 
 export interface ResolvedAssignments {
   positionId?: string | null;
-  /** Só definido quando o cargo muda — a categoria operacional do novo cargo (D4). */
-  jobRole?: JobRole;
   primaryLocationId?: string | null;
   authorizedLocationIds?: string[];
 }
@@ -28,7 +26,6 @@ export interface ResolvedAssignments {
  * - cargo tem de existir na organização; um cargo inativo nunca é
  *   atribuído de novo, mas quem já o tem mantém-no (gravar o colaborador
  *   sem mudar de cargo nunca falha por isso);
- * - o `jobRole` passa a ser a categoria operacional do cargo (D4);
  * - locais têm de existir na organização; um local inativo só é aceite se
  *   o colaborador já o tinha (histórico preservado), nunca numa atribuição
  *   nova.
@@ -49,7 +46,6 @@ export async function resolveEmployeeAssignments(
       const position = await positions.findById(organizationId, input.positionId);
       if (!position) throw new PositionNotFoundError(input.positionId);
       if (!position.active && current?.positionId !== position.id) throw new InactivePositionError(position.name);
-      resolved.jobRole = position.operationalCategory;
     }
   }
 

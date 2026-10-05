@@ -8,7 +8,6 @@ import { InvalidShiftRotationError } from "../../domain/errors.js";
 
 function makeRotation(anchorDate = "2026-05-11") {
   return ShiftRotation.create({
-    jobRole: "service",
     participantEmployeeIds: ["andres", "gabriel"],
     patternA: { startTime: "11:30", endTime: "15:30" },
     patternB: { startTime: "17:00", endTime: "23:00" },
@@ -21,7 +20,6 @@ describe("ShiftRotation", () => {
   it("rejeita os 2 participantes iguais", () => {
     expect(() =>
       ShiftRotation.create({
-        jobRole: "service",
         participantEmployeeIds: ["andres", "andres"],
         patternA: { startTime: "11:30", endTime: "15:30" },
         patternB: { startTime: "17:00", endTime: "23:00" },
@@ -34,7 +32,6 @@ describe("ShiftRotation", () => {
   it("rejeita um padrão com início >= fim", () => {
     expect(() =>
       ShiftRotation.create({
-        jobRole: "service",
         participantEmployeeIds: ["andres", "gabriel"],
         patternA: { startTime: "15:30", endTime: "11:30" },
         patternB: { startTime: "17:00", endTime: "23:00" },
@@ -76,7 +73,6 @@ describe("ShiftRotation", () => {
 
   it("aceita um padrão repartido (2º período válido)", () => {
     const rotation = ShiftRotation.create({
-      jobRole: "service",
       participantEmployeeIds: ["andres", "gabriel"],
       patternA: { startTime: "12:00", endTime: "16:00", secondStartTime: "19:00", secondEndTime: "23:00" },
       patternB: { startTime: "17:00", endTime: "23:00" },
@@ -90,7 +86,6 @@ describe("ShiftRotation", () => {
   it("rejeita 2º período sobreposto ao 1º", () => {
     expect(() =>
       ShiftRotation.create({
-        jobRole: "service",
         participantEmployeeIds: ["andres", "gabriel"],
         patternA: { startTime: "12:00", endTime: "16:00", secondStartTime: "15:00", secondEndTime: "20:00" },
         patternB: { startTime: "17:00", endTime: "23:00" },
@@ -103,7 +98,6 @@ describe("ShiftRotation", () => {
   it("rejeita 2º período com início >= fim", () => {
     expect(() =>
       ShiftRotation.create({
-        jobRole: "service",
         participantEmployeeIds: ["andres", "gabriel"],
         patternA: { startTime: "12:00", endTime: "16:00", secondStartTime: "19:00", secondEndTime: "19:00" },
         patternB: { startTime: "17:00", endTime: "23:00" },
@@ -116,7 +110,6 @@ describe("ShiftRotation", () => {
   it("rejeita 2º período sem hora de fim", () => {
     expect(() =>
       ShiftRotation.create({
-        jobRole: "service",
         participantEmployeeIds: ["andres", "gabriel"],
         patternA: { startTime: "12:00", endTime: "16:00", secondStartTime: "19:00" },
         patternB: { startTime: "17:00", endTime: "23:00" },

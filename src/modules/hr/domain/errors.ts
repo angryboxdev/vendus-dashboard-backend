@@ -26,6 +26,8 @@ export {
   DocumentNotCurrentError,
   DocumentCategoryConfigNotFoundError,
   DocumentCategoryConfigAlreadyExistsError,
+  DocumentPeriodAlreadyExistsError,
+  InvalidDocumentError,
 } from "../../documents/domain/errors.js";
 
 // ── RH-03 — Escalas & Turnos ────────────────────────────────────────────────
@@ -176,5 +178,37 @@ export class InvalidEmployeeLocationError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "InvalidEmployeeLocationError";
+  }
+}
+
+// ── RH 2.0 — Modelos de turno ───────────────────────────────────────────────
+
+export class InvalidShiftTemplateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidShiftTemplateError";
+  }
+}
+
+export class ShiftTemplateNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Modelo de turno não encontrado: ${id}`);
+    this.name = "ShiftTemplateNotFoundError";
+  }
+}
+
+/** Já existe um modelo com o mesmo nome normalizado ("Manhã 1" = "manhã 1"). */
+export class DuplicateShiftTemplateNameError extends Error {
+  constructor(name: string) {
+    super(`Já existe um modelo de turno com o nome "${name}"`);
+    this.name = "DuplicateShiftTemplateNameError";
+  }
+}
+
+/** Pedido de aplicação de modelo inválido (datas, público, modelo inativo…). */
+export class InvalidTemplateApplicationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidTemplateApplicationError";
   }
 }

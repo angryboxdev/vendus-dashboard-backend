@@ -1,11 +1,9 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { JobRole } from "../../entities/employee.js";
 
 export interface PositionDTO {
   id: string;
   name: string;
   description: string | null;
-  operationalCategory: JobRole;
   active: boolean;
   /** Colaboradores ativos com este cargo. */
   employeeCount: number;
@@ -21,7 +19,6 @@ export interface CreatePositionCommand {
   actor: string;
   name: string;
   description: string | null;
-  operationalCategory: JobRole;
 }
 
 export interface CreatePositionPort {
@@ -34,13 +31,8 @@ export interface UpdatePositionCommand {
   id: string;
   name?: string;
   description?: string | null;
-  operationalCategory?: JobRole;
 }
 
-/**
- * Mudar a categoria operacional de um cargo propaga-se ao `jobRole` de todos
- * os colaboradores com esse cargo (mantém Escalas/documentos coerentes — D4).
- */
 export interface UpdatePositionPort {
   execute(command: UpdatePositionCommand): Promise<PositionDTO>;
 }

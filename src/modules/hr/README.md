@@ -1,7 +1,7 @@
 # Module: hr
 
 > Status: active
-> Last updated: 2026-09-28
+> Last updated: 2026-10-06
 
 ---
 
@@ -119,9 +119,9 @@ Este módulo é **aditivo**, não uma substituição imediata:
     Apólice de seguro AT, Certificado de morada, Ficha de colaborador,
     Formação de segurança, Atestado de saúde, NIF, + qualquer categoria
     nova criada pelo utilizador) vivem em `hr_document_categories`, uma por
-    organização, cada uma com `label`, `mandatory`, `jobRoles` (`[]` =
+    organização, cada uma com `label`, `mandatory`, `positionIds` (`[]` =
     todos os cargos, ou uma lista de cargos específicos) e
-    `acceptedMimeTypes`. `applicableCategoriesFor(defs, jobRole)` filtra as
+    `acceptedMimeTypes`. `applicableCategoriesFor(defs, { positionId })` filtra as
     ativas e aplicáveis ao cargo do colaborador; `buildDynamicRequirements`
     converte as `mandatory=true` num requisito de categoria única cada.
   - **Pendências prioritárias e alertas do Overview só listam categorias
@@ -361,8 +361,7 @@ Este módulo é **aditivo**, não uma substituição imediata:
 - `CreateEmployeePort` / `UpdateEmployeePort` / `SetEmployeeStatusPort` /
   `UploadEmployeePhotoPort` — escrita de colaborador. Desde a Base
   Organizacional aceitam `positionId`, `primaryLocationId` e
-  `authorizedLocationIds` (e já não `jobRole`, que passou a derivar do
-  cargo) — regras em `employee-assignments.ts`, ver "Cargos e locais do
+  `authorizedLocationIds` (a antiga "Função" `jobRole` foi retirada — 2026-10-05) — regras em `employee-assignments.ts`, ver "Cargos e locais do
   colaborador" nas Design decisions. `ListEmployeesPort` filtra também por
   `positionId` e `locationId` (principal ou autorizado).
 - `ListPositionsPort` / `CreatePositionPort` / `UpdatePositionPort` /
@@ -416,6 +415,22 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `UpdateDocumentCategoryPort` / `SetDocumentCategoryActivePort` —
   CRUD (desativar, nunca apagar) das categorias de documento configuráveis
   por organização.
+- `ListShiftTemplatesPort` / `CreateShiftTemplatePort` /
+  `UpdateShiftTemplatePort` / `SetShiftTemplateActivePort` (RH 2.0, ticket
+  01) — Modelos de turno: CRUD, inativar (nunca apagar).
+- `PreviewTemplateApplicationPort` / `ApplyTemplatePort` (RH 2.0, ticket 02) —
+  "Aplicar modelo": público (um/vários/todos/por cargo/por local), dias
+  (datas ou intervalo + dias da semana) e local; pré-visualização com
+  estado por ocorrência e confirmação com decisões (criar/ignorar/
+  substituir).
+- `PreviewPayslipImportPort` / `ImportPayslipsPort` (Base Organizacional,
+  ticket 10) — importação em massa de recibos de vencimento: pré-visualizar
+  (identifica o colaborador de cada PDF, assinala duplicados, nada é
+  gravado) e importar o que o utilizador confirmou (cada recibo passa por
+  `UploadEmployeeDocumentPort`/`ReplaceEmployeeDocumentPort`).
+  `UploadEmployeeDocumentCommand.period` (`YYYY-MM`) é obrigatório nas
+  categorias periódicas; `importBatchId` liga as entradas do histórico do
+  mesmo lote.
 - `ListWorkShiftsPort` / `CreateWorkShiftPort` / `UpdateWorkShiftPort` /
   `DuplicateWorkShiftPort` / `DeleteWorkShiftPort` / `PublishWorkShiftsPort`
   (RH-03) — CRUD de turnos planeados. `CreateWorkShiftCommand.repeatWeeks`
@@ -502,10 +517,10 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `pendingCount`/`status` (`pronto_para_fecho|pendencias|
   requer_atencao` — ver Design decisions); `balanceMinutes` passa a usar
   "planeado até agora", nunca o total do mês (task, secção 12). **Redesign
-  do Fecho Mensal**: linha ganhou `jobRole` (de `Employee.jobRole`, já
+  do Fecho Mensal**: linha ganhou `positionId` (o Cargo, já
   carregado em memória por `employeeRepository.findMany` — sem query
-  nova) para o subtítulo do nome na tabela geral do frontend
-  ("Operador"). O ratio "Conferência X/Y" e a célula "Ocorrências" que o
+  nova) para o subtítulo do nome na tabela geral do frontend (antes era a
+  antiga "Função" `jobRole`, retirada em 2026-10-05). O ratio "Conferência X/Y" e a célula "Ocorrências" que o
   frontend mostra são só reapresentação de campos já existentes aqui
   (`plannedShiftsCount - pendingCount`, `absenceDaysCount`/
   `lateDaysCount`/`lateMinutesTotal`) — nenhum campo novo precisou de
@@ -517,7 +532,7 @@ Este módulo é **aditivo**, não uma substituição imediata:
   últimas excluem linhas ainda `reviewStatus: "pending"`, task secção
   18) + `rows: AttendanceIssueRowDTO[]` com o extrato diário completo
   (nunca pula "Regular", ao contrário da Conferência — task, secção 19).
-  **Redesign do Fecho Mensal**: resultado ganhou `jobRole` (mesmo motivo
+  **Redesign do Fecho Mensal**: resultado ganhou `positionId` (mesmo motivo
   do ponto acima, para o subtítulo do cabeçalho da nova página de
   detalhe). A "loja" que aparece ao lado não vem daqui — o frontend
   deriva-a client-side da localização mais frequente entre `rows`
@@ -581,7 +596,13 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `ScopedQueryFactory`. `applicableCategoriesFor` ignora categorias com
   âmbito `company` (um documento empresarial nunca gera "Em falta"). Injetado também em `ListEmployeesUseCase`/
   `GetPeopleKpisUseCase`/`GetHrOverviewUseCase`/`GetEmployeeProfileUseCase`
-  (constroem os requisitos obrigatórios dinâmicos a partir dele).
+  (constroem os requisitos obrigatórios dinâmicos a partir dele). Também em
+  `UploadEmployeeDocumentUseCase` (sabe se a categoria é periódica) e nos
+  use cases de importação de recibos.
+- `ShiftTemplateRepositoryPort` (RH 2.0) — `hr_shift_templates`; nome
+  único por organização (`DuplicateShiftTemplateNameError`).
+- `PdfTextExtractorPort` (ticket 10) — texto de um PDF para identificar o
+  colaborador de um recibo; `null` se o PDF não tiver texto. Sem OCR/IA.
 - `WorkShiftRepositoryPort` (RH-03) — CRUD de `hr_work_shifts` +
   `hasAttendance`/`findAttendanceStatusesByShiftIds` (consulta própria a
   `hr_shift_attendance`, independente de `ShiftAttendanceReadPort` — servem
@@ -630,6 +651,14 @@ Este módulo é **aditivo**, não uma substituição imediata:
 - `HrPositionsController` (Base Organizacional) → `GET /api/hr/positions`
   (`hr_viewer`+), `POST /api/hr/positions`, `PATCH /api/hr/positions/:id`,
   `PATCH /api/hr/positions/:id/active` (`manager`). 409 em nome duplicado.
+- `HrShiftTemplatesController` (RH 2.0) → `GET /api/hr/schedules/templates`
+  (`hr_viewer`+), `POST`, `PATCH /:id`, `PATCH /:id/active` (`manager`).
+  409 em nome duplicado. `POST /:id/apply/preview` e `POST /:id/apply`
+  (`manager`) — aplicar modelo (ticket 02).
+- `HrPayslipsController` (ticket 10) → `POST /api/hr/payslips/import/preview`
+  e `POST /api/hr/payslips/import` (multipart `files` + `period`; o 2.º
+  com `mapping` JSON `[{ fileName, employeeId, action }]`). Só `admin`
+  (dados salariais); só PDF, até 100 ficheiros de 10 MB.
 - `HrOverviewController` (RH-01) → `GET /api/hr/overview`,
   `GET /api/hr/overview/shifts-to-review` e
   `GET /api/hr/overview/shifts-to-review/:shiftId` (novo, "Melhorar Hoje na
@@ -693,6 +722,9 @@ Este módulo é **aditivo**, não uma substituição imediata:
 - `SupabaseDocumentRepository` / `SupabaseDocumentCategoryRepository` — do
   módulo `documents`, instanciados em `hr.module.ts` (mesmo padrão de
   `SupabaseLocationRepository`).
+- `SupabaseShiftTemplateRepository` (RH 2.0) → `hr_shift_templates`.
+- `PdfParseTextExtractorAdapter` (ticket 10) → `pdf-parse` (já usado na
+  importação de faturas), só a camada de texto.
 - **"Melhorar Hoje na operação"**: nenhum adapter novo — `GetHrOverviewUseCase`/
   `ListShiftsToReviewUseCase`/`GetShiftToReviewUseCase` passaram a receber
   `SupabaseLocationRepository` (módulo `locations`, já existente), o mesmo
@@ -707,6 +739,92 @@ Este módulo é **aditivo**, não uma substituição imediata:
 
 ## Design decisions (ADR summary)
 
+### RH 2.0 — Modelos de turno (ticket 01)
+
+- **Modelo ≠ Turno** (task RH 2.0 §1): o Modelo (`ShiftTemplate`) é um
+  horário reutilizável (direto/repartido/noturno, local padrão opcional,
+  ativo/inativo); o turno gerado copia o horário/local (snapshot) e guarda
+  só a referência `templateId` (`source: "template"`). Alterar ou inativar
+  um modelo nunca toca turnos existentes. Spec completa e decisões
+  R1–R5/T1–T7 em `.scratch/rh-2-0/spec.md`.
+- **Mesma regra de horários dos turnos** (`assertShiftShape`, exportada de
+  `work-shift.ts`): repartido nunca combinado com noturno.
+- Nome único por organização sem distinguir maiúsculas/espaços (como os
+  Cargos); local padrão tem de estar ativo.
+
+### RH 2.0 — Aplicar modelo (ticket 02)
+
+- **Um motor puro para pré-visualizar e confirmar**
+  (`template-application.service`): `planTemplateApplication` classifica
+  cada ocorrência (colaborador × data) em `valid` / `duplicate` (turno
+  idêntico já existe) / `overlap` / `leave` / `inactive_employee` /
+  `no_location` / `inactive_location`, com o feriado assinalado (R4 — cria-se
+  na mesma). A confirmação recalcula tudo com os dados atuais e
+  `resolveConfirmation` só aplica o que o utilizador decidiu **e** continua
+  igual: o resto sai como `changed` (revalidação, task §5). Uma ocorrência
+  que não estava na pré-visualização (sem decisão) nunca é criada.
+- **Idempotente:** um turno idêntico já existente é `duplicate` — repetir a
+  aplicação (duplo clique, reenvio) não cria nada. Sobreposição usa a mesma
+  regra do motor de séries (`occurrenceOverlapsShift`, cobre repartido e
+  noturnos de dias vizinhos).
+- **Local:** aplicação → local padrão do modelo → local principal do
+  colaborador (task §4); sem nenhum → `no_location`.
+- **Substituir** só turnos sem presença (R3), verificado de novo
+  imediatamente antes de apagar o turno antigo (rascunho/publicado sem
+  presença — mesma regra do "apagar turno" atual). Turnos novos em
+  rascunho (R1), `source: "template"` + `templateId`.
+- Limite: 366 dias por aplicação. Dois gestores a aplicar **ao mesmo tempo**
+  sobre o mesmo colaborador/dia ainda podem criar duplicado (não há índice
+  único na BD — dados antigos podem ter repetidos); a revalidação cobre o
+  caso sequencial (retry, preview desatualizado).
+
+### Base Organizacional — recibos de vencimento (ticket 10)
+
+- **Recibo = documento do colaborador** (task §23): categoria
+  `recibo_vencimento` (semeada pela migração
+  `20261006120000_payslips_period.sql`) com `requiresPeriod`; cada
+  documento guarda `period` (`YYYY-MM`). Sem tabela nem módulo próprios.
+- **Recibo verde = categoria à parte** (`recibo_verde`, migração
+  `20261006130000_recibo_verde_category.sql`): prestadores independentes
+  emitem fatura-recibo; mesma mecânica (período, duplicados, importação),
+  categoria separada para não se misturar com os recibos de vencimento. A
+  importação recebe `category` (`PAYSLIP_CATEGORY_SLUGS`; omissão
+  `recibo_vencimento`).
+- **Um atual por colaborador × categoria × período** (§26): o upload recusa
+  com `DocumentPeriodAlreadyExistsError` (409 `period_already_exists`, com
+  o id do atual) — o utilizador cancela ou usa "Substituir versão". Regra na
+  aplicação, como a unicidade por categoria já era: não há índice único
+  porque "Substituir" grava a nova versão antes de marcar a anterior.
+- **Nunca "Em falta"**: `applicableCategoriesFor` exclui categorias
+  periódicas; a vista global mostra uma linha por recibo
+  (`computePeriodicDocumentRows`, com `period`).
+- **Identificação** (`payslip-identification.service`, puro): NIF ou id do
+  colaborador (texto ou nome do ficheiro) → nome completo normalizado no
+  texto → no nome do ficheiro → palavras do nome do ficheiro contidas no
+  nome de um só colaborador. Mais de um candidato, sinais contraditórios ou
+  dois ficheiros do lote para a mesma pessoa → `review` ("Rever"), nunca
+  associação automática (§24). Inclui colaboradores inativos (último recibo
+  de quem saiu).
+- **Dois passos sem estado no servidor**: a pré-visualização não grava
+  nada; o frontend reenvia os PDFs com o mapeamento confirmado. Evita
+  ficheiros órfãos em storage se o utilizador desistir.
+- **Só admin** na importação (dados salariais). O upload individual no
+  perfil continua `manager`, como os outros documentos.
+
+### Base Organizacional — documentos dos colaboradores (ticket 09)
+
+- **Obrigatoriedade por Cargo:** uma categoria aplica-se a "Todos os
+  colaboradores" (`positionIds` vazio) ou a "Cargos selecionados"
+  (`positionIds`). `applicableCategoriesFor(defs, { positionId })`
+  — a antiga aplicabilidade por "Função" (`job_roles`) foi retirada do
+  código em 2026-10-05 (a migração `20261006100000_document_categories_positions.sql`
+  já a tinha convertido; nenhuma categoria em produção a usava).
+- **Opcionais nunca são "Em falta":** na vista global
+  (`GetDocumentOverviewUseCase`) uma categoria opcional sem documento não
+  gera linha; com documento aparece, para se acompanhar a validade. KPIs e
+  pendências já contavam só obrigatórias. O perfil continua a listar as
+  opcionais por enviar, à parte.
+
 ### Base Organizacional — Cargos e locais do colaborador (tickets 07/08)
 
 - **Cargo (`Position`, `hr_positions`) substitui a "Função" fixa.** A
@@ -716,14 +834,17 @@ Este módulo é **aditivo**, não uma substituição imediata:
   função atual. Nome único por organização após normalização
   (minúsculas, espaços colapsados — coluna gerada `normalized_name`), por
   isso "Preparador"/"preparador" nunca são dois cargos.
-- **Categoria operacional transitória (spec D4).** As Escalas (rotações) e
-  as categorias de documentos ainda filtram por `job_role`
-  (manager|prep|service) e a task proíbe mexer nas Escalas agora. Cada
-  cargo tem uma `operationalCategory`; o `jobRole` do colaborador passa a
-  ser **sempre** a categoria do seu cargo (definido na atribuição, e
-  propagado a todos os titulares se a categoria do cargo mudar).
-  `hr_employees.job_role` só será removido depois de Escalas/documentos
-  migrarem para o cargo.
+- **"Categoria nas Escalas" retirada (2026-10-05, decisão do utilizador).**
+  A ponte transitória da spec D4 (cada cargo com uma categoria
+  manager|prep|service, sincronizada no `jobRole` do colaborador) foi
+  removida: Cargos, rotações (já não exigem a mesma função nos 2
+  participantes), Assiduidade (mostra o Cargo) e documentos usam só o
+  Cargo. Sem perda de dados: a migração
+  `20261007110000_drop_operational_category_dependency.sql` só torna
+  opcionais `hr_positions.operational_category` e
+  `hr_shift_rotations.job_role`; os valores antigos ficam na BD.
+  `hr_employees.job_role` (default `service`) só é lido pelas páginas
+  legacy.
 - **Cargo ≠ permissão.** Nada no cargo toca em `org_members`/RBAC.
 - **Inativar, nunca apagar.** Cargo ou local inativo nunca é atribuído de
   novo, mas quem já o tinha mantém-no e pode continuar a ser editado.
@@ -1447,9 +1568,12 @@ ronda — ver Known gaps. O extrato só mostra dias com registo real
   `src/routes/hrRoutes.ts`/`hrEmployeeService.ts` (legacy) continuam a
   criar/editar colaboradores só com o enum; um colaborador criado por aí
   fica sem `position_id` até ser editado no ecrã novo (Colaboradores).
-- **Base Organizacional — Escalas e categorias de documentos ainda usam a
-  categoria operacional, não o cargo** (spec D4) — a migrar quando a task
-  permitir mexer nas Escalas; só então se remove `hr_employees.job_role`.
+- **Colunas obsoletas da antiga "Função"** (`hr_employees.job_role`,
+  `hr_positions.operational_category`, `hr_shift_rotations.job_role`,
+  `hr_document_categories.job_roles`) continuam na BD, sem uso pelo código
+  novo — remover quando o legacy de RH (`hrEmployeeService`, ficha antiga)
+  for retirado. Até lá, a ficha legacy mostra a Função antiga gravada (e
+  "Serviço" para colaboradores criados depois desta alteração).
 - **Evolução "Por Colaborador" — ficha individual não sintetiza "Folga"**
   para dias sem nenhum `WorkShift`/presença (o mockup mostra essas
   linhas) — exigiria reconstruir escala base/feriados também aqui

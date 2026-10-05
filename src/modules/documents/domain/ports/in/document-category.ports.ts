@@ -1,14 +1,17 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { DocumentCategoryScope, OperationalCategory } from "../../entities/document-category.js";
+import type { DocumentCategoryScope } from "../../entities/document-category.js";
 
 export interface DocumentCategoryDTO {
   id: string;
   slug: string;
   label: string;
   mandatory: boolean;
-  jobRoles: OperationalCategory[];
+  /** Cargos a que se aplica; vazio = todos os colaboradores. */
+  positionIds: string[];
   acceptedMimeTypes: string[];
   scope: DocumentCategoryScope;
+  /** Categoria periódica (ex: Recibo de vencimento) — o upload exige o período Mês/Ano. */
+  requiresPeriod: boolean;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -32,7 +35,7 @@ export interface CreateDocumentCategoryCommand {
   organizationId: OrganizationId;
   label: string;
   mandatory: boolean;
-  jobRoles: OperationalCategory[];
+  positionIds?: string[];
   acceptedMimeTypes: string[];
   /** Omissão: `employee`. */
   scope?: DocumentCategoryScope;
@@ -49,7 +52,7 @@ export interface UpdateDocumentCategoryCommand {
   id: string;
   label?: string;
   mandatory?: boolean;
-  jobRoles?: OperationalCategory[];
+  positionIds?: string[];
   acceptedMimeTypes?: string[];
   scope?: DocumentCategoryScope;
 }
