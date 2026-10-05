@@ -1,18 +1,18 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { Employee } from "../../domain/entities/employee.js";
-import { EmployeeDocument } from "../../domain/entities/employee-document.js";
+import { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
 import { ListEmployeesUseCase } from "../../application/use-cases/list-employees.use-case.js";
 import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
-import { FakeEmployeeDocumentRepository } from "../fakes/fake-employee-document-repository.js";
+import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
 import { FakeHrFileStorage } from "../fakes/fake-hr-file-storage.js";
-import { FakeDocumentCategoryRepository } from "../fakes/fake-document-category-repository.js";
+import { FakeDocumentCategoryRepository } from "../../../documents/__tests__/fakes/fake-document-category-repository.js";
 
 const ORG = mintOrganizationId("org-test");
 
 describe("ListEmployeesUseCase", () => {
   it("devolve linhas com situação documental 'missing' quando falta um documento obrigatório", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const storage = new FakeHrFileStorage();
     const categories = new FakeDocumentCategoryRepository();
     const e = Employee.create({ fullName: "Andres Silva" });
@@ -28,7 +28,7 @@ describe("ListEmployeesUseCase", () => {
 
   it("filtra por documentSituation em memória, ajustando o total", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const storage = new FakeHrFileStorage();
     const categories = new FakeDocumentCategoryRepository();
     employees.seed(ORG, Employee.create({ fullName: "Falta Documentos" }));
@@ -49,7 +49,7 @@ describe("ListEmployeesUseCase", () => {
 
   it("pagina em memória (page/pageSize)", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const storage = new FakeHrFileStorage();
     const categories = new FakeDocumentCategoryRepository();
     for (const name of ["Ana", "Bruno", "Carlos"]) {
@@ -67,7 +67,7 @@ describe("ListEmployeesUseCase", () => {
 
   it("gera photoUrl assinado quando o colaborador tem foto", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const storage = new FakeHrFileStorage();
     const categories = new FakeDocumentCategoryRepository();
     const e = Employee.create({ fullName: "Andres Silva" }).updatePhoto("org-a/andres.jpg");
@@ -81,7 +81,7 @@ describe("ListEmployeesUseCase", () => {
 
   it("filtra por profileComplete", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const storage = new FakeHrFileStorage();
     const categories = new FakeDocumentCategoryRepository();
     employees.seed(ORG, Employee.create({ fullName: "Perfil Incompleto" }));
@@ -126,7 +126,7 @@ describe("ListEmployeesUseCase", () => {
 
   it("'ok' quando todas as categorias obrigatórias existem e nada expira em breve", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const storage = new FakeHrFileStorage();
     const categories = new FakeDocumentCategoryRepository();
     const e = Employee.create({ fullName: "Completo" });
@@ -139,7 +139,7 @@ describe("ListEmployeesUseCase", () => {
       documents.seed(
         ORG,
         EmployeeDocument.createFirstVersion({
-          employeeId: e.id,
+          owner: { type: "employee", id: e.id },
           category,
           mandatory: true,
           fileName: `${category}.pdf`,
@@ -161,7 +161,7 @@ describe("ListEmployeesUseCase", () => {
 
   it("colaborador inativo nunca mostra situação documental ou de perfil como pendente", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const storage = new FakeHrFileStorage();
     const categories = new FakeDocumentCategoryRepository();
     const e = Employee.create({ fullName: "Ex-Colaborador" }).deactivate();
@@ -182,7 +182,7 @@ describe("ListEmployeesUseCase", () => {
 
   it("filtro profileComplete=incomplete nunca inclui colaboradores inativos", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const storage = new FakeHrFileStorage();
     const categories = new FakeDocumentCategoryRepository();
     employees.seed(ORG, Employee.create({ fullName: "Inativo Incompleto" }).deactivate());

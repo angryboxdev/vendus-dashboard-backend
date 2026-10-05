@@ -2,9 +2,9 @@ import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { Employee } from "../../domain/entities/employee.js";
 import { GetEmployeeProfileUseCase } from "../../application/use-cases/get-employee-profile.use-case.js";
 import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
-import { FakeEmployeeDocumentRepository } from "../fakes/fake-employee-document-repository.js";
+import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
 import { FakeHrFileStorage } from "../fakes/fake-hr-file-storage.js";
-import { FakeDocumentCategoryRepository } from "../fakes/fake-document-category-repository.js";
+import { FakeDocumentCategoryRepository } from "../../../documents/__tests__/fakes/fake-document-category-repository.js";
 import { EmployeeNotFoundError } from "../../domain/errors.js";
 
 const ORG = mintOrganizationId("org-test");
@@ -13,7 +13,7 @@ describe("GetEmployeeProfileUseCase", () => {
   it("lança EmployeeNotFoundError para id inexistente", async () => {
     const useCase = new GetEmployeeProfileUseCase(
       new FakeEmployeeRepository(),
-      new FakeEmployeeDocumentRepository(),
+      new FakeDocumentRepository(),
       new FakeHrFileStorage(),
       new FakeDocumentCategoryRepository(),
     );
@@ -33,7 +33,7 @@ describe("GetEmployeeProfileUseCase", () => {
 
     const useCase = new GetEmployeeProfileUseCase(
       employees,
-      new FakeEmployeeDocumentRepository(),
+      new FakeDocumentRepository(),
       new FakeHrFileStorage(),
       new FakeDocumentCategoryRepository(),
     );
@@ -47,20 +47,20 @@ describe("GetEmployeeProfileUseCase", () => {
     expect(asManager.employee.nif).toBe("271234567");
   });
 
-  it("onboardingStatus 'pending' quando falta um documento obrigatório", async () => {
+  it("alerta de documento em falta quando falta um documento obrigatório (sem estado de onboarding — removido na Base Organizacional)", async () => {
     const employees = new FakeEmployeeRepository();
     const e = Employee.create({ fullName: "Andres Silva" });
     employees.seed(ORG, e);
 
     const useCase = new GetEmployeeProfileUseCase(
       employees,
-      new FakeEmployeeDocumentRepository(),
+      new FakeDocumentRepository(),
       new FakeHrFileStorage(),
       new FakeDocumentCategoryRepository(),
     );
     const result = await useCase.execute({ organizationId: ORG, viewerRole: "manager", id: e.id });
 
-    expect(result.onboardingStatus).toBe("pending");
+    expect(result).not.toHaveProperty("onboardingStatus");
     expect(result.alerts.some((a) => a.type === "document_missing")).toBe(true);
   });
 
@@ -71,7 +71,7 @@ describe("GetEmployeeProfileUseCase", () => {
 
     const useCase = new GetEmployeeProfileUseCase(
       employees,
-      new FakeEmployeeDocumentRepository(),
+      new FakeDocumentRepository(),
       new FakeHrFileStorage(),
       new FakeDocumentCategoryRepository(),
     );
@@ -80,21 +80,20 @@ describe("GetEmployeeProfileUseCase", () => {
     expect(result.alerts.some((a) => a.type === "emergency_contact_pending")).toBe(true);
   });
 
-  it("colaborador inativo não gera alertas de documentos/perfil nem fica 'pending'", async () => {
+  it("colaborador inativo não gera alertas de documentos/perfil", async () => {
     const employees = new FakeEmployeeRepository();
     const e = Employee.create({ fullName: "Ex-Colaborador" }).deactivate();
     employees.seed(ORG, e);
 
     const useCase = new GetEmployeeProfileUseCase(
       employees,
-      new FakeEmployeeDocumentRepository(),
+      new FakeDocumentRepository(),
       new FakeHrFileStorage(),
       new FakeDocumentCategoryRepository(),
     );
     const result = await useCase.execute({ organizationId: ORG, viewerRole: "manager", id: e.id });
 
     expect(result.alerts).toEqual([]);
-    expect(result.onboardingStatus).toBe("completed");
     expect(result.profileCompletionPercent).toBe(100);
     expect(result.documents.missingRequirements).toEqual([]);
     expect(result.documents.mandatoryCompleted).toBe(result.documents.mandatoryTotal);
@@ -108,7 +107,7 @@ describe("GetEmployeeProfileUseCase", () => {
 
     const useCase = new GetEmployeeProfileUseCase(
       employees,
-      new FakeEmployeeDocumentRepository(),
+      new FakeDocumentRepository(),
       new FakeHrFileStorage(),
       new FakeDocumentCategoryRepository(),
     );
@@ -132,7 +131,7 @@ describe("GetEmployeeProfileUseCase", () => {
 
     const useCase = new GetEmployeeProfileUseCase(
       employees,
-      new FakeEmployeeDocumentRepository(),
+      new FakeDocumentRepository(),
       new FakeHrFileStorage(),
       categories,
     );

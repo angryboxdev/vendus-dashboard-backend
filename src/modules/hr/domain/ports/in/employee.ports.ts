@@ -10,7 +10,14 @@ export interface EmployeeDTO {
   phone: string | null;
   roleOrNotes: string | null;
   employmentType: EmploymentType;
+  /** Categoria operacional (antiga "Função") — sempre a do cargo; mantida para Escalas/documentos (D4). */
   jobRole: JobRole;
+  /** Cargo (ticket 07). O nome resolve-se pela lista de cargos (`GET /hr/positions`). */
+  positionId: string | null;
+  /** Local principal (ticket 08). */
+  primaryLocationId: string | null;
+  /** Outros locais autorizados (ticket 08). */
+  authorizedLocationIds: string[];
   status: EmployeeStatus;
   hiredAt: string | null;
   endedAt: string | null;
@@ -43,6 +50,10 @@ export interface ListEmployeesCommand {
   employmentType?: EmploymentType;
   documentSituation?: DocumentSituation;
   profileComplete?: "complete" | "incomplete";
+  /** Cargo (ticket 07). */
+  positionId?: string;
+  /** Local principal ou autorizado (ticket 08). */
+  locationId?: string;
   page: number;
   pageSize: number;
 }
@@ -51,6 +62,8 @@ export interface EmployeeListRowDTO {
   id: string;
   fullName: string;
   jobRole: JobRole;
+  positionId: string | null;
+  primaryLocationId: string | null;
   employmentType: EmploymentType;
   email: string | null;
   phone: string | null;
@@ -95,7 +108,6 @@ export interface PriorityPendencyGroupDTO {
 
 export interface PeopleKpisDTO {
   activeEmployees: number;
-  onboardingPending: number;
   incompleteProfiles: number;
   documentsExpiringSoon: number;
   priorityPendencies: PriorityPendencyGroupDTO[];
@@ -126,7 +138,6 @@ export interface EmployeeProfileDTO {
     missingOptional: string[];
     expiringSoonCount: number;
   };
-  onboardingStatus: "completed" | "pending";
   alerts: Array<{ type: "document_expiring" | "document_missing" | "emergency_contact_pending"; message: string }>;
 }
 
@@ -150,7 +161,14 @@ export interface CreateEmployeeCommand {
   phone?: string | null;
   roleOrNotes?: string | null;
   employmentType?: EmploymentType;
-  jobRole?: JobRole;
+  /**
+   * Cargo (ticket 07) — substitui a antiga "Função": o `jobRole` do
+   * colaborador passa a ser derivado da categoria operacional do cargo (D4),
+   * nunca enviado diretamente.
+   */
+  positionId?: string | null;
+  primaryLocationId?: string | null;
+  authorizedLocationIds?: string[];
   hiredAt?: string | null;
   baseSalary?: number | null;
   salaryType?: SalaryType;

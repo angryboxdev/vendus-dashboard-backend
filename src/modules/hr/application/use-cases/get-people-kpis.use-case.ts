@@ -1,7 +1,7 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
-import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
-import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
+import type { DocumentCategoryRepositoryPort } from "../../../documents/domain/ports/out/document-category-repository.port.js";
 import {
   applicableCategoriesFor,
   buildDynamicRequirements,
@@ -21,7 +21,6 @@ import type {
 } from "../../domain/ports/in/employee.ports.js";
 
 const PROFILE_COMPLETE_THRESHOLD = 100;
-const RECENTLY_HIRED_DAYS = 30;
 
 interface Candidate {
   kind: PriorityPendencyGroupDTO["kind"];
@@ -60,22 +59,19 @@ export class GetPeopleKpisUseCase implements GetPeopleKpisPort {
 
   async execute(organizationId: OrganizationId): Promise<PeopleKpisDTO> {
     const employees = await this.employeeRepository.findMany(organizationId, { status: "active" });
-    const documents = await this.employeeDocumentRepository.findCurrentByEmployeeIds(
-      organizationId,
-      employees.map((e) => e.id),
+    const documents = await this.employeeDocumentRepository.findCurrentByOwners(organizationId, "employee", employees.map((e) => e.id),
     );
     const documentsByEmployee = new Map<string, typeof documents>();
     for (const doc of documents) {
-      const list = documentsByEmployee.get(doc.employeeId) ?? [];
+      const list = documentsByEmployee.get(doc.ownerId) ?? [];
       list.push(doc);
-      documentsByEmployee.set(doc.employeeId, list);
+      documentsByEmployee.set(doc.ownerId, list);
     }
 
     const categoryDefs = await this.documentCategoryRepository.findMany(organizationId, { activeOnly: true });
     const labelBySlug = new Map(categoryDefs.map((c): [string, string] => [c.slug, c.label]));
 
     const now = new Date();
-    let onboardingPending = 0;
     let incompleteProfiles = 0;
     let documentsExpiringSoon = 0;
     const candidates: Candidate[] = [];
@@ -96,13 +92,6 @@ export class GetPeopleKpisUseCase implements GetPeopleKpisPort {
           employeeName: employee.fullName,
           detail: "Dados pessoais incompletos",
         });
-      }
-
-      const hiredRecently =
-        employee.hiredAt != null &&
-        (now.getTime() - new Date(employee.hiredAt).getTime()) / (1000 * 60 * 60 * 24) <= RECENTLY_HIRED_DAYS;
-      if (hiredRecently && (summary.missingRequirements.length > 0 || completionPercent < PROFILE_COMPLETE_THRESHOLD)) {
-        onboardingPending++;
       }
 
       for (const label of summary.missingRequirements) {
@@ -138,7 +127,6 @@ export class GetPeopleKpisUseCase implements GetPeopleKpisPort {
 
     return {
       activeEmployees: employees.length,
-      onboardingPending,
       incompleteProfiles,
       documentsExpiringSoon,
       priorityPendencies: groupPendencies(candidates),

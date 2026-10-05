@@ -1,5 +1,5 @@
 import { EmployeeDocumentNotFoundError } from "../../domain/errors.js";
-import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
 import type {
   GetEmployeeDocumentHistoryCommand,
   GetEmployeeDocumentHistoryPort,
@@ -12,12 +12,10 @@ export class GetEmployeeDocumentHistoryUseCase implements GetEmployeeDocumentHis
 
   async execute(command: GetEmployeeDocumentHistoryCommand): Promise<EmployeeDocumentDTO[]> {
     const doc = await this.employeeDocumentRepository.findById(command.organizationId, command.documentId);
-    if (!doc || doc.employeeId !== command.employeeId) {
+    if (!doc || doc.ownerId !== command.employeeId) {
       throw new EmployeeDocumentNotFoundError(command.documentId);
     }
-    const history = await this.employeeDocumentRepository.findVersionHistory(
-      command.organizationId,
-      command.employeeId,
+    const history = await this.employeeDocumentRepository.findVersionHistory(command.organizationId, "employee", command.employeeId,
       doc.category,
     );
     return history.map(toEmployeeDocumentDTO);

@@ -1,9 +1,7 @@
 import type { Employee } from "../../domain/entities/employee.js";
-import type { EmployeeDocument } from "../../domain/entities/employee-document.js";
-import type { DocumentCategoryDefinition } from "../../domain/entities/document-category.js";
+import type { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
 import type { EmployeeDTO } from "../../domain/ports/in/employee.ports.js";
 import type { EmployeeDocumentDTO } from "../../domain/ports/in/employee-document.ports.js";
-import type { DocumentCategoryDTO } from "../../domain/ports/in/document-category.ports.js";
 import { computeDocumentDisplayStatus } from "../../domain/services/document-status.service.js";
 import {
   maskSensitiveValue,
@@ -26,6 +24,9 @@ export function toEmployeeDTO(employee: Employee, viewerRole: ViewerRole, photoU
     roleOrNotes: employee.roleOrNotes,
     employmentType: employee.employmentType,
     jobRole: employee.jobRole,
+    positionId: employee.positionId,
+    primaryLocationId: employee.primaryLocationId,
+    authorizedLocationIds: employee.authorizedLocationIds,
     status: employee.status,
     hiredAt: employee.hiredAt,
     endedAt: employee.endedAt,
@@ -50,7 +51,7 @@ export function toEmployeeDTO(employee: Employee, viewerRole: ViewerRole, photoU
 export function toEmployeeDocumentDTO(doc: EmployeeDocument): EmployeeDocumentDTO {
   return {
     id: doc.id,
-    employeeId: doc.employeeId,
+    employeeId: doc.ownerId,
     category: doc.category,
     mandatory: doc.mandatory,
     fileName: doc.fileName,
@@ -63,19 +64,5 @@ export function toEmployeeDocumentDTO(doc: EmployeeDocument): EmployeeDocumentDT
     displayStatus: computeDocumentDisplayStatus(doc),
     uploadedBy: doc.uploadedBy,
     uploadedAt: doc.uploadedAt,
-  };
-}
-
-export function toDocumentCategoryDTO(def: DocumentCategoryDefinition): DocumentCategoryDTO {
-  return {
-    id: def.id,
-    slug: def.slug,
-    label: def.label,
-    mandatory: def.mandatory,
-    jobRoles: def.jobRoles,
-    acceptedMimeTypes: def.acceptedMimeTypes,
-    active: def.active,
-    createdAt: def.createdAt,
-    updatedAt: def.updatedAt,
   };
 }

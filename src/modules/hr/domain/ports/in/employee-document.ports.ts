@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { DocumentOrigin } from "../../entities/employee-document.js";
+import type { DocumentOrigin } from "../../../../documents/domain/entities/document.js";
 import type { DocumentDisplayStatus } from "../../services/document-status.service.js";
 
 export interface EmployeeDocumentDTO {

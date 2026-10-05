@@ -1,7 +1,7 @@
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
-import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
 import type { HrFileStoragePort } from "../../domain/ports/out/hr-file-storage.port.js";
-import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
+import type { DocumentCategoryRepositoryPort } from "../../../documents/domain/ports/out/document-category-repository.port.js";
 import {
   applicableCategoriesFor,
   buildDynamicRequirements,
@@ -35,22 +35,29 @@ export class ListEmployeesUseCase implements ListEmployeesPort {
   ) {}
 
   async execute(command: ListEmployeesCommand): Promise<ListEmployeesResultDTO> {
-    const employees = await this.employeeRepository.findMany(command.organizationId, {
+    const allEmployees = await this.employeeRepository.findMany(command.organizationId, {
       ...(command.search !== undefined && { search: command.search }),
       status: command.status ?? "all",
       ...(command.employmentType !== undefined && { employmentType: command.employmentType }),
     });
+    // Cargo e local filtram em memória sobre o mesmo conjunto (como `documentSituation`).
+    // Um colaborador "pertence" a um local se for o principal ou um dos autorizados.
+    const employees = allEmployees.filter(
+      (e) =>
+        (!command.positionId || e.positionId === command.positionId) &&
+        (!command.locationId ||
+          e.primaryLocationId === command.locationId ||
+          e.authorizedLocationIds.includes(command.locationId)),
+    );
 
-    const documents = await this.employeeDocumentRepository.findCurrentByEmployeeIds(
-      command.organizationId,
-      employees.map((e) => e.id),
+    const documents = await this.employeeDocumentRepository.findCurrentByOwners(command.organizationId, "employee", employees.map((e) => e.id),
     );
     const categoryDefs = await this.documentCategoryRepository.findMany(command.organizationId, { activeOnly: true });
     const documentsByEmployee = new Map<string, typeof documents>();
     for (const doc of documents) {
-      const list = documentsByEmployee.get(doc.employeeId) ?? [];
+      const list = documentsByEmployee.get(doc.ownerId) ?? [];
       list.push(doc);
-      documentsByEmployee.set(doc.employeeId, list);
+      documentsByEmployee.set(doc.ownerId, list);
     }
 
     let rows: EmployeeListRowDTO[] = await Promise.all(
@@ -74,6 +81,8 @@ export class ListEmployeesUseCase implements ListEmployeesPort {
           id: employee.id,
           fullName: employee.fullName,
           jobRole: employee.jobRole,
+          positionId: employee.positionId,
+          primaryLocationId: employee.primaryLocationId,
           employmentType: employee.employmentType,
           email: employee.email,
           phone: employee.phone,

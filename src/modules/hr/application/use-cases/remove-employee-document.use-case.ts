@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { EmployeeDocumentNotFoundError } from "../../domain/errors.js";
-import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
 import type { HrAuditLogPort } from "../../domain/ports/out/hr-audit-log.port.js";
 import type {
   RemoveEmployeeDocumentCommand,
@@ -16,7 +16,7 @@ export class RemoveEmployeeDocumentUseCase implements RemoveEmployeeDocumentPort
 
   async execute(command: RemoveEmployeeDocumentCommand): Promise<void> {
     const existing = await this.employeeDocumentRepository.findById(command.organizationId, command.documentId);
-    if (!existing || existing.employeeId !== command.employeeId) {
+    if (!existing || existing.ownerId !== command.employeeId) {
       throw new EmployeeDocumentNotFoundError(command.documentId);
     }
 

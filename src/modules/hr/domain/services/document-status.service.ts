@@ -1,37 +1,14 @@
-import type { EmployeeDocument } from "../entities/employee-document.js";
-import type { DocumentCategoryDefinition } from "../entities/document-category.js";
+import type { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
+import type { DocumentCategoryDefinition } from "../../../documents/domain/entities/document-category.js";
 import type { JobRole } from "../entities/employee.js";
 
-export type DocumentDisplayStatus =
-  | "ok"
-  | "expiring"
-  | "expired"
-  | "pending_validation"
-  | "rejected"
-  | "removed";
-
-/**
- * Threshold de "a expirar" — constante nomeada, não persistida por
- * organização nesta fase (simplificação documentada no README do módulo).
- */
-export const EXPIRING_SOON_DAYS = 30;
-
-/** Deriva o estado de exibição de uma versão de documento (mockup: "Tudo ok" / "A expirar" / "A validar" / etc). */
-export function computeDocumentDisplayStatus(
-  doc: Pick<EmployeeDocument, "status" | "expiresAt" | "isCurrent">,
-  now: Date = new Date(),
-): DocumentDisplayStatus {
-  if (!doc.isCurrent || doc.status === "removed") return "removed";
-  if (doc.status === "rejected") return "rejected";
-  if (doc.status === "pending_validation") return "pending_validation";
-  if (doc.expiresAt) {
-    const expiresAtMs = new Date(doc.expiresAt).getTime();
-    const daysRemaining = Math.ceil((expiresAtMs - now.getTime()) / (1000 * 60 * 60 * 24));
-    if (daysRemaining < 0) return "expired";
-    if (daysRemaining <= EXPIRING_SOON_DAYS) return "expiring";
-  }
-  return "ok";
-}
+// Estado de validade genérico — vive no motor de documentos (Base Organizacional, ticket 03).
+export {
+  computeDocumentDisplayStatus,
+  EXPIRING_SOON_DAYS,
+  type DocumentDisplayStatus,
+} from "../../../documents/domain/services/document-validity.service.js";
+import { computeDocumentDisplayStatus } from "../../../documents/domain/services/document-validity.service.js";
 
 export interface MandatoryDocumentsSummary {
   mandatoryTotal: number;
@@ -199,7 +176,13 @@ export function applicableCategoriesFor(
   definitions: readonly DocumentCategoryDefinition[],
   jobRole: JobRole,
 ): DocumentCategoryDefinition[] {
-  return definitions.filter((d) => d.active && (d.jobRoles.length === 0 || d.jobRoles.includes(jobRole)));
+  return definitions.filter(
+    (d) =>
+      d.active &&
+      // Base Organizacional §11: uma categoria só da Empresa nunca gera requisito (nem "Em falta") individual.
+      d.scope !== "company" &&
+      (d.jobRoles.length === 0 || d.jobRoles.includes(jobRole)),
+  );
 }
 
 /** Converte cada categoria configurável obrigatória num requisito de categoria única, para somar a `DEFAULT_MANDATORY_REQUIREMENTS`. */

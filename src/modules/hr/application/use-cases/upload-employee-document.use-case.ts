@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { EmployeeNotFoundError, DocumentCategoryAlreadyExistsError } from "../../domain/errors.js";
-import { EmployeeDocument } from "../../domain/entities/employee-document.js";
+import { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
-import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
 import type { HrFileStoragePort } from "../../domain/ports/out/hr-file-storage.port.js";
 import type { HrAuditLogPort } from "../../domain/ports/out/hr-audit-log.port.js";
 import type {
@@ -24,10 +24,7 @@ export class UploadEmployeeDocumentUseCase implements UploadEmployeeDocumentPort
     const employee = await this.employeeRepository.findById(command.organizationId, command.employeeId);
     if (!employee) throw new EmployeeNotFoundError(command.employeeId);
 
-    const current = await this.employeeDocumentRepository.findCurrentByEmployeeId(
-      command.organizationId,
-      command.employeeId,
-    );
+    const current = await this.employeeDocumentRepository.findCurrentByOwners(command.organizationId, "employee", [command.employeeId]);
     if (current.some((d) => d.category === command.category)) {
       throw new DocumentCategoryAlreadyExistsError(command.category);
     }
@@ -41,7 +38,7 @@ export class UploadEmployeeDocumentUseCase implements UploadEmployeeDocumentPort
     );
 
     const document = EmployeeDocument.createFirstVersion({
-      employeeId: command.employeeId,
+      owner: { type: "employee", id: command.employeeId },
       category: command.category,
       mandatory: command.mandatory,
       fileName: command.filename,

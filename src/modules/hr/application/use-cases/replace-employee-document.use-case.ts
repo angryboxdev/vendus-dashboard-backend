@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { EmployeeNotFoundError, EmployeeDocumentNotFoundError } from "../../domain/errors.js";
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
-import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
 import type { HrFileStoragePort } from "../../domain/ports/out/hr-file-storage.port.js";
 import type { HrAuditLogPort } from "../../domain/ports/out/hr-audit-log.port.js";
 import type {
@@ -30,7 +30,7 @@ export class ReplaceEmployeeDocumentUseCase implements ReplaceEmployeeDocumentPo
     if (!employee) throw new EmployeeNotFoundError(command.employeeId);
 
     const previous = await this.employeeDocumentRepository.findById(command.organizationId, command.documentId);
-    if (!previous || previous.employeeId !== command.employeeId) {
+    if (!previous || previous.ownerId !== command.employeeId) {
       throw new EmployeeDocumentNotFoundError(command.documentId);
     }
 

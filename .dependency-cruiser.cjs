@@ -83,6 +83,8 @@ module.exports = {
           "^src/modules/cash-closings/__tests__/integration/supabase-cash-closing\\.integration\\.test\\.ts$",
           "^src/modules/bank-statements/__tests__/integration/supabase-occurrence-match-read\\.integration\\.test\\.ts$",
           "^src/modules/crm/__tests__/integration/supabase-crm-workspace\\.integration\\.test\\.ts$",
+          "^src/modules/organization/__tests__/integration/supabase-organization\\.integration\\.test\\.ts$",
+          "^src/modules/locations/__tests__/integration/supabase-location\\.integration\\.test\\.ts$",
           "^src/services/__tests__/ingredientConsumptionService\\.integration\\.test\\.ts$",
           "^src/services/__tests__/stockMovementService\\.integration\\.test\\.ts$",
         ],

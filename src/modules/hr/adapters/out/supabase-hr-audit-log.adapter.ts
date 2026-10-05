@@ -54,7 +54,7 @@ export class SupabaseHrAuditLogAdapter implements HrAuditLogPort {
           id: randomUUID(),
           entity_type: entry.entityType,
           entity_id: entry.entityId,
-          employee_id: entry.employeeId,
+          employee_id: entry.employeeId ?? null,
           action: entry.action,
           actor: entry.actor,
           description: entry.description,

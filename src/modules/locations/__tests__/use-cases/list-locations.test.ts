@@ -19,7 +19,19 @@ describe("ListLocationsUseCase", () => {
     const result = await useCase.execute({ organizationId: orgA });
 
     expect(result).toEqual([
-      { id: "loc-1", name: "Arcozelo", code: "ARC", timezone: "Europe/Lisbon", isActive: true },
+      {
+        id: "loc-1",
+        name: "Arcozelo",
+        code: "ARC",
+        timezone: "Europe/Lisbon",
+        isActive: true,
+        address: null,
+        postalCode: null,
+        city: null,
+        municipality: null,
+        country: "PT",
+        phone: null,
+      },
     ]);
   });
 

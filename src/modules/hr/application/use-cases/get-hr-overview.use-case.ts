@@ -1,14 +1,14 @@
 import { DateTime } from "luxon";
 import { REPORT_TIMEZONE } from "../../../../utils/lisbonDayInstants.js";
 import type { Employee } from "../../domain/entities/employee.js";
-import type { EmployeeDocument } from "../../domain/entities/employee-document.js";
+import type { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
-import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
 import type { ShiftAttendanceReadPort, ShiftOccurrence } from "../../domain/ports/out/shift-attendance-read.port.js";
 import type { ActiveLeaveRange, LeaveReadPort, LeaveType } from "../../domain/ports/out/leave-read.port.js";
 import type { PaymentReadPort } from "../../domain/ports/out/payment-read.port.js";
-import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
-import type { DocumentCategoryDefinition } from "../../domain/entities/document-category.js";
+import type { DocumentCategoryRepositoryPort } from "../../../documents/domain/ports/out/document-category-repository.port.js";
+import type { DocumentCategoryDefinition } from "../../../documents/domain/entities/document-category.js";
 import type { LocationRepositoryPort } from "../../../locations/domain/ports/out/location-repository.port.js";
 import {
   applicableCategoriesFor,
@@ -103,9 +103,7 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
     const [documentsResult, shiftsResult, leaveResult, unpaidResult, locationsResult] = await Promise.all([
       employeesResult.ok
         ? settle(
-            this.employeeDocumentRepository.findCurrentByEmployeeIds(
-              command.organizationId,
-              activeEmployees.map((e) => e.id),
+            this.employeeDocumentRepository.findCurrentByOwners(command.organizationId, "employee", activeEmployees.map((e) => e.id),
             ),
           )
         : Promise.resolve<Settled<EmployeeDocument[]>>({ ok: false, reason: "employees indisponível" }),
@@ -156,9 +154,9 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
     if (documentsResult.ok) {
       const documentsByEmployee = new Map<string, EmployeeDocument[]>();
       for (const doc of documentsResult.data) {
-        const list = documentsByEmployee.get(doc.employeeId) ?? [];
+        const list = documentsByEmployee.get(doc.ownerId) ?? [];
         list.push(doc);
-        documentsByEmployee.set(doc.employeeId, list);
+        documentsByEmployee.set(doc.ownerId, list);
       }
       for (const e of activeEmployees) {
         const applicable = applicableCategoriesFor(categoryDefs, e.jobRole);
@@ -278,9 +276,9 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
     if (employeesResult.ok && documentsResult.ok) {
       const documentsByEmployee = new Map<string, EmployeeDocument[]>();
       for (const doc of documentsResult.data) {
-        const list = documentsByEmployee.get(doc.employeeId) ?? [];
+        const list = documentsByEmployee.get(doc.ownerId) ?? [];
         list.push(doc);
-        documentsByEmployee.set(doc.employeeId, list);
+        documentsByEmployee.set(doc.ownerId, list);
       }
       for (const e of employeesResult.data.filter((e) => e.status === "active")) {
         for (const doc of documentsByEmployee.get(e.id) ?? []) {

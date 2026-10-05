@@ -1,3 +1,5 @@
+import { FakePositionRepository } from "../fakes/fake-position-repository.js";
+import { FakeLocationRepository } from "../fakes/fake-location-repository.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { Employee } from "../../domain/entities/employee.js";
 import { UpdateEmployeeUseCase } from "../../application/use-cases/update-employee.use-case.js";
@@ -9,7 +11,7 @@ const ORG = mintOrganizationId("org-test");
 
 describe("UpdateEmployeeUseCase", () => {
   it("lança EmployeeNotFoundError para id inexistente", async () => {
-    const useCase = new UpdateEmployeeUseCase(new FakeEmployeeRepository(), new FakeHrAuditLog());
+    const useCase = new UpdateEmployeeUseCase(new FakeEmployeeRepository(), new FakeHrAuditLog(), new FakePositionRepository(), new FakeLocationRepository());
     await expect(
       useCase.execute({ organizationId: ORG, actor: "a@b.com", id: "x", data: {} }),
     ).rejects.toThrow(EmployeeNotFoundError);
@@ -21,7 +23,7 @@ describe("UpdateEmployeeUseCase", () => {
     const e = Employee.create({ fullName: "Andres Silva", phone: "919000000" });
     employees.seed(ORG, e);
 
-    const useCase = new UpdateEmployeeUseCase(employees, auditLog);
+    const useCase = new UpdateEmployeeUseCase(employees, auditLog, new FakePositionRepository(), new FakeLocationRepository());
     const result = await useCase.execute({
       organizationId: ORG,
       actor: "gerencia@fonsat.pt",

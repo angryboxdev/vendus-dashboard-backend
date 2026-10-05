@@ -10,7 +10,9 @@ export type HrAuditEntityType =
   | "attendance_correction"
   | "monthly_closure"
   // Fase 2.1
-  | "attendance_rules";
+  | "attendance_rules"
+  // Base Organizacional — Cargos (ticket 07): entidade da organização, sem colaborador associado.
+  | "position";
 
 export interface HrAuditLogEntry {
   organizationId: OrganizationId;
@@ -18,7 +20,8 @@ export interface HrAuditLogEntry {
   actor: string;
   entityType: HrAuditEntityType;
   entityId: string;
-  employeeId: string;
+  /** Omitido só para entidades da organização sem colaborador (ex.: `position`) — `hr_audit_logs.employee_id` é nullable. */
+  employeeId?: string;
   action: string;
   description: string;
   before?: unknown;

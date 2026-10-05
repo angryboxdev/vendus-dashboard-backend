@@ -13,6 +13,12 @@ export interface EmployeeProps {
   roleOrNotes: string | null;
   employmentType: EmploymentType;
   jobRole: JobRole;
+  /** Cargo (Base Organizacional, ticket 07). `jobRole` acompanha sempre a categoria operacional do cargo (D4). */
+  positionId: string | null;
+  /** Local principal (ticket 08) — referência a `locations`, nunca texto. */
+  primaryLocationId: string | null;
+  /** Outros locais autorizados, opcional (ticket 08). Nunca inclui o principal. */
+  authorizedLocationIds: string[];
   status: EmployeeStatus;
   hiredAt: string | null;
   endedAt: string | null;
@@ -40,6 +46,9 @@ export interface UpdateEmployeeData {
   roleOrNotes?: string | null;
   employmentType?: EmploymentType;
   jobRole?: JobRole;
+  positionId?: string | null;
+  primaryLocationId?: string | null;
+  authorizedLocationIds?: string[];
   hiredAt?: string | null;
   endedAt?: string | null;
   baseSalary?: number | null;
@@ -56,6 +65,11 @@ export interface UpdateEmployeeData {
   emergencyContactPhone?: string | null;
 }
 
+/** Sem duplicados e nunca contendo o local principal (já é implícito). */
+function normalizeAuthorizedLocations(ids: string[], primaryLocationId: string | null): string[] {
+  return [...new Set(ids)].filter((id) => id !== primaryLocationId);
+}
+
 /**
  * Não inclui `weeklySchedule`/`hasKioskPin` (turnos/kiosk) nem pagamentos —
  * esses campos continuam a viver exclusivamente no domínio legacy
@@ -69,6 +83,9 @@ export class Employee {
   readonly roleOrNotes: string | null;
   readonly employmentType: EmploymentType;
   readonly jobRole: JobRole;
+  readonly positionId: string | null;
+  readonly primaryLocationId: string | null;
+  readonly authorizedLocationIds: string[];
   readonly status: EmployeeStatus;
   readonly hiredAt: string | null;
   readonly endedAt: string | null;
@@ -96,6 +113,9 @@ export class Employee {
     this.roleOrNotes = props.roleOrNotes;
     this.employmentType = props.employmentType;
     this.jobRole = props.jobRole;
+    this.positionId = props.positionId;
+    this.primaryLocationId = props.primaryLocationId;
+    this.authorizedLocationIds = normalizeAuthorizedLocations(props.authorizedLocationIds, props.primaryLocationId);
     this.status = props.status;
     this.hiredAt = props.hiredAt;
     this.endedAt = props.endedAt;
@@ -123,6 +143,9 @@ export class Employee {
     roleOrNotes?: string | null;
     employmentType?: EmploymentType;
     jobRole?: JobRole;
+    positionId?: string | null;
+    primaryLocationId?: string | null;
+    authorizedLocationIds?: string[];
     hiredAt?: string | null;
     baseSalary?: number | null;
     salaryType?: SalaryType;
@@ -149,6 +172,9 @@ export class Employee {
       roleOrNotes: props.roleOrNotes ?? null,
       employmentType: props.employmentType ?? "permanent",
       jobRole: props.jobRole ?? "service",
+      positionId: props.positionId ?? null,
+      primaryLocationId: props.primaryLocationId ?? null,
+      authorizedLocationIds: props.authorizedLocationIds ?? [],
       status: "active",
       hiredAt: props.hiredAt ?? null,
       endedAt: null,
@@ -187,6 +213,10 @@ export class Employee {
       roleOrNotes: data.roleOrNotes !== undefined ? data.roleOrNotes : props.roleOrNotes,
       employmentType: data.employmentType !== undefined ? data.employmentType : props.employmentType,
       jobRole: data.jobRole !== undefined ? data.jobRole : props.jobRole,
+      positionId: data.positionId !== undefined ? data.positionId : props.positionId,
+      primaryLocationId: data.primaryLocationId !== undefined ? data.primaryLocationId : props.primaryLocationId,
+      authorizedLocationIds:
+        data.authorizedLocationIds !== undefined ? data.authorizedLocationIds : props.authorizedLocationIds,
       hiredAt: data.hiredAt !== undefined ? data.hiredAt : props.hiredAt,
       endedAt: data.endedAt !== undefined ? data.endedAt : props.endedAt,
       baseSalary: data.baseSalary !== undefined ? data.baseSalary : props.baseSalary,
@@ -234,6 +264,9 @@ export class Employee {
       roleOrNotes: this.roleOrNotes,
       employmentType: this.employmentType,
       jobRole: this.jobRole,
+      positionId: this.positionId,
+      primaryLocationId: this.primaryLocationId,
+      authorizedLocationIds: [...this.authorizedLocationIds],
       status: this.status,
       hiredAt: this.hiredAt,
       endedAt: this.endedAt,

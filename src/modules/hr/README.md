@@ -10,8 +10,9 @@
 Módulo **Pessoas & Documentos** (RH-02) + **Visão Geral operacional** (RH-01)
 + **Escalas & Turnos** (RH-03). Trata o cadastro de colaboradores e o dossiê
 documental de cada um como a fonte operacional de RH — substitui a antiga
-entrada "Funcionários" por uma vista com sinais de completude de perfil,
-onboarding e situação documental, mais um perfil 360º por colaborador —
+entrada "Funcionários" por uma vista com sinais de completude de perfil
+e situação documental (o sinal de onboarding foi removido na Base
+Organizacional — ver Design decisions), mais um perfil 360º por colaborador —
 agrega, só em leitura, KPIs de equipa/operação do dia/pendências a partir de
 dados reais já existentes (turnos, presença, férias, pagamentos) — e, desde
 a RH-03, também **cria/edita/publica turnos planeados**, gere uma **escala
@@ -358,7 +359,15 @@ Este módulo é **aditivo**, não uma substituição imediata:
   Visão Geral mostrar a validade/dias restantes sem uma 2ª chamada — ver
   "Design decisions".
 - `CreateEmployeePort` / `UpdateEmployeePort` / `SetEmployeeStatusPort` /
-  `UploadEmployeePhotoPort` — escrita de colaborador.
+  `UploadEmployeePhotoPort` — escrita de colaborador. Desde a Base
+  Organizacional aceitam `positionId`, `primaryLocationId` e
+  `authorizedLocationIds` (e já não `jobRole`, que passou a derivar do
+  cargo) — regras em `employee-assignments.ts`, ver "Cargos e locais do
+  colaborador" nas Design decisions. `ListEmployeesPort` filtra também por
+  `positionId` e `locationId` (principal ou autorizado).
+- `ListPositionsPort` / `CreatePositionPort` / `UpdatePositionPort` /
+  `SetPositionActivePort` — Colaboradores → Cargos (Base Organizacional,
+  ticket 07); nunca há delete.
 - `GetEmployeeHistoryPort` — histórico agregado de auditoria de um
   colaborador.
 - `ListEmployeeDocumentsPort` / `UploadEmployeeDocumentPort` /
@@ -531,9 +540,15 @@ Este módulo é **aditivo**, não uma substituição imediata:
 
 ### Output (domain dependencies)
 
-- `EmployeeRepositoryPort` / `EmployeeDocumentRepositoryPort` — persistência
+- `EmployeeRepositoryPort` / `DocumentRepositoryPort` (do módulo `documents`,
+  desde a Base Organizacional ticket 03 — o motor de documentos é único para
+  Empresa e Colaborador; o RH usa-o com dono `employee`) — persistência
   via `ScopedQueryFactory` (D1/D2), sobre `hr_employees`/
-  `hr_employee_documents`.
+  `hr_employee_documents` (+ `hr_employee_locations` para os locais
+  autorizados, reescritos como conjunto a cada gravação).
+- `PositionRepositoryPort` — `hr_positions` (Cargos).
+- `LocationRepositoryPort` (do módulo `locations`) — também usado para
+  validar o local principal/autorizados de um colaborador.
 - `HrFileStoragePort` — `store`/`getSignedUrl`/`remove`, com `kind:
   "document" | "photo"` selecionando o bucket (`hr-documents` privado, TTL
   curto; `hr-photos` privado, TTL longo — ver ADR abaixo).
@@ -561,9 +576,10 @@ Este módulo é **aditivo**, não uma substituição imediata:
   print do utilizador). Se esta fonte falhar, o bloco `operation` continua
   `status: "ok"` só com `locationName: null` em todas as linhas — não é
   informação crítica o suficiente para derrubar o painel inteiro.
-- `DocumentCategoryRepositoryPort` — persistência de
+- `DocumentCategoryRepositoryPort` (do módulo `documents`) — persistência de
   `DocumentCategoryDefinition` em `hr_document_categories` via
-  `ScopedQueryFactory`. Injetado também em `ListEmployeesUseCase`/
+  `ScopedQueryFactory`. `applicableCategoriesFor` ignora categorias com
+  âmbito `company` (um documento empresarial nunca gera "Em falta"). Injetado também em `ListEmployeesUseCase`/
   `GetPeopleKpisUseCase`/`GetHrOverviewUseCase`/`GetEmployeeProfileUseCase`
   (constroem os requisitos obrigatórios dinâmicos a partir dele).
 - `WorkShiftRepositoryPort` (RH-03) — CRUD de `hr_work_shifts` +
@@ -611,6 +627,9 @@ Este módulo é **aditivo**, não uma substituição imediata:
 - `HrPeopleController` → expõe os use cases em `/api/hr/people*` (ver tabela
   de rotas no plano/PR). GETs permitidos a `hr_viewer`+; escritas exigem
   `requireMinRole("manager")` inline, mesmo padrão do `hrRoutes.ts` legacy.
+- `HrPositionsController` (Base Organizacional) → `GET /api/hr/positions`
+  (`hr_viewer`+), `POST /api/hr/positions`, `PATCH /api/hr/positions/:id`,
+  `PATCH /api/hr/positions/:id/active` (`manager`). 409 em nome duplicado.
 - `HrOverviewController` (RH-01) → `GET /api/hr/overview`,
   `GET /api/hr/overview/shifts-to-review` e
   `GET /api/hr/overview/shifts-to-review/:shiftId` (novo, "Melhorar Hoje na
@@ -618,10 +637,9 @@ Este módulo é **aditivo**, não uma substituição imediata:
   todos só leitura, `hr_viewer`+. A confirmação de conferência **não** tem
   rota aqui — continua a usar o endpoint legacy
   `PATCH /api/hr/shifts/:id/attendance`.
-- `HrDocumentCategoriesController` → `GET/POST /api/hr/document-categories`,
-  `PATCH /api/hr/document-categories/:id`,
-  `PATCH /api/hr/document-categories/:id/active`. GET aberto a `hr_viewer`+;
-  escritas exigem `requireMinRole("manager")`.
+- `/api/hr/document-categories*` — desde a Base Organizacional (ticket 03)
+  exposto pelo módulo `documents` (`DocumentCategoriesController`, mesmo
+  contrato + campo `scope`), já não por este módulo.
 - `HrSchedulesController` (RH-03) → `/api/hr/schedules/*`. GET aberto a
   `hr_viewer`+; escritas exigem `requireMinRole("manager")` (mesmo padrão do
   resto do módulo — nada aqui usa `admin`, ao contrário de
@@ -653,7 +671,10 @@ Este módulo é **aditivo**, não uma substituição imediata:
 ### Output
 
 - `SupabaseEmployeeRepository` / `SupabaseEmployeeDocumentRepository` →
-  `hr_employees`/`hr_employee_documents` via `createScopedQuery`.
+  `hr_employees` (+ `hr_employee_locations`)/`hr_employee_documents` via
+  `createScopedQuery`.
+- `SupabasePositionRepository` → `hr_positions`; traduz `23505` em
+  `DuplicatePositionNameError`.
 - `SupabaseHrFileStorageAdapter` → delega para `objectStorage`
   (`src/infra/scoped-db/object-storage.ts`), nunca importa o SDK
   diretamente.
@@ -669,8 +690,9 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `SupabasePaymentReadAdapter` (RH-01) → leitura direta via
   `createScopedQuery`, sem importar `hrShiftService.ts`/
   `hrShiftAttendanceService.ts`/`hrLeaveService.ts`/`hrPaymentService.ts`.
-- `SupabaseDocumentCategoryRepository` → `hr_document_categories` via
-  `createScopedQuery`.
+- `SupabaseDocumentRepository` / `SupabaseDocumentCategoryRepository` — do
+  módulo `documents`, instanciados em `hr.module.ts` (mesmo padrão de
+  `SupabaseLocationRepository`).
 - **"Melhorar Hoje na operação"**: nenhum adapter novo — `GetHrOverviewUseCase`/
   `ListShiftsToReviewUseCase`/`GetShiftToReviewUseCase` passaram a receber
   `SupabaseLocationRepository` (módulo `locations`, já existente), o mesmo
@@ -684,6 +706,34 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `hr_attendance_rules`; `save` é sempre `insert`, nunca `update`.
 
 ## Design decisions (ADR summary)
+
+### Base Organizacional — Cargos e locais do colaborador (tickets 07/08)
+
+- **Cargo (`Position`, `hr_positions`) substitui a "Função" fixa.** A
+  migração `20261004120000_hr_positions_and_employee_locations.sql` cria
+  por organização os 3 cargos equivalentes ao enum (Gerente, Preparador,
+  Serviço) e liga cada colaborador ao da sua função — ninguém perde a
+  função atual. Nome único por organização após normalização
+  (minúsculas, espaços colapsados — coluna gerada `normalized_name`), por
+  isso "Preparador"/"preparador" nunca são dois cargos.
+- **Categoria operacional transitória (spec D4).** As Escalas (rotações) e
+  as categorias de documentos ainda filtram por `job_role`
+  (manager|prep|service) e a task proíbe mexer nas Escalas agora. Cada
+  cargo tem uma `operationalCategory`; o `jobRole` do colaborador passa a
+  ser **sempre** a categoria do seu cargo (definido na atribuição, e
+  propagado a todos os titulares se a categoria do cargo mudar).
+  `hr_employees.job_role` só será removido depois de Escalas/documentos
+  migrarem para o cargo.
+- **Cargo ≠ permissão.** Nada no cargo toca em `org_members`/RBAC.
+- **Inativar, nunca apagar.** Cargo ou local inativo nunca é atribuído de
+  novo, mas quem já o tinha mantém-no e pode continuar a ser editado.
+- **Locais por referência.** `primary_location_id` (FK composta a
+  `locations`) + `hr_employee_locations` (FKs compostas) — nunca texto.
+  O principal nunca se repete nos autorizados.
+- **Histórico único.** Mudanças de cargo/local ficam no histórico do
+  colaborador (`employee_updated`, com descrição "cargo alterado"/"locais
+  alterados"); a gestão de cargos grava em `hr_audit_logs` com
+  `entity_type = "position"` e `employee_id` nulo — sem segundo histórico.
 
 ### Versionamento por nova linha, não tabela de histórico separada
 
@@ -726,8 +776,8 @@ confirmado com o utilizador. Tanto `ListEmployeesUseCase` como
 `GetEmployeeProfileUseCase` tratam `employee.status !== "active"` como um
 caso especial: devolvem sempre `documentSituation: "ok"`,
 `profileCompletionPercent: 100`, `sections` todas `true`,
-`missingRequirements: []`, `expiringSoonCount: 0`, `alerts: []` e
-`onboardingStatus: "completed"`, **independentemente** do estado real dos
+`missingRequirements: []`, `expiringSoonCount: 0` e `alerts: []`,
+**independentemente** do estado real dos
 dados/documentos. Não é um cálculo estatístico fraco — é uma decisão
 deliberada de não gerar alerta/estado pendente para quem já saiu, mesmo que
 o registo histórico continue incompleto. `GetPeopleKpisUseCase` e
@@ -926,9 +976,10 @@ A task original pedia uma 3ª aba "Admissão" dentro de "Pessoas"
 (acompanhamento de checklist de onboarding). O utilizador pediu
 explicitamente para ignorar essa parte "não vejo necessário na nossa
 operação" — nada foi construído para isso (nem endpoint, nem aba, nem
-componente). `PeopleTabs` só tem Colaboradores/Documentos. Se vier a ser
-pedida no futuro, o `onboardingPending` KPI (já existente em
-`GetPeopleKpisPort`) já dá o ponto de partida para a contagem.
+componente). Desde a Base Organizacional (task §20) também o KPI
+`onboardingPending` e o `onboardingStatus` do perfil foram removidos —
+não existe workflow de onboarding e a task proíbe manter o card só
+para "preparar" a interface.
 
 ### RH-03 — `status`/`source` como único par de campos para tudo
 
@@ -1392,6 +1443,13 @@ ronda — ver Known gaps. O extrato só mostra dias com registo real
 
 ## Known gaps / open debt
 
+- **Base Organizacional — caminhos legacy ainda escrevem `job_role` sem cargo.**
+  `src/routes/hrRoutes.ts`/`hrEmployeeService.ts` (legacy) continuam a
+  criar/editar colaboradores só com o enum; um colaborador criado por aí
+  fica sem `position_id` até ser editado no ecrã novo (Colaboradores).
+- **Base Organizacional — Escalas e categorias de documentos ainda usam a
+  categoria operacional, não o cargo** (spec D4) — a migrar quando a task
+  permitir mexer nas Escalas; só então se remove `hr_employees.job_role`.
 - **Evolução "Por Colaborador" — ficha individual não sintetiza "Folga"**
   para dias sem nenhum `WorkShift`/presença (o mockup mostra essas
   linhas) — exigiria reconstruir escala base/feriados também aqui

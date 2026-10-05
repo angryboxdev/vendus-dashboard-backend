@@ -6,6 +6,9 @@ import {
   EmployeeNotFoundError,
   EmployeeDocumentNotFoundError,
   InvalidEmployeeError,
+  InactivePositionError,
+  InvalidEmployeeLocationError,
+  PositionNotFoundError,
   DocumentCategoryAlreadyExistsError,
   DocumentNotCurrentError,
 } from "../../domain/errors.js";
@@ -53,7 +56,6 @@ function toViewerRole(role: AppRole): ViewerRole {
 }
 
 const EMPLOYMENT_TYPES = new Set(["permanent", "contract", "extra"]);
-const JOB_ROLES = new Set(["manager", "prep", "service"]);
 const SALARY_TYPES = new Set(["fixed", "hourly"]);
 
 type EmployeeOptionalFields = Partial<Omit<CreateEmployeeCommand, "organizationId" | "actor" | "fullName">>;
@@ -67,7 +69,12 @@ function readEmployeeFields(body: Record<string, unknown>): EmployeeOptionalFiel
   if (typeof body.employmentType === "string" && EMPLOYMENT_TYPES.has(body.employmentType)) {
     out.employmentType = body.employmentType;
   }
-  if (typeof body.jobRole === "string" && JOB_ROLES.has(body.jobRole)) out.jobRole = body.jobRole;
+  // Cargo/locais (Base Organizacional, tickets 07/08) — `jobRole` deixou de ser aceite: deriva do cargo (D4).
+  if ("positionId" in body) out.positionId = typeof body.positionId === "string" && body.positionId ? body.positionId : null;
+  if ("primaryLocationId" in body)
+    out.primaryLocationId = typeof body.primaryLocationId === "string" && body.primaryLocationId ? body.primaryLocationId : null;
+  if (Array.isArray(body.authorizedLocationIds))
+    out.authorizedLocationIds = body.authorizedLocationIds.filter((v): v is string => typeof v === "string" && v.length > 0);
   if ("hiredAt" in body) out.hiredAt = (body.hiredAt as string | null) ?? null;
   if ("baseSalary" in body) out.baseSalary = body.baseSalary != null ? Number(body.baseSalary) : null;
   if (typeof body.salaryType === "string" && SALARY_TYPES.has(body.salaryType)) out.salaryType = body.salaryType;
@@ -128,6 +135,8 @@ export class HrPeopleController {
           ...(q.profileComplete === "complete" || q.profileComplete === "incomplete"
             ? { profileComplete: q.profileComplete }
             : {}),
+          ...(q.positionId && { positionId: q.positionId }),
+          ...(q.locationId && { locationId: q.locationId }),
           page: q.page ? Math.max(1, Number(q.page)) : 1,
           pageSize: q.pageSize ? Math.min(100, Math.max(1, Number(q.pageSize))) : 10,
         });
@@ -207,7 +216,12 @@ export class HrPeopleController {
         });
         res.status(201).json(result);
       } catch (e) {
-        if (e instanceof InvalidEmployeeError) {
+        if (
+          e instanceof InvalidEmployeeError ||
+          e instanceof PositionNotFoundError ||
+          e instanceof InactivePositionError ||
+          e instanceof InvalidEmployeeLocationError
+        ) {
           res.status(400).json({ error: e.message });
           return;
         }
@@ -233,7 +247,12 @@ export class HrPeopleController {
           res.status(404).json({ error: e.message });
           return;
         }
-        if (e instanceof InvalidEmployeeError) {
+        if (
+          e instanceof InvalidEmployeeError ||
+          e instanceof PositionNotFoundError ||
+          e instanceof InactivePositionError ||
+          e instanceof InvalidEmployeeLocationError
+        ) {
           res.status(400).json({ error: e.message });
           return;
         }

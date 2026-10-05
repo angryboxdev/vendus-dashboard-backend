@@ -1,9 +1,9 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { Employee } from "../../domain/entities/employee.js";
-import { EmployeeDocument } from "../../domain/entities/employee-document.js";
+import { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
 import { UploadEmployeeDocumentUseCase } from "../../application/use-cases/upload-employee-document.use-case.js";
 import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
-import { FakeEmployeeDocumentRepository } from "../fakes/fake-employee-document-repository.js";
+import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
 import { FakeHrFileStorage } from "../fakes/fake-hr-file-storage.js";
 import { FakeHrAuditLog } from "../fakes/fake-hr-audit-log.js";
 import { EmployeeNotFoundError, DocumentCategoryAlreadyExistsError } from "../../domain/errors.js";
@@ -12,7 +12,7 @@ const ORG = mintOrganizationId("org-test");
 
 function makeUseCase() {
   const employees = new FakeEmployeeRepository();
-  const documents = new FakeEmployeeDocumentRepository();
+  const documents = new FakeDocumentRepository();
   const storage = new FakeHrFileStorage();
   const auditLog = new FakeHrAuditLog();
   return { employees, documents, storage, auditLog, useCase: new UploadEmployeeDocumentUseCase(employees, documents, storage, auditLog) };
@@ -66,7 +66,7 @@ describe("UploadEmployeeDocumentUseCase", () => {
     documents.seed(
       ORG,
       EmployeeDocument.createFirstVersion({
-        employeeId: e.id,
+        owner: { type: "employee", id: e.id },
         category: "nif",
         mandatory: true,
         fileName: "nif.pdf",

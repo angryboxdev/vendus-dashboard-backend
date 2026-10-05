@@ -19,42 +19,14 @@ export class EmployeeDocumentNotFoundError extends Error {
   }
 }
 
-/**
- * Só existe uma versão "atual" por categoria de documento de cada vez —
- * enviar uma nova categoria quando já existe uma versão atual força o
- * chamador a usar a acção "Substituir" (nunca cria uma segunda linha
- * concorrente "atual" para a mesma categoria).
- */
-export class DocumentCategoryAlreadyExistsError extends Error {
-  constructor(category: string) {
-    super(`Já existe um documento atual na categoria "${category}" — usa substituir em vez de enviar novo`);
-    this.name = "DocumentCategoryAlreadyExistsError";
-  }
-}
-
-/** Tentativa de substituir/remover uma versão que já não é a atual. */
-export class DocumentNotCurrentError extends Error {
-  constructor(id: string) {
-    super(`Documento ${id} já não é a versão atual — não pode ser substituído/removido`);
-    this.name = "DocumentNotCurrentError";
-  }
-}
-
-/** Definição de categoria de documento (configuração, não instância enviada) não encontrada. */
-export class DocumentCategoryConfigNotFoundError extends Error {
-  constructor(id: string) {
-    super(`Categoria de documento não encontrada: ${id}`);
-    this.name = "DocumentCategoryConfigNotFoundError";
-  }
-}
-
-/** Já existe uma categoria de documento configurada com este slug/label nesta organização. */
-export class DocumentCategoryConfigAlreadyExistsError extends Error {
-  constructor(slug: string) {
-    super(`Já existe uma categoria de documento com este nome: "${slug}"`);
-    this.name = "DocumentCategoryConfigAlreadyExistsError";
-  }
-}
+// Erros do motor de documentos — vivem no módulo `documents` (Base Organizacional, ticket 03);
+// re-exportados aqui para os use cases/controllers do RH que já os usam.
+export {
+  DocumentCategoryAlreadyExistsError,
+  DocumentNotCurrentError,
+  DocumentCategoryConfigNotFoundError,
+  DocumentCategoryConfigAlreadyExistsError,
+} from "../../documents/domain/errors.js";
 
 // ── RH-03 — Escalas & Turnos ────────────────────────────────────────────────
 
@@ -164,5 +136,45 @@ export class MonthlyClosureReopenReasonRequiredError extends Error {
   constructor() {
     super("O motivo da reabertura é obrigatório");
     this.name = "MonthlyClosureReopenReasonRequiredError";
+  }
+}
+
+// ── Base Organizacional — Cargos (ticket 07) e Local principal (ticket 08) ──
+
+export class PositionNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Cargo não encontrado: ${id}`);
+    this.name = "PositionNotFoundError";
+  }
+}
+
+export class InvalidPositionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidPositionError";
+  }
+}
+
+/** Já existe um cargo com o mesmo nome normalizado ("Preparador" = "preparador" = " PREPARADOR "). */
+export class DuplicatePositionNameError extends Error {
+  constructor(name: string) {
+    super(`Já existe um cargo com o nome "${name}"`);
+    this.name = "DuplicatePositionNameError";
+  }
+}
+
+/** Atribuir a um colaborador um cargo inativo — quem já o tinha mantém-no, mas nunca se atribui de novo. */
+export class InactivePositionError extends Error {
+  constructor(name: string) {
+    super(`O cargo "${name}" está inativo e não pode ser atribuído`);
+    this.name = "InactivePositionError";
+  }
+}
+
+/** Local inexistente na organização, ou inativo numa nova atribuição. */
+export class InvalidEmployeeLocationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidEmployeeLocationError";
   }
 }

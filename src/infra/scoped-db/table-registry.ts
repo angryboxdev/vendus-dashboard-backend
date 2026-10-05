@@ -54,6 +54,12 @@ export const TABLE_REGISTRY = {
   organizations: { organizationColumn: "id", locationBearing: false },
 
   locations: { organizationColumn: "org_id", locationBearing: false },
+  // Módulo documents (Base Organizacional — auditoria dos documentos da Empresa).
+  document_audit_logs: { organizationColumn: "org_id", locationBearing: false },
+  // Módulo locations (Base Organizacional — Locais).
+  location_audit_logs: { organizationColumn: "org_id", locationBearing: false },
+  // Módulo organization (Base Organizacional — Empresa).
+  organization_audit_logs: { organizationColumn: "org_id", locationBearing: false },
   org_members: { organizationColumn: "org_id", locationBearing: false },
 
   // Módulo Contabilidade — "Documento" (qualquer documento contabilístico/
@@ -134,6 +140,9 @@ export const TABLE_REGISTRY = {
   hr_employee_documents: { organizationColumn: "org_id", locationBearing: false },
   hr_employee_payments: { organizationColumn: "org_id", locationBearing: false },
   hr_employees: { organizationColumn: "org_id", locationBearing: false },
+  // Base Organizacional — Cargos (ticket 07) e outros locais autorizados (ticket 08).
+  hr_positions: { organizationColumn: "org_id", locationBearing: false },
+  hr_employee_locations: { organizationColumn: "org_id", locationBearing: true },
   hr_leave_balances: { organizationColumn: "org_id", locationBearing: false },
   hr_leave_requests: { organizationColumn: "org_id", locationBearing: false },
   // Fase 2: fecho é por organização inteira, nunca por local.
