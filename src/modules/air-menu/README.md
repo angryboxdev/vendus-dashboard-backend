@@ -177,7 +177,7 @@ Authenticate(username, password)  →  { sessionId }
 1. GetOrderIds(sessionId, enterpriseId, startDate_ms, endDate_ms)
    → { orderIds: ["123", "456", ...] }
 
-2. Para cada orderId (em paralelo):
+2. Para cada orderId (em lotes de `BATCH_SIZE`, `BATCH_DELAY_MS` entre lotes, paralelo dentro do lote):
    GetOrders(sessionId, enterpriseId, orderId)
    → { orders: { "NomeDivisão": [orderItemInstance, ...] } }
 ```
@@ -362,7 +362,7 @@ Os endpoints públicos (`/webhook/receive` e `/webhook/stream`) são registados 
 
 - **Endpoint único `/summary`**: ordens e analytics são calculados numa única passagem pelo servidor — o frontend faz 1 chamada HTTP em vez de 2, e o backend faz 1+N chamadas à AirMenu em vez de 2+2N. `GetSummaryUseCase` recebe `GetOrdersPort` e `MenuCatalogPort`, chama ambos em `Promise.all` e passa os resultados a `computeAnalytics` diretamente.
 - **`rawData` lazy-loaded**: o payload de `/summary` omite `rawData` (que pode ter vários KB por ordem). Os dados brutos são acessíveis on-demand via `GET /orders/:orderId/raw`, chamado apenas quando o utilizador abre o drawer de detalhe.
-- **Dois passos obrigatórios para ordens**: a API AirMenu não suporta busca direta por período em `GetOrders` — é necessário `GetOrderIds` primeiro. Os `GetOrders` são feitos em `Promise.all` para paralelismo.
+- **Dois passos obrigatórios para ordens**: a API AirMenu não suporta busca direta por período em `GetOrders` — é necessário `GetOrderIds` primeiro. O primeiro `GetOrders` é uma sonda isolada: se falha, invalida a sessão, reautentica e repete só essa chamada (se falhar de novo, o erro propaga e nenhum outro pedido é disparado — a AirMenu revoga a API key em vez de devolver 429, por isso não há retry do fluxo completo). Os restantes `GetOrders` são feitos em lotes sequenciais de `BATCH_SIZE` (constante em `get-orders.use-case.ts`, default 5) com pausa de `BATCH_DELAY_MS` (default 1000 ms) entre lotes, com `Promise.allSettled` dentro de cada lote — evita disparar centenas de pedidos simultâneos à AirMenu.
 - **Consolidação por `orderId`**: o `GetOrders` agrupa por divisão; uma ordem pode aparecer em múltiplas divisões. O use case usa `Map<orderId, ...>` para garantir unicidade.
 - **`documentType` derivado, não armazenado**: calculado a partir dos `activeFlags` em runtime — não existe campo direto na API.
 - **`documentDate` vs `orderDate`**: a data contabilisticamente relevante é a da flag `FATURAR` ou `CANCEL`, não a da criação da ordem.

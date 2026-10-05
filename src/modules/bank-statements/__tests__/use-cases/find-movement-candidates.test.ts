@@ -37,6 +37,8 @@ function makeInvoiceCandidate(overrides: Partial<InvoiceMatchCandidate> = {}): I
     dueDate: "2026-07-05",
     paidAt: null,
     status: "pending",
+    currency: "EUR",
+    documentType: "invoice",
     ...overrides,
   };
 }

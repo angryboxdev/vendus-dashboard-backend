@@ -227,6 +227,16 @@ export interface UpdateInvoiceCommand {
   currency?: string;
   stockReviewOverride?: StockReviewOverride;
   stockReviewOverrideReason?: string | null;
+  /** Identifica quem faz o pedido (email autenticado) — usado só se for preciso apagar um rascunho de revisão de stock (auditoria, ver `shared-stock-review-guard`). Opcional para não quebrar chamadores/testes existentes; o controller HTTP envia sempre `req.auth.email`. */
+  actor?: string;
+  /**
+   * Só relevante quando `stockReviewOverride` muda e existe uma revisão de
+   * stock associada ainda não aplicada (D10, módulo `stock-purchase-review`)
+   * — `true` confirma que o utilizador aceita remover essa revisão para
+   * prosseguir. Omitido/`false` faz o pedido falhar com 409 (confirmação
+   * necessária) em vez de descartar a revisão silenciosamente.
+   */
+  confirmRemoveStockReview?: boolean;
 }
 
 export interface MarkInvoicePaidCommand {
@@ -242,6 +252,10 @@ export interface SetLineDetailModeCommand {
   organizationId: OrganizationId;
   id: string;
   mode: LineDetailMode;
+  /** Identifica quem faz o pedido (email autenticado) — usado só se for preciso apagar um rascunho de revisão de stock (auditoria, ver `shared-stock-review-guard`). */
+  actor?: string;
+  /** Ver `UpdateInvoiceCommand.confirmRemoveStockReview` — mesma semântica, para a transição `detailed → simple` que descartaria linhas com uma revisão de stock associada ainda não aplicada. */
+  confirmRemoveStockReview?: boolean;
 }
 
 export interface SetInvoiceStatusCommand {
@@ -395,8 +409,15 @@ export interface GetInvoicePort {
   execute(organizationId: OrganizationId, id: string): Promise<InvoiceDTO>;
 }
 
+export interface DeleteInvoiceCommand {
+  organizationId: OrganizationId;
+  id: string;
+  confirmRemoveStockReview?: boolean;
+  actor?: string;
+}
+
 export interface DeleteInvoicePort {
-  execute(organizationId: OrganizationId, id: string): Promise<void>;
+  execute(command: DeleteInvoiceCommand): Promise<void>;
 }
 
 export interface SuggestLineClassificationPort {

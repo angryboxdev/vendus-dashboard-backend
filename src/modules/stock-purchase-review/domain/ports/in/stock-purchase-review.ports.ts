@@ -235,3 +235,42 @@ export interface ReprocessMissingStockReviewsResult {
 export interface ReprocessMissingStockReviewsPort {
   execute(command: ReprocessMissingStockReviewsCommand): Promise<ReprocessMissingStockReviewsResult>;
 }
+
+// ── Estado da revisão de uma fatura (chamado por `invoices`, D10) ────────
+
+export interface GetStockPurchaseReviewStatusCommand {
+  organizationId: OrganizationId;
+  invoiceId: string;
+}
+
+export interface StockPurchaseReviewStatusSnapshotDTO {
+  reviewId: string;
+  status: StockPurchaseReviewStatus;
+}
+
+export interface GetStockPurchaseReviewStatusPort {
+  execute(command: GetStockPurchaseReviewStatusCommand): Promise<StockPurchaseReviewStatusSnapshotDTO | null>;
+}
+
+// ── Hard-delete de rascunho nunca aplicado (chamado por `invoices`, D10) ──
+
+/**
+ * Única exceção deliberada e estreita à regra "nunca hard delete" deste
+ * módulo — ver `DeleteDraftStockPurchaseReviewUseCase` e o README (Design
+ * decisions). Chamado quando o utilizador de `invoices` confirma que quer
+ * mudar o impacto em stock duma fatura cuja revisão associada ainda não
+ * foi aplicada.
+ */
+export interface DeleteDraftStockPurchaseReviewCommand {
+  organizationId: OrganizationId;
+  invoiceId: string;
+  actor: string;
+}
+
+export interface DeleteDraftStockPurchaseReviewResult {
+  deleted: boolean;
+}
+
+export interface DeleteDraftStockPurchaseReviewPort {
+  execute(command: DeleteDraftStockPurchaseReviewCommand): Promise<DeleteDraftStockPurchaseReviewResult>;
+}

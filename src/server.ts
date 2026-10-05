@@ -42,7 +42,11 @@ import { createSalesSummaryModule } from "./modules/sales-summary/sales-summary.
 import { createHrModule } from "./modules/hr/hr.module.js";
 import { createAccountingModule } from "./modules/accounting/accounting.module.js";
 import { createStockPurchaseReviewModule } from "./modules/stock-purchase-review/stock-purchase-review.module.js";
-import type { RecordInvoiceFinalizedForStockPort } from "./modules/stock-purchase-review/domain/ports/in/stock-purchase-review.ports.js";
+import type {
+  RecordInvoiceFinalizedForStockPort,
+  GetStockPurchaseReviewStatusPort,
+  DeleteDraftStockPurchaseReviewPort,
+} from "./modules/stock-purchase-review/domain/ports/in/stock-purchase-review.ports.js";
 import { createStockCountModule } from "./modules/stock-count/stock-count.module.js";
 import { createStockPlanningModule } from "./modules/stock-planning/stock-planning.module.js";
 
@@ -154,13 +158,14 @@ app.use("/api", locationCredentialsModule.deviceRouter);
 // internal cron router, which must be mounted before requireAuth.
 //
 // `invoices` → `stock-purchase-review` (gancho fire-and-forget de
-// finalização de fatura) e `stock-purchase-review` → `invoices` (D10,
-// leitura, para revalidação e para a varredura de recuperação) formam um
-// ciclo de construção: nenhum dos dois pode ser construído primeiro na
-// forma direta. Resolvido com um indirection object — `invoicesModule` é
-// construído já com um `RecordInvoiceFinalizedForStockPort` funcional que
-// delega para `recordInvoiceFinalizedForStockRef.current`, que só é
-// atribuído ao use case real depois de `stockPurchaseReviewModule` existir.
+// finalização de fatura, mais os dois ganchos síncronos do guard de edição
+// de fatura — estado da revisão + hard-delete de rascunho, mesma direção)
+// e `stock-purchase-review` → `invoices` (D10, leitura, para revalidação e
+// para a varredura de recuperação) formam um ciclo de construção: nenhum
+// dos dois pode ser construído primeiro na forma direta. Resolvido com um
+// indirection object — `invoicesModule` é construído já com três ports
+// funcionais que delegam para `*Ref.current`, só atribuídos aos use cases
+// reais depois de `stockPurchaseReviewModule` existir.
 const financialBaseModule = createFinancialBaseModule();
 const locationsModule = createLocationsModule();
 const recordInvoiceFinalizedForStockRef: { current: RecordInvoiceFinalizedForStockPort } = {
@@ -169,7 +174,24 @@ const recordInvoiceFinalizedForStockRef: { current: RecordInvoiceFinalizedForSto
 const recordInvoiceFinalizedForStockProxy: RecordInvoiceFinalizedForStockPort = {
   execute: (command) => recordInvoiceFinalizedForStockRef.current.execute(command),
 };
-const invoicesModule = createInvoicesModule(financialBaseModule.createSupplier, recordInvoiceFinalizedForStockProxy);
+const getStockPurchaseReviewStatusRef: { current: GetStockPurchaseReviewStatusPort } = {
+  current: { execute: async () => null },
+};
+const getStockPurchaseReviewStatusProxy: GetStockPurchaseReviewStatusPort = {
+  execute: (command) => getStockPurchaseReviewStatusRef.current.execute(command),
+};
+const deleteDraftStockPurchaseReviewRef: { current: DeleteDraftStockPurchaseReviewPort } = {
+  current: { execute: async () => ({ deleted: false }) },
+};
+const deleteDraftStockPurchaseReviewProxy: DeleteDraftStockPurchaseReviewPort = {
+  execute: (command) => deleteDraftStockPurchaseReviewRef.current.execute(command),
+};
+const invoicesModule = createInvoicesModule(
+  financialBaseModule.createSupplier,
+  recordInvoiceFinalizedForStockProxy,
+  getStockPurchaseReviewStatusProxy,
+  deleteDraftStockPurchaseReviewProxy,
+);
 const stockPurchaseReviewModule = createStockPurchaseReviewModule(
   invoicesModule.getInvoice,
   invoicesModule.listInvoices,
@@ -178,6 +200,8 @@ const stockPurchaseReviewModule = createStockPurchaseReviewModule(
   locationsModule.listLocations,
 );
 recordInvoiceFinalizedForStockRef.current = stockPurchaseReviewModule.recordInvoiceFinalizedForStock;
+getStockPurchaseReviewStatusRef.current = stockPurchaseReviewModule.getStockPurchaseReviewStatus;
+deleteDraftStockPurchaseReviewRef.current = stockPurchaseReviewModule.deleteDraftStockPurchaseReview;
 
 // Stock planning module (hexagonal) — "Planeamento de Stock" (Stock
 // Intelligence 3.0). Instanciado aqui (antes do cron interno) para expor
@@ -297,7 +321,7 @@ const bankAccountsModule = createBankAccountsModule();
 app.use("/api", requireMinRole("manager"), bankAccountsModule.router);
 
 // Bank statements module (hexagonal) — receives bank account read port for auto-linking
-const bankStatementsModule = createBankStatementsModule(bankAccountsModule.accountRepo);
+const bankStatementsModule = createBankStatementsModule(bankAccountsModule.accountRepo, financialBaseModule.listSuppliers);
 app.use("/api", requireMinRole("manager"), bankStatementsModule.router);
 
 // Air Menu: rota protegida (módulo já instanciado acima)

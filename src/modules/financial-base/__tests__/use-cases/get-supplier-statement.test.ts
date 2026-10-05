@@ -255,7 +255,7 @@ describe("GetSupplierStatementUseCase", () => {
         { supplierId: s.id, invoiceCount: 1, totalBilled: 500, totalPaid: 500, totalPending: 0, lastInvoiceDate: new Date("2026-06-01"), lastPaymentDate: new Date("2026-06-15") },
         [makeInvoice({ id: "i1", invoiceNumber: "F001", invoiceDate: new Date("2026-06-01"), status: "paid", totalWithVat: 500 })],
       );
-      paymentRead.seedPayment({ invoiceId: "i1", date: new Date("2026-06-15"), amount: 500 });
+      paymentRead.seedPayment({ invoiceId: "i1", movementId: "mov-1", date: new Date("2026-06-15"), amount: 500 });
 
       const useCase = new GetSupplierStatementUseCase(repo, statsPort, paymentRead);
       const result = await useCase.execute({ organizationId: ORG_ID, id: s.id });
@@ -284,7 +284,7 @@ describe("GetSupplierStatementUseCase", () => {
           makeInvoice({ id: "nc1", invoiceNumber: "NC001", invoiceDate: new Date("2026-09-03"), status: "pending", totalWithVat: -50, documentType: "credit_note" }),
         ],
       );
-      paymentRead.seedPayment({ invoiceId: "i1", date: new Date("2026-09-05"), amount: 30 });
+      paymentRead.seedPayment({ invoiceId: "i1", movementId: "mov-2", date: new Date("2026-09-05"), amount: 30 });
 
       const useCase = new GetSupplierStatementUseCase(repo, statsPort, paymentRead);
       const result = await useCase.execute({ organizationId: ORG_ID, id: s.id });
@@ -293,6 +293,79 @@ describe("GetSupplierStatementUseCase", () => {
       expect(result.lines.map((l) => l.kind)).toEqual(["invoice", "credit_note", "payment"]);
       expect(result.finalBalance).toBeCloseTo(20, 2);
       expect(result.netDocumentBalanceBeforeSettlement).toBeCloseTo(20, 2);
+    });
+
+    it("liquidação agrupada (várias faturas + NC no mesmo movimento bancário) aparece como UMA única linha 'payment', pelo valor total do movimento", async () => {
+      const repo = new FakeSupplierRepository();
+      const statsPort = new FakeSupplierInvoiceStats();
+      const paymentRead = new FakeInvoicePaymentReadAdapter();
+      const s = Supplier.create({ name: "Justdrinks Lda" });
+      await repo.save(ORG_ID, s);
+
+      // 4 faturas (933.43) + 3 NC (-117.46) liquidadas de uma só vez pelo
+      // mesmo movimento bancário (815.97) — igual ao caso real reportado.
+      statsPort.seed(
+        { supplierId: s.id, invoiceCount: 4, totalBilled: 933.43, totalPaid: 0, totalPending: 0, lastInvoiceDate: new Date("2026-06-08"), lastPaymentDate: null },
+        [
+          makeInvoice({ id: "i1", invoiceNumber: "Fac262/2628", invoiceDate: new Date("2026-05-05"), status: "paid", totalWithVat: 582.39 }),
+          makeInvoice({ id: "i2", invoiceNumber: "Fac262/2760", invoiceDate: new Date("2026-05-08"), status: "paid", totalWithVat: 121.92 }),
+          makeInvoice({ id: "i3", invoiceNumber: "Fac262/3318", invoiceDate: new Date("2026-05-29"), status: "paid", totalWithVat: 85.32 }),
+          makeInvoice({ id: "i4", invoiceNumber: "Fac262/3503", invoiceDate: new Date("2026-06-08"), status: "paid", totalWithVat: 143.80 }),
+          makeInvoice({ id: "nc1", invoiceNumber: "NCA262/1480", invoiceDate: new Date("2026-06-02"), status: "pending", totalWithVat: -30, documentType: "credit_note" }),
+          makeInvoice({ id: "nc2", invoiceNumber: "NC-A262/1565", invoiceDate: new Date("2026-06-09"), status: "pending", totalWithVat: -57.46, documentType: "credit_note" }),
+          makeInvoice({ id: "nc3", invoiceNumber: "NCA262/1587", invoiceDate: new Date("2026-06-11"), status: "pending", totalWithVat: -30, documentType: "credit_note" }),
+        ],
+      );
+
+      // Todas as 7 ligações vêm do MESMO movimento (liquidação agrupada) —
+      // 4 faturas com alocação positiva (valor cheio), 3 NC com alocação
+      // negativa (consumidas na mesma liquidação).
+      const MOVEMENT_DATE = new Date("2026-06-15");
+      for (const [id, amount] of [
+        ["i1", 582.39], ["i2", 121.92], ["i3", 85.32], ["i4", 143.80],
+        ["nc1", -30], ["nc2", -57.46], ["nc3", -30],
+      ] as const) {
+        paymentRead.seedPayment({ invoiceId: id, movementId: "mov-grouped-1", date: MOVEMENT_DATE, amount });
+      }
+
+      const useCase = new GetSupplierStatementUseCase(repo, statsPort, paymentRead);
+      const result = await useCase.execute({ organizationId: ORG_ID, id: s.id });
+
+      // 4 faturas + 3 NC + 1 única linha de liquidação agrupada = 8 linhas
+      // (nunca 7 linhas de "payment" separadas para o mesmo movimento).
+      expect(result.lines.filter((l) => l.kind === "payment")).toHaveLength(1);
+      const settlementLine = result.lines.find((l) => l.kind === "payment")!;
+      expect(settlementLine.date).toBe("2026-06-15");
+      // Conta todos os documentos envolvidos na liquidação (4 faturas + 3
+      // NC) — mesma terminologia já usada no ecrã de Conciliação Bancária
+      // ("Liquidação agrupada... N documentos").
+      expect(settlementLine.documentNumber).toBe("7 documentos");
+      // Valor da linha = valor líquido do movimento (933.43 - 117.46), nunca
+      // a soma bruta das 4 faturas (933.43) — é isso que faz o saldo fechar
+      // exatamente em 0, nunca ficar negativo.
+      expect(settlementLine.creditOrSettlementAmount).toBeCloseTo(815.97, 2);
+      expect(result.finalBalance).toBeCloseTo(0, 2);
+      expect(result.isReconciled).toBe(true);
+    });
+
+    it("pagamento de uma única fatura continua a mostrar o próprio número da fatura (sem regressão visual do caso simples)", async () => {
+      const repo = new FakeSupplierRepository();
+      const statsPort = new FakeSupplierInvoiceStats();
+      const paymentRead = new FakeInvoicePaymentReadAdapter();
+      const s = Supplier.create({ name: "Fornecedor Simples" });
+      await repo.save(ORG_ID, s);
+
+      statsPort.seed(
+        { supplierId: s.id, invoiceCount: 1, totalBilled: 200, totalPaid: 200, totalPending: 0, lastInvoiceDate: new Date("2026-06-01"), lastPaymentDate: new Date("2026-06-10") },
+        [makeInvoice({ id: "i1", invoiceNumber: "F999", invoiceDate: new Date("2026-06-01"), status: "paid", totalWithVat: 200 })],
+      );
+      paymentRead.seedPayment({ invoiceId: "i1", movementId: "mov-simples", date: new Date("2026-06-10"), amount: 200 });
+
+      const useCase = new GetSupplierStatementUseCase(repo, statsPort, paymentRead);
+      const result = await useCase.execute({ organizationId: ORG_ID, id: s.id });
+
+      const paymentLine = result.lines.find((l) => l.kind === "payment")!;
+      expect(paymentLine.documentNumber).toBe("F999");
     });
 
     it("openingBalance desloca o saldo corrente de todas as linhas", async () => {

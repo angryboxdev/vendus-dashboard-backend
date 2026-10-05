@@ -1,6 +1,6 @@
 import type { Router } from "express";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
-import type { CreateSupplierPort, GetSupplierPort } from "./domain/ports/in/supplier.ports.js";
+import type { CreateSupplierPort, GetSupplierPort, ListSuppliersPort } from "./domain/ports/in/supplier.ports.js";
 import type { ListCostCenterCategoriesPort } from "./domain/ports/in/cost-center-category.ports.js";
 
 import { SupabaseCostCenterGroupRepository } from "./adapters/out/supabase-cost-center-group.repository.js";
@@ -65,6 +65,8 @@ export function createFinancialBaseModule(): {
   getSupplier: GetSupplierPort;
   /** Módulo Stock — Planeamento (D10): calendário de entrega por fornecedor×loja. */
   listSupplierDeliverySchedules: ListSupplierDeliverySchedulesPort;
+  /** Módulo bank-statements (D10): identificar fornecedor por nome na liquidação agrupada. */
+  listSuppliers: ListSuppliersPort;
 } {
   // Adapters de saída
   const groupRepository = new SupabaseCostCenterGroupRepository(createScopedQuery);
@@ -161,5 +163,6 @@ export function createFinancialBaseModule(): {
     listCostCenterCategories,
     getSupplier,
     listSupplierDeliverySchedules,
+    listSuppliers,
   };
 }

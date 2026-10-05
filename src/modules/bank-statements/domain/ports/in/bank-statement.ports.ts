@@ -551,3 +551,96 @@ export interface GetInvoiceOpenBalancesQuery {
 export interface GetInvoiceOpenBalancesPort {
   execute(query: GetInvoiceOpenBalancesQuery): Promise<Record<string, number>>;
 }
+
+// ─── Grouped settlement ("Liquidação agrupada") ───────────────────────────────
+// One bank movement settling N documents (invoices + credit notes) from the
+// same supplier at once. See the module README, section "Liquidação
+// agrupada", for the full design (subset-sum matcher, RPC-backed atomic
+// confirm, stale-document detection).
+
+export interface GroupedSettlementDocDto {
+  entityId: string;
+  documentType: "invoice" | "credit_note";
+  entityLabel: string;
+  supplierId: string | null;
+  /** Signed cents: positive for invoices, negative for credit notes. */
+  openBalanceCents: number;
+  invoiceDate: string; // YYYY-MM-DD
+  dueDate: string | null; // YYYY-MM-DD
+  isOverdue: boolean;
+  /** true when this document's best date (dueDate ?? invoiceDate) is on/before the movement's booking date. */
+  isBeforeMovementDate: boolean;
+}
+
+export interface GroupedSettlementCombinationDto {
+  docs: GroupedSettlementDocDto[];
+  documentCount: number;
+  invoiceCount: number;
+  creditNoteCount: number;
+  /** Sum of the positive (invoice) open balances in this combination. */
+  invoiceTotalCents: number;
+  /** Sum of the negative (credit note) open balances in this combination (≤ 0). */
+  creditNoteTotalCents: number;
+  /** invoiceTotalCents + creditNoteTotalCents — always equals the movement's amount for a combination returned here. */
+  netTotalCents: number;
+  /** Always true — only true 0-cent-difference combinations are ever surfaced (see matcher service doc comment). */
+  isExactMatch: true;
+}
+
+export interface GetGroupedSettlementSuggestionsQuery {
+  organizationId: OrganizationId;
+  movementId: string;
+}
+
+export interface GetGroupedSettlementSuggestionsResult {
+  movementId: string;
+  movementAmountCents: number;
+  currency: string;
+  supplierId: string | null;
+  supplierName: string | null;
+  /** Simple 1:1 match, tried first — reuses FindMovementCandidatesPort's own scoring/currency-filtering. Present only when its openBalanceCents matches the movement exactly. */
+  singleExactMatch: MovementCandidate | null;
+  /** Best-ranked exact-sum combination (task's 4-level tie-break), or null when none was found. Null whenever `singleExactMatch` is present — combinatorics are skipped once a simple match exists (task section 7: "try simple 1:1 match first"). */
+  primaryCombination: GroupedSettlementCombinationDto | null;
+  /** Other exact-sum combinations found, ranked after the primary one. Non-empty ⇒ "Foram encontradas várias combinações possíveis" (task section 13). */
+  alternateCombinations: GroupedSettlementCombinationDto[];
+  /** Full eligible pool (same supplier/currency/open/compatible-type/on-or-before-movement-date) for manual multi-select search — already filters out fully-settled documents. */
+  eligibleDocuments: GroupedSettlementDocDto[];
+  /** How many eligible documents existed before the ~40 cap was applied to the combinatorics; null when no capping occurred. */
+  totalEligibleBeforeCap: number;
+  candidatePoolCap: number;
+}
+
+export interface GetGroupedSettlementSuggestionsPort {
+  execute(query: GetGroupedSettlementSuggestionsQuery): Promise<GetGroupedSettlementSuggestionsResult>;
+}
+
+export interface GroupedEntityLinkInput {
+  entityId: string;
+  documentType: "invoice" | "credit_note";
+  /** Signed cents: positive for invoices, negative for credit notes — the portion of this document's open balance being settled now. */
+  allocatedAmountCents: number;
+  /** The open balance the caller observed when building the selection — revalidated server-side before writing; a mismatch rejects the whole operation (see StaleDocumentBalanceError). */
+  expectedOpenBalanceCents: number;
+}
+
+export interface ConfirmGroupedSettlementCommand {
+  organizationId: OrganizationId;
+  movementId: string;
+  entityLinks: GroupedEntityLinkInput[];
+}
+
+export interface ConfirmGroupedSettlementResult {
+  movementId: string;
+  reconciliationStatus: ReconciliationStatus;
+}
+
+/**
+ * Atomically settles a movement against N documents (invoices/credit notes).
+ * Backed by the `fn_reconcile_movement_grouped` RPC — see the module README
+ * for why this is a distinct write path from `ReconcileMovementPort` (which
+ * remains the simple, non-credit-note, non-transactional path).
+ */
+export interface ConfirmGroupedSettlementPort {
+  execute(command: ConfirmGroupedSettlementCommand): Promise<ConfirmGroupedSettlementResult>;
+}

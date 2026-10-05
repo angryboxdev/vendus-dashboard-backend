@@ -3,9 +3,16 @@ import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
 import { FakePayableEntryWrite } from "../fakes/fake-payable-entry-write.js";
 import { FakeInvoiceReconciliationCleanup } from "../fakes/fake-invoice-reconciliation-cleanup.js";
+import { FakeInvoiceStockReviewStatusRead } from "../fakes/fake-invoice-stock-review-status-read.js";
+import { FakeInvoiceStockReviewDraftDelete } from "../fakes/fake-invoice-stock-review-draft-delete.js";
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
-import { InvoiceNotFoundError, DuplicateInvoiceError } from "../../domain/errors.js";
+import {
+  InvoiceNotFoundError,
+  DuplicateInvoiceError,
+  InvoiceLinesLockedByAppliedStockReviewError,
+  StockReviewRemovalConfirmationRequiredError,
+} from "../../domain/errors.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 
 const ORG_ID = mintOrganizationId("org-test");
@@ -25,6 +32,8 @@ describe("UpdateInvoiceUseCase", () => {
   let lineRepo: FakeInvoiceLineRepository;
   let payableWrite: FakePayableEntryWrite;
   let reconciliationCleanup: FakeInvoiceReconciliationCleanup;
+  let stockReviewStatusRead: FakeInvoiceStockReviewStatusRead;
+  let stockReviewDraftDelete: FakeInvoiceStockReviewDraftDelete;
   let useCase: UpdateInvoiceUseCase;
 
   beforeEach(() => {
@@ -32,7 +41,9 @@ describe("UpdateInvoiceUseCase", () => {
     lineRepo = new FakeInvoiceLineRepository();
     payableWrite = new FakePayableEntryWrite();
     reconciliationCleanup = new FakeInvoiceReconciliationCleanup();
-    useCase = new UpdateInvoiceUseCase(repo, lineRepo, payableWrite, reconciliationCleanup);
+    stockReviewStatusRead = new FakeInvoiceStockReviewStatusRead();
+    stockReviewDraftDelete = new FakeInvoiceStockReviewDraftDelete();
+    useCase = new UpdateInvoiceUseCase(repo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete);
   });
 
   it("actualiza o nome do fornecedor", async () => {
@@ -350,5 +361,93 @@ describe("UpdateInvoiceUseCase", () => {
 
     expect(payableWrite.renumbered).toHaveLength(0);
     expect(reconciliationCleanup.renumbered).toHaveLength(0);
+  });
+
+  // ── Bug corrigido: stockReviewOverride/stockReviewOverrideReason ignorados ──
+
+  it("persiste stockReviewOverride e stockReviewOverrideReason quando enviados (regressão)", async () => {
+    const inv = makeInvoice();
+    await repo.save(ORG_ID, inv);
+
+    const dto = await useCase.execute({
+      organizationId: ORG_ID,
+      id: inv.id,
+      stockReviewOverride: "force_skip",
+      stockReviewOverrideReason: "Consumo imediato, não entra em stock",
+    });
+
+    expect(dto.stockReviewOverride).toBe("force_skip");
+    expect(dto.stockReviewOverrideReason).toBe("Consumo imediato, não entra em stock");
+
+    const saved = await repo.findById(ORG_ID, inv.id);
+    expect(saved!.stockReviewOverride).toBe("force_skip");
+    expect(saved!.stockReviewOverrideReason).toBe("Consumo imediato, não entra em stock");
+  });
+
+  // ── Guard: mudar stockReviewOverride contra uma revisão de stock associada ──
+
+  describe("guarda contra revisão de stock ao mudar stockReviewOverride", () => {
+    it("prossegue sem pedir nada quando não há revisão associada", async () => {
+      const inv = makeInvoice();
+      await repo.save(ORG_ID, inv);
+
+      const dto = await useCase.execute({ organizationId: ORG_ID, id: inv.id, stockReviewOverride: "force_skip" });
+      expect(dto.stockReviewOverride).toBe("force_skip");
+      expect(stockReviewDraftDelete.calls).toHaveLength(0);
+    });
+
+    it("lança StockReviewRemovalConfirmationRequiredError quando há revisão pendente e não há confirmação", async () => {
+      const inv = makeInvoice();
+      await repo.save(ORG_ID, inv);
+      stockReviewStatusRead.seed(inv.id, { reviewId: "rev-1", status: "pending" });
+
+      await expect(
+        useCase.execute({ organizationId: ORG_ID, id: inv.id, stockReviewOverride: "force_skip" }),
+      ).rejects.toThrow(StockReviewRemovalConfirmationRequiredError);
+      expect(stockReviewDraftDelete.calls).toHaveLength(0);
+    });
+
+    it("com confirmação, apaga o rascunho e prossegue quando a revisão ainda não foi aplicada", async () => {
+      const inv = makeInvoice();
+      await repo.save(ORG_ID, inv);
+      stockReviewStatusRead.seed(inv.id, { reviewId: "rev-1", status: "in_review" });
+
+      const dto = await useCase.execute({
+        organizationId: ORG_ID,
+        id: inv.id,
+        stockReviewOverride: "force_skip",
+        confirmRemoveStockReview: true,
+      });
+
+      expect(dto.stockReviewOverride).toBe("force_skip");
+      expect(stockReviewDraftDelete.calls).toHaveLength(1);
+      expect(stockReviewDraftDelete.calls[0]?.invoiceId).toBe(inv.id);
+    });
+
+    it("bloqueia sempre com InvoiceLinesLockedByAppliedStockReviewError quando a revisão já foi aplicada, mesmo com confirmação", async () => {
+      const inv = makeInvoice();
+      await repo.save(ORG_ID, inv);
+      stockReviewStatusRead.seed(inv.id, { reviewId: "rev-1", status: "applied" });
+
+      await expect(
+        useCase.execute({
+          organizationId: ORG_ID,
+          id: inv.id,
+          stockReviewOverride: "force_skip",
+          confirmRemoveStockReview: true,
+        }),
+      ).rejects.toThrow(InvoiceLinesLockedByAppliedStockReviewError);
+      expect(stockReviewDraftDelete.calls).toHaveLength(0);
+    });
+
+    it("não verifica a revisão quando stockReviewOverride não muda", async () => {
+      const inv = makeInvoice(); // stockReviewOverride default = "auto"
+      await repo.save(ORG_ID, inv);
+      stockReviewStatusRead.seed(inv.id, { reviewId: "rev-1", status: "applied" });
+
+      await expect(
+        useCase.execute({ organizationId: ORG_ID, id: inv.id, stockReviewOverride: "auto", supplierName: "NOS" }),
+      ).resolves.toBeDefined();
+    });
   });
 });
