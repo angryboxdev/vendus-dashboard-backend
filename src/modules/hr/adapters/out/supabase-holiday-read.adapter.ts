@@ -14,6 +14,9 @@ export class SupabaseHolidayReadAdapter implements HolidayReadPort {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("hr_public_holidays")
       .select("date, name")
+      // D6 (Base Organizacional): feriados de um Local específico ainda não
+      // afetam as Escalas — só os da empresa inteira, como até aqui.
+      .is("location_id", null)
       .gte("date", from)
       .lte("date", to);
     if (error) throw new Error(error.message);

@@ -19,6 +19,7 @@ import {
 } from "./application/use-cases/company-documents.use-cases.js";
 import { DocumentCategoriesController } from "./adapters/in/document-categories.controller.js";
 import { CompanyDocumentsController } from "./adapters/in/company-documents.controller.js";
+import type { ListCompanyDocumentsPort } from "./domain/ports/in/company-document.ports.js";
 
 /**
  * Composition root do módulo `documents` (Base Organizacional, ticket 03) —
@@ -28,7 +29,7 @@ import { CompanyDocumentsController } from "./adapters/in/company-documents.cont
  * continuam expostos pelo módulo `hr` (`/hr/people/:id/documents`), que usa
  * os ports e adapters deste módulo.
  */
-export function createDocumentsModule(): { router: Router } {
+export function createDocumentsModule(): { router: Router; listCompanyDocuments: ListCompanyDocumentsPort } {
   const documentRepository = new SupabaseDocumentRepository(createScopedQuery);
   const categoryRepository = new SupabaseDocumentCategoryRepository(createScopedQuery);
   const storage = new SupabaseDocumentFileStorageAdapter();
@@ -40,8 +41,9 @@ export function createDocumentsModule(): { router: Router } {
     new UpdateDocumentCategoryUseCase(categoryRepository),
     new SetDocumentCategoryActiveUseCase(categoryRepository),
   );
+  const listCompanyDocuments = new ListCompanyDocumentsUseCase(documentRepository, categoryRepository);
   const companyDocumentsController = new CompanyDocumentsController(
-    new ListCompanyDocumentsUseCase(documentRepository, categoryRepository),
+    listCompanyDocuments,
     new UploadCompanyDocumentUseCase(documentRepository, categoryRepository, storage, auditLog),
     new ReplaceCompanyDocumentUseCase(documentRepository, categoryRepository, storage, auditLog),
     new RemoveCompanyDocumentUseCase(documentRepository, auditLog),
@@ -52,5 +54,6 @@ export function createDocumentsModule(): { router: Router } {
   const router = createRouter();
   router.use(categoriesController.router);
   router.use(companyDocumentsController.router);
-  return { router };
+  // `listCompanyDocuments` é usado pelo `calendar` (prazos de validade, ticket 05).
+  return { router, listCompanyDocuments };
 }

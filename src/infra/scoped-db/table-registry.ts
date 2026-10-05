@@ -54,6 +54,9 @@ export const TABLE_REGISTRY = {
   organizations: { organizationColumn: "id", locationBearing: false },
 
   locations: { organizationColumn: "org_id", locationBearing: false },
+  // Módulo calendar (Base Organizacional — eventos empresariais e auditoria; os feriados são `hr_public_holidays`).
+  company_events: { organizationColumn: "org_id", locationBearing: true },
+  calendar_audit_logs: { organizationColumn: "org_id", locationBearing: false },
   // Módulo documents (Base Organizacional — auditoria dos documentos da Empresa).
   document_audit_logs: { organizationColumn: "org_id", locationBearing: false },
   // Módulo locations (Base Organizacional — Locais).

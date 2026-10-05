@@ -39,6 +39,7 @@ import { authRoutes } from "./routes/authRoutes.js";
 import { createLocationsModule } from "./modules/locations/locations.module.js";
 import { createOrganizationModule } from "./modules/organization/organization.module.js";
 import { createDocumentsModule } from "./modules/documents/documents.module.js";
+import { createCalendarModule } from "./modules/calendar/calendar.module.js";
 import { createLocationCredentialsModule } from "./modules/location-credentials/location-credentials.module.js";
 import { createSalesSummaryModule } from "./modules/sales-summary/sales-summary.module.js";
 import { createHrModule } from "./modules/hr/hr.module.js";
@@ -255,6 +256,12 @@ app.use("/api", organizationModule.router);
 // categorias diretamente.
 const documentsModule = createDocumentsModule();
 app.use("/api", documentsModule.router);
+
+// Calendar module (hexagonal, Base Organizacional — Calendário & Eventos):
+// feriados (admin), eventos (manager) e prazos dos documentos da Empresa.
+// Leitura para qualquer role autenticado, com visibilidade aplicada.
+const calendarModule = createCalendarModule(locationsModule.listLocations, documentsModule.listCompanyDocuments);
+app.use("/api", calendarModule.router);
 
 // Location credentials admin routes (generate pairing code, list/revoke tokens)
 app.use("/api", locationCredentialsModule.adminRouter);
