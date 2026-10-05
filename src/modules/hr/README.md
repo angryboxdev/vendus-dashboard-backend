@@ -423,6 +423,11 @@ Este módulo é **aditivo**, não uma substituição imediata:
   (datas ou intervalo + dias da semana) e local; pré-visualização com
   estado por ocorrência e confirmação com decisões (criar/ignorar/
   substituir).
+- `ListShiftAutomationsPort` / `CreateShiftAutomationPort` /
+  `UpdateShiftAutomationPort` / `SetShiftAutomationStatusPort` /
+  `GenerateAutomationPort` / `GenerateAllAutomationsPort` (cron) /
+  `DismissAutomationIssuePort` (RH 2.0, ticket 03) — Automatizações de
+  turnos. `GetScheduleAlertsPort` ganhou `automationIssues`.
 - `PreviewPayslipImportPort` / `ImportPayslipsPort` (Base Organizacional,
   ticket 10) — importação em massa de recibos de vencimento: pré-visualizar
   (identifica o colaborador de cada PDF, assinala duplicados, nada é
@@ -601,6 +606,8 @@ Este módulo é **aditivo**, não uma substituição imediata:
   use cases de importação de recibos.
 - `ShiftTemplateRepositoryPort` (RH 2.0) — `hr_shift_templates`; nome
   único por organização (`DuplicateShiftTemplateNameError`).
+- `ShiftAutomationRepositoryPort` / `AutomationIssueRepositoryPort` (RH 2.0)
+  — `hr_shift_automations` / `hr_shift_automation_issues`.
 - `PdfTextExtractorPort` (ticket 10) — texto de um PDF para identificar o
   colaborador de um recibo; `null` se o PDF não tiver texto. Sem OCR/IA.
 - `WorkShiftRepositoryPort` (RH-03) — CRUD de `hr_work_shifts` +
@@ -655,6 +662,12 @@ Este módulo é **aditivo**, não uma substituição imediata:
   (`hr_viewer`+), `POST`, `PATCH /:id`, `PATCH /:id/active` (`manager`).
   409 em nome duplicado. `POST /:id/apply/preview` e `POST /:id/apply`
   (`manager`) — aplicar modelo (ticket 02).
+- `HrShiftAutomationsController` (RH 2.0) → `/api/hr/schedules/automations`
+  (GET `hr_viewer`+; POST, `PATCH /:id`, `PATCH /:id/status`,
+  `POST /:id/generate` `manager`) e
+  `POST /api/hr/schedules/automation-issues/:id/dismiss`. Cron interno
+  `POST /api/internal/cron/hr-shift-automations` (Bearer `CRON_SECRET`,
+  fan-out por organização) — por agendar no Render (R5).
 - `HrPayslipsController` (ticket 10) → `POST /api/hr/payslips/import/preview`
   e `POST /api/hr/payslips/import` (multipart `files` + `period`; o 2.º
   com `mapping` JSON `[{ fileName, employeeId, action }]`). Só `admin`
@@ -751,6 +764,27 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `work-shift.ts`): repartido nunca combinado com noturno.
 - Nome único por organização sem distinguir maiúsculas/espaços (como os
   Cargos); local padrão tem de estar ativo.
+
+### RH 2.0 — Automatizações (ticket 03)
+
+- **Regra guardada** (`ShiftAutomation`): modelo + público + local
+  opcional + dias da semana + início/fim opcional + Ativa/Pausada +
+  horizonte (1–12 semanas). Público reavaliado em cada geração (task §7).
+- **Geração = mesmo motor do "Aplicar modelo"** (`computePlan`), só
+  dentro de `nextWindow`: de max(início, hoje, dia após `generatedUntil`)
+  até min(fim, hoje + horizonte). Cada geração só cobre datas ainda não
+  geradas — nunca infinita, nunca duplica, e um turno apagado à mão num
+  período já gerado não volta. Contrapartida: quem entra no público depois
+  só recebe turnos nas datas ainda por gerar.
+- **Só cria ocorrências válidas** (rascunho, `source: "automation"` +
+  `automationId` + `templateId`). Conflitos, ausências, sem local →
+  `hr_shift_automation_issues` → "Alertas e ações" até serem dispensados
+  (nunca forçados).
+- **Execução (R5):** botão "Gerar próximas X semanas" + rota de cron diária
+  pronta (o `hrModule` passou a ser construído antes do router de cron no
+  `server.ts`; as rotas continuam montadas depois do `requireAuth`). No
+  cron, uma automatização com erro (ex.: modelo inativo) não trava as
+  outras.
 
 ### RH 2.0 — Aplicar modelo (ticket 02)
 

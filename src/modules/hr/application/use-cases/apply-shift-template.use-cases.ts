@@ -38,7 +38,7 @@ export interface TemplateApplicationDeps {
   holidayRead: HolidayReadPort;
 }
 
-interface ComputedPlan {
+export interface ComputedPlan {
   template: ShiftTemplate;
   occurrences: PlannedTemplateOccurrence[];
   employeeById: Map<string, { fullName: string; positionId: string | null }>;
@@ -49,7 +49,7 @@ interface ComputedPlan {
  * Carrega tudo o que o motor puro precisa, com os dados atuais — chamado
  * na pré-visualização e de novo na confirmação (revalidação, task §5).
  */
-async function computePlan(deps: TemplateApplicationDeps, organizationId: OrganizationId, config: TemplateApplicationConfig): Promise<ComputedPlan> {
+export async function computePlan(deps: TemplateApplicationDeps, organizationId: OrganizationId, config: TemplateApplicationConfig): Promise<ComputedPlan> {
   const template = await deps.templates.findById(organizationId, config.templateId);
   if (!template) throw new ShiftTemplateNotFoundError(config.templateId);
   if (!template.active) throw new InvalidTemplateApplicationError(`O modelo "${template.name}" está inativo`);

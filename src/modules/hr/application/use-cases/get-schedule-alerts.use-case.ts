@@ -6,6 +6,7 @@ import type { HolidayReadPort } from "../../domain/ports/out/holiday-read.port.j
 import { detectOverlaps, detectMissingCoverage, countPendingPublish } from "../../domain/services/schedule-alerts.service.js";
 import type { GetScheduleAlertsCommand, GetScheduleAlertsPort, ScheduleAlertsDTO } from "../../domain/ports/in/schedule.ports.js";
 import { weekdayOf } from "./schedule-shared.js";
+import type { AutomationIssueRepositoryPort, ShiftAutomationRepositoryPort } from "../../domain/ports/out/shift-automation-repository.port.js";
 
 export class GetScheduleAlertsUseCase implements GetScheduleAlertsPort {
   constructor(
@@ -14,6 +15,8 @@ export class GetScheduleAlertsUseCase implements GetScheduleAlertsPort {
     private readonly employeeRepository: EmployeeRepositoryPort,
     private readonly leaveRead: LeaveReadPort,
     private readonly holidayRead: HolidayReadPort,
+    /** RH 2.0 (ticket 03): ocorrências que as automatizações não criaram. Opcional para quem ainda não as usa. */
+    private readonly automationIssues?: { issues: AutomationIssueRepositoryPort; automations: ShiftAutomationRepositoryPort },
   ) {}
 
   async execute(command: GetScheduleAlertsCommand): Promise<ScheduleAlertsDTO> {
@@ -23,13 +26,16 @@ export class GetScheduleAlertsUseCase implements GetScheduleAlertsPort {
       ...(command.locationId !== undefined && { locationId: command.locationId }),
     };
 
-    const [shifts, templates, leaves, holidays, employees] = await Promise.all([
+    const [shifts, templates, leaves, holidays, employees, issues, automations] = await Promise.all([
       this.workShiftRepository.findInRange(command.organizationId, filter),
       this.baseScheduleRepository.findAll(command.organizationId),
       this.leaveRead.findActiveInRange(command.organizationId, command.from, command.to),
       this.holidayRead.findInRange(command.organizationId, command.from, command.to),
       this.employeeRepository.findMany(command.organizationId, { status: "all" }),
+      this.automationIssues?.issues.findOpenInRange(command.organizationId, command.from, command.to) ?? Promise.resolve([]),
+      this.automationIssues?.automations.findAll(command.organizationId) ?? Promise.resolve([]),
     ]);
+    const automationNameById = new Map(automations.map((a) => [a.id, a.name]));
     const nameById = new Map(employees.map((e) => [e.id, e.fullName]));
 
     const templatesByEmployee = new Map<string, typeof templates>();
@@ -73,6 +79,15 @@ export class GetScheduleAlertsUseCase implements GetScheduleAlertsPort {
         employeeName: nameById.get(o.employeeId) ?? o.employeeId,
         workDate: o.workDate,
         shiftIds: o.shiftIds,
+      })),
+      automationIssues: issues.map((i) => ({
+        id: i.id,
+        automationId: i.automationId,
+        automationName: automationNameById.get(i.automationId) ?? "Automatização",
+        employeeId: i.employeeId,
+        employeeName: nameById.get(i.employeeId) ?? i.employeeId,
+        workDate: i.workDate,
+        status: i.status,
       })),
       pendingPublishCount: countPendingPublish(shifts),
       pendingPublishRange: shifts.some((s) => s.status === "draft") ? { from: command.from, to: command.to } : null,

@@ -35,6 +35,21 @@ import { SupabasePositionRepository } from "./adapters/out/supabase-position.rep
 import { HrPositionsController } from "./adapters/in/hr-positions.controller.js";
 import { HrPayslipsController } from "./adapters/in/hr-payslips.controller.js";
 import { HrShiftTemplatesController } from "./adapters/in/hr-shift-templates.controller.js";
+import { HrShiftAutomationsController } from "./adapters/in/hr-shift-automations.controller.js";
+import {
+  SupabaseAutomationIssueRepository,
+  SupabaseShiftAutomationRepository,
+} from "./adapters/out/supabase-shift-automation.repository.js";
+import {
+  CreateShiftAutomationUseCase,
+  DismissAutomationIssueUseCase,
+  GenerateAllAutomationsUseCase,
+  GenerateAutomationUseCase,
+  ListShiftAutomationsUseCase,
+  SetShiftAutomationStatusUseCase,
+  UpdateShiftAutomationUseCase,
+} from "./application/use-cases/shift-automations.use-cases.js";
+import type { GenerateAllAutomationsPort } from "./domain/ports/in/shift-automation.ports.js";
 import { SupabaseShiftTemplateRepository } from "./adapters/out/supabase-shift-template.repository.js";
 import { ApplyTemplateUseCase, PreviewTemplateApplicationUseCase } from "./application/use-cases/apply-shift-template.use-cases.js";
 import {
@@ -105,7 +120,7 @@ import { HrAttendanceController } from "./adapters/in/hr-attendance.controller.j
  * colaboradores+documentos; nada aqui apaga ou substitui o legacy
  * automaticamente.
  */
-export function createHrModule(): { router: Router } {
+export function createHrModule(): { router: Router; generateAllAutomations: GenerateAllAutomationsPort } {
   const employeeRepository = new SupabaseEmployeeRepository(createScopedQuery);
   const employeeDocumentRepository = new SupabaseDocumentRepository(createScopedQuery);
   const documentCategoryRepository = new SupabaseDocumentCategoryRepository(createScopedQuery);
@@ -207,12 +222,15 @@ export function createHrModule(): { router: Router } {
     auditLog,
   );
   const setShiftRotationActive = new SetShiftRotationActiveUseCase(shiftRotationRepository, employeeRepository, auditLog);
+  const shiftAutomationRepository = new SupabaseShiftAutomationRepository(createScopedQuery);
+  const automationIssueRepository = new SupabaseAutomationIssueRepository(createScopedQuery);
   const getScheduleAlerts = new GetScheduleAlertsUseCase(
     workShiftRepository,
     baseScheduleRepository,
     employeeRepository,
     leaveRead,
     holidayRead,
+    { issues: automationIssueRepository, automations: shiftAutomationRepository },
   );
   const previewWorkShiftSeries = new PreviewWorkShiftSeriesUseCase(workShiftRepository, leaveRead, holidayRead);
   const createWorkShiftSeries = new CreateWorkShiftSeriesUseCase(
@@ -368,14 +386,31 @@ export function createHrModule(): { router: Router } {
     new ApplyTemplateUseCase(templateApplicationDeps, auditLog),
   );
 
+  const shiftAutomationDeps = {
+    ...templateApplicationDeps,
+    automations: shiftAutomationRepository,
+    issues: automationIssueRepository,
+    auditLog,
+  };
+  const generateAllAutomations = new GenerateAllAutomationsUseCase(shiftAutomationDeps);
+  const shiftAutomationsController = new HrShiftAutomationsController(
+    new ListShiftAutomationsUseCase(shiftAutomationDeps),
+    new CreateShiftAutomationUseCase(shiftAutomationDeps),
+    new UpdateShiftAutomationUseCase(shiftAutomationDeps),
+    new SetShiftAutomationStatusUseCase(shiftAutomationDeps),
+    new GenerateAutomationUseCase(shiftAutomationDeps),
+    new DismissAutomationIssueUseCase(shiftAutomationDeps),
+  );
+
   const router = Router();
   router.use(controller.router);
   router.use(shiftTemplatesController.router);
+  router.use(shiftAutomationsController.router);
   router.use(positionsController.router);
   router.use(payslipsController.router);
   router.use(overviewController.router);
   router.use(schedulesController.router);
   router.use(attendanceController.router);
 
-  return { router };
+  return { router, generateAllAutomations };
 }

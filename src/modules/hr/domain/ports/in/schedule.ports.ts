@@ -1,3 +1,4 @@
+import type { AutomationIssueDTO } from "./shift-automation.ports.js";
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { ShiftStatus, ShiftSource } from "../../entities/work-shift.js";
 import type { Weekday } from "../../entities/base-schedule-template.js";
@@ -23,6 +24,8 @@ export interface WorkShiftDTO {
   seriesId: string | null;
   /** Modelo de turno de origem (RH 2.0); null = não veio de um modelo. */
   templateId: string | null;
+  /** Automatização de origem (RH 2.0); null = não veio de uma automatização. */
+  automationId: string | null;
   /** Estado de presença já registado (lido de hr_shift_attendance), quando existe — para a bolinha "Pendente"/"Conferido" do calendário. */
   attendanceStatus: "worked_as_planned" | "late" | "left_early" | "cancelled" | null;
   createdAt: string;
@@ -276,6 +279,8 @@ export interface SetShiftRotationActivePort {
 export interface ScheduleAlertsDTO {
   coverageGaps: Array<{ employeeId: string; employeeName: string; workDate: string; locationId: string | null }>;
   overlaps: Array<{ employeeId: string; employeeName: string; workDate: string; shiftIds: string[] }>;
+  /** RH 2.0: ocorrências que as automatizações não criaram (conflito, ausência, sem local…), por dispensar. */
+  automationIssues: AutomationIssueDTO[];
   pendingPublishCount: number;
   pendingPublishRange: { from: string; to: string } | null;
 }

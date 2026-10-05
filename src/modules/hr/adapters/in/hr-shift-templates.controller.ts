@@ -6,11 +6,8 @@ import {
   InvalidTemplateApplicationError,
   ShiftTemplateNotFoundError,
 } from "../../domain/errors.js";
-import type {
-  ApplicationAudience,
-  ApplicationDays,
-  OccurrenceDecision,
-} from "../../domain/services/template-application.service.js";
+import type { ApplicationDays, OccurrenceDecision } from "../../domain/services/template-application.service.js";
+import { isString, readAudience, stringArray } from "./http-readers.js";
 import type {
   ApplyTemplatePort,
   PreviewTemplateApplicationPort,
@@ -58,27 +55,6 @@ function readInput(body: Record<string, unknown>): Partial<ShiftTemplateInput> {
   if (typeof body.breakMinutes === "number") out.breakMinutes = body.breakMinutes;
   if ("locationId" in body) out.locationId = nullableString(body.locationId);
   return out;
-}
-
-const isString = (v: unknown): v is string => typeof v === "string" && v.length > 0;
-const stringArray = (v: unknown): string[] | null => (Array.isArray(v) && v.every(isString) ? v : null);
-
-function readAudience(v: unknown): ApplicationAudience | null {
-  const a = (v ?? {}) as Record<string, unknown>;
-  switch (a.kind) {
-    case "employees": {
-      const ids = stringArray(a.employeeIds);
-      return ids ? { kind: "employees", employeeIds: ids } : null;
-    }
-    case "all":
-      return { kind: "all" };
-    case "position":
-      return isString(a.positionId) ? { kind: "position", positionId: a.positionId, locationId: isString(a.locationId) ? a.locationId : null } : null;
-    case "location":
-      return isString(a.locationId) ? { kind: "location", locationId: a.locationId } : null;
-    default:
-      return null;
-  }
 }
 
 function readDays(v: unknown): ApplicationDays | null {

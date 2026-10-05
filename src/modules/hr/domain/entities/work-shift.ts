@@ -34,6 +34,8 @@ export interface WorkShiftProps {
   seriesId: string | null;
   /** Modelo de turno de origem (RH 2.0) — só referência; o horário/local acima são cópia (snapshot). */
   templateId: string | null;
+  /** Automatização que gerou o turno (RH 2.0) — só referência. */
+  automationId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -103,6 +105,7 @@ export class WorkShift {
   readonly rotationId: string | null;
   readonly seriesId: string | null;
   readonly templateId: string | null;
+  readonly automationId: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 
@@ -123,6 +126,7 @@ export class WorkShift {
     this.rotationId = props.rotationId;
     this.seriesId = props.seriesId;
     this.templateId = props.templateId;
+    this.automationId = props.automationId;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
   }
@@ -167,6 +171,7 @@ export class WorkShift {
     rotationId?: string | null;
     seriesId?: string | null;
     templateId?: string | null;
+    automationId?: string | null;
   }): WorkShift {
     const endsNextDay = props.endsNextDay ?? false;
     const secondStartTime = props.secondStartTime ?? null;
@@ -190,6 +195,7 @@ export class WorkShift {
       rotationId: props.rotationId ?? null,
       seriesId: props.seriesId ?? null,
       templateId: props.templateId ?? null,
+      automationId: props.automationId ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -329,6 +335,7 @@ export class WorkShift {
       rotationId: this.rotationId,
       seriesId: this.seriesId,
       templateId: this.templateId,
+      automationId: this.automationId,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };
