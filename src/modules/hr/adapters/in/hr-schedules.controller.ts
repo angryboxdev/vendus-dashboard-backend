@@ -37,11 +37,9 @@ import type {
   PreviewRepeatCalendarWeekPort,
   RepeatCalendarWeekPort,
 } from "../../domain/ports/in/schedule.ports.js";
-import type { JobRole } from "../../domain/entities/employee.js";
 
 const SERIES_EDIT_SCOPES = new Set(["only_this", "this_and_following", "whole_series"]);
 
-const JOB_ROLES = new Set(["manager", "prep", "service"]);
 
 function errorResponse(e: unknown): { status: number; body: { error: string } } {
   if (
@@ -285,11 +283,6 @@ export class HrSchedulesController {
     this.router.post("/hr/schedules/rotations", requireMinRole("manager"), async (req, res) => {
       try {
         const body = req.body as Record<string, unknown>;
-        const jobRole = body.jobRole as string;
-        if (!JOB_ROLES.has(jobRole)) {
-          res.status(400).json({ error: "jobRole inválido" });
-          return;
-        }
         const participantEmployeeIds = body.participantEmployeeIds as string[];
         if (!Array.isArray(participantEmployeeIds) || participantEmployeeIds.length !== 2) {
           res.status(400).json({ error: "participantEmployeeIds tem de ter exatamente 2 colaboradores" });
@@ -298,7 +291,6 @@ export class HrSchedulesController {
         const result = await this.createShiftRotation.execute({
           organizationId: req.auth!.orgId,
           actor: req.auth!.email,
-          jobRole: jobRole as JobRole,
           participantEmployeeIds: [participantEmployeeIds[0]!, participantEmployeeIds[1]!],
           patternA: body.patternA as { startTime: string; endTime: string; secondStartTime?: string | null; secondEndTime?: string | null },
           patternB: body.patternB as { startTime: string; endTime: string; secondStartTime?: string | null; secondEndTime?: string | null },

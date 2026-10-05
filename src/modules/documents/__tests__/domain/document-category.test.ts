@@ -7,7 +7,6 @@ describe("DocumentCategoryDefinition", () => {
       slug: "seguro_saude",
       label: "Seguro de saúde",
       mandatory: false,
-      jobRoles: [],
       acceptedMimeTypes: ["application/pdf"],
     });
     expect(def.active).toBe(true);
@@ -19,7 +18,6 @@ describe("DocumentCategoryDefinition", () => {
       slug: "seguro_saude",
       label: "Seguro de saúde",
       mandatory: false,
-      jobRoles: [],
       acceptedMimeTypes: ["application/pdf"],
     });
     const updated = def.update({ mandatory: true });
@@ -34,7 +32,6 @@ describe("DocumentCategoryDefinition", () => {
       slug: "seguro_saude",
       label: "Seguro de saúde",
       mandatory: false,
-      jobRoles: [],
       acceptedMimeTypes: ["application/pdf"],
     });
     const inactive = def.setActive(false);
@@ -49,7 +46,6 @@ describe("DocumentCategoryDefinition", () => {
       slug: "seguro_saude",
       label: "Seguro de saúde",
       mandatory: true,
-      jobRoles: ["manager" as const],
       acceptedMimeTypes: ["application/pdf"],
       active: false,
       createdAt: "2026-01-01T00:00:00.000Z",
@@ -67,7 +63,6 @@ describe("DocumentCategoryDefinition — âmbito (Base Organizacional, ticket 03
       slug: "licenca_utilizacao",
       label: "Licença de utilização",
       mandatory: false,
-      jobRoles: [],
       acceptedMimeTypes: [],
     });
     expect(def.scope).toBe("employee");

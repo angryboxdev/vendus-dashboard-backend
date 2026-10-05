@@ -6,7 +6,6 @@ describe("Employee", () => {
     const e = Employee.create({ fullName: "  Andres Silva  " });
     expect(e.fullName).toBe("Andres Silva");
     expect(e.employmentType).toBe("permanent");
-    expect(e.jobRole).toBe("service");
     expect(e.status).toBe("active");
     expect(e.photoStoragePath).toBeNull();
   });
@@ -59,7 +58,6 @@ describe("Employee", () => {
       phone: null,
       roleOrNotes: null,
       employmentType: "permanent",
-      jobRole: "service",
       status: "active",
       hiredAt: null,
       endedAt: null,

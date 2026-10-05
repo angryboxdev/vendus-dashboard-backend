@@ -119,9 +119,9 @@ Este módulo é **aditivo**, não uma substituição imediata:
     Apólice de seguro AT, Certificado de morada, Ficha de colaborador,
     Formação de segurança, Atestado de saúde, NIF, + qualquer categoria
     nova criada pelo utilizador) vivem em `hr_document_categories`, uma por
-    organização, cada uma com `label`, `mandatory`, `jobRoles` (`[]` =
+    organização, cada uma com `label`, `mandatory`, `positionIds` (`[]` =
     todos os cargos, ou uma lista de cargos específicos) e
-    `acceptedMimeTypes`. `applicableCategoriesFor(defs, jobRole)` filtra as
+    `acceptedMimeTypes`. `applicableCategoriesFor(defs, { positionId })` filtra as
     ativas e aplicáveis ao cargo do colaborador; `buildDynamicRequirements`
     converte as `mandatory=true` num requisito de categoria única cada.
   - **Pendências prioritárias e alertas do Overview só listam categorias
@@ -361,8 +361,7 @@ Este módulo é **aditivo**, não uma substituição imediata:
 - `CreateEmployeePort` / `UpdateEmployeePort` / `SetEmployeeStatusPort` /
   `UploadEmployeePhotoPort` — escrita de colaborador. Desde a Base
   Organizacional aceitam `positionId`, `primaryLocationId` e
-  `authorizedLocationIds` (e já não `jobRole`, que passou a derivar do
-  cargo) — regras em `employee-assignments.ts`, ver "Cargos e locais do
+  `authorizedLocationIds` (a antiga "Função" `jobRole` foi retirada — 2026-10-05) — regras em `employee-assignments.ts`, ver "Cargos e locais do
   colaborador" nas Design decisions. `ListEmployeesPort` filtra também por
   `positionId` e `locationId` (principal ou autorizado).
 - `ListPositionsPort` / `CreatePositionPort` / `UpdatePositionPort` /
@@ -513,10 +512,10 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `pendingCount`/`status` (`pronto_para_fecho|pendencias|
   requer_atencao` — ver Design decisions); `balanceMinutes` passa a usar
   "planeado até agora", nunca o total do mês (task, secção 12). **Redesign
-  do Fecho Mensal**: linha ganhou `jobRole` (de `Employee.jobRole`, já
+  do Fecho Mensal**: linha ganhou `positionId` (o Cargo, já
   carregado em memória por `employeeRepository.findMany` — sem query
-  nova) para o subtítulo do nome na tabela geral do frontend
-  ("Operador"). O ratio "Conferência X/Y" e a célula "Ocorrências" que o
+  nova) para o subtítulo do nome na tabela geral do frontend (antes era a
+  antiga "Função" `jobRole`, retirada em 2026-10-05). O ratio "Conferência X/Y" e a célula "Ocorrências" que o
   frontend mostra são só reapresentação de campos já existentes aqui
   (`plannedShiftsCount - pendingCount`, `absenceDaysCount`/
   `lateDaysCount`/`lateMinutesTotal`) — nenhum campo novo precisou de
@@ -528,7 +527,7 @@ Este módulo é **aditivo**, não uma substituição imediata:
   últimas excluem linhas ainda `reviewStatus: "pending"`, task secção
   18) + `rows: AttendanceIssueRowDTO[]` com o extrato diário completo
   (nunca pula "Regular", ao contrário da Conferência — task, secção 19).
-  **Redesign do Fecho Mensal**: resultado ganhou `jobRole` (mesmo motivo
+  **Redesign do Fecho Mensal**: resultado ganhou `positionId` (mesmo motivo
   do ponto acima, para o subtítulo do cabeçalho da nova página de
   detalhe). A "loja" que aparece ao lado não vem daqui — o frontend
   deriva-a client-side da localização mais frequente entre `rows`
@@ -784,10 +783,10 @@ Este módulo é **aditivo**, não uma substituição imediata:
 
 - **Obrigatoriedade por Cargo:** uma categoria aplica-se a "Todos os
   colaboradores" (`positionIds` vazio) ou a "Cargos selecionados"
-  (`positionIds`). `applicableCategoriesFor(defs, { positionId, jobRole })`
-  — `jobRoles` (categoria operacional) só é lido em categorias antigas; a
-  migração `20261006100000_document_categories_positions.sql` converteu-as
-  (nenhuma em produção o usava).
+  (`positionIds`). `applicableCategoriesFor(defs, { positionId })`
+  — a antiga aplicabilidade por "Função" (`job_roles`) foi retirada do
+  código em 2026-10-05 (a migração `20261006100000_document_categories_positions.sql`
+  já a tinha convertido; nenhuma categoria em produção a usava).
 - **Opcionais nunca são "Em falta":** na vista global
   (`GetDocumentOverviewUseCase`) uma categoria opcional sem documento não
   gera linha; com documento aparece, para se acompanhar a validade. KPIs e
@@ -803,14 +802,17 @@ Este módulo é **aditivo**, não uma substituição imediata:
   função atual. Nome único por organização após normalização
   (minúsculas, espaços colapsados — coluna gerada `normalized_name`), por
   isso "Preparador"/"preparador" nunca são dois cargos.
-- **Categoria operacional transitória (spec D4).** As Escalas (rotações) e
-  as categorias de documentos ainda filtram por `job_role`
-  (manager|prep|service) e a task proíbe mexer nas Escalas agora. Cada
-  cargo tem uma `operationalCategory`; o `jobRole` do colaborador passa a
-  ser **sempre** a categoria do seu cargo (definido na atribuição, e
-  propagado a todos os titulares se a categoria do cargo mudar).
-  `hr_employees.job_role` só será removido depois de Escalas/documentos
-  migrarem para o cargo.
+- **"Categoria nas Escalas" retirada (2026-10-05, decisão do utilizador).**
+  A ponte transitória da spec D4 (cada cargo com uma categoria
+  manager|prep|service, sincronizada no `jobRole` do colaborador) foi
+  removida: Cargos, rotações (já não exigem a mesma função nos 2
+  participantes), Assiduidade (mostra o Cargo) e documentos usam só o
+  Cargo. Sem perda de dados: a migração
+  `20261007110000_drop_operational_category_dependency.sql` só torna
+  opcionais `hr_positions.operational_category` e
+  `hr_shift_rotations.job_role`; os valores antigos ficam na BD.
+  `hr_employees.job_role` (default `service`) só é lido pelas páginas
+  legacy.
 - **Cargo ≠ permissão.** Nada no cargo toca em `org_members`/RBAC.
 - **Inativar, nunca apagar.** Cargo ou local inativo nunca é atribuído de
   novo, mas quem já o tinha mantém-no e pode continuar a ser editado.
@@ -1534,9 +1536,12 @@ ronda — ver Known gaps. O extrato só mostra dias com registo real
   `src/routes/hrRoutes.ts`/`hrEmployeeService.ts` (legacy) continuam a
   criar/editar colaboradores só com o enum; um colaborador criado por aí
   fica sem `position_id` até ser editado no ecrã novo (Colaboradores).
-- **Base Organizacional — Escalas e categorias de documentos ainda usam a
-  categoria operacional, não o cargo** (spec D4) — a migrar quando a task
-  permitir mexer nas Escalas; só então se remove `hr_employees.job_role`.
+- **Colunas obsoletas da antiga "Função"** (`hr_employees.job_role`,
+  `hr_positions.operational_category`, `hr_shift_rotations.job_role`,
+  `hr_document_categories.job_roles`) continuam na BD, sem uso pelo código
+  novo — remover quando o legacy de RH (`hrEmployeeService`, ficha antiga)
+  for retirado. Até lá, a ficha legacy mostra a Função antiga gravada (e
+  "Serviço" para colaboradores criados depois desta alteração).
 - **Evolução "Por Colaborador" — ficha individual não sintetiza "Folga"**
   para dias sem nenhum `WorkShift`/presença (o mockup mostra essas
   linhas) — exigiria reconstruir escala base/feriados também aqui

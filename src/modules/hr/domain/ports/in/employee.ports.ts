@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { EmploymentType, EmployeeStatus, JobRole, SalaryType } from "../../entities/employee.js";
+import type { EmploymentType, EmployeeStatus, SalaryType } from "../../entities/employee.js";
 import type { ViewerRole } from "../../services/sensitive-field-masking.service.js";
 import type { HrAuditEntityType } from "../out/hr-audit-log.port.js";
 
@@ -10,8 +10,6 @@ export interface EmployeeDTO {
   phone: string | null;
   roleOrNotes: string | null;
   employmentType: EmploymentType;
-  /** Categoria operacional (antiga "Função") — sempre a do cargo; mantida para Escalas/documentos (D4). */
-  jobRole: JobRole;
   /** Cargo (ticket 07). O nome resolve-se pela lista de cargos (`GET /hr/positions`). */
   positionId: string | null;
   /** Local principal (ticket 08). */
@@ -61,7 +59,6 @@ export interface ListEmployeesCommand {
 export interface EmployeeListRowDTO {
   id: string;
   fullName: string;
-  jobRole: JobRole;
   positionId: string | null;
   primaryLocationId: string | null;
   employmentType: EmploymentType;
@@ -161,11 +158,7 @@ export interface CreateEmployeeCommand {
   phone?: string | null;
   roleOrNotes?: string | null;
   employmentType?: EmploymentType;
-  /**
-   * Cargo (ticket 07) — substitui a antiga "Função": o `jobRole` do
-   * colaborador passa a ser derivado da categoria operacional do cargo (D4),
-   * nunca enviado diretamente.
-   */
+  /** Cargo (ticket 07) — substitui a antiga "Função". */
   positionId?: string | null;
   primaryLocationId?: string | null;
   authorizedLocationIds?: string[];

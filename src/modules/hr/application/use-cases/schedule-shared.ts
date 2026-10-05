@@ -38,7 +38,6 @@ export function toShiftRotationDTO(
 ): ShiftRotationDTO {
   return {
     id: rotation.id,
-    jobRole: rotation.jobRole,
     participantEmployeeIds: rotation.participantEmployeeIds,
     participantNames: [
       employeeNameById.get(rotation.participantEmployeeIds[0]) ?? rotation.participantEmployeeIds[0],

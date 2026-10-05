@@ -1,6 +1,5 @@
 import type { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
 import type { DocumentCategoryDefinition } from "../../../documents/domain/entities/document-category.js";
-import type { JobRole } from "../entities/employee.js";
 
 // Estado de validade genérico — vive no motor de documentos (Base Organizacional, ticket 03).
 export {
@@ -200,10 +199,9 @@ export function computePeriodicDocumentRows(
     }));
 }
 
-/** O que decide se uma categoria se aplica a um colaborador: o seu Cargo (e, só para categorias antigas, a categoria operacional). */
+/** O que decide se uma categoria se aplica a um colaborador: o seu Cargo. */
 export interface CategoryApplicabilitySubject {
   positionId: string | null;
-  jobRole: JobRole;
 }
 
 /**
@@ -215,9 +213,7 @@ export interface CategoryApplicabilitySubject {
  * - nunca periódicas (ex: Recibo de vencimento, ticket 10 — §26: um recibo
  *   não é um requisito permanente; ver `computePeriodicDocumentRows`);
  * - `positionIds` preenchido → só para colaboradores com um desses cargos;
- * - `jobRoles` preenchido (categorias anteriores aos Cargos) → pela
- *   categoria operacional;
- * - ambos vazios → todos os colaboradores.
+ * - vazio → todos os colaboradores.
  */
 export function applicableCategoriesFor(
   definitions: readonly DocumentCategoryDefinition[],
@@ -226,7 +222,6 @@ export function applicableCategoriesFor(
   return definitions.filter((d) => {
     if (!d.active || d.scope === "company" || d.requiresPeriod) return false;
     if (d.positionIds.length > 0) return subject.positionId !== null && d.positionIds.includes(subject.positionId);
-    if (d.jobRoles.length > 0) return d.jobRoles.includes(subject.jobRole);
     return true;
   });
 }

@@ -20,7 +20,6 @@ describe("CreateDocumentCategoryUseCase", () => {
       organizationId: ORG,
       label: "Seguro de saúde",
       mandatory: false,
-      jobRoles: [],
       acceptedMimeTypes: ["application/pdf"],
     });
 
@@ -33,7 +32,7 @@ describe("CreateDocumentCategoryUseCase", () => {
     const useCase = new CreateDocumentCategoryUseCase(categories);
 
     await expect(
-      useCase.execute({ organizationId: ORG, label: "   ", mandatory: false, jobRoles: [], acceptedMimeTypes: [] }),
+      useCase.execute({ organizationId: ORG, label: "   ", mandatory: false, acceptedMimeTypes: [] }),
     ).rejects.toThrow(InvalidEmployeeError);
   });
 
@@ -44,7 +43,6 @@ describe("CreateDocumentCategoryUseCase", () => {
       organizationId: ORG,
       label: "Seguro de saúde",
       mandatory: false,
-      jobRoles: [],
       acceptedMimeTypes: ["application/pdf"],
     });
 
@@ -53,26 +51,9 @@ describe("CreateDocumentCategoryUseCase", () => {
         organizationId: ORG,
         label: "Seguro de Saúde",
         mandatory: false,
-        jobRoles: [],
         acceptedMimeTypes: ["application/pdf"],
       }),
     ).rejects.toThrow(DocumentCategoryConfigAlreadyExistsError);
   });
 
-  it("guarda jobRoles e acceptedMimeTypes tal como pedido", async () => {
-    const categories = new FakeDocumentCategoryRepository();
-    const useCase = new CreateDocumentCategoryUseCase(categories);
-
-    const result = await useCase.execute({
-      organizationId: ORG,
-      label: "Cartão de estacionamento",
-      mandatory: true,
-      jobRoles: ["service", "prep"],
-      acceptedMimeTypes: ["application/pdf", "image/jpeg"],
-    });
-
-    expect(result.jobRoles).toEqual(["service", "prep"]);
-    expect(result.acceptedMimeTypes).toEqual(["application/pdf", "image/jpeg"]);
-    expect(result.mandatory).toBe(true);
-  });
 });

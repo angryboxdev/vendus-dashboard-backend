@@ -26,7 +26,6 @@ function setup() {
   employees.seed(ORG, andres);
   employees.seed(ORG, gabriel);
   const rotation = ShiftRotation.create({
-    jobRole: "service",
     participantEmployeeIds: [andres.id, gabriel.id],
     patternA: { startTime: "11:30", endTime: "15:30" },
     patternB: { startTime: "17:00", endTime: "23:00" },
@@ -144,7 +143,6 @@ describe("ApplyShiftRotationUseCase", () => {
     employees.seed(ORG, andres);
     employees.seed(ORG, gabriel);
     const rotation = ShiftRotation.create({
-      jobRole: "service",
       participantEmployeeIds: [andres.id, gabriel.id],
       patternA: { startTime: "12:00", endTime: "16:00", secondStartTime: "19:00", secondEndTime: "23:00" },
       patternB: { startTime: "17:00", endTime: "23:00" },

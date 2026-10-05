@@ -1,17 +1,9 @@
 import { InvalidPositionError } from "../errors.js";
-import type { JobRole } from "./employee.js";
 
 export interface PositionProps {
   id: string;
   name: string;
   description: string | null;
-  /**
-   * Categoria operacional transitória (spec D4): os mesmos 3 valores da antiga
-   * "Função" (`JobRole`). As Escalas (rotações) e as categorias de documentos
-   * ainda filtram por ela; o `jobRole` de cada colaborador acompanha sempre a
-   * categoria do seu cargo até essas áreas migrarem para o cargo.
-   */
-  operationalCategory: JobRole;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -20,10 +12,8 @@ export interface PositionProps {
 export interface PositionDetails {
   name: string;
   description: string | null;
-  operationalCategory: JobRole;
 }
 
-const OPERATIONAL_CATEGORIES: JobRole[] = ["manager", "prep", "service"];
 const MAX_NAME_LENGTH = 80;
 
 /**
@@ -39,11 +29,8 @@ function clean(details: PositionDetails): PositionDetails {
   const name = details.name.trim().replace(/\s+/g, " ");
   if (name.length === 0) throw new InvalidPositionError("Nome do cargo é obrigatório");
   if (name.length > MAX_NAME_LENGTH) throw new InvalidPositionError(`Nome do cargo: máximo ${MAX_NAME_LENGTH} caracteres`);
-  if (!OPERATIONAL_CATEGORIES.includes(details.operationalCategory)) {
-    throw new InvalidPositionError("Categoria operacional inválida");
-  }
   const description = details.description?.trim() || null;
-  return { name, description, operationalCategory: details.operationalCategory };
+  return { name, description };
 }
 
 /**
@@ -63,9 +50,6 @@ export class Position {
   }
   get description(): string | null {
     return this.props.description;
-  }
-  get operationalCategory(): JobRole {
-    return this.props.operationalCategory;
   }
   get active(): boolean {
     return this.props.active;
@@ -87,7 +71,6 @@ export class Position {
     const merged = clean({
       name: changes.name ?? this.props.name,
       description: changes.description !== undefined ? changes.description : this.props.description,
-      operationalCategory: changes.operationalCategory ?? this.props.operationalCategory,
     });
     return new Position({ ...this.props, ...merged, updatedAt: now.toISOString() });
   }

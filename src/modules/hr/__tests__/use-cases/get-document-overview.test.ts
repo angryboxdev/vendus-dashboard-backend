@@ -103,37 +103,13 @@ describe("GetDocumentOverviewUseCase", () => {
     expect(rows.every((r) => r.requirementLabel === "Recibo de vencimento" && !r.mandatory)).toBe(true);
   });
 
-  it("categorias com jobRoles restrito (legacy) só aparecem para colaboradores com essa categoria operacional", async () => {
-    const { employees, categories, useCase } = makeUseCase();
-    const manager = Employee.create({ fullName: "Gerente", jobRole: "manager" });
-    const service = Employee.create({ fullName: "Serviço", jobRole: "service" });
-    employees.seed(ORG, manager);
-    employees.seed(ORG, service);
-    const defs = await categories.findMany(ORG);
-    categories.seedOverride(ORG, [
-      ...defs,
-      DocumentCategoryDefinition.create({
-        organizationId: String(ORG),
-        slug: "carta_conducao",
-        label: "Carta de condução",
-        mandatory: true,
-        jobRoles: ["manager"],
-        acceptedMimeTypes: ["application/pdf"],
-      }),
-    ]);
-
-    const rows = await useCase.execute({ organizationId: ORG });
-
-    expect(rows.some((r) => r.employeeId === manager.id && r.requirementId === "carta_conducao")).toBe(true);
-    expect(rows.some((r) => r.employeeId === service.id && r.requirementId === "carta_conducao")).toBe(false);
-  });
 });
 
 describe("Ticket 09 — obrigatoriedade por Cargo e opcionais", () => {
   it("categoria obrigatória para 'Cargos selecionados' só gera pendência a quem tem esse cargo", async () => {
     const { employees, categories, useCase } = makeUseCase();
-    const gerente = Employee.create({ fullName: "Gerente", positionId: "pos-gerente", jobRole: "manager" });
-    const outro = Employee.create({ fullName: "Outro", positionId: "pos-prep", jobRole: "prep" });
+    const gerente = Employee.create({ fullName: "Gerente", positionId: "pos-gerente" });
+    const outro = Employee.create({ fullName: "Outro", positionId: "pos-prep" });
     employees.seed(ORG, gerente);
     employees.seed(ORG, outro);
     await categories.create(
@@ -143,7 +119,6 @@ describe("Ticket 09 — obrigatoriedade por Cargo e opcionais", () => {
         slug: "curso_gerente",
         label: "Curso de gerente",
         mandatory: true,
-        jobRoles: [],
         positionIds: ["pos-gerente"],
         acceptedMimeTypes: [],
       }),
@@ -192,7 +167,6 @@ describe("Base Organizacional — documento empresarial (teste crítico)", () =>
         slug: "apolice_empresa",
         label: "Apólice da empresa",
         mandatory: true,
-        jobRoles: [],
         acceptedMimeTypes: [],
         scope: "company",
       }),

@@ -104,7 +104,7 @@ export class GetMonthlyAttendanceSummaryUseCase implements GetMonthlyAttendanceS
       this.attendanceCorrectionRepository.listInRange(command.organizationId, from, to).catch(() => []),
     ]);
 
-    const employeeById = new Map(employees.map((e) => [e.id, { fullName: e.fullName, jobRole: e.jobRole }]));
+    const employeeById = new Map(employees.map((e) => [e.id, { fullName: e.fullName, positionId: e.positionId }]));
     const latestCorrectionByRowKey = latestCorrectionByKey(corrections);
 
     const overlapGroups = new Map<string, typeof shifts>();
@@ -178,7 +178,7 @@ export class GetMonthlyAttendanceSummaryUseCase implements GetMonthlyAttendanceS
       .map((acc) => ({
         employeeId: acc.employeeId,
         employeeName: employeeById.get(acc.employeeId)?.fullName ?? acc.employeeId,
-        jobRole: employeeById.get(acc.employeeId)?.jobRole ?? "service",
+        positionId: employeeById.get(acc.employeeId)?.positionId ?? null,
         plannedShiftsCount: acc.plannedShiftsCount,
         actualShiftsCount: acc.actualShiftsCount,
         pendingCount: acc.pendingCount,

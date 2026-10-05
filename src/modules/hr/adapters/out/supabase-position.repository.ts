@@ -1,17 +1,15 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
-import type { JobRole } from "../../domain/entities/employee.js";
 import { Position } from "../../domain/entities/position.js";
 import { DuplicatePositionNameError } from "../../domain/errors.js";
 import type { PositionRepositoryPort } from "../../domain/ports/out/position-repository.port.js";
 
-const SELECT = "id, name, description, operational_category, active, created_at, updated_at";
+const SELECT = "id, name, description, active, created_at, updated_at";
 
 interface Row {
   id: string;
   name: string;
   description: string | null;
-  operational_category: string;
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -22,7 +20,6 @@ function toEntity(row: Row): Position {
     id: row.id,
     name: row.name,
     description: row.description,
-    operationalCategory: row.operational_category as JobRole,
     active: row.active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -35,7 +32,6 @@ function toRow(position: Position): Omit<Row, "id" | "created_at"> {
   return {
     name: p.name,
     description: p.description,
-    operational_category: p.operationalCategory,
     active: p.active,
     updated_at: p.updatedAt,
   };

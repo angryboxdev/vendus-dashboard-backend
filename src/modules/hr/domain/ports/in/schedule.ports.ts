@@ -1,5 +1,4 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { JobRole } from "../../entities/employee.js";
 import type { ShiftStatus, ShiftSource } from "../../entities/work-shift.js";
 import type { Weekday } from "../../entities/base-schedule-template.js";
 
@@ -188,7 +187,6 @@ export interface ShiftRotationPatternDTO {
 
 export interface ShiftRotationDTO {
   id: string;
-  jobRole: JobRole;
   participantEmployeeIds: [string, string];
   participantNames: [string, string];
   patternA: ShiftRotationPatternDTO;
@@ -210,7 +208,6 @@ export interface ListShiftRotationsPort {
 export interface CreateShiftRotationCommand {
   organizationId: OrganizationId;
   actor: string;
-  jobRole: JobRole;
   participantEmployeeIds: [string, string];
   patternA: { startTime: string; endTime: string; secondStartTime?: string | null; secondEndTime?: string | null };
   patternB: { startTime: string; endTime: string; secondStartTime?: string | null; secondEndTime?: string | null };

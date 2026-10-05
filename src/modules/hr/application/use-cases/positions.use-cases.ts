@@ -25,7 +25,6 @@ function toPositionDTO(position: Position, employeeCount: number): PositionDTO {
     id: p.id,
     name: p.name,
     description: p.description,
-    operationalCategory: p.operationalCategory,
     active: p.active,
     employeeCount,
     updatedAt: p.updatedAt,
@@ -89,7 +88,7 @@ export class CreatePositionUseCase implements CreatePositionPort {
   async execute(command: CreatePositionCommand): Promise<PositionDTO> {
     const position = Position.create(
       this.newId(),
-      { name: command.name, description: command.description, operationalCategory: command.operationalCategory },
+      { name: command.name, description: command.description },
       this.now(),
     );
     await assertNameAvailable(this.positions, command.organizationId, position);
@@ -122,23 +121,15 @@ export class UpdatePositionUseCase implements UpdatePositionPort {
       {
         ...(command.name !== undefined && { name: command.name }),
         ...(command.description !== undefined && { description: command.description }),
-        ...(command.operationalCategory !== undefined && { operationalCategory: command.operationalCategory }),
       },
       this.now(),
     );
     await assertNameAvailable(this.positions, command.organizationId, updated);
     await this.positions.update(command.organizationId, updated);
 
-    // D4: o `jobRole` de quem tem este cargo acompanha a categoria operacional
-    // (Escalas e categorias de documentos ainda filtram por ela).
     const holders = (await this.employees.findMany(command.organizationId, { status: "all" })).filter(
       (e) => e.positionId === updated.id,
     );
-    if (updated.operationalCategory !== current.operationalCategory) {
-      for (const employee of holders) {
-        await this.employees.update(command.organizationId, employee.update({ jobRole: updated.operationalCategory }));
-      }
-    }
 
     await this.auditLog.record({
       organizationId: command.organizationId,

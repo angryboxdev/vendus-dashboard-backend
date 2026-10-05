@@ -23,7 +23,6 @@ export function toEmployeeDTO(employee: Employee, viewerRole: ViewerRole, photoU
     phone: employee.phone,
     roleOrNotes: employee.roleOrNotes,
     employmentType: employee.employmentType,
-    jobRole: employee.jobRole,
     positionId: employee.positionId,
     primaryLocationId: employee.primaryLocationId,
     authorizedLocationIds: employee.authorizedLocationIds,

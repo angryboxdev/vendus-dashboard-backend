@@ -1,6 +1,5 @@
 import { Router, type Response } from "express";
 import { requireMinRole } from "../../../../middleware/auth.js";
-import type { JobRole } from "../../domain/entities/employee.js";
 import { DuplicatePositionNameError, InvalidPositionError, PositionNotFoundError } from "../../domain/errors.js";
 import type {
   CreatePositionPort,
@@ -8,12 +7,6 @@ import type {
   SetPositionActivePort,
   UpdatePositionPort,
 } from "../../domain/ports/in/position.ports.js";
-
-const OPERATIONAL_CATEGORIES = new Set<JobRole>(["manager", "prep", "service"]);
-
-function readCategory(value: unknown): JobRole | undefined {
-  return typeof value === "string" && OPERATIONAL_CATEGORIES.has(value as JobRole) ? (value as JobRole) : undefined;
-}
 
 function readDescription(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
@@ -63,13 +56,12 @@ export class HrPositionsController {
       }
     });
 
-    /** POST /api/hr/positions — body `{ name, description?, operationalCategory }`. */
+    /** POST /api/hr/positions — body `{ name, description? }`. */
     this.router.post("/hr/positions", requireMinRole("manager"), async (req, res) => {
       try {
         const body = (req.body ?? {}) as Record<string, unknown>;
-        const operationalCategory = readCategory(body.operationalCategory);
-        if (typeof body.name !== "string" || !operationalCategory) {
-          res.status(400).json({ error: "name e operationalCategory (manager|prep|service) são obrigatórios" });
+        if (typeof body.name !== "string") {
+          res.status(400).json({ error: "name é obrigatório" });
           return;
         }
         const created = await this.createPosition.execute({
@@ -77,7 +69,6 @@ export class HrPositionsController {
           actor: req.auth!.email,
           name: body.name,
           description: readDescription(body.description),
-          operationalCategory,
         });
         res.status(201).json(created);
       } catch (e) {
@@ -89,11 +80,6 @@ export class HrPositionsController {
     this.router.patch("/hr/positions/:id", requireMinRole("manager"), async (req, res) => {
       try {
         const body = (req.body ?? {}) as Record<string, unknown>;
-        if ("operationalCategory" in body && !readCategory(body.operationalCategory)) {
-          res.status(400).json({ error: "operationalCategory inválida (manager|prep|service)" });
-          return;
-        }
-        const category = readCategory(body.operationalCategory);
         res.json(
           await this.updatePosition.execute({
             organizationId: req.auth!.orgId,
@@ -101,7 +87,6 @@ export class HrPositionsController {
             id: req.params["id"] as string,
             ...(typeof body.name === "string" && { name: body.name }),
             ...("description" in body && { description: readDescription(body.description) }),
-            ...(category && { operationalCategory: category }),
           }),
         );
       } catch (e) {

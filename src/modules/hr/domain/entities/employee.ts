@@ -2,7 +2,6 @@ import { InvalidEmployeeError } from "../errors.js";
 
 export type EmployeeStatus = "active" | "inactive";
 export type EmploymentType = "permanent" | "contract" | "extra";
-export type JobRole = "manager" | "prep" | "service";
 export type SalaryType = "fixed" | "hourly";
 
 export interface EmployeeProps {
@@ -12,8 +11,7 @@ export interface EmployeeProps {
   phone: string | null;
   roleOrNotes: string | null;
   employmentType: EmploymentType;
-  jobRole: JobRole;
-  /** Cargo (Base Organizacional, ticket 07). `jobRole` acompanha sempre a categoria operacional do cargo (D4). */
+  /** Cargo (Base Organizacional, ticket 07). Substitui a antiga "Função" (`hr_employees.job_role`, já não lida pelo código novo). */
   positionId: string | null;
   /** Local principal (ticket 08) — referência a `locations`, nunca texto. */
   primaryLocationId: string | null;
@@ -45,7 +43,6 @@ export interface UpdateEmployeeData {
   phone?: string | null;
   roleOrNotes?: string | null;
   employmentType?: EmploymentType;
-  jobRole?: JobRole;
   positionId?: string | null;
   primaryLocationId?: string | null;
   authorizedLocationIds?: string[];
@@ -82,7 +79,6 @@ export class Employee {
   readonly phone: string | null;
   readonly roleOrNotes: string | null;
   readonly employmentType: EmploymentType;
-  readonly jobRole: JobRole;
   readonly positionId: string | null;
   readonly primaryLocationId: string | null;
   readonly authorizedLocationIds: string[];
@@ -112,7 +108,6 @@ export class Employee {
     this.phone = props.phone;
     this.roleOrNotes = props.roleOrNotes;
     this.employmentType = props.employmentType;
-    this.jobRole = props.jobRole;
     this.positionId = props.positionId;
     this.primaryLocationId = props.primaryLocationId;
     this.authorizedLocationIds = normalizeAuthorizedLocations(props.authorizedLocationIds, props.primaryLocationId);
@@ -142,7 +137,6 @@ export class Employee {
     phone?: string | null;
     roleOrNotes?: string | null;
     employmentType?: EmploymentType;
-    jobRole?: JobRole;
     positionId?: string | null;
     primaryLocationId?: string | null;
     authorizedLocationIds?: string[];
@@ -171,7 +165,6 @@ export class Employee {
       phone: props.phone ?? null,
       roleOrNotes: props.roleOrNotes ?? null,
       employmentType: props.employmentType ?? "permanent",
-      jobRole: props.jobRole ?? "service",
       positionId: props.positionId ?? null,
       primaryLocationId: props.primaryLocationId ?? null,
       authorizedLocationIds: props.authorizedLocationIds ?? [],
@@ -212,7 +205,6 @@ export class Employee {
       phone: data.phone !== undefined ? data.phone : props.phone,
       roleOrNotes: data.roleOrNotes !== undefined ? data.roleOrNotes : props.roleOrNotes,
       employmentType: data.employmentType !== undefined ? data.employmentType : props.employmentType,
-      jobRole: data.jobRole !== undefined ? data.jobRole : props.jobRole,
       positionId: data.positionId !== undefined ? data.positionId : props.positionId,
       primaryLocationId: data.primaryLocationId !== undefined ? data.primaryLocationId : props.primaryLocationId,
       authorizedLocationIds:
@@ -263,7 +255,6 @@ export class Employee {
       phone: this.phone,
       roleOrNotes: this.roleOrNotes,
       employmentType: this.employmentType,
-      jobRole: this.jobRole,
       positionId: this.positionId,
       primaryLocationId: this.primaryLocationId,
       authorizedLocationIds: [...this.authorizedLocationIds],

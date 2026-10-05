@@ -80,7 +80,6 @@ export class ListEmployeesUseCase implements ListEmployeesPort {
         return {
           id: employee.id,
           fullName: employee.fullName,
-          jobRole: employee.jobRole,
           positionId: employee.positionId,
           primaryLocationId: employee.primaryLocationId,
           employmentType: employee.employmentType,

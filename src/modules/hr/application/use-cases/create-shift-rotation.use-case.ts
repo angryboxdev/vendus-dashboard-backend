@@ -27,16 +27,10 @@ export class CreateShiftRotationUseCase implements CreateShiftRotationPort {
     for (const employeeId of command.participantEmployeeIds) {
       const employee = await this.employeeRepository.findById(command.organizationId, employeeId);
       if (!employee) throw new EmployeeNotFoundError(employeeId);
-      if (employee.jobRole !== command.jobRole) {
-        throw new InvalidShiftRotationError(
-          `${employee.fullName} não tem o cargo "${command.jobRole}" — a rotação exige a mesma função para os dois colaboradores`,
-        );
-      }
       nameById.set(employeeId, employee.fullName);
     }
 
     const rotation = ShiftRotation.create({
-      jobRole: command.jobRole,
       participantEmployeeIds: command.participantEmployeeIds,
       patternA: command.patternA,
       patternB: command.patternB,
@@ -55,7 +49,7 @@ export class CreateShiftRotationUseCase implements CreateShiftRotationPort {
         entityId: saved.id,
         employeeId,
         action: "created",
-        description: `Rotação semanal criada para a função "${saved.jobRole}" (${nameById.get(command.participantEmployeeIds[0])} / ${nameById.get(command.participantEmployeeIds[1])})`,
+        description: `Rotação semanal criada (${nameById.get(command.participantEmployeeIds[0])} / ${nameById.get(command.participantEmployeeIds[1])})`,
         after: saved.toProps(),
         correlationId: randomUUID(),
       });

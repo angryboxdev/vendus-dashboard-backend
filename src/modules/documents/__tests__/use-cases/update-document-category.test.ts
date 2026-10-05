@@ -13,7 +13,6 @@ describe("UpdateDocumentCategoryUseCase", () => {
       organizationId: ORG,
       label: "Seguro de saúde",
       mandatory: false,
-      jobRoles: [],
       acceptedMimeTypes: ["application/pdf"],
     });
 
@@ -33,25 +32,4 @@ describe("UpdateDocumentCategoryUseCase", () => {
     ).rejects.toThrow(DocumentCategoryConfigNotFoundError);
   });
 
-  it("atualiza jobRoles e acceptedMimeTypes", async () => {
-    const categories = new FakeDocumentCategoryRepository();
-    const created = await new CreateDocumentCategoryUseCase(categories).execute({
-      organizationId: ORG,
-      label: "Seguro de saúde",
-      mandatory: false,
-      jobRoles: [],
-      acceptedMimeTypes: ["application/pdf"],
-    });
-
-    const useCase = new UpdateDocumentCategoryUseCase(categories);
-    const updated = await useCase.execute({
-      organizationId: ORG,
-      id: created.id,
-      jobRoles: ["manager"],
-      acceptedMimeTypes: ["image/png"],
-    });
-
-    expect(updated.jobRoles).toEqual(["manager"]);
-    expect(updated.acceptedMimeTypes).toEqual(["image/png"]);
-  });
 });

@@ -71,7 +71,7 @@ function readEmployeeFields(body: Record<string, unknown>): EmployeeOptionalFiel
   if (typeof body.employmentType === "string" && EMPLOYMENT_TYPES.has(body.employmentType)) {
     out.employmentType = body.employmentType;
   }
-  // Cargo/locais (Base Organizacional, tickets 07/08) — `jobRole` deixou de ser aceite: deriva do cargo (D4).
+  // Cargo/locais (Base Organizacional, tickets 07/08) — a antiga "Função" (`jobRole`) já não é aceite nem usada.
   if ("positionId" in body) out.positionId = typeof body.positionId === "string" && body.positionId ? body.positionId : null;
   if ("primaryLocationId" in body)
     out.primaryLocationId = typeof body.primaryLocationId === "string" && body.primaryLocationId ? body.primaryLocationId : null;

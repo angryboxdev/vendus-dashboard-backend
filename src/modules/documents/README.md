@@ -62,9 +62,9 @@ daqui (mesmo padrão cross-module de `locations`).
 - **`DocumentCategoryDefinition`** — `scope` (`employee`|`company`|`both`,
   por defeito `employee`); `scopeAllowsOwner`; `positionIds` (ticket 09 —
   "Cargos selecionados"; vazio = todos os colaboradores). A regra de
-  aplicabilidade a um colaborador vive no `hr` (`applicableCategoriesFor`). `jobRoles` usa
-  `OperationalCategory` (os 3 valores da antiga "Função"), declarado aqui
-  para este módulo nunca depender do `hr`. `requiresPeriod` (ticket 10 —
+  aplicabilidade a um colaborador vive no `hr` (`applicableCategoriesFor`). A
+  antiga aplicabilidade por "Função" (`job_roles`) foi retirada do código
+  (2026-10-05); a coluna fica na BD, vazia e já não lida. `requiresPeriod` (ticket 10 —
   ex: Recibo de vencimento): definido pela migração, só leitura na API.
 - **`computeDocumentDisplayStatus`** (`document-validity.service.ts`) —
   Válido / A expirar (30 dias) / Expirado / A validar / …, igual para os

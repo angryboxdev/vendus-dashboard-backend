@@ -1,11 +1,4 @@
 /**
- * Categoria operacional do colaborador (antiga "Função": manager|prep|service).
- * Declarada aqui e não importada do `hr` para o motor de documentos não
- * depender do RH (o `JobRole` do RH é estruturalmente o mesmo tipo).
- */
-export type OperationalCategory = "manager" | "prep" | "service";
-
-/**
  * Âmbito da categoria (task Base Organizacional §11): para que dono a
  * categoria existe. Só `employee`/`both` entram nos requisitos dos
  * colaboradores — uma categoria `company` nunca gera "Em falta" individual.
@@ -22,12 +15,6 @@ export interface DocumentCategoryDefinitionProps {
   slug: string;
   label: string;
   mandatory: boolean;
-  /**
-   * Legacy (antes dos Cargos): categoria operacional. Vazio desde a migração
-   * `20261006100000_document_categories_positions.sql` — a aplicabilidade é
-   * `positionIds`. Mantido só para ler linhas antigas.
-   */
-  jobRoles: OperationalCategory[];
   /** Cargos (`hr_positions`) a que se aplica. Vazio = todos os colaboradores (ticket 09). */
   positionIds: string[];
   acceptedMimeTypes: string[];
@@ -57,7 +44,6 @@ export class DocumentCategoryDefinition {
   readonly slug: string;
   readonly label: string;
   readonly mandatory: boolean;
-  readonly jobRoles: OperationalCategory[];
   readonly positionIds: string[];
   readonly acceptedMimeTypes: string[];
   readonly scope: DocumentCategoryScope;
@@ -72,7 +58,6 @@ export class DocumentCategoryDefinition {
     this.slug = props.slug;
     this.label = props.label;
     this.mandatory = props.mandatory;
-    this.jobRoles = props.jobRoles;
     this.positionIds = props.positionIds;
     this.acceptedMimeTypes = props.acceptedMimeTypes;
     this.scope = props.scope;
@@ -87,7 +72,6 @@ export class DocumentCategoryDefinition {
     slug: string;
     label: string;
     mandatory: boolean;
-    jobRoles: OperationalCategory[];
     /** Omissão: [] (todos os colaboradores). */
     positionIds?: string[];
     acceptedMimeTypes: string[];
@@ -103,7 +87,6 @@ export class DocumentCategoryDefinition {
       slug: props.slug,
       label: props.label,
       mandatory: props.mandatory,
-      jobRoles: props.jobRoles,
       positionIds: props.positionIds ?? [],
       acceptedMimeTypes: props.acceptedMimeTypes,
       scope: props.scope ?? "employee",
@@ -118,7 +101,7 @@ export class DocumentCategoryDefinition {
     return new DocumentCategoryDefinition(props);
   }
 
-  update(patch: Partial<Pick<DocumentCategoryDefinitionProps, "label" | "mandatory" | "jobRoles" | "positionIds" | "acceptedMimeTypes" | "scope">>): DocumentCategoryDefinition {
+  update(patch: Partial<Pick<DocumentCategoryDefinitionProps, "label" | "mandatory" | "positionIds" | "acceptedMimeTypes" | "scope">>): DocumentCategoryDefinition {
     return new DocumentCategoryDefinition({
       ...this.toProps(),
       ...patch,
@@ -137,7 +120,6 @@ export class DocumentCategoryDefinition {
       slug: this.slug,
       label: this.label,
       mandatory: this.mandatory,
-      jobRoles: this.jobRoles,
       positionIds: this.positionIds,
       acceptedMimeTypes: this.acceptedMimeTypes,
       scope: this.scope,

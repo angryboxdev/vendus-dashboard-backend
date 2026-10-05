@@ -1,15 +1,13 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import { ShiftRotation } from "../../domain/entities/shift-rotation.js";
-import type { JobRole } from "../../domain/entities/employee.js";
 import type { ShiftRotationRepositoryPort } from "../../domain/ports/out/shift-rotation-repository.port.js";
 
 const SELECT =
-  "id, job_role, participant_employee_ids, pattern_a_start_time, pattern_a_end_time, pattern_a_second_start_time, pattern_a_second_end_time, pattern_b_start_time, pattern_b_end_time, pattern_b_second_start_time, pattern_b_second_end_time, location_id, anchor_date, auto_switch_weekly, active, created_by, created_at, updated_at";
+  "id, participant_employee_ids, pattern_a_start_time, pattern_a_end_time, pattern_a_second_start_time, pattern_a_second_end_time, pattern_b_start_time, pattern_b_end_time, pattern_b_second_start_time, pattern_b_second_end_time, location_id, anchor_date, auto_switch_weekly, active, created_by, created_at, updated_at";
 
 interface Row {
   id: string;
-  job_role: string;
   participant_employee_ids: string[];
   pattern_a_start_time: string;
   pattern_a_end_time: string;
@@ -31,7 +29,6 @@ interface Row {
 function rowToRotation(row: Row): ShiftRotation {
   return ShiftRotation.reconstitute({
     id: row.id,
-    jobRole: row.job_role as JobRole,
     participantEmployeeIds: [row.participant_employee_ids[0]!, row.participant_employee_ids[1]!],
     patternA: {
       startTime: row.pattern_a_start_time.slice(0, 5),
@@ -59,7 +56,6 @@ function rotationToRow(rotation: ShiftRotation): Record<string, unknown> {
   const props = rotation.toProps();
   return {
     id: props.id,
-    job_role: props.jobRole,
     participant_employee_ids: props.participantEmployeeIds,
     pattern_a_start_time: props.patternA.startTime,
     pattern_a_end_time: props.patternA.endTime,

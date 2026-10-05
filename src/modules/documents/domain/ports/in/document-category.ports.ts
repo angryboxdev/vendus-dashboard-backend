@@ -1,12 +1,11 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { DocumentCategoryScope, OperationalCategory } from "../../entities/document-category.js";
+import type { DocumentCategoryScope } from "../../entities/document-category.js";
 
 export interface DocumentCategoryDTO {
   id: string;
   slug: string;
   label: string;
   mandatory: boolean;
-  jobRoles: OperationalCategory[];
   /** Cargos a que se aplica; vazio = todos os colaboradores. */
   positionIds: string[];
   acceptedMimeTypes: string[];
@@ -36,7 +35,6 @@ export interface CreateDocumentCategoryCommand {
   organizationId: OrganizationId;
   label: string;
   mandatory: boolean;
-  jobRoles: OperationalCategory[];
   positionIds?: string[];
   acceptedMimeTypes: string[];
   /** Omissão: `employee`. */
@@ -54,7 +52,6 @@ export interface UpdateDocumentCategoryCommand {
   id: string;
   label?: string;
   mandatory?: boolean;
-  jobRoles?: OperationalCategory[];
   positionIds?: string[];
   acceptedMimeTypes?: string[];
   scope?: DocumentCategoryScope;
