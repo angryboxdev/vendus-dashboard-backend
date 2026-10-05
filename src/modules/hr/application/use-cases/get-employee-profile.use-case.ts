@@ -1,8 +1,8 @@
 import { EmployeeNotFoundError } from "../../domain/errors.js";
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
-import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
 import type { HrFileStoragePort } from "../../domain/ports/out/hr-file-storage.port.js";
-import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
+import type { DocumentCategoryRepositoryPort } from "../../../documents/domain/ports/out/document-category-repository.port.js";
 import {
   applicableCategoriesFor,
   buildDynamicRequirements,
@@ -36,10 +36,7 @@ export class GetEmployeeProfileUseCase implements GetEmployeeProfilePort {
     const employee = await this.employeeRepository.findById(command.organizationId, command.id);
     if (!employee) throw new EmployeeNotFoundError(command.id);
 
-    const currentDocuments = await this.employeeDocumentRepository.findCurrentByEmployeeId(
-      command.organizationId,
-      employee.id,
-    );
+    const currentDocuments = await this.employeeDocumentRepository.findCurrentByOwners(command.organizationId, "employee", [employee.id]);
     const categoryDefs = await this.documentCategoryRepository.findMany(command.organizationId, { activeOnly: true });
     const applicable = applicableCategoriesFor(categoryDefs, employee.jobRole);
     const requirements = [...DEFAULT_MANDATORY_REQUIREMENTS, ...buildDynamicRequirements(applicable)];

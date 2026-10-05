@@ -1,6 +1,6 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import { DocumentCategoryDefinition } from "../../domain/entities/document-category.js";
-import type { JobRole } from "../../domain/entities/employee.js";
+import type { OperationalCategory as JobRole } from "../../domain/entities/document-category.js";
 import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
 
 const DEFAULT_ACCEPTED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png"];

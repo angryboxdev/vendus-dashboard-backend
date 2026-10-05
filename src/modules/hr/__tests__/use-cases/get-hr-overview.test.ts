@@ -5,11 +5,11 @@ import { Location } from "../../../locations/domain/entities/location.js";
 import { GetHrOverviewUseCase } from "../../application/use-cases/get-hr-overview.use-case.js";
 import type { ShiftOccurrence } from "../../domain/ports/out/shift-attendance-read.port.js";
 import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
-import { FakeEmployeeDocumentRepository } from "../fakes/fake-employee-document-repository.js";
+import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
 import { FakeShiftAttendanceReadAdapter } from "../fakes/fake-shift-attendance-read.js";
 import { FakeLeaveReadAdapter } from "../fakes/fake-leave-read.js";
 import { FakePaymentReadAdapter } from "../fakes/fake-payment-read.js";
-import { FakeDocumentCategoryRepository } from "../fakes/fake-document-category-repository.js";
+import { FakeDocumentCategoryRepository } from "../../../documents/__tests__/fakes/fake-document-category-repository.js";
 import { FakeLocationRepository } from "../fakes/fake-location-repository.js";
 import type { ShiftAttendanceReadPort } from "../../domain/ports/out/shift-attendance-read.port.js";
 
@@ -17,7 +17,7 @@ const ORG = mintOrganizationId("org-test");
 
 function makeUseCase(overrides: { shiftAttendanceRead?: ShiftAttendanceReadPort } = {}) {
   const employees = new FakeEmployeeRepository();
-  const documents = new FakeEmployeeDocumentRepository();
+  const documents = new FakeDocumentRepository();
   const shifts = overrides.shiftAttendanceRead ?? new FakeShiftAttendanceReadAdapter();
   const leave = new FakeLeaveReadAdapter();
   const payments = new FakePaymentReadAdapter();
@@ -80,7 +80,7 @@ describe("GetHrOverviewUseCase", () => {
     // @ts-expect-error — fake mínimo só para este teste de robustez
     const useCaseWithFailingEmployees = new GetHrOverviewUseCase(
       failingEmployees,
-      new FakeEmployeeDocumentRepository(),
+      new FakeDocumentRepository(),
       new FakeShiftAttendanceReadAdapter(),
       new FakeLeaveReadAdapter(),
       payments,

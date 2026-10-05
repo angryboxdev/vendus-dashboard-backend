@@ -1,5 +1,5 @@
 import { DocumentCategoryDefinition } from "../../domain/entities/document-category.js";
-import { InvalidEmployeeError, DocumentCategoryConfigAlreadyExistsError } from "../../domain/errors.js";
+import { InvalidDocumentError, DocumentCategoryConfigAlreadyExistsError } from "../../domain/errors.js";
 import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
 import type {
   CreateDocumentCategoryCommand,
@@ -24,10 +24,10 @@ export class CreateDocumentCategoryUseCase implements CreateDocumentCategoryPort
 
   async execute(command: CreateDocumentCategoryCommand): Promise<DocumentCategoryDTO> {
     const label = command.label.trim();
-    if (label.length === 0) throw new InvalidEmployeeError("label é obrigatório");
+    if (label.length === 0) throw new InvalidDocumentError("label é obrigatório");
 
     const slug = slugifyLabel(label);
-    if (slug.length === 0) throw new InvalidEmployeeError("label inválido");
+    if (slug.length === 0) throw new InvalidDocumentError("label inválido");
 
     const existing = await this.documentCategoryRepository.findBySlug(command.organizationId, slug);
     if (existing) throw new DocumentCategoryConfigAlreadyExistsError(label);
@@ -39,6 +39,7 @@ export class CreateDocumentCategoryUseCase implements CreateDocumentCategoryPort
       mandatory: command.mandatory,
       jobRoles: command.jobRoles,
       acceptedMimeTypes: command.acceptedMimeTypes,
+      ...(command.scope !== undefined && { scope: command.scope }),
     });
     const created = await this.documentCategoryRepository.create(command.organizationId, definition);
     return toDocumentCategoryDTO(created);

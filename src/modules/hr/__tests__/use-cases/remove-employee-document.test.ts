@@ -1,7 +1,7 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
-import { EmployeeDocument } from "../../domain/entities/employee-document.js";
+import { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
 import { RemoveEmployeeDocumentUseCase } from "../../application/use-cases/remove-employee-document.use-case.js";
-import { FakeEmployeeDocumentRepository } from "../fakes/fake-employee-document-repository.js";
+import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
 import { FakeHrAuditLog } from "../fakes/fake-hr-audit-log.js";
 import { EmployeeDocumentNotFoundError } from "../../domain/errors.js";
 
@@ -9,10 +9,10 @@ const ORG = mintOrganizationId("org-test");
 
 describe("RemoveEmployeeDocumentUseCase", () => {
   it("marca removed/isCurrent=false sem apagar a linha nem o ficheiro", async () => {
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const auditLog = new FakeHrAuditLog();
     const doc = EmployeeDocument.createFirstVersion({
-      employeeId: "e1",
+      owner: { type: "employee", id: "e1" },
       category: "outro",
       mandatory: false,
       fileName: "x.pdf",
@@ -36,9 +36,9 @@ describe("RemoveEmployeeDocumentUseCase", () => {
   });
 
   it("lança EmployeeDocumentNotFoundError se o documento não pertence ao colaborador indicado", async () => {
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const doc = EmployeeDocument.createFirstVersion({
-      employeeId: "e1",
+      owner: { type: "employee", id: "e1" },
       category: "outro",
       mandatory: false,
       fileName: "x.pdf",

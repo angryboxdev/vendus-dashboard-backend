@@ -38,6 +38,7 @@ import { populateAuth, requireAuth, requireMinRole } from "./middleware/auth.js"
 import { authRoutes } from "./routes/authRoutes.js";
 import { createLocationsModule } from "./modules/locations/locations.module.js";
 import { createOrganizationModule } from "./modules/organization/organization.module.js";
+import { createDocumentsModule } from "./modules/documents/documents.module.js";
 import { createLocationCredentialsModule } from "./modules/location-credentials/location-credentials.module.js";
 import { createSalesSummaryModule } from "./modules/sales-summary/sales-summary.module.js";
 import { createHrModule } from "./modules/hr/hr.module.js";
@@ -223,6 +224,13 @@ app.use("/api", locationsModule.router);
 // role autenticado; PATCH/logo/histórico com requireMinRole("admin") inline.
 const organizationModule = createOrganizationModule();
 app.use("/api", organizationModule.router);
+
+// Documents module (hexagonal, Base Organizacional — motor único de documentos):
+// categorias (GET qualquer role autenticado; escrita manager) e documentos da
+// Empresa (manager+, inline). Montado antes do `hr`, que deixou de expor as
+// categorias diretamente.
+const documentsModule = createDocumentsModule();
+app.use("/api", documentsModule.router);
 
 // Location credentials admin routes (generate pairing code, list/revoke tokens)
 app.use("/api", locationCredentialsModule.adminRouter);

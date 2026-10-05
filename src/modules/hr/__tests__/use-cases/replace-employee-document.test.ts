@@ -1,9 +1,9 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { Employee } from "../../domain/entities/employee.js";
-import { EmployeeDocument } from "../../domain/entities/employee-document.js";
+import { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
 import { ReplaceEmployeeDocumentUseCase } from "../../application/use-cases/replace-employee-document.use-case.js";
 import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
-import { FakeEmployeeDocumentRepository } from "../fakes/fake-employee-document-repository.js";
+import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
 import { FakeHrFileStorage } from "../fakes/fake-hr-file-storage.js";
 import { FakeHrAuditLog } from "../fakes/fake-hr-audit-log.js";
 
@@ -12,14 +12,14 @@ const ORG = mintOrganizationId("org-test");
 describe("ReplaceEmployeeDocumentUseCase", () => {
   it("cria uma nova versão, marca a anterior isCurrent=false e NUNCA remove o ficheiro antigo do storage", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const storage = new FakeHrFileStorage();
     const auditLog = new FakeHrAuditLog();
 
     const e = Employee.create({ fullName: "Andres Silva" });
     employees.seed(ORG, e);
     const v1 = EmployeeDocument.createFirstVersion({
-      employeeId: e.id,
+      owner: { type: "employee", id: e.id },
       category: "cartao_cidadao",
       mandatory: true,
       fileName: "cc.pdf",
@@ -56,14 +56,14 @@ describe("ReplaceEmployeeDocumentUseCase", () => {
 
   it("herda expiresAt da versão anterior quando não é fornecido de novo", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const storage = new FakeHrFileStorage();
     const auditLog = new FakeHrAuditLog();
 
     const e = Employee.create({ fullName: "Andres Silva" });
     employees.seed(ORG, e);
     const v1 = EmployeeDocument.createFirstVersion({
-      employeeId: e.id,
+      owner: { type: "employee", id: e.id },
       category: "cartao_cidadao",
       mandatory: true,
       fileName: "cc.pdf",

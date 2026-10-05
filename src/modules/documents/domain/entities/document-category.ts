@@ -1,4 +1,20 @@
-import type { JobRole } from "./employee.js";
+/**
+ * Categoria operacional do colaborador (antiga "Função": manager|prep|service).
+ * Declarada aqui e não importada do `hr` para o motor de documentos não
+ * depender do RH (o `JobRole` do RH é estruturalmente o mesmo tipo).
+ */
+export type OperationalCategory = "manager" | "prep" | "service";
+
+/**
+ * Âmbito da categoria (task Base Organizacional §11): para que dono a
+ * categoria existe. Só `employee`/`both` entram nos requisitos dos
+ * colaboradores — uma categoria `company` nunca gera "Em falta" individual.
+ */
+export type DocumentCategoryScope = "employee" | "company" | "both";
+
+export function scopeAllowsOwner(scope: DocumentCategoryScope, ownerType: "employee" | "company"): boolean {
+  return scope === "both" || scope === ownerType;
+}
 
 export interface DocumentCategoryDefinitionProps {
   id: string;
@@ -7,15 +23,17 @@ export interface DocumentCategoryDefinitionProps {
   label: string;
   mandatory: boolean;
   /** Vazio = aplica-se a todos os cargos. */
-  jobRoles: JobRole[];
+  jobRoles: OperationalCategory[];
   acceptedMimeTypes: string[];
+  scope: DocumentCategoryScope;
   active: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
 /**
- * Definição configurável de uma categoria de documento (RH). Não inclui as
+ * Definição configurável de uma categoria de documento — da Empresa, do
+ * Colaborador ou de ambos (`scope`). Não inclui as
  * 3 categorias fixas de identificação (cartao_cidadao/titulo_residencia/
  * passaporte) — essas continuam uma constante do código, fora desta
  * entidade (ver document-status.service.ts, decisão confirmada com o
@@ -27,8 +45,9 @@ export class DocumentCategoryDefinition {
   readonly slug: string;
   readonly label: string;
   readonly mandatory: boolean;
-  readonly jobRoles: JobRole[];
+  readonly jobRoles: OperationalCategory[];
   readonly acceptedMimeTypes: string[];
+  readonly scope: DocumentCategoryScope;
   readonly active: boolean;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -41,6 +60,7 @@ export class DocumentCategoryDefinition {
     this.mandatory = props.mandatory;
     this.jobRoles = props.jobRoles;
     this.acceptedMimeTypes = props.acceptedMimeTypes;
+    this.scope = props.scope;
     this.active = props.active;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
@@ -51,8 +71,10 @@ export class DocumentCategoryDefinition {
     slug: string;
     label: string;
     mandatory: boolean;
-    jobRoles: JobRole[];
+    jobRoles: OperationalCategory[];
     acceptedMimeTypes: string[];
+    /** Omissão: `employee` (comportamento anterior à Base Organizacional). */
+    scope?: DocumentCategoryScope;
   }): DocumentCategoryDefinition {
     const now = new Date().toISOString();
     return new DocumentCategoryDefinition({
@@ -63,6 +85,7 @@ export class DocumentCategoryDefinition {
       mandatory: props.mandatory,
       jobRoles: props.jobRoles,
       acceptedMimeTypes: props.acceptedMimeTypes,
+      scope: props.scope ?? "employee",
       active: true,
       createdAt: now,
       updatedAt: now,
@@ -73,7 +96,7 @@ export class DocumentCategoryDefinition {
     return new DocumentCategoryDefinition(props);
   }
 
-  update(patch: Partial<Pick<DocumentCategoryDefinitionProps, "label" | "mandatory" | "jobRoles" | "acceptedMimeTypes">>): DocumentCategoryDefinition {
+  update(patch: Partial<Pick<DocumentCategoryDefinitionProps, "label" | "mandatory" | "jobRoles" | "acceptedMimeTypes" | "scope">>): DocumentCategoryDefinition {
     return new DocumentCategoryDefinition({
       ...this.toProps(),
       ...patch,
@@ -94,6 +117,7 @@ export class DocumentCategoryDefinition {
       mandatory: this.mandatory,
       jobRoles: this.jobRoles,
       acceptedMimeTypes: this.acceptedMimeTypes,
+      scope: this.scope,
       active: this.active,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,

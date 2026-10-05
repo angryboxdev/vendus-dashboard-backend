@@ -59,3 +59,18 @@ describe("DocumentCategoryDefinition", () => {
     expect(def.toProps()).toEqual(props);
   });
 });
+
+describe("DocumentCategoryDefinition — âmbito (Base Organizacional, ticket 03)", () => {
+  it("âmbito por defeito é Colaborador e pode ser alterado", () => {
+    const def = DocumentCategoryDefinition.create({
+      organizationId: "org-1",
+      slug: "licenca_utilizacao",
+      label: "Licença de utilização",
+      mandatory: false,
+      jobRoles: [],
+      acceptedMimeTypes: [],
+    });
+    expect(def.scope).toBe("employee");
+    expect(def.update({ scope: "company" }).scope).toBe("company");
+  });
+});

@@ -1,7 +1,7 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
-import { EmployeeDocument } from "../../domain/entities/employee-document.js";
+import { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
 import { GetEmployeeDocumentDownloadUrlUseCase } from "../../application/use-cases/get-employee-document-download-url.use-case.js";
-import { FakeEmployeeDocumentRepository } from "../fakes/fake-employee-document-repository.js";
+import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
 import { FakeHrFileStorage } from "../fakes/fake-hr-file-storage.js";
 import { EmployeeDocumentNotFoundError } from "../../domain/errors.js";
 
@@ -9,10 +9,10 @@ const ORG = mintOrganizationId("org-test");
 
 describe("GetEmployeeDocumentDownloadUrlUseCase", () => {
   it("devolve um URL assinado (TTL curto) para o storagePath do documento", async () => {
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const storage = new FakeHrFileStorage();
     const doc = EmployeeDocument.createFirstVersion({
-      employeeId: "e1",
+      owner: { type: "employee", id: "e1" },
       category: "nif",
       mandatory: true,
       fileName: "nif.pdf",
@@ -33,9 +33,9 @@ describe("GetEmployeeDocumentDownloadUrlUseCase", () => {
   });
 
   it("lança EmployeeDocumentNotFoundError quando o documento não pertence ao colaborador indicado", async () => {
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const doc = EmployeeDocument.createFirstVersion({
-      employeeId: "e1",
+      owner: { type: "employee", id: "e1" },
       category: "nif",
       mandatory: true,
       fileName: "nif.pdf",

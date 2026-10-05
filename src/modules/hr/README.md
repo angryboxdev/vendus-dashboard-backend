@@ -540,7 +540,9 @@ Este módulo é **aditivo**, não uma substituição imediata:
 
 ### Output (domain dependencies)
 
-- `EmployeeRepositoryPort` / `EmployeeDocumentRepositoryPort` — persistência
+- `EmployeeRepositoryPort` / `DocumentRepositoryPort` (do módulo `documents`,
+  desde a Base Organizacional ticket 03 — o motor de documentos é único para
+  Empresa e Colaborador; o RH usa-o com dono `employee`) — persistência
   via `ScopedQueryFactory` (D1/D2), sobre `hr_employees`/
   `hr_employee_documents` (+ `hr_employee_locations` para os locais
   autorizados, reescritos como conjunto a cada gravação).
@@ -574,9 +576,10 @@ Este módulo é **aditivo**, não uma substituição imediata:
   print do utilizador). Se esta fonte falhar, o bloco `operation` continua
   `status: "ok"` só com `locationName: null` em todas as linhas — não é
   informação crítica o suficiente para derrubar o painel inteiro.
-- `DocumentCategoryRepositoryPort` — persistência de
+- `DocumentCategoryRepositoryPort` (do módulo `documents`) — persistência de
   `DocumentCategoryDefinition` em `hr_document_categories` via
-  `ScopedQueryFactory`. Injetado também em `ListEmployeesUseCase`/
+  `ScopedQueryFactory`. `applicableCategoriesFor` ignora categorias com
+  âmbito `company` (um documento empresarial nunca gera "Em falta"). Injetado também em `ListEmployeesUseCase`/
   `GetPeopleKpisUseCase`/`GetHrOverviewUseCase`/`GetEmployeeProfileUseCase`
   (constroem os requisitos obrigatórios dinâmicos a partir dele).
 - `WorkShiftRepositoryPort` (RH-03) — CRUD de `hr_work_shifts` +
@@ -634,10 +637,9 @@ Este módulo é **aditivo**, não uma substituição imediata:
   todos só leitura, `hr_viewer`+. A confirmação de conferência **não** tem
   rota aqui — continua a usar o endpoint legacy
   `PATCH /api/hr/shifts/:id/attendance`.
-- `HrDocumentCategoriesController` → `GET/POST /api/hr/document-categories`,
-  `PATCH /api/hr/document-categories/:id`,
-  `PATCH /api/hr/document-categories/:id/active`. GET aberto a `hr_viewer`+;
-  escritas exigem `requireMinRole("manager")`.
+- `/api/hr/document-categories*` — desde a Base Organizacional (ticket 03)
+  exposto pelo módulo `documents` (`DocumentCategoriesController`, mesmo
+  contrato + campo `scope`), já não por este módulo.
 - `HrSchedulesController` (RH-03) → `/api/hr/schedules/*`. GET aberto a
   `hr_viewer`+; escritas exigem `requireMinRole("manager")` (mesmo padrão do
   resto do módulo — nada aqui usa `admin`, ao contrário de
@@ -688,8 +690,9 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `SupabasePaymentReadAdapter` (RH-01) → leitura direta via
   `createScopedQuery`, sem importar `hrShiftService.ts`/
   `hrShiftAttendanceService.ts`/`hrLeaveService.ts`/`hrPaymentService.ts`.
-- `SupabaseDocumentCategoryRepository` → `hr_document_categories` via
-  `createScopedQuery`.
+- `SupabaseDocumentRepository` / `SupabaseDocumentCategoryRepository` — do
+  módulo `documents`, instanciados em `hr.module.ts` (mesmo padrão de
+  `SupabaseLocationRepository`).
 - **"Melhorar Hoje na operação"**: nenhum adapter novo — `GetHrOverviewUseCase`/
   `ListShiftsToReviewUseCase`/`GetShiftToReviewUseCase` passaram a receber
   `SupabaseLocationRepository` (módulo `locations`, já existente), o mesmo

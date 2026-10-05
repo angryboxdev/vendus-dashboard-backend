@@ -40,6 +40,10 @@ evoluir Escalas, Férias e Assiduidade — que **não mudam** nesta task.
 - **D8 — Estado da Empresa é só leitura na UI** (ativar/desativar o
   tenant é um assunto de provisioning/faturação, não de configuração).
 
+- **D9 — Documentos: generalizar as tabelas existentes sem as renomear** (confirmado 2026-10-05). `hr_employee_documents`/`hr_document_categories` ganham dono (`owner_type` COMPANY|EMPLOYEE) e âmbito; o código legacy e o backend em produção continuam a funcionar antes do deploy novo. O prefixo `hr_` fica como dívida até o legacy ser retirado.
+- **D10 — Categoria "Apólice de seguro de acidentes de trabalho": âmbito Ambos** (decisão do utilizador, 2026-10-05). Continua opcional para colaboradores.
+- **D11 — Visibilidade dos documentos da Empresa: Gestão (manager+admin, por defeito) ou Só administração (admin).**
+
 ## Fases (ver `issues/`)
 
 A — Empresa & Estrutura: 01 Empresa · 02 Locais · 03 Documentos (motor) ·

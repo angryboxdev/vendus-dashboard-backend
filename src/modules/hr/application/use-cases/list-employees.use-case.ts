@@ -1,7 +1,7 @@
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
-import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
 import type { HrFileStoragePort } from "../../domain/ports/out/hr-file-storage.port.js";
-import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
+import type { DocumentCategoryRepositoryPort } from "../../../documents/domain/ports/out/document-category-repository.port.js";
 import {
   applicableCategoriesFor,
   buildDynamicRequirements,
@@ -50,16 +50,14 @@ export class ListEmployeesUseCase implements ListEmployeesPort {
           e.authorizedLocationIds.includes(command.locationId)),
     );
 
-    const documents = await this.employeeDocumentRepository.findCurrentByEmployeeIds(
-      command.organizationId,
-      employees.map((e) => e.id),
+    const documents = await this.employeeDocumentRepository.findCurrentByOwners(command.organizationId, "employee", employees.map((e) => e.id),
     );
     const categoryDefs = await this.documentCategoryRepository.findMany(command.organizationId, { activeOnly: true });
     const documentsByEmployee = new Map<string, typeof documents>();
     for (const doc of documents) {
-      const list = documentsByEmployee.get(doc.employeeId) ?? [];
+      const list = documentsByEmployee.get(doc.ownerId) ?? [];
       list.push(doc);
-      documentsByEmployee.set(doc.employeeId, list);
+      documentsByEmployee.set(doc.ownerId, list);
     }
 
     let rows: EmployeeListRowDTO[] = await Promise.all(

@@ -1,10 +1,13 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
-import { DocumentCategoryDefinition } from "../../domain/entities/document-category.js";
-import type { JobRole } from "../../domain/entities/employee.js";
+import {
+  DocumentCategoryDefinition,
+  type DocumentCategoryScope,
+  type OperationalCategory,
+} from "../../domain/entities/document-category.js";
 import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
 
-const SELECT = "id, org_id, slug, label, mandatory, job_roles, accepted_mime_types, active, created_at, updated_at";
+const SELECT = "id, org_id, slug, label, mandatory, job_roles, accepted_mime_types, scope, active, created_at, updated_at";
 
 interface Row {
   id: string;
@@ -14,6 +17,7 @@ interface Row {
   mandatory: boolean;
   job_roles: string[];
   accepted_mime_types: string[];
+  scope: string;
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -26,8 +30,9 @@ function rowToDefinition(row: Row): DocumentCategoryDefinition {
     slug: row.slug,
     label: row.label,
     mandatory: row.mandatory,
-    jobRoles: row.job_roles as JobRole[],
+    jobRoles: row.job_roles as OperationalCategory[],
     acceptedMimeTypes: row.accepted_mime_types,
+    scope: row.scope as DocumentCategoryScope,
     active: row.active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -43,6 +48,7 @@ function definitionToRow(def: DocumentCategoryDefinition): Record<string, unknow
     mandatory: props.mandatory,
     job_roles: props.jobRoles,
     accepted_mime_types: props.acceptedMimeTypes,
+    scope: props.scope,
     active: props.active,
     updated_at: props.updatedAt,
   };

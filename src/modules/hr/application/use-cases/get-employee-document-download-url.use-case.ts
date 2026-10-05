@@ -1,5 +1,5 @@
 import { EmployeeDocumentNotFoundError } from "../../domain/errors.js";
-import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
 import type { HrFileStoragePort } from "../../domain/ports/out/hr-file-storage.port.js";
 import type {
   GetEmployeeDocumentDownloadUrlCommand,
@@ -15,7 +15,7 @@ export class GetEmployeeDocumentDownloadUrlUseCase implements GetEmployeeDocumen
 
   async execute(command: GetEmployeeDocumentDownloadUrlCommand): Promise<{ url: string }> {
     const doc = await this.employeeDocumentRepository.findById(command.organizationId, command.documentId);
-    if (!doc || doc.employeeId !== command.employeeId) {
+    if (!doc || doc.ownerId !== command.employeeId) {
       throw new EmployeeDocumentNotFoundError(command.documentId);
     }
     const url = await this.hrFileStorage.getSignedUrl(

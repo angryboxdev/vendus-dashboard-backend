@@ -19,42 +19,14 @@ export class EmployeeDocumentNotFoundError extends Error {
   }
 }
 
-/**
- * Só existe uma versão "atual" por categoria de documento de cada vez —
- * enviar uma nova categoria quando já existe uma versão atual força o
- * chamador a usar a acção "Substituir" (nunca cria uma segunda linha
- * concorrente "atual" para a mesma categoria).
- */
-export class DocumentCategoryAlreadyExistsError extends Error {
-  constructor(category: string) {
-    super(`Já existe um documento atual na categoria "${category}" — usa substituir em vez de enviar novo`);
-    this.name = "DocumentCategoryAlreadyExistsError";
-  }
-}
-
-/** Tentativa de substituir/remover uma versão que já não é a atual. */
-export class DocumentNotCurrentError extends Error {
-  constructor(id: string) {
-    super(`Documento ${id} já não é a versão atual — não pode ser substituído/removido`);
-    this.name = "DocumentNotCurrentError";
-  }
-}
-
-/** Definição de categoria de documento (configuração, não instância enviada) não encontrada. */
-export class DocumentCategoryConfigNotFoundError extends Error {
-  constructor(id: string) {
-    super(`Categoria de documento não encontrada: ${id}`);
-    this.name = "DocumentCategoryConfigNotFoundError";
-  }
-}
-
-/** Já existe uma categoria de documento configurada com este slug/label nesta organização. */
-export class DocumentCategoryConfigAlreadyExistsError extends Error {
-  constructor(slug: string) {
-    super(`Já existe uma categoria de documento com este nome: "${slug}"`);
-    this.name = "DocumentCategoryConfigAlreadyExistsError";
-  }
-}
+// Erros do motor de documentos — vivem no módulo `documents` (Base Organizacional, ticket 03);
+// re-exportados aqui para os use cases/controllers do RH que já os usam.
+export {
+  DocumentCategoryAlreadyExistsError,
+  DocumentNotCurrentError,
+  DocumentCategoryConfigNotFoundError,
+  DocumentCategoryConfigAlreadyExistsError,
+} from "../../documents/domain/errors.js";
 
 // ── RH-03 — Escalas & Turnos ────────────────────────────────────────────────
 

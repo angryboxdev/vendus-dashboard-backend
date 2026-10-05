@@ -10,9 +10,9 @@ import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
 import { FakeHrAuditLog } from "../fakes/fake-hr-audit-log.js";
 import { FakePositionRepository } from "../fakes/fake-position-repository.js";
 import { FakeLocationRepository } from "../fakes/fake-location-repository.js";
-import { FakeEmployeeDocumentRepository } from "../fakes/fake-employee-document-repository.js";
+import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
 import { FakeHrFileStorage } from "../fakes/fake-hr-file-storage.js";
-import { FakeDocumentCategoryRepository } from "../fakes/fake-document-category-repository.js";
+import { FakeDocumentCategoryRepository } from "../../../documents/__tests__/fakes/fake-document-category-repository.js";
 
 const ORG = mintOrganizationId("org-test");
 const NOW = new Date("2026-10-04T10:00:00.000Z");
@@ -126,7 +126,7 @@ describe("ListEmployeesUseCase — filtros de cargo e local", () => {
     employees.seed(ORG, Employee.create({ fullName: "Ana", positionId: "pos-mgr", primaryLocationId: "loc-mbs" }));
     employees.seed(ORG, Employee.create({ fullName: "Bruno", primaryLocationId: "loc-gaia", authorizedLocationIds: ["loc-mbs"] }));
     employees.seed(ORG, Employee.create({ fullName: "Carla", primaryLocationId: "loc-gaia" }));
-    const list = new ListEmployeesUseCase(employees, new FakeEmployeeDocumentRepository(), new FakeHrFileStorage(), new FakeDocumentCategoryRepository());
+    const list = new ListEmployeesUseCase(employees, new FakeDocumentRepository(), new FakeHrFileStorage(), new FakeDocumentCategoryRepository());
 
     const byPosition = await list.execute({ organizationId: ORG, viewerRole: "manager", positionId: "pos-mgr", page: 1, pageSize: 10 });
     const byLocation = await list.execute({ organizationId: ORG, viewerRole: "manager", locationId: "loc-mbs", page: 1, pageSize: 10 });

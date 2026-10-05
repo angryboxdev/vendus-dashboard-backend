@@ -1,16 +1,16 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
-import { EmployeeDocument } from "../../domain/entities/employee-document.js";
+import { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
 import { GetEmployeeDocumentHistoryUseCase } from "../../application/use-cases/get-employee-document-history.use-case.js";
-import { FakeEmployeeDocumentRepository } from "../fakes/fake-employee-document-repository.js";
+import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
 import { EmployeeDocumentNotFoundError } from "../../domain/errors.js";
 
 const ORG = mintOrganizationId("org-test");
 
 describe("GetEmployeeDocumentHistoryUseCase", () => {
   it("devolve toda a cadeia de versões, mais recente primeiro", async () => {
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const v1 = EmployeeDocument.createFirstVersion({
-      employeeId: "e1",
+      owner: { type: "employee", id: "e1" },
       category: "cartao_cidadao",
       mandatory: true,
       fileName: "cc.pdf",
@@ -39,7 +39,7 @@ describe("GetEmployeeDocumentHistoryUseCase", () => {
   });
 
   it("lança EmployeeDocumentNotFoundError para id inexistente", async () => {
-    const useCase = new GetEmployeeDocumentHistoryUseCase(new FakeEmployeeDocumentRepository());
+    const useCase = new GetEmployeeDocumentHistoryUseCase(new FakeDocumentRepository());
     await expect(
       useCase.execute({ organizationId: ORG, employeeId: "e1", documentId: "x" }),
     ).rejects.toThrow(EmployeeDocumentNotFoundError);

@@ -2,9 +2,9 @@ import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { Employee } from "../../domain/entities/employee.js";
 import { GetEmployeeProfileUseCase } from "../../application/use-cases/get-employee-profile.use-case.js";
 import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
-import { FakeEmployeeDocumentRepository } from "../fakes/fake-employee-document-repository.js";
+import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
 import { FakeHrFileStorage } from "../fakes/fake-hr-file-storage.js";
-import { FakeDocumentCategoryRepository } from "../fakes/fake-document-category-repository.js";
+import { FakeDocumentCategoryRepository } from "../../../documents/__tests__/fakes/fake-document-category-repository.js";
 import { EmployeeNotFoundError } from "../../domain/errors.js";
 
 const ORG = mintOrganizationId("org-test");
@@ -13,7 +13,7 @@ describe("GetEmployeeProfileUseCase", () => {
   it("lança EmployeeNotFoundError para id inexistente", async () => {
     const useCase = new GetEmployeeProfileUseCase(
       new FakeEmployeeRepository(),
-      new FakeEmployeeDocumentRepository(),
+      new FakeDocumentRepository(),
       new FakeHrFileStorage(),
       new FakeDocumentCategoryRepository(),
     );
@@ -33,7 +33,7 @@ describe("GetEmployeeProfileUseCase", () => {
 
     const useCase = new GetEmployeeProfileUseCase(
       employees,
-      new FakeEmployeeDocumentRepository(),
+      new FakeDocumentRepository(),
       new FakeHrFileStorage(),
       new FakeDocumentCategoryRepository(),
     );
@@ -54,7 +54,7 @@ describe("GetEmployeeProfileUseCase", () => {
 
     const useCase = new GetEmployeeProfileUseCase(
       employees,
-      new FakeEmployeeDocumentRepository(),
+      new FakeDocumentRepository(),
       new FakeHrFileStorage(),
       new FakeDocumentCategoryRepository(),
     );
@@ -71,7 +71,7 @@ describe("GetEmployeeProfileUseCase", () => {
 
     const useCase = new GetEmployeeProfileUseCase(
       employees,
-      new FakeEmployeeDocumentRepository(),
+      new FakeDocumentRepository(),
       new FakeHrFileStorage(),
       new FakeDocumentCategoryRepository(),
     );
@@ -87,7 +87,7 @@ describe("GetEmployeeProfileUseCase", () => {
 
     const useCase = new GetEmployeeProfileUseCase(
       employees,
-      new FakeEmployeeDocumentRepository(),
+      new FakeDocumentRepository(),
       new FakeHrFileStorage(),
       new FakeDocumentCategoryRepository(),
     );
@@ -107,7 +107,7 @@ describe("GetEmployeeProfileUseCase", () => {
 
     const useCase = new GetEmployeeProfileUseCase(
       employees,
-      new FakeEmployeeDocumentRepository(),
+      new FakeDocumentRepository(),
       new FakeHrFileStorage(),
       new FakeDocumentCategoryRepository(),
     );
@@ -131,7 +131,7 @@ describe("GetEmployeeProfileUseCase", () => {
 
     const useCase = new GetEmployeeProfileUseCase(
       employees,
-      new FakeEmployeeDocumentRepository(),
+      new FakeDocumentRepository(),
       new FakeHrFileStorage(),
       categories,
     );

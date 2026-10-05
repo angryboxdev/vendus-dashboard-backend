@@ -1,17 +1,17 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { Employee } from "../../domain/entities/employee.js";
-import { EmployeeDocument } from "../../domain/entities/employee-document.js";
+import { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
 import { GetPeopleKpisUseCase } from "../../application/use-cases/get-people-kpis.use-case.js";
 import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
-import { FakeEmployeeDocumentRepository } from "../fakes/fake-employee-document-repository.js";
-import { FakeDocumentCategoryRepository } from "../fakes/fake-document-category-repository.js";
+import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
+import { FakeDocumentCategoryRepository } from "../../../documents/__tests__/fakes/fake-document-category-repository.js";
 
 const ORG = mintOrganizationId("org-test");
 
 describe("GetPeopleKpisUseCase", () => {
   it("conta activeEmployees só entre os ativos", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const categories = new FakeDocumentCategoryRepository();
     employees.seed(ORG, Employee.create({ fullName: "Ativo" }));
     employees.seed(ORG, Employee.create({ fullName: "Inativo" }).deactivate());
@@ -24,7 +24,7 @@ describe("GetPeopleKpisUseCase", () => {
 
   it("perfil incompleto gera incompleteProfiles + pendência prioritária", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const categories = new FakeDocumentCategoryRepository();
     employees.seed(ORG, Employee.create({ fullName: "Incompleto" }));
 
@@ -37,7 +37,7 @@ describe("GetPeopleKpisUseCase", () => {
 
   it("contacto de emergência em falta gera pendência prioritária dedicada", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const categories = new FakeDocumentCategoryRepository();
     employees.seed(ORG, Employee.create({ fullName: "Sem Contacto" }));
 
@@ -49,7 +49,7 @@ describe("GetPeopleKpisUseCase", () => {
 
   it("documento obrigatório em falta gera missing_document", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const categories = new FakeDocumentCategoryRepository();
     employees.seed(ORG, Employee.create({ fullName: "Sem Docs" }));
 
@@ -61,7 +61,7 @@ describe("GetPeopleKpisUseCase", () => {
 
   it("agrupa colaboradores com a mesma pendência num único grupo, com etiqueta amigável da categoria", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const categories = new FakeDocumentCategoryRepository();
     const e1 = Employee.create({ fullName: "Kleiton Carlos" });
     const e2 = Employee.create({ fullName: "Alexandre Jesus" });
@@ -80,7 +80,7 @@ describe("GetPeopleKpisUseCase", () => {
 
   it("documento a expirar gera pendência expiring_document", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const categories = new FakeDocumentCategoryRepository();
     const e = Employee.create({ fullName: "Andres" });
     employees.seed(ORG, e);
@@ -89,7 +89,7 @@ describe("GetPeopleKpisUseCase", () => {
     documents.seed(
       ORG,
       EmployeeDocument.createFirstVersion({
-        employeeId: e.id,
+        owner: { type: "employee", id: e.id },
         category: "cartao_cidadao",
         mandatory: true,
         fileName: "cc.pdf",
@@ -115,7 +115,7 @@ describe("GetPeopleKpisUseCase", () => {
 
   it("nunca gera missing_document para categorias opcionais (só obrigatórias)", async () => {
     const employees = new FakeEmployeeRepository();
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const categories = new FakeDocumentCategoryRepository();
     employees.seed(ORG, Employee.create({ fullName: "Sem Docs Opcionais" }));
 

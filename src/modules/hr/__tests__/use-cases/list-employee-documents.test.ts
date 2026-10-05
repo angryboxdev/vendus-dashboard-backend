@@ -1,15 +1,15 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
-import { EmployeeDocument } from "../../domain/entities/employee-document.js";
+import { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
 import { ListEmployeeDocumentsUseCase } from "../../application/use-cases/list-employee-documents.use-case.js";
-import { FakeEmployeeDocumentRepository } from "../fakes/fake-employee-document-repository.js";
+import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
 
 const ORG = mintOrganizationId("org-test");
 
 describe("ListEmployeeDocumentsUseCase", () => {
   it("só devolve versões atuais, com o displayStatus calculado", async () => {
-    const documents = new FakeEmployeeDocumentRepository();
+    const documents = new FakeDocumentRepository();
     const v1 = EmployeeDocument.createFirstVersion({
-      employeeId: "e1",
+      owner: { type: "employee", id: "e1" },
       category: "contrato_trabalho",
       mandatory: true,
       fileName: "contrato.pdf",

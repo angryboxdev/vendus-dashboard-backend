@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import { SupabaseEmployeeRepository } from "./adapters/out/supabase-employee.repository.js";
-import { SupabaseEmployeeDocumentRepository } from "./adapters/out/supabase-employee-document.repository.js";
-import { SupabaseDocumentCategoryRepository } from "./adapters/out/supabase-document-category.repository.js";
+// Motor de documentos (Base Organizacional, ticket 03) — mesmo padrão cross-module de `locations` (D10):
+// o RH usa os adapters do módulo `documents`; a configuração de categorias é exposta por esse módulo.
+import { SupabaseDocumentRepository } from "../documents/adapters/out/supabase-document.repository.js";
+import { SupabaseDocumentCategoryRepository } from "../documents/adapters/out/supabase-document-category.repository.js";
 import { SupabaseHrFileStorageAdapter } from "./adapters/out/supabase-hr-file-storage.adapter.js";
 import { SupabaseHrAuditLogAdapter } from "./adapters/out/supabase-hr-audit-log.adapter.js";
 import { SupabaseShiftAttendanceReadAdapter } from "./adapters/out/supabase-shift-attendance-read.adapter.js";
@@ -44,10 +46,6 @@ import { GetDocumentOverviewUseCase } from "./application/use-cases/get-document
 import { GetHrOverviewUseCase } from "./application/use-cases/get-hr-overview.use-case.js";
 import { ListShiftsToReviewUseCase } from "./application/use-cases/list-shifts-to-review.use-case.js";
 import { GetShiftToReviewUseCase } from "./application/use-cases/get-shift-to-review.use-case.js";
-import { ListDocumentCategoriesUseCase } from "./application/use-cases/list-document-categories.use-case.js";
-import { CreateDocumentCategoryUseCase } from "./application/use-cases/create-document-category.use-case.js";
-import { UpdateDocumentCategoryUseCase } from "./application/use-cases/update-document-category.use-case.js";
-import { SetDocumentCategoryActiveUseCase } from "./application/use-cases/set-document-category-active.use-case.js";
 import { ListWorkShiftsUseCase } from "./application/use-cases/list-work-shifts.use-case.js";
 import { CreateWorkShiftUseCase } from "./application/use-cases/create-work-shift.use-case.js";
 import { UpdateWorkShiftUseCase } from "./application/use-cases/update-work-shift.use-case.js";
@@ -83,7 +81,6 @@ import { GetAttendanceEmployeeDetailUseCase } from "./application/use-cases/get-
 
 import { HrPeopleController } from "./adapters/in/hr-people.controller.js";
 import { HrOverviewController } from "./adapters/in/hr-overview.controller.js";
-import { HrDocumentCategoriesController } from "./adapters/in/hr-document-categories.controller.js";
 import { HrSchedulesController } from "./adapters/in/hr-schedules.controller.js";
 import { HrAttendanceController } from "./adapters/in/hr-attendance.controller.js";
 
@@ -98,7 +95,7 @@ import { HrAttendanceController } from "./adapters/in/hr-attendance.controller.j
  */
 export function createHrModule(): { router: Router } {
   const employeeRepository = new SupabaseEmployeeRepository(createScopedQuery);
-  const employeeDocumentRepository = new SupabaseEmployeeDocumentRepository(createScopedQuery);
+  const employeeDocumentRepository = new SupabaseDocumentRepository(createScopedQuery);
   const documentCategoryRepository = new SupabaseDocumentCategoryRepository(createScopedQuery);
   const hrFileStorage = new SupabaseHrFileStorageAdapter();
   const auditLog = new SupabaseHrAuditLogAdapter(createScopedQuery);
@@ -168,10 +165,6 @@ export function createHrModule(): { router: Router } {
   const listShiftsToReview = new ListShiftsToReviewUseCase(employeeRepository, shiftAttendanceRead, locationRepository);
   const getShiftToReview = new GetShiftToReviewUseCase(employeeRepository, shiftAttendanceRead, locationRepository);
 
-  const listDocumentCategories = new ListDocumentCategoriesUseCase(documentCategoryRepository);
-  const createDocumentCategory = new CreateDocumentCategoryUseCase(documentCategoryRepository);
-  const updateDocumentCategory = new UpdateDocumentCategoryUseCase(documentCategoryRepository);
-  const setDocumentCategoryActive = new SetDocumentCategoryActiveUseCase(documentCategoryRepository);
 
   const listWorkShifts = new ListWorkShiftsUseCase(workShiftRepository, employeeRepository);
   const createWorkShift = new CreateWorkShiftUseCase(workShiftRepository, employeeRepository, auditLog);
@@ -295,12 +288,6 @@ export function createHrModule(): { router: Router } {
     getDocumentOverview,
   );
   const overviewController = new HrOverviewController(getHrOverview, listShiftsToReview, getShiftToReview);
-  const documentCategoriesController = new HrDocumentCategoriesController(
-    listDocumentCategories,
-    createDocumentCategory,
-    updateDocumentCategory,
-    setDocumentCategoryActive,
-  );
   const schedulesController = new HrSchedulesController(
     listWorkShifts,
     createWorkShift,
@@ -349,7 +336,6 @@ export function createHrModule(): { router: Router } {
   router.use(controller.router);
   router.use(positionsController.router);
   router.use(overviewController.router);
-  router.use(documentCategoriesController.router);
   router.use(schedulesController.router);
   router.use(attendanceController.router);
 

@@ -1,4 +1,4 @@
-import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
 import type {
   ListEmployeeDocumentsCommand,
   ListEmployeeDocumentsPort,
@@ -10,10 +10,7 @@ export class ListEmployeeDocumentsUseCase implements ListEmployeeDocumentsPort {
   constructor(private readonly employeeDocumentRepository: EmployeeDocumentRepositoryPort) {}
 
   async execute(command: ListEmployeeDocumentsCommand): Promise<EmployeeDocumentDTO[]> {
-    const documents = await this.employeeDocumentRepository.findCurrentByEmployeeId(
-      command.organizationId,
-      command.employeeId,
-    );
+    const documents = await this.employeeDocumentRepository.findCurrentByOwners(command.organizationId, "employee", [command.employeeId]);
     return documents.map(toEmployeeDocumentDTO);
   }
 }

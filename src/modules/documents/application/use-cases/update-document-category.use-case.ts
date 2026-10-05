@@ -19,6 +19,7 @@ export class UpdateDocumentCategoryUseCase implements UpdateDocumentCategoryPort
       ...(command.mandatory !== undefined && { mandatory: command.mandatory }),
       ...(command.jobRoles !== undefined && { jobRoles: command.jobRoles }),
       ...(command.acceptedMimeTypes !== undefined && { acceptedMimeTypes: command.acceptedMimeTypes }),
+      ...(command.scope !== undefined && { scope: command.scope }),
     });
     const saved = await this.documentCategoryRepository.update(command.organizationId, updated);
     return toDocumentCategoryDTO(saved);

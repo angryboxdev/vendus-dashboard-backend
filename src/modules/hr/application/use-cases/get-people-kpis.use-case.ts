@@ -1,7 +1,7 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
-import type { EmployeeDocumentRepositoryPort } from "../../domain/ports/out/employee-document-repository.port.js";
-import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
+import type { DocumentCategoryRepositoryPort } from "../../../documents/domain/ports/out/document-category-repository.port.js";
 import {
   applicableCategoriesFor,
   buildDynamicRequirements,
@@ -59,15 +59,13 @@ export class GetPeopleKpisUseCase implements GetPeopleKpisPort {
 
   async execute(organizationId: OrganizationId): Promise<PeopleKpisDTO> {
     const employees = await this.employeeRepository.findMany(organizationId, { status: "active" });
-    const documents = await this.employeeDocumentRepository.findCurrentByEmployeeIds(
-      organizationId,
-      employees.map((e) => e.id),
+    const documents = await this.employeeDocumentRepository.findCurrentByOwners(organizationId, "employee", employees.map((e) => e.id),
     );
     const documentsByEmployee = new Map<string, typeof documents>();
     for (const doc of documents) {
-      const list = documentsByEmployee.get(doc.employeeId) ?? [];
+      const list = documentsByEmployee.get(doc.ownerId) ?? [];
       list.push(doc);
-      documentsByEmployee.set(doc.employeeId, list);
+      documentsByEmployee.set(doc.ownerId, list);
     }
 
     const categoryDefs = await this.documentCategoryRepository.findMany(organizationId, { activeOnly: true });

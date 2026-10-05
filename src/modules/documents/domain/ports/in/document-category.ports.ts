@@ -1,13 +1,14 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { JobRole } from "../../entities/employee.js";
+import type { DocumentCategoryScope, OperationalCategory } from "../../entities/document-category.js";
 
 export interface DocumentCategoryDTO {
   id: string;
   slug: string;
   label: string;
   mandatory: boolean;
-  jobRoles: JobRole[];
+  jobRoles: OperationalCategory[];
   acceptedMimeTypes: string[];
+  scope: DocumentCategoryScope;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -17,6 +18,8 @@ export interface DocumentCategoryDTO {
 
 export interface ListDocumentCategoriesCommand {
   organizationId: OrganizationId;
+  /** Só as categorias aplicáveis a este dono (`both` conta para os dois). Omitido = todas. */
+  ownerType?: "employee" | "company";
 }
 
 export interface ListDocumentCategoriesPort {
@@ -29,8 +32,10 @@ export interface CreateDocumentCategoryCommand {
   organizationId: OrganizationId;
   label: string;
   mandatory: boolean;
-  jobRoles: JobRole[];
+  jobRoles: OperationalCategory[];
   acceptedMimeTypes: string[];
+  /** Omissão: `employee`. */
+  scope?: DocumentCategoryScope;
 }
 
 export interface CreateDocumentCategoryPort {
@@ -44,8 +49,9 @@ export interface UpdateDocumentCategoryCommand {
   id: string;
   label?: string;
   mandatory?: boolean;
-  jobRoles?: JobRole[];
+  jobRoles?: OperationalCategory[];
   acceptedMimeTypes?: string[];
+  scope?: DocumentCategoryScope;
 }
 
 export interface UpdateDocumentCategoryPort {

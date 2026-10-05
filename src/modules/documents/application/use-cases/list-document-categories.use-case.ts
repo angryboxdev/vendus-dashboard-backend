@@ -1,3 +1,4 @@
+import { scopeAllowsOwner } from "../../domain/entities/document-category.js";
 import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
 import type {
   ListDocumentCategoriesCommand,
@@ -11,6 +12,7 @@ export class ListDocumentCategoriesUseCase implements ListDocumentCategoriesPort
 
   async execute(command: ListDocumentCategoriesCommand): Promise<DocumentCategoryDTO[]> {
     const definitions = await this.documentCategoryRepository.findMany(command.organizationId);
-    return definitions.map(toDocumentCategoryDTO);
+    const ownerType = command.ownerType;
+    return definitions.filter((d) => !ownerType || scopeAllowsOwner(d.scope, ownerType)).map(toDocumentCategoryDTO);
   }
 }
