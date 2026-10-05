@@ -1,6 +1,12 @@
 import { randomUUID } from "crypto";
-import { EmployeeNotFoundError, DocumentCategoryAlreadyExistsError } from "../../domain/errors.js";
-import { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
+import {
+  EmployeeNotFoundError,
+  DocumentCategoryAlreadyExistsError,
+  DocumentPeriodAlreadyExistsError,
+  InvalidDocumentError,
+} from "../../domain/errors.js";
+import { Document as EmployeeDocument, isValidDocumentPeriod } from "../../../documents/domain/entities/document.js";
+import type { DocumentCategoryRepositoryPort } from "../../../documents/domain/ports/out/document-category-repository.port.js";
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
 import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
 import type { HrFileStoragePort } from "../../domain/ports/out/hr-file-storage.port.js";
@@ -18,14 +24,31 @@ export class UploadEmployeeDocumentUseCase implements UploadEmployeeDocumentPort
     private readonly employeeDocumentRepository: EmployeeDocumentRepositoryPort,
     private readonly hrFileStorage: HrFileStoragePort,
     private readonly auditLog: HrAuditLogPort,
+    private readonly documentCategoryRepository: DocumentCategoryRepositoryPort,
   ) {}
 
   async execute(command: UploadEmployeeDocumentCommand): Promise<EmployeeDocumentDTO> {
     const employee = await this.employeeRepository.findById(command.organizationId, command.employeeId);
     if (!employee) throw new EmployeeNotFoundError(command.employeeId);
 
+    // Categorias periódicas (ex: Recibo de vencimento, ticket 10): um documento
+    // atual por período — as restantes, um por categoria.
+    const definition = await this.documentCategoryRepository.findBySlug(command.organizationId, command.category);
+    const requiresPeriod = definition?.requiresPeriod ?? false;
+    const period = command.period ?? null;
+    if (requiresPeriod && (period === null || !isValidDocumentPeriod(period))) {
+      throw new InvalidDocumentError("Período (Mês/Ano) é obrigatório para esta categoria");
+    }
+    if (!requiresPeriod && period !== null) {
+      throw new InvalidDocumentError("Esta categoria não tem período");
+    }
+
     const current = await this.employeeDocumentRepository.findCurrentByOwners(command.organizationId, "employee", [command.employeeId]);
-    if (current.some((d) => d.category === command.category)) {
+    const sameCategory = current.filter((d) => d.category === command.category);
+    if (requiresPeriod) {
+      const duplicate = sameCategory.find((d) => d.period === period);
+      if (duplicate) throw new DocumentPeriodAlreadyExistsError(command.category, period as string, duplicate.id);
+    } else if (sameCategory.length > 0) {
       throw new DocumentCategoryAlreadyExistsError(command.category);
     }
 
@@ -40,13 +63,15 @@ export class UploadEmployeeDocumentUseCase implements UploadEmployeeDocumentPort
     const document = EmployeeDocument.createFirstVersion({
       owner: { type: "employee", id: command.employeeId },
       category: command.category,
-      mandatory: command.mandatory,
+      // Um documento periódico nunca é requisito obrigatório (task §26).
+      mandatory: requiresPeriod ? false : command.mandatory,
       fileName: command.filename,
       storagePath,
       mimeType: command.mimeType,
       fileSizeBytes: command.buffer.byteLength,
       origin: command.origin,
       expiresAt: command.expiresAt,
+      period,
       uploadedBy: command.actor,
     });
 
@@ -62,9 +87,9 @@ export class UploadEmployeeDocumentUseCase implements UploadEmployeeDocumentPort
       entityId: saved.id,
       employeeId: command.employeeId,
       action: "document_created",
-      description: `Documento "${saved.category}" enviado para ${employee.fullName}`,
+      description: `Documento "${saved.category}"${period ? ` (${period})` : ""} enviado para ${employee.fullName}${command.importBatchId ? " — importação de recibos" : ""}`,
       after: saved.toProps(),
-      correlationId: randomUUID(),
+      correlationId: command.importBatchId ?? randomUUID(),
     });
 
     return toEmployeeDocumentDTO(saved);

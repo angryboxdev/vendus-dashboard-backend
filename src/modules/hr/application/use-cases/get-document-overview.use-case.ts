@@ -1,7 +1,7 @@
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
 import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
 import type { DocumentCategoryRepositoryPort } from "../../../documents/domain/ports/out/document-category-repository.port.js";
-import { applicableCategoriesFor, computeDocumentRequirementRows } from "../../domain/services/document-status.service.js";
+import { applicableCategoriesFor, computeDocumentRequirementRows, computePeriodicDocumentRows } from "../../domain/services/document-status.service.js";
 import type {
   DocumentOverviewRowDTO,
   GetDocumentOverviewCommand,
@@ -46,6 +46,10 @@ export class GetDocumentOverviewUseCase implements GetDocumentOverviewPort {
         // aparece como "Em falta" (evita KPIs falsos). Com documento aparece,
         // para se acompanhar a validade.
         if (!r.mandatory && r.documentId === null) continue;
+        rows.push({ employeeId: employee.id, employeeName: employee.fullName, ...r });
+      }
+      // Ticket 10: recibos (e outras categorias periódicas) — uma linha por período.
+      for (const r of computePeriodicDocumentRows(categoryDefs, documentsByEmployee.get(employee.id) ?? [])) {
         rows.push({ employeeId: employee.id, employeeName: employee.fullName, ...r });
       }
     }

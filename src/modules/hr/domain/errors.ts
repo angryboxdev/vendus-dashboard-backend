@@ -26,6 +26,8 @@ export {
   DocumentNotCurrentError,
   DocumentCategoryConfigNotFoundError,
   DocumentCategoryConfigAlreadyExistsError,
+  DocumentPeriodAlreadyExistsError,
+  InvalidDocumentError,
 } from "../../documents/domain/errors.js";
 
 // ── RH-03 — Escalas & Turnos ────────────────────────────────────────────────

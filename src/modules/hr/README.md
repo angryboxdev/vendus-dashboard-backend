@@ -1,7 +1,7 @@
 # Module: hr
 
 > Status: active
-> Last updated: 2026-09-28
+> Last updated: 2026-10-06
 
 ---
 
@@ -416,6 +416,14 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `UpdateDocumentCategoryPort` / `SetDocumentCategoryActivePort` —
   CRUD (desativar, nunca apagar) das categorias de documento configuráveis
   por organização.
+- `PreviewPayslipImportPort` / `ImportPayslipsPort` (Base Organizacional,
+  ticket 10) — importação em massa de recibos de vencimento: pré-visualizar
+  (identifica o colaborador de cada PDF, assinala duplicados, nada é
+  gravado) e importar o que o utilizador confirmou (cada recibo passa por
+  `UploadEmployeeDocumentPort`/`ReplaceEmployeeDocumentPort`).
+  `UploadEmployeeDocumentCommand.period` (`YYYY-MM`) é obrigatório nas
+  categorias periódicas; `importBatchId` liga as entradas do histórico do
+  mesmo lote.
 - `ListWorkShiftsPort` / `CreateWorkShiftPort` / `UpdateWorkShiftPort` /
   `DuplicateWorkShiftPort` / `DeleteWorkShiftPort` / `PublishWorkShiftsPort`
   (RH-03) — CRUD de turnos planeados. `CreateWorkShiftCommand.repeatWeeks`
@@ -581,7 +589,11 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `ScopedQueryFactory`. `applicableCategoriesFor` ignora categorias com
   âmbito `company` (um documento empresarial nunca gera "Em falta"). Injetado também em `ListEmployeesUseCase`/
   `GetPeopleKpisUseCase`/`GetHrOverviewUseCase`/`GetEmployeeProfileUseCase`
-  (constroem os requisitos obrigatórios dinâmicos a partir dele).
+  (constroem os requisitos obrigatórios dinâmicos a partir dele). Também em
+  `UploadEmployeeDocumentUseCase` (sabe se a categoria é periódica) e nos
+  use cases de importação de recibos.
+- `PdfTextExtractorPort` (ticket 10) — texto de um PDF para identificar o
+  colaborador de um recibo; `null` se o PDF não tiver texto. Sem OCR/IA.
 - `WorkShiftRepositoryPort` (RH-03) — CRUD de `hr_work_shifts` +
   `hasAttendance`/`findAttendanceStatusesByShiftIds` (consulta própria a
   `hr_shift_attendance`, independente de `ShiftAttendanceReadPort` — servem
@@ -630,6 +642,10 @@ Este módulo é **aditivo**, não uma substituição imediata:
 - `HrPositionsController` (Base Organizacional) → `GET /api/hr/positions`
   (`hr_viewer`+), `POST /api/hr/positions`, `PATCH /api/hr/positions/:id`,
   `PATCH /api/hr/positions/:id/active` (`manager`). 409 em nome duplicado.
+- `HrPayslipsController` (ticket 10) → `POST /api/hr/payslips/import/preview`
+  e `POST /api/hr/payslips/import` (multipart `files` + `period`; o 2.º
+  com `mapping` JSON `[{ fileName, employeeId, action }]`). Só `admin`
+  (dados salariais); só PDF, até 100 ficheiros de 10 MB.
 - `HrOverviewController` (RH-01) → `GET /api/hr/overview`,
   `GET /api/hr/overview/shifts-to-review` e
   `GET /api/hr/overview/shifts-to-review/:shiftId` (novo, "Melhorar Hoje na
@@ -693,6 +709,8 @@ Este módulo é **aditivo**, não uma substituição imediata:
 - `SupabaseDocumentRepository` / `SupabaseDocumentCategoryRepository` — do
   módulo `documents`, instanciados em `hr.module.ts` (mesmo padrão de
   `SupabaseLocationRepository`).
+- `PdfParseTextExtractorAdapter` (ticket 10) → `pdf-parse` (já usado na
+  importação de faturas), só a camada de texto.
 - **"Melhorar Hoje na operação"**: nenhum adapter novo — `GetHrOverviewUseCase`/
   `ListShiftsToReviewUseCase`/`GetShiftToReviewUseCase` passaram a receber
   `SupabaseLocationRepository` (módulo `locations`, já existente), o mesmo
@@ -706,6 +724,33 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `hr_attendance_rules`; `save` é sempre `insert`, nunca `update`.
 
 ## Design decisions (ADR summary)
+
+### Base Organizacional — recibos de vencimento (ticket 10)
+
+- **Recibo = documento do colaborador** (task §23): categoria
+  `recibo_vencimento` (semeada pela migração
+  `20261006120000_payslips_period.sql`) com `requiresPeriod`; cada
+  documento guarda `period` (`YYYY-MM`). Sem tabela nem módulo próprios.
+- **Um atual por colaborador × categoria × período** (§26): o upload recusa
+  com `DocumentPeriodAlreadyExistsError` (409 `period_already_exists`, com
+  o id do atual) — o utilizador cancela ou usa "Substituir versão". Regra na
+  aplicação, como a unicidade por categoria já era: não há índice único
+  porque "Substituir" grava a nova versão antes de marcar a anterior.
+- **Nunca "Em falta"**: `applicableCategoriesFor` exclui categorias
+  periódicas; a vista global mostra uma linha por recibo
+  (`computePeriodicDocumentRows`, com `period`).
+- **Identificação** (`payslip-identification.service`, puro): NIF ou id do
+  colaborador (texto ou nome do ficheiro) → nome completo normalizado no
+  texto → no nome do ficheiro → palavras do nome do ficheiro contidas no
+  nome de um só colaborador. Mais de um candidato, sinais contraditórios ou
+  dois ficheiros do lote para a mesma pessoa → `review` ("Rever"), nunca
+  associação automática (§24). Inclui colaboradores inativos (último recibo
+  de quem saiu).
+- **Dois passos sem estado no servidor**: a pré-visualização não grava
+  nada; o frontend reenvia os PDFs com o mapeamento confirmado. Evita
+  ficheiros órfãos em storage se o utilizador desistir.
+- **Só admin** na importação (dados salariais). O upload individual no
+  perfil continua `manager`, como os outros documentos.
 
 ### Base Organizacional — documentos dos colaboradores (ticket 09)
 

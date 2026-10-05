@@ -64,10 +64,10 @@ export class ReplaceEmployeeDocumentUseCase implements ReplaceEmployeeDocumentPo
       entityId: saved.id,
       employeeId: command.employeeId,
       action: "document_replaced",
-      description: `Documento "${saved.category}" substituído (v${previous.version} → v${saved.version}) para ${employee.fullName}`,
+      description: `Documento "${saved.category}"${saved.period ? ` (${saved.period})` : ""} substituído (v${previous.version} → v${saved.version}) para ${employee.fullName}${command.importBatchId ? " — importação de recibos" : ""}`,
       before: previous.toProps(),
       after: saved.toProps(),
-      correlationId: randomUUID(),
+      correlationId: command.importBatchId ?? randomUUID(),
     });
 
     return toEmployeeDocumentDTO(saved);

@@ -59,6 +59,7 @@ export function toEmployeeDocumentDTO(doc: EmployeeDocument): EmployeeDocumentDT
     fileSizeBytes: doc.fileSizeBytes,
     origin: doc.origin,
     expiresAt: doc.expiresAt,
+    period: doc.period,
     version: doc.version,
     previousVersionId: doc.previousVersionId,
     displayStatus: computeDocumentDisplayStatus(doc),

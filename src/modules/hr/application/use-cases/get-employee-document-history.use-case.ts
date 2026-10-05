@@ -18,6 +18,7 @@ export class GetEmployeeDocumentHistoryUseCase implements GetEmployeeDocumentHis
     const history = await this.employeeDocumentRepository.findVersionHistory(command.organizationId, "employee", command.employeeId,
       doc.category,
     );
-    return history.map(toEmployeeDocumentDTO);
+    // Categoria periódica: o histórico é o do período (cada recibo tem o seu).
+    return history.filter((d) => d.period === doc.period).map(toEmployeeDocumentDTO);
   }
 }

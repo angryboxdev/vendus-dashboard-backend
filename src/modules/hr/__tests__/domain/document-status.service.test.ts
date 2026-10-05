@@ -220,8 +220,8 @@ describe("computeDocumentRequirementRows", () => {
     const applicable = [categoryDef({ slug: "contrato_trabalho", label: "Contrato de trabalho", mandatory: true })];
     const rows = computeDocumentRequirementRows(applicable, [], NOW);
     expect(rows).toEqual([
-      { requirementId: "identificacao", requirementLabel: "Documento de identificação", mandatory: true, status: "missing", expiresAt: null, documentId: null },
-      { requirementId: "contrato_trabalho", requirementLabel: "Contrato de trabalho", mandatory: true, status: "missing", expiresAt: null, documentId: null },
+      { requirementId: "identificacao", requirementLabel: "Documento de identificação", mandatory: true, status: "missing", expiresAt: null, documentId: null, period: null },
+      { requirementId: "contrato_trabalho", requirementLabel: "Contrato de trabalho", mandatory: true, status: "missing", expiresAt: null, documentId: null, period: null },
     ]);
   });
 
@@ -229,7 +229,7 @@ describe("computeDocumentRequirementRows", () => {
     const applicable = [categoryDef({ slug: "certificado_morada", label: "Certificado de morada", mandatory: false })];
     const rows = computeDocumentRequirementRows(applicable, [], NOW);
     const row = rows.find((r) => r.requirementId === "certificado_morada");
-    expect(row).toEqual({ requirementId: "certificado_morada", requirementLabel: "Certificado de morada", mandatory: false, status: "missing", expiresAt: null, documentId: null });
+    expect(row).toEqual({ requirementId: "certificado_morada", requirementLabel: "Certificado de morada", mandatory: false, status: "missing", expiresAt: null, documentId: null, period: null });
   });
 
   it("documento 'ok' aparece com o seu id e validade", () => {
@@ -237,7 +237,7 @@ describe("computeDocumentRequirementRows", () => {
     const currentDoc = { id: "doc-1", category: "contrato_trabalho", status: "valid" as DocumentStatus, expiresAt: "2027-01-01", isCurrent: true };
     const rows = computeDocumentRequirementRows(applicable, [currentDoc], NOW);
     const row = rows.find((r) => r.requirementId === "contrato_trabalho");
-    expect(row).toEqual({ requirementId: "contrato_trabalho", requirementLabel: "Contrato de trabalho", mandatory: true, status: "ok", expiresAt: "2027-01-01", documentId: "doc-1" });
+    expect(row).toEqual({ requirementId: "contrato_trabalho", requirementLabel: "Contrato de trabalho", mandatory: true, status: "ok", expiresAt: "2027-01-01", documentId: "doc-1", period: null });
   });
 
   it("documento 'a expirar'/'expirado' mantém o estado real (não vira 'ok' nem 'missing')", () => {
@@ -259,6 +259,6 @@ describe("computeDocumentRequirementRows", () => {
   it("identificação é satisfeita por qualquer uma das 3 categorias (cartão de cidadão OU título de residência OU passaporte)", () => {
     const passaporte = { id: "doc-1", category: "passaporte", status: "valid" as DocumentStatus, expiresAt: null, isCurrent: true };
     const row = computeDocumentRequirementRows([], [passaporte], NOW).find((r) => r.requirementId === "identificacao");
-    expect(row).toEqual({ requirementId: "identificacao", requirementLabel: "Documento de identificação", mandatory: true, status: "ok", expiresAt: null, documentId: "doc-1" });
+    expect(row).toEqual({ requirementId: "identificacao", requirementLabel: "Documento de identificação", mandatory: true, status: "ok", expiresAt: null, documentId: "doc-1", period: null });
   });
 });

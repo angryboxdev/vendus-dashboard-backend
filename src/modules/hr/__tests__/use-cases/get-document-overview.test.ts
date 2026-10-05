@@ -69,6 +69,40 @@ describe("GetDocumentOverviewUseCase", () => {
     expect(row?.documentId).not.toBeNull();
   });
 
+  it("recibos (categoria periódica, ticket 10): uma linha por período, nunca 'Em falta'", async () => {
+    const { employees, documents, useCase } = makeUseCase();
+    const e = Employee.create({ fullName: "Com Recibos" });
+    const sem = Employee.create({ fullName: "Sem Recibos" });
+    employees.seed(ORG, e);
+    employees.seed(ORG, sem);
+    for (const period of ["2026-08", "2026-09"]) {
+      documents.seed(
+        ORG,
+        EmployeeDocument.createFirstVersion({
+          owner: { type: "employee", id: e.id },
+          category: "recibo_vencimento",
+          mandatory: false,
+          fileName: `recibo-${period}.pdf`,
+          storagePath: `x/recibo-${period}.pdf`,
+          mimeType: "application/pdf",
+          fileSizeBytes: 10,
+          origin: "rh",
+          expiresAt: null,
+          period,
+          uploadedBy: "rh@angrybox.com",
+        }),
+      );
+    }
+
+    const rows = (await useCase.execute({ organizationId: ORG })).filter((r) => r.requirementId === "recibo_vencimento");
+
+    expect(rows.map((r) => [r.employeeName, r.period, r.status])).toEqual([
+      ["Com Recibos", "2026-09", "ok"],
+      ["Com Recibos", "2026-08", "ok"],
+    ]);
+    expect(rows.every((r) => r.requirementLabel === "Recibo de vencimento" && !r.mandatory)).toBe(true);
+  });
+
   it("categorias com jobRoles restrito (legacy) só aparecem para colaboradores com essa categoria operacional", async () => {
     const { employees, categories, useCase } = makeUseCase();
     const manager = Employee.create({ fullName: "Gerente", jobRole: "manager" });

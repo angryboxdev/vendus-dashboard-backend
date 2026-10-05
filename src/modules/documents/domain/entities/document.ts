@@ -36,6 +36,8 @@ export interface DocumentProps {
   expiresAt: string | null;
   /** `null` para documentos de colaborador; obrigatório para documentos da Empresa. */
   visibility: DocumentVisibility | null;
+  /** Período `YYYY-MM` das categorias periódicas (ex: Recibo de vencimento, ticket 10); `null` nas restantes. */
+  period: string | null;
   version: number;
   previousVersionId: string | null;
   isCurrent: boolean;
@@ -55,7 +57,13 @@ export interface NewDocumentData {
   issuedAt?: string | null;
   expiresAt: string | null;
   visibility?: DocumentVisibility | null;
+  period?: string | null;
   uploadedBy: string;
+}
+
+/** Período Mês/Ano no formato `YYYY-MM` (ex: "2026-09"). */
+export function isValidDocumentPeriod(period: string): boolean {
+  return /^[0-9]{4}-(0[1-9]|1[0-2])$/.test(period);
 }
 
 function visibilityFor(ownerType: DocumentOwnerType, visibility: DocumentVisibility | null | undefined): DocumentVisibility | null {
@@ -86,6 +94,7 @@ export class Document {
   readonly issuedAt: string | null;
   readonly expiresAt: string | null;
   readonly visibility: DocumentVisibility | null;
+  readonly period: string | null;
   readonly version: number;
   readonly previousVersionId: string | null;
   readonly isCurrent: boolean;
@@ -107,6 +116,7 @@ export class Document {
     this.issuedAt = props.issuedAt;
     this.expiresAt = props.expiresAt;
     this.visibility = props.visibility;
+    this.period = props.period;
     this.version = props.version;
     this.previousVersionId = props.previousVersionId;
     this.isCurrent = props.isCurrent;
@@ -137,6 +147,7 @@ export class Document {
       issuedAt: data.issuedAt ?? null,
       expiresAt: data.expiresAt,
       visibility: visibilityFor(data.owner.type, data.visibility),
+      period: data.period ?? null,
       version: 1,
       previousVersionId: null,
       isCurrent: true,
@@ -152,7 +163,7 @@ export class Document {
   /**
    * Cria a próxima versão a partir desta (que deve ser a versão atual).
    * Validade/emissão são da nova versão; a visibilidade mantém-se, salvo se
-   * for indicada outra.
+   * for indicada outra; o período nunca muda (é o mesmo recibo, nova versão).
    */
   supersede(data: {
     fileName: string;
@@ -182,6 +193,7 @@ export class Document {
       issuedAt: data.issuedAt ?? null,
       expiresAt: data.expiresAt,
       visibility: visibilityFor(this.ownerType, data.visibility ?? this.visibility),
+      period: this.period,
       version: this.version + 1,
       previousVersionId: this.id,
       isCurrent: true,
@@ -227,6 +239,7 @@ export class Document {
       issuedAt: this.issuedAt,
       expiresAt: this.expiresAt,
       visibility: this.visibility,
+      period: this.period,
       version: this.version,
       previousVersionId: this.previousVersionId,
       isCurrent: this.isCurrent,

@@ -1,7 +1,7 @@
 # Módulo: documents
 
 > Status: active
-> Última atualização: 2026-10-05
+> Última atualização: 2026-10-06
 
 ---
 
@@ -56,13 +56,16 @@ daqui (mesmo padrão cross-module de `locations`).
   mesma visibilidade salvo indicação), `markSuperseded` ("Substituído"),
   `remove` (lógico), `belongsTo(owner)`. Dono `{ type: "employee" | "company",
   id }` — para a Empresa o id é o `organizationId`. Visibilidade só existe
-  em documentos da Empresa (por defeito `management`).
+  em documentos da Empresa (por defeito `management`). `period`
+  (`YYYY-MM`, ticket 10) só em categorias periódicas; `supersede` mantém-no
+  (`isValidDocumentPeriod`).
 - **`DocumentCategoryDefinition`** — `scope` (`employee`|`company`|`both`,
   por defeito `employee`); `scopeAllowsOwner`; `positionIds` (ticket 09 —
   "Cargos selecionados"; vazio = todos os colaboradores). A regra de
   aplicabilidade a um colaborador vive no `hr` (`applicableCategoriesFor`). `jobRoles` usa
   `OperationalCategory` (os 3 valores da antiga "Função"), declarado aqui
-  para este módulo nunca depender do `hr`.
+  para este módulo nunca depender do `hr`. `requiresPeriod` (ticket 10 —
+  ex: Recibo de vencimento): definido pela migração, só leitura na API.
 - **`computeDocumentDisplayStatus`** (`document-validity.service.ts`) —
   Válido / A expirar (30 dias) / Expirado / A validar / …, igual para os
   dois donos.
@@ -127,7 +130,13 @@ daqui (mesmo padrão cross-module de `locations`).
   decisão do utilizador; continua opcional nos colaboradores.
 - **Auditoria própria (D3)** para documentos da Empresa.
 - **Substituir cria a nova versão antes de marcar a anterior** — se a
-  escrita falhar a meio, nunca fica sem versão atual.
+  escrita falhar a meio, nunca fica sem versão atual. Por isso a unicidade
+  "uma versão atual" (por categoria, ou por categoria × período nas
+  periódicas — `DocumentPeriodAlreadyExistsError`) é regra da aplicação,
+  não índice único.
+- **Categorias periódicas sem módulo próprio (ticket 10)** — o recibo de
+  vencimento é um documento como os outros com `period`; a importação em
+  massa vive no `hr` (identifica colaboradores).
 
 ## How to test
 

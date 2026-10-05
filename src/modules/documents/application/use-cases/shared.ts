@@ -11,6 +11,7 @@ export function toDocumentCategoryDTO(def: DocumentCategoryDefinition): Document
     positionIds: def.positionIds,
     acceptedMimeTypes: def.acceptedMimeTypes,
     scope: def.scope,
+    requiresPeriod: def.requiresPeriod,
     active: def.active,
     createdAt: def.createdAt,
     updatedAt: def.updatedAt,

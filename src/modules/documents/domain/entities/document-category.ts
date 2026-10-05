@@ -32,6 +32,12 @@ export interface DocumentCategoryDefinitionProps {
   positionIds: string[];
   acceptedMimeTypes: string[];
   scope: DocumentCategoryScope;
+  /**
+   * Categoria periódica (ex: Recibo de vencimento, ticket 10): cada documento
+   * pertence a um período Mês/Ano, há no máximo um atual por período e
+   * nunca gera "Em falta". Definida pela migração, não pelo formulário.
+   */
+  requiresPeriod: boolean;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -55,6 +61,7 @@ export class DocumentCategoryDefinition {
   readonly positionIds: string[];
   readonly acceptedMimeTypes: string[];
   readonly scope: DocumentCategoryScope;
+  readonly requiresPeriod: boolean;
   readonly active: boolean;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -69,6 +76,7 @@ export class DocumentCategoryDefinition {
     this.positionIds = props.positionIds;
     this.acceptedMimeTypes = props.acceptedMimeTypes;
     this.scope = props.scope;
+    this.requiresPeriod = props.requiresPeriod;
     this.active = props.active;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
@@ -85,6 +93,8 @@ export class DocumentCategoryDefinition {
     acceptedMimeTypes: string[];
     /** Omissão: `employee` (comportamento anterior à Base Organizacional). */
     scope?: DocumentCategoryScope;
+    /** Omissão: false. */
+    requiresPeriod?: boolean;
   }): DocumentCategoryDefinition {
     const now = new Date().toISOString();
     return new DocumentCategoryDefinition({
@@ -97,6 +107,7 @@ export class DocumentCategoryDefinition {
       positionIds: props.positionIds ?? [],
       acceptedMimeTypes: props.acceptedMimeTypes,
       scope: props.scope ?? "employee",
+      requiresPeriod: props.requiresPeriod ?? false,
       active: true,
       createdAt: now,
       updatedAt: now,
@@ -130,6 +141,7 @@ export class DocumentCategoryDefinition {
       positionIds: this.positionIds,
       acceptedMimeTypes: this.acceptedMimeTypes,
       scope: this.scope,
+      requiresPeriod: this.requiresPeriod,
       active: this.active,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,

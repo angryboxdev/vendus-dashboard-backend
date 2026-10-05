@@ -11,6 +11,8 @@ export interface DocumentCategoryDTO {
   positionIds: string[];
   acceptedMimeTypes: string[];
   scope: DocumentCategoryScope;
+  /** Categoria periódica (ex: Recibo de vencimento) — o upload exige o período Mês/Ano. */
+  requiresPeriod: boolean;
   active: boolean;
   createdAt: string;
   updatedAt: string;

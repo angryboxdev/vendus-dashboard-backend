@@ -11,6 +11,21 @@ export class DocumentCategoryAlreadyExistsError extends Error {
   }
 }
 
+/**
+ * Categorias periódicas (ex: Recibo de vencimento): no máximo um documento
+ * atual por colaborador × categoria × período (task §26 — chave
+ * tenant+employee+category+period). Nunca cria duplicado: o chamador
+ * cancela ou usa "Substituir versão".
+ */
+export class DocumentPeriodAlreadyExistsError extends Error {
+  readonly existingDocumentId: string;
+  constructor(category: string, period: string, existingDocumentId: string) {
+    super(`Já existe um documento "${category}" deste colaborador para o período ${period}`);
+    this.name = "DocumentPeriodAlreadyExistsError";
+    this.existingDocumentId = existingDocumentId;
+  }
+}
+
 /** Tentativa de substituir/remover uma versão que já não é a atual. */
 export class DocumentNotCurrentError extends Error {
   constructor(id: string) {
