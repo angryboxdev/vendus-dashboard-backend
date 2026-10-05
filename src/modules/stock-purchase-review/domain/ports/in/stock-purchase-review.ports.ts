@@ -168,6 +168,28 @@ export interface CancelStockPurchaseReviewPort {
   execute(command: CancelStockPurchaseReviewCommand): Promise<StockPurchaseReviewDTO>;
 }
 
+// ── Cancelar em lote as revisões sem linhas (remediação, ver README) ──────
+
+export interface CancelEmptyStockPurchaseReviewsCommand {
+  organizationId: OrganizationId;
+  actor: string;
+}
+
+export interface CancelledEmptyReviewSummary {
+  id: string;
+  invoiceNumber: string;
+  supplierName: string;
+}
+
+export interface CancelEmptyStockPurchaseReviewsResult {
+  cancelledCount: number;
+  cancelled: CancelledEmptyReviewSummary[];
+}
+
+export interface CancelEmptyStockPurchaseReviewsPort {
+  execute(command: CancelEmptyStockPurchaseReviewsCommand): Promise<CancelEmptyStockPurchaseReviewsResult>;
+}
+
 // ── Gancho interno (chamado por `invoices`, D10) ─────────────────────────
 
 export interface RecordInvoiceFinalizedForStockLineData {

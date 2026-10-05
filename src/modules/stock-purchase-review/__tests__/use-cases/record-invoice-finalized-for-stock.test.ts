@@ -82,6 +82,15 @@ describe("RecordInvoiceFinalizedForStockUseCase", () => {
     expect(stockMovementWrite.calls[0]?.decisionSource).toBe("unresolved");
   });
 
+  it("fatura sem linhas (lineDetailMode=simple) nunca cria revisão — mesmo com override force_create", async () => {
+    const { categoryRead, stockMovementWrite, useCase } = makeUseCase();
+    categoryRead.policies.set("cat-cmv", "CREATE_REVIEW");
+
+    await useCase.execute({ ...baseCommand(), override: "force_create", lines: [] });
+
+    expect(stockMovementWrite.calls).toHaveLength(0);
+  });
+
   it("mistura de categorias (mercadoria + serviço) ainda gera 1 revisão com todas as linhas", async () => {
     const { categoryRead, stockMovementWrite, useCase } = makeUseCase();
     categoryRead.policies.set("cat-cmv", "CREATE_REVIEW");
