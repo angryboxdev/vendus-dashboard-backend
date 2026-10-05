@@ -7,7 +7,7 @@ import {
 } from "../../domain/entities/document-category.js";
 import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
 
-const SELECT = "id, org_id, slug, label, mandatory, job_roles, accepted_mime_types, scope, active, created_at, updated_at";
+const SELECT = "id, org_id, slug, label, mandatory, job_roles, position_ids, accepted_mime_types, scope, active, created_at, updated_at";
 
 interface Row {
   id: string;
@@ -16,6 +16,7 @@ interface Row {
   label: string;
   mandatory: boolean;
   job_roles: string[];
+  position_ids: string[] | null;
   accepted_mime_types: string[];
   scope: string;
   active: boolean;
@@ -31,6 +32,7 @@ function rowToDefinition(row: Row): DocumentCategoryDefinition {
     label: row.label,
     mandatory: row.mandatory,
     jobRoles: row.job_roles as OperationalCategory[],
+    positionIds: row.position_ids ?? [],
     acceptedMimeTypes: row.accepted_mime_types,
     scope: row.scope as DocumentCategoryScope,
     active: row.active,
@@ -47,6 +49,7 @@ function definitionToRow(def: DocumentCategoryDefinition): Record<string, unknow
     label: props.label,
     mandatory: props.mandatory,
     job_roles: props.jobRoles,
+    position_ids: props.positionIds,
     accepted_mime_types: props.acceptedMimeTypes,
     scope: props.scope,
     active: props.active,

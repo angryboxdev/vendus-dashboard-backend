@@ -8,6 +8,7 @@ export function toDocumentCategoryDTO(def: DocumentCategoryDefinition): Document
     label: def.label,
     mandatory: def.mandatory,
     jobRoles: def.jobRoles,
+    positionIds: def.positionIds,
     acceptedMimeTypes: def.acceptedMimeTypes,
     scope: def.scope,
     active: def.active,

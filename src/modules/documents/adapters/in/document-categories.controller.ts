@@ -30,6 +30,11 @@ function readJobRoles(value: unknown): OperationalCategory[] | undefined {
   return value.filter((v): v is OperationalCategory => typeof v === "string" && JOB_ROLES.has(v));
 }
 
+function readPositionIds(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return [...new Set(value.filter((v): v is string => typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v)))];
+}
+
 function readAcceptedMimeTypes(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   return value.filter((v): v is string => typeof v === "string" && ACCEPTED_MIME_TYPES.has(v));
@@ -102,6 +107,7 @@ export class DocumentCategoriesController {
           label: body.label,
           mandatory: body.mandatory === true,
           jobRoles: readJobRoles(body.jobRoles) ?? [],
+          positionIds: readPositionIds(body.positionIds) ?? [],
           acceptedMimeTypes: readAcceptedMimeTypes(body.acceptedMimeTypes) ?? [...ACCEPTED_MIME_TYPES],
           ...(scope && { scope }),
         });
@@ -122,6 +128,7 @@ export class DocumentCategoriesController {
         const jobRoles = readJobRoles(body.jobRoles);
         const acceptedMimeTypes = readAcceptedMimeTypes(body.acceptedMimeTypes);
         const scope = readScope(body.scope);
+        const positionIds = readPositionIds(body.positionIds);
         res.json(
           await this.updateDocumentCategory.execute({
             organizationId: req.auth!.orgId,
@@ -129,6 +136,7 @@ export class DocumentCategoriesController {
             ...(typeof body.label === "string" && { label: body.label }),
             ...(typeof body.mandatory === "boolean" && { mandatory: body.mandatory }),
             ...(jobRoles !== undefined && { jobRoles }),
+            ...(positionIds !== undefined && { positionIds }),
             ...(acceptedMimeTypes !== undefined && { acceptedMimeTypes }),
             ...(scope && { scope }),
           }),

@@ -707,6 +707,20 @@ Este módulo é **aditivo**, não uma substituição imediata:
 
 ## Design decisions (ADR summary)
 
+### Base Organizacional — documentos dos colaboradores (ticket 09)
+
+- **Obrigatoriedade por Cargo:** uma categoria aplica-se a "Todos os
+  colaboradores" (`positionIds` vazio) ou a "Cargos selecionados"
+  (`positionIds`). `applicableCategoriesFor(defs, { positionId, jobRole })`
+  — `jobRoles` (categoria operacional) só é lido em categorias antigas; a
+  migração `20261006100000_document_categories_positions.sql` converteu-as
+  (nenhuma em produção o usava).
+- **Opcionais nunca são "Em falta":** na vista global
+  (`GetDocumentOverviewUseCase`) uma categoria opcional sem documento não
+  gera linha; com documento aparece, para se acompanhar a validade. KPIs e
+  pendências já contavam só obrigatórias. O perfil continua a listar as
+  opcionais por enviar, à parte.
+
 ### Base Organizacional — Cargos e locais do colaborador (tickets 07/08)
 
 - **Cargo (`Position`, `hr_positions`) substitui a "Função" fixa.** A

@@ -17,7 +17,7 @@ function makeUseCase() {
 }
 
 describe("GetDocumentOverviewUseCase", () => {
-  it("1 linha por requisito aplicável ao colaborador — inclui obrigatórios e opcionais, mesmo sem documento", async () => {
+  it("1 linha por requisito obrigatório aplicável, mesmo sem documento; opcionais sem documento não são 'Em falta' (ticket 09)", async () => {
     const { employees, useCase } = makeUseCase();
     const e = Employee.create({ fullName: "Sem Documentos" });
     employees.seed(ORG, e);
@@ -26,9 +26,10 @@ describe("GetDocumentOverviewUseCase", () => {
 
     expect(rows.every((r) => r.employeeId === e.id)).toBe(true);
     expect(rows.every((r) => r.employeeName === "Sem Documentos")).toBe(true);
-    // identificação + 3 categorias obrigatórias por omissão + 5 opcionais (ver FakeDocumentCategoryRepository) = 9.
-    expect(rows).toHaveLength(9);
-    expect(rows.every((r) => r.status === "missing")).toBe(true);
+    // identificação + 3 categorias obrigatórias por omissão (ver FakeDocumentCategoryRepository) = 4;
+    // as 5 opcionais sem documento já não aparecem.
+    expect(rows).toHaveLength(4);
+    expect(rows.every((r) => r.status === "missing" && r.mandatory)).toBe(true);
   });
 
   it("nunca inclui colaboradores inativos", async () => {
@@ -68,7 +69,7 @@ describe("GetDocumentOverviewUseCase", () => {
     expect(row?.documentId).not.toBeNull();
   });
 
-  it("categorias com jobRoles restrito só aparecem para colaboradores com esse cargo", async () => {
+  it("categorias com jobRoles restrito (legacy) só aparecem para colaboradores com essa categoria operacional", async () => {
     const { employees, categories, useCase } = makeUseCase();
     const manager = Employee.create({ fullName: "Gerente", jobRole: "manager" });
     const service = Employee.create({ fullName: "Serviço", jobRole: "service" });
@@ -81,7 +82,7 @@ describe("GetDocumentOverviewUseCase", () => {
         organizationId: String(ORG),
         slug: "carta_conducao",
         label: "Carta de condução",
-        mandatory: false,
+        mandatory: true,
         jobRoles: ["manager"],
         acceptedMimeTypes: ["application/pdf"],
       }),
@@ -91,6 +92,58 @@ describe("GetDocumentOverviewUseCase", () => {
 
     expect(rows.some((r) => r.employeeId === manager.id && r.requirementId === "carta_conducao")).toBe(true);
     expect(rows.some((r) => r.employeeId === service.id && r.requirementId === "carta_conducao")).toBe(false);
+  });
+});
+
+describe("Ticket 09 — obrigatoriedade por Cargo e opcionais", () => {
+  it("categoria obrigatória para 'Cargos selecionados' só gera pendência a quem tem esse cargo", async () => {
+    const { employees, categories, useCase } = makeUseCase();
+    const gerente = Employee.create({ fullName: "Gerente", positionId: "pos-gerente", jobRole: "manager" });
+    const outro = Employee.create({ fullName: "Outro", positionId: "pos-prep", jobRole: "prep" });
+    employees.seed(ORG, gerente);
+    employees.seed(ORG, outro);
+    await categories.create(
+      ORG,
+      DocumentCategoryDefinition.create({
+        organizationId: String(ORG),
+        slug: "curso_gerente",
+        label: "Curso de gerente",
+        mandatory: true,
+        jobRoles: [],
+        positionIds: ["pos-gerente"],
+        acceptedMimeTypes: [],
+      }),
+    );
+
+    const rows = await useCase.execute({ organizationId: ORG });
+
+    expect(rows.some((r) => r.employeeId === gerente.id && r.requirementId === "curso_gerente")).toBe(true);
+    expect(rows.some((r) => r.employeeId === outro.id && r.requirementId === "curso_gerente")).toBe(false);
+  });
+
+  it("categoria opcional com documento aparece (para acompanhar a validade)", async () => {
+    const { employees, documents, useCase } = makeUseCase();
+    const e = Employee.create({ fullName: "Com Certificado" });
+    employees.seed(ORG, e);
+    documents.seed(
+      ORG,
+      EmployeeDocument.createFirstVersion({
+        owner: { type: "employee", id: e.id },
+        category: "certificado_morada",
+        mandatory: false,
+        fileName: "morada.pdf",
+        storagePath: "x",
+        mimeType: "application/pdf",
+        fileSizeBytes: 1,
+        origin: "rh",
+        expiresAt: "2099-01-01",
+        uploadedBy: "rh",
+      }),
+    );
+
+    const rows = await useCase.execute({ organizationId: ORG });
+
+    expect(rows.find((r) => r.requirementId === "certificado_morada")).toMatchObject({ status: "ok", mandatory: false });
   });
 });
 

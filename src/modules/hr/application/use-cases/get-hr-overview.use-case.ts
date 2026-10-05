@@ -159,7 +159,7 @@ export class GetHrOverviewUseCase implements GetHrOverviewPort {
         documentsByEmployee.set(doc.ownerId, list);
       }
       for (const e of activeEmployees) {
-        const applicable = applicableCategoriesFor(categoryDefs, e.jobRole);
+        const applicable = applicableCategoriesFor(categoryDefs, e);
         const requirements = [...DEFAULT_MANDATORY_REQUIREMENTS, ...buildDynamicRequirements(applicable)];
         const summary = computeMandatoryDocumentsSummary(requirements, documentsByEmployee.get(e.id) ?? []);
         documentsExpiringSoon += summary.expiringSoonCount;

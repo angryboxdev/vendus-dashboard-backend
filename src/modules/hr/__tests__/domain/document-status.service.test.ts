@@ -17,6 +17,8 @@ function categoryDef(overrides: {
   label?: string;
   mandatory?: boolean;
   jobRoles?: JobRole[];
+  positionIds?: string[];
+  scope?: "employee" | "company" | "both";
   active?: boolean;
 }): DocumentCategoryDefinition {
   const def = DocumentCategoryDefinition.create({
@@ -25,7 +27,9 @@ function categoryDef(overrides: {
     label: overrides.label ?? overrides.slug,
     mandatory: overrides.mandatory ?? false,
     jobRoles: overrides.jobRoles ?? [],
+    positionIds: overrides.positionIds ?? [],
     acceptedMimeTypes: ["application/pdf"],
+    scope: overrides.scope ?? "employee",
   });
   return overrides.active === false ? def.setActive(false) : def;
 }
@@ -157,18 +161,30 @@ describe("deriveOverallDocumentSituation", () => {
 describe("applicableCategoriesFor", () => {
   it("inclui categorias sem restrição de cargo (jobRoles vazio)", () => {
     const defs = [categoryDef({ slug: "a", jobRoles: [] })];
-    expect(applicableCategoriesFor(defs, "service").map((d) => d.slug)).toEqual(["a"]);
+    expect(applicableCategoriesFor(defs, { positionId: null, jobRole: "service" }).map((d) => d.slug)).toEqual(["a"]);
   });
 
   it("só inclui categorias cujo jobRoles inclui o cargo do colaborador", () => {
     const defs = [categoryDef({ slug: "a", jobRoles: ["manager"] }), categoryDef({ slug: "b", jobRoles: ["service", "prep"] })];
-    expect(applicableCategoriesFor(defs, "service").map((d) => d.slug)).toEqual(["b"]);
-    expect(applicableCategoriesFor(defs, "manager").map((d) => d.slug)).toEqual(["a"]);
+    expect(applicableCategoriesFor(defs, { positionId: null, jobRole: "service" }).map((d) => d.slug)).toEqual(["b"]);
+    expect(applicableCategoriesFor(defs, { positionId: null, jobRole: "manager" }).map((d) => d.slug)).toEqual(["a"]);
+  });
+
+  it("ticket 09: 'Cargos selecionados' aplica só a colaboradores com um desses cargos", () => {
+    const defs = [categoryDef({ slug: "curso_gerente", positionIds: ["pos-gerente"] }), categoryDef({ slug: "contrato" })];
+    expect(applicableCategoriesFor(defs, { positionId: "pos-gerente", jobRole: "manager" }).map((d) => d.slug)).toEqual(["curso_gerente", "contrato"]);
+    expect(applicableCategoriesFor(defs, { positionId: "pos-prep", jobRole: "prep" }).map((d) => d.slug)).toEqual(["contrato"]);
+    expect(applicableCategoriesFor(defs, { positionId: null, jobRole: "manager" }).map((d) => d.slug)).toEqual(["contrato"]);
+  });
+
+  it("categoria só da Empresa nunca se aplica a colaboradores; 'Ambos' aplica", () => {
+    const defs = [categoryDef({ slug: "apolice_empresa", scope: "company" }), categoryDef({ slug: "apolice_at", scope: "both" })];
+    expect(applicableCategoriesFor(defs, { positionId: null, jobRole: "service" }).map((d) => d.slug)).toEqual(["apolice_at"]);
   });
 
   it("exclui categorias desativadas mesmo que o cargo aplique", () => {
     const defs = [categoryDef({ slug: "a", active: false })];
-    expect(applicableCategoriesFor(defs, "service")).toEqual([]);
+    expect(applicableCategoriesFor(defs, { positionId: null, jobRole: "service" })).toEqual([]);
   });
 });
 

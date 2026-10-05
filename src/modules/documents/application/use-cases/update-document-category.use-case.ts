@@ -18,6 +18,7 @@ export class UpdateDocumentCategoryUseCase implements UpdateDocumentCategoryPort
       ...(command.label !== undefined && { label: command.label.trim() }),
       ...(command.mandatory !== undefined && { mandatory: command.mandatory }),
       ...(command.jobRoles !== undefined && { jobRoles: command.jobRoles }),
+      ...(command.positionIds !== undefined && { positionIds: command.positionIds }),
       ...(command.acceptedMimeTypes !== undefined && { acceptedMimeTypes: command.acceptedMimeTypes }),
       ...(command.scope !== undefined && { scope: command.scope }),
     });

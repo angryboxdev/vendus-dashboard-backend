@@ -78,7 +78,7 @@ export class GetPeopleKpisUseCase implements GetPeopleKpisPort {
 
     for (const employee of employees) {
       const employeeDocuments = documentsByEmployee.get(employee.id) ?? [];
-      const applicable = applicableCategoriesFor(categoryDefs, employee.jobRole);
+      const applicable = applicableCategoriesFor(categoryDefs, employee);
       const requirements = [...DEFAULT_MANDATORY_REQUIREMENTS, ...buildDynamicRequirements(applicable)];
       const summary = computeMandatoryDocumentsSummary(requirements, employeeDocuments, now);
       const completionPercent = computeProfileCompletionPercent(employee);

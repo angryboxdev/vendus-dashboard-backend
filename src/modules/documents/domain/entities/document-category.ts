@@ -22,8 +22,14 @@ export interface DocumentCategoryDefinitionProps {
   slug: string;
   label: string;
   mandatory: boolean;
-  /** Vazio = aplica-se a todos os cargos. */
+  /**
+   * Legacy (antes dos Cargos): categoria operacional. Vazio desde a migração
+   * `20261006100000_document_categories_positions.sql` — a aplicabilidade é
+   * `positionIds`. Mantido só para ler linhas antigas.
+   */
   jobRoles: OperationalCategory[];
+  /** Cargos (`hr_positions`) a que se aplica. Vazio = todos os colaboradores (ticket 09). */
+  positionIds: string[];
   acceptedMimeTypes: string[];
   scope: DocumentCategoryScope;
   active: boolean;
@@ -46,6 +52,7 @@ export class DocumentCategoryDefinition {
   readonly label: string;
   readonly mandatory: boolean;
   readonly jobRoles: OperationalCategory[];
+  readonly positionIds: string[];
   readonly acceptedMimeTypes: string[];
   readonly scope: DocumentCategoryScope;
   readonly active: boolean;
@@ -59,6 +66,7 @@ export class DocumentCategoryDefinition {
     this.label = props.label;
     this.mandatory = props.mandatory;
     this.jobRoles = props.jobRoles;
+    this.positionIds = props.positionIds;
     this.acceptedMimeTypes = props.acceptedMimeTypes;
     this.scope = props.scope;
     this.active = props.active;
@@ -72,6 +80,8 @@ export class DocumentCategoryDefinition {
     label: string;
     mandatory: boolean;
     jobRoles: OperationalCategory[];
+    /** Omissão: [] (todos os colaboradores). */
+    positionIds?: string[];
     acceptedMimeTypes: string[];
     /** Omissão: `employee` (comportamento anterior à Base Organizacional). */
     scope?: DocumentCategoryScope;
@@ -84,6 +94,7 @@ export class DocumentCategoryDefinition {
       label: props.label,
       mandatory: props.mandatory,
       jobRoles: props.jobRoles,
+      positionIds: props.positionIds ?? [],
       acceptedMimeTypes: props.acceptedMimeTypes,
       scope: props.scope ?? "employee",
       active: true,
@@ -96,7 +107,7 @@ export class DocumentCategoryDefinition {
     return new DocumentCategoryDefinition(props);
   }
 
-  update(patch: Partial<Pick<DocumentCategoryDefinitionProps, "label" | "mandatory" | "jobRoles" | "acceptedMimeTypes" | "scope">>): DocumentCategoryDefinition {
+  update(patch: Partial<Pick<DocumentCategoryDefinitionProps, "label" | "mandatory" | "jobRoles" | "positionIds" | "acceptedMimeTypes" | "scope">>): DocumentCategoryDefinition {
     return new DocumentCategoryDefinition({
       ...this.toProps(),
       ...patch,
@@ -116,6 +127,7 @@ export class DocumentCategoryDefinition {
       label: this.label,
       mandatory: this.mandatory,
       jobRoles: this.jobRoles,
+      positionIds: this.positionIds,
       acceptedMimeTypes: this.acceptedMimeTypes,
       scope: this.scope,
       active: this.active,

@@ -58,7 +58,9 @@ daqui (mesmo padrão cross-module de `locations`).
   id }` — para a Empresa o id é o `organizationId`. Visibilidade só existe
   em documentos da Empresa (por defeito `management`).
 - **`DocumentCategoryDefinition`** — `scope` (`employee`|`company`|`both`,
-  por defeito `employee`); `scopeAllowsOwner`. `jobRoles` usa
+  por defeito `employee`); `scopeAllowsOwner`; `positionIds` (ticket 09 —
+  "Cargos selecionados"; vazio = todos os colaboradores). A regra de
+  aplicabilidade a um colaborador vive no `hr` (`applicableCategoriesFor`). `jobRoles` usa
   `OperationalCategory` (os 3 valores da antiga "Função"), declarado aqui
   para este módulo nunca depender do `hr`.
 - **`computeDocumentDisplayStatus`** (`document-validity.service.ts`) —
@@ -140,7 +142,5 @@ daqui (mesmo padrão cross-module de `locations`).
   `hr-documents` são históricos (D9) — renomear quando o legacy
   `hrDocumentService` for retirado (ainda apaga fisicamente documentos de
   colaborador na página antiga `/hr/employees/:id`).
-- Categorias opcionais continuam a aparecer como "Em falta" (opcional) na
-  vista global dos Colaboradores — a tratar no ticket 09.
 - Sem teste de integração do adapter generalizado (Supabase local
   indisponível nesta sessão).

@@ -38,7 +38,7 @@ export class GetEmployeeProfileUseCase implements GetEmployeeProfilePort {
 
     const currentDocuments = await this.employeeDocumentRepository.findCurrentByOwners(command.organizationId, "employee", [employee.id]);
     const categoryDefs = await this.documentCategoryRepository.findMany(command.organizationId, { activeOnly: true });
-    const applicable = applicableCategoriesFor(categoryDefs, employee.jobRole);
+    const applicable = applicableCategoriesFor(categoryDefs, employee);
     const requirements = [...DEFAULT_MANDATORY_REQUIREMENTS, ...buildDynamicRequirements(applicable)];
     const categoryLabelBySlug = new Map<string, string>([
       ...Object.entries(DOCUMENT_CATEGORY_BASE_LABELS),

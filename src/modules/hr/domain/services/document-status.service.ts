@@ -171,18 +171,33 @@ export function computeDocumentRequirementRows(
   });
 }
 
-/** Categorias de uma organização aplicáveis a um cargo — ativas e sem restrição de cargo, ou cujo `jobRoles` inclui este cargo. */
+/** O que decide se uma categoria se aplica a um colaborador: o seu Cargo (e, só para categorias antigas, a categoria operacional). */
+export interface CategoryApplicabilitySubject {
+  positionId: string | null;
+  jobRole: JobRole;
+}
+
+/**
+ * Categorias de uma organização aplicáveis a um colaborador (Base
+ * Organizacional, ticket 09 — "Todos os colaboradores" ou "Cargos
+ * selecionados"):
+ * - ativas e nunca só da Empresa (§11: um documento empresarial nunca gera
+ *   requisito nem "Em falta" individual);
+ * - `positionIds` preenchido → só para colaboradores com um desses cargos;
+ * - `jobRoles` preenchido (categorias anteriores aos Cargos) → pela
+ *   categoria operacional;
+ * - ambos vazios → todos os colaboradores.
+ */
 export function applicableCategoriesFor(
   definitions: readonly DocumentCategoryDefinition[],
-  jobRole: JobRole,
+  subject: CategoryApplicabilitySubject,
 ): DocumentCategoryDefinition[] {
-  return definitions.filter(
-    (d) =>
-      d.active &&
-      // Base Organizacional §11: uma categoria só da Empresa nunca gera requisito (nem "Em falta") individual.
-      d.scope !== "company" &&
-      (d.jobRoles.length === 0 || d.jobRoles.includes(jobRole)),
-  );
+  return definitions.filter((d) => {
+    if (!d.active || d.scope === "company") return false;
+    if (d.positionIds.length > 0) return subject.positionId !== null && d.positionIds.includes(subject.positionId);
+    if (d.jobRoles.length > 0) return d.jobRoles.includes(subject.jobRole);
+    return true;
+  });
 }
 
 /** Converte cada categoria configurável obrigatória num requisito de categoria única, para somar a `DEFAULT_MANDATORY_REQUIREMENTS`. */

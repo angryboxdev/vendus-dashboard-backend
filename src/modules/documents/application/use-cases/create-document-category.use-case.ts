@@ -38,6 +38,7 @@ export class CreateDocumentCategoryUseCase implements CreateDocumentCategoryPort
       label,
       mandatory: command.mandatory,
       jobRoles: command.jobRoles,
+      ...(command.positionIds !== undefined && { positionIds: command.positionIds }),
       acceptedMimeTypes: command.acceptedMimeTypes,
       ...(command.scope !== undefined && { scope: command.scope }),
     });

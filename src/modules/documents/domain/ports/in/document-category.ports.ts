@@ -7,6 +7,8 @@ export interface DocumentCategoryDTO {
   label: string;
   mandatory: boolean;
   jobRoles: OperationalCategory[];
+  /** Cargos a que se aplica; vazio = todos os colaboradores. */
+  positionIds: string[];
   acceptedMimeTypes: string[];
   scope: DocumentCategoryScope;
   active: boolean;
@@ -33,6 +35,7 @@ export interface CreateDocumentCategoryCommand {
   label: string;
   mandatory: boolean;
   jobRoles: OperationalCategory[];
+  positionIds?: string[];
   acceptedMimeTypes: string[];
   /** Omissão: `employee`. */
   scope?: DocumentCategoryScope;
@@ -50,6 +53,7 @@ export interface UpdateDocumentCategoryCommand {
   label?: string;
   mandatory?: boolean;
   jobRoles?: OperationalCategory[];
+  positionIds?: string[];
   acceptedMimeTypes?: string[];
   scope?: DocumentCategoryScope;
 }
