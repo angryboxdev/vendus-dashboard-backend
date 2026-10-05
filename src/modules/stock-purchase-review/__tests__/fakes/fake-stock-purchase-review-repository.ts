@@ -56,4 +56,11 @@ export class FakeStockPurchaseReviewRepository implements StockPurchaseReviewRep
   async saveLine(_organizationId: OrganizationId, line: StockReviewLine): Promise<void> {
     this.lines.set(line.id, line);
   }
+
+  async hardDelete(_organizationId: OrganizationId, reviewId: string): Promise<void> {
+    for (const [lineId, line] of this.lines) {
+      if (line.reviewId === reviewId) this.lines.delete(lineId);
+    }
+    this.reviews.delete(reviewId);
+  }
 }

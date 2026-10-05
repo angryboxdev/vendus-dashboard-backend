@@ -60,11 +60,13 @@ function formatDate(date: Date | string | null | undefined): string {
 
 type LineKind = "invoice" | "credit_note" | "payment" | "settlement";
 
-const KIND_BADGE: Record<LineKind, { label: string; bg: string; text: string }> = {
-  invoice: { label: "Fatura", bg: "#dbeafe", text: "#1d4ed8" },
-  credit_note: { label: "Nota de crédito", bg: "#fee2e2", text: "#b91c1c" },
-  payment: { label: "Liquidação", bg: "#d1fae5", text: "#047857" },
-  settlement: { label: "Liquidação", bg: "#d1fae5", text: "#047857" },
+// Texto colorido simples (sem pílula/fundo) para a coluna TIPO — pedido
+// explícito do utilizador: só a palavra a cores, nunca sombreada.
+const KIND_LABEL: Record<LineKind, { label: string; text: string }> = {
+  invoice: { label: "Fatura", text: "#1d4ed8" },
+  credit_note: { label: "Nota de crédito", text: "#b91c1c" },
+  payment: { label: "Liquidação", text: "#047857" },
+  settlement: { label: "Liquidação", text: "#047857" },
 };
 
 const KIND_PREFIX: Record<LineKind, string> = {
@@ -121,13 +123,21 @@ function buildStatementPdf(data: SupplierStatementDTO, organization: Organizatio
     })();
 
     try {
-      doc.image(LOGO_PATH, 40, 36, { width: 54 });
+      // Logótipo "Angry Box" (wordmark, ficheiro substituído — antes era o
+      // emblema redondo) — landscape (~1.65:1), largura maior que o emblema
+      // antigo para o texto cursivo continuar legível.
+      doc.image(LOGO_PATH, 40, 36, { width: 100 });
     } catch {
       // Logotipo indisponível (ex: asset não copiado neste ambiente) — não bloqueia a geração do PDF.
     }
 
-    doc.fontSize(18).fillColor(dark).font("Helvetica-Bold")
-      .text("Extrato de Conta Corrente", 40, 40, { align: "right", width: pageWidth });
+    // "Times-Bold" (fonte standard do pdfkit, sem precisar de ficheiro
+    // externo) só no título — dá mais peso/carácter do que Helvetica para
+    // este destaque, mais perto do visual profissional pedido. A fonte de
+    // marca real (Amsi Pro AKS) não está disponível em nenhum dos dois
+    // repositórios — ver README/aviso ao utilizador.
+    doc.fontSize(20).fillColor(dark).font("Times-Bold")
+      .text("EXTRATO DE CONTA CORRENTE", 40, 38, { align: "right", width: pageWidth, characterSpacing: 0.3 });
     doc.fontSize(8).fillColor(gray).font("Helvetica")
       .text(`Período: ${periodLabel}`, 40, 64, { align: "right", width: pageWidth })
       .text(`Emissão: ${formatDate(new Date())} | Moeda: EUR`, 40, 76, { align: "right", width: pageWidth });
@@ -159,8 +169,13 @@ function buildStatementPdf(data: SupplierStatementDTO, organization: Organizatio
     doc.fontSize(10).fillColor(dark).font("Helvetica-Bold").text(data.supplier.name, supX, cardY + 22, { width: cardW - 20 });
     doc.fontSize(8).fillColor(gray).font("Helvetica")
       .text(`NIF: ${data.supplier.nif || "—"}`, supX, cardY + 36, { width: cardW - 20 });
-    doc.fillColor(gray).text("Saldo inicial considerado: ", supX, cardY + 48, { continued: true, width: cardW - 20 })
-      .fillColor(dark).font("Helvetica-Bold").text(formatMoney(data.openingBalance));
+    // Só mostra o saldo transitado quando realmente foi informado (via
+    // chamada direta à API) — a exportação normal já não recolhe este campo,
+    // por isso mostrar sempre "0,00 €" aqui seria ruído sem sentido.
+    if (data.openingBalance !== 0) {
+      doc.fillColor(gray).text("Saldo inicial considerado: ", supX, cardY + 48, { continued: true, width: cardW - 20 })
+        .fillColor(dark).font("Helvetica-Bold").text(formatMoney(data.openingBalance));
+    }
 
     // ── KPI cards ─────────────────────────────────────────────────────────────
     const kpiY = cardY + cardH + 14;
@@ -230,10 +245,13 @@ function buildStatementPdf(data: SupplierStatementDTO, organization: Organizatio
       doc.text(line.date ? formatDate(new Date(line.date)) : "-", cols.date.x + 4, ry, { width: cols.date.w });
       doc.text(`${KIND_PREFIX[line.kind]}${line.documentNumber ?? "-"}`, cols.doc.x, ry, { width: cols.doc.w });
 
-      const kindStyle = KIND_BADGE[line.kind];
-      badge(kindStyle.label, cols.kind.x, y + 3, kindStyle.bg, kindStyle.text);
+      // Só cor no texto — sem pílula/fundo (pedido explícito do utilizador,
+      // a "badge" com fundo colorido foi substituída por texto colorido simples).
+      const kindStyle = KIND_LABEL[line.kind];
+      doc.fontSize(9).font("Helvetica-Bold").fillColor(kindStyle.text)
+        .text(kindStyle.label, cols.kind.x, ry, { width: cols.kind.w });
 
-      doc.fillColor(dark).font("Helvetica");
+      doc.fontSize(8).fillColor(dark).font("Helvetica");
       doc.text(line.invoicedAmount != null ? formatMoney(line.invoicedAmount) : "-", cols.invoiced.x, ry, { width: cols.invoiced.w, align: "right" });
       doc.text(line.creditOrSettlementAmount != null ? formatMoney(line.creditOrSettlementAmount) : "-", cols.credit.x, ry, { width: cols.credit.w, align: "right" });
       doc.font("Helvetica-Bold").text(formatMoney(line.runningBalance), cols.balance.x, ry, { width: cols.balance.w - 4, align: "right" });

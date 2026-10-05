@@ -29,6 +29,8 @@ import {
   DuplicateInvoiceError,
   LineDetailModeError,
   LinesTotalMismatchError,
+  InvoiceLinesLockedByAppliedStockReviewError,
+  StockReviewRemovalConfirmationRequiredError,
 } from "../../domain/errors.js";
 
 interface InvoicePorts {
@@ -58,8 +60,12 @@ function handleError(res: import("express").Response, err: unknown): void {
     res.status(404).json({ error: (err as Error).message });
     return;
   }
-  if (err instanceof InvoiceAlreadyCancelledError || err instanceof DuplicateInvoiceError) {
+  if (err instanceof InvoiceAlreadyCancelledError || err instanceof DuplicateInvoiceError || err instanceof InvoiceLinesLockedByAppliedStockReviewError) {
     res.status(409).json({ error: (err as Error).message });
+    return;
+  }
+  if (err instanceof StockReviewRemovalConfirmationRequiredError) {
+    res.status(409).json({ error: err.message, requiresConfirmation: true });
     return;
   }
   if (err instanceof LineDetailModeError || err instanceof LinesTotalMismatchError) {
@@ -150,6 +156,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
         ...req.body as object,
         organizationId: req.auth!.orgId,
         id: req.params.id,
+        actor: req.auth!.email,
       });
       res.json(invoice);
     } catch (err) {
@@ -179,8 +186,15 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   // PATCH /invoices/:id/line-detail-mode
   router.patch("/invoices/:id/line-detail-mode", async (req, res) => {
     try {
-      const { mode } = req.body as { mode: LineDetailMode };
-      const invoice = await ports.setLineDetailMode.execute({ organizationId: req.auth!.orgId, id: req.params.id, mode });
+      const { mode, confirmRemoveStockReview } = req.body as { mode: LineDetailMode; confirmRemoveStockReview?: boolean };
+      const cmd: Parameters<typeof ports.setLineDetailMode.execute>[0] = {
+        organizationId: req.auth!.orgId,
+        id: req.params.id,
+        mode,
+        actor: req.auth!.email,
+      };
+      if (confirmRemoveStockReview !== undefined) cmd.confirmRemoveStockReview = confirmRemoveStockReview;
+      const invoice = await ports.setLineDetailMode.execute(cmd);
       res.json(invoice);
     } catch (err) {
       handleError(res, err);
@@ -201,7 +215,13 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   // DELETE /invoices/:id
   router.delete("/invoices/:id", async (req, res) => {
     try {
-      await ports.deleteInvoice.execute(req.auth!.orgId, req.params.id);
+      const confirmRemoveStockReview = req.query.confirmRemoveStockReview === "true";
+      await ports.deleteInvoice.execute({
+        organizationId: req.auth!.orgId,
+        id: req.params.id,
+        confirmRemoveStockReview,
+        actor: req.auth!.email,
+      });
       res.status(204).send();
     } catch (err) {
       handleError(res, err);

@@ -7,9 +7,12 @@ import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repos
 import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
 import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry-write.port.js";
 import type { InvoiceReconciliationCleanupPort } from "../../domain/ports/out/invoice-reconciliation-cleanup.port.js";
+import type { InvoiceStockReviewStatusReadPort } from "../../domain/ports/out/invoice-stock-review-status-read.port.js";
+import type { InvoiceStockReviewDraftDeletePort } from "../../domain/ports/out/invoice-stock-review-draft-delete.port.js";
 import { InvoiceNotFoundError, DuplicateInvoiceError } from "../../domain/errors.js";
 import type { UpdateInvoiceData } from "../../domain/entities/invoice.js";
 import { toInvoiceDTO } from "./shared.js";
+import { guardAgainstBlockingStockReview } from "./shared-stock-review-guard.js";
 
 export class UpdateInvoiceUseCase implements UpdateInvoicePort {
   constructor(
@@ -17,6 +20,8 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     private readonly lineRepo: InvoiceLineRepositoryPort,
     private readonly payableWrite: PayableEntryWritePort,
     private readonly reconciliationCleanup: InvoiceReconciliationCleanupPort,
+    private readonly stockReviewStatusRead: InvoiceStockReviewStatusReadPort,
+    private readonly stockReviewDraftDelete: InvoiceStockReviewDraftDeletePort,
   ) {}
 
   async execute(command: UpdateInvoiceCommand): Promise<InvoiceDTO> {
@@ -33,6 +38,21 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
         const dup = await this.invoiceRepo.findDuplicate(command.organizationId, command.invoiceNumber, existing.supplierId, command.id);
         if (dup) throw new DuplicateInvoiceError(command.invoiceNumber, existing.supplierName);
       }
+    }
+
+    // Módulo Stock (Compra por rever, D10) — mudar o impacto em stock pode
+    // tornar órfã uma revisão já criada para esta fatura; ver
+    // `shared-stock-review-guard`. Só corre quando o valor realmente muda —
+    // reenviar o mesmo override nunca deve pedir confirmação.
+    if (command.stockReviewOverride !== undefined && command.stockReviewOverride !== existing.stockReviewOverride) {
+      await guardAgainstBlockingStockReview({
+        organizationId: command.organizationId,
+        invoiceId: command.id,
+        confirmRemoveStockReview: command.confirmRemoveStockReview,
+        actor: command.actor ?? "system",
+        statusRead: this.stockReviewStatusRead,
+        draftDelete: this.stockReviewDraftDelete,
+      });
     }
 
     const data: UpdateInvoiceData = {};
@@ -56,6 +76,11 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     if (command.affectsCashflow !== undefined) data.affectsCashflow = command.affectsCashflow;
     if (command.affectsProfitability !== undefined) data.affectsProfitability = command.affectsProfitability;
     if (command.currency !== undefined) data.currency = command.currency;
+    // Bug corrigido: estes dois campos chegavam no comando mas nunca eram
+    // aplicados a `data` — mudar "Impacto no stock" numa fatura já
+    // finalizada não tinha nenhum efeito (ver README, Design decisions).
+    if (command.stockReviewOverride !== undefined) data.stockReviewOverride = command.stockReviewOverride;
+    if (command.stockReviewOverrideReason !== undefined) data.stockReviewOverrideReason = command.stockReviewOverrideReason;
 
     const updated = existing.update(data);
     await this.invoiceRepo.update(command.organizationId, updated);

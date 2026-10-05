@@ -381,6 +381,31 @@ O endpoint `GET /suppliers/:id/statement-pdf` devolve `application/pdf` gerado c
 A alternativa (geração no browser com `@react-pdf/renderer`) foi descartada por adicionar
 ~200 KB ao bundle e produzir documentos menos consistentes.
 
+### Liquidação agrupada aparece como UMA linha no extrato, pelo valor líquido do movimento
+
+`InvoicePaymentReadPort.findByInvoiceIds` devolve um registo por *ligação*
+(`bank_movement_entity_links`), não por movimento — mas um único movimento
+bancário pode ter liquidado várias faturas + consumido notas de crédito de
+uma só vez (módulo `bank-statements`, "Liquidação agrupada"). Mostrar uma
+linha de "payment" por ligação faz o extrato parecer N pagamentos separados
+do mesmo fornecedor no mesmo dia, e — pior — o saldo calculado ficava errado
+(subtraía o valor bruto de cada fatura outra vez, ignorando que as notas de
+crédito já tinham sido descontadas mais acima na mesma conta corrente).
+
+`GetSupplierStatementUseCase` agora agrupa por `InvoicePayment.movementId`
+antes de gerar as linhas: uma única linha "payment", na data do movimento,
+com o valor = soma de todas as alocações desse movimento para este
+fornecedor (faturas positivas + notas de crédito negativas, o que já bate
+certo com o valor realmente saído do banco). O rótulo mostra o nº da
+própria fatura quando é só 1 documento (sem regressão visual do caso
+simples, que continua a ser a esmagadora maioria), ou "N documentos" quando
+é uma liquidação agrupada.
+
+Para isto, `findByInvoiceIds` passou a ser chamado com os IDs de **todas**
+as faturas E notas de crédito do fornecedor (antes só recebia as faturas) —
+sem isto, as ligações das notas de crédito que fazem parte da mesma
+liquidação agrupada nunca entravam na soma.
+
 ### Identidade da organização lida da tabela `organizations`, não de `config/company.ts`
 
 O cabeçalho do extrato (nome, NIF, morada) já foi um ficheiro de constantes
