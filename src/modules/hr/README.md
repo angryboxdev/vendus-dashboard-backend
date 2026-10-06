@@ -797,6 +797,10 @@ Este módulo é **aditivo**, não uma substituição imediata:
   `off` a localização não é guardada.
 - O quiosque legado não foi alterado.
 
+### Modelos de Turno 2.0 — Grupo (2026-10-06)
+
+`hr_shift_templates.template_group` (`OPENING | INTERMEDIATE | CLOSING | FULL_TIME | OTHER`, omissão `OTHER`) — **só** organização/filtro da biblioteca: não entra na geração, conflitos, automatizações nem turnos (ids e referências iguais). Independente do Tipo (Direto/Repartido = existe 2.º período). Backfill único pelo prefixo do nome (Abertura/Fecho/Full time; o resto Outro) na migração `20261008120000_hr_shift_template_group.sql`. Pesquisa/filtros são no frontend (sem endpoints por Grupo).
+
 ### RH 2.0 — Modelos de turno (ticket 01)
 
 - **Modelo ≠ Turno** (task RH 2.0 §1): o Modelo (`ShiftTemplate`) é um

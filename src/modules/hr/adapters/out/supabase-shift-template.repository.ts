@@ -1,15 +1,16 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
-import { ShiftTemplate } from "../../domain/entities/shift-template.js";
+import { ShiftTemplate, type ShiftTemplateGroup } from "../../domain/entities/shift-template.js";
 import { DuplicateShiftTemplateNameError } from "../../domain/errors.js";
 import type { ShiftTemplateRepositoryPort } from "../../domain/ports/out/shift-template-repository.port.js";
 
 const SELECT =
-  "id, name, description, color, start_time, end_time, ends_next_day, second_start_time, second_end_time, break_minutes, location_id, active, created_by, created_at, updated_at";
+  "id, name, template_group, description, color, start_time, end_time, ends_next_day, second_start_time, second_end_time, break_minutes, location_id, active, created_by, created_at, updated_at";
 
 interface Row {
   id: string;
   name: string;
+  template_group: ShiftTemplateGroup;
   description: string | null;
   color: string | null;
   start_time: string;
@@ -32,6 +33,7 @@ function toEntity(row: Row): ShiftTemplate {
   return ShiftTemplate.reconstitute({
     id: row.id,
     name: row.name,
+    group: row.template_group,
     description: row.description,
     color: row.color,
     startTime: hhmm(row.start_time)!,
@@ -53,6 +55,7 @@ function toRow(template: ShiftTemplate): Omit<Row, "id" | "created_at" | "create
   const p = template.toProps();
   return {
     name: p.name,
+    template_group: p.group,
     description: p.description,
     color: p.color,
     start_time: p.startTime,
