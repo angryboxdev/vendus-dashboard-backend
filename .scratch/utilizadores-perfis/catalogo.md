@@ -100,3 +100,20 @@ Colaborador: só Portal (ligado à ficha).
    estiver definido.
 3. GET legado `/api/hr/employees[/:id]` não mascara dados sensíveis.
 4. Visualizador RH: **sem contas** → proposta de não o criar como perfil.
+
+## Decisões do utilizador (2026-10-06) — catálogo VALIDADO
+
+- Hoje "todos fazem tudo"; os perfis passam a separar Financeiro, RH e um
+  Manager **operacional** (substitui a coluna "Manager (= hoje)" acima):
+  Vendas Ver · DRE — · Financeiro — · Stock Gerir (sem especiais) · CRM Gerir ·
+  RH: Gerir Escalas & Turnos, Assiduidade, Férias & Ausências; Ver Visão Geral,
+  Colaboradores, Documentos; sem Pagamentos, Fecho mensal, Histórico, dados
+  sensíveis · Empresa Ver.
+- RH não participa nas escalas: perfil RH com **Escalas & Turnos = Ver**.
+- **Sem perfil Visualizador RH** (0 contas; cria-se como perfil personalizado se preciso).
+- Contas atuais: `gabriel@angrybox.pt` (gestor) → **Manager**, ligado à sua ficha
+  pelo Editar utilizador (a ficha tem o email pessoal — não se altera);
+  `gabrielle@angrybox.pt` (gestor) → migra como Manager e o Admin muda para
+  **RH** no ecrã novo. 6 Admin → Admin.
+- Não usar "Dar acesso ao Portal" na ficha do Gabriel até existir a ligação
+  por seleção de conta (criaria 2.ª conta pelo email da ficha).
