@@ -1,4 +1,4 @@
-Status: todo
+Status: in-review (proposta em catalogo.md, a validar com o utilizador)
 
 # Catálogo de permissões
 
