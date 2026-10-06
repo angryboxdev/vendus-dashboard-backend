@@ -1,5 +1,7 @@
 import type { Router } from "express";
 import { AirMenuHttpGateway } from "./adapters/out/air-menu-http.gateway.js";
+import { RateLimitedAirMenuGateway } from "./adapters/out/rate-limited-air-menu.gateway.js";
+import { MinIntervalScheduler } from "./domain/services/min-interval-scheduler.js";
 import { AirMenuMenuCatalogAdapter } from "./adapters/out/air-menu-menu-catalog.adapter.js";
 import { OrderEventBusAdapter } from "./adapters/out/order-event-bus.adapter.js";
 import { SessionManagerService } from "./domain/services/session-manager.service.js";
@@ -13,6 +15,9 @@ import type { AirMenuEnterprise } from "./domain/entities/air-menu-enterprise.js
 import type { GetSummaryPort } from "./domain/ports/in/get-summary.port.js";
 import type { OrderEventBusPort } from "./domain/ports/out/order-event-bus.port.js";
 
+/** Limite da API AirMenu: no máximo 1 pedido a cada 2 segundos. */
+export const AIRMENU_MIN_REQUEST_INTERVAL_MS = 2000;
+
 export function createAirMenuModule(config: {
   apiKey: string;
   username: string;
@@ -20,7 +25,10 @@ export function createAirMenuModule(config: {
   enterprises: AirMenuEnterprise[];
   webhookSecret?: string | null;
 }): { router: Router; publicRouter: Router; getSummary: GetSummaryPort; eventBus: OrderEventBusPort } {
-  const gateway = new AirMenuHttpGateway(config.apiKey);
+  const gateway = new RateLimitedAirMenuGateway(
+    new AirMenuHttpGateway(config.apiKey),
+    new MinIntervalScheduler(AIRMENU_MIN_REQUEST_INTERVAL_MS),
+  );
 
   const sessionManager = new SessionManagerService(
     gateway,

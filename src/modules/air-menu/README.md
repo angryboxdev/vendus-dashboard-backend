@@ -260,6 +260,7 @@ Os endpoints públicos (`/webhook/receive` e `/webhook/stream`) são registados 
 ### Saída
 
 - `AirMenuHttpGateway` — implementa `AirMenuGatewayPort`. Todas as chamadas usam o padrão `?ACTION=X&VERSION=1.0.0&KEY=...&DATA={...}` com resposta `RESULT={...json...}`.
+- `RateLimitedAirMenuGateway` — decorator de `AirMenuGatewayPort` (montado em `air-menu.module.ts` à volta do `AirMenuHttpGateway`): passa **todos** os pedidos por um `MinIntervalScheduler`, garantindo no máximo **1 pedido a cada 2 s** (`AIRMENU_MIN_REQUEST_INTERVAL_MS`).
 - `AirMenuMenuCatalogAdapter` — implementa `MenuCatalogPort`. Carrega o catálogo via `GetMenu` e mantém-no em cache em memória por 1 hora. Ver nota de configuração acima.
 - `OrderEventBusAdapter` — implementa `OrderEventBusPort`. Wrapper fino sobre `EventEmitter` do Node. Partilhado entre o módulo `air-menu` (que publica) e o módulo `kds` (que subscreve) via injeção no composition root (`server.ts`).
 - `SupabaseAirMenuCredentialsRepository` — implementa `AirMenuCredentialsPort` sobre `airmenu_credentials` (Supabase, via `ScopedQueryFactory`). Decifra as três colunas no `getByOrganization`. Expõe também `upsert(organizationId, credentials)` — cifra e grava, **fora** do port (só o script de cutover chama).
@@ -362,6 +363,7 @@ Os endpoints públicos (`/webhook/receive` e `/webhook/stream`) são registados 
 
 - **Endpoint único `/summary`**: ordens e analytics são calculados numa única passagem pelo servidor — o frontend faz 1 chamada HTTP em vez de 2, e o backend faz 1+N chamadas à AirMenu em vez de 2+2N. `GetSummaryUseCase` recebe `GetOrdersPort` e `MenuCatalogPort`, chama ambos em `Promise.all` e passa os resultados a `computeAnalytics` diretamente.
 - **`rawData` lazy-loaded**: o payload de `/summary` omite `rawData` (que pode ter vários KB por ordem). Os dados brutos são acessíveis on-demand via `GET /orders/:orderId/raw`, chamado apenas quando o utilizador abre o drawer de detalhe.
+- **Limite de 1 pedido a cada 2 s (restrição da API AirMenu)**: aplicado no gateway (decorator `RateLimitedAirMenuGateway` + `MinIntervalScheduler`, que espaça o *início* de chamadas consecutivas pela ordem pedida), para valer para todos os consumidores — páginas, fecho de caixa, resumo e declaração de vendas. Consequência: o `GetOrders` por ordem (1+N pedidos) leva ~2 s por ordem — um período com 100 ordens demora ~3 min. O limite é global ao processo (um único gateway); não protege contra várias instâncias do servidor.
 - **Dois passos obrigatórios para ordens**: a API AirMenu não suporta busca direta por período em `GetOrders` — é necessário `GetOrderIds` primeiro. O primeiro `GetOrders` é uma sonda isolada: se falha, invalida a sessão, reautentica e repete só essa chamada (se falhar de novo, o erro propaga e nenhum outro pedido é disparado — a AirMenu revoga a API key em vez de devolver 429, por isso não há retry do fluxo completo). Os restantes `GetOrders` são feitos em lotes sequenciais de `BATCH_SIZE` (constante em `get-orders.use-case.ts`, default 5) com pausa de `BATCH_DELAY_MS` (default 1000 ms) entre lotes, com `Promise.allSettled` dentro de cada lote — evita disparar centenas de pedidos simultâneos à AirMenu.
 - **Consolidação por `orderId`**: o `GetOrders` agrupa por divisão; uma ordem pode aparecer em múltiplas divisões. O use case usa `Map<orderId, ...>` para garantir unicidade.
 - **`documentType` derivado, não armazenado**: calculado a partir dos `activeFlags` em runtime — não existe campo direto na API.
@@ -424,6 +426,8 @@ Todos os testes unitários: `jest --testPathPattern=air-menu`
 | `__tests__/entities/air-menu-order.test.ts` | Derivação de `documentType`, `documentDate` e `total` na entidade |
 | `__tests__/use-cases/get-analytics.use-case.test.ts` | `computeAnalytics` — summary, byPlatform, byVatRate, byCategory, topItems, temporalDistribution |
 | `__tests__/use-cases/get-orders.use-case.test.ts` | `derivePlatform`, extracção de itens, complement "Dobre" (L/S), default S por família de pizza, sufixo legado, add-ons pagos, consolidação de divisões, filtro por `documentDate` |
+| `__tests__/services/min-interval-scheduler.test.ts` | Espaçamento mínimo entre inícios de chamadas (fake timers): ordem, espera parcial, sem espera após idle, erros não bloqueiam |
+| `__tests__/adapters/rate-limited-air-menu.gateway.test.ts` | Todos os métodos do gateway passam pelo limite de 2 s |
 | `__tests__/services/session-manager.service.test.ts` | Re-autenticação, sessão válida em cache, deduplicação de chamadas concorrentes |
 | `__tests__/use-cases/register-webhook.use-case.test.ts` | Passagem de sessionId e campos ao gateway |
 | `__tests__/services/resolve-closing-enterprise-id.test.ts` | Contrato `found`/`not_configured` dos dois novos ports (via fakes) e o mapeamento puro `resolveClosingEnterpriseId` |
