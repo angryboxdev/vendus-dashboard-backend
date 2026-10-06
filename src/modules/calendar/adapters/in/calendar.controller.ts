@@ -1,5 +1,6 @@
 import { Router, type Response } from "express";
-import { requireMinRole, type AppRole } from "../../../../middleware/auth.js";
+import { can } from "../../../access/domain/services/effective-access.service.js";
+import { requireMinRole } from "../../../../middleware/auth.js";
 import {
   EVENT_CATEGORIES,
   type CompanyEventDetails,
@@ -33,11 +34,14 @@ const KINDS = new Set<CalendarItemKind>(["holiday", "event", "deadline"]);
 const PRIORITIES = new Set<EventPriority>(["normal", "important", "critical"]);
 const HOLIDAY_TYPES = new Set<HolidayType>(["national", "municipal", "custom"]);
 
-/** `AppRole` e `CalendarViewerRole` têm os mesmos valores — só o domínio não pode importar o tipo do middleware. */
-function toViewerRole(role: AppRole): CalendarViewerRole {
-  // `employee` nunca chega aqui (`restrictEmployeeToPortal`); se chegasse, recusa — nunca promove a hr_viewer.
-  if (role === "employee") throw new Error("Sem permissão para esta operação");
-  return role;
+/**
+ * Utilizadores & Perfis 2.0: prazos de documentos e eventos de gestão para
+ * quem vê Documentos da Empresa; confidenciais só com a permissão especial.
+ */
+function toViewerRole(req: Pick<import("express").Request, "access">): CalendarViewerRole {
+  const a = req.access;
+  if (a && can(a, "company.confidential_documents", "MANAGE")) return "admin";
+  return a && can(a, "company.documents", "READ") ? "manager" : "hr_viewer";
 }
 
 function todayIso(): string {
@@ -132,7 +136,7 @@ export class CalendarController {
         res.json(
           await this.listCalendar.execute({
             organizationId: req.auth!.orgId,
-            viewerRole: toViewerRole(req.auth!.orgRole),
+            viewerRole: toViewerRole(req),
             from: q.from,
             to: q.to,
             filter: {
@@ -153,7 +157,7 @@ export class CalendarController {
         res.json(
           await this.listUpcomingImportant.execute({
             organizationId: req.auth!.orgId,
-            viewerRole: toViewerRole(req.auth!.orgRole),
+            viewerRole: toViewerRole(req),
             today: todayIso(),
           }),
         );
@@ -162,7 +166,7 @@ export class CalendarController {
       }
     });
 
-    this.router.post("/calendar/holidays", requireMinRole("admin"), async (req, res) => {
+    this.router.post("/calendar/holidays", async (req, res) => {
       try {
         const c = readHolidayChanges((req.body ?? {}) as Record<string, unknown>);
         const created = await this.createHoliday.execute({
@@ -176,7 +180,7 @@ export class CalendarController {
       }
     });
 
-    this.router.patch("/calendar/holidays/:id", requireMinRole("admin"), async (req, res) => {
+    this.router.patch("/calendar/holidays/:id", async (req, res) => {
       try {
         res.json(
           await this.updateHoliday.execute({
@@ -191,7 +195,7 @@ export class CalendarController {
       }
     });
 
-    this.router.delete("/calendar/holidays/:id", requireMinRole("admin"), async (req, res) => {
+    this.router.delete("/calendar/holidays/:id", async (req, res) => {
       try {
         await this.deleteHoliday.execute({ organizationId: req.auth!.orgId, actor: req.auth!.email, id: req.params["id"] as string });
         res.status(204).send();
@@ -201,7 +205,7 @@ export class CalendarController {
     });
 
     /** POST /calendar/holidays/import/preview — body `{ country: "PT", year }`. */
-    this.router.post("/calendar/holidays/import/preview", requireMinRole("admin"), async (req, res) => {
+    this.router.post("/calendar/holidays/import/preview", async (req, res) => {
       try {
         const body = (req.body ?? {}) as Record<string, unknown>;
         if (body.country !== "PT") {
@@ -215,7 +219,7 @@ export class CalendarController {
     });
 
     /** POST /calendar/holidays/import — grava só os que faltam (idempotente). */
-    this.router.post("/calendar/holidays/import", requireMinRole("admin"), async (req, res) => {
+    this.router.post("/calendar/holidays/import", async (req, res) => {
       try {
         const body = (req.body ?? {}) as Record<string, unknown>;
         if (body.country !== "PT") {

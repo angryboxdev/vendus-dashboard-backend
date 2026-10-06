@@ -1,4 +1,4 @@
-Status: todo
+Status: done (tabela central + conversões inline; ver README do módulo access)
 Blocked by: 03
 
 # Aplicação módulo a módulo

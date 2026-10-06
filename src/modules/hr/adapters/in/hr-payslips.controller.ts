@@ -1,6 +1,5 @@
 import { Router, type Response } from "express";
 import multer from "multer";
-import { requireMinRole } from "../../../../middleware/auth.js";
 import { InvalidDocumentError } from "../../domain/errors.js";
 import { isPayslipCategory } from "../../domain/ports/in/payslip-import.ports.js";
 import type {
@@ -87,7 +86,7 @@ export class HrPayslipsController {
 
   private registerRoutes(): void {
     /** POST /api/hr/payslips/import/preview (multipart "files" + "period" YYYY-MM + "category" opcional). */
-    this.router.post("/hr/payslips/import/preview", requireMinRole("admin"), payslipUpload.array("files", MAX_FILES), async (req, res) => {
+    this.router.post("/hr/payslips/import/preview", payslipUpload.array("files", MAX_FILES), async (req, res) => {
       try {
         const files = readFiles(req.files);
         const body = (req.body ?? {}) as Record<string, unknown>;
@@ -104,7 +103,7 @@ export class HrPayslipsController {
     });
 
     /** POST /api/hr/payslips/import (multipart "files" + "period" + "mapping" JSON). */
-    this.router.post("/hr/payslips/import", requireMinRole("admin"), payslipUpload.array("files", MAX_FILES), async (req, res) => {
+    this.router.post("/hr/payslips/import", payslipUpload.array("files", MAX_FILES), async (req, res) => {
       try {
         const body = (req.body ?? {}) as Record<string, unknown>;
         const mapping = readMapping(body.mapping);

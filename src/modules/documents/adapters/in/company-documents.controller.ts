@@ -1,7 +1,7 @@
 import { Router, type Response } from "express";
+import { can } from "../../../access/domain/services/effective-access.service.js";
 import multer from "multer";
 import { requireMinRole } from "../../../../middleware/auth.js";
-import type { AppRole } from "../../../../middleware/auth.js";
 import type { DocumentVisibility } from "../../domain/entities/document.js";
 import {
   DocumentCategoryAlreadyExistsError,
@@ -28,11 +28,14 @@ const documentUpload = multer({
   },
 });
 
-/** `AppRole` e `DocumentViewerRole` têm os mesmos valores — só o domínio não pode importar o tipo do middleware. */
-function toViewerRole(role: AppRole): DocumentViewerRole {
-  // `employee` nunca chega aqui (`restrictEmployeeToPortal`); se chegasse, recusa — nunca promove a hr_viewer.
-  if (role === "employee") throw new Error("Sem permissão para esta operação");
-  return role;
+/**
+ * Utilizadores & Perfis 2.0: visibilidade pelas permissões — confidenciais com
+ * `company.confidential_documents`, os restantes com `company.documents` (Ver).
+ */
+function toViewerRole(req: Pick<import("express").Request, "access">): DocumentViewerRole {
+  const a = req.access;
+  if (a && can(a, "company.confidential_documents", "MANAGE")) return "admin";
+  return a && can(a, "company.documents", "READ") ? "manager" : "hr_viewer";
 }
 
 function readDate(value: unknown): string | null {
@@ -84,7 +87,7 @@ export class CompanyDocumentsController {
 
     this.router.get(BASE, requireMinRole("manager"), async (req, res) => {
       try {
-        res.json(await this.listCompanyDocuments.execute({ organizationId: req.auth!.orgId, viewerRole: toViewerRole(req.auth!.orgRole) }));
+        res.json(await this.listCompanyDocuments.execute({ organizationId: req.auth!.orgId, viewerRole: toViewerRole(req) }));
       } catch (e) {
         handleError(e, res);
       }
@@ -105,7 +108,7 @@ export class CompanyDocumentsController {
         const created = await this.uploadCompanyDocument.execute({
           organizationId: req.auth!.orgId,
           actor: req.auth!.email,
-          viewerRole: toViewerRole(req.auth!.orgRole),
+          viewerRole: toViewerRole(req),
           category: body.category,
           buffer: req.file.buffer,
           filename: req.file.originalname,
@@ -133,7 +136,7 @@ export class CompanyDocumentsController {
           await this.replaceCompanyDocument.execute({
             organizationId: req.auth!.orgId,
             actor: req.auth!.email,
-            viewerRole: toViewerRole(req.auth!.orgRole),
+            viewerRole: toViewerRole(req),
             documentId: req.params["id"] as string,
             buffer: req.file.buffer,
             filename: req.file.originalname,
@@ -154,7 +157,7 @@ export class CompanyDocumentsController {
         await this.removeCompanyDocument.execute({
           organizationId: req.auth!.orgId,
           actor: req.auth!.email,
-          viewerRole: toViewerRole(req.auth!.orgRole),
+          viewerRole: toViewerRole(req),
           documentId: req.params["id"] as string,
         });
         res.status(204).send();
@@ -168,7 +171,7 @@ export class CompanyDocumentsController {
         res.json(
           await this.getCompanyDocumentDownloadUrl.execute({
             organizationId: req.auth!.orgId,
-            viewerRole: toViewerRole(req.auth!.orgRole),
+            viewerRole: toViewerRole(req),
             documentId: req.params["id"] as string,
           }),
         );
@@ -182,7 +185,7 @@ export class CompanyDocumentsController {
         res.json(
           await this.getCompanyDocumentHistory.execute({
             organizationId: req.auth!.orgId,
-            viewerRole: toViewerRole(req.auth!.orgRole),
+            viewerRole: toViewerRole(req),
             documentId: req.params["id"] as string,
           }),
         );

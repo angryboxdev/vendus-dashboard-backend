@@ -176,7 +176,7 @@ export class HrAttendanceController {
     });
 
     /** POST /api/hr/attendance/closure/reopen — só role mais alto (secção 23), exige motivo. */
-    this.router.post("/hr/attendance/closure/reopen", requireMinRole("admin"), async (req, res) => {
+    this.router.post("/hr/attendance/closure/reopen", async (req, res) => {
       try {
         const body = req.body as { year?: number; month?: number; reason?: string };
         if (!body.year || !body.month) {

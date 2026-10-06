@@ -63,7 +63,6 @@ hrLeaveRoutes.get("/leave/holidays", async (req: Request, res: Response) => {
 /** POST /api/hr/leave/holidays — adicionar feriado manual (admin) */
 hrLeaveRoutes.post(
   "/leave/holidays",
-  requireMinRole("admin"),
   async (req: Request, res: Response) => {
     try {
       const { date, name, isNational = false } = req.body as {
@@ -82,7 +81,6 @@ hrLeaveRoutes.post(
 /** DELETE /api/hr/leave/holidays/:id */
 hrLeaveRoutes.delete(
   "/leave/holidays/:id",
-  requireMinRole("admin"),
   async (req: Request, res: Response) => {
     try {
       await deletePublicHoliday(req.auth!.orgId, req.params["id"] as string);

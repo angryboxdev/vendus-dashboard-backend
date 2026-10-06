@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { can } from "../../../access/domain/services/effective-access.service.js";
 import {
   StockCountSessionNotFoundError,
   StockCountLineNotFoundError,
@@ -93,8 +94,9 @@ function handleError(e: unknown, res: import("express").Response): void {
 }
 
 /** `true` quando o pedido tenta uma ação reservada a `admin` mas o ator não o é (secção 64). */
-function isAdmin(req: import("express").Request): boolean {
-  return req.auth!.orgRole === "admin";
+function canConfirmCounts(req: import("express").Request): boolean {
+  // Permissão especial `stock.count_confirm` (Utilizadores & Perfis 2.0; antes: só Admin).
+  return !!req.access && can(req.access, "stock.count_confirm", "MANAGE");
 }
 
 export class StockCountController {
@@ -171,7 +173,7 @@ export class StockCountController {
           return;
         }
         const overrideOverlap = Boolean(body.overrideOverlap);
-        if (overrideOverlap && !isAdmin(req)) {
+        if (overrideOverlap && !canConfirmCounts(req)) {
           res.status(403).json({ error: "Só admin pode forçar o início apesar de sobreposição" });
           return;
         }
@@ -239,7 +241,7 @@ export class StockCountController {
           return;
         }
         const resolution = body.resolution as "select_attempt" | "manual_value";
-        if (resolution === "manual_value" && !isAdmin(req)) {
+        if (resolution === "manual_value" && !canConfirmCounts(req)) {
           res.status(403).json({ error: "Só admin pode definir um valor final manual" });
           return;
         }
@@ -299,7 +301,7 @@ export class StockCountController {
 
     this.router.post("/stock-count/sessions/:id/confirm", async (req, res) => {
       try {
-        if (!isAdmin(req)) {
+        if (!canConfirmCounts(req)) {
           res.status(403).json({ error: "Só admin pode confirmar a contagem e ajustar o stock" });
           return;
         }
