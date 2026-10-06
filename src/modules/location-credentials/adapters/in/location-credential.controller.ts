@@ -49,7 +49,6 @@ export class LocationCredentialController {
     this.adminRouter.post(
       "/location-credentials/pairing-codes",
       requireAuth,
-      requireMinRole("admin"),
       async (req: Request, res: Response) => {
         try {
           const body = req.body as { locationId?: unknown; description?: unknown };
@@ -89,7 +88,6 @@ export class LocationCredentialController {
     this.adminRouter.get(
       "/location-credentials/locations/:locationId/tokens",
       requireAuth,
-      requireMinRole("admin"),
       async (req: Request, res: Response) => {
         try {
           const tokens = await this.listActiveTokens.execute({
@@ -117,7 +115,6 @@ export class LocationCredentialController {
     this.adminRouter.delete(
       "/location-credentials/tokens/:tokenId",
       requireAuth,
-      requireMinRole("admin"),
       async (req: Request, res: Response) => {
         try {
           await this.revokeToken.execute({

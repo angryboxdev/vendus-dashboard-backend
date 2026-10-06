@@ -235,3 +235,31 @@ export class ShiftAutomationNotFoundError extends Error {
     this.name = "ShiftAutomationNotFoundError";
   }
 }
+
+/** Portal do Colaborador — pedido de acesso impossível (sem email, conta já ligada a outro colaborador...). */
+export class PortalAccessError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PortalAccessError";
+  }
+}
+
+/** Conta autenticada sem ficha de colaborador ligada — o Portal não tem a quem mostrar dados. */
+export class PortalNotLinkedError extends Error {
+  constructor() {
+    super("Esta conta não está ligada a nenhum colaborador");
+    this.name = "PortalNotLinkedError";
+  }
+}
+
+/** Picagem recusada por uma regra (sem turno, cedo demais, fora da zona...). */
+export class PunchRefusedError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly details: Record<string, unknown> = {},
+  ) {
+    super(message);
+    this.name = "PunchRefusedError";
+  }
+}

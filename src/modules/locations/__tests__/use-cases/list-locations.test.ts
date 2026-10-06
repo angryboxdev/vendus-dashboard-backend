@@ -31,6 +31,7 @@ describe("ListLocationsUseCase", () => {
         municipality: null,
         country: "PT",
         phone: null,
+        geofence: { latitude: null, longitude: null, radiusM: 100, policy: "off" },
       },
     ]);
   });

@@ -64,6 +64,8 @@ export const TABLE_REGISTRY = {
   // Módulo organization (Base Organizacional — Empresa).
   organization_audit_logs: { organizationColumn: "org_id", locationBearing: false },
   org_members: { organizationColumn: "org_id", locationBearing: false },
+  // Utilizadores & Perfis de Acesso 2.0: perfis de acesso por organização.
+  access_profiles: { organizationColumn: "org_id", locationBearing: false },
 
   // Módulo Contabilidade — "Documento" (qualquer documento contabilístico/
   // fiscal sem fluxo bancário normal da empresa: fatura paga por sócio/
@@ -147,6 +149,8 @@ export const TABLE_REGISTRY = {
   hr_positions: { organizationColumn: "org_id", locationBearing: false },
   hr_employee_locations: { organizationColumn: "org_id", locationBearing: true },
   hr_leave_balances: { organizationColumn: "org_id", locationBearing: false },
+  // Portal do Colaborador: evidência de cada toque de Entrada/Saída, location_id NOT NULL.
+  hr_attendance_punch_events: { organizationColumn: "org_id", locationBearing: true },
   hr_leave_requests: { organizationColumn: "org_id", locationBearing: false },
   // Fase 2: fecho é por organização inteira, nunca por local.
   hr_monthly_closures: { organizationColumn: "org_id", locationBearing: false },

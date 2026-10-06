@@ -1,6 +1,5 @@
 import { Router, type Response } from "express";
 import multer from "multer";
-import { requireMinRole } from "../../../../middleware/auth.js";
 import type {
   GetOrganizationProfilePort,
   ListOrganizationHistoryPort,
@@ -79,7 +78,7 @@ export class OrganizationController {
     });
 
     /** PATCH /organization — alteração parcial; 400 com `fieldErrors` por campo. */
-    this.router.patch("/organization", requireMinRole("admin"), async (req, res) => {
+    this.router.patch("/organization", async (req, res) => {
       try {
         const changes = parseChanges((req.body ?? {}) as Record<string, unknown>);
         if (typeof changes === "string") {
@@ -99,7 +98,7 @@ export class OrganizationController {
     });
 
     /** POST /organization/logo (multipart "file") — jpg, png, webp ou svg até 2 MB. */
-    this.router.post("/organization/logo", requireMinRole("admin"), logoUpload.single("file"), async (req, res) => {
+    this.router.post("/organization/logo", logoUpload.single("file"), async (req, res) => {
       try {
         if (!req.file) {
           res.status(400).json({ error: "ficheiro em falta (campo 'file'), formatos aceites: jpg, png, webp, svg" });
@@ -120,7 +119,7 @@ export class OrganizationController {
     });
 
     /** GET /organization/history — histórico de alterações da Empresa. */
-    this.router.get("/organization/history", requireMinRole("admin"), async (req, res) => {
+    this.router.get("/organization/history", async (req, res) => {
       try {
         res.json(await this.listOrganizationHistory.execute({ organizationId: req.auth!.orgId }));
       } catch (e) {

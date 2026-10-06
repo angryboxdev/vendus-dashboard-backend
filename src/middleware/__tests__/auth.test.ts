@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import {
   createAuthMiddleware,
+  restrictEmployeeToPortal,
   resolveAuth,
   type Membership,
   type MembershipLookup,
@@ -211,5 +212,47 @@ describe("createAuthMiddleware", () => {
     } finally {
       warnSpy.mockRestore();
     }
+  });
+});
+
+describe("restrictEmployeeToPortal (Portal do Colaborador)", () => {
+  function run(role: string | undefined, url: string) {
+    const fence = restrictEmployeeToPortal(["/api/me"]);
+    const req = { originalUrl: url, auth: role ? { orgRole: role } : undefined } as unknown as Request;
+    let status: number | undefined;
+    const res = { status: (s: number) => ((status = s), { json: () => undefined }) } as unknown as Response;
+    const next = jest.fn() as unknown as NextFunction;
+    fence(req, res, next);
+    return { passed: (next as unknown as jest.Mock).mock.calls.length === 1, status };
+  }
+
+  it("deixa o colaborador usar só as rotas /api/me", () => {
+    expect(run("employee", "/api/me").passed).toBe(true);
+    expect(run("employee", "/api/me/shifts?from=2026-10-01").passed).toBe(true);
+  });
+
+  it("recusa ao colaborador qualquer rota de gestão, incluindo as 'qualquer role autenticado' e prefixos parecidos", () => {
+    expect(run("employee", "/api/locations")).toEqual({ passed: false, status: 403 });
+    expect(run("employee", "/api/hr/people")).toEqual({ passed: false, status: 403 });
+    expect(run("employee", "/api/meetings")).toEqual({ passed: false, status: 403 });
+  });
+
+  it("não interfere com os outros papéis nem com pedidos sem autenticação", () => {
+    expect(run("hr_viewer", "/api/hr/people").passed).toBe(true);
+    expect(run("admin", "/api/locations").passed).toBe(true);
+    expect(run(undefined, "/api/locations").passed).toBe(true);
+  });
+});
+
+describe("papel employee", () => {
+  it("requireMinRole('hr_viewer') recusa o colaborador", () => {
+    const { requireMinRole } = createAuthMiddleware({ verifyToken: async () => null, lookupMembership: async () => null });
+    const req = { auth: { sub: "u", email: "e", orgId: "o", orgRole: "employee" } } as unknown as Request;
+    let status: number | undefined;
+    const res = { status: (s: number) => ((status = s), { json: () => undefined }) } as unknown as Response;
+    const next = jest.fn();
+    requireMinRole("hr_viewer")(req, res, next as unknown as NextFunction);
+    expect(next).not.toHaveBeenCalled();
+    expect(status).toBe(403);
   });
 });

@@ -1,8 +1,18 @@
 import { InvalidShiftTemplateError, InvalidWorkShiftError } from "../errors.js";
 import { assertShiftShape, type ShiftKind, type WorkShiftSegment } from "./work-shift.js";
 
+/**
+ * Grupo do modelo (Modelos de Turno 2.0) — SÓ organização/filtro da
+ * biblioteca; não altera horário, geração, conflitos nem automatizações.
+ * Independente do Tipo (Direto/Repartido).
+ */
+export type ShiftTemplateGroup = "OPENING" | "INTERMEDIATE" | "CLOSING" | "FULL_TIME" | "OTHER";
+export const SHIFT_TEMPLATE_GROUPS: readonly ShiftTemplateGroup[] = ["OPENING", "INTERMEDIATE", "CLOSING", "FULL_TIME", "OTHER"];
+
 export interface ShiftTemplateDetails {
   name: string;
+  /** Omitido = "OTHER". */
+  group?: ShiftTemplateGroup;
   description: string | null;
   /** Cor do ponto na lista/escala (ex.: "#3B82F6"); null = cor por omissão. */
   color: string | null;
@@ -19,6 +29,7 @@ export interface ShiftTemplateDetails {
 }
 
 export interface ShiftTemplateProps extends ShiftTemplateDetails {
+  group: ShiftTemplateGroup;
   id: string;
   active: boolean;
   createdBy: string | null;
@@ -40,7 +51,9 @@ function toMinutes(hhmm: string): number {
   return (h ?? 0) * 60 + (m ?? 0);
 }
 
-function clean(details: ShiftTemplateDetails): ShiftTemplateDetails {
+function clean(details: ShiftTemplateDetails): ShiftTemplateDetails & { group: ShiftTemplateGroup } {
+  const group = details.group ?? "OTHER";
+  if (!SHIFT_TEMPLATE_GROUPS.includes(group)) throw new InvalidShiftTemplateError("Grupo do modelo inválido");
   const name = details.name.trim().replace(/\s+/g, " ");
   if (name.length === 0) throw new InvalidShiftTemplateError("Nome do modelo é obrigatório");
   if (name.length > MAX_NAME_LENGTH) throw new InvalidShiftTemplateError(`Nome do modelo: máximo ${MAX_NAME_LENGTH} caracteres`);
@@ -57,7 +70,7 @@ function clean(details: ShiftTemplateDetails): ShiftTemplateDetails {
     if (e instanceof InvalidWorkShiftError) throw new InvalidShiftTemplateError(e.message);
     throw e;
   }
-  return { ...details, name, description: details.description?.trim() || null };
+  return { ...details, group, name, description: details.description?.trim() || null };
 }
 
 /**
@@ -81,6 +94,9 @@ export class ShiftTemplate {
   }
   get locationId(): string | null {
     return this.props.locationId;
+  }
+  get group(): ShiftTemplateGroup {
+    return this.props.group;
   }
   get normalizedName(): string {
     return normalizeShiftTemplateName(this.props.name);
@@ -116,8 +132,8 @@ export class ShiftTemplate {
     return new ShiftTemplate({ id, ...clean(details), active: true, createdBy, createdAt: iso, updatedAt: iso });
   }
 
-  static reconstitute(props: ShiftTemplateProps): ShiftTemplate {
-    return new ShiftTemplate({ ...props });
+  static reconstitute(props: Omit<ShiftTemplateProps, "group"> & { group?: ShiftTemplateGroup }): ShiftTemplate {
+    return new ShiftTemplate({ ...props, group: props.group ?? "OTHER" });
   }
 
   update(changes: Partial<ShiftTemplateDetails>, now: Date): ShiftTemplate {

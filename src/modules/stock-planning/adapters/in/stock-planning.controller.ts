@@ -233,13 +233,9 @@ export class StockPlanningController {
       }
     });
 
-    /** Admin-only — backfill único de ~90 dias (secção 4 do plano; pode demorar, ver README). */
+    /** Permissão especial `stock.forecast_ops` (tabela central de rotas) — backfill único de ~90 dias (secção 4 do plano; pode demorar, ver README). */
     this.router.post("/stock-planning/backfill", async (req, res) => {
       try {
-        if (req.auth!.orgRole !== "admin") {
-          res.status(403).json({ error: "Só admin pode disparar o backfill de histórico" });
-          return;
-        }
         const body = req.body as Record<string, unknown>;
         if (typeof body.since !== "string" || typeof body.until !== "string") {
           res.status(400).json({ error: "since e until são obrigatórios (YYYY-MM-DD)" });
@@ -257,13 +253,9 @@ export class StockPlanningController {
       }
     });
 
-    /** Admin-only — disparo manual do pipeline diário (o cron interno é o caminho normal). */
+    /** Permissão especial `stock.forecast_ops` (tabela central de rotas) — disparo manual do pipeline diário (o cron interno é o caminho normal). */
     this.router.post("/stock-planning/run-forecast", async (req, res) => {
       try {
-        if (req.auth!.orgRole !== "admin") {
-          res.status(403).json({ error: "Só admin pode disparar o forecast manualmente" });
-          return;
-        }
         const body = req.body as Record<string, unknown>;
         const result = await this.runDailyForecast.execute({
           organizationId: req.auth!.orgId,
@@ -277,13 +269,9 @@ export class StockPlanningController {
       }
     });
 
-    /** Admin-only — disparo manual da deteção de desvio (o cron interno é o caminho normal). */
+    /** Permissão especial `stock.forecast_ops` (tabela central de rotas) — disparo manual da deteção de desvio (o cron interno é o caminho normal). */
     this.router.post("/stock-planning/detect-deviation", async (req, res) => {
       try {
-        if (req.auth!.orgRole !== "admin") {
-          res.status(403).json({ error: "Só admin pode disparar a deteção de desvio manualmente" });
-          return;
-        }
         const body = req.body as Record<string, unknown>;
         const result = await this.detectForecastDeviation.execute({
           organizationId: req.auth!.orgId,

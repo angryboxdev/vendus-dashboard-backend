@@ -1,7 +1,7 @@
 import { Router } from "express";
+import { can } from "../../../access/domain/services/effective-access.service.js";
 import multer from "multer";
 import { requireMinRole } from "../../../../middleware/auth.js";
-import type { AppRole } from "../../../../middleware/auth-middleware.js";
 import {
   EmployeeNotFoundError,
   EmployeeDocumentNotFoundError,
@@ -52,9 +52,9 @@ const documentUpload = multer({
   },
 });
 
-/** `req.auth.orgRole` (AppRole) e `ViewerRole` deste módulo têm exatamente os mesmos valores — só o domínio não pode importar o tipo do middleware (D10). */
-function toViewerRole(role: AppRole): ViewerRole {
-  return role;
+/** Utilizadores & Perfis 2.0: mascaramento pela permissão especial `hr.sensitive_data` (antes: papel hr_viewer). */
+function toViewerRole(req: Pick<import("express").Request, "access">): ViewerRole {
+  return req.access && can(req.access, "hr.sensitive_data", "MANAGE") ? "manager" : "hr_viewer";
 }
 
 const EMPLOYMENT_TYPES = new Set(["permanent", "contract", "extra"]);
@@ -125,7 +125,7 @@ export class HrPeopleController {
         const q = req.query as Record<string, string | undefined>;
         const result = await this.listEmployees.execute({
           organizationId: req.auth!.orgId,
-          viewerRole: toViewerRole(req.auth!.orgRole),
+          viewerRole: toViewerRole(req),
           ...(q.search && { search: q.search }),
           ...(q.status === "active" || q.status === "inactive" || q.status === "all" ? { status: q.status } : {}),
           ...(q.employmentType === "permanent" || q.employmentType === "contract" || q.employmentType === "extra"
@@ -173,7 +173,7 @@ export class HrPeopleController {
       try {
         const result = await this.getEmployeeProfile.execute({
           organizationId: req.auth!.orgId,
-          viewerRole: toViewerRole(req.auth!.orgRole),
+          viewerRole: toViewerRole(req),
           id: req.params["id"] as string,
         });
         res.json(result);

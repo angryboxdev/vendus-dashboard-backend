@@ -14,7 +14,12 @@ import { mintOrganizationId, type OrganizationId } from "../kernel/organization-
  * mint call sites.
  */
 
-export type AppRole = "admin" | "manager" | "hr_viewer";
+/**
+ * `employee` (Portal do Colaborador): abaixo de `hr_viewer` — todas as rotas
+ * de gestão (`requireMinRole(...)`) recusam-no, e `restrictEmployeeToPortal`
+ * fecha também as que só exigem autenticação.
+ */
+export type AppRole = "admin" | "manager" | "hr_viewer" | "employee";
 
 /** Auth payload attached to every authenticated request. */
 export interface AuthPayload {
@@ -42,6 +47,7 @@ declare global {
 }
 
 const ROLE_LEVEL: Record<AppRole, number> = {
+  employee: 0,
   hr_viewer: 1,
   manager: 2,
   admin: 3,
@@ -214,4 +220,26 @@ export function createAuthMiddleware(deps: {
   };
 
   return { populateAuth, requireAuth, requireMinRole };
+}
+
+/**
+ * Barreira por omissão para o papel `employee` (Portal do Colaborador): só
+ * passa nos prefixos permitidos (as rotas `/api/me`). Montada logo a seguir
+ * a `requireAuth`, protege também as rotas de gestão que só exigem
+ * autenticação (leituras "qualquer role autenticado") — nunca depender de
+ * cada rota se lembrar de recusar o colaborador.
+ */
+export function restrictEmployeeToPortal(allowedPrefixes: string[]): RequestHandler {
+  return (req, res, next) => {
+    if (req.auth?.orgRole !== "employee") {
+      next();
+      return;
+    }
+    const path = req.originalUrl.split("?")[0] ?? "";
+    if (allowedPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) {
+      next();
+      return;
+    }
+    res.status(403).json({ error: "Sem permissão para esta operação" });
+  };
 }

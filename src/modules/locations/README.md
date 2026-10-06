@@ -130,6 +130,13 @@ A task marca "centro de custo associado" como opcional; os `cost_center_*`
 do `financial-base` são classificação de despesa, não centros de custo por
 loja — fica fora até existir esse conceito (spec D7).
 
+### Zona de picagem (Portal do Colaborador, 2026-10-06)
+
+`Location.geofence` = `{ latitude, longitude, radiusM (10–5000, 100), policy off|warn|block }`,
+por omissão `off` sem coordenadas. Uma política ativa exige coordenadas.
+`PATCH /locations/:id/geofence` (admin), auditado como `geofence` no
+histórico do Local. A geofence pertence ao Local — nunca ao colaborador.
+
 ## How to test
 
 - Domínio/use cases: `npx jest src/modules/locations --testPathIgnorePatterns=integration`

@@ -6,6 +6,7 @@ import {
   InvalidTemplateApplicationError,
   ShiftTemplateNotFoundError,
 } from "../../domain/errors.js";
+import type { ShiftTemplateGroup } from "../../domain/entities/shift-template.js";
 import type { ApplicationDays, OccurrenceDecision } from "../../domain/services/template-application.service.js";
 import { isString, readAudience, stringArray } from "./http-readers.js";
 import type {
@@ -45,6 +46,7 @@ const nullableString = (v: unknown) => (typeof v === "string" && v.trim().length
 function readInput(body: Record<string, unknown>): Partial<ShiftTemplateInput> {
   const out: Partial<ShiftTemplateInput> = {};
   if (typeof body.name === "string") out.name = body.name;
+  if (typeof body.group === "string") out.group = body.group as ShiftTemplateGroup; // validado no domínio
   if ("description" in body) out.description = nullableString(body.description);
   if ("color" in body) out.color = nullableString(body.color);
   if (typeof body.startTime === "string") out.startTime = body.startTime;
@@ -130,6 +132,7 @@ export class HrShiftTemplatesController {
           organizationId: req.auth!.orgId,
           actor: req.auth!.email,
           name: input.name,
+          ...(input.group && { group: input.group }),
           description: input.description ?? null,
           color: input.color ?? null,
           startTime: input.startTime,

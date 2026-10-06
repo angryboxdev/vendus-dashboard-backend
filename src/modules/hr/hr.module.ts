@@ -93,6 +93,12 @@ import { PreviewWorkShiftSeriesUseCase } from "./application/use-cases/preview-w
 import { CreateWorkShiftSeriesUseCase } from "./application/use-cases/create-work-shift-series.use-case.js";
 import { UpdateWorkShiftSeriesScopeUseCase } from "./application/use-cases/update-work-shift-series-scope.use-case.js";
 import { ClearWorkShiftsUseCase } from "./application/use-cases/clear-work-shifts.use-case.js";
+import { SupabasePortalAccountAdapter } from "./adapters/out/supabase-portal-account.adapter.js";
+import { HrPortalAccessController } from "./adapters/in/hr-portal-access.controller.js";
+import { HrMeController } from "./adapters/in/hr-me.controller.js";
+import { SupabasePunchRepository } from "./adapters/out/supabase-punch.repository.js";
+import { GetPortalHomeUseCase, RegisterPunchUseCase } from "./application/use-cases/portal-me.use-cases.js";
+import { GetPortalAccessUseCase, GrantPortalAccessUseCase, RevokePortalAccessUseCase } from "./application/use-cases/portal-access.use-cases.js";
 import { PreviewClearWorkShiftsUseCase } from "./application/use-cases/preview-clear-work-shifts.use-case.js";
 import { PreviewRepeatCalendarWeekUseCase } from "./application/use-cases/preview-repeat-calendar-week.use-case.js";
 import { RepeatCalendarWeekUseCase } from "./application/use-cases/repeat-calendar-week.use-case.js";
@@ -122,7 +128,7 @@ import { HrAttendanceController } from "./adapters/in/hr-attendance.controller.j
  * colaboradores+documentos; nada aqui apaga ou substitui o legacy
  * automaticamente.
  */
-export function createHrModule(): { router: Router; generateAllAutomations: GenerateAllAutomationsPort } {
+export function createHrModule(): { router: Router; meRouter: Router; generateAllAutomations: GenerateAllAutomationsPort } {
   const employeeRepository = new SupabaseEmployeeRepository(createScopedQuery);
   const employeeDocumentRepository = new SupabaseDocumentRepository(createScopedQuery);
   const documentCategoryRepository = new SupabaseDocumentCategoryRepository(createScopedQuery);
@@ -408,6 +414,20 @@ export function createHrModule(): { router: Router; generateAllAutomations: Gene
 
   const router = Router();
   router.use(controller.router);
+  const portalAccounts = new SupabasePortalAccountAdapter(createScopedQuery);
+  router.use(
+    new HrPortalAccessController(
+      new GetPortalAccessUseCase(employeeRepository, portalAccounts),
+      new GrantPortalAccessUseCase(employeeRepository, portalAccounts, auditLog),
+      new RevokePortalAccessUseCase(employeeRepository, portalAccounts, auditLog),
+    ).router,
+  );
+  const punchRepository = new SupabasePunchRepository(createScopedQuery);
+  // Rotas do Portal (/me) num router próprio: montado no server.ts ANTES das rotas de gestão com requireMinRole no mount.
+  const meRouter = new HrMeController(
+      new GetPortalHomeUseCase(portalAccounts, employeeRepository, workShiftRepository, punchRepository, attendanceRulesRepository, locationRepository),
+      new RegisterPunchUseCase(portalAccounts, workShiftRepository, punchRepository, attendanceRulesRepository, locationRepository, auditLog),
+  ).router;
   router.use(shiftTemplatesController.router);
   router.use(shiftAutomationsController.router);
   router.use(positionsController.router);
@@ -416,5 +436,5 @@ export function createHrModule(): { router: Router; generateAllAutomations: Gene
   router.use(schedulesController.router);
   router.use(attendanceController.router);
 
-  return { router, generateAllAutomations };
+  return { router, meRouter, generateAllAutomations };
 }

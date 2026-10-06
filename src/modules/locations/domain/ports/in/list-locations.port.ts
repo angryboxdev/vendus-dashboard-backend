@@ -1,4 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+import type { LocationGeofence } from "../../entities/location.js";
 
 export interface LocationDto {
   id: string;
@@ -13,6 +14,8 @@ export interface LocationDto {
   municipality: string | null;
   country: string;
   phone: string | null;
+  /** Zona de picagem do Portal do Colaborador. */
+  geofence: LocationGeofence;
 }
 
 export interface ListLocationsInput {

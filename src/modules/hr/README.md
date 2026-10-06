@@ -765,6 +765,42 @@ Este módulo é **aditivo**, não uma substituição imediata:
 
 ## Design decisions (ADR summary)
 
+### Portal do Colaborador — conta, `/me` e picagem (2026-10-06, `.scratch/portal-colaborador`)
+
+- **Papel `employee`** (nível 0, abaixo de `hr_viewer`) + barreira global
+  `restrictEmployeeToPortal` logo a seguir a `requireAuth`: o colaborador só
+  chega a `/api/me/*`. As rotas `/me` vivem num router próprio (`meRouter`)
+  montado antes das montagens com `requireMinRole` no mount (essas correm
+  para todo o `/api`).
+- **Ligação conta ↔ colaborador** em `hr_employees.user_id` (`PortalAccountPort`).
+  O colaborador é sempre resolvido a partir da sessão, nunca de um id do
+  cliente. "Dar acesso ao Portal" (`/hr/people/:id/portal-access`, manager+)
+  liga a conta da organização com o mesmo email (gestor que também é
+  colaborador mantém conta e papel) ou cria conta `employee` com
+  palavra-passe temporária (`user_metadata.must_change_password`). Retirar
+  acesso apaga só contas `employee`; uma conta de gestão é só desligada.
+- **Picagem** (`POST /me/punches`): regras puras em `punch.service`
+  (`planPunch`) — só turnos **publicados**, hoje + noturno de ontem aberto,
+  janela `preShiftWindowMinutes`, Entrada→Entrada / Saída sem Entrada
+  recusadas, saída no mesmo minuto recusada; atraso/saída antecipada iguais
+  ao quiosque. Escreve na mesma `hr_shift_attendance` (origem
+  `employee_portal`) + evidência por toque em `hr_attendance_punch_events`
+  (hora do servidor, localização, zona, `idempotency_key` único).
+  Idempotência: a mesma chave devolve o evento gravado (`replay`). Turno
+  repartido = um par entrada/saída (limitação da Assiduidade).
+- **Geolocalização** (`punch-geofence.service`): o servidor calcula a
+  distância (haversine) à zona do Local (`locations.geofence`);
+  `inside`/`outside`/`unverified`/`not_required`. Precisão > 100 m ou
+  margem de erro a cruzar a fronteira → `unverified`, nunca `outside`.
+  `warn` aceita e sinaliza; `block` recusa só `outside` (fica no
+  histórico como `refused_in/out`) e aceita `unverified` sinalizado. Com
+  `off` a localização não é guardada.
+- O quiosque legado não foi alterado.
+
+### Modelos de Turno 2.0 — Grupo (2026-10-06)
+
+`hr_shift_templates.template_group` (`OPENING | INTERMEDIATE | CLOSING | FULL_TIME | OTHER`, omissão `OTHER`) — **só** organização/filtro da biblioteca: não entra na geração, conflitos, automatizações nem turnos (ids e referências iguais). Independente do Tipo (Direto/Repartido = existe 2.º período). Backfill único pelo prefixo do nome (Abertura/Fecho/Full time; o resto Outro) na migração `20261008120000_hr_shift_template_group.sql`. Pesquisa/filtros são no frontend (sem endpoints por Grupo).
+
 ### RH 2.0 — Modelos de turno (ticket 01)
 
 - **Modelo ≠ Turno** (task RH 2.0 §1): o Modelo (`ShiftTemplate`) é um

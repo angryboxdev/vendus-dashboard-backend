@@ -25,7 +25,7 @@ export const authAdmin = {
     return client().auth.admin.listUsers({ page, perPage });
   },
 
-  createUser(params: { email: string; password: string; email_confirm: boolean }) {
+  createUser(params: { email: string; password: string; email_confirm: boolean; user_metadata?: Record<string, unknown> }) {
     return client().auth.admin.createUser(params);
   },
 
@@ -35,6 +35,11 @@ export const authAdmin = {
 
   updateUserPassword(userId: string, password: string) {
     return client().auth.admin.updateUserById(userId, { password });
+  },
+
+  /** Palavra-passe temporária + aviso de mudança obrigatória no próximo login (Utilizadores 2.0). */
+  setTemporaryPassword(userId: string, password: string) {
+    return client().auth.admin.updateUserById(userId, { password, user_metadata: { must_change_password: true } });
   },
 
   deleteUser(userId: string) {

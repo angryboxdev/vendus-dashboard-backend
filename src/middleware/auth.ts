@@ -3,6 +3,7 @@ import { ENV } from "../config/env.js";
 import { listMembershipsForUser } from "../infra/scoped-db/membership-lookup.js";
 import {
   createAuthMiddleware,
+  restrictEmployeeToPortal,
   type AppRole,
   type MembershipLookup,
   type TokenVerifier,
@@ -41,7 +42,7 @@ function getJWKS() {
 }
 
 function isAppRole(value: unknown): value is AppRole {
-  return value === "admin" || value === "manager" || value === "hr_viewer";
+  return value === "admin" || value === "manager" || value === "hr_viewer" || value === "employee";
 }
 
 const verifyTokenViaJwks: TokenVerifier = async (token) => {
@@ -84,3 +85,5 @@ const defaultAuthMiddleware = createAuthMiddleware({
 export const populateAuth = defaultAuthMiddleware.populateAuth;
 export const requireAuth = defaultAuthMiddleware.requireAuth;
 export const requireMinRole = defaultAuthMiddleware.requireMinRole;
+/** Colaboradores (`employee`) só chegam às rotas do Portal. */
+export const restrictEmployeeToPortalRoutes = restrictEmployeeToPortal(["/api/me"]);

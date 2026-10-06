@@ -1,5 +1,30 @@
 import { InvalidLocationError, type LocationFieldError } from "../errors.js";
 
+/** Política de geolocalização na picagem pelo Portal do Colaborador (decisões P8–P10). */
+export type GeofencePolicy = "off" | "warn" | "block";
+
+/** Zona de picagem do Local — pertence ao Local, nunca ao colaborador. */
+export interface LocationGeofence {
+  latitude: number | null;
+  longitude: number | null;
+  /** Raio permitido, em metros (10–5000). */
+  radiusM: number;
+  policy: GeofencePolicy;
+}
+
+export const DEFAULT_GEOFENCE: LocationGeofence = { latitude: null, longitude: null, radiusM: 100, policy: "off" };
+
+function validateGeofence(g: LocationGeofence): void {
+  const errors: LocationFieldError[] = [];
+  if ((g.latitude === null) !== (g.longitude === null)) errors.push({ field: "geofence", message: "latitude e longitude vão juntas" });
+  if (g.latitude !== null && !(Number.isFinite(g.latitude) && g.latitude >= -90 && g.latitude <= 90)) errors.push({ field: "latitude", message: "entre -90 e 90" });
+  if (g.longitude !== null && !(Number.isFinite(g.longitude) && g.longitude >= -180 && g.longitude <= 180)) errors.push({ field: "longitude", message: "entre -180 e 180" });
+  if (!Number.isInteger(g.radiusM) || g.radiusM < 10 || g.radiusM > 5000) errors.push({ field: "radiusM", message: "entre 10 e 5000 metros" });
+  if (!["off", "warn", "block"].includes(g.policy)) errors.push({ field: "policy", message: "política inválida" });
+  else if (g.policy !== "off" && g.latitude === null) errors.push({ field: "policy", message: "defina primeiro a localização do Local" });
+  if (errors.length > 0) throw new InvalidLocationError(errors);
+}
+
 export interface LocationProps {
   id: string;
   name: string;
@@ -16,6 +41,7 @@ export interface LocationProps {
   /** ISO 3166-1 alpha-2. */
   country?: string;
   phone?: string | null;
+  geofence?: LocationGeofence;
   updatedAt?: string;
 }
 
@@ -101,6 +127,7 @@ export class Location {
   readonly municipality: string | null;
   readonly country: string;
   readonly phone: string | null;
+  readonly geofence: LocationGeofence;
   readonly updatedAt: string | null;
 
   private constructor(props: LocationProps) {
@@ -115,6 +142,7 @@ export class Location {
     this.municipality = props.municipality ?? null;
     this.country = props.country ?? DEFAULT_COUNTRY;
     this.phone = props.phone ?? null;
+    this.geofence = props.geofence ?? DEFAULT_GEOFENCE;
     this.updatedAt = props.updatedAt ?? null;
   }
 
@@ -154,6 +182,12 @@ export class Location {
     return new Location({ ...this.toProps(), ...normalized, updatedAt: now.toISOString() });
   }
 
+  /** Zona de picagem (Portal do Colaborador). Uma política ativa exige coordenadas. */
+  setGeofence(geofence: LocationGeofence, now: Date): Location {
+    validateGeofence(geofence);
+    return new Location({ ...this.toProps(), geofence: { ...geofence }, updatedAt: now.toISOString() });
+  }
+
   /** Inativar só muda o estado — todas as relações históricas (`location_id`) continuam válidas. */
   deactivate(now: Date): Location {
     return new Location({ ...this.toProps(), isActive: false, updatedAt: now.toISOString() });
@@ -168,6 +202,7 @@ export class Location {
       id: this.id,
       ...this.details(),
       isActive: this.isActive,
+      geofence: this.geofence,
       updatedAt: this.updatedAt ?? "",
     };
   }

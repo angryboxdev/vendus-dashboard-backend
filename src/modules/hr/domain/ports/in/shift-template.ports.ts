@@ -1,3 +1,4 @@
+import type { ShiftTemplateGroup } from "../../entities/shift-template.js";
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { ShiftKind } from "../../entities/work-shift.js";
 import type {
@@ -10,6 +11,8 @@ import type {
 export interface ShiftTemplateDTO {
   id: string;
   name: string;
+  /** Organização da biblioteca (Abertura/Intermédio/Fecho/Full time/Outro). */
+  group: ShiftTemplateGroup;
   description: string | null;
   color: string | null;
   kind: ShiftKind;
@@ -30,6 +33,8 @@ export interface ShiftTemplateDTO {
 
 export interface ShiftTemplateInput {
   name: string;
+  /** Omitido na criação = "OTHER". */
+  group?: ShiftTemplateGroup;
   description: string | null;
   color: string | null;
   startTime: string;

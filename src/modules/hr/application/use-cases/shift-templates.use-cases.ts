@@ -28,6 +28,7 @@ export function toShiftTemplateDTO(template: ShiftTemplate): ShiftTemplateDTO {
   return {
     id: p.id,
     name: p.name,
+    group: p.group,
     description: p.description,
     color: p.color,
     kind: template.kind,
@@ -49,6 +50,7 @@ function pickDetails(input: Partial<ShiftTemplateDetails>): Partial<ShiftTemplat
   const out: Partial<ShiftTemplateDetails> = {};
   for (const key of [
     "name",
+    "group",
     "description",
     "color",
     "startTime",

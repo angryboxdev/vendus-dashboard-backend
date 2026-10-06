@@ -34,7 +34,8 @@ import { UNATTENDED_SCOPE } from "./infra/scoped-db/unattended-scope.js";
 import { createScopedQuery } from "./infra/scoped-db/scoped-query.js";
 import { listOrganizations } from "./infra/scoped-db/organization-listing.js";
 import { resolveClosingEnterpriseId } from "./modules/air-menu/domain/services/resolve-closing-enterprise-id.js";
-import { populateAuth, requireAuth, requireMinRole } from "./middleware/auth.js";
+import { populateAuth, requireAuth, restrictEmployeeToPortalRoutes } from "./middleware/auth.js";
+import { createAccessModule } from "./modules/access/access.module.js";
 import { authRoutes } from "./routes/authRoutes.js";
 import { createLocationsModule } from "./modules/locations/locations.module.js";
 import { createOrganizationModule } from "./modules/organization/organization.module.js";
@@ -63,7 +64,8 @@ const corsOptions: cors.CorsOptions = {
       !origin ||
       origin === "http://localhost:5173" ||
       origin === "http://localhost:3000" ||
-      /\.vercel\.app$/.test(origin);
+      /\.vercel\.app$/.test(origin) ||
+      ENV.CORS_EXTRA_ORIGINS.includes(origin);
     cb(null, allowed);
   },
 };
@@ -246,8 +248,26 @@ if (ENV.CRON_SECRET) {
 // All routes below this line require authentication
 app.use(requireAuth);
 
+// Utilizadores & Perfis de Acesso 2.0: acesso efetivo (perfil + exceções +
+// estado) lido da BD por pedido — conta desativada é recusada já aqui.
+const accessModule = createAccessModule();
+app.use(accessModule.guards.loadAccess);
+
+// Portal do Colaborador: o papel `employee` só chega a `/api/me/*` — barreira
+// por omissão, antes de qualquer rota de gestão (inclui as "qualquer role").
+app.use(restrictEmployeeToPortalRoutes);
+// Tabela central rota → permissão (Utilizadores & Perfis 2.0): substitui os
+// antigos requireMinRole("manager") no mount, que se aplicavam a TODO o /api.
+app.use(accessModule.guards.routeGuard);
+// Rotas do Portal (/api/me/*) logo aqui: as montagens seguintes com
+// requireMinRole(...) no próprio mount correm para todo o /api e recusariam
+// o colaborador antes de chegar a elas.
+app.use("/api", hrModule.meRouter);
+app.use("/api", accessModule.meRouter);
+app.use("/api", accessModule.adminRouter);
+
 // Admin-only: user management
-app.use("/api/auth", requireMinRole("admin"), authRoutes);
+app.use("/api/auth", accessModule.guards.requireAdmin, authRoutes);
 
 // Locations module (hexagonal) — org-scoped read, any authenticated role (D15)
 app.use("/api", locationsModule.router);
@@ -274,14 +294,14 @@ app.use("/api", calendarModule.router);
 app.use("/api", locationCredentialsModule.adminRouter);
 
 // Manager+: financial, stock, documents, reports, pizza, preparations, analytics
-app.use("/api", requireMinRole("manager"), analyticsRoutes);
-app.use("/api", requireMinRole("manager"), documentsRoutes);
-app.use("/api", requireMinRole("manager"), reportsRoutes);
-app.use("/api", requireMinRole("manager"), dreRoutes);
-app.use("/api", requireMinRole("manager"), stockRoutes);
-app.use("/api", requireMinRole("manager"), supplierInvoiceImportRoutes);
-app.use("/api", requireMinRole("manager"), pizzaRoutes);
-app.use("/api", requireMinRole("manager"), preparationRoutes);
+app.use("/api", analyticsRoutes);
+app.use("/api", documentsRoutes);
+app.use("/api", reportsRoutes);
+app.use("/api", dreRoutes);
+app.use("/api", stockRoutes);
+app.use("/api", supplierInvoiceImportRoutes);
+app.use("/api", pizzaRoutes);
+app.use("/api", preparationRoutes);
 
 // HR routes: GETs allow hr_viewer; write handlers have inline requireMinRole("manager")
 app.use("/api/hr", hrRoutes);
@@ -296,14 +316,14 @@ app.use("/api", hrModule.router);
 
 // CRM: acessível a managers+
 const crmModule = createCrmModule();
-app.use("/api", requireMinRole("manager"), crmModule.router);
-app.use("/api", requireMinRole("manager"), crmRoutes);
+app.use("/api", crmModule.router);
+app.use("/api", crmRoutes);
 
 // Financial base module (hexagonal) — instantiated above, before requireAuth
-app.use("/api", requireMinRole("manager"), financialBaseModule.router);
+app.use("/api", financialBaseModule.router);
 
 // Invoices module (hexagonal) — instantiated above, before requireAuth
-app.use("/api", requireMinRole("manager"), invoicesModule.router);
+app.use("/api", invoicesModule.router);
 
 // Accounting module (hexagonal) — Fase 1 (Documentos agregados, despesas de
 // sócio/plataforma, Controlo de IVA em acompanhamento). Cross-module reads
@@ -314,12 +334,12 @@ const accountingModule = createAccountingModule(
   invoicesModule.listInvoiceLines,
   financialBaseModule.listCostCenterCategories,
 );
-app.use("/api", requireMinRole("manager"), accountingModule.router);
+app.use("/api", accountingModule.router);
 
 // Stock purchase review module (hexagonal) — "Compra por rever". Instanciado
 // acima (antes do requireAuth) para expor recordInvoiceFinalizedForStock a
 // `invoices` e reprocessMissingStockReviews ao cron interno.
-app.use("/api", requireMinRole("manager"), stockPurchaseReviewModule.router);
+app.use("/api", stockPurchaseReviewModule.router);
 
 // Stock count module (hexagonal) — "Contagem Física de Stock 2.0". Sem
 // dependência de invoices/financial-base/stock-purchase-review — só lê
@@ -328,36 +348,36 @@ app.use("/api", requireMinRole("manager"), stockPurchaseReviewModule.router);
 // inline de admin dentro do controller para confirmar/forçar
 // sobreposição/definir valor final manual (secção 64).
 const stockCountModule = createStockCountModule(locationsModule.listLocations);
-app.use("/api", requireMinRole("manager"), stockCountModule.router);
+app.use("/api", stockCountModule.router);
 
 // Stock planning module (hexagonal) — "Planeamento de Stock". Instanciado
 // acima (antes do cron interno) para expor runDailyForecast/
 // detectForecastDeviation; router só montado aqui.
-app.use("/api", requireMinRole("manager"), stockPlanningModule.router);
+app.use("/api", stockPlanningModule.router);
 
 // Payable entries module (hexagonal)
 const payableEntriesModule = createPayableEntriesModule();
-app.use("/api", requireMinRole("manager"), payableEntriesModule.router);
+app.use("/api", payableEntriesModule.router);
 
 // Payable recurrences module (hexagonal)
 const payableRecurrencesModule = createPayableRecurrencesModule();
-app.use("/api", requireMinRole("manager"), payableRecurrencesModule.router);
+app.use("/api", payableRecurrencesModule.router);
 
 // Bank accounts module (hexagonal) — must be before bank-statements
 const bankAccountsModule = createBankAccountsModule();
-app.use("/api", requireMinRole("manager"), bankAccountsModule.router);
+app.use("/api", bankAccountsModule.router);
 
 // Bank statements module (hexagonal) — receives bank account read port for auto-linking
 const bankStatementsModule = createBankStatementsModule(bankAccountsModule.accountRepo, financialBaseModule.listSuppliers);
-app.use("/api", requireMinRole("manager"), bankStatementsModule.router);
+app.use("/api", bankStatementsModule.router);
 
 // Air Menu: rota protegida (módulo já instanciado acima)
-app.use("/api", requireMinRole("manager"), airMenuModule.router);
+app.use("/api", airMenuModule.router);
 
 // Vendus (hexagonal) — router registado aqui; módulo instanciado acima (antes do cash-closings)
 // As routes legadas (/api/analytics/*, /api/documents, /api/reports/monthly-summary)
 // continuam registadas acima durante a migração do frontend.
-app.use("/api", requireMinRole("manager"), vendusModule.router);
+app.use("/api", vendusModule.router);
 
 // Sales Summary module (hexagonal) — requires vendus and air-menu getSummary ports
 const salesSummaryModule = createSalesSummaryModule(
@@ -365,14 +385,14 @@ const salesSummaryModule = createSalesSummaryModule(
   airMenuModule.getSummary,
   { salesSummaryEnterpriseId: ENV.AIRMENU_SALES_SUMMARY_ENTERPRISE_ID },
 );
-app.use("/api", requireMinRole("manager"), salesSummaryModule.router);
+app.use("/api", salesSummaryModule.router);
 
 // Sales Declaration (hexagonal) — Excel para o Mercado Bom Sucesso a partir dos SAF-T enviados
 const salesDeclarationModule = createSalesDeclarationModule();
-app.use("/api", requireMinRole("manager"), salesDeclarationModule.router);
+app.use("/api", salesDeclarationModule.router);
 
 // Cash closing manager routes (authenticated)
-app.use("/api", requireMinRole("manager"), cashClosingsModule.managedRouter);
+app.use("/api", cashClosingsModule.managedRouter);
 
 app.listen(ENV.PORT, () => {
   console.log(`Backend running on http://localhost:${ENV.PORT}`);

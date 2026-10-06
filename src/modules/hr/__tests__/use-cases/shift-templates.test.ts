@@ -129,3 +129,25 @@ describe("Modelos de turno (use cases)", () => {
     expect(stored).toMatchObject({ startTime: "08:00", endTime: "16:00", templateId: template.id });
   });
 });
+
+describe("Grupo do modelo (Modelos de Turno 2.0)", () => {
+  it("por omissão é Outro; aceita um Grupo válido e recusa um inválido", async () => {
+    const { create } = setup();
+    expect((await create.execute({ organizationId: ORG, actor: ACTOR, ...MANHA })).group).toBe("OTHER");
+    expect((await create.execute({ organizationId: ORG, actor: ACTOR, ...MANHA, name: "Fecho 9", group: "CLOSING" })).group).toBe("CLOSING");
+    await expect(create.execute({ organizationId: ORG, actor: ACTOR, ...MANHA, name: "X", group: "REPARTIDO" as never })).rejects.toThrow(InvalidShiftTemplateError);
+  });
+
+  it("Grupo e Tipo são independentes: um repartido pode ser Intermédio", async () => {
+    const { create } = setup();
+    const t = await create.execute({ organizationId: ORG, actor: ACTOR, ...MANHA, name: "Intermédio repartido", group: "INTERMEDIATE", startTime: "11:00", endTime: "15:00", secondStartTime: "19:00", secondEndTime: "23:00" });
+    expect(t).toMatchObject({ group: "INTERMEDIATE", kind: "split" });
+  });
+
+  it("mudar o Grupo não mexe no horário, no id nem no resto", async () => {
+    const { create, update } = setup();
+    const t = await create.execute({ organizationId: ORG, actor: ACTOR, ...MANHA });
+    const u = await update.execute({ organizationId: ORG, actor: ACTOR, id: t.id, group: "OPENING" });
+    expect(u).toMatchObject({ id: t.id, group: "OPENING", startTime: t.startTime, endTime: t.endTime, name: t.name, locationId: t.locationId });
+  });
+});

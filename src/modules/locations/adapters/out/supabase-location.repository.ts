@@ -1,10 +1,11 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
-import { Location } from "../../domain/entities/location.js";
+import { Location, type GeofencePolicy } from "../../domain/entities/location.js";
 import { DuplicateLocationCodeError } from "../../domain/errors.js";
 import type { LocationRepositoryPort } from "../../domain/ports/out/location-repository.port.js";
 
-const COLUMNS = "id, name, code, timezone, is_active, address, postal_code, city, municipality, country, phone, updated_at";
+const COLUMNS =
+  "id, name, code, timezone, is_active, address, postal_code, city, municipality, country, phone, latitude, longitude, geofence_radius_m, geofence_policy, updated_at";
 
 interface Row {
   id: string;
@@ -18,8 +19,15 @@ interface Row {
   municipality: string | null;
   country: string;
   phone: string | null;
+  /** `numeric` — pode chegar como string. */
+  latitude: number | string | null;
+  longitude: number | string | null;
+  geofence_radius_m: number;
+  geofence_policy: GeofencePolicy;
   updated_at: string;
 }
+
+const numOrNull = (v: number | string | null): number | null => (v === null ? null : Number(v));
 
 function toEntity(row: Row): Location {
   return Location.reconstitute({
@@ -34,6 +42,12 @@ function toEntity(row: Row): Location {
     municipality: row.municipality,
     country: row.country,
     phone: row.phone,
+    geofence: {
+      latitude: numOrNull(row.latitude),
+      longitude: numOrNull(row.longitude),
+      radiusM: row.geofence_radius_m,
+      policy: row.geofence_policy,
+    },
     updatedAt: row.updated_at,
   });
 }
@@ -50,6 +64,10 @@ function toRow(location: Location): Omit<Row, "id"> {
     municipality: location.municipality,
     country: location.country,
     phone: location.phone,
+    latitude: location.geofence.latitude,
+    longitude: location.geofence.longitude,
+    geofence_radius_m: location.geofence.radiusM,
+    geofence_policy: location.geofence.policy,
     updated_at: location.updatedAt ?? new Date().toISOString(),
   };
 }
