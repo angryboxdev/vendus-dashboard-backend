@@ -1,6 +1,6 @@
 # Spec — Utilizadores & Perfis de Acesso 2.0
 
-Status: todo
+Status: done (implementado — falta aplicar a migração)
 Origem: `Task_Utilizadores_Perfis_Acesso_2_0.md` + 4 mockups (enviados pelo
 utilizador em 2026-10-06). Revisão e decisões no mesmo dia.
 Branch: `branch-rh` (backend + frontend).

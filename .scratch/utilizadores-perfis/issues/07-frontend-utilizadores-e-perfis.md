@@ -1,4 +1,4 @@
-Status: todo
+Status: done (frontend módulo access)
 Blocked by: 05, 06
 
 # Frontend — Utilizadores e Perfis

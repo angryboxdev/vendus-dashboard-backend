@@ -1,4 +1,4 @@
-Status: in-progress (backend feito: U6 no Dar acesso ao Portal; falta frontend)
+Status: done (Novo utilizador → Colaborador escolhe a ficha; Editar liga a ficha; Dar acesso ao Portal por permissão)
 Blocked by: 05
 
 # Colaborador e Portal

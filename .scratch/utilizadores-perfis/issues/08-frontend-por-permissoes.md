@@ -1,4 +1,4 @@
-Status: todo
+Status: done (frontend módulo access)
 Blocked by: 03, 04
 
 # Frontend por permissões
