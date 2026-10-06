@@ -389,7 +389,7 @@ app.use("/api", salesSummaryModule.router);
 
 // Sales Declaration (hexagonal) — Excel para o Mercado Bom Sucesso a partir dos SAF-T enviados
 const salesDeclarationModule = createSalesDeclarationModule();
-app.use("/api", requireMinRole("manager"), salesDeclarationModule.router);
+app.use("/api", salesDeclarationModule.router);
 
 // Cash closing manager routes (authenticated)
 app.use("/api", cashClosingsModule.managedRouter);

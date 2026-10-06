@@ -18,6 +18,7 @@ describe("Tabela rota → permissão", () => {
     ["GET", "/api/analytics/current", "sales.dashboard:READ"],
     ["GET", "/api/documents/123", "sales.dashboard:READ"],
     ["POST", "/api/sales-summary/refresh", "sales.results:MANAGE"],
+    ["POST", "/api/sales-declaration/export", "sales.dashboard:READ"],
     ["PATCH", "/api/cash-closings/abc", "sales.cash_closings:MANAGE"],
     ["POST", "/api/air-menu/webhook/register", "sales.air_menu:MANAGE"],
     ["GET", "/api/reports/dre/kpis", "dre.statement:READ"],

@@ -52,6 +52,8 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/(analytics|vendus|documents)(\/|$)/, target: p("sales.dashboard") },
   { pattern: /^\/api\/reports\/monthly-summary$/, target: p("sales.dashboard") },
   { pattern: /^\/api\/sales-summary(\/|$)/, target: p("sales.results") },
+  // Declaração de Vendas (Excel do MBS a partir de SAF-T): gera um ficheiro, não grava nada — basta Ver.
+  { pattern: /^\/api\/sales-declaration\/export$/, target: p("sales.dashboard", "READ") },
   { pattern: /^\/api\/cash-closings(\/|$)/, target: p("sales.cash_closings") },
   { pattern: /^\/api\/air-menu(\/|$)/, target: p("sales.air_menu") },
 
