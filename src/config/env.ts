@@ -64,6 +64,15 @@ export const ENV = {
    */
   CRON_SECRET: process.env.CRON_SECRET ?? "",
 
+  /**
+   * Origens CORS extra, separadas por vírgula (ex.: o URL https do túnel
+   * usado para testar o Portal do Colaborador no telemóvel). Vazio por omissão.
+   */
+  CORS_EXTRA_ORIGINS: (process.env.CORS_EXTRA_ORIGINS ?? "")
+    .split(",")
+    .map((o) => o.trim().replace(/\/+$/, ""))
+    .filter((o) => o.length > 0),
+
   /** OpenAI: importação de faturas de fornecedor (extração estruturada). */
   OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
   OPENAI_MODEL_TEXT: process.env.OPENAI_MODEL_TEXT ?? "gpt-4o-mini",

@@ -17,6 +17,7 @@ export function toLocationDto(l: Location): LocationDto {
     municipality: l.municipality,
     country: l.country,
     phone: l.phone,
+    geofence: l.geofence,
   };
 }
 

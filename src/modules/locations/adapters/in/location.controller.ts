@@ -5,9 +5,10 @@ import type {
   CreateLocationPort,
   ListLocationHistoryPort,
   SetLocationActivePort,
+  SetLocationGeofencePort,
   UpdateLocationPort,
 } from "../../domain/ports/in/manage-locations.port.js";
-import type { LocationChanges, LocationDetails } from "../../domain/entities/location.js";
+import type { GeofencePolicy, LocationChanges, LocationDetails } from "../../domain/entities/location.js";
 import { DuplicateLocationCodeError, InvalidLocationError, LocationNotFoundError } from "../../domain/errors.js";
 
 const REQUIRED_STRING_FIELDS = ["name", "country", "timezone"] as const;
@@ -68,6 +69,7 @@ export class LocationController {
     private readonly updateLocation: UpdateLocationPort,
     private readonly setLocationActive: SetLocationActivePort,
     private readonly listLocationHistory: ListLocationHistoryPort,
+    private readonly setLocationGeofence: SetLocationGeofencePort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -150,6 +152,29 @@ export class LocationController {
     });
 
     /** GET /locations/:id/history — histórico de alterações do Local. */
+    /** PATCH /locations/:id/geofence — zona de picagem do Portal do Colaborador (coordenadas, raio, política). */
+    this.router.patch("/locations/:id/geofence", requireMinRole("admin"), async (req, res) => {
+      try {
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const num = (v: unknown) => (typeof v === "number" ? v : v === null || v === undefined || v === "" ? null : Number(v));
+        res.json(
+          await this.setLocationGeofence.execute({
+            organizationId: req.auth!.orgId,
+            actor: req.auth!.email,
+            locationId: req.params["id"] as string,
+            geofence: {
+              latitude: num(body.latitude),
+              longitude: num(body.longitude),
+              radiusM: num(body.radiusM) ?? 100,
+              policy: body.policy as GeofencePolicy,
+            },
+          }),
+        );
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+
     this.router.get("/locations/:id/history", requireMinRole("admin"), async (req, res) => {
       try {
         res.json(

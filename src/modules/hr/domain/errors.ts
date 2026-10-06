@@ -243,3 +243,23 @@ export class PortalAccessError extends Error {
     this.name = "PortalAccessError";
   }
 }
+
+/** Conta autenticada sem ficha de colaborador ligada — o Portal não tem a quem mostrar dados. */
+export class PortalNotLinkedError extends Error {
+  constructor() {
+    super("Esta conta não está ligada a nenhum colaborador");
+    this.name = "PortalNotLinkedError";
+  }
+}
+
+/** Picagem recusada por uma regra (sem turno, cedo demais, fora da zona...). */
+export class PunchRefusedError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly details: Record<string, unknown> = {},
+  ) {
+    super(message);
+    this.name = "PunchRefusedError";
+  }
+}

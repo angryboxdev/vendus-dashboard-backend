@@ -1,4 +1,4 @@
-Status: todo
+Status: in-progress (backend feito)
 Blocked by: 02
 
 # Portal: estrutura, Início e PWA

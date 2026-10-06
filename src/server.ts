@@ -62,7 +62,8 @@ const corsOptions: cors.CorsOptions = {
       !origin ||
       origin === "http://localhost:5173" ||
       origin === "http://localhost:3000" ||
-      /\.vercel\.app$/.test(origin);
+      /\.vercel\.app$/.test(origin) ||
+      ENV.CORS_EXTRA_ORIGINS.includes(origin);
     cb(null, allowed);
   },
 };
@@ -248,6 +249,10 @@ app.use(requireAuth);
 // Portal do Colaborador: o papel `employee` só chega a `/api/me/*` — barreira
 // por omissão, antes de qualquer rota de gestão (inclui as "qualquer role").
 app.use(restrictEmployeeToPortalRoutes);
+// Rotas do Portal (/api/me/*) logo aqui: as montagens seguintes com
+// requireMinRole(...) no próprio mount correm para todo o /api e recusariam
+// o colaborador antes de chegar a elas.
+app.use("/api", hrModule.meRouter);
 
 // Admin-only: user management
 app.use("/api/auth", requireMinRole("admin"), authRoutes);

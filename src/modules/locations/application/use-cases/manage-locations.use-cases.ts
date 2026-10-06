@@ -7,6 +7,8 @@ import type {
   ListLocationHistoryQuery,
   SetLocationActiveCommand,
   SetLocationActivePort,
+  SetLocationGeofenceCommand,
+  SetLocationGeofencePort,
   UpdateLocationCommand,
   UpdateLocationPort,
 } from "../../domain/ports/in/manage-locations.port.js";
@@ -90,6 +92,30 @@ export class SetLocationActiveUseCase implements SetLocationActivePort {
       action: command.active ? "activate" : "deactivate",
       before: { isActive: current.isActive },
       after: { isActive: updated.isActive },
+    });
+    return toLocationDto(updated);
+  }
+}
+
+export class SetLocationGeofenceUseCase implements SetLocationGeofencePort {
+  constructor(
+    private readonly repository: LocationRepositoryPort,
+    private readonly auditLog: LocationAuditLogPort,
+    private readonly now: Clock = systemClock,
+  ) {}
+
+  async execute(command: SetLocationGeofenceCommand): Promise<LocationDto> {
+    const current = await loadLocationOrThrow(this.repository, command.organizationId, command.locationId);
+    const updated = current.setGeofence(command.geofence, this.now());
+    await this.repository.update(command.organizationId, updated);
+    await this.auditLog.record({
+      organizationId: command.organizationId,
+      actor: command.actor,
+      entityType: "location",
+      entityId: current.id,
+      action: "geofence",
+      before: current.geofence,
+      after: updated.geofence,
     });
     return toLocationDto(updated);
   }

@@ -11,7 +11,9 @@
 --    segunda conta).
 -- 3) Geofence no Local: coordenadas, raio e política (off por omissão —
 --    nada muda para quem não configurar).
--- 4) `hr_shift_attendance.registration_source` aceita `employee_portal`.
+-- 4) `hr_shift_attendance.registration_source` aceita `employee_portal`; o
+--    check de ordem entrada<saída passa a só exigir entrada≠saída (saída de
+--    turno noturno depois da meia-noite).
 -- 5) `hr_attendance_punch_events`: evidência de cada toque de Entrada/Saída
 --    (hora do servidor com data, localização só no momento da picagem,
 --    resultado da zona, chave de idempotência única). A linha de
@@ -75,6 +77,15 @@ alter table public.hr_shift_attendance drop constraint if exists hr_shift_attend
 alter table public.hr_shift_attendance
   add constraint hr_shift_attendance_registration_source_check
   check (registration_source in ('dashboard', 'employee_qr', 'import', 'employee_portal'));
+
+-- Turnos noturnos: a saída depois da meia-noite tem hora de parede menor do
+-- que a entrada (ex.: 20:00 → 00:10). O check antigo (início < fim)
+-- impedia gravá-la; a ordem passa a ser garantida pela aplicação, que
+-- conhece `ends_next_day` do turno. Mantém-se só "início ≠ fim".
+alter table public.hr_shift_attendance drop constraint if exists hr_shift_attendance_actual_order;
+alter table public.hr_shift_attendance
+  add constraint hr_shift_attendance_actual_order
+  check (actual_start_time is null or actual_end_time is null or actual_start_time <> actual_end_time);
 
 -- Chave composta para a FK dos eventos (padrão org_id + id).
 create unique index if not exists hr_shift_attendance_org_id_id_uq on public.hr_shift_attendance (org_id, id);

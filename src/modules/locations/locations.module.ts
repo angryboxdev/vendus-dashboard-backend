@@ -7,6 +7,7 @@ import {
   CreateLocationUseCase,
   ListLocationHistoryUseCase,
   SetLocationActiveUseCase,
+  SetLocationGeofenceUseCase,
   UpdateLocationUseCase,
 } from "./application/use-cases/manage-locations.use-cases.js";
 import { LocationController } from "./adapters/in/location.controller.js";
@@ -31,6 +32,7 @@ export function createLocationsModule(): { router: Router; listLocations: ListLo
     new UpdateLocationUseCase(locationRepository, auditLog),
     new SetLocationActiveUseCase(locationRepository, auditLog),
     new ListLocationHistoryUseCase(locationRepository, auditLog),
+    new SetLocationGeofenceUseCase(locationRepository, auditLog),
   );
 
   return { router: controller.router, listLocations };
