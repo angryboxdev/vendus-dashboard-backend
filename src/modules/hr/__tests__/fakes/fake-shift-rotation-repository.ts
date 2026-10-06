@@ -32,4 +32,8 @@ export class FakeShiftRotationRepository implements ShiftRotationRepositoryPort 
     this.store(organizationId).set(rotation.id, rotation);
     return rotation;
   }
+
+  async delete(organizationId: OrganizationId, id: string): Promise<void> {
+    this.store(organizationId).delete(id);
+  }
 }

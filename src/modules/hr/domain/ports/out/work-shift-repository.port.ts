@@ -17,6 +17,8 @@ export interface WorkShiftRepositoryPort {
   create(organizationId: OrganizationId, shift: WorkShift): Promise<WorkShift>;
   update(organizationId: OrganizationId, shift: WorkShift): Promise<WorkShift>;
   delete(organizationId: OrganizationId, id: string): Promise<void>;
+  /** Apaga vários turnos de uma vez (limpeza em massa). Não verifica presenças — quem chama já filtrou. */
+  deleteMany(organizationId: OrganizationId, ids: string[]): Promise<void>;
   /** Turno já tem presença registada (`hr_shift_attendance`)? Bloqueia remoção direta — ver `WorkShiftHasAttendanceError`. */
   hasAttendance(organizationId: OrganizationId, shiftId: string): Promise<boolean>;
   /** Estado de presença já registado por turno (para a bolinha "Pendente"/"Conferido" do calendário) — consulta própria, independente de `ShiftAttendanceReadPort` (RH-01), que serve um propósito diferente (fila de revisão). */

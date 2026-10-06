@@ -3,6 +3,7 @@ import { requireMinRole } from "../../../../middleware/auth.js";
 import {
   EmployeeNotFoundError,
   InvalidWorkShiftError,
+  InvalidClearShiftsScopeError,
   InvalidBaseScheduleTemplateError,
   InvalidShiftRotationError,
   InvalidRecurrenceSpecError,
@@ -27,11 +28,13 @@ import type {
   PreviewShiftRotationPort,
   ApplyShiftRotationPort,
   SetShiftRotationActivePort,
+  DeleteShiftRotationPort,
   GetScheduleAlertsPort,
   PreviewWorkShiftSeriesPort,
   CreateWorkShiftSeriesPort,
   UpdateWorkShiftSeriesScopePort,
   ClearWorkShiftsPort,
+  PreviewClearWorkShiftsPort,
   SeriesEditScope,
   ClearShiftsScope,
   PreviewRepeatCalendarWeekPort,
@@ -46,7 +49,8 @@ function errorResponse(e: unknown): { status: number; body: { error: string } } 
     e instanceof InvalidWorkShiftError ||
     e instanceof InvalidBaseScheduleTemplateError ||
     e instanceof InvalidShiftRotationError ||
-    e instanceof ShiftOverlapError
+    e instanceof ShiftOverlapError ||
+    e instanceof InvalidClearShiftsScopeError
   ) {
     return { status: 400, body: { error: e.message } };
   }
@@ -60,6 +64,30 @@ function errorResponse(e: unknown): { status: number; body: { error: string } } 
     return { status: 409, body: { error: e.message } };
   }
   return { status: 500, body: { error: e instanceof Error ? e.message : "Internal error" } };
+}
+
+/** Valida o âmbito de "Limpar turnos" vindo do body (os âmbitos antigos passam como antes; "range" é lido campo a campo). */
+function readClearScope(raw: unknown): ClearShiftsScope {
+  if (!raw || typeof raw !== "object" || typeof (raw as { kind?: unknown }).kind !== "string") {
+    throw new InvalidClearShiftsScopeError("Âmbito em falta");
+  }
+  const s = raw as Record<string, unknown>;
+  if (s.kind !== "range") return s as unknown as ClearShiftsScope;
+  const str = (v: unknown) => (typeof v === "string" && v.length > 0 ? v : undefined);
+  const employeeIds = s.employeeIds === undefined ? undefined : Array.isArray(s.employeeIds) ? s.employeeIds.filter((id): id is string => typeof id === "string") : [];
+  const locationId = str(s.locationId);
+  const automationId = str(s.automationId);
+  const templateId = str(s.templateId);
+  return {
+    kind: "range",
+    from: s.from as string,
+    to: s.to as string,
+    ...(employeeIds && { employeeIds }),
+    ...(locationId && { locationId }),
+    ...(s.onlyDrafts === true && { onlyDrafts: true }),
+    ...(automationId && { automationId }),
+    ...(templateId && { templateId }),
+  };
 }
 
 export class HrSchedulesController {
@@ -87,6 +115,8 @@ export class HrSchedulesController {
     private readonly clearWorkShifts: ClearWorkShiftsPort,
     private readonly previewRepeatCalendarWeek: PreviewRepeatCalendarWeekPort,
     private readonly repeatCalendarWeek: RepeatCalendarWeekPort,
+    private readonly deleteShiftRotation: DeleteShiftRotationPort,
+    private readonly previewClearWorkShifts: PreviewClearWorkShiftsPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -353,6 +383,21 @@ export class HrSchedulesController {
       }
     });
 
+    /** DELETE /api/hr/schedules/rotations/:id — apaga a rotação; os turnos já criados ficam na escala. */
+    this.router.delete("/hr/schedules/rotations/:id", requireMinRole("manager"), async (req, res) => {
+      try {
+        await this.deleteShiftRotation.execute({
+          organizationId: req.auth!.orgId,
+          actor: req.auth!.email,
+          rotationId: req.params["id"] as string,
+        });
+        res.status(204).send();
+      } catch (e) {
+        const { status, body } = errorResponse(e);
+        res.status(status).json(body);
+      }
+    });
+
     // ── Alertas ───────────────────────────────────────────────────────────
 
     this.router.get("/hr/schedules/alerts", async (req, res) => {
@@ -449,13 +494,27 @@ export class HrSchedulesController {
       },
     );
 
+    this.router.post("/hr/schedules/work-shifts/clear/preview", requireMinRole("manager"), async (req, res) => {
+      try {
+        const body = req.body as Record<string, unknown>;
+        const result = await this.previewClearWorkShifts.execute({
+          organizationId: req.auth!.orgId,
+          scope: readClearScope(body.scope),
+        });
+        res.json(result);
+      } catch (e) {
+        const { status, body } = errorResponse(e);
+        res.status(status).json(body);
+      }
+    });
+
     this.router.post("/hr/schedules/work-shifts/clear", requireMinRole("manager"), async (req, res) => {
       try {
         const body = req.body as Record<string, unknown>;
         const result = await this.clearWorkShifts.execute({
           organizationId: req.auth!.orgId,
           actor: req.auth!.email,
-          scope: body.scope as ClearShiftsScope,
+          scope: readClearScope(body.scope),
         });
         res.json(result);
       } catch (e) {

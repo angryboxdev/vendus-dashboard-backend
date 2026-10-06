@@ -4,6 +4,7 @@ import { runDailyVendusConsumptionJob } from "../services/dailyVendusConsumption
 import type { ProcessDirectDebitsPort } from "../modules/invoices/domain/ports/in/invoice.ports.js";
 import type { ReprocessMissingStockReviewsPort } from "../modules/stock-purchase-review/domain/ports/in/stock-purchase-review.ports.js";
 import type { DetectForecastDeviationPort, RunDailyForecastPort } from "../modules/stock-planning/domain/ports/in/stock-planning.ports.js";
+import type { GenerateAllAutomationsPort } from "../modules/hr/domain/ports/in/shift-automation.ports.js";
 import { UNATTENDED_SCOPE } from "../infra/scoped-db/unattended-scope.js";
 import { fanOut } from "../utils/fan-out.js";
 import type { OrganizationRow } from "../infra/scoped-db/organization-listing.js";
@@ -25,6 +26,7 @@ export function createInternalCronRouter(deps: {
   reprocessMissingStockReviews: ReprocessMissingStockReviewsPort;
   runDailyForecast: RunDailyForecastPort;
   detectForecastDeviation: DetectForecastDeviationPort;
+  generateAllShiftAutomations: GenerateAllAutomationsPort;
   listOrganizations: () => Promise<OrganizationRow[]>;
 }): Router {
   const router = Router();
@@ -156,6 +158,34 @@ export function createInternalCronRouter(deps: {
       }
     }
   );
+
+  /**
+   * POST /internal/cron/hr-shift-automations
+   * Header: Authorization: Bearer <CRON_SECRET>
+   *
+   * RH 2.0 (ticket 03, decisão R5) — gera as automatizações de turnos
+   * ativas de cada organização até ao horizonte de cada uma. Seguro correr
+   * redundantemente: só cobre datas ainda não geradas e nunca duplica;
+   * conflitos vão para "Alertas e ações". Pensado para correr 1×/dia.
+   */
+  router.post("/internal/cron/hr-shift-automations", async (req: Request, res: Response) => {
+    if (!requireCronSecret(req, res)) return;
+    try {
+      const organizations = await deps.listOrganizations();
+      const summary = await fanOut(
+        organizations,
+        async (org) => {
+          const result = await deps.generateAllShiftAutomations.execute({ organizationId: org.organizationId, actor: "sistema (cron)" });
+          return { status: "success" as const, ...result };
+        },
+        { describeItem: (org) => org.organizationId },
+      );
+      res.json(summary);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erro no job";
+      res.status(500).json({ error: message });
+    }
+  });
 
   return router;
 }

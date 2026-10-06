@@ -26,6 +26,7 @@ export function toWorkShiftDTO(
     rotationId: shift.rotationId,
     seriesId: shift.seriesId,
     templateId: shift.templateId,
+    automationId: shift.automationId,
     attendanceStatus,
     createdAt: shift.createdAt,
     updatedAt: shift.updatedAt,

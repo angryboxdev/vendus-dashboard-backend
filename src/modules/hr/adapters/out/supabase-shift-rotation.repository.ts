@@ -118,4 +118,9 @@ export class SupabaseShiftRotationRepository implements ShiftRotationRepositoryP
     if (error) throw new Error(error.message);
     return rowToRotation(data as unknown as Row);
   }
+
+  async delete(organizationId: OrganizationId, id: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("hr_shift_rotations").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+  }
 }

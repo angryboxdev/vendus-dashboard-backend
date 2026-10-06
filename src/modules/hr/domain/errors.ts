@@ -32,6 +32,13 @@ export {
 
 // ── RH-03 — Escalas & Turnos ────────────────────────────────────────────────
 
+export class InvalidClearShiftsScopeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidClearShiftsScopeError";
+  }
+}
+
 export class InvalidWorkShiftError extends Error {
   constructor(message: string) {
     super(message);
@@ -210,5 +217,21 @@ export class InvalidTemplateApplicationError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "InvalidTemplateApplicationError";
+  }
+}
+
+// ── RH 2.0 — Automatizações ─────────────────────────────────────────────────
+
+export class InvalidShiftAutomationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidShiftAutomationError";
+  }
+}
+
+export class ShiftAutomationNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Automatização não encontrada: ${id}`);
+    this.name = "ShiftAutomationNotFoundError";
   }
 }

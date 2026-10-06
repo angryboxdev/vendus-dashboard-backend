@@ -220,6 +220,11 @@ const stockPlanningModule = createStockPlanningModule(
   financialBaseModule.listSupplierDeliverySchedules,
 );
 
+// RH (hexagonal) — construído aqui, antes do cron interno, para expor a
+// geração diária das automatizações de turnos (RH 2.0). As rotas continuam
+// montadas mais abaixo, depois do requireAuth.
+const hrModule = createHrModule();
+
 // Internal cron routes: authenticated via requireCronSecret (Bearer
 // CRON_SECRET), not user sessions — must be mounted before the global
 // requireAuth below, or Supabase JWT auth rejects the request first.
@@ -231,6 +236,7 @@ if (ENV.CRON_SECRET) {
       reprocessMissingStockReviews: stockPurchaseReviewModule.reprocessMissingStockReviews,
       runDailyForecast: stockPlanningModule.runDailyForecast,
       detectForecastDeviation: stockPlanningModule.detectForecastDeviation,
+      generateAllShiftAutomations: hrModule.generateAllAutomations,
       listOrganizations,
     }),
   );
@@ -285,7 +291,6 @@ app.use("/api/hr", hrLeaveRoutes);
 // acima (mesmas tabelas hr_employees/hr_employee_documents); GETs allow
 // hr_viewer, writes têm requireMinRole("manager") inline no controller.
 // RH-01 (Visão Geral) — /api/hr/overview*, só leitura, mesmo módulo.
-const hrModule = createHrModule();
 app.use("/api", hrModule.router);
 
 // CRM: acessível a managers+
