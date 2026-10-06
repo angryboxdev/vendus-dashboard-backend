@@ -52,6 +52,7 @@ import type {
 } from "./modules/stock-purchase-review/domain/ports/in/stock-purchase-review.ports.js";
 import { createStockCountModule } from "./modules/stock-count/stock-count.module.js";
 import { createStockPlanningModule } from "./modules/stock-planning/stock-planning.module.js";
+import { createSalesDeclarationModule } from "./modules/sales-declaration/sales-declaration.module.js";
 
 const app = express();
 
@@ -365,6 +366,10 @@ const salesSummaryModule = createSalesSummaryModule(
   { salesSummaryEnterpriseId: ENV.AIRMENU_SALES_SUMMARY_ENTERPRISE_ID },
 );
 app.use("/api", requireMinRole("manager"), salesSummaryModule.router);
+
+// Sales Declaration (hexagonal) — Excel para o Mercado Bom Sucesso a partir dos SAF-T enviados
+const salesDeclarationModule = createSalesDeclarationModule();
+app.use("/api", requireMinRole("manager"), salesDeclarationModule.router);
 
 // Cash closing manager routes (authenticated)
 app.use("/api", requireMinRole("manager"), cashClosingsModule.managedRouter);
