@@ -25,7 +25,7 @@ export const authAdmin = {
     return client().auth.admin.listUsers({ page, perPage });
   },
 
-  createUser(params: { email: string; password: string; email_confirm: boolean }) {
+  createUser(params: { email: string; password: string; email_confirm: boolean; user_metadata?: Record<string, unknown> }) {
     return client().auth.admin.createUser(params);
   },
 

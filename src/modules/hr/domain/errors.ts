@@ -235,3 +235,11 @@ export class ShiftAutomationNotFoundError extends Error {
     this.name = "ShiftAutomationNotFoundError";
   }
 }
+
+/** Portal do Colaborador — pedido de acesso impossível (sem email, conta já ligada a outro colaborador...). */
+export class PortalAccessError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PortalAccessError";
+  }
+}

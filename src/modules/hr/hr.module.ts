@@ -93,6 +93,9 @@ import { PreviewWorkShiftSeriesUseCase } from "./application/use-cases/preview-w
 import { CreateWorkShiftSeriesUseCase } from "./application/use-cases/create-work-shift-series.use-case.js";
 import { UpdateWorkShiftSeriesScopeUseCase } from "./application/use-cases/update-work-shift-series-scope.use-case.js";
 import { ClearWorkShiftsUseCase } from "./application/use-cases/clear-work-shifts.use-case.js";
+import { SupabasePortalAccountAdapter } from "./adapters/out/supabase-portal-account.adapter.js";
+import { HrPortalAccessController } from "./adapters/in/hr-portal-access.controller.js";
+import { GetPortalAccessUseCase, GrantPortalAccessUseCase, RevokePortalAccessUseCase } from "./application/use-cases/portal-access.use-cases.js";
 import { PreviewClearWorkShiftsUseCase } from "./application/use-cases/preview-clear-work-shifts.use-case.js";
 import { PreviewRepeatCalendarWeekUseCase } from "./application/use-cases/preview-repeat-calendar-week.use-case.js";
 import { RepeatCalendarWeekUseCase } from "./application/use-cases/repeat-calendar-week.use-case.js";
@@ -408,6 +411,14 @@ export function createHrModule(): { router: Router; generateAllAutomations: Gene
 
   const router = Router();
   router.use(controller.router);
+  const portalAccounts = new SupabasePortalAccountAdapter(createScopedQuery);
+  router.use(
+    new HrPortalAccessController(
+      new GetPortalAccessUseCase(employeeRepository, portalAccounts),
+      new GrantPortalAccessUseCase(employeeRepository, portalAccounts, auditLog),
+      new RevokePortalAccessUseCase(employeeRepository, portalAccounts, auditLog),
+    ).router,
+  );
   router.use(shiftTemplatesController.router);
   router.use(shiftAutomationsController.router);
   router.use(positionsController.router);

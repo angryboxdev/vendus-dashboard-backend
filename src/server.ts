@@ -34,7 +34,7 @@ import { UNATTENDED_SCOPE } from "./infra/scoped-db/unattended-scope.js";
 import { createScopedQuery } from "./infra/scoped-db/scoped-query.js";
 import { listOrganizations } from "./infra/scoped-db/organization-listing.js";
 import { resolveClosingEnterpriseId } from "./modules/air-menu/domain/services/resolve-closing-enterprise-id.js";
-import { populateAuth, requireAuth, requireMinRole } from "./middleware/auth.js";
+import { populateAuth, requireAuth, requireMinRole, restrictEmployeeToPortalRoutes } from "./middleware/auth.js";
 import { authRoutes } from "./routes/authRoutes.js";
 import { createLocationsModule } from "./modules/locations/locations.module.js";
 import { createOrganizationModule } from "./modules/organization/organization.module.js";
@@ -244,6 +244,10 @@ if (ENV.CRON_SECRET) {
 
 // All routes below this line require authentication
 app.use(requireAuth);
+
+// Portal do Colaborador: o papel `employee` só chega a `/api/me/*` — barreira
+// por omissão, antes de qualquer rota de gestão (inclui as "qualquer role").
+app.use(restrictEmployeeToPortalRoutes);
 
 // Admin-only: user management
 app.use("/api/auth", requireMinRole("admin"), authRoutes);

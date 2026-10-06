@@ -54,6 +54,8 @@ const documentUpload = multer({
 
 /** `req.auth.orgRole` (AppRole) e `ViewerRole` deste módulo têm exatamente os mesmos valores — só o domínio não pode importar o tipo do middleware (D10). */
 function toViewerRole(role: AppRole): ViewerRole {
+  // `employee` nunca chega aqui (`restrictEmployeeToPortal`); se chegasse, recusa — nunca promove a hr_viewer.
+  if (role === "employee") throw new Error("Sem permissão para esta operação");
   return role;
 }
 

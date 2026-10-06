@@ -16,7 +16,10 @@ export type HrAuditEntityType =
   // RH 2.0 — Modelos de turno (entidade da organização, sem colaborador associado).
   | "shift_template"
   // RH 2.0 — Automatizações (entidade da organização).
-  | "shift_automation";
+  | "shift_automation"
+  // Portal do Colaborador — acesso (conta ligada à ficha) e picagens pelo Portal.
+  | "portal_access"
+  | "attendance_punch";
 
 export interface HrAuditLogEntry {
   organizationId: OrganizationId;
