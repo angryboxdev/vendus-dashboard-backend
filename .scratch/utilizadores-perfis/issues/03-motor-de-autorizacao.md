@@ -1,4 +1,4 @@
-Status: todo
+Status: done (motor + guardas + /api/me/access; aplicação às rotas no ticket 04)
 Blocked by: 02
 
 # Motor de autorização

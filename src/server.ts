@@ -35,6 +35,7 @@ import { createScopedQuery } from "./infra/scoped-db/scoped-query.js";
 import { listOrganizations } from "./infra/scoped-db/organization-listing.js";
 import { resolveClosingEnterpriseId } from "./modules/air-menu/domain/services/resolve-closing-enterprise-id.js";
 import { populateAuth, requireAuth, requireMinRole, restrictEmployeeToPortalRoutes } from "./middleware/auth.js";
+import { createAccessModule } from "./modules/access/access.module.js";
 import { authRoutes } from "./routes/authRoutes.js";
 import { createLocationsModule } from "./modules/locations/locations.module.js";
 import { createOrganizationModule } from "./modules/organization/organization.module.js";
@@ -246,6 +247,11 @@ if (ENV.CRON_SECRET) {
 // All routes below this line require authentication
 app.use(requireAuth);
 
+// Utilizadores & Perfis de Acesso 2.0: acesso efetivo (perfil + exceções +
+// estado) lido da BD por pedido — conta desativada é recusada já aqui.
+const accessModule = createAccessModule();
+app.use(accessModule.guards.loadAccess);
+
 // Portal do Colaborador: o papel `employee` só chega a `/api/me/*` — barreira
 // por omissão, antes de qualquer rota de gestão (inclui as "qualquer role").
 app.use(restrictEmployeeToPortalRoutes);
@@ -253,6 +259,7 @@ app.use(restrictEmployeeToPortalRoutes);
 // requireMinRole(...) no próprio mount correm para todo o /api e recusariam
 // o colaborador antes de chegar a elas.
 app.use("/api", hrModule.meRouter);
+app.use("/api", accessModule.meRouter);
 
 // Admin-only: user management
 app.use("/api/auth", requireMinRole("admin"), authRoutes);
