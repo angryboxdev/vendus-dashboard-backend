@@ -40,7 +40,7 @@ utilizador = escolher perfil e guardar; exceções só quando preciso.
 | U8 | Restrição por Local fora desta fase (decisão 4). |
 | U9 | Auditoria em `organization_audit_logs` (sem tabela nova). Concorrência: `version` em perfis e membership (409 se mudou). Nunca 0 Admins ativos. |
 | U10 | "Último acesso" = `last_sign_in_at` (Supabase); sem tipo de dispositivo (minimização). Sem "pedidos" em Férias (não existem). Sino de notificações não entra. |
-| U11 | Migração: admin→Admin, manager→Manager (com as exceções só-admin de hoje), hr_viewer→Visualizador RH legado, employee→Colaborador; matriz de acessos rota a rota igual antes/depois. Uma migração única, a juntar à do Portal para o Raul. |
+| U11 | Migração: admin→Admin, manager→Manager (perfil operacional, decidido pelo utilizador — Gabrielle passa a RH no ecrã novo), employee→Colaborador; sem Visualizador RH (0 contas). Uma migração única, a juntar à do Portal para o Raul. |
 
 ## Notas de implementação
 
