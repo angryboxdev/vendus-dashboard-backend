@@ -54,6 +54,10 @@ export class FakeWorkShiftRepository implements WorkShiftRepositoryPort {
     this.store(organizationId).delete(id);
   }
 
+  async deleteMany(organizationId: OrganizationId, ids: string[]): Promise<void> {
+    for (const id of ids) this.store(organizationId).delete(id);
+  }
+
   async hasAttendance(_organizationId: OrganizationId, shiftId: string): Promise<boolean> {
     return this.shiftIdsWithAttendance.has(shiftId);
   }

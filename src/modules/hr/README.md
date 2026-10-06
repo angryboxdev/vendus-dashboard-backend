@@ -470,6 +470,17 @@ Este módulo é **aditivo**, não uma substituição imediata:
   só disponível quando pedido explicitamente sem colaborador selecionado;
   grava 1 entrada de auditoria por colaborador afetado (nunca uma entrada
   ambígua "do primeiro turno encontrado").
+  `range` (2026-10-06, apagar em massa — p.ex. 12 semanas criadas por
+  engano): período `from`–`to` (máx. `MAX_CLEAR_RANGE_DAYS` = 366, em
+  `clear-shifts.service`) para um, vários (`employeeIds`) ou todos os
+  colaboradores, com filtros opcionais `locationId`, `onlyDrafts`,
+  `automationId`, `templateId`; 1 entrada de auditoria por colaborador.
+  `PreviewClearWorkShiftsPort` mostra, sem apagar, o que a confirmação
+  apagaria (por colaborador, apagáveis vs. protegidos) — ambos usam
+  `partitionClearTargets`. Presenças verificadas e turnos apagados **em
+  lote** (`findAttendanceStatusesByShiftIds` + `deleteMany`, em lotes de
+  200 ids no adapter); `findInRange` é paginado (o PostgREST corta em
+  1000 linhas).
 - `PreviewRepeatCalendarWeekPort` / `RepeatCalendarWeekPort` ("Repetir
   escala pelo calendário") — copiam os turnos reais de uma semana para as
   semanas seguintes (ver `computeRepeatWeekPartitions` acima). `Create`
@@ -696,7 +707,9 @@ Este módulo é **aditivo**, não uma substituição imediata:
   - `GET /alerts`.
   - **"Novo Turno Padrão Semanal":** `POST /work-shift-series/preview` (sem
     guarda de role — só leitura), `POST /work-shift-series`,
-    `PATCH /work-shifts/:id/series-scope`, `POST /work-shifts/clear`.
+    `PATCH /work-shifts/:id/series-scope`, `POST /work-shifts/clear`,
+    `POST /work-shifts/clear/preview` (manager; âmbito validado em
+    `readClearScope`).
   - **"Repetir escala pelo calendário":**
     `POST /work-shifts/repeat-week/preview` (sem guarda de role — só
     leitura), `POST /work-shifts/repeat-week`.

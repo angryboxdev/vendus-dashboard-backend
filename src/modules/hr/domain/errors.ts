@@ -32,6 +32,13 @@ export {
 
 // ── RH-03 — Escalas & Turnos ────────────────────────────────────────────────
 
+export class InvalidClearShiftsScopeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidClearShiftsScopeError";
+  }
+}
+
 export class InvalidWorkShiftError extends Error {
   constructor(message: string) {
     super(message);

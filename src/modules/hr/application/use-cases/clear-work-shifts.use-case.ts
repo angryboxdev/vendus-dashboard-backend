@@ -4,6 +4,7 @@ import type { WorkShiftRepositoryPort } from "../../domain/ports/out/work-shift-
 import type { HrAuditLogPort } from "../../domain/ports/out/hr-audit-log.port.js";
 import type { ClearWorkShiftsCommand, ClearWorkShiftsPort, ClearWorkShiftsResultDTO } from "../../domain/ports/in/schedule.ports.js";
 import { addDays } from "./schedule-shared.js";
+import { assertValidClearRange, matchesClearRangeFilters } from "../../domain/services/clear-shifts.service.js";
 
 /**
  * "Limpar turnos" (task, secção 12) — âmbito explícito (dia/dias/semana/
@@ -11,6 +12,8 @@ import { addDays } from "./schedule-shared.js";
  * com presença já registada (mesma regra de `DeleteWorkShiftUseCase`) — em
  * vez de abortar a operação toda, salta esse turno e reporta-o em
  * `skipped`, para as restantes datas do pedido serem sempre processadas.
+ * Presenças verificadas e turnos apagados em lote (o âmbito "range" pode
+ * abranger centenas de turnos).
  */
 export class ClearWorkShiftsUseCase implements ClearWorkShiftsPort {
   constructor(
@@ -19,24 +22,34 @@ export class ClearWorkShiftsUseCase implements ClearWorkShiftsPort {
   ) {}
 
   async execute(command: ClearWorkShiftsCommand): Promise<ClearWorkShiftsResultDTO> {
-    const shifts = await this.resolveTargets(command);
+    const { deletable, protectedShifts: shiftsWithAttendance } = await partitionClearTargets(this.workShiftRepository, command);
+    const shifts = [...deletable, ...shiftsWithAttendance];
 
-    let deletedCount = 0;
-    const skipped: ClearWorkShiftsResultDTO["skipped"] = [];
+    await this.workShiftRepository.deleteMany(
+      command.organizationId,
+      deletable.map((s) => s.id),
+    );
+    const deletedCount = deletable.length;
+    const skipped: ClearWorkShiftsResultDTO["skipped"] = shiftsWithAttendance.map((s) => ({ id: s.id, workDate: s.workDate, reason: "has_attendance" }));
     const deletedByEmployee = new Map<string, number>();
+    for (const shift of deletable) deletedByEmployee.set(shift.employeeId, (deletedByEmployee.get(shift.employeeId) ?? 0) + 1);
 
-    for (const shift of shifts) {
-      const hasAttendance = await this.workShiftRepository.hasAttendance(command.organizationId, shift.id);
-      if (hasAttendance) {
-        skipped.push({ id: shift.id, workDate: shift.workDate, reason: "has_attendance" });
-        continue;
+    if (command.scope.kind === "range") {
+      const { from, to } = command.scope;
+      const correlationId = randomUUID();
+      for (const [employeeId, count] of deletedByEmployee) {
+        await this.auditLog.record({
+          organizationId: command.organizationId,
+          actor: command.actor,
+          entityType: "work_shift",
+          entityId: `range:${from}:${to}`,
+          employeeId,
+          action: "deleted",
+          description: `Turnos apagados em massa de ${from} a ${to}: ${count} turno(s)`,
+          correlationId,
+        });
       }
-      await this.workShiftRepository.delete(command.organizationId, shift.id);
-      deletedCount++;
-      deletedByEmployee.set(shift.employeeId, (deletedByEmployee.get(shift.employeeId) ?? 0) + 1);
-    }
-
-    if (command.scope.kind === "week_all") {
+    } else if (command.scope.kind === "week_all") {
       // Vários colaboradores podem estar envolvidos — 1 registo de auditoria por colaborador afetado (mesmo padrão de `ApplyShiftRotationUseCase`), nunca um registo ambíguo "do primeiro turno encontrado".
       for (const [employeeId, count] of deletedByEmployee) {
         await this.auditLog.record({
@@ -66,51 +79,85 @@ export class ClearWorkShiftsUseCase implements ClearWorkShiftsPort {
 
     return { deletedCount, skipped };
   }
+}
 
-  private async resolveTargets(command: ClearWorkShiftsCommand): Promise<WorkShift[]> {
-    const { scope } = command;
-    if (scope.kind === "series") {
-      return this.workShiftRepository.findBySeriesId(command.organizationId, scope.seriesId);
-    }
-    if (scope.kind === "day") {
-      return this.workShiftRepository.findInRange(command.organizationId, {
-        from: scope.workDate,
-        to: scope.workDate,
-        employeeId: scope.employeeId,
-      });
-    }
-    if (scope.kind === "days") {
-      const all = await Promise.all(
-        scope.workDates.map((workDate) =>
-          this.workShiftRepository.findInRange(command.organizationId, { from: workDate, to: workDate, employeeId: scope.employeeId }),
-        ),
-      );
-      return all.flat();
-    }
-    if (scope.kind === "week") {
-      return this.workShiftRepository.findInRange(command.organizationId, {
-        from: scope.weekStartDate,
-        to: addDays(scope.weekStartDate, 6),
-        employeeId: scope.employeeId,
-      });
-    }
-    if (scope.kind === "weeks") {
-      const all = await Promise.all(
-        scope.weekStartDates.map((weekStartDate) =>
-          this.workShiftRepository.findInRange(command.organizationId, {
-            from: weekStartDate,
-            to: addDays(weekStartDate, 6),
-            employeeId: scope.employeeId,
-          }),
-        ),
-      );
-      return all.flat();
-    }
-    // scope.kind === "week_all" — todos os colaboradores, sem filtro de employeeId (nunca implícito: só quando pedido explicitamente sem colaborador selecionado).
-    return this.workShiftRepository.findInRange(command.organizationId, {
-      from: scope.weekStartDate,
-      to: addDays(scope.weekStartDate, 6),
+/**
+ * Turnos abrangidos pelo âmbito, separados em apagáveis e protegidos (com
+ * presença registada). Partilhado com a pré-visualização — o que se mostra
+ * é exatamente o que se apaga.
+ */
+export async function partitionClearTargets(
+  workShiftRepository: WorkShiftRepositoryPort,
+  command: { organizationId: ClearWorkShiftsCommand["organizationId"]; scope: ClearWorkShiftsCommand["scope"] },
+): Promise<{ deletable: WorkShift[]; protectedShifts: WorkShift[] }> {
+  const shifts = await resolveTargets(workShiftRepository, command);
+  const attendance = await workShiftRepository.findAttendanceStatusesByShiftIds(
+    command.organizationId,
+    shifts.map((s) => s.id),
+  );
+  return {
+    deletable: shifts.filter((s) => !attendance.has(s.id)),
+    protectedShifts: shifts.filter((s) => attendance.has(s.id)),
+  };
+}
+
+async function resolveTargets(
+  workShiftRepository: WorkShiftRepositoryPort,
+  command: { organizationId: ClearWorkShiftsCommand["organizationId"]; scope: ClearWorkShiftsCommand["scope"] },
+): Promise<WorkShift[]> {
+  const { scope } = command;
+  if (scope.kind === "range") {
+    assertValidClearRange(scope);
+    const [onlyEmployee] = scope.employeeIds?.length === 1 ? scope.employeeIds : [];
+    const inRange = await workShiftRepository.findInRange(command.organizationId, {
+      from: scope.from,
+      to: scope.to,
+      ...(onlyEmployee && { employeeId: onlyEmployee }),
       ...(scope.locationId && { locationId: scope.locationId }),
     });
+    return inRange.filter((s) => matchesClearRangeFilters(s, scope));
   }
+  if (scope.kind === "series") {
+    return workShiftRepository.findBySeriesId(command.organizationId, scope.seriesId);
+  }
+  if (scope.kind === "day") {
+    return workShiftRepository.findInRange(command.organizationId, {
+      from: scope.workDate,
+      to: scope.workDate,
+      employeeId: scope.employeeId,
+    });
+  }
+  if (scope.kind === "days") {
+    const all = await Promise.all(
+      scope.workDates.map((workDate) =>
+        workShiftRepository.findInRange(command.organizationId, { from: workDate, to: workDate, employeeId: scope.employeeId }),
+      ),
+    );
+    return all.flat();
+  }
+  if (scope.kind === "week") {
+    return workShiftRepository.findInRange(command.organizationId, {
+      from: scope.weekStartDate,
+      to: addDays(scope.weekStartDate, 6),
+      employeeId: scope.employeeId,
+    });
+  }
+  if (scope.kind === "weeks") {
+    const all = await Promise.all(
+      scope.weekStartDates.map((weekStartDate) =>
+        workShiftRepository.findInRange(command.organizationId, {
+          from: weekStartDate,
+          to: addDays(weekStartDate, 6),
+          employeeId: scope.employeeId,
+        }),
+      ),
+    );
+    return all.flat();
+  }
+  // scope.kind === "week_all" — todos os colaboradores, sem filtro de employeeId (nunca implícito: só quando pedido explicitamente sem colaborador selecionado).
+  return workShiftRepository.findInRange(command.organizationId, {
+    from: scope.weekStartDate,
+    to: addDays(scope.weekStartDate, 6),
+    ...(scope.locationId && { locationId: scope.locationId }),
+  });
 }

@@ -404,7 +404,26 @@ export type ClearShiftsScope =
   | { kind: "weeks"; employeeId: string; weekStartDates: string[] }
   | { kind: "series"; seriesId: string }
   /** Limpa a semana toda para TODOS os colaboradores (task "Repetir escala pelo calendário", "Limpar semana") — nunca implícito, só quando pedido explicitamente sem filtro de colaborador. */
-  | { kind: "week_all"; weekStartDate: string; locationId?: string };
+  | { kind: "week_all"; weekStartDate: string; locationId?: string }
+  /**
+   * Apagar em massa por período (pedido do utilizador, 2026-10-06 — p.ex.
+   * 12 semanas criadas por engano). Um, vários ou todos os colaboradores
+   * (`employeeIds` omitido = todos), no máximo `MAX_CLEAR_RANGE_DAYS` dias.
+   * Filtros opcionais para não apagar mais do que o pretendido.
+   */
+  | {
+      kind: "range";
+      from: string;
+      to: string;
+      employeeIds?: string[];
+      locationId?: string;
+      /** Só rascunhos — os turnos já publicados ficam. */
+      onlyDrafts?: boolean;
+      /** Só turnos gerados por esta automatização. */
+      automationId?: string;
+      /** Só turnos criados a partir deste modelo. */
+      templateId?: string;
+    };
 
 export interface ClearWorkShiftsCommand {
   organizationId: OrganizationId;
@@ -419,6 +438,24 @@ export interface ClearWorkShiftsResultDTO {
 
 export interface ClearWorkShiftsPort {
   execute(command: ClearWorkShiftsCommand): Promise<ClearWorkShiftsResultDTO>;
+}
+
+/** O que "Limpar turnos" vai apagar, sem apagar nada — por colaborador. */
+export interface ClearWorkShiftsPreviewDTO {
+  /** Turnos que serão apagados. */
+  deletableCount: number;
+  /** Turnos com presença registada — nunca são apagados. */
+  protectedCount: number;
+  byEmployee: Array<{ employeeId: string; deletableCount: number; protectedCount: number; firstDate: string; lastDate: string }>;
+}
+
+export interface PreviewClearWorkShiftsCommand {
+  organizationId: OrganizationId;
+  scope: ClearShiftsScope;
+}
+
+export interface PreviewClearWorkShiftsPort {
+  execute(command: PreviewClearWorkShiftsCommand): Promise<ClearWorkShiftsPreviewDTO>;
 }
 
 // ── "Repetir escala pelo calendário" ─────────────────────────────────────────

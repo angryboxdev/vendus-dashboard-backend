@@ -93,6 +93,7 @@ import { PreviewWorkShiftSeriesUseCase } from "./application/use-cases/preview-w
 import { CreateWorkShiftSeriesUseCase } from "./application/use-cases/create-work-shift-series.use-case.js";
 import { UpdateWorkShiftSeriesScopeUseCase } from "./application/use-cases/update-work-shift-series-scope.use-case.js";
 import { ClearWorkShiftsUseCase } from "./application/use-cases/clear-work-shifts.use-case.js";
+import { PreviewClearWorkShiftsUseCase } from "./application/use-cases/preview-clear-work-shifts.use-case.js";
 import { PreviewRepeatCalendarWeekUseCase } from "./application/use-cases/preview-repeat-calendar-week.use-case.js";
 import { RepeatCalendarWeekUseCase } from "./application/use-cases/repeat-calendar-week.use-case.js";
 import { ListAttendanceIssuesUseCase } from "./application/use-cases/list-attendance-issues.use-case.js";
@@ -343,6 +344,7 @@ export function createHrModule(): { router: Router; generateAllAutomations: Gene
     previewRepeatCalendarWeek,
     repeatCalendarWeek,
     new DeleteShiftRotationUseCase(shiftRotationRepository, auditLog),
+    new PreviewClearWorkShiftsUseCase(workShiftRepository),
   );
   const attendanceController = new HrAttendanceController(
     listAttendanceIssues,
