@@ -1,4 +1,4 @@
-Status: todo
+Status: in-progress (catálogo + migração feitos)
 Blocked by: 01
 
 # Modelo de dados e migração

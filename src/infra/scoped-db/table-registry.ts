@@ -64,6 +64,8 @@ export const TABLE_REGISTRY = {
   // Módulo organization (Base Organizacional — Empresa).
   organization_audit_logs: { organizationColumn: "org_id", locationBearing: false },
   org_members: { organizationColumn: "org_id", locationBearing: false },
+  // Utilizadores & Perfis de Acesso 2.0: perfis de acesso por organização.
+  access_profiles: { organizationColumn: "org_id", locationBearing: false },
 
   // Módulo Contabilidade — "Documento" (qualquer documento contabilístico/
   // fiscal sem fluxo bancário normal da empresa: fatura paga por sócio/
