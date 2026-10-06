@@ -1,4 +1,4 @@
-Status: todo
+Status: in-progress (backend feito: U6 no Dar acesso ao Portal; falta frontend)
 Blocked by: 05
 
 # Colaborador e Portal

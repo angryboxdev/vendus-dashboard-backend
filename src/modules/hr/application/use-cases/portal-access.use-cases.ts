@@ -74,6 +74,9 @@ export class GrantPortalAccessUseCase implements GrantPortalAccessPort {
     let account: OrgAccount;
     let temporaryPassword: string | null = null;
     if (existing) {
+      if (existing.role !== "employee" && !command.actorIsAdmin) {
+        throw new PortalAccessError("Este email pertence a uma conta de gestão — só um Admin a pode ligar à ficha (em Utilizadores → Editar)");
+      }
       const otherEmployee = await this.accounts.findLinkedEmployeeId(organizationId, existing.userId);
       if (otherEmployee && otherEmployee !== employeeId) {
         throw new PortalAccessError("Esta conta já está ligada a outro colaborador");
@@ -128,6 +131,9 @@ export class RevokePortalAccessUseCase implements RevokePortalAccessPort {
     if (!employee) throw new EmployeeNotFoundError(employeeId);
 
     const account = await linkedAccount(this.accounts, organizationId, employeeId);
+    if (account && account.role !== "employee" && !command.actorIsAdmin) {
+      throw new PortalAccessError("Esta ficha está ligada a uma conta de gestão — só um Admin a pode desligar (em Utilizadores → Editar)");
+    }
     await this.accounts.unlink(organizationId, employeeId);
     if (!account) return;
     if (account.role === "employee") await this.accounts.deleteEmployeeAccount(organizationId, account.userId);

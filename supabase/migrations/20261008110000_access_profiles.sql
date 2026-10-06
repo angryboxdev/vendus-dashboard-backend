@@ -15,6 +15,8 @@
 --    aos membros existentes pelo papel atual: admin→Admin, manager→Manager,
 --    hr_viewer→RH, employee→Colaborador. Sem exceções individuais.
 --
+-- 4) `organization_audit_logs` passa a aceitar `user` e `access_profile`.
+--
 -- Aditivo e reexecutável.
 
 create table if not exists public.access_profiles (
@@ -86,3 +88,23 @@ where p.org_id = m.org_id
     when 'hr_viewer' then 'rh'
     when 'employee' then 'colaborador'
   end;
+
+-- Histórico (task §18): reutiliza `organization_audit_logs` para utilizadores
+-- e perfis de acesso — sem tabela nova. Alarga o check de `entity_type`
+-- (criado inline, por isso apaga-se qualquer check que o restrinja).
+do $$
+declare
+  c record;
+begin
+  for c in
+    select conname from pg_constraint
+    where conrelid = 'public.organization_audit_logs'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) ilike '%entity_type%'
+  loop
+    execute format('alter table public.organization_audit_logs drop constraint %I', c.conname);
+  end loop;
+end $$;
+alter table public.organization_audit_logs
+  add constraint organization_audit_logs_entity_type_check
+  check (entity_type in ('organization', 'user', 'access_profile'));

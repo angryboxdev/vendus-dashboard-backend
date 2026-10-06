@@ -17,6 +17,8 @@ export interface PortalAccessCommand {
   organizationId: OrganizationId;
   actor: string;
   employeeId: string;
+  /** Utilizadores & Perfis 2.0 (U6): só o Admin liga/desliga contas de GESTÃO a fichas; quem gere Colaboradores só trata contas Colaborador. */
+  actorIsAdmin: boolean;
 }
 
 export interface GetPortalAccessPort {

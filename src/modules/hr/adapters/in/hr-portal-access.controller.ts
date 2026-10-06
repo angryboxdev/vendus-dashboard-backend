@@ -1,5 +1,4 @@
 import { Router, type Response } from "express";
-import { requireMinRole } from "../../../../middleware/auth.js";
 import { EmployeeNotFoundError, PortalAccessError } from "../../domain/errors.js";
 import type { GetPortalAccessPort, GrantPortalAccessPort, RevokePortalAccessPort } from "../../domain/ports/in/portal-access.ports.js";
 
@@ -25,7 +24,7 @@ export class HrPortalAccessController {
     private readonly revokePortalAccess: RevokePortalAccessPort,
   ) {
     this.router = Router();
-    this.router.get("/hr/people/:id/portal-access", requireMinRole("manager"), async (req, res) => {
+    this.router.get("/hr/people/:id/portal-access", async (req, res) => {
       try {
         res.json(await this.getPortalAccess.execute({ organizationId: req.auth!.orgId, employeeId: req.params.id as string }));
       } catch (e) {
@@ -33,12 +32,13 @@ export class HrPortalAccessController {
       }
     });
 
-    this.router.post("/hr/people/:id/portal-access", requireMinRole("manager"), async (req, res) => {
+    this.router.post("/hr/people/:id/portal-access", async (req, res) => {
       try {
         const result = await this.grantPortalAccess.execute({
           organizationId: req.auth!.orgId,
           actor: req.auth!.email,
           employeeId: req.params.id as string,
+          actorIsAdmin: req.access?.isAdmin === true,
         });
         res.json(result);
       } catch (e) {
@@ -46,9 +46,9 @@ export class HrPortalAccessController {
       }
     });
 
-    this.router.delete("/hr/people/:id/portal-access", requireMinRole("manager"), async (req, res) => {
+    this.router.delete("/hr/people/:id/portal-access", async (req, res) => {
       try {
-        await this.revokePortalAccess.execute({ organizationId: req.auth!.orgId, actor: req.auth!.email, employeeId: req.params.id as string });
+        await this.revokePortalAccess.execute({ organizationId: req.auth!.orgId, actor: req.auth!.email, employeeId: req.params.id as string, actorIsAdmin: req.access?.isAdmin === true });
         res.json({ revoked: true });
       } catch (e) {
         handleError(e, res);

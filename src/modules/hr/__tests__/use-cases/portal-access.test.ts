@@ -31,7 +31,7 @@ function setup(email: string | null = "carla.demo@example.com") {
   };
 }
 
-const cmd = (employeeId: string) => ({ organizationId: ORG, actor: "gestor@example.com", employeeId });
+const cmd = (employeeId: string, actorIsAdmin = true) => ({ organizationId: ORG, actor: "gestor@example.com", employeeId, actorIsAdmin });
 
 describe("Acesso ao Portal do Colaborador", () => {
   it("sem conta: cria conta 'employee' com palavra-passe temporária, liga à ficha e regista no histórico", async () => {
@@ -110,5 +110,19 @@ describe("Acesso ao Portal do Colaborador", () => {
 
   it("palavra-passe temporária sem caracteres ambíguos", () => {
     for (let i = 0; i < 50; i++) expect(generateTemporaryPassword()).not.toMatch(/[01OIl]/);
+  });
+});
+
+describe("Acesso ao Portal — quem pode (Utilizadores 2.0, U6)", () => {
+  it("quem gere Colaboradores (não Admin) cria conta Colaborador, mas não liga nem desliga uma conta de gestão", async () => {
+    const created = setup();
+    const r = await created.grant.execute(cmd(created.employee.id, false));
+    expect(r.accountKind).toBe("employee");
+
+    const staff = setup();
+    staff.accounts.seedAccount({ userId: "user-gestor", email: "carla.demo@example.com", role: "manager" });
+    await expect(staff.grant.execute(cmd(staff.employee.id, false))).rejects.toThrow(/só um Admin/);
+    await staff.grant.execute(cmd(staff.employee.id, true));
+    await expect(staff.revoke.execute(cmd(staff.employee.id, false))).rejects.toThrow(/só um Admin/);
   });
 });

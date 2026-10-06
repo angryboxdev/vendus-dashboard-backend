@@ -1,4 +1,4 @@
-Status: todo
+Status: done (backend no módulo access)
 Blocked by: 03
 
 # Perfis de acesso — backend

@@ -42,6 +42,12 @@ utilizador = escolher perfil e guardar; exceções só quando preciso.
 | U10 | "Último acesso" = `last_sign_in_at` (Supabase); sem tipo de dispositivo (minimização). Sem "pedidos" em Férias (não existem). Sino de notificações não entra. |
 | U11 | Migração: admin→Admin, manager→Manager (com as exceções só-admin de hoje), hr_viewer→Visualizador RH legado, employee→Colaborador; matriz de acessos rota a rota igual antes/depois. Uma migração única, a juntar à do Portal para o Raul. |
 
+## Notas de implementação
+
+- Utilizadores e Perfis vivem no módulo `access` (não num módulo `users` à parte): é a mesma fronteira de dados (perfis, memberships, exceções).
+- "Dar acesso ao Portal" na ficha (hr): quem tem RH → Colaboradores: Gerir cria/retira contas Colaborador; ligar/desligar uma conta de gestão a uma ficha é só Admin (U6). O Gabriel liga-se pelo Editar utilizador.
+- As rotas legadas `/api/auth/users` mantêm-se (só Admin) até a página nova substituir a antiga.
+
 ## Fora de âmbito
 
 Permissões por Cargo, temporárias, por horário, por IP, por campo, aprovação

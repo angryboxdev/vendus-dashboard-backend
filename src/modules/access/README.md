@@ -22,10 +22,12 @@ Decide, em cada pedido, se o utilizador pode consultar (READ) ou gerir
 
 ## Ports
 ### Input
+- `AccessAdminPort` (`AccessAdminUseCases`, tickets 05–06) — Utilizadores (listar, ver, criar com perfil + palavra-passe temporária, editar perfil/exceções/ficha ligada, desativar/reativar, repor palavra-passe) e Perfis (listar com nº de utilizadores, criar de base/duplicar, editar, desativar). Regras: nunca 0 Admins ativos; Admin e Colaborador protegidos; `version` (409); Colaborador exige ficha; 1 conta por ficha; `role` antigo sincronizado (admin→admin, colaborador→employee, restantes→manager); invalida a cache; histórico em `organization_audit_logs` (`user`, `access_profile`).
 - `ResolveAccessPort` (`ResolveAccessUseCase`) — acesso efetivo lido da BD
   (perfil, exceções, estado), com cache curta (15 s) e `invalidate` chamado
   pelas escritas.
 ### Output
+- `AccessAdminRepositoryPort`, `EmployeeLinkPort` (`hr_employees.user_id`), `AccountDirectoryPort` (Supabase Auth), `AccessAuditPort`.
 - `AccessRepositoryPort` — membership (`org_members`: `profile_id`,
   `permission_overrides`, `status`, `version`, `role` antigo) e perfis
   (`access_profiles`).
@@ -35,10 +37,11 @@ Decide, em cada pedido, se o utilizador pode consultar (READ) ou gerir
 - `access-guards.ts` — `loadAccess` (global após `requireAuth`; conta
   desativada → 403 `USER_DISABLED`), `routeGuard` (global; aplica a tabela),
   `requirePermission`, `requireAdmin`.
+- `access-admin.controller.ts` — `/api/users*`, `/api/users/employee-options`, `/api/access-profiles*` (só Admin pela tabela central).
 - `access-me.controller.ts` — `GET /api/me/access` (acesso efetivo + catálogo
   para o frontend adaptar menus/botões).
 ### Output
-- `SupabaseAccessRepository` — scoped query.
+- `SupabaseAccessRepository`, `SupabaseAccessAdminRepository`, `SupabaseEmployeeLinkAdapter`, `SupabaseAccessAudit` — scoped query; `SupabaseAccountDirectory` — `authAdmin`.
 
 ## Design decisions (ADR summary)
 - **Fonte da verdade = BD por pedido**, não o token: revogação/desativação

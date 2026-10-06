@@ -37,6 +37,11 @@ export const authAdmin = {
     return client().auth.admin.updateUserById(userId, { password });
   },
 
+  /** Palavra-passe temporária + aviso de mudança obrigatória no próximo login (Utilizadores 2.0). */
+  setTemporaryPassword(userId: string, password: string) {
+    return client().auth.admin.updateUserById(userId, { password, user_metadata: { must_change_password: true } });
+  },
+
   deleteUser(userId: string) {
     return client().auth.admin.deleteUser(userId);
   },

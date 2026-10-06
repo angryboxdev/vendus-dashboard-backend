@@ -263,6 +263,7 @@ app.use(accessModule.guards.routeGuard);
 // o colaborador antes de chegar a elas.
 app.use("/api", hrModule.meRouter);
 app.use("/api", accessModule.meRouter);
+app.use("/api", accessModule.adminRouter);
 
 // Admin-only: user management
 app.use("/api/auth", accessModule.guards.requireAdmin, authRoutes);
