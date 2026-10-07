@@ -25,15 +25,6 @@ export interface MonthlyAttendanceSummaryRowDTO {
   absenceDaysCount: number;
   /** `actualMinutes - planeado ATÉ HOJE` (nunca o total do mês — task, secção 12). */
   balanceMinutes: number;
-  /**
-   * Jornadas trabalhadas (pelas horas REAIS, agrupadas pelo dia em que o turno
-   * começa — a limpeza depois da meia-noite não conta como outro dia).
-   */
-  workedDaysCount: number;
-  /** Soma das equivalências por jornada: 1 / 1,5 / 2 (limites em "Configurar regras"). */
-  shiftEquivalents: number;
-  oneAndHalfDaysCount: number;
-  doubleDaysCount: number;
   status: AttendanceEmployeeStatusDTO;
 }
 

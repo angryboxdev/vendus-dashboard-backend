@@ -9,8 +9,6 @@ import type { MonthlyClosureRepositoryPort } from "../../domain/ports/out/monthl
 import { attributeActualToPeriods, sumActualMinutes, sumPlannedMinutes } from "../../domain/services/attendance-conference.service.js";
 import { hasOverlappingOpenAttendance } from "../../domain/services/overview-shift-state.service.js";
 import { classifyScheduledShift } from "../../domain/services/attendance-occurrence.service.js";
-import { resolveEffectiveRules } from "../../domain/services/attendance-tolerance.service.js";
-import { summarizeWorkdays } from "../../domain/services/workday.service.js";
 import { monthRange } from "./list-attendance-issues.use-case.js";
 import type {
   AttendanceEmployeeStatusDTO,
@@ -22,11 +20,6 @@ import type {
 
 /** Kinds "graves" — task não define fórmula para o Estado por colaborador (secção 17, só nomeia os 3 estados); decisão própria, documentada no README. */
 const SEVERE_PENDING_KINDS = new Set(["absence", "conflict", "no_exit"]);
-
-function workdayColumns(entries: Accumulator["workedEntries"], rulesFor: Parameters<typeof summarizeWorkdays>[1]) {
-  const t = summarizeWorkdays(entries, rulesFor);
-  return { workedDaysCount: t.days, shiftEquivalents: t.shiftEquivalents, oneAndHalfDaysCount: t.oneAndHalfDays, doubleDaysCount: t.doubleDays };
-}
 
 /** `pendingCount === 0` → pronto para fecho; senão, requer atenção se houver algo grave pendente ou muitos dias em atraso; senão só pendências. */
 export function deriveEmployeeStatus(pendingCount: number, lateDaysCount: number, hasSeverePending: boolean): AttendanceEmployeeStatusDTO {
@@ -65,8 +58,6 @@ interface Accumulator {
   lateMinutesTotal: number;
   absenceDays: Set<string>;
   hasSeverePending: boolean;
-  /** Minutos reais por turno, para agrupar por jornada. */
-  workedEntries: Array<{ workDate: string; minutes: number }>;
 }
 
 /**
@@ -141,7 +132,6 @@ export class GetMonthlyAttendanceSummaryUseCase implements GetMonthlyAttendanceS
           lateMinutesTotal: 0,
           absenceDays: new Set(),
           hasSeverePending: false,
-          workedEntries: [],
         };
         byEmployee.set(employeeId, acc);
       }
@@ -156,9 +146,7 @@ export class GetMonthlyAttendanceSummaryUseCase implements GetMonthlyAttendanceS
       acc.plannedShiftsCount += 1;
       acc.plannedMinutes += shiftPlannedMinutes;
       if (shift.workDate <= today) acc.plannedMinutesToDate += shiftPlannedMinutes;
-      const shiftActualMinutes = sumActualMinutes(periods, shift.endsNextDay);
-      acc.actualMinutes += shiftActualMinutes;
-      if (shiftActualMinutes > 0) acc.workedEntries.push({ workDate: shift.workDate, minutes: shiftActualMinutes });
+      acc.actualMinutes += sumActualMinutes(periods, shift.endsNextDay);
       if (shift.actualStartTime && shift.actualEndTime) acc.actualShiftsCount += 1;
 
       const key = `${shift.employeeId}:${shift.workDate}`;
@@ -186,10 +174,8 @@ export class GetMonthlyAttendanceSummaryUseCase implements GetMonthlyAttendanceS
       }
     }
 
-    const rulesFor = (workDate: string) => resolveEffectiveRules(ruleVersions, workDate);
     const rows: MonthlyAttendanceSummaryRowDTO[] = [...byEmployee.values()]
       .map((acc) => ({
-        ...workdayColumns(acc.workedEntries, rulesFor),
         employeeId: acc.employeeId,
         employeeName: employeeById.get(acc.employeeId)?.fullName ?? acc.employeeId,
         positionId: employeeById.get(acc.employeeId)?.positionId ?? null,
