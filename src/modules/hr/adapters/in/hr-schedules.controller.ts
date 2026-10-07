@@ -12,6 +12,7 @@ import {
   WorkShiftHasAttendanceError,
   ShiftOverlapError,
   ShiftRotationNotFoundError,
+  UndoNotAvailableError,
 } from "../../domain/errors.js";
 import type {
   ListWorkShiftsPort,
@@ -19,6 +20,7 @@ import type {
   UpdateWorkShiftPort,
   DuplicateWorkShiftPort,
   DeleteWorkShiftPort,
+  UndoDeleteWorkShiftsPort,
   PublishWorkShiftsPort,
   GetBaseSchedulePort,
   UpsertBaseScheduleCellPort,
@@ -59,6 +61,9 @@ function errorResponse(e: unknown): { status: number; body: { error: string } } 
   }
   if (e instanceof EmployeeNotFoundError || e instanceof WorkShiftNotFoundError || e instanceof ShiftRotationNotFoundError) {
     return { status: 404, body: { error: e.message } };
+  }
+  if (e instanceof UndoNotAvailableError) {
+    return { status: 410, body: { error: e.message } };
   }
   if (e instanceof WorkShiftHasAttendanceError || e instanceof WorkShiftNotInSeriesError) {
     return { status: 409, body: { error: e.message } };
@@ -117,6 +122,7 @@ export class HrSchedulesController {
     private readonly repeatCalendarWeek: RepeatCalendarWeekPort,
     private readonly deleteShiftRotation: DeleteShiftRotationPort,
     private readonly previewClearWorkShifts: PreviewClearWorkShiftsPort,
+    private readonly undoDeleteWorkShifts: UndoDeleteWorkShiftsPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -209,12 +215,13 @@ export class HrSchedulesController {
 
     this.router.delete("/hr/schedules/work-shifts/:id", requireMinRole("manager"), async (req, res) => {
       try {
-        await this.deleteWorkShift.execute({
-          organizationId: req.auth!.orgId,
-          actor: req.auth!.email,
-          id: req.params["id"] as string,
-        });
-        res.status(204).send();
+        res.json(
+          await this.deleteWorkShift.execute({
+            organizationId: req.auth!.orgId,
+            actor: req.auth!.email,
+            id: req.params["id"] as string,
+          }),
+        );
       } catch (e) {
         const { status, body } = errorResponse(e);
         res.status(status).json(body);
@@ -502,6 +509,21 @@ export class HrSchedulesController {
           scope: readClearScope(body.scope),
         });
         res.json(result);
+      } catch (e) {
+        const { status, body } = errorResponse(e);
+        res.status(status).json(body);
+      }
+    });
+
+    // "Desfazer" logo a seguir a apagar/limpar — repõe a partir da auditoria da própria operação.
+    this.router.post("/hr/schedules/work-shifts/undo", requireMinRole("manager"), async (req, res) => {
+      try {
+        const token = (req.body as Record<string, unknown> | undefined)?.undoToken;
+        if (typeof token !== "string" || token.length === 0) {
+          res.status(400).json({ error: "undoToken em falta" });
+          return;
+        }
+        res.json(await this.undoDeleteWorkShifts.execute({ organizationId: req.auth!.orgId, actor: req.auth!.email, undoToken: token }));
       } catch (e) {
         const { status, body } = errorResponse(e);
         res.status(status).json(body);

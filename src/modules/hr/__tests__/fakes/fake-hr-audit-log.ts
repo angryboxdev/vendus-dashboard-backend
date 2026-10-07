@@ -3,9 +3,31 @@ import type { HrAuditLogEntry, HrAuditLogPort, HrAuditLogRecordDTO } from "../..
 
 export class FakeHrAuditLog implements HrAuditLogPort {
   readonly entries: HrAuditLogEntry[] = [];
+  /** Hora de gravação de cada entrada (alinhado com `entries`) — os testes podem recuar no tempo. */
+  readonly recordedAt: string[] = [];
+  now: () => Date = () => new Date();
 
   async record(entry: HrAuditLogEntry): Promise<void> {
     this.entries.push(entry);
+    this.recordedAt.push(this.now().toISOString());
+  }
+
+  async findByCorrelationId(_organizationId: OrganizationId, correlationId: string): Promise<HrAuditLogRecordDTO[]> {
+    return this.entries
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => e.correlationId === correlationId)
+      .map(({ e, i }) => ({
+        id: `audit-${i}`,
+        createdAt: this.recordedAt[i]!,
+        entityType: e.entityType,
+        entityId: e.entityId,
+        action: e.action,
+        actor: e.actor,
+        description: e.description,
+        before: e.before,
+        after: e.after,
+        correlationId: e.correlationId,
+      }));
   }
 
   async findByEmployeeId(

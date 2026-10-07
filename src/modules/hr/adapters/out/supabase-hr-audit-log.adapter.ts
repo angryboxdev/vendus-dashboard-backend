@@ -83,4 +83,14 @@ export class SupabaseHrAuditLogAdapter implements HrAuditLogPort {
     if (error) throw new Error(error.message);
     return { items: ((data ?? []) as unknown as Row[]).map(rowToDto), total: count ?? 0 };
   }
+
+  async findByCorrelationId(organizationId: OrganizationId, correlationId: string): Promise<HrAuditLogRecordDTO[]> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("hr_audit_logs")
+      .select(SELECT)
+      .eq("correlation_id", correlationId)
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as unknown as Row[]).map(rowToDto);
+  }
 }

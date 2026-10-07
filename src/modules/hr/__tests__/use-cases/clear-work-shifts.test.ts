@@ -150,6 +150,6 @@ describe("ClearWorkShiftsUseCase", () => {
   it("scope sem turnos correspondentes: deletedCount=0, sem erro", async () => {
     const { useCase } = setup();
     const result = await useCase.execute({ organizationId: ORG, actor: "m", scope: { kind: "day", employeeId: EMPLOYEE_ID, workDate: "2026-09-28" } });
-    expect(result).toEqual({ deletedCount: 0, skipped: [] });
+    expect(result).toEqual({ deletedCount: 0, skipped: [], undoToken: null });
   });
 });

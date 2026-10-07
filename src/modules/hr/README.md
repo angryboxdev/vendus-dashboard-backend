@@ -796,6 +796,32 @@ Este módulo é **aditivo**, não uma substituição imediata:
   histórico como `refused_in/out`) e aceita `unverified` sinalizado. Com
   `off` a localização não é guardada.
 - O quiosque legado não foi alterado.
+- **Self-service — consulta** (tickets 07–09, `portal-self-service.use-cases`):
+  `GET /me/shifts?from&to` (só publicados do próprio, máx. 62 dias),
+  `GET /me/shifts/:id/coworkers` (mesmo Local, horário sobreposto incl.
+  noturnos vizinhos; devolve **só** nome curto + cargo + horário),
+  `GET /me/documents` (versões atuais do próprio, sem removidos/rejeitados;
+  recibo = categoria com período), `GET /me/documents/:id/download-url`
+  (mecanismo assinado existente; documento de outro → 404),
+  `GET /me/leave?year` (ausências do próprio, só leitura — **sem saldo de
+  férias nem feriados**, decisão de 2026-10-07). Turno/documento que não é do
+  próprio responde 404 (`PortalResourceNotFoundError`), nunca 403, para não
+  confirmar que existe.
+
+### Desfazer apagar/limpar turnos (2026-10-07)
+
+- Motivo: uma "Semana limpa" acidental apagou 22 turnos publicados e a
+  auditoria em massa não guardava os turnos (só a contagem) — foram repostos
+  a partir dos registos de criação/edição.
+- Agora **toda** a remoção de turnos guarda os turnos apagados em `before`
+  (apagar um: o turno; limpar: lista por colaborador) e usa **um só
+  `correlationId` por operação**, devolvido como `undoToken`
+  (`DELETE /work-shifts/:id` passou de 204 para 200 `{ undoToken }`;
+  `POST /work-shifts/clear` devolve `undoToken | null`).
+- `POST /work-shifts/undo { undoToken }` (`UndoDeleteWorkShiftsUseCase`):
+  repõe a partir da auditoria (nunca de dados do cliente), mesmo id e estado;
+  só quem apagou e até `UNDO_WINDOW_MINUTES` (15) depois → senão 410;
+  turno que já voltou a existir é ignorado (idempotente). Regista `restored`.
 
 ### Modelos de Turno 2.0 — Grupo (2026-10-06)
 

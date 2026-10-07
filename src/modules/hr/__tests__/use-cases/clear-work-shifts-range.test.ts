@@ -44,7 +44,7 @@ describe("Limpar turnos — âmbito 'range' (apagar em massa por período)", () 
       scope: { kind: "range", from: "2026-10-05", to: "2026-12-27", employeeIds: ["emp-1", "emp-2"] },
     });
 
-    expect(result).toEqual({ deletedCount: 24, skipped: [] });
+    expect(result).toEqual({ deletedCount: 24, skipped: [], undoToken: expect.any(String) });
     expect(await remainingOf(workShifts, "emp-1")).toBe(0);
     expect(await remainingOf(workShifts, "emp-2")).toBe(0);
     expect(await remainingOf(workShifts, "emp-3")).toBe(12);

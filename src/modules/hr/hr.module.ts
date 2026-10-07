@@ -78,6 +78,7 @@ import { CreateWorkShiftUseCase } from "./application/use-cases/create-work-shif
 import { UpdateWorkShiftUseCase } from "./application/use-cases/update-work-shift.use-case.js";
 import { DuplicateWorkShiftUseCase } from "./application/use-cases/duplicate-work-shift.use-case.js";
 import { DeleteWorkShiftUseCase } from "./application/use-cases/delete-work-shift.use-case.js";
+import { UndoDeleteWorkShiftsUseCase } from "./application/use-cases/undo-delete-work-shifts.use-case.js";
 import { PublishWorkShiftsUseCase } from "./application/use-cases/publish-work-shifts.use-case.js";
 import { GetBaseScheduleUseCase } from "./application/use-cases/get-base-schedule.use-case.js";
 import { UpsertBaseScheduleCellUseCase } from "./application/use-cases/upsert-base-schedule-cell.use-case.js";
@@ -98,6 +99,13 @@ import { HrPortalAccessController } from "./adapters/in/hr-portal-access.control
 import { HrMeController } from "./adapters/in/hr-me.controller.js";
 import { SupabasePunchRepository } from "./adapters/out/supabase-punch.repository.js";
 import { GetPortalHomeUseCase, RegisterPunchUseCase } from "./application/use-cases/portal-me.use-cases.js";
+import {
+  GetMyDocumentUrlUseCase,
+  GetMyLeaveUseCase,
+  ListMyCoworkersUseCase,
+  ListMyDocumentsUseCase,
+  ListMyShiftsUseCase,
+} from "./application/use-cases/portal-self-service.use-cases.js";
 import { GetPortalAccessUseCase, GrantPortalAccessUseCase, RevokePortalAccessUseCase } from "./application/use-cases/portal-access.use-cases.js";
 import { PreviewClearWorkShiftsUseCase } from "./application/use-cases/preview-clear-work-shifts.use-case.js";
 import { PreviewRepeatCalendarWeekUseCase } from "./application/use-cases/preview-repeat-calendar-week.use-case.js";
@@ -351,6 +359,7 @@ export function createHrModule(): { router: Router; meRouter: Router; generateAl
     repeatCalendarWeek,
     new DeleteShiftRotationUseCase(shiftRotationRepository, auditLog),
     new PreviewClearWorkShiftsUseCase(workShiftRepository),
+    new UndoDeleteWorkShiftsUseCase(workShiftRepository, auditLog),
   );
   const attendanceController = new HrAttendanceController(
     listAttendanceIssues,
@@ -427,6 +436,13 @@ export function createHrModule(): { router: Router; meRouter: Router; generateAl
   const meRouter = new HrMeController(
       new GetPortalHomeUseCase(portalAccounts, employeeRepository, workShiftRepository, punchRepository, attendanceRulesRepository, locationRepository),
       new RegisterPunchUseCase(portalAccounts, workShiftRepository, punchRepository, attendanceRulesRepository, locationRepository, auditLog),
+      {
+        listMyShifts: new ListMyShiftsUseCase(portalAccounts, workShiftRepository, locationRepository),
+        listMyCoworkers: new ListMyCoworkersUseCase(portalAccounts, workShiftRepository, employeeRepository, positionRepository),
+        listMyDocuments: new ListMyDocumentsUseCase(portalAccounts, employeeDocumentRepository, documentCategoryRepository),
+        getMyDocumentUrl: new GetMyDocumentUrlUseCase(portalAccounts, getEmployeeDocumentDownloadUrl),
+        getMyLeave: new GetMyLeaveUseCase(portalAccounts, leaveRead),
+      },
   ).router;
   router.use(shiftTemplatesController.router);
   router.use(shiftAutomationsController.router);
