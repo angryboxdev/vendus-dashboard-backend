@@ -91,6 +91,7 @@ import { SupabasePortalRequestRepository } from "./adapters/out/supabase-portal-
 import { SupabaseLeaveWriteAdapter } from "./adapters/out/supabase-leave-write.adapter.js";
 import { HrRequestsController } from "./adapters/in/hr-requests.controller.js";
 import { HrAbsencesController } from "./adapters/in/hr-absences.controller.js";
+import { ConfirmAbsenceUseCase, PreviewConfirmAbsenceUseCase } from "./application/use-cases/confirm-absence.use-cases.js";
 import { SupabaseAbsenceRepository } from "./adapters/out/supabase-absence.repository.js";
 import {
   CancelAbsenceUseCase,
@@ -168,6 +169,7 @@ export function createHrModule(): { router: Router; meRouter: Router; generateAl
   /** "Hoje" no calendário do negócio (Lisboa). */
   const lisbonToday = () => DateTime.now().setZone(REPORT_TIMEZONE).toISODate()!;
   const portalRequests = new SupabasePortalRequestRepository(createScopedQuery);
+  const absenceRepository = new SupabaseAbsenceRepository(createScopedQuery);
   const auditLog = new SupabaseHrAuditLogAdapter(createScopedQuery);
   const shiftAttendanceRead = new SupabaseShiftAttendanceReadAdapter(createScopedQuery);
   const leaveRead = new SupabaseLeaveReadAdapter(createScopedQuery);
@@ -401,6 +403,8 @@ export function createHrModule(): { router: Router; meRouter: Router; generateAl
     listAttendanceRuleChanges,
     getMonthlyAttendanceSummary,
     getAttendanceEmployeeDetail,
+    new PreviewConfirmAbsenceUseCase(absenceRepository, portalRequests, workShiftRepository),
+    new ConfirmAbsenceUseCase(absenceRepository, portalRequests, workShiftRepository, holidayRead, correctShiftAttendance),
   );
 
   const positionsController = new HrPositionsController(
@@ -481,7 +485,6 @@ export function createHrModule(): { router: Router; meRouter: Router; generateAl
   router.use(positionsController.router);
   router.use(payslipsController.router);
   router.use(overviewController.router);
-  const absenceRepository = new SupabaseAbsenceRepository(createScopedQuery);
   router.use(
     new HrAbsencesController(
       new GetAbsenceBoardUseCase(absenceRepository, portalRequests, employeeDocumentRepository, employeeRepository, positionRepository, locationRepository, workShiftRepository, holidayRead),

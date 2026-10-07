@@ -7,7 +7,12 @@ import {
   MonthlyClosureNotFoundError,
   MonthlyClosureReopenReasonRequiredError,
   InvalidWorkdayRulesError,
+  ConfirmAbsenceChoiceRequiredError,
+  PendingAbsenceRequestError,
 } from "../../domain/errors.js";
+import { InvalidAbsenceError } from "../../domain/entities/absence.js";
+import type { ConfirmAbsencePort, OccurrenceRef, PreviewConfirmAbsencePort } from "../../domain/ports/in/confirm-absence.ports.js";
+import type { LeaveType } from "../../domain/ports/out/leave-read.port.js";
 import type { AttendanceCorrectionType } from "../../domain/ports/out/attendance-correction-repository.port.js";
 import type {
   ListAttendanceIssuesPort,
@@ -42,8 +47,72 @@ export class HrAttendanceController {
     private readonly listAttendanceRuleChanges: ListAttendanceRuleChangesPort,
     private readonly getMonthlyAttendanceSummary: GetMonthlyAttendanceSummaryPort,
     private readonly getAttendanceEmployeeDetail: GetAttendanceEmployeeDetailPort,
+    private readonly previewConfirmAbsence: PreviewConfirmAbsencePort,
+    private readonly confirmAbsence: ConfirmAbsencePort,
   ) {
     this.router = Router();
+
+    const occurrenceOf = (b: Record<string, unknown>): OccurrenceRef => ({
+      workShiftId: typeof b.workShiftId === "string" ? b.workShiftId : null,
+      attendanceId: typeof b.attendanceId === "string" ? b.attendanceId : null,
+      employeeId: String(b.employeeId ?? ""),
+      workDate: String(b.workDate ?? ""),
+      locationId: String(b.locationId ?? ""),
+    });
+    const confirmError = (e: unknown, res: import("express").Response) => {
+      if (e instanceof PendingAbsenceRequestError) {
+        res.status(409).json({ error: e.message, code: "PENDING_REQUEST", requestId: e.requestId });
+        return;
+      }
+      if (e instanceof ConfirmAbsenceChoiceRequiredError) {
+        res.status(409).json({ error: e.message, code: "CHOICE_REQUIRED" });
+        return;
+      }
+      if (e instanceof InvalidAbsenceError || e instanceof AttendanceCorrectionReasonRequiredError) {
+        res.status(400).json({ error: e.message });
+        return;
+      }
+      if (e instanceof MonthlyClosureLockedError) {
+        res.status(409).json({ error: e.message });
+        return;
+      }
+      res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+    };
+
+    /** POST /api/hr/attendance/confirm-absence/preview — há ausência compatível? (não grava nada) */
+    this.router.post("/hr/attendance/confirm-absence/preview", async (req, res) => {
+      try {
+        res.json(await this.previewConfirmAbsence.execute({ organizationId: req.auth!.orgId, ...occurrenceOf(req.body ?? {}) }));
+      } catch (e) {
+        confirmError(e, res);
+      }
+    });
+
+    /** POST /api/hr/attendance/confirm-absence — vincula a existente ou cria UMA nova e resolve a ocorrência. */
+    this.router.post("/hr/attendance/confirm-absence", async (req, res) => {
+      try {
+        const b = (req.body ?? {}) as Record<string, unknown>;
+        const n = b.newAbsence as Record<string, unknown> | undefined;
+        res.json(
+          await this.confirmAbsence.execute({
+            organizationId: req.auth!.orgId,
+            actor: req.auth!.email,
+            ...occurrenceOf(b),
+            ...(typeof b.absenceId === "string" && { absenceId: b.absenceId }),
+            ...(n && {
+              newAbsence: {
+                type: String(n.type) as LeaveType,
+                startTime: typeof n.startTime === "string" ? n.startTime : null,
+                endTime: typeof n.endTime === "string" ? n.endTime : null,
+                notes: typeof n.notes === "string" ? n.notes : null,
+              },
+            }),
+          }),
+        );
+      } catch (e) {
+        confirmError(e, res);
+      }
+    });
     this.registerRoutes();
   }
 

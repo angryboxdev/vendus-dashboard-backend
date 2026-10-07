@@ -303,3 +303,19 @@ export class RequestNotAllowedError extends Error {
     this.name = "RequestNotAllowedError";
   }
 }
+
+/** "Confirmar ausência": há várias ausências compatíveis — o gestor tem de escolher (nunca automático). */
+export class ConfirmAbsenceChoiceRequiredError extends Error {
+  constructor() {
+    super("Existe mais de uma ausência para este período — escolha qual corresponde a esta ocorrência.");
+    this.name = "ConfirmAbsenceChoiceRequiredError";
+  }
+}
+
+/** "Confirmar ausência": há um pedido do Portal pendente — não cria nem aprova automaticamente. */
+export class PendingAbsenceRequestError extends Error {
+  constructor(readonly requestId: string) {
+    super("Existe um pedido pendente para este período.");
+    this.name = "PendingAbsenceRequestError";
+  }
+}

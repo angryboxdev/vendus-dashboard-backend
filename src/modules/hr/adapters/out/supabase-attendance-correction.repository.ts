@@ -11,7 +11,7 @@ import type {
 } from "../../domain/ports/out/attendance-correction-repository.port.js";
 
 const SELECT =
-  "id, work_shift_id, employee_id, work_date, correction_type, original_status, original_start_time, original_end_time, corrected_status, corrected_start_time, corrected_end_time, reason, notes, actor, created_at";
+  "id, work_shift_id, employee_id, work_date, correction_type, original_status, original_start_time, original_end_time, corrected_status, corrected_start_time, corrected_end_time, reason, notes, actor, created_at, absence_id";
 
 interface Row {
   id: string;
@@ -27,6 +27,7 @@ interface Row {
   corrected_end_time: string | null;
   reason: string;
   notes: string | null;
+  absence_id: string | null;
   actor: string;
   created_at: string;
 }
@@ -53,6 +54,7 @@ function rowToDto(row: Row): AttendanceCorrectionDTO {
     notes: row.notes,
     actor: row.actor,
     createdAt: row.created_at,
+    absenceId: row.absence_id ?? null,
   };
 }
 
@@ -78,6 +80,7 @@ export class SupabaseAttendanceCorrectionRepository implements AttendanceCorrect
         reason: entry.reason,
         notes: entry.notes,
         actor: entry.actor,
+        absence_id: entry.absenceId ?? null,
       })
       .select(SELECT)
       .single();

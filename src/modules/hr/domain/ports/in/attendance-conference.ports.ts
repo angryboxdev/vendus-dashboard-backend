@@ -118,6 +118,8 @@ export interface CorrectShiftAttendanceCommand {
   lateMinutes?: number | null;
   reason: string;
   notes?: string | null;
+  /** "Confirmar ausência": a ausência a que a ocorrência fica vinculada. */
+  absenceId?: string | null;
 }
 
 export interface CorrectShiftAttendancePort {
