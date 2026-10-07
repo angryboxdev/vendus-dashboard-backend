@@ -16,6 +16,7 @@ export class SupabaseLeaveReadAdapter implements LeaveReadPort {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("hr_leave_requests")
       .select("employee_id, type")
+      .eq("status", "active")
       .lte("start_date", dateYmd)
       .gte("end_date", dateYmd);
     if (error) throw new Error(error.message);
@@ -29,6 +30,7 @@ export class SupabaseLeaveReadAdapter implements LeaveReadPort {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("hr_leave_requests")
       .select("employee_id, type, start_date, end_date")
+      .eq("status", "active")
       .lte("start_date", to)
       .gte("end_date", from);
     if (error) throw new Error(error.message);
@@ -44,6 +46,7 @@ export class SupabaseLeaveReadAdapter implements LeaveReadPort {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("hr_leave_requests")
       .select("id, type, start_date, end_date, working_days")
+      .eq("status", "active")
       .eq("employee_id", employeeId)
       .lte("start_date", to)
       .gte("end_date", from)

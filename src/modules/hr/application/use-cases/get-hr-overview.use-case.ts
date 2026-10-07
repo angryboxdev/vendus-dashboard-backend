@@ -49,6 +49,9 @@ const LEAVE_STATE: Record<LeaveType, string> = {
   compensatory: "FOLGA",
   justified: "AUSENTE",
   unjustified: "AUSENTE",
+  authorized_absence: "FOLGA",
+  license: "AUSENTE",
+  other: "AUSENTE",
 };
 
 function formatEndDate(iso: string): string {

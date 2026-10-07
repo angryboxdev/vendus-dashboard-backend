@@ -78,7 +78,18 @@ import { CreateWorkShiftUseCase } from "./application/use-cases/create-work-shif
 import { UpdateWorkShiftUseCase } from "./application/use-cases/update-work-shift.use-case.js";
 import { DuplicateWorkShiftUseCase } from "./application/use-cases/duplicate-work-shift.use-case.js";
 import { DeleteWorkShiftUseCase } from "./application/use-cases/delete-work-shift.use-case.js";
-import { ReplaceMyDocumentUseCase, ReviewEmployeeDocumentUseCase } from "./application/use-cases/employee-document-review.use-cases.js";
+import { ListPendingDocumentsUseCase, ReplaceMyDocumentUseCase, ReviewEmployeeDocumentUseCase } from "./application/use-cases/employee-document-review.use-cases.js";
+import {
+  CancelMyRequestUseCase,
+  CreateMyRequestUseCase,
+  DecidePortalRequestUseCase,
+  GetRequestAttachmentUrlUseCase,
+  ListInboxRequestsUseCase,
+  ListMyRequestsUseCase,
+} from "./application/use-cases/portal-requests.use-cases.js";
+import { SupabasePortalRequestRepository } from "./adapters/out/supabase-portal-request.repository.js";
+import { SupabaseLeaveWriteAdapter } from "./adapters/out/supabase-leave-write.adapter.js";
+import { HrRequestsController } from "./adapters/in/hr-requests.controller.js";
 import { DateTime } from "luxon";
 import { REPORT_TIMEZONE } from "../../utils/lisbonDayInstants.js";
 import { UndoDeleteWorkShiftsUseCase } from "./application/use-cases/undo-delete-work-shifts.use-case.js";
@@ -146,6 +157,7 @@ export function createHrModule(): { router: Router; meRouter: Router; generateAl
   const hrFileStorage = new SupabaseHrFileStorageAdapter();
   /** "Hoje" no calendário do negócio (Lisboa). */
   const lisbonToday = () => DateTime.now().setZone(REPORT_TIMEZONE).toISODate()!;
+  const portalRequests = new SupabasePortalRequestRepository(createScopedQuery);
   const auditLog = new SupabaseHrAuditLogAdapter(createScopedQuery);
   const shiftAttendanceRead = new SupabaseShiftAttendanceReadAdapter(createScopedQuery);
   const leaveRead = new SupabaseLeaveReadAdapter(createScopedQuery);
@@ -448,6 +460,9 @@ export function createHrModule(): { router: Router; meRouter: Router; generateAl
         listMyDocuments: new ListMyDocumentsUseCase(portalAccounts, employeeDocumentRepository, documentCategoryRepository, lisbonToday),
         getMyDocumentUrl: new GetMyDocumentUrlUseCase(portalAccounts, getEmployeeDocumentDownloadUrl),
         getMyLeave: new GetMyLeaveUseCase(portalAccounts, leaveRead),
+        createMyRequest: new CreateMyRequestUseCase(portalAccounts, workShiftRepository, portalRequests, hrFileStorage, auditLog, lisbonToday),
+        listMyRequests: new ListMyRequestsUseCase(portalAccounts, portalRequests),
+        cancelMyRequest: new CancelMyRequestUseCase(portalAccounts, portalRequests, auditLog),
         replaceMyDocument: new ReplaceMyDocumentUseCase(portalAccounts, employeeDocumentRepository, documentCategoryRepository, hrFileStorage, auditLog, lisbonToday),
       },
   ).router;
@@ -456,6 +471,14 @@ export function createHrModule(): { router: Router; meRouter: Router; generateAl
   router.use(positionsController.router);
   router.use(payslipsController.router);
   router.use(overviewController.router);
+  router.use(
+    new HrRequestsController(
+      new ListInboxRequestsUseCase(portalRequests, employeeRepository, workShiftRepository),
+      new ListPendingDocumentsUseCase(employeeDocumentRepository, employeeRepository, documentCategoryRepository),
+      new DecidePortalRequestUseCase(portalRequests, new SupabaseLeaveWriteAdapter(createScopedQuery), employeeRepository, workShiftRepository, auditLog),
+      new GetRequestAttachmentUrlUseCase(portalRequests, hrFileStorage),
+    ).router,
+  );
   router.use(schedulesController.router);
   router.use(attendanceController.router);
 

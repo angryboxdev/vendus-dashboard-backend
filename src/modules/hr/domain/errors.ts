@@ -295,3 +295,11 @@ export class InvalidWorkdayRulesError extends Error {
     this.name = "InvalidWorkdayRulesError";
   }
 }
+
+/** Quem decide não tem permissão para este tipo de pedido (faltas → Assiduidade; folgas → Escalas). */
+export class RequestNotAllowedError extends Error {
+  constructor() {
+    super("Não tem permissão para decidir este tipo de pedido.");
+    this.name = "RequestNotAllowedError";
+  }
+}

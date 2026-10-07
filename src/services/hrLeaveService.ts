@@ -183,6 +183,7 @@ export async function getLeaveRequests(
   let q = createScopedQuery(organizationId)
     .table("hr_leave_requests")
     .select("*")
+    .eq("status", "active") // canceladas pelo RH 2.0 ficam só no histórico
     .order("start_date");
   if (params.employeeId) q = q.eq("employee_id", params.employeeId);
   if (params.type) q = q.eq("type", params.type);
@@ -324,6 +325,7 @@ export async function getLeaveBalance(
   const { data: used } = await scoped
     .table("hr_leave_requests")
     .select("working_days")
+    .eq("status", "active")
     .eq("employee_id", employeeId)
     .eq("type", "vacation")
     .gte("start_date", `${year}-01-01`)

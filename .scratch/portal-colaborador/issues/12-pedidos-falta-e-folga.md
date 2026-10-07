@@ -1,4 +1,4 @@
-Status: todo
+Status: done (backend)
 Blocked by: 07
 
 # Pedidos: justificar falta e pedir folga

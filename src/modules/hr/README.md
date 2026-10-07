@@ -808,6 +808,36 @@ Este módulo é **aditivo**, não uma substituição imediata:
   próprio responde 404 (`PortalResourceNotFoundError`), nunca 403, para não
   confirmar que existe.
 
+### Portal — pedidos, substituir documento e Caixa de pedidos (2026-10-07)
+
+- **Substituir documento** (ticket 11, `employee-document-review.use-cases`):
+  `POST /me/documents/:id/replace` (multipart `file`, PDF/JPG/PNG ≤ 10 MB) só
+  para documentos do próprio **vencidos ou a vencer em 30 dias**
+  (`document-replacement.service`), nunca com um envio pendente. Nova versão
+  origem `colaborador` → `pending_validation`; a anterior fica no histórico;
+  o colaborador não remove. Hub: `POST /hr/people/:id/documents/:docId/review`
+  (validar, opcionalmente com validade; rejeitar com motivo obrigatório →
+  repõe a versão anterior como atual; o Portal mostra `lastRejection`).
+  Migração `20261009110000_document_review` (reviewed_by/at, review_note).
+- **Pedidos** (ticket 12, entidade `PortalRequest`, tabela `hr_portal_requests`):
+  `justify_absence` (turno próprio publicado já começado, motivo, anexo
+  opcional) e `day_off` (a partir de hoje, máx. 7 dias, sem sobreposição).
+  `GET/POST /me/requests`, `POST /me/requests/:id/cancel` (só pendente).
+  Aprovar cria a ausência (`justified` / `authorized_absence`, origem
+  `portal`) via `LeaveWritePort` — a escala nunca é mexida (decisão
+  2026-10-07: o gerente ajusta à mão); rejeitar exige motivo.
+- **Caixa de pedidos** (ticket 13, `HrRequestsController`): `GET /hr/requests`
+  (pedidos + documentos por validar), `POST /hr/requests/:id/decide`,
+  `GET /hr/requests/:id/attachment-url`. Rota "base"; o âmbito vem das
+  permissões: `hr.attendance` → faltas, `hr.schedules` → folgas,
+  `hr.documents` → documentos.
+- **Ausências (RH 2.0 T4, parcial)**: `hr_leave_requests` ganhou `status`
+  (active/cancelled), parcial em horas, origem, tipos `authorized_absence`,
+  `license`, `other` (migração `20261009120000`). Todas as leituras (novas
+  e legacy) filtram `status = 'active'`. Por fazer: UI Férias & Ausências
+  2.0 com cancelamento de turnos (ticket 05) e bloqueio de novos turnos
+  (ticket 06).
+
 ### Jornada, dupla e turnos que passam da meia-noite (2026-10-07)
 
 - **Jornada** (ver `CONTEXT.md`): por colaborador e `workDate` (dia em que o

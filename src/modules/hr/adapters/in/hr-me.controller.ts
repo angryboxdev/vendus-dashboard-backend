@@ -12,6 +12,8 @@ import type {
   RegisterPunchPort,
   ReplaceMyDocumentPort,
 } from "../../domain/ports/in/portal-me.ports.js";
+import type { CancelMyRequestPort, CreateMyRequestPort, ListMyRequestsPort } from "../../domain/ports/in/portal-requests.ports.js";
+import { InvalidPortalRequestError, PortalRequestNotPendingError } from "../../domain/entities/portal-request.js";
 import type { ClientLocation } from "../../domain/services/punch-geofence.service.js";
 
 function handleError(e: unknown, res: Response): void {
@@ -25,6 +27,14 @@ function handleError(e: unknown, res: Response): void {
   }
   if (e instanceof PortalBadRequestError) {
     res.status(400).json({ error: e.message });
+    return;
+  }
+  if (e instanceof InvalidPortalRequestError) {
+    res.status(400).json({ error: e.message });
+    return;
+  }
+  if (e instanceof PortalRequestNotPendingError) {
+    res.status(409).json({ error: e.message });
     return;
   }
   if (e instanceof PunchRefusedError) {
@@ -82,6 +92,9 @@ export class HrMeController {
       getMyDocumentUrl: GetMyDocumentUrlPort;
       getMyLeave: GetMyLeavePort;
       replaceMyDocument: ReplaceMyDocumentPort;
+      createMyRequest: CreateMyRequestPort;
+      listMyRequests: ListMyRequestsPort;
+      cancelMyRequest: CancelMyRequestPort;
     },
   ) {
     this.router = Router();
@@ -115,6 +128,38 @@ export class HrMeController {
             ...(body.expiresAt ? { expiresAt: body.expiresAt } : {}),
           }),
         );
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+    // Pedidos (ticket 12): justificar falta (com anexo opcional) / pedir folga.
+    this.router.get("/me/requests", run((req) => this.selfService.listMyRequests.execute(identity(req))));
+    this.router.post("/me/requests/:id/cancel", run((req) => this.selfService.cancelMyRequest.execute(identity(req), req.params.id as string)));
+    this.router.post("/me/requests", portalUpload.single("attachment"), async (req, res) => {
+      try {
+        const body = (req.body ?? {}) as Record<string, string | undefined>;
+        const reasonText = body.reasonText ?? null;
+        const reasonCode = body.reasonCode ?? "";
+        if (body.kind === "justify_absence") {
+          res.json(
+            await this.selfService.createMyRequest.execute({
+              ...identity(req),
+              kind: "justify_absence",
+              workShiftId: body.workShiftId ?? "",
+              reasonCode,
+              reasonText,
+              attachment: req.file ? { buffer: req.file.buffer, filename: req.file.originalname, mimeType: req.file.mimetype } : null,
+            }),
+          );
+          return;
+        }
+        if (body.kind === "day_off") {
+          res.json(
+            await this.selfService.createMyRequest.execute({ ...identity(req), kind: "day_off", startDate: body.startDate ?? "", endDate: body.endDate ?? body.startDate ?? "", reasonCode, reasonText }),
+          );
+          return;
+        }
+        res.status(400).json({ error: "kind deve ser 'justify_absence' ou 'day_off'" });
       } catch (e) {
         handleError(e, res);
       }

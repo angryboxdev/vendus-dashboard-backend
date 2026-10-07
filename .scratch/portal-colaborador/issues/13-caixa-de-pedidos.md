@@ -1,4 +1,4 @@
-Status: todo
+Status: done (backend)
 Blocked by: 11, 12
 
 # Caixa de pedidos do Portal (Hub)
