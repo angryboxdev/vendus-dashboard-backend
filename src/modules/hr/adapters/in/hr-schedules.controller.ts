@@ -186,6 +186,10 @@ export class HrSchedulesController {
           ...(typeof body.workDate === "string" && { workDate: body.workDate }),
           ...(typeof body.startTime === "string" && { startTime: body.startTime }),
           ...(typeof body.endTime === "string" && { endTime: body.endTime }),
+          // Sem estes três, desmarcar "termina no dia seguinte" ou mudar o 2º período não era gravado.
+          ...(typeof body.endsNextDay === "boolean" && { endsNextDay: body.endsNextDay }),
+          ...("secondStartTime" in body && { secondStartTime: typeof body.secondStartTime === "string" ? body.secondStartTime : null }),
+          ...("secondEndTime" in body && { secondEndTime: typeof body.secondEndTime === "string" ? body.secondEndTime : null }),
           ...(typeof body.locationId === "string" && { locationId: body.locationId }),
           ...(body.breakMinutes != null && { breakMinutes: Number(body.breakMinutes) }),
           ...("notes" in body && { notes: (body.notes as string | null) ?? null }),
