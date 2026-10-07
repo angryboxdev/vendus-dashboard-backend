@@ -263,3 +263,19 @@ export class PunchRefusedError extends Error {
     this.name = "PunchRefusedError";
   }
 }
+
+/** Turno/documento que não existe ou não é do próprio colaborador (Portal) — 404, nunca revela que existe. */
+export class PortalResourceNotFoundError extends Error {
+  constructor(what: string) {
+    super(`${what} não encontrado`);
+    this.name = "PortalResourceNotFoundError";
+  }
+}
+
+/** Pedido inválido no Portal (datas, período demasiado longo). */
+export class PortalBadRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PortalBadRequestError";
+  }
+}

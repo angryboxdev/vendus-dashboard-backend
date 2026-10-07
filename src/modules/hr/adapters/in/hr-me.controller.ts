@@ -1,11 +1,28 @@
 import { Router, type Request, type Response } from "express";
-import { PortalNotLinkedError, PunchRefusedError } from "../../domain/errors.js";
-import type { GetPortalHomePort, PortalIdentity, RegisterPunchPort } from "../../domain/ports/in/portal-me.ports.js";
+import { PortalBadRequestError, PortalNotLinkedError, PortalResourceNotFoundError, PunchRefusedError } from "../../domain/errors.js";
+import type {
+  GetMyDocumentUrlPort,
+  GetMyLeavePort,
+  GetPortalHomePort,
+  ListMyCoworkersPort,
+  ListMyDocumentsPort,
+  ListMyShiftsPort,
+  PortalIdentity,
+  RegisterPunchPort,
+} from "../../domain/ports/in/portal-me.ports.js";
 import type { ClientLocation } from "../../domain/services/punch-geofence.service.js";
 
 function handleError(e: unknown, res: Response): void {
   if (e instanceof PortalNotLinkedError) {
     res.status(403).json({ error: e.message, code: "PORTAL_NOT_LINKED" });
+    return;
+  }
+  if (e instanceof PortalResourceNotFoundError) {
+    res.status(404).json({ error: e.message });
+    return;
+  }
+  if (e instanceof PortalBadRequestError) {
+    res.status(400).json({ error: e.message });
     return;
   }
   if (e instanceof PunchRefusedError) {
@@ -49,8 +66,29 @@ export class HrMeController {
   constructor(
     private readonly getPortalHome: GetPortalHomePort,
     private readonly registerPunch: RegisterPunchPort,
+    private readonly selfService: {
+      listMyShifts: ListMyShiftsPort;
+      listMyCoworkers: ListMyCoworkersPort;
+      listMyDocuments: ListMyDocumentsPort;
+      getMyDocumentUrl: GetMyDocumentUrlPort;
+      getMyLeave: GetMyLeavePort;
+    },
   ) {
     this.router = Router();
+    const run = (fn: (req: Request) => Promise<unknown>) => async (req: Request, res: Response) => {
+      try {
+        res.json(await fn(req));
+      } catch (e) {
+        handleError(e, res);
+      }
+    };
+
+    // Self-service (tickets 07–09) — sempre do colaborador da sessão.
+    this.router.get("/me/shifts", run((req) => this.selfService.listMyShifts.execute(identity(req), String(req.query.from ?? ""), String(req.query.to ?? ""))));
+    this.router.get("/me/shifts/:id/coworkers", run((req) => this.selfService.listMyCoworkers.execute(identity(req), req.params.id as string)));
+    this.router.get("/me/documents", run((req) => this.selfService.listMyDocuments.execute(identity(req))));
+    this.router.get("/me/documents/:id/download-url", run((req) => this.selfService.getMyDocumentUrl.execute(identity(req), req.params.id as string)));
+    this.router.get("/me/leave", run((req) => this.selfService.getMyLeave.execute(identity(req), Number(req.query.year ?? new Date().getFullYear()))));
 
     this.router.get("/me", async (req, res) => {
       try {

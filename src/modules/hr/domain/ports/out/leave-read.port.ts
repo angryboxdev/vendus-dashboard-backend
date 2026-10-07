@@ -18,9 +18,20 @@ export interface ActiveLeaveRange extends ActiveLeave {
   endDate: string;
 }
 
+/** Ausência do próprio colaborador (Portal) — sem `notes` (podem ter informação interna do gestor). */
+export interface EmployeeLeaveEntry {
+  id: string;
+  type: LeaveType;
+  startDate: string;
+  endDate: string;
+  workingDays: number;
+}
+
 export interface LeaveReadPort {
   /** Ausências cuja janela [startDate, endDate] cobre `dateYmd`. */
   findActiveOnDate(organizationId: OrganizationId, dateYmd: string): Promise<ActiveLeave[]>;
   /** Ausências cuja janela [startDate, endDate] intersecta [from, to] — para varrer uma semana/mês de uma vez (RH-03). */
   findActiveInRange(organizationId: OrganizationId, from: string, to: string): Promise<ActiveLeaveRange[]>;
+  /** Ausências de UM colaborador que intersectam [from, to] (Portal do Colaborador). */
+  findForEmployee(organizationId: OrganizationId, employeeId: string, from: string, to: string): Promise<EmployeeLeaveEntry[]>;
 }

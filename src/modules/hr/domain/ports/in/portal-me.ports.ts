@@ -62,3 +62,49 @@ export interface GetPortalHomePort {
 export interface RegisterPunchPort {
   execute(command: RegisterPunchCommand): Promise<PunchResultDTO>;
 }
+
+// ── Self-service (Portal tickets 07–09) ──────────────────────────────────
+
+export interface MyShiftDTO extends PortalShiftDTO {
+  id: string;
+}
+
+/** Quem trabalha comigo: só dados operacionais mínimos (nunca contactos, NIF, assiduidade…). */
+export interface CoworkerDTO {
+  shortName: string;
+  positionName: string | null;
+  hours: string;
+}
+
+export interface MyDocumentDTO {
+  id: string;
+  categoryLabel: string;
+  fileName: string;
+  /** `YYYY-MM` nos recibos. */
+  period: string | null;
+  isPayslip: boolean;
+  issuedAt: string | null;
+  expiresAt: string | null;
+  uploadedAt: string;
+}
+
+export interface MyLeaveDTO {
+  year: number;
+  entries: Array<{ id: string; type: string; startDate: string; endDate: string; workingDays: number }>;
+}
+
+export interface ListMyShiftsPort {
+  execute(identity: PortalIdentity, from: string, to: string): Promise<MyShiftDTO[]>;
+}
+export interface ListMyCoworkersPort {
+  execute(identity: PortalIdentity, shiftId: string): Promise<CoworkerDTO[]>;
+}
+export interface ListMyDocumentsPort {
+  execute(identity: PortalIdentity): Promise<MyDocumentDTO[]>;
+}
+export interface GetMyDocumentUrlPort {
+  execute(identity: PortalIdentity, documentId: string): Promise<{ url: string }>;
+}
+export interface GetMyLeavePort {
+  execute(identity: PortalIdentity, year: number): Promise<MyLeaveDTO>;
+}

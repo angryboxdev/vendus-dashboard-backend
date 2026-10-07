@@ -796,6 +796,17 @@ Este módulo é **aditivo**, não uma substituição imediata:
   histórico como `refused_in/out`) e aceita `unverified` sinalizado. Com
   `off` a localização não é guardada.
 - O quiosque legado não foi alterado.
+- **Self-service — consulta** (tickets 07–09, `portal-self-service.use-cases`):
+  `GET /me/shifts?from&to` (só publicados do próprio, máx. 62 dias),
+  `GET /me/shifts/:id/coworkers` (mesmo Local, horário sobreposto incl.
+  noturnos vizinhos; devolve **só** nome curto + cargo + horário),
+  `GET /me/documents` (versões atuais do próprio, sem removidos/rejeitados;
+  recibo = categoria com período), `GET /me/documents/:id/download-url`
+  (mecanismo assinado existente; documento de outro → 404),
+  `GET /me/leave?year` (ausências do próprio, só leitura — **sem saldo de
+  férias nem feriados**, decisão de 2026-10-07). Turno/documento que não é do
+  próprio responde 404 (`PortalResourceNotFoundError`), nunca 403, para não
+  confirmar que existe.
 
 ### Modelos de Turno 2.0 — Grupo (2026-10-06)
 
