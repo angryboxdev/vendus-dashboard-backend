@@ -61,4 +61,6 @@ export interface HrAuditLogPort {
     employeeId: string,
     pagination: { page: number; pageSize: number },
   ): Promise<{ items: HrAuditLogRecordDTO[]; total: number }>;
+  /** Todos os registos de uma operação (mesmo `correlationId`) — usado pelo "Desfazer". */
+  findByCorrelationId(organizationId: OrganizationId, correlationId: string): Promise<HrAuditLogRecordDTO[]>;
 }

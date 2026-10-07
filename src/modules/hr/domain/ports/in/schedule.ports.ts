@@ -106,8 +106,23 @@ export interface DeleteWorkShiftCommand {
   id: string;
 }
 
+/** Código para "Desfazer" — o `correlationId` da operação na auditoria. */
+export interface UndoTokenDTO {
+  undoToken: string;
+}
+
 export interface DeleteWorkShiftPort {
-  execute(command: DeleteWorkShiftCommand): Promise<void>;
+  execute(command: DeleteWorkShiftCommand): Promise<UndoTokenDTO>;
+}
+
+export interface UndoDeleteWorkShiftsCommand {
+  organizationId: OrganizationId;
+  actor: string;
+  undoToken: string;
+}
+
+export interface UndoDeleteWorkShiftsPort {
+  execute(command: UndoDeleteWorkShiftsCommand): Promise<{ restoredCount: number }>;
 }
 
 export interface PublishWorkShiftsCommand {
@@ -433,6 +448,8 @@ export interface ClearWorkShiftsCommand {
 
 export interface ClearWorkShiftsResultDTO {
   deletedCount: number;
+  /** null quando nada foi apagado. */
+  undoToken: string | null;
   skipped: Array<{ id: string; workDate: string; reason: "has_attendance" }>;
 }
 

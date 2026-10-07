@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { WorkShiftNotFoundError, WorkShiftHasAttendanceError } from "../../domain/errors.js";
 import type { WorkShiftRepositoryPort } from "../../domain/ports/out/work-shift-repository.port.js";
 import type { HrAuditLogPort } from "../../domain/ports/out/hr-audit-log.port.js";
-import type { DeleteWorkShiftCommand, DeleteWorkShiftPort } from "../../domain/ports/in/schedule.ports.js";
+import type { DeleteWorkShiftCommand, DeleteWorkShiftPort, UndoTokenDTO } from "../../domain/ports/in/schedule.ports.js";
 
 /** Nunca apaga um turno com presença já registada — forçaria a perder essa evidência por cascata (ver `WorkShiftHasAttendanceError`). */
 export class DeleteWorkShiftUseCase implements DeleteWorkShiftPort {
@@ -11,7 +11,7 @@ export class DeleteWorkShiftUseCase implements DeleteWorkShiftPort {
     private readonly auditLog: HrAuditLogPort,
   ) {}
 
-  async execute(command: DeleteWorkShiftCommand): Promise<void> {
+  async execute(command: DeleteWorkShiftCommand): Promise<UndoTokenDTO> {
     const existing = await this.workShiftRepository.findById(command.organizationId, command.id);
     if (!existing) throw new WorkShiftNotFoundError(command.id);
 
@@ -20,6 +20,7 @@ export class DeleteWorkShiftUseCase implements DeleteWorkShiftPort {
 
     await this.workShiftRepository.delete(command.organizationId, command.id);
 
+    const correlationId = randomUUID();
     await this.auditLog.record({
       organizationId: command.organizationId,
       actor: command.actor,
@@ -29,7 +30,8 @@ export class DeleteWorkShiftUseCase implements DeleteWorkShiftPort {
       action: "deleted",
       description: `Turno apagado: ${existing.workDate} ${existing.startTime}–${existing.endTime}`,
       before: existing.toProps(),
-      correlationId: randomUUID(),
+      correlationId,
     });
+    return { undoToken: correlationId };
   }
 }

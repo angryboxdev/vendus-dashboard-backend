@@ -33,10 +33,12 @@ export class ClearWorkShiftsUseCase implements ClearWorkShiftsPort {
     const skipped: ClearWorkShiftsResultDTO["skipped"] = shiftsWithAttendance.map((s) => ({ id: s.id, workDate: s.workDate, reason: "has_attendance" }));
     const deletedByEmployee = new Map<string, number>();
     for (const shift of deletable) deletedByEmployee.set(shift.employeeId, (deletedByEmployee.get(shift.employeeId) ?? 0) + 1);
+    // Os turnos apagados ficam na auditoria (`before`) — é daí que o "Desfazer" os repõe.
+    const snapshotsOf = (employeeId: string) => deletable.filter((s) => s.employeeId === employeeId).map((s) => s.toProps());
+    const correlationId = randomUUID();
 
     if (command.scope.kind === "range") {
       const { from, to } = command.scope;
-      const correlationId = randomUUID();
       for (const [employeeId, count] of deletedByEmployee) {
         await this.auditLog.record({
           organizationId: command.organizationId,
@@ -46,6 +48,7 @@ export class ClearWorkShiftsUseCase implements ClearWorkShiftsPort {
           employeeId,
           action: "deleted",
           description: `Turnos apagados em massa de ${from} a ${to}: ${count} turno(s)`,
+          before: snapshotsOf(employeeId),
           correlationId,
         });
       }
@@ -60,7 +63,8 @@ export class ClearWorkShiftsUseCase implements ClearWorkShiftsPort {
           employeeId,
           action: "deleted",
           description: `Semana limpa (todos os colaboradores) a partir de ${command.scope.weekStartDate}: ${count} turno(s) apagado(s)`,
-          correlationId: randomUUID(),
+          before: snapshotsOf(employeeId),
+          correlationId,
         });
       }
     } else if (deletedCount > 0) {
@@ -73,11 +77,12 @@ export class ClearWorkShiftsUseCase implements ClearWorkShiftsPort {
         employeeId,
         action: "deleted",
         description: `Turnos limpos (${command.scope.kind}): ${deletedCount} apagado(s), ${skipped.length} preservado(s) por já terem presença registada`,
-        correlationId: randomUUID(),
+        before: deletable.map((s) => s.toProps()),
+        correlationId,
       });
     }
 
-    return { deletedCount, skipped };
+    return { deletedCount, skipped, undoToken: deletedCount > 0 ? correlationId : null };
   }
 }
 

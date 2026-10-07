@@ -808,6 +808,21 @@ Este módulo é **aditivo**, não uma substituição imediata:
   próprio responde 404 (`PortalResourceNotFoundError`), nunca 403, para não
   confirmar que existe.
 
+### Desfazer apagar/limpar turnos (2026-10-07)
+
+- Motivo: uma "Semana limpa" acidental apagou 22 turnos publicados e a
+  auditoria em massa não guardava os turnos (só a contagem) — foram repostos
+  a partir dos registos de criação/edição.
+- Agora **toda** a remoção de turnos guarda os turnos apagados em `before`
+  (apagar um: o turno; limpar: lista por colaborador) e usa **um só
+  `correlationId` por operação**, devolvido como `undoToken`
+  (`DELETE /work-shifts/:id` passou de 204 para 200 `{ undoToken }`;
+  `POST /work-shifts/clear` devolve `undoToken | null`).
+- `POST /work-shifts/undo { undoToken }` (`UndoDeleteWorkShiftsUseCase`):
+  repõe a partir da auditoria (nunca de dados do cliente), mesmo id e estado;
+  só quem apagou e até `UNDO_WINDOW_MINUTES` (15) depois → senão 410;
+  turno que já voltou a existir é ignorado (idempotente). Regista `restored`.
+
 ### Modelos de Turno 2.0 — Grupo (2026-10-06)
 
 `hr_shift_templates.template_group` (`OPENING | INTERMEDIATE | CLOSING | FULL_TIME | OTHER`, omissão `OTHER`) — **só** organização/filtro da biblioteca: não entra na geração, conflitos, automatizações nem turnos (ids e referências iguais). Independente do Tipo (Direto/Repartido = existe 2.º período). Backfill único pelo prefixo do nome (Abertura/Fecho/Full time; o resto Outro) na migração `20261008120000_hr_shift_template_group.sql`. Pesquisa/filtros são no frontend (sem endpoints por Grupo).

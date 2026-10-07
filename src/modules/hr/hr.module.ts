@@ -78,6 +78,7 @@ import { CreateWorkShiftUseCase } from "./application/use-cases/create-work-shif
 import { UpdateWorkShiftUseCase } from "./application/use-cases/update-work-shift.use-case.js";
 import { DuplicateWorkShiftUseCase } from "./application/use-cases/duplicate-work-shift.use-case.js";
 import { DeleteWorkShiftUseCase } from "./application/use-cases/delete-work-shift.use-case.js";
+import { UndoDeleteWorkShiftsUseCase } from "./application/use-cases/undo-delete-work-shifts.use-case.js";
 import { PublishWorkShiftsUseCase } from "./application/use-cases/publish-work-shifts.use-case.js";
 import { GetBaseScheduleUseCase } from "./application/use-cases/get-base-schedule.use-case.js";
 import { UpsertBaseScheduleCellUseCase } from "./application/use-cases/upsert-base-schedule-cell.use-case.js";
@@ -358,6 +359,7 @@ export function createHrModule(): { router: Router; meRouter: Router; generateAl
     repeatCalendarWeek,
     new DeleteShiftRotationUseCase(shiftRotationRepository, auditLog),
     new PreviewClearWorkShiftsUseCase(workShiftRepository),
+    new UndoDeleteWorkShiftsUseCase(workShiftRepository, auditLog),
   );
   const attendanceController = new HrAttendanceController(
     listAttendanceIssues,

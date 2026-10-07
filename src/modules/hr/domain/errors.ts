@@ -279,3 +279,11 @@ export class PortalBadRequestError extends Error {
     this.name = "PortalBadRequestError";
   }
 }
+
+/** "Desfazer" pedido para uma operação que não existe, não é de quem pede ou já passou da janela. */
+export class UndoNotAvailableError extends Error {
+  constructor() {
+    super("Já não é possível desfazer esta operação.");
+    this.name = "UndoNotAvailableError";
+  }
+}
