@@ -91,7 +91,7 @@ describe("Turno que termina no dia seguinte", () => {
   });
 });
 
-describe("Resumo mensal — jornadas pelas horas reais", () => {
+describe("Resumo mensal — um turno, uma jornada", () => {
   const ORG = mintOrganizationId("org-test");
   const occ = (o: Partial<ShiftOccurrence>): ShiftOccurrence => ({
     shiftId: "s",
@@ -110,7 +110,7 @@ describe("Resumo mensal — jornadas pelas horas reais", () => {
     ...o,
   });
 
-  it("noturno com limpeza = 1 jornada de 1 turno; 4h + 8h no mesmo dia = dupla", async () => {
+  it("noturno com limpeza = 1 jornada; dois turnos no mesmo dia = 2 jornadas (sem 'dupla')", async () => {
     const employees = new FakeEmployeeRepository();
     const shifts = new FakeShiftAttendanceReadAdapter();
     const emp = Employee.create({ fullName: "Carla Demo" });
@@ -121,7 +121,8 @@ describe("Resumo mensal — jornadas pelas horas reais", () => {
     const uc = new GetMonthlyAttendanceSummaryUseCase(employees, shifts, new FakeLeaveReadAdapter(), new FakeAttendanceRulesRepository(), new FakeAttendanceCorrectionRepository(), new FakeMonthlyClosureRepository());
 
     const row = (await uc.execute({ organizationId: ORG, year: 2026, month: 9 })).rows.find((r) => r.employeeId === emp.id)!;
-    expect(row).toMatchObject({ plannedShiftsCount: 3, workedDaysCount: 2, shiftEquivalents: 3, doubleDaysCount: 1, oneAndHalfDaysCount: 0 });
+    expect(row).toMatchObject({ plannedShiftsCount: 3, actualShiftsCount: 3 });
+    expect(row).not.toHaveProperty("doubleDaysCount");
     expect(row.actualMinutes).toBe(h(8) + 30 + h(4) + h(8));
   });
 });

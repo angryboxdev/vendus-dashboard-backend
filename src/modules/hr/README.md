@@ -858,6 +858,11 @@ Este módulo é **aditivo**, não uma substituição imediata:
 
 ### Jornada, dupla e turnos que passam da meia-noite (2026-10-07)
 
+> **Dupla suspensa (2026-10-07, decisão do utilizador):** por agora 1 turno =
+> 1 jornada; dois turnos no mesmo dia = 2 jornadas. O resumo mensal deixou de
+> devolver `workedDaysCount`/`shiftEquivalents`/…; os 3 limites continuam
+> nas regras (BD e API) e `workday.service` fica disponível para reativar.
+
 - **Jornada** (ver `CONTEXT.md`): por colaborador e `workDate` (dia em que o
   turno começa); `workday.service` soma os turnos do dia e classifica 1 / 1,5
   / 2 com 3 limites novos nas regras de assiduidade (`standardShiftMinutes`
