@@ -152,6 +152,8 @@ export const TABLE_REGISTRY = {
   // Portal do Colaborador: evidência de cada toque de Entrada/Saída, location_id NOT NULL.
   hr_attendance_punch_events: { organizationColumn: "org_id", locationBearing: true },
   hr_leave_requests: { organizationColumn: "org_id", locationBearing: false },
+  // Portal do Colaborador (ticket 12): justificar falta / pedir folga — por colaborador, sem local.
+  hr_portal_requests: { organizationColumn: "org_id", locationBearing: false },
   // Fase 2: fecho é por organização inteira, nunca por local.
   hr_monthly_closures: { organizationColumn: "org_id", locationBearing: false },
   hr_public_holidays: { organizationColumn: "org_id", locationBearing: false },

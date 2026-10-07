@@ -19,7 +19,11 @@ export type HrAuditEntityType =
   | "shift_automation"
   // Portal do Colaborador — acesso (conta ligada à ficha) e picagens pelo Portal.
   | "portal_access"
-  | "attendance_punch";
+  | "attendance_punch"
+  // Portal do Colaborador — pedidos (justificar falta / pedir folga).
+  | "portal_request"
+  // Férias & Ausências 2.0 (registo/cancelamento no padrão novo).
+  | "absence";
 
 export interface HrAuditLogEntry {
   organizationId: OrganizationId;

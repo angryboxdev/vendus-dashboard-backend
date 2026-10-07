@@ -1,6 +1,6 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 
-export type LeaveType = "vacation" | "sick_leave" | "justified" | "unjustified" | "compensatory";
+export type LeaveType = "vacation" | "sick_leave" | "justified" | "unjustified" | "compensatory" | "authorized_absence" | "license" | "other";
 
 export interface ActiveLeave {
   employeeId: string;

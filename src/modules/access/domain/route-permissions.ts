@@ -104,6 +104,8 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: new RegExp(`^/api/hr/(leave(/|$)|employees/${ID}/leave(/|$))`), target: p("hr.leave") },
   { pattern: new RegExp(`^/api/hr/(payments(/|$)|employees/${ID}/payments$)`), target: p("hr.payments") },
   { pattern: /^\/api\/hr\/(people|employees)(\/|$)/, target: p("hr.employees") },
+  // Caixa de pedidos do Portal: cada um vê/decide só o que as suas permissões cobrem (filtro em HrRequestsController).
+  { pattern: /^\/api\/hr\/requests(\/|$)/, target: { kind: "base" } },
 ];
 
 export interface RouteDecision {

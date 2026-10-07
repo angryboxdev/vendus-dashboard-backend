@@ -36,6 +36,10 @@ export class FakeDocumentRepository implements DocumentRepositoryPort {
       .sort((a, b) => b.version - a.version);
   }
 
+  async findPendingValidation(organizationId: OrganizationId): Promise<Document[]> {
+    return [...this.store(organizationId).values()].filter((d) => d.ownerType === "employee" && d.status === "pending_validation" && d.isCurrent);
+  }
+
   async create(organizationId: OrganizationId, document: Document): Promise<Document> {
     this.store(organizationId).set(document.id, document);
     return document;

@@ -10,7 +10,7 @@ import {
 import type { DocumentRepositoryPort } from "../../domain/ports/out/document-repository.port.js";
 
 const SELECT =
-  "id, org_id, owner_type, employee_id, category, mandatory, file_name, storage_path, mime_type, file_size_bytes, status, origin, issued_at, expires_at, visibility, period, version, previous_version_id, is_current, uploaded_by, uploaded_at";
+  "id, org_id, owner_type, employee_id, category, mandatory, file_name, storage_path, mime_type, file_size_bytes, status, origin, issued_at, expires_at, visibility, period, version, previous_version_id, is_current, uploaded_by, uploaded_at, reviewed_by, reviewed_at, review_note";
 
 interface Row {
   id: string;
@@ -34,6 +34,9 @@ interface Row {
   is_current: boolean;
   uploaded_by: string;
   uploaded_at: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
 }
 
 /**
@@ -63,6 +66,9 @@ function rowToDocument(row: Row): Document {
     isCurrent: row.is_current,
     uploadedBy: row.uploaded_by,
     uploadedAt: row.uploaded_at,
+    reviewedBy: row.reviewed_by ?? null,
+    reviewedAt: row.reviewed_at ?? null,
+    reviewNote: row.review_note ?? null,
   });
 }
 
@@ -90,6 +96,9 @@ function documentToRow(doc: Document): Record<string, unknown> {
     is_current: p.isCurrent,
     uploaded_by: p.uploadedBy,
     uploaded_at: p.uploadedAt,
+    reviewed_by: p.reviewedBy ?? null,
+    reviewed_at: p.reviewedAt ?? null,
+    review_note: p.reviewNote ?? null,
   };
 }
 
@@ -164,5 +173,17 @@ export class SupabaseDocumentRepository implements DocumentRepositoryPort {
       .single();
     if (error) throw new Error(error.message);
     return rowToDocument(data as unknown as Row);
+  }
+
+  async findPendingValidation(organizationId: OrganizationId): Promise<Document[]> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("hr_employee_documents")
+      .select(SELECT)
+      .eq("owner_type", "employee")
+      .eq("status", "pending_validation")
+      .eq("is_current", true)
+      .order("uploaded_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as unknown as Row[]).map(rowToDocument);
   }
 }

@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { can } from "../../../access/domain/services/effective-access.service.js";
 import multer from "multer";
+import { DocumentNotPendingError, DocumentRejectionReasonRequiredError } from "../../../documents/domain/entities/document.js";
+import type { ReviewEmployeeDocumentPort } from "../../domain/ports/in/employee-document.ports.js";
 import { requireMinRole } from "../../../../middleware/auth.js";
 import {
   EmployeeNotFoundError,
@@ -113,6 +115,7 @@ export class HrPeopleController {
     private readonly getEmployeeDocumentDownloadUrl: GetEmployeeDocumentDownloadUrlPort,
     private readonly getEmployeeDocumentHistory: GetEmployeeDocumentHistoryPort,
     private readonly getDocumentOverview: GetDocumentOverviewPort,
+    private readonly reviewEmployeeDocument: ReviewEmployeeDocumentPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -365,6 +368,42 @@ export class HrPeopleController {
           return;
         }
         if (e instanceof InvalidDocumentError) {
+          res.status(400).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /** POST /api/hr/people/:id/documents/:docId/review — validar/rejeitar um envio do colaborador (Portal). */
+    this.router.post("/hr/people/:id/documents/:docId/review", requireMinRole("manager"), async (req, res) => {
+      try {
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        if (body.decision !== "approve" && body.decision !== "reject") {
+          res.status(400).json({ error: "decision deve ser 'approve' ou 'reject'" });
+          return;
+        }
+        res.json(
+          await this.reviewEmployeeDocument.execute({
+            organizationId: req.auth!.orgId,
+            actor: req.auth!.email,
+            employeeId: req.params["id"] as string,
+            documentId: req.params["docId"] as string,
+            decision: body.decision,
+            ...(typeof body.note === "string" && { note: body.note }),
+            ...("expiresAt" in body && { expiresAt: typeof body.expiresAt === "string" && body.expiresAt ? body.expiresAt : null }),
+          }),
+        );
+      } catch (e) {
+        if (e instanceof EmployeeDocumentNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        if (e instanceof DocumentNotPendingError) {
+          res.status(409).json({ error: e.message });
+          return;
+        }
+        if (e instanceof DocumentRejectionReasonRequiredError) {
           res.status(400).json({ error: e.message });
           return;
         }
