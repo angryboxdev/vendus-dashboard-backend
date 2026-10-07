@@ -21,7 +21,9 @@ export type HrAuditEntityType =
   | "portal_access"
   | "attendance_punch"
   // Portal do Colaborador — pedidos (justificar falta / pedir folga).
-  | "portal_request";
+  | "portal_request"
+  // Férias & Ausências 2.0 (registo/cancelamento no padrão novo).
+  | "absence";
 
 export interface HrAuditLogEntry {
   organizationId: OrganizationId;

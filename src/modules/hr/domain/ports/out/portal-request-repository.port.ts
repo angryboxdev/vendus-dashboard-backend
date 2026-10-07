@@ -9,5 +9,7 @@ export interface PortalRequestRepositoryPort {
   /** Mais recentes primeiro. */
   findForEmployee(organizationId: OrganizationId, employeeId: string, limit: number): Promise<PortalRequest[]>;
   /** Pendentes dos tipos pedidos, mais antigos primeiro (Caixa de pedidos). */
+  /** Pedidos (qualquer estado) que intersectam [from, to] — Registos de Férias & Ausências. */
+  findOverlapping(organizationId: OrganizationId, from: string, to: string): Promise<PortalRequest[]>;
   findPending(organizationId: OrganizationId, kinds: PortalRequestKind[]): Promise<PortalRequest[]>;
 }

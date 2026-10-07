@@ -22,6 +22,9 @@ export class FakePortalRequestRepository implements PortalRequestRepositoryPort 
   async findForEmployee(_org: OrganizationId, employeeId: string, limit: number): Promise<PortalRequest[]> {
     return [...this.items.values()].filter((r) => r.employeeId === employeeId).sort((a, b) => this.order.get(b.id)! - this.order.get(a.id)!).slice(0, limit);
   }
+  async findOverlapping(_org: OrganizationId, from: string, to: string): Promise<PortalRequest[]> {
+    return [...this.items.values()].filter((r) => r.overlaps(from, to));
+  }
   async findPending(_org: OrganizationId, kinds: PortalRequestKind[]): Promise<PortalRequest[]> {
     return [...this.items.values()].filter((r) => r.status === "pending" && kinds.includes(r.kind)).sort((a, b) => this.order.get(a.id)! - this.order.get(b.id)!);
   }

@@ -106,6 +106,17 @@ export class SupabasePortalRequestRepository implements PortalRequestRepositoryP
     return ((data ?? []) as unknown as Row[]).map(toEntity);
   }
 
+  async findOverlapping(organizationId: OrganizationId, from: string, to: string): Promise<PortalRequest[]> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("hr_portal_requests")
+      .select(SELECT)
+      .lte("start_date", to)
+      .gte("end_date", from)
+      .order("start_date");
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as unknown as Row[]).map(toEntity);
+  }
+
   async findPending(organizationId: OrganizationId, kinds: PortalRequestKind[]): Promise<PortalRequest[]> {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("hr_portal_requests")
