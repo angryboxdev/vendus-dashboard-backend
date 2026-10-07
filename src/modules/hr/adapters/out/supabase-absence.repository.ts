@@ -139,4 +139,22 @@ export class SupabaseAbsenceRepository implements AbsenceRepositoryPort {
     const r = data as unknown as { days_entitled: number; days_carried_over: number | null };
     return { daysEntitled: r.days_entitled, daysCarriedOver: r.days_carried_over ?? 0 };
   }
+
+  async findBalances(organizationId: OrganizationId, year: number): Promise<Map<string, LeaveBalanceRecord>> {
+    const { data, error } = await this.scopedQuery(organizationId).table("hr_leave_balances").select("employee_id, days_entitled, days_carried_over").eq("year", year);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as unknown as Array<{ employee_id: string; days_entitled: number; days_carried_over: number | null }>;
+    return new Map(rows.map((r) => [r.employee_id, { daysEntitled: r.days_entitled, daysCarriedOver: r.days_carried_over ?? 0 }]));
+  }
+
+  async saveBalance(organizationId: OrganizationId, employeeId: string, year: number, b: LeaveBalanceRecord): Promise<void> {
+    const q = this.scopedQuery(organizationId).table("hr_leave_balances");
+    const { data: existing, error: readError } = await q.select("id").eq("employee_id", employeeId).eq("year", year).maybeSingle();
+    if (readError) throw new Error(readError.message);
+    const values = { days_entitled: b.daysEntitled, days_carried_over: b.daysCarriedOver, updated_at: new Date().toISOString() };
+    const { error } = existing
+      ? await this.scopedQuery(organizationId).table("hr_leave_balances").update(values).eq("id", (existing as unknown as { id: string }).id)
+      : await this.scopedQuery(organizationId).table("hr_leave_balances").insert({ employee_id: employeeId, year, ...values });
+    if (error) throw new Error(error.message);
+  }
 }

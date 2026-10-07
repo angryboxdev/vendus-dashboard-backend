@@ -29,6 +29,8 @@ export interface AbsenceRecordDTO {
 
 export interface AbsenceBoardDTO {
   records: AbsenceRecordDTO[];
+  /** Feriados no intervalo (marcados no Calendário). */
+  holidays: Array<{ date: string; name: string }>;
   attention: { pendingRequests: number; pendingDocuments: number; shiftConflicts: number };
 }
 
@@ -67,4 +69,28 @@ export interface RegisterAbsencePort {
 }
 export interface CancelAbsencePort {
   execute(command: { organizationId: OrganizationId; actor: string; id: string; reason: string }): Promise<void>;
+}
+
+/** Separador "Saldos": um colaborador ativo num ano. */
+export interface LeaveBalanceRowDTO {
+  employeeId: string;
+  employeeName: string;
+  positionName: string | null;
+  /** false = ainda não definido (mostra a sugestão). */
+  defined: boolean;
+  daysEntitled: number;
+  daysCarriedOver: number;
+  /** Sugestão a partir da data de admissão. */
+  suggested: number;
+  /** Férias já gozadas / marcadas (ativas, que começam no ano). */
+  taken: number;
+  scheduled: number;
+  available: number;
+}
+
+export interface ListLeaveBalancesPort {
+  execute(command: { organizationId: OrganizationId; year: number }): Promise<LeaveBalanceRowDTO[]>;
+}
+export interface SetLeaveBalancePort {
+  execute(command: { organizationId: OrganizationId; actor: string; employeeId: string; year: number; daysEntitled: number; daysCarriedOver: number }): Promise<void>;
 }

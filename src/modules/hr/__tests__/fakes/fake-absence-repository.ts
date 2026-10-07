@@ -26,6 +26,14 @@ export class FakeAbsenceRepository implements AbsenceRepositoryPort {
     this.items.set(absence.id, absence);
     return absence;
   }
+  async findBalances(_org: OrganizationId, year: number): Promise<Map<string, LeaveBalanceRecord>> {
+    const out = new Map<string, LeaveBalanceRecord>();
+    for (const [k, v] of this.balances) if (k.endsWith(`:${year}`)) out.set(k.split(":")[0]!, v);
+    return out;
+  }
+  async saveBalance(_org: OrganizationId, employeeId: string, year: number, b: LeaveBalanceRecord): Promise<void> {
+    this.balances.set(`${employeeId}:${year}`, b);
+  }
   async findBalance(_org: OrganizationId, employeeId: string, year: number): Promise<LeaveBalanceRecord | null> {
     return this.balances.get(`${employeeId}:${year}`) ?? null;
   }

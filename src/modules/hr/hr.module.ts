@@ -92,7 +92,14 @@ import { SupabaseLeaveWriteAdapter } from "./adapters/out/supabase-leave-write.a
 import { HrRequestsController } from "./adapters/in/hr-requests.controller.js";
 import { HrAbsencesController } from "./adapters/in/hr-absences.controller.js";
 import { SupabaseAbsenceRepository } from "./adapters/out/supabase-absence.repository.js";
-import { CancelAbsenceUseCase, GetAbsenceBoardUseCase, PreviewAbsenceUseCase, RegisterAbsenceUseCase } from "./application/use-cases/absences.use-cases.js";
+import {
+  CancelAbsenceUseCase,
+  GetAbsenceBoardUseCase,
+  ListLeaveBalancesUseCase,
+  PreviewAbsenceUseCase,
+  RegisterAbsenceUseCase,
+  SetLeaveBalanceUseCase,
+} from "./application/use-cases/absences.use-cases.js";
 import { DateTime } from "luxon";
 import { REPORT_TIMEZONE } from "../../utils/lisbonDayInstants.js";
 import { UndoDeleteWorkShiftsUseCase } from "./application/use-cases/undo-delete-work-shifts.use-case.js";
@@ -477,10 +484,12 @@ export function createHrModule(): { router: Router; meRouter: Router; generateAl
   const absenceRepository = new SupabaseAbsenceRepository(createScopedQuery);
   router.use(
     new HrAbsencesController(
-      new GetAbsenceBoardUseCase(absenceRepository, portalRequests, employeeDocumentRepository, employeeRepository, positionRepository, locationRepository, workShiftRepository),
+      new GetAbsenceBoardUseCase(absenceRepository, portalRequests, employeeDocumentRepository, employeeRepository, positionRepository, locationRepository, workShiftRepository, holidayRead),
       new PreviewAbsenceUseCase(absenceRepository, workShiftRepository, holidayRead, employeeRepository),
       new RegisterAbsenceUseCase(absenceRepository, holidayRead, auditLog),
       new CancelAbsenceUseCase(absenceRepository, auditLog),
+      new ListLeaveBalancesUseCase(absenceRepository, employeeRepository, positionRepository, lisbonToday),
+      new SetLeaveBalanceUseCase(absenceRepository, auditLog),
     ).router,
   );
   router.use(
