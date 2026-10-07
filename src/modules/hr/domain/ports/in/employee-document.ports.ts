@@ -135,3 +135,33 @@ export interface GetDocumentOverviewCommand {
 export interface GetDocumentOverviewPort {
   execute(command: GetDocumentOverviewCommand): Promise<DocumentOverviewRowDTO[]>;
 }
+
+// ── Envios do colaborador (Portal, ticket 11) ─────────────────────────────
+
+export interface ReviewEmployeeDocumentCommand {
+  organizationId: OrganizationId;
+  actor: string;
+  employeeId: string;
+  documentId: string;
+  decision: "approve" | "reject";
+  /** Obrigatório ao rejeitar — o colaborador vê-o no Portal. */
+  note?: string;
+  /** Ao validar, o RH pode confirmar/corrigir a validade. */
+  expiresAt?: string | null;
+}
+export interface ReviewEmployeeDocumentPort {
+  execute(command: ReviewEmployeeDocumentCommand): Promise<EmployeeDocumentDTO>;
+}
+
+export interface PendingDocumentDTO {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  categoryLabel: string;
+  fileName: string;
+  expiresAt: string | null;
+  submittedAt: string;
+}
+export interface ListPendingDocumentsPort {
+  execute(command: { organizationId: OrganizationId }): Promise<PendingDocumentDTO[]>;
+}

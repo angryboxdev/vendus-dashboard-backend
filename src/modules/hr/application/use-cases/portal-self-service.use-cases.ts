@@ -23,6 +23,9 @@ import type {
 } from "../../domain/ports/in/portal-me.ports.js";
 import { occurrenceOverlapsShift } from "../../domain/services/shift-recurrence.service.js";
 import { resolvePortalEmployeeId } from "./portal-me.use-cases.js";
+import { canReplaceDocument } from "../../domain/services/document-replacement.service.js";
+import type { Document } from "../../../documents/domain/entities/document.js";
+import type { DocumentCategoryDefinition } from "../../../documents/domain/entities/document-category.js";
 import { addDays } from "./schedule-shared.js";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 
@@ -123,12 +126,34 @@ export class ListMyCoworkersUseCase implements ListMyCoworkersPort {
   }
 }
 
+export function toMyDocumentDTO(
+  d: Document,
+  cat: Pick<DocumentCategoryDefinition, "label" | "requiresPeriod"> | null,
+  today: string,
+  lastRejection: MyDocumentDTO["lastRejection"],
+): MyDocumentDTO {
+  return {
+    id: d.id,
+    categoryLabel: cat?.label ?? d.category,
+    fileName: d.fileName,
+    status: d.status,
+    canReplace: canReplaceDocument(d, today).ok,
+    lastRejection,
+    period: d.period,
+    isPayslip: cat?.requiresPeriod === true,
+    issuedAt: d.issuedAt,
+    expiresAt: d.expiresAt,
+    uploadedAt: d.uploadedAt,
+  };
+}
+
 /** Documentos do próprio (motor documental existente) — versões atuais, sem removidos/rejeitados. Recibos = categorias com período. */
 export class ListMyDocumentsUseCase implements ListMyDocumentsPort {
   constructor(
     private readonly accounts: PortalAccountPort,
     private readonly documents: DocumentRepositoryPort,
     private readonly categories: DocumentCategoryRepositoryPort,
+    private readonly today: () => string = () => new Date().toISOString().slice(0, 10),
   ) {}
 
   async execute(identity: PortalIdentity): Promise<MyDocumentDTO[]> {
@@ -136,21 +161,19 @@ export class ListMyDocumentsUseCase implements ListMyDocumentsPort {
     const employeeId = await resolvePortalEmployeeId(this.accounts, identity);
     const [docs, cats] = await Promise.all([this.documents.findCurrentByOwners(org, "employee", [employeeId]), this.categories.findMany(org)]);
     const bySlug = new Map(cats.map((c) => [c.slug, c]));
-    return docs
-      .filter((d) => d.status !== "removed" && d.status !== "rejected")
-      .map((d) => {
-        const cat = bySlug.get(d.category);
-        return {
-          id: d.id,
-          categoryLabel: cat?.label ?? d.category,
-          fileName: d.fileName,
-          period: d.period,
-          isPayslip: cat?.requiresPeriod === true,
-          issuedAt: d.issuedAt,
-          expiresAt: d.expiresAt,
-          uploadedAt: d.uploadedAt,
-        };
-      })
+    const today = this.today();
+    const visible = docs.filter((d) => d.status !== "removed" && d.status !== "rejected");
+    const result: MyDocumentDTO[] = [];
+    for (const d of visible) {
+      // Só os substituíveis podem ter uma rejeição recente a mostrar — evita ler o histórico de todos.
+      let lastRejection: MyDocumentDTO["lastRejection"] = null;
+      if (canReplaceDocument(d, today).ok) {
+        const newest = (await this.documents.findVersionHistory(org, "employee", employeeId, d.category))[0];
+        if (newest && newest.status === "rejected" && newest.reviewNote) lastRejection = { note: newest.reviewNote, at: newest.reviewedAt ?? newest.uploadedAt };
+      }
+      result.push(toMyDocumentDTO(d, bySlug.get(d.category) ?? null, today, lastRejection));
+    }
+    return result
       .sort((a, b) => (b.period ?? "").localeCompare(a.period ?? "") || b.uploadedAt.localeCompare(a.uploadedAt));
   }
 }

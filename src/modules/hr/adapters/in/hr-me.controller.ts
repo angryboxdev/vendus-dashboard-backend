@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import multer from "multer";
 import { PortalBadRequestError, PortalNotLinkedError, PortalResourceNotFoundError, PunchRefusedError } from "../../domain/errors.js";
 import type {
   GetMyDocumentUrlPort,
@@ -9,6 +10,7 @@ import type {
   ListMyShiftsPort,
   PortalIdentity,
   RegisterPunchPort,
+  ReplaceMyDocumentPort,
 } from "../../domain/ports/in/portal-me.ports.js";
 import type { ClientLocation } from "../../domain/services/punch-geofence.service.js";
 
@@ -35,6 +37,13 @@ function handleError(e: unknown, res: Response): void {
 function identity(req: Request): PortalIdentity {
   return { organizationId: req.auth!.orgId, userId: req.auth!.sub, actor: req.auth!.email };
 }
+
+/** Portal: PDF ou foto do telemóvel, até 10 MB. */
+const portalUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(null, ["application/pdf", "image/jpeg", "image/png"].includes(file.mimetype)),
+});
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LOCATION_ERRORS = new Set(["permission_denied", "unavailable", "timeout"]);
@@ -72,6 +81,7 @@ export class HrMeController {
       listMyDocuments: ListMyDocumentsPort;
       getMyDocumentUrl: GetMyDocumentUrlPort;
       getMyLeave: GetMyLeavePort;
+      replaceMyDocument: ReplaceMyDocumentPort;
     },
   ) {
     this.router = Router();
@@ -88,6 +98,27 @@ export class HrMeController {
     this.router.get("/me/shifts/:id/coworkers", run((req) => this.selfService.listMyCoworkers.execute(identity(req), req.params.id as string)));
     this.router.get("/me/documents", run((req) => this.selfService.listMyDocuments.execute(identity(req))));
     this.router.get("/me/documents/:id/download-url", run((req) => this.selfService.getMyDocumentUrl.execute(identity(req), req.params.id as string)));
+    this.router.post("/me/documents/:id/replace", portalUpload.single("file"), async (req, res) => {
+      try {
+        if (!req.file) {
+          res.status(400).json({ error: "Escolha um PDF ou uma foto (JPG/PNG) até 10 MB." });
+          return;
+        }
+        const body = (req.body ?? {}) as Record<string, string | undefined>;
+        res.json(
+          await this.selfService.replaceMyDocument.execute({
+            ...identity(req),
+            documentId: req.params.id as string,
+            buffer: req.file.buffer,
+            filename: req.file.originalname,
+            mimeType: req.file.mimetype,
+            ...(body.expiresAt ? { expiresAt: body.expiresAt } : {}),
+          }),
+        );
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
     this.router.get("/me/leave", run((req) => this.selfService.getMyLeave.execute(identity(req), Number(req.query.year ?? new Date().getFullYear()))));
 
     this.router.get("/me", async (req, res) => {

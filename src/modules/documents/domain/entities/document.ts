@@ -43,6 +43,11 @@ export interface DocumentProps {
   isCurrent: boolean;
   uploadedBy: string;
   uploadedAt: string;
+  /** Revisão do RH a um envio do colaborador (validar/rejeitar). Opcionais: documentos antigos não têm. */
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  /** Motivo da rejeição (mostrado ao colaborador no Portal). */
+  reviewNote?: string | null;
 }
 
 export interface NewDocumentData {
@@ -100,6 +105,9 @@ export class Document {
   readonly isCurrent: boolean;
   readonly uploadedBy: string;
   readonly uploadedAt: string;
+  readonly reviewedBy: string | null;
+  readonly reviewedAt: string | null;
+  readonly reviewNote: string | null;
 
   private constructor(props: DocumentProps) {
     this.id = props.id;
@@ -122,6 +130,9 @@ export class Document {
     this.isCurrent = props.isCurrent;
     this.uploadedBy = props.uploadedBy;
     this.uploadedAt = props.uploadedAt;
+    this.reviewedBy = props.reviewedBy ?? null;
+    this.reviewedAt = props.reviewedAt ?? null;
+    this.reviewNote = props.reviewNote ?? null;
   }
 
   belongsTo(owner: DocumentOwner): boolean {
@@ -174,6 +185,8 @@ export class Document {
     expiresAt: string | null;
     visibility?: DocumentVisibility | null;
     uploadedBy: string;
+    /** Quem envia esta versão — por omissão a mesma origem da anterior. O colaborador (Portal) → "pending_validation". */
+    origin?: DocumentOrigin;
   }): Document {
     if (!this.isCurrent) {
       throw new DocumentNotCurrentError(this.id);
@@ -188,8 +201,8 @@ export class Document {
       storagePath: data.storagePath,
       mimeType: data.mimeType,
       fileSizeBytes: data.fileSizeBytes,
-      status: this.origin === "colaborador" ? "pending_validation" : "valid",
-      origin: this.origin,
+      status: (data.origin ?? this.origin) === "colaborador" ? "pending_validation" : "valid",
+      origin: data.origin ?? this.origin,
       issuedAt: data.issuedAt ?? null,
       expiresAt: data.expiresAt,
       visibility: visibilityFor(this.ownerType, data.visibility ?? this.visibility),
@@ -215,12 +228,26 @@ export class Document {
     return new Document({ ...this.toProps(), status: "removed", isCurrent: false });
   }
 
-  validate(): Document {
-    return new Document({ ...this.toProps(), status: "valid" });
+  validate(reviewedBy: string, at: Date = new Date()): Document {
+    if (this.status !== "pending_validation") throw new DocumentNotPendingError(this.id);
+    return new Document({ ...this.toProps(), status: "valid", reviewedBy, reviewedAt: at.toISOString(), reviewNote: null });
   }
 
-  reject(): Document {
-    return new Document({ ...this.toProps(), status: "rejected" });
+  /** Rejeitada deixa de ser a versão atual — quem a chama repõe a anterior (`restoreAsCurrent`). */
+  reject(reviewedBy: string, note: string, at: Date = new Date()): Document {
+    if (this.status !== "pending_validation") throw new DocumentNotPendingError(this.id);
+    if (!note.trim()) throw new DocumentRejectionReasonRequiredError();
+    return new Document({ ...this.toProps(), status: "rejected", isCurrent: false, reviewedBy, reviewedAt: at.toISOString(), reviewNote: note.trim() });
+  }
+
+  /** O RH confirma/corrige a data de validade ao validar um envio do colaborador. */
+  withExpiry(expiresAt: string | null): Document {
+    return new Document({ ...this.toProps(), expiresAt });
+  }
+
+  /** Versão anterior volta a ser a atual depois de a nova ser rejeitada. */
+  restoreAsCurrent(): Document {
+    return new Document({ ...this.toProps(), isCurrent: true });
   }
 
   toProps(): DocumentProps {
@@ -245,6 +272,24 @@ export class Document {
       isCurrent: this.isCurrent,
       uploadedBy: this.uploadedBy,
       uploadedAt: this.uploadedAt,
+      reviewedBy: this.reviewedBy,
+      reviewedAt: this.reviewedAt,
+      reviewNote: this.reviewNote,
     };
+  }
+}
+
+/** Validar/rejeitar só se aplica a um envio do colaborador ainda por validar. */
+export class DocumentNotPendingError extends Error {
+  constructor(id: string) {
+    super(`O documento ${id} não está a aguardar validação`);
+    this.name = "DocumentNotPendingError";
+  }
+}
+
+export class DocumentRejectionReasonRequiredError extends Error {
+  constructor() {
+    super("Indique o motivo da rejeição — o colaborador vai vê-lo no Portal.");
+    this.name = "DocumentRejectionReasonRequiredError";
   }
 }

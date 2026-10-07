@@ -12,6 +12,8 @@ export interface DocumentRepositoryPort {
     ownerId: string,
     category: string,
   ): Promise<Document[]>;
+  /** Versões atuais de colaboradores a aguardar validação do RH (Caixa de pedidos). */
+  findPendingValidation(organizationId: OrganizationId): Promise<Document[]>;
   create(organizationId: OrganizationId, document: Document): Promise<Document>;
   update(organizationId: OrganizationId, document: Document): Promise<Document>;
 }
