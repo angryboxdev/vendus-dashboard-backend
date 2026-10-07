@@ -92,7 +92,7 @@ export class HrAbsencesController {
       try {
         const reason = typeof req.body?.reason === "string" ? req.body.reason : "";
         await this.cancel.execute({ organizationId: req.auth!.orgId, actor: req.auth!.email, id: req.params.id as string, reason });
-        res.status(204).send();
+        res.json({ cancelled: true });
       } catch (e) {
         handleError(e, res);
       }
