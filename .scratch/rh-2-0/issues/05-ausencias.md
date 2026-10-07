@@ -1,4 +1,4 @@
-Status: open
+Status: done (2026-10-07 — sem cancelamento de turnos: ficam como conflito, decisão do utilizador)
 
 # Férias & Ausências 2.0
 

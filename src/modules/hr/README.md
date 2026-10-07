@@ -808,6 +808,24 @@ Este módulo é **aditivo**, não uma substituição imediata:
   próprio responde 404 (`PortalResourceNotFoundError`), nunca 403, para não
   confirmar que existe.
 
+### Férias & Ausências 2.0 (2026-10-07, mockup)
+
+- `Absence` (entidade) sobre `hr_leave_requests` via `AbsenceRepositoryPort`:
+  dia / meio dia (240 min) / horas (num só dia); férias só em dias inteiros;
+  cancelar exige motivo e nunca apaga (`status = cancelled`). Não deixa
+  sobrepor ausências ativas do mesmo colaborador.
+- Rotas em `/hr/leave/...` (já `hr.leave`): `GET board?from&to` (ausências +
+  pedidos do Portal não aprovados, turnos afetados, "Requer atenção":
+  pedidos/documentos pendentes e conflitos), `POST absences/preview`
+  (dias úteis seg–sex sem feriados, saldo de férias só no Hub, turnos
+  afetados, equipa ausente, sobreposição), `POST absences`,
+  `POST absences/:id/cancel`.
+- **Turnos afetados ficam** e contam como conflito — o gerente ajusta nas
+  Escalas (decisão 2026-10-07; o "turno cancelado" do T3 fica por fazer).
+- "Resolver ocorrência" (Assiduidade) não tem rota própria: o frontend
+  regista a ausência (`hr.leave`) e fecha a ocorrência com a correção
+  existente (`hr.attendance`) — cada permissão continua a valer.
+
 ### Portal — pedidos, substituir documento e Caixa de pedidos (2026-10-07)
 
 - **Substituir documento** (ticket 11, `employee-document-review.use-cases`):
