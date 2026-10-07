@@ -62,6 +62,10 @@ export function assertShiftShape(props: {
   if (endsNextDay && secondStartTime != null) {
     throw new InvalidWorkShiftError("Turno repartido não é suportado em turnos que terminam no dia seguinte");
   }
+  if (endsNextDay && endTime >= startTime) {
+    // Ex.: 20:00–23:59 marcado como "dia seguinte" daria ~28h. Turno noturno = fim antes do início (18:00–01:30).
+    throw new InvalidWorkShiftError("Num turno que termina no dia seguinte, a hora de fim tem de ser antes da hora de início (ex.: 18:00–01:30)");
+  }
   if (!endsNextDay && startTime >= endTime) {
     throw new InvalidWorkShiftError("A hora de início tem de ser antes da hora de fim (mesmo dia civil)");
   }

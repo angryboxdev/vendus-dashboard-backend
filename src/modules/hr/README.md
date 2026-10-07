@@ -808,6 +808,31 @@ Este módulo é **aditivo**, não uma substituição imediata:
   próprio responde 404 (`PortalResourceNotFoundError`), nunca 403, para não
   confirmar que existe.
 
+### Jornada, dupla e turnos que passam da meia-noite (2026-10-07)
+
+- **Jornada** (ver `CONTEXT.md`): por colaborador e `workDate` (dia em que o
+  turno começa); `workday.service` soma os turnos do dia e classifica 1 / 1,5
+  / 2 com 3 limites novos nas regras de assiduidade (`standardShiftMinutes`
+  480, `closingToleranceMinutes` 90, `doubleShiftFromMinutes` 720; migração
+  `20261009100000_hr_attendance_rules_workday`). Versionados como as outras
+  regras e no histórico por campo. Resumo mensal/fecho: `workedDaysCount`,
+  `shiftEquivalents`, `oneAndHalfDaysCount`, `doubleDaysCount` pelas horas
+  **reais**; o calendário (frontend) usa as horas **planeadas** (decisão do
+  utilizador, 2026-10-07).
+- **Viragem do dia** (`shift-clock.service`): marcações "HH:mm" vão para o
+  dia mais próximo da hora planeada — corrige entrada tardia depois da
+  meia-noite (+24h nas horas), atraso/saída antecipada em noturnos e saída de
+  fecho depois da meia-noite vista como "saída antecipada".
+- **Turno noturno** só com fim antes do início (`assertShiftShape`):
+  "20:00–23:59 termina no dia seguinte" (~28h) passa a ser recusado. O
+  frontend marca "termina no dia seguinte" sozinho quando o fim é antes do
+  início.
+- **Quiosque (legado, `hrKioskService`)**: a saída depois da meia-noite fecha
+  o turno de ontem com entrada aberta se o fim planeado estiver a ≤ 6h; saída
+  antecipada calculada com a viragem do dia.
+- Fora do âmbito: a pausa (`breakMinutes`) continua a não ser descontada nas
+  horas.
+
 ### Desfazer apagar/limpar turnos (2026-10-07)
 
 - Motivo: uma "Semana limpa" acidental apagou 22 turnos publicados e a

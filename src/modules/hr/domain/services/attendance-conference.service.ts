@@ -3,6 +3,7 @@ import { REPORT_TIMEZONE } from "../../../../utils/lisbonDayInstants.js";
 import type { ShiftOccurrence, UnscheduledAttendanceOccurrence } from "../ports/out/shift-attendance-read.port.js";
 import type { ActiveLeave } from "../ports/out/leave-read.port.js";
 import { shiftWindow } from "./overview-shift-state.service.js";
+import { actualPeriodMinutes, plannedRange } from "./shift-clock.service.js";
 
 /**
  * Fase 2 ("Assiduidade, Correções, Ausências e Fecho Mensal") — separa
@@ -47,13 +48,6 @@ export interface AttendanceIssue {
   actualMinutes: number;
 }
 
-function minutesBetween(startHm: string, endHm: string, endsNextDay = false): number {
-  const [sh, sm] = startHm.split(":").map(Number) as [number, number];
-  const [eh, em] = endHm.split(":").map(Number) as [number, number];
-  let mins = eh * 60 + em - (sh * 60 + sm);
-  if (endsNextDay || mins < 0) mins += 24 * 60;
-  return mins;
-}
 
 /**
  * Atribui o único par entrada/saída real de um turno repartido ao período
@@ -86,13 +80,22 @@ export function attributeActualToPeriods(shift: ShiftOccurrence): AttendancePeri
 
 export function sumPlannedMinutes(periods: AttendancePeriod[], endsNextDay: boolean): number {
   let total = 0;
-  for (const p of periods) if (p.plannedStart && p.plannedEnd) total += minutesBetween(p.plannedStart, p.plannedEnd, endsNextDay);
+  for (const p of periods) {
+    if (!p.plannedStart || !p.plannedEnd) continue;
+    const r = plannedRange(p.plannedStart, p.plannedEnd, endsNextDay);
+    total += r.end - r.start;
+  }
   return total;
 }
 
 export function sumActualMinutes(periods: AttendancePeriod[], endsNextDay: boolean): number {
   let total = 0;
-  for (const p of periods) if (p.actualStart && p.actualEnd) total += minutesBetween(p.actualStart, p.actualEnd, endsNextDay);
+  // Cada marcação vai para o dia mais próximo da sua hora planeada — uma entrada tardia depois da meia-noite já não soma 24h.
+  for (const p of periods) {
+    if (!p.actualStart || !p.actualEnd) continue;
+    const planned = p.plannedStart && p.plannedEnd ? plannedRange(p.plannedStart, p.plannedEnd, endsNextDay) : null;
+    total += actualPeriodMinutes(p.actualStart, p.actualEnd, planned);
+  }
   return total;
 }
 
@@ -212,7 +215,7 @@ export function computeUnscheduledAttendanceIssue(row: UnscheduledAttendanceOccu
     occurrences: ["PRESENCA_SEM_ESCALA"],
     lateMinutes: row.lateMinutes,
     plannedMinutes: 0,
-    actualMinutes: row.actualStartTime && row.actualEndTime ? minutesBetween(row.actualStartTime, row.actualEndTime) : 0,
+    actualMinutes: row.actualStartTime && row.actualEndTime ? actualPeriodMinutes(row.actualStartTime, row.actualEndTime, null) : 0,
   };
 }
 

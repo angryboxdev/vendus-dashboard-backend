@@ -5,6 +5,7 @@ import type { AttendanceRulesRepositoryPort } from "../../domain/ports/out/atten
 import type { HrAuditLogPort } from "../../domain/ports/out/hr-audit-log.port.js";
 import type { AttendanceRulesConfigDTO, UpdateAttendanceRulesCommand, UpdateAttendanceRulesPort } from "../../domain/ports/in/attendance-rules.ports.js";
 import { GetAttendanceRulesUseCase, pickCurrentVersion } from "./get-attendance-rules.use-case.js";
+import { assertWorkdayRules } from "../../domain/services/workday.service.js";
 
 /**
  * Fase 2.1 — insere uma NOVA versão (nunca UPDATE) com `effectiveFrom =
@@ -22,6 +23,7 @@ export class UpdateAttendanceRulesUseCase implements UpdateAttendanceRulesPort {
   ) {}
 
   async execute(command: UpdateAttendanceRulesCommand): Promise<AttendanceRulesConfigDTO> {
+    assertWorkdayRules(command);
     const versions = await this.attendanceRulesRepository.listVersions(command.organizationId);
     const today = DateTime.now().setZone(REPORT_TIMEZONE).toISODate()!;
     const previous = pickCurrentVersion(versions, today);
@@ -34,6 +36,9 @@ export class UpdateAttendanceRulesUseCase implements UpdateAttendanceRulesPort {
       absenceThresholdMinutes: command.absenceThresholdMinutes,
       preShiftWindowMinutes: command.preShiftWindowMinutes,
       postShiftWindowMinutes: command.postShiftWindowMinutes,
+      standardShiftMinutes: command.standardShiftMinutes,
+      closingToleranceMinutes: command.closingToleranceMinutes,
+      doubleShiftFromMinutes: command.doubleShiftFromMinutes,
       controlStartDate: command.controlStartDate,
       effectiveFrom: today,
       changedBy: command.actor,

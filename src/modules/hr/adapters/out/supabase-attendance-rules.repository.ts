@@ -5,7 +5,7 @@ import type { AttendanceRulesRepositoryPort } from "../../domain/ports/out/atten
 import type { AttendanceRulesVersion } from "../../domain/entities/attendance-rules.js";
 
 const SELECT =
-  "id, org_id, entry_tolerance_minutes, early_exit_tolerance_minutes, absence_threshold_minutes, pre_shift_window_minutes, post_shift_window_minutes, control_start_date, effective_from, changed_by, created_at";
+  "id, org_id, entry_tolerance_minutes, early_exit_tolerance_minutes, absence_threshold_minutes, pre_shift_window_minutes, post_shift_window_minutes, standard_shift_minutes, closing_tolerance_minutes, double_shift_from_minutes, control_start_date, effective_from, changed_by, created_at";
 
 interface Row {
   id: string;
@@ -15,6 +15,9 @@ interface Row {
   absence_threshold_minutes: number;
   pre_shift_window_minutes: number;
   post_shift_window_minutes: number;
+  standard_shift_minutes: number;
+  closing_tolerance_minutes: number;
+  double_shift_from_minutes: number;
   control_start_date: string | null;
   effective_from: string;
   changed_by: string;
@@ -30,6 +33,9 @@ function rowToVersion(row: Row): AttendanceRulesVersion {
     absenceThresholdMinutes: row.absence_threshold_minutes,
     preShiftWindowMinutes: row.pre_shift_window_minutes,
     postShiftWindowMinutes: row.post_shift_window_minutes,
+    standardShiftMinutes: row.standard_shift_minutes,
+    closingToleranceMinutes: row.closing_tolerance_minutes,
+    doubleShiftFromMinutes: row.double_shift_from_minutes,
     controlStartDate: row.control_start_date,
     effectiveFrom: row.effective_from,
     changedBy: row.changed_by,
@@ -57,6 +63,9 @@ export class SupabaseAttendanceRulesRepository implements AttendanceRulesReposit
         absence_threshold_minutes: version.absenceThresholdMinutes,
         pre_shift_window_minutes: version.preShiftWindowMinutes,
         post_shift_window_minutes: version.postShiftWindowMinutes,
+        standard_shift_minutes: version.standardShiftMinutes,
+        closing_tolerance_minutes: version.closingToleranceMinutes,
+        double_shift_from_minutes: version.doubleShiftFromMinutes,
         control_start_date: version.controlStartDate,
         effective_from: version.effectiveFrom,
         changed_by: version.changedBy,

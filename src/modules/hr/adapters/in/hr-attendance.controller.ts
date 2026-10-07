@@ -6,6 +6,7 @@ import {
   MonthlyClosureLockedError,
   MonthlyClosureNotFoundError,
   MonthlyClosureReopenReasonRequiredError,
+  InvalidWorkdayRulesError,
 } from "../../domain/errors.js";
 import type { AttendanceCorrectionType } from "../../domain/ports/out/attendance-correction-repository.port.js";
 import type {
@@ -224,6 +225,9 @@ export class HrAttendanceController {
           "absenceThresholdMinutes",
           "preShiftWindowMinutes",
           "postShiftWindowMinutes",
+          "standardShiftMinutes",
+          "closingToleranceMinutes",
+          "doubleShiftFromMinutes",
         ] as const;
         for (const field of fields) {
           if (!isFiniteNumber(body[field]) || (body[field] as number) < 0) {
@@ -243,10 +247,17 @@ export class HrAttendanceController {
           absenceThresholdMinutes: body.absenceThresholdMinutes as number,
           preShiftWindowMinutes: body.preShiftWindowMinutes as number,
           postShiftWindowMinutes: body.postShiftWindowMinutes as number,
+          standardShiftMinutes: body.standardShiftMinutes as number,
+          closingToleranceMinutes: body.closingToleranceMinutes as number,
+          doubleShiftFromMinutes: body.doubleShiftFromMinutes as number,
           controlStartDate: (body.controlStartDate as string | null | undefined) ?? null,
         });
         res.json(result);
       } catch (e) {
+        if (e instanceof InvalidWorkdayRulesError) {
+          res.status(400).json({ error: e.message });
+          return;
+        }
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
       }
     });
