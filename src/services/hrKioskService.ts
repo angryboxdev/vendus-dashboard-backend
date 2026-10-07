@@ -66,34 +66,65 @@ export async function kioskScan(
     throw new KioskError("PIN incorrecto", 401);
   }
 
-  // 4. Encontrar turno de hoje para este funcionário
+  // 4. Hora actual em Lisboa
   const scoped = createScopedQuery(organizationId);
-  const { data: shiftsData, error: shiftError } = await scoped
-    .table("hr_work_shifts")
-    .select("id, start_time, end_time")
-    .eq("employee_id", employee.id)
-    .eq("work_date", todayYmd)
-    .order("start_time", { ascending: true });
-
-  if (shiftError) {
-    throw new KioskError(`Erro ao obter turno: ${shiftError.message}`, 500);
-  }
-  if (!shiftsData || shiftsData.length === 0) {
-    throw new KioskError("Não tens turno agendado para hoje", 404);
-  }
-
-  // 5. Hora actual em Lisboa
   const nowLisbon = DateTime.now().setZone(REPORT_TIMEZONE);
   const currentHm = nowLisbon.toFormat("HH:mm");
 
-  // 6. Para cada turno (por ordem), verificar conferência — usar o primeiro incompleto
-  type ShiftRow = { id: string; start_time: string; end_time: string };
+  type ShiftRow = { id: string; start_time: string; end_time: string; ends_next_day: boolean | null };
   type AttRow = { id: string; actual_start_time: string | null; actual_end_time: string | null } | null;
 
   let shift: ShiftRow | null = null;
   let att: AttRow = null;
+  /** O turno escolhido é de ontem (saída depois da meia-noite). */
+  let fromYesterday = false;
 
-  for (const s of shiftsData as unknown as ShiftRow[]) {
+  // 5. Saída depois da meia-noite: turno de ONTEM com entrada e sem saída, cujo fim
+  // planeado está perto de agora (noturno, ou fecho que passou da meia-noite). Uma
+  // saída esquecida ontem à tarde não é apanhada (fim longe de agora).
+  const yesterdayYmd = nowLisbon.minus({ days: 1 }).toFormat("yyyy-MM-dd");
+  const { data: yesterdayShifts } = await scoped
+    .table("hr_work_shifts")
+    .select("id, start_time, end_time, ends_next_day")
+    .eq("employee_id", employee.id)
+    .eq("work_date", yesterdayYmd);
+  for (const s of (yesterdayShifts ?? []) as unknown as ShiftRow[]) {
+    const plannedEnd = shiftEndMinutes(s);
+    const nowFromYesterday = DAY_MINUTES + timeToMinutes(currentHm);
+    if (nowFromYesterday - plannedEnd > OVERNIGHT_EXIT_WINDOW_MINUTES) continue;
+    const { data: attData } = await scoped
+      .table("hr_shift_attendance")
+      .select("id, actual_start_time, actual_end_time")
+      .eq("work_shift_id", s.id)
+      .maybeSingle();
+    const a = attData as unknown as AttRow;
+    if (a && a.actual_start_time && !a.actual_end_time) {
+      shift = s;
+      att = a;
+      fromYesterday = true;
+      break;
+    }
+  }
+
+  // 6. Turnos de hoje para este funcionário
+  const { data: shiftsData, error: shiftError } = shift
+    ? { data: [] as ShiftRow[], error: null }
+    : await scoped
+        .table("hr_work_shifts")
+        .select("id, start_time, end_time, ends_next_day")
+        .eq("employee_id", employee.id)
+        .eq("work_date", todayYmd)
+        .order("start_time", { ascending: true });
+
+  if (shiftError) {
+    throw new KioskError(`Erro ao obter turno: ${shiftError.message}`, 500);
+  }
+  if (!shift && (!shiftsData || shiftsData.length === 0)) {
+    throw new KioskError("Não tens turno agendado para hoje", 404);
+  }
+
+  // 7. Para cada turno (por ordem), verificar conferência — usar o primeiro incompleto
+  for (const s of (shift ? [] : shiftsData) as unknown as ShiftRow[]) {
     const { data: attData, error: attError } = await scoped
       .table("hr_shift_attendance")
       .select("id, actual_start_time, actual_end_time")
@@ -160,7 +191,7 @@ export async function kioskScan(
   if (att.actual_start_time && !att.actual_end_time) {
     // --- CHECK-OUT ---
     const currentStatus = await getCurrentAttendanceStatus(scoped, att.id);
-    const leftEarly = isLeftEarly(currentHm, shiftEndHm);
+    const leftEarly = timeToMinutes(currentHm) + (fromYesterday ? DAY_MINUTES : 0) < shiftEndMinutes(shift);
     const newStatus = leftEarly && currentStatus === "worked_as_planned"
       ? "left_early"
       : currentStatus;
@@ -202,8 +233,15 @@ function computeLateMinutes(currentHm: string, shiftStartHm: string): number {
   return Math.max(0, timeToMinutes(currentHm) - timeToMinutes(shiftStartHm));
 }
 
-function isLeftEarly(currentHm: string, shiftEndHm: string): boolean {
-  return timeToMinutes(currentHm) < timeToMinutes(shiftEndHm);
+const DAY_MINUTES = 24 * 60;
+/** Até quanto tempo depois do fim planeado do turno de ontem ainda se aceita a saída nele. */
+const OVERNIGHT_EXIT_WINDOW_MINUTES = 6 * 60;
+
+/** Fim planeado em minutos desde o início do dia do turno (noturno → dia seguinte). */
+function shiftEndMinutes(s: { start_time: string; end_time: string; ends_next_day: boolean | null }): number {
+  const start = timeToMinutes(formatHrTimeForApi(s.start_time));
+  const end = timeToMinutes(formatHrTimeForApi(s.end_time));
+  return s.ends_next_day || end <= start ? end + DAY_MINUTES : end;
 }
 
 async function getCurrentAttendanceStatus(

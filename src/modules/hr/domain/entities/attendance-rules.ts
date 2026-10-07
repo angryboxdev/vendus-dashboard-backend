@@ -16,6 +16,12 @@ export interface AttendanceRulesVersion {
   absenceThresholdMinutes: number;
   preShiftWindowMinutes: number;
   postShiftWindowMinutes: number;
+  /** Jornada: duração de referência de 1 turno (min). */
+  standardShiftMinutes: number;
+  /** Jornada: prolongamento de fecho/limpeza que ainda conta como 1 turno (min). */
+  closingToleranceMinutes: number;
+  /** Jornada: a partir deste total (min) a jornada conta como 2 turnos (dupla); entre o turno+tolerância e isto, 1,5. */
+  doubleShiftFromMinutes: number;
   /**
    * "Início do controlo de assiduidade" — turnos com `workDate` anterior
    * a esta data nunca geram pendência AUTOMÁTICA por tolerância (task
@@ -37,8 +43,14 @@ export type AttendanceRulesValues = Pick<
   | "absenceThresholdMinutes"
   | "preShiftWindowMinutes"
   | "postShiftWindowMinutes"
+  | "standardShiftMinutes"
+  | "closingToleranceMinutes"
+  | "doubleShiftFromMinutes"
   | "controlStartDate"
 >;
+
+/** Os 3 limites da jornada (1 turno / 1,5 / dupla) — ver `workday.service.ts`. */
+export type WorkdayRulesValues = Pick<AttendanceRulesValues, "standardShiftMinutes" | "closingToleranceMinutes" | "doubleShiftFromMinutes">;
 
 /** Só os 5 campos numéricos — usado para o histórico por campo (diffs numéricos, ver `ListAttendanceRuleChangesUseCase`). `controlStartDate` não entra nesse histórico (não é numérico). */
 export type AttendanceToleranceValues = Omit<AttendanceRulesValues, "controlStartDate">;
@@ -49,6 +61,9 @@ export const ATTENDANCE_RULES_FIELDS: (keyof AttendanceToleranceValues)[] = [
   "absenceThresholdMinutes",
   "preShiftWindowMinutes",
   "postShiftWindowMinutes",
+  "standardShiftMinutes",
+  "closingToleranceMinutes",
+  "doubleShiftFromMinutes",
 ];
 
 /**
@@ -63,5 +78,8 @@ export const DEFAULT_ATTENDANCE_RULES: AttendanceRulesValues = {
   absenceThresholdMinutes: 60,
   preShiftWindowMinutes: 30,
   postShiftWindowMinutes: 60,
+  standardShiftMinutes: 8 * 60,
+  closingToleranceMinutes: 90,
+  doubleShiftFromMinutes: 12 * 60,
   controlStartDate: null,
 };

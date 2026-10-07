@@ -61,6 +61,16 @@ admin at generation time — the only channel that value has to reach the
 `LocationToken` minted later, since generation and redemption are separate
 requests, possibly by different actors minutes apart.
 
+**Jornada** (workday):
+Everything one employee works on one schedule day, counted by the day the
+shift **starts** (`workDate`). Time after midnight (closing/cleaning)
+belongs to the previous day's jornada — never a second day or shift. Several
+shifts/periods on the same day add up into one jornada, which counts as 1,
+1,5 or 2 shifts ("dupla") by total hours, with limits configured per
+Organization in the attendance rules (HR → Assiduidade → Configurar regras).
+Planned hours drive the calendar badge; worked hours drive the monthly close.
+_Avoid_: counting by the calendar day of the clock time.
+
 ## Sales analytics
 
 **Sales Period**:

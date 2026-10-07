@@ -3,6 +3,7 @@ import { REPORT_TIMEZONE } from "../../../../utils/lisbonDayInstants.js";
 import type { AttendancePeriod } from "./attendance-conference.service.js";
 import type { AttendanceRulesValues, AttendanceRulesVersion } from "../entities/attendance-rules.js";
 import { DEFAULT_ATTENDANCE_RULES } from "../entities/attendance-rules.js";
+import { clockDiffMinutes, hmToMinutes } from "./shift-clock.service.js";
 
 /**
  * Fase 2.1 — classificação automática por tolerância, em PARALELO à
@@ -43,14 +44,13 @@ function pickMostSevere(results: ToleranceClassification[]): ToleranceClassifica
   return { kind: "ok", diffMinutes: null };
 }
 
-function hmToMinutes(hm: string): number {
-  const [h, m] = hm.split(":").map(Number) as [number, number];
-  return h * 60 + m;
-}
-
-/** Diferença real em minutos (registado − planeado) — nunca só "o que excedeu a tolerância" (task, secção 2). */
-function diffMinutes(actualHm: string, plannedHm: string): number {
-  return hmToMinutes(actualHm) - hmToMinutes(plannedHm);
+/**
+ * Diferença real em minutos (registado − planeado) — nunca só "o que excedeu
+ * a tolerância" (task, secção 2). A marcação vai para o dia mais próximo da
+ * hora planeada (`shift-clock.service`): 00:10 num turno das 23:50 = +20.
+ */
+function diffMinutes(actualHm: string, plannedHm: string, plannedNextDay = false): number {
+  return clockDiffMinutes(actualHm, hmToMinutes(plannedHm) + (plannedNextDay ? 24 * 60 : 0));
 }
 
 function instantOf(workDate: string, hm: string, addDays = 0): DateTime {
@@ -92,7 +92,7 @@ function classifyExit(
     return { kind: "no_exit", diffMinutes: null };
   }
 
-  const diff = diffMinutes(period.actualEnd, period.plannedEnd);
+  const diff = diffMinutes(period.actualEnd, period.plannedEnd, periodEndsNextDay);
   if (diff < -rules.earlyExitToleranceMinutes) return { kind: "early_exit", diffMinutes: diff };
   return { kind: "ok", diffMinutes: diff };
 }

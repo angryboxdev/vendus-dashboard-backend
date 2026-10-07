@@ -287,3 +287,11 @@ export class UndoNotAvailableError extends Error {
     this.name = "UndoNotAvailableError";
   }
 }
+
+/** Limites da jornada (1 turno / 1,5 / dupla) incoerentes entre si. */
+export class InvalidWorkdayRulesError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidWorkdayRulesError";
+  }
+}
