@@ -45,7 +45,7 @@ function setup() {
     outro,
     shift,
     base,
-    board: new GetAbsenceBoardUseCase(absences, requests, new FakeDocumentRepository(), employees, positions, locations, workShifts),
+    board: new GetAbsenceBoardUseCase(absences, requests, new FakeDocumentRepository(), employees, positions, locations, workShifts, holidays),
     preview: new PreviewAbsenceUseCase(absences, workShifts, holidays, employees),
     register: new RegisterAbsenceUseCase(absences, holidays, audit),
     cancel: new CancelAbsenceUseCase(absences, audit),
@@ -119,5 +119,6 @@ describe("Quadro (Calendário / Registos)", () => {
     ]);
     expect(board.records[0]).toMatchObject({ positionName: "Preparador", locationName: "Loja Teste", duration: "5 dias úteis" });
     expect(board.attention).toEqual({ pendingRequests: 1, pendingDocuments: 0, shiftConflicts: 1 });
+    expect(board.holidays).toEqual([]);
   });
 });

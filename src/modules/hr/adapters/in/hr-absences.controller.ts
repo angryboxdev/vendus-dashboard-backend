@@ -1,7 +1,15 @@
 import { Router, type Request, type Response } from "express";
 import { InvalidAbsenceError, type AbsenceDuration } from "../../domain/entities/absence.js";
 import { PortalResourceNotFoundError } from "../../domain/errors.js";
-import type { CancelAbsencePort, GetAbsenceBoardPort, PreviewAbsencePort, RegisterAbsenceCommand, RegisterAbsencePort } from "../../domain/ports/in/absences.ports.js";
+import type {
+  CancelAbsencePort,
+  GetAbsenceBoardPort,
+  ListLeaveBalancesPort,
+  PreviewAbsencePort,
+  RegisterAbsenceCommand,
+  RegisterAbsencePort,
+  SetLeaveBalancePort,
+} from "../../domain/ports/in/absences.ports.js";
 import type { LeaveType } from "../../domain/ports/out/leave-read.port.js";
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -52,8 +60,42 @@ export class HrAbsencesController {
     private readonly preview: PreviewAbsencePort,
     private readonly register: RegisterAbsencePort,
     private readonly cancel: CancelAbsencePort,
+    private readonly listBalances: ListLeaveBalancesPort,
+    private readonly setBalance: SetLeaveBalancePort,
   ) {
     this.router = Router();
+
+    /** GET /api/hr/leave/balances?year — separador "Saldos". */
+    this.router.get("/hr/leave/balances", async (req, res) => {
+      try {
+        const year = Number(req.query.year);
+        if (!Number.isInteger(year)) {
+          res.status(400).json({ error: "year inválido" });
+          return;
+        }
+        res.json(await this.listBalances.execute({ organizationId: req.auth!.orgId, year }));
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+
+    /** PUT /api/hr/leave/balances/:employeeId/:year { daysEntitled, daysCarriedOver } */
+    this.router.put("/hr/leave/balances/:employeeId/:year", async (req, res) => {
+      try {
+        const b = (req.body ?? {}) as Record<string, unknown>;
+        await this.setBalance.execute({
+          organizationId: req.auth!.orgId,
+          actor: req.auth!.email,
+          employeeId: req.params.employeeId as string,
+          year: Number(req.params.year),
+          daysEntitled: Number(b.daysEntitled),
+          daysCarriedOver: Number(b.daysCarriedOver ?? 0),
+        });
+        res.json({ saved: true });
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
 
     /** GET /api/hr/leave/board?from&to — Calendário + Registos + "Requer atenção". */
     this.router.get("/hr/leave/board", async (req, res) => {

@@ -102,6 +102,7 @@ export class CorrectShiftAttendanceUseCase implements CorrectShiftAttendancePort
       reason: command.reason,
       notes: command.notes ?? null,
       actor: command.actor,
+      absenceId: command.absenceId ?? null,
     });
 
     await this.auditLog.record({

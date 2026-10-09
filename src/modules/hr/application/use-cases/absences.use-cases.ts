@@ -18,12 +18,16 @@ import type {
   AbsenceRecordDTO,
   CancelAbsencePort,
   GetAbsenceBoardPort,
+  LeaveBalanceRowDTO,
+  ListLeaveBalancesPort,
+  SetLeaveBalancePort,
   PreviewAbsencePort,
   RegisterAbsenceCommand,
   RegisterAbsencePort,
 } from "../../domain/ports/in/absences.ports.js";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import { durationLabel, workingDaysBetween } from "../../domain/services/absence-impact.service.js";
+import { MAX_BALANCE_DAYS, suggestDaysEntitled, vacationDaysInYear } from "../../domain/services/leave-balance.service.js";
 
 /**
  * Férias & Ausências 2.0 (RH 2.0 tickets 05; mockup 2026-10-07). Os turnos
@@ -57,6 +61,7 @@ export class GetAbsenceBoardUseCase implements GetAbsenceBoardPort {
     private readonly positions: PositionRepositoryPort,
     private readonly locations: LocationRepositoryPort,
     private readonly workShifts: WorkShiftRepositoryPort,
+    private readonly holidays: HolidayReadPort,
   ) {}
 
   async execute(command: { organizationId: OrganizationId; from: string; to: string }): Promise<AbsenceBoardDTO> {
@@ -134,8 +139,10 @@ export class GetAbsenceBoardUseCase implements GetAbsenceBoardPort {
     }
     records.sort((x, y) => x.startDate.localeCompare(y.startDate) || x.employeeName.localeCompare(y.employeeName, "pt"));
 
+    const holidays = (await this.holidays.findInRange(org, command.from, command.to)).map((h) => ({ date: h.date, name: h.name }));
     return {
       records,
+      holidays,
       attention: {
         pendingRequests: allPending.length,
         pendingDocuments: pendingDocs.length,
@@ -231,6 +238,82 @@ export class CancelAbsenceUseCase implements CancelAbsencePort {
       description: `Ausência cancelada (${cancelled.startDate} a ${cancelled.endDate}): ${command.reason}`,
       before: absence.toProps(),
       after: cancelled.toProps(),
+      correlationId: randomUUID(),
+    });
+  }
+}
+
+/** Separador "Saldos": colaboradores ativos, saldo do ano (ou sugestão), gozados, marcados e disponível. */
+export class ListLeaveBalancesUseCase implements ListLeaveBalancesPort {
+  constructor(
+    private readonly absences: AbsenceRepositoryPort,
+    private readonly employees: EmployeeRepositoryPort,
+    private readonly positions: PositionRepositoryPort,
+    private readonly today: () => string,
+  ) {}
+
+  async execute(command: { organizationId: OrganizationId; year: number }): Promise<LeaveBalanceRowDTO[]> {
+    const org = command.organizationId;
+    const y = command.year;
+    const [employees, balances, absences, positions] = await Promise.all([
+      this.employees.findMany(org, { status: "active" }),
+      this.absences.findBalances(org, y),
+      this.absences.findInRange(org, `${y}-01-01`, `${y}-12-31`),
+      this.positions.findAll(org),
+    ]);
+    const posName = new Map(positions.map((p) => [p.id, p.name]));
+    const today = this.today();
+    return employees
+      .map((e) => {
+        const b = balances.get(e.id);
+        const suggested = suggestDaysEntitled(e.hiredAt, y);
+        const entitled = b?.daysEntitled ?? suggested;
+        const carried = b?.daysCarriedOver ?? 0;
+        const { taken, scheduled } = vacationDaysInYear(
+          absences.filter((a) => a.employeeId === e.id).map((a) => a.toProps()),
+          y,
+          today,
+        );
+        return {
+          employeeId: e.id,
+          employeeName: e.fullName,
+          positionName: e.positionId ? (posName.get(e.positionId) ?? null) : null,
+          defined: !!b,
+          daysEntitled: entitled,
+          daysCarriedOver: carried,
+          suggested,
+          taken,
+          scheduled,
+          available: entitled + carried - taken - scheduled,
+        };
+      })
+      .sort((a, b) => a.employeeName.localeCompare(b.employeeName, "pt"));
+  }
+}
+
+export class SetLeaveBalanceUseCase implements SetLeaveBalancePort {
+  constructor(
+    private readonly absences: AbsenceRepositoryPort,
+    private readonly auditLog: HrAuditLogPort,
+  ) {}
+
+  async execute(c: { organizationId: OrganizationId; actor: string; employeeId: string; year: number; daysEntitled: number; daysCarriedOver: number }): Promise<void> {
+    const ok = (n: number) => Number.isInteger(n) && n >= 0 && n <= MAX_BALANCE_DAYS;
+    if (!ok(c.daysEntitled) || !ok(c.daysCarriedOver)) throw new InvalidAbsenceError(`Os dias têm de ser números inteiros entre 0 e ${MAX_BALANCE_DAYS}.`);
+    if (!Number.isInteger(c.year) || c.year < 2000 || c.year > 2100) throw new InvalidAbsenceError("Ano inválido.");
+    const before = await this.absences.findBalance(c.organizationId, c.employeeId, c.year);
+    const after = { daysEntitled: c.daysEntitled, daysCarriedOver: c.daysCarriedOver };
+    await this.absences.saveBalance(c.organizationId, c.employeeId, c.year, after);
+    await this.auditLog.record({
+      organizationId: c.organizationId,
+      actor: c.actor,
+      entityType: "absence",
+      entityId: `balance:${c.employeeId}:${c.year}`,
+      employeeId: c.employeeId,
+      action: "balance_updated",
+      description: `Saldo de férias ${c.year}: ${c.daysEntitled} dias de direito + ${c.daysCarriedOver} transitados`,
+      before,
+      after,
       correlationId: randomUUID(),
     });
   }

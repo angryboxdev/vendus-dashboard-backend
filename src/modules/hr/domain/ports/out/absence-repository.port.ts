@@ -17,4 +17,8 @@ export interface AbsenceRepositoryPort {
   update(organizationId: OrganizationId, absence: Absence): Promise<Absence>;
   /** Saldo de férias registado para o ano (null = ainda não definido). */
   findBalance(organizationId: OrganizationId, employeeId: string, year: number): Promise<LeaveBalanceRecord | null>;
+  /** Todos os saldos registados no ano, por colaborador. */
+  findBalances(organizationId: OrganizationId, year: number): Promise<Map<string, LeaveBalanceRecord>>;
+  /** Cria ou atualiza o saldo do colaborador no ano. */
+  saveBalance(organizationId: OrganizationId, employeeId: string, year: number, balance: LeaveBalanceRecord): Promise<void>;
 }

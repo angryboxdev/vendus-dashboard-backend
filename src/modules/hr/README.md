@@ -808,6 +808,21 @@ Este módulo é **aditivo**, não uma substituição imediata:
   próprio responde 404 (`PortalResourceNotFoundError`), nunca 403, para não
   confirmar que existe.
 
+### Assiduidade — "Confirmar ausência" (2026-10-08)
+
+- Uma só ação na ocorrência: o servidor procura ausências **compatíveis**
+  (`absence-match.service`: ativa, mesmo colaborador, cobre o dia; parcial só
+  se o horário se sobrepõe ao turno). `POST /hr/attendance/confirm-absence/preview`
+  → `single` | `multiple` | `pending_request` | `none`; `POST …/confirm-absence`
+  vincula a única (ou a escolhida — várias nunca é automático), recusa com
+  409 `PENDING_REQUEST` se há pedido do Portal pendente (não cria nem aprova)
+  ou cria UMA ausência (dia inteiro se o horário é o do turno, senão horas).
+- A ocorrência fecha pela correção existente (`justify_no_impact`, ou
+  `mark_absence` se falta injustificada) que guarda `absence_id`
+  (migração `20261010100000_attendance_correction_absence_link`).
+- Rota em `/hr/attendance` (`hr.attendance`): confirmar pode criar a ausência
+  sem a permissão `hr.leave` — decisão da task (o gestor resolve tudo ali).
+
 ### Férias & Ausências 2.0 (2026-10-07, mockup)
 
 - `Absence` (entidade) sobre `hr_leave_requests` via `AbsenceRepositoryPort`:

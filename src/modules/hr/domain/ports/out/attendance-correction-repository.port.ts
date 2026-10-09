@@ -28,6 +28,8 @@ export interface AttendanceCorrectionRecord {
   reason: string;
   notes: string | null;
   actor: string;
+  /** Ausência de Férias & Ausências a que esta ocorrência ficou vinculada. */
+  absenceId?: string | null;
 }
 
 export interface AttendanceCorrectionDTO {
@@ -42,6 +44,7 @@ export interface AttendanceCorrectionDTO {
   notes: string | null;
   actor: string;
   createdAt: string;
+  absenceId: string | null;
 }
 
 /**
