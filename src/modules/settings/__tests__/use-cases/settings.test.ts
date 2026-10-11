@@ -3,7 +3,7 @@ import type { SettingDefinition } from "../../domain/entities/setting-definition
 import { RetroactiveNotAllowed, SettingRuleViolation, SettingValidationError } from "../../domain/errors.js";
 import { SETTING_CATALOG } from "../../domain/services/setting-catalog.js";
 import { SettingsUseCases } from "../../application/use-cases/settings.use-cases.js";
-import { FakeClock, FakeImpact, FakeSegments, FakeSettingsRepository } from "../fakes/fake-settings.js";
+import { FakeAudit, FakeClock, FakeImpact, FakeSegments, FakeSettingsRepository } from "../fakes/fake-settings.js";
 
 const ORG = mintOrganizationId("org-test");
 const ADMIN = { userId: "u-admin", canRetroactive: false };
@@ -14,8 +14,9 @@ function setup(segments: FakeSegments = new FakeSegments(), catalog: SettingDefi
   const repo = new FakeSettingsRepository();
   const impact = new FakeImpact();
   const clock = new FakeClock("2026-10-11");
-  const uc = new SettingsUseCases(repo, segments, impact, clock, catalog);
-  return { repo, impact, clock, uc };
+  const audit = new FakeAudit();
+  const uc = new SettingsUseCases(repo, segments, impact, clock, catalog, audit);
+  return { repo, impact, clock, uc, audit };
 }
 
 async function effective(uc: SettingsUseCases, employeeId: string, date: string, key = TOL) {
@@ -168,6 +169,16 @@ describe("Motor de configurações — perfis, alvos e histórico", () => {
     await expect(uc.addTarget(ORG, p.id, { targetType: "employee", targetId: "e1", validFrom: "2026-12-01", validTo: null }, ADMIN)).rejects.toThrow("nesse período");
     await expect(uc.addTarget(ORG, p.id, { targetType: "employee", targetId: "e1", validFrom: "2027-01-01", validTo: null }, ADMIN)).resolves.toBeDefined();
     await expect(uc.addTarget(ORG, p.id, { targetType: "employee", targetId: "e2", validFrom: "2026-10-01", validTo: null }, ADMIN)).rejects.toBeInstanceOf(RetroactiveNotAllowed);
+  });
+
+  test("cada escrita fica na auditoria transversal (antes, depois, motivo; retroativo com ação própria)", async () => {
+    const { uc, audit } = setup();
+    const g = await uc.createProfile(ORG, { domain: "time_tracking", name: "Global", kind: "global" }, ADMIN);
+    await uc.setValue(ORG, g.id, { key: TOL, value: 15, validFrom: "2026-10-11", reason: "inicial" }, ADMIN);
+    await uc.setValue(ORG, g.id, { key: TOL, value: 10, validFrom: "2026-10-05", reason: "corrigir" }, RETRO);
+    expect(audit.events.map((e) => e.action)).toEqual(["settings.profile.create", "settings.value.set", "settings.value.set_retroactive"]);
+    expect(audit.events[1]).toMatchObject({ before: { key: TOL, value: null }, after: { key: TOL, value: 15 }, reason: "inicial", actor: "u-admin" });
+    expect(audit.events[2]!.after).toMatchObject({ value: 10, impact: { employees: 7, pastDays: 6 } });
   });
 
   test("CF_12_historico_com_antes_depois_e_motivo", async () => {

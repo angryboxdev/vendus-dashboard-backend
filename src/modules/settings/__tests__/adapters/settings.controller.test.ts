@@ -6,7 +6,7 @@ import { problemHandler } from "../../../../infra/http/problem-details.js";
 import { SettingsController } from "../../adapters/in/settings.controller.js";
 import { SettingsUseCases } from "../../application/use-cases/settings.use-cases.js";
 import { SETTING_CATALOG } from "../../domain/services/setting-catalog.js";
-import { FakeClock, FakeImpact, FakeSegments, FakeSettingsRepository } from "../fakes/fake-settings.js";
+import { FakeAudit, FakeClock, FakeImpact, FakeSegments, FakeSettingsRepository } from "../fakes/fake-settings.js";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const express = require("express") as typeof import("express");
@@ -21,7 +21,7 @@ describe("API /api/novo-rh/settings", () => {
 
   beforeEach(async () => {
     retro = false;
-    const uc = new SettingsUseCases(new FakeSettingsRepository(), new FakeSegments(), new FakeImpact(4), new FakeClock("2026-10-11"), SETTING_CATALOG);
+    const uc = new SettingsUseCases(new FakeSettingsRepository(), new FakeSegments(), new FakeImpact(4), new FakeClock("2026-10-11"), SETTING_CATALOG, new FakeAudit());
     const controller = new SettingsController(uc, new InMemoryIdempotencyStore(), () => ({ userId: "admin@demo.invalid", canRetroactive: retro }));
     const app = express();
     app.use(express.json());

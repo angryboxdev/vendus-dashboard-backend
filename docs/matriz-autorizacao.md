@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 470 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 473 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -321,6 +321,9 @@ Endpoints: 470 · pré-autenticação: 20 · não classificados: 0
 | POST | `/api/me/requests/:id/cancel` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/shifts` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/shifts/:id/coworkers` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/novo-rh/audit/events` | permission:governance.audit:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/audit/events.csv` | permission:governance.audit:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/audit/verify` | permission:governance.audit:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/settings/definitions` | permission:governance.settings:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/settings/effective` | permission:governance.settings:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/settings/history` | permission:governance.settings:READ | ✔ | ✖ | ✖ | ✖ | ✖ |

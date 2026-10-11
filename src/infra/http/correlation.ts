@@ -16,17 +16,31 @@ import type { RequestHandler } from "express";
 const HEADER = "x-correlation-id";
 const SAFE_ID = /^[A-Za-z0-9._-]{8,64}$/;
 
-const storage = new AsyncLocalStorage<{ correlationId: string }>();
+export interface RequestContext {
+  correlationId: string;
+  /** IP do cliente (req.ip — respeita `trust proxy` quando configurado). */
+  ip: string | null;
+  /** Dispositivo/navegador (User-Agent), truncado. */
+  userAgent: string | null;
+}
+
+const storage = new AsyncLocalStorage<RequestContext>();
 
 export function currentCorrelationId(): string | undefined {
   return storage.getStore()?.correlationId;
+}
+
+/** Contexto do pedido em curso (auditoria: IP e dispositivo). Fora de um pedido → undefined. */
+export function currentRequestContext(): RequestContext | undefined {
+  return storage.getStore();
 }
 
 export const correlationId: RequestHandler = (req, res, next) => {
   const incoming = req.get(HEADER);
   const id = incoming && SAFE_ID.test(incoming) ? incoming : randomUUID();
   res.setHeader("X-Correlation-Id", id);
-  storage.run({ correlationId: id }, () => next());
+  const ua = req.get("user-agent");
+  storage.run({ correlationId: id, ip: req.ip ?? null, userAgent: ua ? ua.slice(0, 400) : null }, () => next());
 };
 
 /** Chaves cujo valor nunca vai para o log (comparação sem maiúsculas, `_` e `-`). */

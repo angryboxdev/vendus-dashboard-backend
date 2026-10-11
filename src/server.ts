@@ -56,10 +56,13 @@ import { createStockPlanningModule } from "./modules/stock-planning/stock-planni
 import { createSalesDeclarationModule } from "./modules/sales-declaration/sales-declaration.module.js";
 import { correlationId } from "./infra/http/correlation.js";
 import { createSettingsModule } from "./modules/settings/settings.module.js";
+import { createAuditModule } from "./modules/audit/audit.module.js";
 import { can } from "./modules/access/domain/services/effective-access.service.js";
 import { problemHandler } from "./infra/http/problem-details.js";
 
 const app = express();
+// Render põe um proxy à frente: req.ip passa a ser o IP real do cliente (auditoria, ADR-0022).
+app.set("trust proxy", 1);
 
 // CORS: permitir frontend Vercel (produção + previews *.vercel.app) e localhost
 const corsOptions: cors.CorsOptions = {
@@ -322,9 +325,13 @@ app.use("/api/hr", hrLeaveRoutes);
 // RH-01 (Visão Geral) — /api/hr/overview*, só leitura, mesmo módulo.
 app.use("/api", hrModule.router);
 
-// Novo RH (task faseada) — motor de configurações (Fase 1, ticket 02). Rotas em /api/novo-rh/settings.
+// Novo RH (task faseada) — auditoria transversal (Fase 1, ticket 03) e motor de
+// configurações (ticket 02). Rotas em /api/novo-rh/audit e /api/novo-rh/settings.
+const auditModule = createAuditModule();
+app.use("/api", auditModule.router);
 const settingsModule = createSettingsModule({
   canRetroactive: (req) => !!req.access && can(req.access, "governance.settings_retroactive", "MANAGE"),
+  audit: auditModule.recorder,
 });
 app.use("/api", settingsModule.router);
 

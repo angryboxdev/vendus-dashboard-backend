@@ -52,6 +52,13 @@ export class FakeImpact implements SettingsImpactPort {
   }
 }
 
+export class FakeAudit {
+  events: { action: string; resourceId: string | null; before: unknown; after: unknown; reason: string | null; actor: string }[] = [];
+  async record(_org: OrganizationId, e: FakeAudit["events"][number]): Promise<void> {
+    this.events.push(e);
+  }
+}
+
 export class FakeClock implements SettingsClockPort {
   constructor(public date = "2026-10-11") {}
   async today(): Promise<string> {

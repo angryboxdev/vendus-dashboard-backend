@@ -92,6 +92,7 @@ export const ROUTE_RULES: RouteRule[] = [
   // ── Novo RH (task faseada) ───────────────────────────────────────────
   // Pré-visualizar impacto não grava nada, mas só serve a quem vai alterar.
   { pattern: /^\/api\/novo-rh\/settings(\/|$)/, target: p("governance.settings") },
+  { pattern: /^\/api\/novo-rh\/audit(\/|$)/, target: p("governance.audit") },
 
   // ── Recursos Humanos ─────────────────────────────────────────────────
   { pattern: /^\/api\/hr\/overview(\/|$)/, target: p("hr.overview") },

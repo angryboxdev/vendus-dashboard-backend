@@ -24,6 +24,14 @@ export interface SettingsImpactPort {
   countEmployees(orgId: OrganizationId, scope: { allEmployees: true } | { targets: Pick<SettingTarget, "targetType" | "targetId">[] }, date: string): Promise<number>;
 }
 
+/** Auditoria transversal (módulo audit, ligado no composition root). */
+export interface SettingsAuditPort {
+  record(
+    orgId: OrganizationId,
+    event: { actor: string; action: string; resourceType: string; resourceId: string | null; before: unknown; after: unknown; reason: string | null },
+  ): Promise<void>;
+}
+
 /** "Hoje" no fuso da organização (AAAA-MM-DD). */
 export interface SettingsClockPort {
   today(orgId: OrganizationId): Promise<string>;

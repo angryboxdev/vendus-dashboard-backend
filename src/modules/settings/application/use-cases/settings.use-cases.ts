@@ -3,7 +3,7 @@ import type { SettingDefinition, SettingDomain } from "../../domain/entities/set
 import type { SettingProfile, SettingTarget, TargetType } from "../../domain/entities/setting-profile.js";
 import { RetroactiveNotAllowed, SettingNotFound, SettingValidationError } from "../../domain/errors.js";
 import type { Actor, HistoryEntry, ImpactPreview, ProfileDetail, SettingsPorts } from "../../domain/ports/in/settings.ports.js";
-import type { EmployeeSegmentsPort, SettingsClockPort, SettingsImpactPort, SettingsRepositoryPort } from "../../domain/ports/out/settings.ports.js";
+import type { EmployeeSegmentsPort, SettingsAuditPort, SettingsClockPort, SettingsImpactPort, SettingsRepositoryPort } from "../../domain/ports/out/settings.ports.js";
 import { activeOn, profileValueAt, profileViewAt, resolveSetting, type SettingsSnapshot } from "../../domain/services/setting-resolution.js";
 import { checkDependencies, validateSettingValue } from "../../domain/services/setting-validation.js";
 
@@ -34,6 +34,7 @@ export class SettingsUseCases implements SettingsPorts {
     private readonly impact: SettingsImpactPort,
     private readonly clock: SettingsClockPort,
     private readonly catalog: SettingDefinition[],
+    private readonly audit: SettingsAuditPort,
   ) {}
 
   listDefinitions(domain?: SettingDomain): SettingDefinition[] {
@@ -67,7 +68,9 @@ export class SettingsUseCases implements SettingsPorts {
     if (input.kind === "global" && sameDomain.some((p) => p.kind === "global")) {
       throw new SettingValidationError("Este domínio já tem uma configuração global.", "kind");
     }
-    return this.repo.createProfile(orgId, { domain: input.domain, name, kind: input.kind, createdBy: actor.userId });
+    const profile = await this.repo.createProfile(orgId, { domain: input.domain, name, kind: input.kind, createdBy: actor.userId });
+    await this.audit.record(orgId, { actor: actor.userId, action: "settings.profile.create", resourceType: "setting_profile", resourceId: profile.id, before: null, after: profile, reason: null });
+    return profile;
   }
 
   async addTarget(
@@ -99,7 +102,9 @@ export class SettingsUseCases implements SettingsPorts {
         (input.validTo === null || t.validFrom <= input.validTo),
     );
     if (overlaps) throw new SettingValidationError("Este alvo já está associado ao perfil nesse período.", "targetId");
-    return this.repo.addTarget(orgId, { profileId, ...input, createdBy: actor.userId });
+    const target = await this.repo.addTarget(orgId, { profileId, ...input, createdBy: actor.userId });
+    await this.audit.record(orgId, { actor: actor.userId, action: "settings.target.add", resourceType: "setting_profile", resourceId: profileId, before: null, after: target, reason: null });
+    return target;
   }
 
   async setValue(
@@ -126,12 +131,22 @@ export class SettingsUseCases implements SettingsPorts {
     if (input.value !== null) checkDependencies(this.catalog, def.key, input.value, profileViewAt(this.catalog, profile, input.validFrom, snap));
 
     const impact = retroactive ? await this.computeImpact(orgId, profile, snap, input.validFrom, today) : null;
+    const previous = profileValueAt(snap.values, profileId, def.key, input.validFrom);
     const value = await this.repo.appendValue(orgId, {
       profileId,
       key: def.key,
       value: input.value,
       validFrom: input.validFrom,
       createdBy: actor.userId,
+      reason,
+    });
+    await this.audit.record(orgId, {
+      actor: actor.userId,
+      action: retroactive ? "settings.value.set_retroactive" : "settings.value.set",
+      resourceType: "setting_profile",
+      resourceId: profileId,
+      before: { key: def.key, value: previous?.value ?? null, validFrom: previous?.validFrom ?? null },
+      after: { key: def.key, value: value.value, validFrom: value.validFrom, ...(impact && { impact }) },
       reason,
     });
     return { value, impact };

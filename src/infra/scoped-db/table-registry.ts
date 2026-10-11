@@ -202,6 +202,8 @@ export const TABLE_REGISTRY = {
   setting_profile_targets: { organizationColumn: "org_id", locationBearing: false },
   setting_values: { organizationColumn: "org_id", locationBearing: false },
   http_idempotency_keys: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 1 (ticket 03): auditoria transversal append-only, encadeada por hash.
+  audit_events: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;
