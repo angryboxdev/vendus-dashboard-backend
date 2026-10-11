@@ -42,7 +42,7 @@ Fontes: RE = `Especificacao_RH_Engenharia_Reversa` §15 · CF = `Especificacao_R
 | RE-2 | Documento duplicado → 409 | por fazer | | |
 | RE-3 | Exportação sem colunas sem permissão (IBAN) | por fazer | | |
 | RE-4 | Desativação revoga sessões; dados ficam nos relatórios | por fazer | | |
-| RE-34 | Admin de centro não vê outros centros (pesquisa e exportação) | por fazer | | |
+| RE-34 | Admin de centro não vê outros centros (pesquisa e exportação) | parcial — âmbitos e verificação feitos (Fase 1); pesquisa/exportação de colaboradores com a Fase 2 | `access/domain/services/scope.service.ts`, `access-governance.use-cases.ts` | `src/modules/access/__tests__/use-cases/access-governance.test.ts::RE_34_*` |
 | CF-2 | Transferência: regras do novo centro a partir da data de efeito | por fazer | | |
 | CF-14 | Complemento noutra moeda → recusado | por fazer | | |
 | TK-9 | Contratos sobrepostos → 409 | por fazer | | |

@@ -19,7 +19,12 @@ import { SETTING_CATALOG } from "./domain/services/setting-catalog.js";
  * `canRetroactive` vem de fora (módulo access) para este módulo não
  * depender do modelo de permissões.
  */
-export function createSettingsModule(deps: { canRetroactive: (req: Request) => boolean; audit: SettingsAuditPort; units: OrgUnitsLookup }): {
+export function createSettingsModule(deps: {
+  canRetroactive: (req: Request) => boolean;
+  audit: SettingsAuditPort;
+  units: OrgUnitsLookup;
+  canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean>;
+}): {
   router: Router;
   settings: SettingsPorts;
 } {
@@ -32,6 +37,6 @@ export function createSettingsModule(deps: { canRetroactive: (req: Request) => b
     deps.audit,
   );
   const actorOf = (req: Request): Actor => ({ userId: req.auth!.email || req.auth!.sub, canRetroactive: deps.canRetroactive(req) });
-  const controller = new SettingsController(settings, new SupabaseIdempotencyStore(createScopedQuery), actorOf);
+  const controller = new SettingsController(settings, new SupabaseIdempotencyStore(createScopedQuery), actorOf, deps.canSeeEmployee);
   return { router: controller.router, settings };
 }

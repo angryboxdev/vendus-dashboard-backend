@@ -262,7 +262,24 @@ app.use(requireAuth);
 
 // Utilizadores & Perfis de Acesso 2.0: acesso efetivo (perfil + exceções +
 // estado) lido da BD por pedido — conta desativada é recusada já aqui.
-const accessModule = createAccessModule({ mfa: ENV.MFA_ENFORCEMENT });
+// Novo RH: auditoria transversal e estrutura criadas antes dos acessos (que as usam);
+// os routers montam-se mais abaixo, depois da autenticação.
+const auditModule = createAuditModule();
+const orgStructureModule = createOrgStructureModule({ audit: auditModule.recorder });
+const accessModule = createAccessModule({
+  mfa: ENV.MFA_ENFORCEMENT,
+  orgUnits: (org, employeeId, date) => orgStructureModule.structure.unitsOf(org, employeeId, date),
+  transversalAudit: auditModule.recorder,
+});
+// Âmbito (RE-34) dos endpoints do Novo RH que recebem um colaborador.
+const canSeeEmployee = (req: express.Request, employeeId: string, date: string) =>
+  accessModule.governance.canManageEmployee(
+    req.auth!.orgId,
+    { userId: req.auth!.sub, isAdmin: !!req.access?.isAdmin, profileId: req.access?.profile.id ?? null },
+    employeeId,
+    /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : new Date().toISOString().slice(0, 10),
+  );
+orgStructureModule.setScopeCheck(canSeeEmployee);
 app.use(accessModule.guards.loadAccess);
 
 // Portal do Colaborador: o papel `employee` só chega a `/api/me/*` — barreira
@@ -278,6 +295,7 @@ app.use(accessModule.guards.requireMfa);
 // o colaborador antes de chegar a elas.
 app.use("/api", hrModule.meRouter);
 app.use("/api", accessModule.meRouter);
+app.use("/api", accessModule.governanceRouter);
 app.use("/api", accessModule.adminRouter);
 
 // Admin-only: user management
@@ -330,14 +348,13 @@ app.use("/api", hrModule.router);
 
 // Novo RH (task faseada) — auditoria transversal (Fase 1, ticket 03) e motor de
 // configurações (ticket 02) e estrutura (ticket 04). Rotas em /api/novo-rh/{audit,structure,settings}.
-const auditModule = createAuditModule();
 app.use("/api", auditModule.router);
-const orgStructureModule = createOrgStructureModule({ audit: auditModule.recorder });
 app.use("/api", orgStructureModule.router);
 const settingsModule = createSettingsModule({
   canRetroactive: (req) => !!req.access && can(req.access, "governance.settings_retroactive", "MANAGE"),
   audit: auditModule.recorder,
   units: orgStructureModule.structure,
+  canSeeEmployee,
 });
 app.use("/api", settingsModule.router);
 

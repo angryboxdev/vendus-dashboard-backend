@@ -51,6 +51,8 @@ export class SettingsController {
     private readonly settings: SettingsPorts,
     idempotencyStore: IdempotencyStore,
     private readonly actorOf: (req: Request) => Actor,
+    /** Âmbito (RE-34): o utilizador gere este colaborador? Fora do âmbito → 404 (não revela existência). */
+    private readonly canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean> = async () => true,
   ) {
     const r = Router();
     const base = "/novo-rh/settings";
@@ -121,6 +123,7 @@ export class SettingsController {
       if (!employeeId) throw problem(400, "validation_error", "Escolha o colaborador.", { field: "employeeId" });
       const domain = str(req.query.domain) as SettingDomain;
       const date = str(req.query.date);
+      if (!(await this.canSeeEmployee(req, employeeId, date))) throw problem(404, "not_found", "Colaborador não encontrado.");
       res.json(await wrap(() => this.settings.effectiveFor(req.auth!.orgId, employeeId, date, DOMAINS.has(domain) ? domain : undefined))(req));
     });
 

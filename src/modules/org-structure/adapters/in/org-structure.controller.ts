@@ -46,6 +46,8 @@ export class OrgStructureController {
     private readonly s: OrgStructurePorts,
     idempotencyStore: IdempotencyStore,
     private readonly actorOf: (req: Request) => string,
+    /** Âmbito (RE-34): fora do âmbito → 404. */
+    private readonly canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean> = async () => true,
   ) {
     const r = Router();
     const base = "/novo-rh/structure";
@@ -98,7 +100,10 @@ export class OrgStructureController {
 
     r.get(`${base}/assignments`, async (req, res) => {
       const f: { employeeId?: string; unitType?: UnitType; unitId?: string } = {};
-      if (str(req.query.employeeId)) f.employeeId = str(req.query.employeeId);
+      if (str(req.query.employeeId)) {
+        f.employeeId = str(req.query.employeeId);
+        if (!(await this.canSeeEmployee(req, f.employeeId, new Date().toISOString().slice(0, 10)))) throw problem(404, "not_found", "Colaborador não encontrado.");
+      }
       if (str(req.query.unitType) === "department" || str(req.query.unitType) === "group") f.unitType = str(req.query.unitType) as UnitType;
       if (str(req.query.unitId)) f.unitId = str(req.query.unitId);
       res.json(await this.s.listAssignments(org(req), f));
@@ -106,6 +111,7 @@ export class OrgStructureController {
     r.post(`${base}/assignments`, async (req, res) => {
       const b = (req.body ?? {}) as Record<string, unknown>;
       const input = { employeeId: str(b.employeeId), unitType: str(b.unitType) as UnitType, unitId: str(b.unitId), validFrom: str(b.validFrom), validTo: optStr(b.validTo) };
+      if (!(await this.canSeeEmployee(req, input.employeeId, input.validFrom))) throw problem(404, "not_found", "Colaborador não encontrado.");
       res.status(201).json(await run(() => this.s.assign(org(req), input, this.actorOf(req))));
     });
     r.post(`${base}/assignments/:id/end`, async (req, res) => {

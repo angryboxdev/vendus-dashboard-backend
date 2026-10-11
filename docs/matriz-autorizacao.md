@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 487 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 496 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -12,6 +12,12 @@ Endpoints: 487 · pré-autenticação: 20 · não classificados: 0
 | POST | `/api/access-profiles` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
 | PATCH | `/api/access-profiles/:id` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
 | PATCH | `/api/access-profiles/:id/active` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
+| PUT | `/api/access-profiles/:id/field-privacy` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/access-profiles/:id/governance` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
+| PUT | `/api/access-profiles/:id/scope-kind` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/access-profiles/field-catalog` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/access-profiles/history` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/access-profiles/history.csv` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/accounting/documents` | permission:finance.accounting:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/accounting/documents` | permission:finance.accounting:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/accounting/documents/:id` | permission:finance.accounting:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
@@ -487,6 +493,9 @@ Endpoints: 487 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/users/:id` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
 | PATCH | `/api/users/:id` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/users/:id/reset-password` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/users/:id/scopes` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/users/:id/scopes` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/users/:id/scopes/:scopeId/end` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
 | PATCH | `/api/users/:id/status` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/users/employee-options` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/vendus/analytics/current` | permission:sales.dashboard:READ | ✔ | ✔ | ✖ | ✔ | ✖ |
