@@ -52,11 +52,11 @@ Fontes: RE = `Especificacao_RH_Engenharia_Reversa` §15 · CF = `Especificacao_R
 
 | ID | Requisito | Estado | Código | Teste |
 |---|---|---|---|---|
-| RE-35 | Apagar calendário mostra impacto e exige confirmação | por fazer | | |
-| CF-10 | Importação de feriados "a confirmar", não substitui regionais | por fazer | | |
-| CF-13 | Nomes de horário únicos por tenant | por fazer | | |
-| TK-11 | Teórico diário correto (casos aprovados por RH) | por fazer | | |
-| TK-12 | Dia de trabalho no fuso do centro, incl. mudança de hora (Lisboa e Madrid) | por fazer — dados de teste já gerados (`demo-data`) | | |
+| RE-35 | Apagar calendário mostra impacto e exige confirmação | feito | `time-base` (`deletePreview`, `deleteCalendar`) | `src/modules/time-base/__tests__/time-base.test.ts::RE_35_*` |
+| CF-10 | Importação de feriados "a confirmar", não substitui regionais | feito | `time-base` (`importNational`) | `src/modules/time-base/__tests__/time-base.test.ts::CF_10_*` |
+| CF-13 | Nomes de horário únicos por tenant | feito (aplicação + índice único) | `time-base` (`createSchedule`) | `src/modules/time-base/__tests__/time-base.test.ts::CF_13_*` |
+| TK-11 | Teórico diário correto (casos aprovados por RH) | feito — casos propostos (fixo, flexível, feriado, versão a meio do mês, meio dia, contrato, noturno); **aprovação de RH pendente** | `theoretical.service.ts` | `src/modules/time-base/__tests__/time-base.test.ts::TK_11_*` |
+| TK-12 | Dia de trabalho no fuso do centro, incl. mudança de hora (Lisboa e Madrid) | feito | `workday.service.ts` | `src/modules/time-base/__tests__/time-base.test.ts::TK_12_*` |
 
 ## Fase 4 — Registo de ponto e assiduidade
 

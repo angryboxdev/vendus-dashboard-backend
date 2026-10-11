@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 529 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 552 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -387,6 +387,29 @@ Endpoints: 529 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/novo-rh/structure/terms` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
 | POST | `/api/novo-rh/structure/terms/accept` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/structure/transfers` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/time/assignments` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/time/assignments` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/time/assignments-for` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/time/assignments/:id/end` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/time/holiday-calendars` | permission:company.holidays:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
+| POST | `/api/novo-rh/time/holiday-calendars` | permission:company.holidays:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| PATCH | `/api/novo-rh/time/holiday-calendars/:id` | permission:company.holidays:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/time/holiday-calendars/:id/days` | permission:company.holidays:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/time/holiday-calendars/:id/delete` | permission:company.holidays:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/time/holiday-calendars/:id/delete-preview` | permission:company.holidays:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
+| POST | `/api/novo-rh/time/holiday-calendars/:id/import` | permission:company.holidays:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| PATCH | `/api/novo-rh/time/holidays/:id` | permission:company.holidays:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/time/holidays/:id/remove` | permission:company.holidays:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/time/schedules` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/time/schedules` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/time/schedules/:id/archive` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/time/schedules/:id/versions` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/time/theoretical` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/time/vacation-calendars` | permission:hr.leave:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/time/vacation-calendars` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| PUT | `/api/novo-rh/time/vacation-calendars/:id` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/time/vacation-calendars/:id/delete` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/time/vacation-calendars/:id/delete-preview` | permission:hr.leave:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/organization` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
 | PATCH | `/api/organization` | permission:company.organization:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/organization/history` | permission:company.organization:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |

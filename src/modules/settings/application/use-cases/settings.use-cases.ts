@@ -8,7 +8,7 @@ import { activeOn, profileValueAt, profileViewAt, resolveSetting, type SettingsS
 import { checkDependencies, validateSettingValue } from "../../domain/services/setting-validation.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const DOMAINS: SettingDomain[] = ["security", "time_tracking", "notifications"];
+const DOMAINS: SettingDomain[] = ["security", "time_tracking", "notifications", "legal"];
 const TARGETS_BY_KIND: Record<SettingProfile["kind"], TargetType[]> = {
   global: [],
   segment: ["group", "department", "location"],
@@ -209,7 +209,7 @@ export class SettingsUseCases implements SettingsPorts {
     const [snap, today] = await Promise.all([this.repo.loadSnapshot(orgId), this.clock.today(orgId)]);
     // Sem colaborador: vale a configuração da empresa (global) ou a predefinição.
     const s = resolveSetting(def, { employeeId: "", locationIds: [], departmentIds: [], groupIds: [] }, today, snap);
-    return { inactivityMinutes: Number(s.value) };
+    return { inactivityMinutes: s.value === null ? 30 : Number(s.value) };
   }
 
   private findProfile(snap: SettingsSnapshot, profileId: string): SettingProfile {

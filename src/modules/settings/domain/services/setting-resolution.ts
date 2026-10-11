@@ -86,7 +86,7 @@ export function applicableProfiles(def: SettingDefinition, segments: EmployeeSeg
 const SYSTEM: ValueOrigin = { level: "system", profileId: null, profileName: null, valueId: null, validFrom: null };
 
 export function resolveSetting(def: SettingDefinition, segments: EmployeeSegments, date: string, snap: SettingsSnapshot): EffectiveSetting {
-  const found: { value: SettingData; origin: ValueOrigin }[] = [];
+  const found: { value: SettingData | null; origin: ValueOrigin }[] = [];
   const seen = new Set<string>();
   for (const c of applicableProfiles(def, segments, date, snap)) {
     if (seen.has(c.profile.id)) continue; // o mesmo perfil por dois alvos conta uma vez (no nível mais forte)
@@ -112,7 +112,7 @@ export function resolveSetting(def: SettingDefinition, segments: EmployeeSegment
  * exige que a dependência esteja cumprida ao nível do próprio perfil ou do global.)
  */
 export function profileViewAt(catalog: SettingDefinition[], profile: SettingProfile, date: string, snap: SettingsSnapshot) {
-  return (key: string): SettingData => {
+  return (key: string): SettingData | null => {
     const def = catalog.find((d) => d.key === key);
     if (!def) throw new Error(`Parâmetro fora do catálogo: ${key}`);
     const own = profileValueAt(snap.values, profile.id, key, date);

@@ -223,6 +223,13 @@ export const TABLE_REGISTRY = {
   employee_compensations: { organizationColumn: "org_id", locationBearing: false },
   custom_field_definitions: { organizationColumn: "org_id", locationBearing: false },
   employee_custom_values: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 3: base do tempo.
+  work_schedules: { organizationColumn: "org_id", locationBearing: false },
+  work_schedule_versions: { organizationColumn: "org_id", locationBearing: false },
+  holiday_calendars: { organizationColumn: "org_id", locationBearing: false },
+  holiday_calendar_days: { organizationColumn: "org_id", locationBearing: false },
+  vacation_calendars: { organizationColumn: "org_id", locationBearing: false },
+  time_assignments: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;

@@ -97,6 +97,9 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/catalog(\/|$)/, target: p("company.structure") },
   { pattern: /^\/api\/novo-rh\/people\/export\.csv$/, target: p("hr.people_export", "MANAGE") },
   { pattern: /^\/api\/novo-rh\/people(\/|$)/, target: p("hr.employees") },
+  { pattern: /^\/api\/novo-rh\/time\/(holiday-calendars|holidays)(\/|$)/, target: p("company.holidays") },
+  { pattern: /^\/api\/novo-rh\/time\/vacation-calendars(\/|$)/, target: p("hr.leave") },
+  { pattern: /^\/api\/novo-rh\/time(\/|$)/, target: p("hr.schedules") },
 
   // ── Recursos Humanos ─────────────────────────────────────────────────
   { pattern: /^\/api\/hr\/overview(\/|$)/, target: p("hr.overview") },

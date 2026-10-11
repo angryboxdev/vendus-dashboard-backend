@@ -67,8 +67,9 @@ export interface ValueOrigin {
 
 export interface EffectiveSetting {
   key: string;
-  value: SettingData;
+  /** null = parâmetro sem valor definido (ADR-0026). */
+  value: SettingData | null;
   origin: ValueOrigin;
   /** O que valeria sem o perfil vencedor (C11.4 "valor herdado"); null quando a origem é o default. */
-  inherited: { value: SettingData; origin: ValueOrigin } | null;
+  inherited: { value: SettingData | null; origin: ValueOrigin } | null;
 }

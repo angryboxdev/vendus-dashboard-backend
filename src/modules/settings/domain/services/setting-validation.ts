@@ -36,12 +36,13 @@ export function validateSettingValue(def: SettingDefinition, value: SettingData 
 }
 
 /** Um parâmetro está "ativo" para efeitos de dependência: bool true; outros tipos, diferente do default. */
-export function isActive(def: SettingDefinition, value: SettingData): boolean {
+export function isActive(def: SettingDefinition, value: SettingData | null): boolean {
+  if (value === null) return false;
   if (def.type === "bool") return value === true;
   return JSON.stringify(value) !== JSON.stringify(def.defaultValue);
 }
 
-const same = (a: SettingData, b: SettingData) => JSON.stringify(a) === JSON.stringify(b);
+const same = (a: SettingData | null, b: SettingData | null) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
  * TK-7 / C9: recusa um valor que deixe uma dependência por cumprir, nos dois
@@ -55,7 +56,7 @@ export function checkDependencies(
   catalog: SettingDefinition[],
   key: string,
   proposed: SettingData,
-  valueAt: (key: string) => SettingData,
+  valueAt: (key: string) => SettingData | null,
 ): void {
   const byKey = new Map(catalog.map((d) => [d.key, d]));
   const def = byKey.get(key);

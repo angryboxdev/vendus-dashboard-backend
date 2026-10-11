@@ -7,7 +7,7 @@ import type { ProfileKind, TargetType } from "../../domain/entities/setting-prof
 import { RetroactiveNotAllowed, SettingNotFound, SettingRuleViolation, SettingValidationError } from "../../domain/errors.js";
 import type { Actor, SettingsPorts } from "../../domain/ports/in/settings.ports.js";
 
-const DOMAINS = new Set<SettingDomain>(["security", "time_tracking", "notifications"]);
+const DOMAINS = new Set<SettingDomain>(["security", "time_tracking", "notifications", "legal"]);
 
 /** Erros do domínio → RFC 7807 (ADR-0022). */
 function toProblem(e: unknown): unknown {

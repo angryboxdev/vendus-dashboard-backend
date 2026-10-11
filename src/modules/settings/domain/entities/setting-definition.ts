@@ -9,7 +9,7 @@ export type SettingType = "bool" | "int" | "duration" | "enum" | "time" | "list"
 /** Valor guardado (JSON). `duration` em minutos; `time` em "HH:MM". */
 export type SettingData = boolean | number | string | string[] | { [k: string]: unknown };
 
-export type SettingDomain = "security" | "time_tracking" | "notifications";
+export type SettingDomain = "security" | "time_tracking" | "notifications" | "legal";
 
 export interface SettingRequirement {
   /** Chave de que este parâmetro depende. */
@@ -25,8 +25,11 @@ export interface SettingDefinition {
   label: string;
   description: string;
   unit?: "minutes" | "days" | "meters";
-  /** Valor de sistema quando nenhum perfil define a chave. */
-  defaultValue: SettingData;
+  /**
+   * Valor de sistema quando nenhum perfil define a chave. `null` = não
+   * definido (parâmetros legais sem valor — ADR-0026): a regra não se aplica.
+   */
+  defaultValue: SettingData | null;
   min?: number;
   max?: number;
   allowed?: string[];

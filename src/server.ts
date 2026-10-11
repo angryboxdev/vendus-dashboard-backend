@@ -60,6 +60,10 @@ import { createAuditModule } from "./modules/audit/audit.module.js";
 import { createOrgStructureModule } from "./modules/org-structure/org-structure.module.js";
 import { createNotificationsModule } from "./modules/notifications/notifications.module.js";
 import { createPeopleModule } from "./modules/people/people.module.js";
+import { createTimeBaseModule } from "./modules/time-base/time-base.module.js";
+import { SupabaseEmployeeSegments, SupabaseSettingsImpact } from "./modules/settings/adapters/out/supabase-settings.adapters.js";
+import { SupabasePeopleRepository } from "./modules/people/adapters/out/supabase-people.repository.js";
+import { portugueseNationalHolidays } from "./modules/calendar/domain/services/portuguese-holidays.service.js";
 import { OrganizationTimezoneClock } from "./modules/settings/adapters/out/supabase-settings.adapters.js";
 import { can } from "./modules/access/domain/services/effective-access.service.js";
 import { problemHandler } from "./infra/http/problem-details.js";
@@ -399,6 +403,30 @@ const settingsModule = createSettingsModule({
   },
 });
 app.use("/api", settingsModule.router);
+
+// Novo RH → Tempo (Fase 3): horários, calendários, atribuições, teórico diário.
+const segments = new SupabaseEmployeeSegments(createScopedQuery, orgStructureModule.structure);
+const peopleRepo = new SupabasePeopleRepository(createScopedQuery);
+const targetsImpact = new SupabaseSettingsImpact(createScopedQuery, orgStructureModule.structure);
+const timeBaseModule = createTimeBaseModule({
+  context: {
+    unitsAt: (org, employeeId, date) => segments.segmentsOf(org, employeeId, date),
+    contractWeeklyMinutesAt: async (org, employeeId, date) => {
+      const c = (await peopleRepo.listContracts(org, employeeId)).find((x) => x.status === "active" && x.startDate <= date && (x.endDate === null || date <= x.endDate));
+      return c?.weeklyHours ? Math.round(c.weeklyHours * 60) : null;
+    },
+    theoreticalModeAt: async (org, employeeId, date) => {
+      const s = (await settingsModule.settings.effectiveFor(org, employeeId, date, "time_tracking")).find((x) => x.key === "time_tracking.theoretical.mode");
+      return s?.value === "contract" ? "contract" : "schedule";
+    },
+  },
+  impact: { countEmployees: (org, targets, date) => targetsImpact.countEmployees(org, { targets }, date) },
+  national: { forCountry: (country, year) => (country === "PT" ? portugueseNationalHolidays(year) : null) },
+  audit: auditModule.recorder,
+  clock: new OrganizationTimezoneClock(createScopedQuery),
+  canSeeEmployee,
+});
+app.use("/api", timeBaseModule.router);
 
 // CRM: acessível a managers+
 const crmModule = createCrmModule();
