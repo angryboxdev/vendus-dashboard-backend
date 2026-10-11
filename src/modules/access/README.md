@@ -15,7 +15,10 @@ Decide, em cada pedido, se o utilizador pode consultar (READ) ou gerir
   permissões especiais e valores iniciais dos perfis de sistema (Admin,
   Manager, RH, Financeiro, Colaborador).
 - `domain/route-permissions.ts` — tabela central rota → permissão; rota de
-  `/api` sem regra é recusada (falha fechada).
+  `/api` sem regra é recusada (falha fechada). `isRouteAllowed` é a decisão
+  pura do `routeGuard`, partilhada com o gerador da matriz de autorização
+  (`npm run authz:matrix` → `docs/matriz-autorizacao.md`; a CI falha se
+  houver rota por classificar).
 - `domain/services/effective-access.service.ts` — `effectivePermissions`
   (perfil + exceções, herança dinâmica), `can`, resumo por módulo,
   `sanitizePermissionMap`, `moduleBulk`.

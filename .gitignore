@@ -9,3 +9,6 @@ dist/
 
 # Projeto usa npm; ignorar lockfile do Yarn
 yarn.lock
+
+# Dados de demonstração gerados localmente (npm run demo:generate)
+.demo/

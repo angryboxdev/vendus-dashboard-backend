@@ -20,6 +20,8 @@
     "vendus:credentials-cutover:dev": "tsx src/jobs/runVendusCredentialsCutover.ts",
     "airmenu:cutover-credentials": "node dist/jobs/runAirMenuCredentialsCutover.js",
     "airmenu:cutover-credentials:dev": "tsx src/jobs/runAirMenuCredentialsCutover.ts",
+    "demo:generate": "tsx src/modules/demo-data/adapters/in/demo-data.cli.ts",
+    "authz:matrix": "tsx src/tools/authz-matrix/cli.ts",
     "test": "jest --config jest.config.cjs",
     "test:tasks": "jest --config jest.config.cjs --testPathPattern=src/modules/tasks",
     "test:unit": "jest --config jest.config.cjs --testPathIgnorePatterns=\\.integration\\.test\\.ts$",

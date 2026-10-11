@@ -1,4 +1,5 @@
 import type { AccessLevel } from "./catalog.js";
+import { can, type AccessSubject } from "./services/effective-access.service.js";
 
 /**
  * Tabela central rota → permissão (Utilizadores & Perfis de Acesso 2.0,
@@ -125,4 +126,28 @@ export function classifyRoute(method: string, path: string): RouteDecision {
     return { target: rule.target, level };
   }
   return { target: null, level: defaultLevel };
+}
+
+/** Quem pede, para a decisão de rota (= AccessContext sem a identidade). */
+export interface RouteSubject extends AccessSubject {
+  portalOnly: boolean;
+}
+
+/**
+ * A decisão do `routeGuard` — pura, para o guarda e para o gerador da matriz
+ * de autorização (TK-5) darem sempre o mesmo resultado.
+ */
+export function isRouteAllowed(subject: RouteSubject, method: string, path: string): boolean {
+  const { target, level } = classifyRoute(method, path);
+  if (!subject.active || !target) return false;
+  switch (target.kind) {
+    case "portal":
+      return true;
+    case "base":
+      return !subject.portalOnly;
+    case "admin":
+      return subject.isAdmin;
+    case "permission":
+      return can(subject, target.key, level);
+  }
 }

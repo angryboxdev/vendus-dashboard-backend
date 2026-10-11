@@ -54,6 +54,8 @@ import type {
 import { createStockCountModule } from "./modules/stock-count/stock-count.module.js";
 import { createStockPlanningModule } from "./modules/stock-planning/stock-planning.module.js";
 import { createSalesDeclarationModule } from "./modules/sales-declaration/sales-declaration.module.js";
+import { correlationId } from "./infra/http/correlation.js";
+import { problemHandler } from "./infra/http/problem-details.js";
 
 const app = express();
 
@@ -68,9 +70,13 @@ const corsOptions: cors.CorsOptions = {
       ENV.CORS_EXTRA_ORIGINS.includes(origin);
     cb(null, allowed);
   },
+  // ETag e ID de correlação legíveis pelo frontend (ADR-0022).
+  exposedHeaders: ["ETag", "X-Correlation-Id", "Idempotent-Replayed"],
 };
 app.use(cors(corsOptions));
 app.use(express.json());
+// ID de correlação em todos os pedidos (ADR-0022) — devolvido em X-Correlation-Id.
+app.use(correlationId);
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
@@ -393,6 +399,9 @@ app.use("/api", salesDeclarationModule.router);
 
 // Cash closing manager routes (authenticated)
 app.use("/api", cashClosingsModule.managedRouter);
+
+// Erros não tratados → RFC 7807 (application/problem+json), sem detalhes internos (ADR-0022).
+app.use(problemHandler);
 
 app.listen(ENV.PORT, () => {
   console.log(`Backend running on http://localhost:${ENV.PORT}`);

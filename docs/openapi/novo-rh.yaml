@@ -1,0 +1,80 @@
+openapi: 3.1.0
+info:
+  title: Mezza ERP — Novo RH
+  version: 0.0.1
+  description: >
+    Contrato da API do Novo RH (task RH faseada). Cresce com cada fase; cada
+    endpoint de escrita usa Idempotency-Key e If-Match e devolve erros RFC 7807
+    (ADR-0022).
+servers:
+  - url: /api
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      summary: Estado do serviço
+      security: []
+      responses:
+        "200":
+          description: Serviço disponível
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Chave única por intenção de escrita (1–255 caracteres visíveis). Repetir o pedido com a mesma chave devolve a mesma resposta.
+      schema: { type: string, minLength: 1, maxLength: 255 }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: ETag da versão lida. Desatualizado → 412; em falta → 428.
+      schema: { type: string }
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: ID de correlação do cliente (8–64 caracteres [A-Za-z0-9._-]); senão é gerado.
+      schema: { type: string }
+  headers:
+    ETag:
+      description: Versão do recurso.
+      schema: { type: string }
+    XCorrelationId:
+      description: ID de correlação do pedido.
+      schema: { type: string }
+    IdempotentReplayed:
+      description: "true quando a resposta é a repetição guardada de um pedido anterior."
+      schema: { type: string, enum: ["true"] }
+  schemas:
+    Problem:
+      type: object
+      description: RFC 7807. Pode ter membros de extensão (ex. field, requires).
+      required: [type, title, status]
+      properties:
+        type: { type: string, example: /problems/precondition_failed }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        correlationId: { type: string }
+        error: { type: string, description: Igual a detail (compatibilidade com o frontend atual). }
+  responses:
+    Problem:
+      description: Erro no formato RFC 7807
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }

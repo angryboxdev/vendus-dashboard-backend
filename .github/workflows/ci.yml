@@ -1,0 +1,74 @@
+# CI do backend (task RH, Fase 0 — TK-1; ADR-0022).
+# Bloqueantes: typecheck, testes unitários, fronteiras da arquitetura,
+# matriz de autorização sem rotas por classificar, deteção de segredos.
+# Só relatório (por agora): auditoria de dependências e SAST.
+# Para o merge ficar bloqueado, um admin do GitHub marca os jobs "checks" e
+# "secrets" como obrigatórios em Settings → Branches → main.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Valores fictícios só para os testes carregarem a configuração — não são segredos.
+      VENDUS_BASE_URL: https://vendus.example.invalid
+      AIRMENU_ENTERPRISE_ID: "0"
+      AIRMENU_SALES_SUMMARY_ENTERPRISE_ID: "0"
+      CREDENTIALS_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Testes unitários
+        run: npm run test:unit
+      - name: Fronteiras da arquitetura (dependency-cruiser)
+        run: npm run lint:deps
+      - name: Matriz de autorização (nenhuma rota por classificar)
+        run: npm run authz:matrix
+      - name: Auditoria de dependências (relatório)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Deteção de segredos (gitleaks, só os commits novos)
+        env:
+          RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
+        run: |
+          if [[ "$RANGE" == 0000000000000000000000000000000000000000..* ]]; then RANGE="${GITHUB_SHA}~1..${GITHUB_SHA}"; fi
+          docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:v8.18.4 \
+            detect --source /repo --log-opts="$RANGE" --redact --no-banner --exit-code 1
+
+  sast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    container:
+      image: semgrep/semgrep:1.85.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: SAST (Semgrep, relatório)
+        run: semgrep scan --config p/typescript --config p/nodejs --metrics=off src

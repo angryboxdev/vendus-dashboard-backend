@@ -2,7 +2,7 @@ import type { RequestHandler } from "express";
 import type { AccessLevel } from "../../domain/catalog.js";
 import type { AccessContext, ResolveAccessPort } from "../../domain/ports/in/resolve-access.port.js";
 import { can } from "../../domain/services/effective-access.service.js";
-import { classifyRoute } from "../../domain/route-permissions.js";
+import { classifyRoute, isRouteAllowed } from "../../domain/route-permissions.js";
 
 declare global {
   namespace Express {
@@ -77,14 +77,7 @@ export function createAccessGuards(resolveAccess: ResolveAccessPort): AccessGuar
     const path = req.originalUrl.split("?")[0] ?? "";
     const { target, level } = classifyRoute(req.method, path);
     const access = req.access;
-    const allowed =
-      !!access &&
-      access.active &&
-      !!target &&
-      (target.kind === "portal" ||
-        (target.kind === "base" && !access.portalOnly) ||
-        (target.kind === "admin" && access.isAdmin) ||
-        (target.kind === "permission" && can(access, target.key, level)));
+    const allowed = !!access && isRouteAllowed(access, req.method, path);
     if (allowed) {
       next();
       return;
