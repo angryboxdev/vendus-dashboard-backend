@@ -1,6 +1,6 @@
 # Novo RH — Fase 1: Fundação (identidade, acessos, organização, motor de configurações)
 
-Status: em curso (aprovada 2026-10-11, "vamos pra próxima fase")
+Status: implementada — a aguardar aprovação do gate (docs/relatorios/fase-1.md)
 Fonte: `Desktop/TASK_Desenvolvimento_Faseado_RH.md` §6 Fase 1; Engenharia
 Reversa 09, 12.1, 12.5, 13; Configurações C2, C3.1–C3.7, C3.11, C9, C11.
 Decisões: ADR-0018..0024 (D0 risco aceite, D2 Supabase Auth + TOTP, D3
