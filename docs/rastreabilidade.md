@@ -24,8 +24,8 @@ Fontes: RE = `Especificacao_RH_Engenharia_Reversa` §15 · CF = `Especificacao_R
 
 | ID | Requisito | Estado | Código | Teste |
 |---|---|---|---|---|
-| TK-3 | Papel administrativo sem MFA não acede à administração | por fazer | | |
-| TK-4 | Mudar papel ou desativar revoga sessões de imediato | por fazer | | |
+| TK-3 | Papel administrativo sem MFA não acede à administração | feito (backend + ecrã de ativação no Novo RH; `MFA_ENFORCEMENT` por omissão `novo-rh`) | `route-permissions.ts` (`mfaRequired`), `access-guards.ts` (`requireMfa`), front `novo-rh/adapters/in/MfaGate.tsx` | `src/modules/access/__tests__/domain/tk-03-04-mfa-sessions.test.ts`, front `MfaGate.test.tsx` |
+| TK-4 | Mudar papel ou desativar revoga sessões de imediato | feito | `org_members.sessions_revoked_at`, `access-guards.ts` (`loadAccess`), `access-admin.use-cases.ts` | `tk-03-04-mfa-sessions.test.ts`, `access-admin.test.ts::TK_4_*` |
 | TK-5 | Matriz papel × endpoint cobre 100% dos endpoints | parcial — gerador feito (`npm run authz:matrix`, 460 endpoints, 0 não classificados); falta o teste por âmbito | `src/tools/authz-matrix/` | `src/tools/authz-matrix/__tests__/authz-matrix.test.ts` |
 | TK-6 | Configurações com data de efeito | feito | `src/modules/settings` | `src/modules/settings/__tests__/use-cases/settings.test.ts`, `src/modules/settings/__tests__/adapters/settings.controller.test.ts` |
 | TK-7 | Dependência violada → 422 `rule_violation` | feito | `src/modules/settings` | `src/modules/settings/__tests__/use-cases/settings.test.ts`, `src/modules/settings/__tests__/adapters/settings.controller.test.ts` |

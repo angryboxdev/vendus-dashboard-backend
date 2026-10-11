@@ -10,6 +10,8 @@ export interface AccessContext {
   /** Perfil Colaborador: só o Portal, nenhum módulo de gestão. */
   portalOnly: boolean;
   active: boolean;
+  /** Sessões abertas antes disto foram revogadas (TK-4). */
+  sessionsRevokedAt: string | null;
   permissions: PermissionMap;
   overrides: PermissionMap;
   modules: ModuleSummary[];

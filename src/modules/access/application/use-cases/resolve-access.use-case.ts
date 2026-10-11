@@ -63,6 +63,7 @@ export class ResolveAccessUseCase implements ResolveAccessPort {
       isAdmin,
       portalOnly,
       active: member.status === "active",
+      sessionsRevokedAt: member.sessionsRevokedAt ?? null,
       permissions,
       overrides,
       modules: summarizeModules(permissions, overrides),

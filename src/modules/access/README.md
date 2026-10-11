@@ -19,6 +19,7 @@ Decide, em cada pedido, se o utilizador pode consultar (READ) ou gerir
   pura do `routeGuard`, partilhada com o gerador da matriz de autorização
   (`npm run authz:matrix` → `docs/matriz-autorizacao.md`; a CI falha se
   houver rota por classificar).
+- Novo RH (Fase 1, ticket 06): `mfaRequired` + guarda `requireMfa` (perfis de gestão sem `aal2` → 403 `mfa_required` nas rotas de `MFA_ENFORCEMENT`: `off` | `novo-rh` (omissão) | `all`); `sessionRevoked` em `loadAccess` (token com `iat` anterior a `org_members.sessions_revoked_at` → 401 `SESSION_REVOKED`), carimbo posto ao mudar perfil/exceções ou o estado.
 - `domain/services/effective-access.service.ts` — `effectivePermissions`
   (perfil + exceções, herança dinâmica), `can`, resumo por módulo,
   `sanitizePermissionMap`, `moduleBulk`.

@@ -103,6 +103,7 @@ export class SupabaseAccessAdminRepository implements AccessAdminRepositoryPort 
     if (patch.legacyRole !== undefined) row.role = patch.legacyRole;
     if (patch.overrides !== undefined) row.permission_overrides = patch.overrides;
     if (patch.status !== undefined) row.status = patch.status;
+    if (patch.revokeSessions) row.sessions_revoked_at = new Date().toISOString();
     const { data, error } = await this.scopedQuery(org).table("org_members").update(row).eq("user_id", userId).eq("version", expectedVersion).select("user_id");
     if (error) throw new Error(error.message);
     return ((data ?? []) as unknown[]).length === 1;

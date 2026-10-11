@@ -191,6 +191,15 @@ export class SettingsUseCases implements SettingsPorts {
       .reverse();
   }
 
+  async sessionPolicy(orgId: OrganizationId) {
+    const def = this.catalog.find((d) => d.key === "security.session.inactivity_minutes");
+    if (!def) return { inactivityMinutes: 30 };
+    const [snap, today] = await Promise.all([this.repo.loadSnapshot(orgId), this.clock.today(orgId)]);
+    // Sem colaborador: vale a configuração da empresa (global) ou a predefinição.
+    const s = resolveSetting(def, { employeeId: "", locationIds: [], departmentIds: [], groupIds: [] }, today, snap);
+    return { inactivityMinutes: Number(s.value) };
+  }
+
   private findProfile(snap: SettingsSnapshot, profileId: string): SettingProfile {
     const p = snap.profiles.find((x) => x.id === profileId);
     if (!p) throw new SettingNotFound("Perfil não encontrado.");

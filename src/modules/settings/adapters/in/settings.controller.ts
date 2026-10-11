@@ -142,6 +142,11 @@ export class SettingsController {
       res.send(`﻿${[header.map(csvCell).join(";"), ...lines].join("\r\n")}`);
     });
 
+    // Política de sessão (fim por inatividade) para qualquer utilizador autenticado — classificada como "portal" (/api/me).
+    r.get("/me/session-policy", async (req, res) => {
+      res.json(await this.settings.sessionPolicy(req.auth!.orgId));
+    });
+
     this.router = r;
   }
 

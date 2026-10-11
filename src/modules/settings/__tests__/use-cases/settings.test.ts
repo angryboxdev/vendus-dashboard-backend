@@ -181,6 +181,14 @@ describe("Motor de configurações — perfis, alvos e histórico", () => {
     expect(audit.events[2]!.after).toMatchObject({ value: 10, impact: { employees: 7, pastDays: 6 } });
   });
 
+  test("política de sessão: predefinição, depois o valor da configuração global (perfil pessoal não conta)", async () => {
+    const { uc } = setup();
+    expect(await uc.sessionPolicy(ORG)).toEqual({ inactivityMinutes: 30 });
+    const g = await uc.createProfile(ORG, { domain: "security", name: "Segurança", kind: "global" }, ADMIN);
+    await uc.setValue(ORG, g.id, { key: "security.session.inactivity_minutes", value: 15, validFrom: "2026-10-11", reason: "política" }, ADMIN);
+    expect(await uc.sessionPolicy(ORG)).toEqual({ inactivityMinutes: 15 });
+  });
+
   test("CF_12_historico_com_antes_depois_e_motivo", async () => {
     const { uc } = setup();
     const g = await uc.createProfile(ORG, { domain: "time_tracking", name: "Global", kind: "global" }, ADMIN);

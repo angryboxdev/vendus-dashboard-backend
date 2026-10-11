@@ -64,6 +64,7 @@ class Fakes implements AccessAdminRepositoryPort, EmployeeLinkPort, AccountDirec
     if (patch.legacyRole !== undefined) m.legacyRole = patch.legacyRole;
     if (patch.overrides !== undefined) m.overrides = patch.overrides;
     if (patch.status !== undefined) m.status = patch.status;
+    if (patch.revokeSessions) m.sessionsRevokedAt = "2026-10-11T12:00:00.000Z";
     m.version = v + 1;
     return true;
   }
@@ -197,5 +198,25 @@ describe("Perfis de acesso", () => {
     expect(fin.active).toBe(false);
     await expect(uc.updateUser({ ...who, userId: "catarina", version: 1, profileId: "p-financeiro" })).rejects.toThrow(/perfil de acesso ativo/);
     expect((await uc.listProfiles(ORG)).find((p) => p.systemKey === "manager")!.userCount).toBe(2);
+  });
+});
+
+describe("TK-4 — revogação de sessões", () => {
+  it("TK_4_mudar_o_perfil_ou_desativar_revoga_as_sessoes_abertas", async () => {
+    const { f, uc, who } = setup();
+    const member = () => f.members.find((m) => m.userId === "gabriel")!;
+    // Só associar a ficha não muda o acesso → não revoga.
+    await uc.updateUser({ ...who, userId: "gabriel", version: 1, employeeId: "e-gabriel" });
+    expect(member().sessionsRevokedAt).toBeUndefined();
+    await uc.updateUser({ ...who, userId: "gabriel", version: 2, profileId: "p-rh" });
+    expect(member().sessionsRevokedAt).toBe("2026-10-11T12:00:00.000Z");
+
+    member().sessionsRevokedAt = null;
+    await uc.updateUser({ ...who, userId: "gabriel", version: 3, overrides: { "stock.items": "READ" } });
+    expect(member().sessionsRevokedAt).not.toBeNull();
+
+    member().sessionsRevokedAt = null;
+    await uc.setUserStatus({ ...who, userId: "gabriel", version: 4, status: "disabled" });
+    expect(member().sessionsRevokedAt).not.toBeNull();
   });
 });

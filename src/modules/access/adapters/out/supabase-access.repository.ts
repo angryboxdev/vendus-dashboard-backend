@@ -37,7 +37,7 @@ export class SupabaseAccessRepository implements AccessRepositoryPort {
   async findMember(organizationId: OrganizationId, userId: string): Promise<AccessMemberRecord | null> {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("org_members")
-      .select("user_id, role, profile_id, permission_overrides, status, version")
+      .select("user_id, role, profile_id, permission_overrides, status, version, sessions_revoked_at")
       .eq("user_id", userId)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -49,6 +49,7 @@ export class SupabaseAccessRepository implements AccessRepositoryPort {
       permission_overrides: Record<string, unknown> | null;
       status: "active" | "disabled";
       version: number;
+      sessions_revoked_at: string | null;
     };
     return {
       userId: row.user_id,
@@ -57,6 +58,7 @@ export class SupabaseAccessRepository implements AccessRepositoryPort {
       overrides: sanitizePermissionMap(row.permission_overrides ?? {}),
       status: row.status,
       version: row.version,
+      sessionsRevokedAt: row.sessions_revoked_at,
     };
   }
 

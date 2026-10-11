@@ -5,6 +5,7 @@ import { ResolveAccessUseCase } from "./application/use-cases/resolve-access.use
 import { createAccessGuards, type AccessGuards } from "./adapters/in/access-guards.js";
 import { createAccessMeRouter } from "./adapters/in/access-me.controller.js";
 import type { ResolveAccessPort } from "./domain/ports/in/resolve-access.port.js";
+import type { MfaEnforcement } from "./domain/route-permissions.js";
 import { AccessAdminUseCases } from "./application/use-cases/access-admin.use-cases.js";
 import { createAccessAdminRouter } from "./adapters/in/access-admin.controller.js";
 import {
@@ -24,7 +25,7 @@ export interface AccessModule {
 }
 
 /** Composition root do motor de autorização (Utilizadores & Perfis de Acesso 2.0). */
-export function createAccessModule(): AccessModule {
+export function createAccessModule(options: { mfa: MfaEnforcement } = { mfa: "off" }): AccessModule {
   const resolveAccess = new ResolveAccessUseCase(new SupabaseAccessRepository(createScopedQuery));
   const admin = new AccessAdminUseCases(
     new SupabaseAccessAdminRepository(createScopedQuery),
@@ -35,7 +36,7 @@ export function createAccessModule(): AccessModule {
   );
   return {
     resolveAccess,
-    guards: createAccessGuards(resolveAccess),
+    guards: createAccessGuards(resolveAccess, options),
     meRouter: createAccessMeRouter(),
     adminRouter: createAccessAdminRouter(admin),
   };

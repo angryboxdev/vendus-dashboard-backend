@@ -56,6 +56,8 @@ const verifyTokenViaJwks: TokenVerifier = async (token) => {
     const claims: VerifiedClaims = { sub, email };
     if (orgId) claims.orgId = orgId;
     if (role) claims.role = role;
+    if (typeof payload.iat === "number") claims.issuedAt = payload.iat;
+    if (typeof payload["aal"] === "string") claims.aal = payload["aal"] as string;
     return claims;
   } catch {
     return null;

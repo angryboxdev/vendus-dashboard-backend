@@ -262,7 +262,7 @@ app.use(requireAuth);
 
 // Utilizadores & Perfis de Acesso 2.0: acesso efetivo (perfil + exceções +
 // estado) lido da BD por pedido — conta desativada é recusada já aqui.
-const accessModule = createAccessModule();
+const accessModule = createAccessModule({ mfa: ENV.MFA_ENFORCEMENT });
 app.use(accessModule.guards.loadAccess);
 
 // Portal do Colaborador: o papel `employee` só chega a `/api/me/*` — barreira
@@ -271,6 +271,8 @@ app.use(restrictEmployeeToPortalRoutes);
 // Tabela central rota → permissão (Utilizadores & Perfis 2.0): substitui os
 // antigos requireMinRole("manager") no mount, que se aplicavam a TODO o /api.
 app.use(accessModule.guards.routeGuard);
+// Novo RH (TK-3): perfis de gestão sem MFA (aal2) não passam nas rotas abrangidas por MFA_ENFORCEMENT.
+app.use(accessModule.guards.requireMfa);
 // Rotas do Portal (/api/me/*) logo aqui: as montagens seguintes com
 // requireMinRole(...) no próprio mount correm para todo o /api e recusariam
 // o colaborador antes de chegar a elas.

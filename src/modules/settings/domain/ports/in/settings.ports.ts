@@ -58,4 +58,6 @@ export interface SettingsPorts {
   impactPreview(orgId: OrganizationId, profileId: string, validFrom: string): Promise<ImpactPreview>;
   effectiveFor(orgId: OrganizationId, employeeId: string, date: string, domain?: SettingDomain): Promise<EffectiveSetting[]>;
   history(orgId: OrganizationId, filter: { key?: string; profileId?: string }): Promise<HistoryEntry[]>;
+  /** Política de sessão da organização hoje (configuração global ou predefinição) — para todos os utilizadores. */
+  sessionPolicy(orgId: OrganizationId): Promise<{ inactivityMinutes: number }>;
 }

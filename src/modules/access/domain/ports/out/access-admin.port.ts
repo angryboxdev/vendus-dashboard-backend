@@ -22,6 +22,8 @@ export interface MemberPatch {
   legacyRole?: string;
   overrides?: PermissionMap;
   status?: MemberStatus;
+  /** Revoga as sessões abertas (TK-4): tokens emitidos antes de agora deixam de valer. */
+  revokeSessions?: true;
 }
 
 /** Escritas de Perfis e Utilizadores (só Admin). `expectedVersion` = concorrência otimista: null quando outro Admin gravou entretanto. */

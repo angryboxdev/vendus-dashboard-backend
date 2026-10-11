@@ -157,3 +157,25 @@ export function isRouteAllowed(subject: RouteSubject, method: string, path: stri
       return can(subject, target.key, level);
   }
 }
+
+/** Âmbito da MFA obrigatória (`MFA_ENFORCEMENT`): desligada, só o Novo RH, ou toda a área de gestão. */
+export type MfaEnforcement = "off" | "novo-rh" | "all";
+
+/** Perfil de gestão = Admin ou qualquer permissão de gerir (ADR-0024, D2). */
+export function isManagementSubject(subject: RouteSubject): boolean {
+  return subject.isAdmin || Object.values(subject.permissions).some((l) => l === "MANAGE");
+}
+
+/** TK-3: o pedido exige sessão com MFA (`aal2`)? O Portal (`/api/me`) nunca exige. */
+export function mfaRequired(subject: RouteSubject, path: string, mode: MfaEnforcement): boolean {
+  if (mode === "off" || subject.portalOnly || !isManagementSubject(subject)) return false;
+  if (/^\/api\/me(\/|$)/.test(path)) return false;
+  return mode === "all" ? path.startsWith("/api/") : /^\/api\/novo-rh(\/|$)/.test(path);
+}
+
+/** TK-4: o token foi emitido antes da revogação das sessões deste utilizador? */
+export function sessionRevoked(revokedAt: string | null, issuedAtSeconds: number | undefined): boolean {
+  if (!revokedAt) return false;
+  if (issuedAtSeconds === undefined) return true;
+  return issuedAtSeconds * 1000 < Date.parse(revokedAt);
+}
