@@ -24,6 +24,7 @@ export class OrgStructureUseCases implements OrgStructurePorts {
     private readonly repo: OrgStructureRepositoryPort,
     private readonly audit: OrgStructureAuditPort,
     private readonly ip: RequestIpPort,
+    private readonly today: (orgId: OrganizationId) => Promise<string> = async () => new Date().toISOString().slice(0, 10),
   ) {}
 
   listDepartments(orgId: OrganizationId) {
@@ -117,7 +118,9 @@ export class OrgStructureUseCases implements OrgStructurePorts {
   }
 
   async assign(orgId: OrganizationId, input: Omit<Assignment, "id">, actor: string) {
-    if (input.unitType !== "department" && input.unitType !== "group") throw new OrgStructureError("Tipo de unidade inválido.", "unitType");
+    if (input.unitType !== "department" && input.unitType !== "group") {
+      throw new OrgStructureError(input.unitType === "location" ? "Para mudar de centro use a transferência." : "Tipo de unidade inválido.", "unitType");
+    }
     validatePeriod(input.validFrom, input.validTo);
     if (!(await this.repo.employeeExists(orgId, input.employeeId))) throw new OrgStructureNotFound("Colaborador não encontrado.");
     const units = input.unitType === "department" ? await this.repo.listDepartments(orgId) : await this.repo.listGroups(orgId);
@@ -166,6 +169,39 @@ export class OrgStructureUseCases implements OrgStructurePorts {
     return t;
   }
 
+  async transfer(orgId: OrganizationId, employeeId: string, locationId: string, effectiveDate: string, actor: string, reason: string) {
+    validatePeriod(effectiveDate, null);
+    if (!reason.trim()) throw new OrgStructureError("O motivo é obrigatório.", "reason");
+    const info = await this.repo.employeeLocationInfo(orgId, employeeId);
+    if (!info) throw new OrgStructureNotFound("Colaborador não encontrado.");
+    if (!(await this.repo.listActiveLocationIds(orgId)).includes(locationId)) throw new OrgStructureNotFound("Centro não encontrado.");
+    let history = (await this.repo.listAssignments(orgId, { employeeId })).filter((a) => a.unitType === "location");
+    if (history.some((a) => a.validFrom >= effectiveDate)) throw new OrgStructureError("Já existe uma mudança de centro nessa data ou depois.", "effectiveDate");
+
+    // Primeira transferência: o centro atual passa a ter vigência até à véspera (TK-10).
+    if (history.length === 0 && info.primaryLocationId) {
+      const from = info.hireDate && info.hireDate < effectiveDate ? info.hireDate : "2000-01-01";
+      history = [await this.repo.createAssignment(orgId, { employeeId, unitType: "location", unitId: info.primaryLocationId, validFrom: from, validTo: null, createdBy: actor })];
+    }
+    const current = history.find((a) => activeOn(a, effectiveDate));
+    if (current?.unitId === locationId) throw new OrgStructureError("O colaborador já está neste centro nessa data.", "locationId");
+    const dayBefore = new Date(Date.parse(`${effectiveDate}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+    if (current) await this.repo.endAssignment(orgId, current.id, dayBefore);
+    const next = await this.repo.createAssignment(orgId, { employeeId, unitType: "location", unitId: locationId, validFrom: effectiveDate, validTo: null, createdBy: actor });
+    // O RH atual lê o centro principal: só muda quando a data chega (transferências futuras: ver dívida no README).
+    if (effectiveDate <= (await this.today(orgId))) await this.repo.setPrimaryLocation(orgId, employeeId, locationId);
+    await this.audit.record(orgId, {
+      actor,
+      action: "structure.employee.transfer",
+      resourceType: "employee",
+      resourceId: employeeId,
+      before: { locationId: current?.unitId ?? info.primaryLocationId },
+      after: { locationId, effectiveDate },
+      reason: reason.trim(),
+    });
+    return next;
+  }
+
   async membersOf(orgId: OrganizationId, unitType: UnitType, unitIds: string[], date: string) {
     if (unitIds.length === 0) return [];
     const rows = await this.repo.listAssignments(orgId, { unitType });
@@ -178,9 +214,11 @@ export class OrgStructureUseCases implements OrgStructurePorts {
     const liveDeps = new Set(deps.filter((d) => !d.archived).map((d) => d.id));
     const liveGroups = new Set(groups.filter((g) => !g.archived).map((g) => g.id));
     const active = rows.filter((a) => activeOn(a, date));
+    const hasLocationHistory = rows.some((a) => a.unitType === "location");
     return {
       departmentIds: active.filter((a) => a.unitType === "department" && liveDeps.has(a.unitId)).map((a) => a.unitId),
       groupIds: active.filter((a) => a.unitType === "group" && liveGroups.has(a.unitId)).map((a) => a.unitId),
+      locationIds: hasLocationHistory ? active.filter((a) => a.unitType === "location").map((a) => a.unitId) : null,
     };
   }
 }

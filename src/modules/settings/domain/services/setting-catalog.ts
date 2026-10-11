@@ -22,6 +22,20 @@ export const SETTING_CATALOG: SettingDefinition[] = [
     toValidate: true,
   },
   {
+    // D4 (ADR-0025): sem valor legal até o DPO decidir; 0 = não anonimizar automaticamente.
+    key: "security.privacy.retention_years_after_termination",
+    domain: "security",
+    type: "int",
+    label: "Retenção de dados após a saída (anos)",
+    description: "Anos depois da saída até os dados pessoais serem anonimizados. 0 = desligado até o DPO definir o prazo.",
+    defaultValue: 0,
+    min: 0,
+    max: 30,
+    sensitive: false,
+    legal: true,
+    toValidate: true,
+  },
+  {
     key: "time_tracking.tolerance.minutes",
     domain: "time_tracking",
     type: "duration",

@@ -2,6 +2,8 @@ import { mintOrganizationId, type OrganizationId } from "../../../kernel/organiz
 import { OrgStructureUseCases } from "../application/use-cases/org-structure.use-cases.js";
 import { OrgStructureError, OrgStructureNotFound, wouldCreateCycle, type Assignment, type Contact, type Department, type Group, type TermsAcceptance, type UnitType } from "../domain/entities/org-structure.js";
 import type { OrgStructureRepositoryPort } from "../domain/ports/out/org-structure.ports.js";
+import { SETTING_CATALOG } from "../../settings/domain/services/setting-catalog.js";
+import { resolveSetting } from "../../settings/domain/services/setting-resolution.js";
 
 const ORG = mintOrganizationId("org-test");
 const ACTOR = "admin@demo.invalid";
@@ -59,6 +61,16 @@ class FakeRepo implements OrgStructureRepositoryPort {
   async employeeExists(_o: OrganizationId, id: string) {
     return this.employees.has(id);
   }
+  primary = new Map<string, string | null>([["e1", "loc-porto"], ["e2", null]]);
+  async listActiveLocationIds() {
+    return ["loc-porto", "loc-braga"];
+  }
+  async employeeLocationInfo(_o: OrganizationId, id: string) {
+    return this.employees.has(id) ? { primaryLocationId: this.primary.get(id) ?? null, hireDate: "2024-01-15" } : null;
+  }
+  async setPrimaryLocation(_o: OrganizationId, id: string, loc: string) {
+    this.primary.set(id, loc);
+  }
   async listContacts() {
     return [...this.contacts];
   }
@@ -81,7 +93,7 @@ class FakeRepo implements OrgStructureRepositoryPort {
 function setup() {
   const repo = new FakeRepo();
   const events: { action: string; before: unknown; after: unknown }[] = [];
-  const uc = new OrgStructureUseCases(repo, { record: async (_o, e) => void events.push(e) }, { current: () => "198.51.100.4" });
+  const uc = new OrgStructureUseCases(repo, { record: async (_o, e) => void events.push(e) }, { current: () => "198.51.100.4" }, async () => "2026-10-11");
   return { repo, uc, events };
 }
 
@@ -123,9 +135,9 @@ describe("Estrutura — pertenças com vigência", () => {
     await uc.endAssignment(ORG, a.id, "2026-10-31", ACTOR);
     await expect(uc.endAssignment(ORG, a.id, "2026-12-31", ACTOR)).rejects.toThrow("encurtar");
 
-    expect(await uc.unitsOf(ORG, "e1", "2026-10-31")).toEqual({ departmentIds: [dep.id], groupIds: [grp.id] });
-    expect(await uc.unitsOf(ORG, "e1", "2026-11-01")).toEqual({ departmentIds: [], groupIds: [grp.id] });
-    expect(await uc.unitsOf(ORG, "e1", "2026-10-02")).toEqual({ departmentIds: [dep.id], groupIds: [] });
+    expect(await uc.unitsOf(ORG, "e1", "2026-10-31")).toMatchObject({ departmentIds: [dep.id], groupIds: [grp.id] });
+    expect(await uc.unitsOf(ORG, "e1", "2026-11-01")).toMatchObject({ departmentIds: [], groupIds: [grp.id] });
+    expect(await uc.unitsOf(ORG, "e1", "2026-10-02")).toMatchObject({ departmentIds: [dep.id], groupIds: [] });
     expect(await uc.membersOf(ORG, "group", [grp.id], "2026-10-20")).toEqual(["e1"]);
   });
 
@@ -156,5 +168,55 @@ describe("Estrutura — contactos e termos", () => {
     const t = await uc.acceptTerms(ORG, "2026-10", ACTOR);
     expect(t).toMatchObject({ document: "terms_and_dpa", version: "2026-10", acceptedBy: ACTOR, ip: "198.51.100.4" });
     await expect(uc.acceptTerms(ORG, " ", ACTOR)).rejects.toThrow("Versão");
+  });
+});
+
+describe("Transferência de centro (CF-2, TK-10)", () => {
+  test("TK_10_transferencia_com_data_de_efeito_nao_altera_os_dias_anteriores", async () => {
+    const { uc, repo, events } = setup();
+    expect(await uc.unitsOf(ORG, "e1", "2026-10-01")).toMatchObject({ locationIds: null }); // sem histórico: vale o principal
+    await uc.transfer(ORG, "e1", "loc-braga", "2026-11-01", ACTOR, "Abertura da loja de Braga");
+    expect((await uc.unitsOf(ORG, "e1", "2026-10-31")).locationIds).toEqual(["loc-porto"]);
+    expect((await uc.unitsOf(ORG, "e1", "2026-11-01")).locationIds).toEqual(["loc-braga"]);
+    expect((await uc.unitsOf(ORG, "e1", "2024-02-01")).locationIds).toEqual(["loc-porto"]); // desde a admissão
+    expect(repo.primary.get("e1")).toBe("loc-porto"); // data futura: o principal só muda quando chegar
+    expect(events.at(-1)).toMatchObject({ action: "structure.employee.transfer", before: { locationId: "loc-porto" }, after: { locationId: "loc-braga", effectiveDate: "2026-11-01" }, reason: "Abertura da loja de Braga" });
+  });
+
+  test("transferência com efeito hoje muda o principal; recusa datas anteriores à última mudança, mesmo centro e sem motivo", async () => {
+    const { uc, repo } = setup();
+    await uc.transfer(ORG, "e1", "loc-braga", "2026-10-11", ACTOR, "mudança");
+    expect(repo.primary.get("e1")).toBe("loc-braga");
+    await expect(uc.transfer(ORG, "e1", "loc-porto", "2026-10-05", ACTOR, "x")).rejects.toThrow("nessa data ou depois");
+    await expect(uc.transfer(ORG, "e1", "loc-braga", "2026-12-01", ACTOR, "x")).rejects.toThrow("já está neste centro");
+    await expect(uc.transfer(ORG, "e1", "loc-porto", "2026-12-01", ACTOR, " ")).rejects.toThrow("motivo");
+    await expect(uc.transfer(ORG, "e1", "loc-lua", "2026-12-01", ACTOR, "x")).rejects.toThrow("Centro");
+    await expect(uc.assign(ORG, { employeeId: "e1", unitType: "location", unitId: "loc-porto", validFrom: "2026-12-01", validTo: null }, ACTOR)).rejects.toThrow("transferência");
+  });
+
+  test("CF_2_depois_da_transferencia_aplicam_se_as_regras_do_novo_centro_a_partir_da_data_de_efeito", async () => {
+    const { uc } = setup();
+    await uc.transfer(ORG, "e1", "loc-braga", "2026-11-01", ACTOR, "mudança");
+    const def = SETTING_CATALOG.find((d) => d.key === "time_tracking.tolerance.minutes")!;
+    const snap = {
+      profiles: [
+        { id: "p-porto", domain: "time_tracking" as const, name: "Porto", kind: "segment" as const, archived: false },
+        { id: "p-braga", domain: "time_tracking" as const, name: "Braga", kind: "segment" as const, archived: false },
+      ],
+      targets: [
+        { id: "t1", profileId: "p-porto", targetType: "location" as const, targetId: "loc-porto", validFrom: "2026-01-01", validTo: null },
+        { id: "t2", profileId: "p-braga", targetType: "location" as const, targetId: "loc-braga", validFrom: "2026-01-01", validTo: null },
+      ],
+      values: [
+        { id: "v1", profileId: "p-porto", key: def.key, value: 10, validFrom: "2026-01-01", createdAt: "a", createdBy: "x", reason: "r" },
+        { id: "v2", profileId: "p-braga", key: def.key, value: 5, validFrom: "2026-01-01", createdAt: "a", createdBy: "x", reason: "r" },
+      ],
+    };
+    const at = async (date: string) => {
+      const u = await uc.unitsOf(ORG, "e1", date);
+      return resolveSetting(def, { employeeId: "e1", locationIds: u.locationIds ?? [], departmentIds: u.departmentIds, groupIds: u.groupIds }, date, snap);
+    };
+    expect((await at("2026-10-31")).origin.profileName).toBe("Porto");
+    expect((await at("2026-11-01")).origin.profileName).toBe("Braga");
   });
 });

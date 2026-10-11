@@ -27,9 +27,11 @@ export interface FieldPrivacyView {
 export class AccessGovernanceUseCases {
   constructor(
     private readonly repo: AccessGovernanceRepositoryPort,
-    private readonly admin: Pick<AccessAdminRepositoryPort, "listMembers" | "findProfileById">,
+    private readonly admin: Pick<AccessAdminRepositoryPort, "listMembers" | "findProfileById"> & Partial<Pick<AccessAdminRepositoryPort, "updateMember">>,
     private readonly units: EmployeeUnitsPort,
     private readonly audit: AccessAuditPort,
+    /** Limpa a cache de acesso efetivo (o pedido seguinte já vê a conta desativada). */
+    private readonly invalidate: (org: OrganizationId, userId: string) => void = () => undefined,
   ) {}
 
   async profileGovernance(org: OrganizationId, profileId: string): Promise<{ scopeKind: ScopeKind; fields: FieldPrivacyView[] }> {
@@ -106,6 +108,34 @@ export class AccessGovernanceUseCases {
   async roleHistory(org: OrganizationId, filter: { from?: string; to?: string; limit?: number }): Promise<RoleHistoryEntry[]> {
     if ((filter.from && !DATE.test(filter.from)) || (filter.to && !DATE.test(filter.to))) throw new AccessValidationError("Datas inválidas");
     return this.repo.roleHistory(org, { ...filter, limit: Math.min(Math.max(filter.limit ?? 500, 1), 5000) });
+  }
+
+  /**
+   * Verificação de âmbito pré-calculada para um pedido: perfis Gerais/Admin
+   * não fazem consultas por colaborador (listas e exportações).
+   */
+  async scopeChecker(org: OrganizationId, who: { userId: string; isAdmin: boolean; profileId: string | null }): Promise<(employeeId: string, date: string) => Promise<boolean>> {
+    if (who.isAdmin) return async () => true;
+    const scopeKind = who.profileId ? ((await this.repo.getProfileScopeKind(org, who.profileId)) ?? "general") : "general";
+    if (scopeKind === "general") return async () => true;
+    const [scopes, ownEmployeeId] = await Promise.all([this.repo.listScopes(org, who.userId), this.units.employeeOfUser(org, who.userId)]);
+    return async (employeeId, date) => coversEmployee({ isAdmin: false, scopeKind, scopes, ownEmployeeId }, await this.units.unitsOf(org, employeeId, date), date);
+  }
+
+  /** Privacidade por campo do perfil, pronta a consultar (chave → ver/editar). */
+  async fieldAccessFor(org: OrganizationId, profileId: string | null, isAdmin: boolean): Promise<(key: string) => { view: boolean; edit: boolean }> {
+    const rules = profileId && !isAdmin ? await this.repo.listFieldRules(org, profileId) : [];
+    return (key) => fieldAccess(isAdmin, rules, key);
+  }
+
+  /** RE-4: ficha desativada → conta desativada e sessões revogadas (os dados ficam). */
+  async disableLinkedUser(org: OrganizationId, userId: string, actor: string): Promise<void> {
+    const member = (await this.admin.listMembers(org)).find((m) => m.userId === userId);
+    if (!member || member.status === "disabled" || !this.admin.updateMember) return;
+    const ok = await this.admin.updateMember(org, userId, { status: "disabled", revokeSessions: true }, member.version);
+    if (!ok) throw new AccessValidationError("A conta foi alterada entretanto; tente de novo.");
+    this.invalidate(org, userId);
+    await this.audit.record({ organizationId: org, actor, entityType: "user", entityId: userId, action: "disabled_with_employee", before: { status: member.status }, after: { status: "disabled" } });
   }
 
   /** RE-34 / âmbito: o utilizador gere este colaborador nesta data? */

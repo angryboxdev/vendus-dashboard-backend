@@ -59,6 +59,8 @@ import { createSettingsModule } from "./modules/settings/settings.module.js";
 import { createAuditModule } from "./modules/audit/audit.module.js";
 import { createOrgStructureModule } from "./modules/org-structure/org-structure.module.js";
 import { createNotificationsModule } from "./modules/notifications/notifications.module.js";
+import { createPeopleModule } from "./modules/people/people.module.js";
+import { OrganizationTimezoneClock } from "./modules/settings/adapters/out/supabase-settings.adapters.js";
 import { can } from "./modules/access/domain/services/effective-access.service.js";
 import { problemHandler } from "./infra/http/problem-details.js";
 
@@ -354,6 +356,30 @@ app.use("/api", orgStructureModule.router);
 // Notificações na aplicação (Fase 1, ticket 10) — /api/me/notifications.
 const notificationsModule = createNotificationsModule();
 app.use("/api", notificationsModule.router);
+// Novo RH → Pessoas (Fase 2): ficha, contratos, responsáveis, remuneração, campos, CSV.
+const peopleModule = createPeopleModule({
+  audit: auditModule.recorder,
+  accounts: { disableLinkedUser: (org, userId, actor) => accessModule.governance.disableLinkedUser(org, userId, actor) },
+  clock: new OrganizationTimezoneClock(createScopedQuery),
+  viewerOf: async (req) => {
+    const org = req.auth!.orgId;
+    const access = req.access!;
+    const who = { userId: req.auth!.sub, isAdmin: access.isAdmin, profileId: access.profile.id };
+    const [canSee, field] = await Promise.all([
+      accessModule.governance.scopeChecker(org, who),
+      accessModule.governance.fieldAccessFor(org, who.profileId, who.isAdmin),
+    ]);
+    return {
+      actor: req.auth!.email || req.auth!.sub,
+      isAdmin: access.isAdmin,
+      canExport: can(access, "hr.people_export", "MANAGE"),
+      canSensitive: can(access, "hr.sensitive_data", "MANAGE"),
+      field,
+      canSee,
+    };
+  },
+});
+app.use("/api", peopleModule.router);
 const settingsModule = createSettingsModule({
   canRetroactive: (req) => !!req.access && can(req.access, "governance.settings_retroactive", "MANAGE"),
   audit: auditModule.recorder,

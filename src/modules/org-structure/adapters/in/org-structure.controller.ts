@@ -118,6 +118,14 @@ export class OrgStructureController {
       res.json(await run(() => this.s.endAssignment(org(req), req.params.id as string, str(req.body?.validTo), this.actorOf(req))));
     });
 
+    // CF-2 / TK-10: mudança de centro com data de efeito e motivo.
+    r.post(`${base}/transfers`, async (req, res) => {
+      const b = (req.body ?? {}) as Record<string, unknown>;
+      const employeeId = str(b.employeeId);
+      if (!(await this.canSeeEmployee(req, employeeId, str(b.effectiveDate)))) throw problem(404, "not_found", "Colaborador não encontrado.");
+      res.status(201).json(await run(() => this.s.transfer(org(req), employeeId, str(b.locationId), str(b.effectiveDate), this.actorOf(req), str(b.reason))));
+    });
+
     r.get(`${base}/contacts`, async (req, res) => {
       res.json(await this.s.listContacts(org(req)));
     });

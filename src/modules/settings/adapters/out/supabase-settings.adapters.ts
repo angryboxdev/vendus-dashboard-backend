@@ -126,7 +126,7 @@ export class SupabaseSettingsRepository implements SettingsRepositoryPort {
 
 /** Departamentos/grupos de um colaborador e membros de unidades — vem do módulo org-structure. */
 export interface OrgUnitsLookup {
-  unitsOf(orgId: OrganizationId, employeeId: string, date: string): Promise<{ departmentIds: string[]; groupIds: string[] }>;
+  unitsOf(orgId: OrganizationId, employeeId: string, date: string): Promise<{ departmentIds: string[]; groupIds: string[]; locationIds: string[] | null }>;
   membersOf(orgId: OrganizationId, unitType: "department" | "group", unitIds: string[], date: string): Promise<string[]>;
 }
 
@@ -145,8 +145,10 @@ export class SupabaseEmployeeSegments implements EmployeeSegmentsPort {
     ]);
     const e = check(emp) as unknown as { primary_location_id: string | null } | null;
     const locs = (check(extra) as unknown as { location_id: string }[]).map((r) => r.location_id);
-    const locationIds = [...new Set([...(e?.primary_location_id ? [e.primary_location_id] : []), ...locs])];
-    const { departmentIds, groupIds } = await this.units.unitsOf(orgId, employeeId, date);
+    const { departmentIds, groupIds, locationIds: dated } = await this.units.unitsOf(orgId, employeeId, date);
+    // Com histórico de centros (transferências) vale o centro dessa data; senão o principal atual.
+    const main = dated ?? (e?.primary_location_id ? [e.primary_location_id] : []);
+    const locationIds = [...new Set([...main, ...locs])];
     return { employeeId, locationIds, departmentIds, groupIds };
   }
 }

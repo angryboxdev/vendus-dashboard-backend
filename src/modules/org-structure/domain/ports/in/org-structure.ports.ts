@@ -30,7 +30,13 @@ export interface OrgStructurePorts {
   acceptTerms(orgId: OrganizationId, version: string, actor: string): Promise<TermsAcceptance>;
 
   /** Departamentos e grupos do colaborador numa data (motor de configurações). */
-  unitsOf(orgId: OrganizationId, employeeId: string, date: string): Promise<{ departmentIds: string[]; groupIds: string[] }>;
+  /** `locationIds` = null quando o colaborador ainda não tem centros com vigência (vale o centro principal). */
+  unitsOf(orgId: OrganizationId, employeeId: string, date: string): Promise<{ departmentIds: string[]; groupIds: string[]; locationIds: string[] | null }>;
+  /**
+   * CF-2 / TK-10: muda o centro a partir de `effectiveDate`. Os dias anteriores
+   * mantêm o centro antigo (fica uma pertença com vigência para cada um).
+   */
+  transfer(orgId: OrganizationId, employeeId: string, locationId: string, effectiveDate: string, actor: string, reason: string): Promise<Assignment>;
   /** Colaboradores com pertença ativa às unidades numa data (pré-visualização de impacto). */
   membersOf(orgId: OrganizationId, unitType: UnitType, unitIds: string[], date: string): Promise<string[]>;
 }

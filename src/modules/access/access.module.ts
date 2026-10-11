@@ -37,7 +37,7 @@ export interface AccessModule {
 export interface AccessModuleOptions {
   mfa: MfaEnforcement;
   /** Departamentos/grupos de um colaborador (módulo org-structure). */
-  orgUnits?: (org: OrganizationId, employeeId: string, date: string) => Promise<{ departmentIds: string[]; groupIds: string[] }>;
+  orgUnits?: (org: OrganizationId, employeeId: string, date: string) => Promise<{ departmentIds: string[]; groupIds: string[]; locationIds?: string[] | null }>;
   /** Auditoria transversal encadeada (módulo audit): as alterações de papéis também lá ficam. */
   transversalAudit?: {
     record(org: OrganizationId, e: { actor: string; action: string; resourceType: string; resourceId: string | null; before: unknown; after: unknown; reason: string | null }): Promise<void>;
@@ -69,6 +69,7 @@ export function createAccessModule(options: AccessModuleOptions = { mfa: "off" }
     adminRepo,
     new SupabaseEmployeeUnits(createScopedQuery, options.orgUnits ?? (async () => ({ departmentIds: [], groupIds: [] }))),
     audit,
+    (org, userId) => resolveAccess.invalidate(org, userId),
   );
   return {
     resolveAccess,

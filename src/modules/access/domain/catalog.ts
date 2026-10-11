@@ -119,6 +119,7 @@ export const ACCESS_CATALOG: CatalogModule[] = [
       { key: "hr.reopen_month", label: "Reabrir mês fechado", description: "Reabrir um mês de assiduidade já fechado." },
       { key: "hr.payslip_import", label: "Importar recibos", description: "Importação em massa de recibos de vencimento." },
       { key: "hr.kiosk_pin", label: "PIN do quiosque", description: "Definir o PIN de picagem do colaborador." },
+      { key: "hr.people_export", label: "Exportar colaboradores", description: "Exportar a lista de colaboradores (só as colunas que pode ver)." },
     ],
   },
   {
@@ -214,6 +215,7 @@ export const SYSTEM_PROFILE_DEFAULTS: Record<SystemProfileKey, { name: string; d
       "hr.schedules": "READ",
       "hr.sensitive_data": "MANAGE",
       "hr.payslip_import": "MANAGE",
+      "hr.people_export": "MANAGE",
       ...moduleAll("company", "READ"),
       "company.positions": "MANAGE",
     },

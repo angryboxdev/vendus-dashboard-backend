@@ -24,7 +24,8 @@ export interface Group {
   updatedAt: string;
 }
 
-export type UnitType = "department" | "group";
+/** `location` = centro com vigência (transferências, Fase 2). */
+export type UnitType = "department" | "group" | "location";
 
 export interface Assignment {
   id: string;

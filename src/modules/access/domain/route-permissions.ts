@@ -94,6 +94,9 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/settings(\/|$)/, target: p("governance.settings") },
   { pattern: /^\/api\/novo-rh\/audit(\/|$)/, target: p("governance.audit") },
   { pattern: /^\/api\/novo-rh\/structure(\/|$)/, target: p("company.structure") },
+  { pattern: /^\/api\/novo-rh\/catalog(\/|$)/, target: p("company.structure") },
+  { pattern: /^\/api\/novo-rh\/people\/export\.csv$/, target: p("hr.people_export", "MANAGE") },
+  { pattern: /^\/api\/novo-rh\/people(\/|$)/, target: p("hr.employees") },
 
   // ── Recursos Humanos ─────────────────────────────────────────────────
   { pattern: /^\/api\/hr\/overview(\/|$)/, target: p("hr.overview") },

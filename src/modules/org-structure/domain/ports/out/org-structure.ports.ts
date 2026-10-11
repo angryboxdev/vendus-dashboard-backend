@@ -14,6 +14,11 @@ export interface OrgStructureRepositoryPort {
   createAssignment(orgId: OrganizationId, input: Omit<Assignment, "id"> & { createdBy: string }): Promise<Assignment>;
   endAssignment(orgId: OrganizationId, id: string, validTo: string): Promise<Assignment>;
   employeeExists(orgId: OrganizationId, employeeId: string): Promise<boolean>;
+  /** Centros ativos (tabela locations). */
+  listActiveLocationIds(orgId: OrganizationId): Promise<string[]>;
+  /** Centro principal atual e data de admissão (base da primeira transferência). */
+  employeeLocationInfo(orgId: OrganizationId, employeeId: string): Promise<{ primaryLocationId: string | null; hireDate: string | null } | null>;
+  setPrimaryLocation(orgId: OrganizationId, employeeId: string, locationId: string): Promise<void>;
 
   listContacts(orgId: OrganizationId): Promise<Contact[]>;
   upsertContact(orgId: OrganizationId, input: Omit<Contact, "updatedAt"> & { createdBy: string }): Promise<Contact>;

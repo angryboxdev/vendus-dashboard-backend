@@ -215,6 +215,14 @@ export const TABLE_REGISTRY = {
   access_field_privacy: { organizationColumn: "org_id", locationBearing: false },
   // Novo RH Fase 1 (ticket 10): notificações na aplicação.
   notifications: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 2: pessoas e contratos.
+  collective_agreements: { organizationColumn: "org_id", locationBearing: false },
+  employment_contracts: { organizationColumn: "org_id", locationBearing: false },
+  employee_managers: { organizationColumn: "org_id", locationBearing: false },
+  compensation_items: { organizationColumn: "org_id", locationBearing: false },
+  employee_compensations: { organizationColumn: "org_id", locationBearing: false },
+  custom_field_definitions: { organizationColumn: "org_id", locationBearing: false },
+  employee_custom_values: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;

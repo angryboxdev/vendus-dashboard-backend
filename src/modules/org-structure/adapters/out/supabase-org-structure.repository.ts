@@ -99,6 +99,19 @@ export class SupabaseOrgStructureRepository implements OrgStructureRepositoryPor
     return !!check<{ id: string } | null>(await this.scoped(orgId).table("hr_employees").select("id").eq("id", employeeId).maybeSingle());
   }
 
+  async listActiveLocationIds(orgId: OrganizationId) {
+    return check<{ id: string }[]>(await this.scoped(orgId).table("locations").select("id").eq("is_active", true)).map((r) => r.id);
+  }
+  async employeeLocationInfo(orgId: OrganizationId, employeeId: string) {
+    const row = check<{ primary_location_id: string | null; hired_at: string | null } | null>(
+      await this.scoped(orgId).table("hr_employees").select("primary_location_id, hired_at").eq("id", employeeId).maybeSingle(),
+    );
+    return row ? { primaryLocationId: row.primary_location_id, hireDate: row.hired_at ? row.hired_at.slice(0, 10) : null } : null;
+  }
+  async setPrimaryLocation(orgId: OrganizationId, employeeId: string, locationId: string) {
+    check(await this.scoped(orgId).table("hr_employees").update({ primary_location_id: locationId, updated_at: new Date().toISOString() }).eq("id", employeeId));
+  }
+
   async listContacts(orgId: OrganizationId) {
     return check<ConRow[]>(await this.scoped(orgId).table("org_contacts").select(CON)).map(con);
   }

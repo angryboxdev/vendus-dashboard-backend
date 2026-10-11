@@ -38,15 +38,15 @@ Fontes: RE = `Especificacao_RH_Engenharia_Reversa` §15 · CF = `Especificacao_R
 
 | ID | Requisito | Estado | Código | Teste |
 |---|---|---|---|---|
-| RE-1 | Nome e apelido obrigatórios | por fazer | | |
-| RE-2 | Documento duplicado → 409 | por fazer | | |
-| RE-3 | Exportação sem colunas sem permissão (IBAN) | por fazer | | |
-| RE-4 | Desativação revoga sessões; dados ficam nos relatórios | por fazer | | |
-| RE-34 | Admin de centro não vê outros centros (pesquisa e exportação) | parcial — âmbitos e verificação feitos (Fase 1); pesquisa/exportação de colaboradores com a Fase 2 | `access/domain/services/scope.service.ts`, `access-governance.use-cases.ts` | `src/modules/access/__tests__/use-cases/access-governance.test.ts::RE_34_*` |
-| CF-2 | Transferência: regras do novo centro a partir da data de efeito | por fazer | | |
-| CF-14 | Complemento noutra moeda → recusado | por fazer | | |
-| TK-9 | Contratos sobrepostos → 409 | por fazer | | |
-| TK-10 | Transferência não altera dias anteriores | por fazer | | |
+| RE-1 | Nome e apelido obrigatórios | feito | `src/modules/people` | `src/modules/people/__tests__/use-cases/people.test.ts::RE_1_*` |
+| RE-2 | Documento duplicado → 409 | feito | `people` + índice único de NIF | `src/modules/people/__tests__/use-cases/people.test.ts::RE_2_*`, `people.controller.test.ts` |
+| RE-3 | Exportação sem colunas sem permissão (IBAN) | feito | `people.use-cases.ts` (`exportCsv`) | `src/modules/people/__tests__/use-cases/people.test.ts::RE_3_*`, `people.controller.test.ts::RE_3_http_*` |
+| RE-4 | Desativação revoga sessões; dados ficam nos relatórios | feito | `people` + `access-governance` (`disableLinkedUser`) | `src/modules/people/__tests__/use-cases/people.test.ts::RE_4_*` |
+| RE-34 | Admin de centro não vê outros centros (pesquisa e exportação) | feito | `access` (âmbitos) + `people` (lista, ficha, exportação) | `access-governance.test.ts::RE_34_*`, `src/modules/people/__tests__/use-cases/people.test.ts::RE_34_*` |
+| CF-2 | Transferência: regras do novo centro a partir da data de efeito | feito | `org-structure` (`transfer`) + settings | `src/modules/org-structure/__tests__/org-structure.test.ts::CF_2_*` |
+| CF-14 | Complemento noutra moeda → recusado | feito | `employment.ts` (`compensationRuleViolation`) | `src/modules/people/__tests__/use-cases/people.test.ts::CF_14_*` |
+| TK-9 | Contratos sobrepostos → 409 | feito (aplicação + trigger na BD) | `employment.use-cases.ts` | `src/modules/people/__tests__/use-cases/people.test.ts::TK_9_*` |
+| TK-10 | Transferência não altera dias anteriores | feito | `org-structure` (`transfer`) | `org-structure.test.ts::TK_10_*` |
 
 ## Fase 3 — Base do tempo
 

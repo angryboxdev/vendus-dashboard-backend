@@ -68,7 +68,7 @@ export class SupabaseAccessGovernanceRepository implements AccessGovernanceRepos
 export class SupabaseEmployeeUnits implements EmployeeUnitsPort {
   constructor(
     private readonly scoped: ScopedQueryFactory,
-    private readonly orgUnits: (org: OrganizationId, employeeId: string, date: string) => Promise<{ departmentIds: string[]; groupIds: string[] }>,
+    private readonly orgUnits: (org: OrganizationId, employeeId: string, date: string) => Promise<{ departmentIds: string[]; groupIds: string[]; locationIds?: string[] | null }>,
   ) {}
 
   async unitsOf(org: OrganizationId, employeeId: string, date: string): Promise<EmployeeUnits> {
@@ -80,7 +80,8 @@ export class SupabaseEmployeeUnits implements EmployeeUnitsPort {
     ]);
     const primary = check<{ primary_location_id: string | null } | null>(emp)?.primary_location_id;
     const locs = check<{ location_id: string }[]>(extra).map((r) => r.location_id);
-    return { employeeId, locationIds: [...new Set([...(primary ? [primary] : []), ...locs])], ...units };
+    const main = units.locationIds ?? (primary ? [primary] : []);
+    return { employeeId, locationIds: [...new Set([...main, ...locs])], departmentIds: units.departmentIds, groupIds: units.groupIds };
   }
 
   async employeeOfUser(org: OrganizationId, userId: string): Promise<string | null> {
