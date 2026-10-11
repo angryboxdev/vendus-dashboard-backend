@@ -27,12 +27,12 @@ Fontes: RE = `Especificacao_RH_Engenharia_Reversa` §15 · CF = `Especificacao_R
 | TK-3 | Papel administrativo sem MFA não acede à administração | por fazer | | |
 | TK-4 | Mudar papel ou desativar revoga sessões de imediato | por fazer | | |
 | TK-5 | Matriz papel × endpoint cobre 100% dos endpoints | parcial — gerador feito (`npm run authz:matrix`, 460 endpoints, 0 não classificados); falta o teste por âmbito | `src/tools/authz-matrix/` | `src/tools/authz-matrix/__tests__/authz-matrix.test.ts` |
-| TK-6 | Configurações com data de efeito | por fazer | | |
-| TK-7 | Dependência violada → 422 `rule_violation` | por fazer | | |
-| TK-8 | Dois segmentos → mesmo valor efetivo (ordem D3) | por fazer | | |
+| TK-6 | Configurações com data de efeito | feito | `src/modules/settings` | `src/modules/settings/__tests__/use-cases/settings.test.ts`, `src/modules/settings/__tests__/adapters/settings.controller.test.ts` |
+| TK-7 | Dependência violada → 422 `rule_violation` | feito | `src/modules/settings` | `src/modules/settings/__tests__/use-cases/settings.test.ts`, `src/modules/settings/__tests__/adapters/settings.controller.test.ts` |
+| TK-8 | Dois segmentos → mesmo valor efetivo (ordem D3) | feito (centros; departamentos/grupos com o ticket 04) | `src/modules/settings` | `src/modules/settings/__tests__/use-cases/settings.test.ts` |
 | RE-33 | Isolamento entre tenants em todos os endpoints | por fazer | | |
-| CF-1 | Cascata Global → Pessoal (chave de teste) | por fazer | | |
-| CF-12 | Alteração de configuração com antes/depois/motivo, exportável | por fazer | | |
+| CF-1 | Cascata Global → Pessoal (chave de teste) | feito | `src/modules/settings` | `src/modules/settings/__tests__/use-cases/settings.test.ts` |
+| CF-12 | Alteração de configuração com antes/depois/motivo, exportável | feito | `src/modules/settings` | `src/modules/settings/__tests__/use-cases/settings.test.ts`, `src/modules/settings/__tests__/adapters/settings.controller.test.ts` (CSV) |
 
 ## Fase 2 — Pessoas e contratos
 

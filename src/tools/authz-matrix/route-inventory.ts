@@ -37,7 +37,7 @@ export function mountOf(file: string): { prefix: string; preAuth: boolean } {
 }
 
 const CALL = /\b(\w+)\.(get|post|put|patch|delete)\(\s*(["'`])((?:(?!\3)[^\\]|\\.)*)\3/g;
-const CONST = /\bconst\s+([A-Z_][A-Z0-9_]*)\s*=\s*(["'`])([^"'`$]*)\2/g;
+const CONST = /\bconst\s+([A-Za-z_]\w*)\s*=\s*(["'`])([^"'`$]*)\2/g;
 
 export function scanRoutes(files: SourceFile[]): RouteEntry[] {
   const out: RouteEntry[] = [];

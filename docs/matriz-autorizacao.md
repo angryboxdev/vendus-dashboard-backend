@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 460 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 470 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -321,6 +321,16 @@ Endpoints: 460 · pré-autenticação: 20 · não classificados: 0
 | POST | `/api/me/requests/:id/cancel` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/shifts` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/shifts/:id/coworkers` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/novo-rh/settings/definitions` | permission:governance.settings:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/settings/effective` | permission:governance.settings:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/settings/history` | permission:governance.settings:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/settings/history.csv` | permission:governance.settings:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/settings/profiles` | permission:governance.settings:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/settings/profiles` | permission:governance.settings:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/settings/profiles/:id` | permission:governance.settings:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/settings/profiles/:id/impact-preview` | permission:governance.settings:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/settings/profiles/:id/targets` | permission:governance.settings:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/settings/profiles/:id/values` | permission:governance.settings:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/organization` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
 | PATCH | `/api/organization` | permission:company.organization:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/organization/history` | permission:company.organization:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |

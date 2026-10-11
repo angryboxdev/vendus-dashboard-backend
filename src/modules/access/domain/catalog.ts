@@ -138,6 +138,20 @@ export const ACCESS_CATALOG: CatalogModule[] = [
       { key: "company.confidential_documents", label: "Documentos confidenciais", description: "Documentos da Empresa com visibilidade só para administração." },
     ],
   },
+  {
+    // Novo RH (Fase 1): motor de configurações e auditoria. Fora de "company"
+    // de propósito — os perfis de sistema leem "company" inteiro e isto não deve vir por arrasto.
+    key: "governance",
+    label: "Configurações & Auditoria",
+    description: "Regras configuráveis do Novo RH e histórico de alterações.",
+    functions: [
+      { key: "governance.settings", label: "Configurações", description: "Ver e alterar as regras do Novo RH, com data de efeito e motivo." },
+      { key: "governance.audit", label: "Auditoria", description: "Consultar e exportar o registo de auditoria." },
+    ],
+    specials: [
+      { key: "governance.settings_retroactive", label: "Alterações retroativas", description: "Alterar regras com data de efeito no passado." },
+    ],
+  },
 ];
 
 export type PermissionMap = Record<string, AccessLevel>;

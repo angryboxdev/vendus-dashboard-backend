@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import type { RequestHandler, Response } from "express";
 import type {} from "../../middleware/auth-middleware.js"; // tipo de req.auth
+import type { OrganizationId } from "../../kernel/organization-id.js";
+import { log } from "./correlation.js";
 import { problem, sendProblem } from "./problem-details.js";
 
 /**
@@ -31,11 +33,17 @@ export type IdempotencyBegin =
   | { state: "mismatch" }
   | { state: "done"; response: StoredResponse };
 
-/** Onde as chaves ficam. Fase 0: memória; persistente (tabela própria) quando as escritas do RH a adotarem. */
+/** Organização (null sem autenticação) + chave composta (utilizador, método, caminho, Idempotency-Key). */
+export interface IdempotencyScope {
+  orgId: OrganizationId | null;
+  key: string;
+}
+
+/** Onde as chaves ficam: memória (testes, rotas sem organização) ou tabela `http_idempotency_keys`. */
 export interface IdempotencyStore {
-  begin(scope: string, fingerprint: string): Promise<IdempotencyBegin>;
-  complete(scope: string, response: StoredResponse): Promise<void>;
-  abandon(scope: string): Promise<void>;
+  begin(scope: IdempotencyScope, fingerprint: string): Promise<IdempotencyBegin>;
+  complete(scope: IdempotencyScope, response: StoredResponse): Promise<void>;
+  abandon(scope: IdempotencyScope): Promise<void>;
 }
 
 interface Entry {
@@ -53,8 +61,9 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
     private readonly now: () => number = Date.now,
   ) {}
 
-  async begin(scope: string, fingerprint: string): Promise<IdempotencyBegin> {
+  async begin(s: IdempotencyScope, fingerprint: string): Promise<IdempotencyBegin> {
     this.sweep();
+    const scope = `${s.orgId ?? "-"}|${s.key}`;
     const existing = this.entries.get(scope);
     if (!existing) {
       this.entries.set(scope, { fingerprint, response: null, expiresAt: this.now() + this.ttlMs });
@@ -65,13 +74,13 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
     return { state: "done", response: existing.response };
   }
 
-  async complete(scope: string, response: StoredResponse): Promise<void> {
-    const entry = this.entries.get(scope);
+  async complete(s: IdempotencyScope, response: StoredResponse): Promise<void> {
+    const entry = this.entries.get(`${s.orgId ?? "-"}|${s.key}`);
     if (entry) entry.response = response;
   }
 
-  async abandon(scope: string): Promise<void> {
-    this.entries.delete(scope);
+  async abandon(s: IdempotencyScope): Promise<void> {
+    this.entries.delete(`${s.orgId ?? "-"}|${s.key}`);
   }
 
   private sweep(): void {
@@ -79,6 +88,8 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
     for (const [k, e] of this.entries) if (e.expiresAt <= t) this.entries.delete(k);
   }
 }
+
+const storeFailed = (e: unknown) => log("error", "idempotency_store_failed", { error: e instanceof Error ? e.message : "unknown" });
 
 function fingerprintOf(body: unknown): string {
   return createHash("sha256")
@@ -116,7 +127,7 @@ export function idempotency(store: IdempotencyStore, options: { required?: boole
     }
 
     const path = req.originalUrl.split("?")[0] ?? "";
-    const scope = [req.auth?.orgId ?? "-", req.auth?.sub ?? "-", req.method, path, key].join("|");
+    const scope: IdempotencyScope = { orgId: req.auth?.orgId ?? null, key: [req.auth?.sub ?? "-", req.method, path, key].join("|") };
     let begun: IdempotencyBegin;
     try {
       begun = await store.begin(scope, fingerprintOf(req.body));
@@ -149,7 +160,7 @@ export function idempotency(store: IdempotencyStore, options: { required?: boole
 
     res.on("finish", () => {
       if (res.statusCode >= 500) {
-        void store.abandon(scope);
+        store.abandon(scope).catch(storeFailed);
         return;
       }
       const headers: StoredResponse["headers"] = {};
@@ -157,10 +168,10 @@ export function idempotency(store: IdempotencyStore, options: { required?: boole
         const v = res.getHeader(h);
         if (typeof v === "string") headers[h] = v;
       }
-      void store.complete(scope, { status: res.statusCode, headers, body: captured });
+      store.complete(scope, { status: res.statusCode, headers, body: captured }).catch(storeFailed);
     });
     res.on("close", () => {
-      if (!res.writableFinished) void store.abandon(scope);
+      if (!res.writableFinished) store.abandon(scope).catch(storeFailed);
     });
     next();
   };

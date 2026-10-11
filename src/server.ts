@@ -55,6 +55,8 @@ import { createStockCountModule } from "./modules/stock-count/stock-count.module
 import { createStockPlanningModule } from "./modules/stock-planning/stock-planning.module.js";
 import { createSalesDeclarationModule } from "./modules/sales-declaration/sales-declaration.module.js";
 import { correlationId } from "./infra/http/correlation.js";
+import { createSettingsModule } from "./modules/settings/settings.module.js";
+import { can } from "./modules/access/domain/services/effective-access.service.js";
 import { problemHandler } from "./infra/http/problem-details.js";
 
 const app = express();
@@ -319,6 +321,12 @@ app.use("/api/hr", hrLeaveRoutes);
 // hr_viewer, writes têm requireMinRole("manager") inline no controller.
 // RH-01 (Visão Geral) — /api/hr/overview*, só leitura, mesmo módulo.
 app.use("/api", hrModule.router);
+
+// Novo RH (task faseada) — motor de configurações (Fase 1, ticket 02). Rotas em /api/novo-rh/settings.
+const settingsModule = createSettingsModule({
+  canRetroactive: (req) => !!req.access && can(req.access, "governance.settings_retroactive", "MANAGE"),
+});
+app.use("/api", settingsModule.router);
 
 // CRM: acessível a managers+
 const crmModule = createCrmModule();
