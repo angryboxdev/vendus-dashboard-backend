@@ -213,6 +213,8 @@ export const TABLE_REGISTRY = {
   // Novo RH Fase 1 (ticket 05): âmbitos de utilizadores e privacidade por campo.
   access_scopes: { organizationColumn: "org_id", locationBearing: false },
   access_field_privacy: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 1 (ticket 10): notificações na aplicação.
+  notifications: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;

@@ -58,6 +58,7 @@ import { correlationId } from "./infra/http/correlation.js";
 import { createSettingsModule } from "./modules/settings/settings.module.js";
 import { createAuditModule } from "./modules/audit/audit.module.js";
 import { createOrgStructureModule } from "./modules/org-structure/org-structure.module.js";
+import { createNotificationsModule } from "./modules/notifications/notifications.module.js";
 import { can } from "./modules/access/domain/services/effective-access.service.js";
 import { problemHandler } from "./infra/http/problem-details.js";
 
@@ -350,11 +351,26 @@ app.use("/api", hrModule.router);
 // configurações (ticket 02) e estrutura (ticket 04). Rotas em /api/novo-rh/{audit,structure,settings}.
 app.use("/api", auditModule.router);
 app.use("/api", orgStructureModule.router);
+// Notificações na aplicação (Fase 1, ticket 10) — /api/me/notifications.
+const notificationsModule = createNotificationsModule();
+app.use("/api", notificationsModule.router);
 const settingsModule = createSettingsModule({
   canRetroactive: (req) => !!req.access && can(req.access, "governance.settings_retroactive", "MANAGE"),
   audit: auditModule.recorder,
   units: orgStructureModule.structure,
   canSeeEmployee,
+  notifier: {
+    async retroactiveChange(org, info) {
+      await notificationsModule.notifications.notify(org, {
+        recipientUserIds: await notificationsModule.notifications.adminUserIds(org),
+        kind: "settings.retroactive_change",
+        title: `Alteração retroativa: ${info.label}`,
+        body: `${info.actor} alterou "${info.label}" (${info.profileName}) com efeito desde ${info.validFrom}: ${info.employees} colaborador(es), ${info.pastDays} dia(s) passados.`,
+        link: "/hr/novo/configuracoes",
+        dedupeKey: `settings:${info.valueId}`,
+      });
+    },
+  },
 });
 app.use("/api", settingsModule.router);
 

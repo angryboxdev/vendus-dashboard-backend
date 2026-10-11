@@ -94,6 +94,18 @@ describe("Motor de configurações — data de efeito (TK-6)", () => {
     expect((await effective(uc, "e1", "2026-11-01")).value).toBe(10);
   });
 
+  test("alteração retroativa avisa os Admins (notificação); a de hoje não", async () => {
+    const repo = new FakeSettingsRepository();
+    const calls: unknown[] = [];
+    const uc = new SettingsUseCases(repo, new FakeSegments(), new FakeImpact(3), new FakeClock("2026-10-11"), SETTING_CATALOG, new FakeAudit(), {
+      retroactiveChange: async (_o, info) => void calls.push(info),
+    });
+    const g = await uc.createProfile(ORG, { domain: "time_tracking", name: "Global", kind: "global" }, ADMIN);
+    await uc.setValue(ORG, g.id, { key: TOL, value: 5, validFrom: "2026-10-11", reason: "hoje" }, ADMIN);
+    await uc.setValue(ORG, g.id, { key: TOL, value: 7, validFrom: "2026-10-09", reason: "corrigir" }, RETRO);
+    expect(calls).toEqual([expect.objectContaining({ label: "Tolerância de entrada", profileName: "Global", validFrom: "2026-10-09", employees: 3, pastDays: 2 })]);
+  });
+
   test("TK_6_data_passada_exige_permissao_retroativa_e_devolve_impacto", async () => {
     const { uc, impact } = setup();
     const g = await uc.createProfile(ORG, { domain: "time_tracking", name: "Global", kind: "global" }, ADMIN);

@@ -11,7 +11,7 @@ import {
 } from "./adapters/out/supabase-settings.adapters.js";
 import { SettingsUseCases } from "./application/use-cases/settings.use-cases.js";
 import type { Actor, SettingsPorts } from "./domain/ports/in/settings.ports.js";
-import type { SettingsAuditPort } from "./domain/ports/out/settings.ports.js";
+import type { SettingsAuditPort, SettingsNotifierPort } from "./domain/ports/out/settings.ports.js";
 import { SETTING_CATALOG } from "./domain/services/setting-catalog.js";
 
 /**
@@ -24,6 +24,7 @@ export function createSettingsModule(deps: {
   audit: SettingsAuditPort;
   units: OrgUnitsLookup;
   canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean>;
+  notifier: SettingsNotifierPort;
 }): {
   router: Router;
   settings: SettingsPorts;
@@ -35,6 +36,7 @@ export function createSettingsModule(deps: {
     new OrganizationTimezoneClock(createScopedQuery),
     SETTING_CATALOG,
     deps.audit,
+    deps.notifier,
   );
   const actorOf = (req: Request): Actor => ({ userId: req.auth!.email || req.auth!.sub, canRetroactive: deps.canRetroactive(req) });
   const controller = new SettingsController(settings, new SupabaseIdempotencyStore(createScopedQuery), actorOf, deps.canSeeEmployee);

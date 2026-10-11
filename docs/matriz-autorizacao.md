@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 496 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 500 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -321,6 +321,10 @@ Endpoints: 496 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/me/documents/:id/download-url` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/documents/:id/replace` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/leave` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/notifications` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| POST | `/api/me/notifications/:id/read` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| POST | `/api/me/notifications/read-all` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/notifications/unread-count` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/punches` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/requests` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/requests` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |

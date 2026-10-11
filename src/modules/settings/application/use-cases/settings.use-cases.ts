@@ -3,7 +3,7 @@ import type { SettingDefinition, SettingDomain } from "../../domain/entities/set
 import type { SettingProfile, SettingTarget, TargetType } from "../../domain/entities/setting-profile.js";
 import { RetroactiveNotAllowed, SettingNotFound, SettingValidationError } from "../../domain/errors.js";
 import type { Actor, HistoryEntry, ImpactPreview, ProfileDetail, SettingsPorts } from "../../domain/ports/in/settings.ports.js";
-import type { EmployeeSegmentsPort, SettingsAuditPort, SettingsClockPort, SettingsImpactPort, SettingsRepositoryPort } from "../../domain/ports/out/settings.ports.js";
+import type { EmployeeSegmentsPort, SettingsAuditPort, SettingsClockPort, SettingsImpactPort, SettingsNotifierPort, SettingsRepositoryPort } from "../../domain/ports/out/settings.ports.js";
 import { activeOn, profileValueAt, profileViewAt, resolveSetting, type SettingsSnapshot } from "../../domain/services/setting-resolution.js";
 import { checkDependencies, validateSettingValue } from "../../domain/services/setting-validation.js";
 
@@ -35,6 +35,7 @@ export class SettingsUseCases implements SettingsPorts {
     private readonly clock: SettingsClockPort,
     private readonly catalog: SettingDefinition[],
     private readonly audit: SettingsAuditPort,
+    private readonly notifier: SettingsNotifierPort = { retroactiveChange: async () => undefined },
   ) {}
 
   listDefinitions(domain?: SettingDomain): SettingDefinition[] {
@@ -149,6 +150,17 @@ export class SettingsUseCases implements SettingsPorts {
       after: { key: def.key, value: value.value, validFrom: value.validFrom, ...(impact && { impact }) },
       reason,
     });
+    if (impact) {
+      await this.notifier.retroactiveChange(orgId, {
+        valueId: value.id,
+        label: def.label,
+        profileName: profile.name,
+        validFrom: value.validFrom,
+        employees: impact.employees,
+        pastDays: impact.pastDays,
+        actor: actor.userId,
+      });
+    }
     return { value, impact };
   }
 

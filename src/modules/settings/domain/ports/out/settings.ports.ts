@@ -32,6 +32,11 @@ export interface SettingsAuditPort {
   ): Promise<void>;
 }
 
+/** Avisos (módulo notifications): uma alteração retroativa avisa os Admins. */
+export interface SettingsNotifierPort {
+  retroactiveChange(orgId: OrganizationId, info: { valueId: string; label: string; profileName: string; validFrom: string; employees: number; pastDays: number; actor: string }): Promise<void>;
+}
+
 /** "Hoje" no fuso da organização (AAAA-MM-DD). */
 export interface SettingsClockPort {
   today(orgId: OrganizationId): Promise<string>;
