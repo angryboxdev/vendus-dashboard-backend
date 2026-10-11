@@ -61,6 +61,7 @@ export function createAttendanceMeRouter(uc: AttendanceUseCases, store: Idempote
       latitude: optN(b.latitude),
       longitude: optN(b.longitude),
       ip: req.ip ?? null,
+      occurredAt: optS(b.occurredAt),
     };
     const out = await run(() => uc.punch(org(req), actorOf(req), input));
     res.status(out.duplicate ? 200 : 201).json(out);

@@ -44,6 +44,18 @@ describe("Assiduidade — casos de uso (Fase 4)", () => {
     expect(results[2]!.event.id).toBe(results[0]!.event.id);
   });
 
+  test("RE_9_fila_offline_guarda_a_hora_do_dispositivo_ate_24h_e_nunca_no_futuro", async () => {
+    const { uc, repo } = setup(at("2026-10-12T10:00:00"));
+    await uc.punch(ORG, EMP, { ...punch("work", { clientEventId: "o-1" }), source: "pwa", occurredAt: at("2026-10-12T08:00:00") });
+    await uc.punch(ORG, EMP, { ...punch("off", { clientEventId: "o-2" }), source: "pwa", occurredAt: at("2026-10-12T09:30:00") });
+    expect(repo.events.map((e) => e.occurredAt)).toEqual([at("2026-10-12T08:00:00"), at("2026-10-12T09:30:00")]);
+    await expect(uc.punch(ORG, EMP, { ...punch("work"), occurredAt: at("2026-10-12T10:05:00") })).rejects.toMatchObject({ field: "occurredAt" });
+    await expect(uc.punch(ORG, EMP, { ...punch("work"), occurredAt: at("2026-10-11T09:00:00") })).rejects.toThrow("pedido de correção");
+    // Relógio ligeiramente adiantado (< 2 min) → fica com a hora do servidor.
+    await uc.punch(ORG, EMP, { ...punch("work"), occurredAt: at("2026-10-12T10:01:00") });
+    expect(repo.events.at(-1)!.occurredAt).toBe(at("2026-10-12T10:00:00"));
+  });
+
   test("marcar o mesmo estado seguido é recusado (ex.: saída sem entrada)", async () => {
     const { uc } = setup();
     await expect(uc.punch(ORG, EMP, punch("off"))).rejects.toBeInstanceOf(AttendanceConflictError);

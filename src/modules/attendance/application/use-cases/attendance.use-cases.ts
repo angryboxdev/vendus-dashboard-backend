@@ -35,7 +35,14 @@ export interface PunchInput {
   latitude: number | null;
   longitude: number | null;
   ip: string | null;
+  /** Hora do dispositivo, para marcações feitas sem rede (fila offline). null = agora. */
+  occurredAt?: string | null;
 }
+
+/** Uma marcação offline só é aceite até este atraso; depois, pedido de correção. */
+const OFFLINE_MAX_HOURS = 24;
+/** Folga para relógios de dispositivos ligeiramente adiantados. */
+const CLOCK_SKEW_SECONDS = 120;
 
 export interface ChangeInput {
   operation: RevisionOperation;
@@ -185,7 +192,17 @@ export class AttendanceUseCases {
       if (existing) return { event: view(existing), duplicate: true };
     }
     const tz = await this.ctx.timeZone(org);
-    const now = this.clock.now();
+    const serverNow = this.clock.now();
+    let now = serverNow;
+    if (input.occurredAt) {
+      if (!isIso(input.occurredAt)) throw new AttendanceValidationError("Data e hora inválidas.", "occurredAt");
+      const at = Date.parse(input.occurredAt);
+      if (at > Date.parse(serverNow) + CLOCK_SKEW_SECONDS * 1000) throw new AttendanceValidationError("A hora do dispositivo está no futuro.", "occurredAt");
+      if (at < Date.parse(serverNow) - OFFLINE_MAX_HOURS * 3600_000) {
+        throw new AttendanceValidationError("Esta marcação ficou demasiado tempo sem rede. Envie um pedido de correção.", "occurredAt");
+      }
+      now = new Date(Math.min(at, Date.parse(serverNow))).toISOString();
+    }
     const today = localDate(now, tz);
     const { effective } = await this.load(org, employeeId, plusDays(today, -1), today, tz);
     const state = effective.filter((e) => e.occurredAt <= now).at(-1)?.segmentType ?? "off";
@@ -219,7 +236,9 @@ export class AttendanceUseCases {
       longitude: keepCoords ? input.longitude : null,
       ip: input.ip,
     });
-    this.recalcLater(org, employeeId, plusDays(today, -2), plusDays(today, -1), "Nova marcação");
+    const serverToday = localDate(serverNow, tz);
+    if (today < serverToday) this.recalcLater(org, employeeId, plusDays(today, -1), plusDays(serverToday, -1), "Nova marcação");
+    else this.recalcLater(org, employeeId, plusDays(today, -2), plusDays(today, -1), "Nova marcação");
     return { event: view(event), duplicate };
   }
 
