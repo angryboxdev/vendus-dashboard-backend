@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 import type { HolidayDay } from "../entities/calendars.js";
-import { plannedMinutes, type IsoWeekday, type ScheduleKind, type ScheduleVersion } from "../entities/schedule.js";
+import { plannedMinutes, type FixedDays, type IsoWeekday, type ScheduleKind, type ScheduleVersion } from "../entities/schedule.js";
 
 /**
  * Tempo teórico diário (Eng. Reversa 3.4; TK-11). Regras:
@@ -30,12 +30,26 @@ export interface TheoreticalDay {
   scheduleName: string | null;
   holidayName: string | null;
   warnings: ("holiday_to_confirm" | "half_day")[];
+  /** Horário fixo: primeira entrada e última saída planeadas (HH:MM) — atrasos e fecho automático. */
+  plannedStart: string | null;
+  plannedEnd: string | null;
+  /** Horário noturno: a jornada pode terminar no dia seguinte. */
+  night: boolean;
 }
 
 export const isoWeekday = (date: string) => String(DateTime.fromISO(date, { zone: "utc" }).weekday) as IsoWeekday;
 
 export function theoreticalDay(i: TheoreticalInput): TheoreticalDay {
-  const base = { date: i.date, scheduleName: i.schedule?.name ?? null, holidayName: i.holiday?.name ?? null };
+  const ranges = i.schedule?.kind === "fixed" ? ((i.schedule.version.days as FixedDays)[isoWeekday(i.date)] ?? []) : [];
+  const sorted = [...ranges].sort((a, b) => a.start.localeCompare(b.start));
+  const base = {
+    date: i.date,
+    scheduleName: i.schedule?.name ?? null,
+    holidayName: i.holiday?.name ?? null,
+    plannedStart: sorted[0]?.start ?? null,
+    plannedEnd: sorted.at(-1)?.end ?? null,
+    night: i.schedule?.version.night ?? false,
+  };
   const warnings: TheoreticalDay["warnings"] = [];
   if (i.holiday?.status === "confirmed") return { ...base, minutes: 0, reason: "holiday", warnings };
   if (i.holiday?.status === "to_confirm") warnings.push("holiday_to_confirm");

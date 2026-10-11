@@ -28,6 +28,7 @@ export function validateSettingValue(def: SettingDefinition, value: SettingData 
     case "list":
       if (!Array.isArray(value) || value.some((v) => typeof v !== "string")) fail("tem de ser uma lista de textos.");
       if (def.allowed && (value as string[]).some((v) => !def.allowed!.includes(v))) fail("lista com valores não permitidos.");
+      if (def.minItems !== undefined && (value as string[]).length < def.minItems) fail(def.minItems === 1 ? "tem de ficar pelo menos um ativo." : `mínimo de ${def.minItems}.`);
       return;
     case "json":
       if (typeof value !== "object" || Array.isArray(value)) fail("tem de ser um objeto.");

@@ -61,6 +61,7 @@ import { createOrgStructureModule } from "./modules/org-structure/org-structure.
 import { createNotificationsModule } from "./modules/notifications/notifications.module.js";
 import { createPeopleModule } from "./modules/people/people.module.js";
 import { createTimeBaseModule } from "./modules/time-base/time-base.module.js";
+import { createAttendanceModule } from "./modules/attendance/attendance.module.js";
 import { SupabaseEmployeeSegments, SupabaseSettingsImpact } from "./modules/settings/adapters/out/supabase-settings.adapters.js";
 import { SupabasePeopleRepository } from "./modules/people/adapters/out/supabase-people.repository.js";
 import { portugueseNationalHolidays } from "./modules/calendar/domain/services/portuguese-holidays.service.js";
@@ -427,6 +428,27 @@ const timeBaseModule = createTimeBaseModule({
   canSeeEmployee,
 });
 app.use("/api", timeBaseModule.router);
+
+// Novo RH → Assiduidade (Fase 4): marcações, motor de apuramento, revisões, incidentes.
+const attendanceModule = createAttendanceModule({
+  effectiveSettings: async (org, employeeId, date) => {
+    const [tt, legal] = await Promise.all([
+      settingsModule.settings.effectiveFor(org, employeeId, date, "time_tracking"),
+      settingsModule.settings.effectiveFor(org, employeeId, date, "legal"),
+    ]);
+    return [...tt, ...legal];
+  },
+  plans: async (org, employeeId, from, to) => {
+    const { days } = await timeBaseModule.time.theoretical(org, employeeId, from, to);
+    return new Map(
+      days.map((d) => [d.date, { theoreticalMinutes: d.minutes, plannedStart: d.plannedStart, plannedEnd: d.plannedEnd, nightSchedule: d.night, excused: d.reason === "holiday" }]),
+    );
+  },
+  audit: auditModule.recorder,
+  canSeeEmployee,
+});
+app.use("/api", attendanceModule.meRouter);
+app.use("/api", attendanceModule.adminRouter);
 
 // CRM: acessível a managers+
 const crmModule = createCrmModule();

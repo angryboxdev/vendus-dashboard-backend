@@ -33,6 +33,8 @@ export interface SettingDefinition {
   min?: number;
   max?: number;
   allowed?: string[];
+  /** Listas: mínimo de elementos (ex.: pelo menos 1 método de identificação no quiosque — CF-4). */
+  minItems?: number;
   /**
    * Dependências (C9): só se aplicam quando ESTE parâmetro tem um valor
    * "ativo" (bool true; nos outros tipos, qualquer valor diferente do

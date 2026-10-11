@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 552 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 567 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -317,6 +317,12 @@ Endpoints: 552 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/locations/:id/history` | permission:company.locations:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/me` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/access` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/clock` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| POST | `/api/me/clock` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/clock/corrections` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| POST | `/api/me/clock/corrections` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/clock/days` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| POST | `/api/me/clock/revisions/:id/refuse` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/documents` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/documents/:id/download-url` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/documents/:id/replace` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
@@ -332,6 +338,15 @@ Endpoints: 552 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/me/session-policy` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/shifts` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/shifts/:id/coworkers` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/novo-rh/attendance/adjustments` | permission:hr.attendance:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/attendance/corrections` | permission:hr.attendance:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/attendance/corrections/:id/approve` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/attendance/corrections/:id/reject` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/attendance/days` | permission:hr.attendance:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/attendance/incidents` | permission:hr.attendance:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/attendance/incidents/:id/resolve` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/attendance/recalculate` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/attendance/revisions` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/audit/events` | permission:governance.audit:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/audit/events.csv` | permission:governance.audit:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/audit/verify` | permission:governance.audit:READ | ✔ | ✖ | ✖ | ✖ | ✖ |

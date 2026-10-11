@@ -62,21 +62,21 @@ Fontes: RE = `Especificacao_RH_Engenharia_Reversa` §15 · CF = `Especificacao_R
 
 | ID | Requisito | Estado | Código | Teste |
 |---|---|---|---|---|
-| RE-5 | Soma de segmentos | por fazer | | |
-| RE-6 | Meia-noite: totais iguais em todas as vistas | por fazer | | |
-| RE-7 | Noturno com margem de continuidade | por fazer | | |
-| RE-8 | Noturno com turno | por fazer | | |
-| RE-9 | Idempotência da marcação (`clientEventId`) | por fazer | | |
-| RE-10 | Correção sem motivo → 400; com motivo cria revisão | por fazer | | |
-| RE-11 | Recusa pelo funcionário em 48 h | por fazer | | |
-| RE-12 | Bloqueio antes da entrada | por fazer | | |
-| RE-13 | Geofence | por fazer | | |
-| RE-14 | Um incidente por (funcionário, dia, tipo, origem) | por fazer | | |
-| CF-1 | Cascata com a tolerância real | por fazer | | |
-| CF-3 | Aviso de fecho sem fecho automático → 422 | por fazer | | |
-| CF-4 | Não desativar o único método do quiosque | por fazer | | |
-| CF-11 | Raio 200 m: 350 m recusa, 150 m aceita | por fazer | | |
-| TK-13 | `attendance_day` guarda versão da configuração; recálculo gera ajuste | por fazer | | |
+| RE-5 | Soma de segmentos | feito | `src/modules/attendance` | `src/modules/attendance/__tests__/domain/day-engine.test.ts` |
+| RE-6 | Meia-noite: totais iguais em todas as vistas | feito | `src/modules/attendance` | `src/modules/attendance/__tests__/domain/day-engine.test.ts` |
+| RE-7 | Noturno com margem de continuidade | feito | `src/modules/attendance` | `src/modules/attendance/__tests__/domain/day-engine.test.ts` |
+| RE-8 | Noturno com turno | feito | `src/modules/attendance` | `src/modules/attendance/__tests__/domain/day-engine.test.ts` |
+| RE-9 | Idempotência da marcação (`clientEventId`) | feito | `src/modules/attendance` | `src/modules/attendance/__tests__/use-cases/attendance.test.ts`; `src/modules/attendance/__tests__/adapters/attendance.controller.test.ts` |
+| RE-10 | Correção sem motivo → 400; com motivo cria revisão | feito | `src/modules/attendance` | `src/modules/attendance/__tests__/use-cases/attendance.test.ts`; `src/modules/attendance/__tests__/adapters/attendance.controller.test.ts` |
+| RE-11 | Recusa pelo funcionário em 48 h | feito | `src/modules/attendance` | `src/modules/attendance/__tests__/use-cases/attendance.test.ts` |
+| RE-12 | Bloqueio antes da entrada | feito | `src/modules/attendance` | `src/modules/attendance/__tests__/domain/day-engine.test.ts` |
+| RE-13 | Geofence | feito (desligado até DPIA, ADR-0027) | `src/modules/attendance` | `src/modules/attendance/__tests__/domain/day-engine.test.ts`; `src/modules/attendance/__tests__/use-cases/attendance.test.ts` |
+| RE-14 | Um incidente por (funcionário, dia, tipo, origem) | feito | `src/modules/attendance` | `src/modules/attendance/__tests__/domain/day-engine.test.ts`; `src/modules/attendance/__tests__/use-cases/attendance.test.ts` |
+| CF-1 | Cascata com a tolerância real | feito | `src/modules/settings`; `src/modules/attendance` | `src/modules/settings/__tests__/use-cases/settings.test.ts`; `src/modules/attendance/__tests__/adapters/attendance.controller.test.ts` |
+| CF-3 | Aviso de fecho sem fecho automático → 422 | feito | `src/modules/settings` | `src/modules/settings/__tests__/use-cases/settings.test.ts` |
+| CF-4 | Não desativar o único método do quiosque | feito | `src/modules/settings` | `src/modules/settings/__tests__/use-cases/settings.test.ts` |
+| CF-11 | Raio 200 m: 350 m recusa, 150 m aceita | feito (desligado até DPIA) | `src/modules/attendance` | `src/modules/attendance/__tests__/domain/day-engine.test.ts`; `src/modules/attendance/__tests__/use-cases/attendance.test.ts` |
+| TK-13 | `attendance_day` guarda versão da configuração; recálculo gera ajuste | feito | `src/modules/attendance` | `src/modules/attendance/__tests__/use-cases/attendance.test.ts` |
 
 ## Fase 5 — Ausências, férias e aprovações
 

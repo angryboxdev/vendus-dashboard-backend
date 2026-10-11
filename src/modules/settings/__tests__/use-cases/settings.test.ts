@@ -224,3 +224,36 @@ describe("Motor de configurações — perfis, alvos e histórico", () => {
     expect(d.version).not.toBe(v0);
   });
 });
+
+describe("Configurações da Fase 4 (C6.1, C9)", () => {
+  test("CF_1_cascata_com_a_tolerancia_real_15_global_5_pessoal", async () => {
+    const { uc } = setup();
+    const g = await uc.createProfile(ORG, { domain: "time_tracking", name: "Global", kind: "global" }, ADMIN);
+    await uc.setValue(ORG, g.id, { key: "time_tracking.tolerance.minutes", value: 15, validFrom: "2026-10-11", reason: "política" }, ADMIN);
+    const p = await uc.createProfile(ORG, { domain: "time_tracking", name: "Pessoal", kind: "personal" }, ADMIN);
+    await uc.addTarget(ORG, p.id, { targetType: "employee", targetId: "e1", validFrom: "2026-10-11", validTo: null }, ADMIN);
+    await uc.setValue(ORG, p.id, { key: "time_tracking.tolerance.minutes", value: 5, validFrom: "2026-10-11", reason: "acordo" }, ADMIN);
+    expect((await effective(uc, "e1", "2026-10-11")).value).toBe(5);
+    await uc.setValue(ORG, p.id, { key: "time_tracking.tolerance.minutes", value: null, validFrom: "2026-10-12", reason: "fim" }, ADMIN);
+    expect((await effective(uc, "e1", "2026-10-12")).value).toBe(15);
+  });
+
+  test("CF_3_aviso_de_fecho_sem_fecho_automatico_e_recusado_com_422", async () => {
+    const { uc } = setup();
+    const n = await uc.createProfile(ORG, { domain: "notifications", name: "N", kind: "global" }, ADMIN);
+    await expect(uc.setValue(ORG, n.id, { key: "notifications.auto_close_warning.enabled", value: true, validFrom: "2026-10-11", reason: "x" }, ADMIN)).rejects.toMatchObject({ code: "rule_violation" });
+  });
+
+  test("CF_4_nao_se_pode_desativar_o_unico_metodo_do_quiosque", async () => {
+    const { uc } = setup();
+    const g = await uc.createProfile(ORG, { domain: "time_tracking", name: "G", kind: "global" }, ADMIN);
+    await expect(uc.setValue(ORG, g.id, { key: "time_tracking.kiosk.methods", value: [], validFrom: "2026-10-11", reason: "x" }, ADMIN)).rejects.toThrow("pelo menos um");
+    await expect(uc.setValue(ORG, g.id, { key: "time_tracking.kiosk.methods", value: ["qr"], validFrom: "2026-10-11", reason: "x" }, ADMIN)).resolves.toBeDefined();
+  });
+
+  test("bloquear fora da zona exige exigir localização (C9)", async () => {
+    const { uc } = setup();
+    const g = await uc.createProfile(ORG, { domain: "time_tracking", name: "G", kind: "global" }, ADMIN);
+    await expect(uc.setValue(ORG, g.id, { key: "time_tracking.geofence.block_outside", value: true, validFrom: "2026-10-11", reason: "x" }, ADMIN)).rejects.toMatchObject({ code: "rule_violation" });
+  });
+});

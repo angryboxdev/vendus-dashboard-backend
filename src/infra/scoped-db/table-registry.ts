@@ -230,6 +230,14 @@ export const TABLE_REGISTRY = {
   holiday_calendar_days: { organizationColumn: "org_id", locationBearing: false },
   vacation_calendars: { organizationColumn: "org_id", locationBearing: false },
   time_assignments: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 4: assiduidade. location_id das marcações é só evidência (âmbito por colaborador).
+  clock_events: { organizationColumn: "org_id", locationBearing: false },
+  clock_revisions: { organizationColumn: "org_id", locationBearing: false },
+  clock_correction_requests: { organizationColumn: "org_id", locationBearing: false },
+  attendance_days: { organizationColumn: "org_id", locationBearing: false },
+  attendance_adjustments: { organizationColumn: "org_id", locationBearing: false },
+  attendance_incidents: { organizationColumn: "org_id", locationBearing: false },
+  attendance_recalc_queue: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;
