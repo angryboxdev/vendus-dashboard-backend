@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 473 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 486 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -334,6 +334,19 @@ Endpoints: 473 · pré-autenticação: 20 · não classificados: 0
 | POST | `/api/novo-rh/settings/profiles/:id/impact-preview` | permission:governance.settings:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/settings/profiles/:id/targets` | permission:governance.settings:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/settings/profiles/:id/values` | permission:governance.settings:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/structure/assignments` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
+| POST | `/api/novo-rh/structure/assignments` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/structure/assignments/:id/end` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/structure/contacts` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
+| PUT | `/api/novo-rh/structure/contacts/:role` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/structure/departments` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
+| POST | `/api/novo-rh/structure/departments` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| PATCH | `/api/novo-rh/structure/departments/:id` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/structure/groups` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
+| POST | `/api/novo-rh/structure/groups` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| PATCH | `/api/novo-rh/structure/groups/:id` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/structure/terms` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
+| POST | `/api/novo-rh/structure/terms/accept` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/organization` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
 | PATCH | `/api/organization` | permission:company.organization:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/organization/history` | permission:company.organization:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |

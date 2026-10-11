@@ -93,6 +93,7 @@ export const ROUTE_RULES: RouteRule[] = [
   // Pré-visualizar impacto não grava nada, mas só serve a quem vai alterar.
   { pattern: /^\/api\/novo-rh\/settings(\/|$)/, target: p("governance.settings") },
   { pattern: /^\/api\/novo-rh\/audit(\/|$)/, target: p("governance.audit") },
+  { pattern: /^\/api\/novo-rh\/structure(\/|$)/, target: p("company.structure") },
 
   // ── Recursos Humanos ─────────────────────────────────────────────────
   { pattern: /^\/api\/hr\/overview(\/|$)/, target: p("hr.overview") },

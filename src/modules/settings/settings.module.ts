@@ -3,6 +3,7 @@ import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import { SupabaseIdempotencyStore } from "../../infra/http/supabase-idempotency.store.js";
 import { SettingsController } from "./adapters/in/settings.controller.js";
 import {
+  type OrgUnitsLookup,
   OrganizationTimezoneClock,
   SupabaseEmployeeSegments,
   SupabaseSettingsImpact,
@@ -18,11 +19,14 @@ import { SETTING_CATALOG } from "./domain/services/setting-catalog.js";
  * `canRetroactive` vem de fora (módulo access) para este módulo não
  * depender do modelo de permissões.
  */
-export function createSettingsModule(deps: { canRetroactive: (req: Request) => boolean; audit: SettingsAuditPort }): { router: Router; settings: SettingsPorts } {
+export function createSettingsModule(deps: { canRetroactive: (req: Request) => boolean; audit: SettingsAuditPort; units: OrgUnitsLookup }): {
+  router: Router;
+  settings: SettingsPorts;
+} {
   const settings = new SettingsUseCases(
     new SupabaseSettingsRepository(createScopedQuery),
-    new SupabaseEmployeeSegments(createScopedQuery),
-    new SupabaseSettingsImpact(createScopedQuery),
+    new SupabaseEmployeeSegments(createScopedQuery, deps.units),
+    new SupabaseSettingsImpact(createScopedQuery, deps.units),
     new OrganizationTimezoneClock(createScopedQuery),
     SETTING_CATALOG,
     deps.audit,

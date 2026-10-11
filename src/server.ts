@@ -57,6 +57,7 @@ import { createSalesDeclarationModule } from "./modules/sales-declaration/sales-
 import { correlationId } from "./infra/http/correlation.js";
 import { createSettingsModule } from "./modules/settings/settings.module.js";
 import { createAuditModule } from "./modules/audit/audit.module.js";
+import { createOrgStructureModule } from "./modules/org-structure/org-structure.module.js";
 import { can } from "./modules/access/domain/services/effective-access.service.js";
 import { problemHandler } from "./infra/http/problem-details.js";
 
@@ -326,12 +327,15 @@ app.use("/api/hr", hrLeaveRoutes);
 app.use("/api", hrModule.router);
 
 // Novo RH (task faseada) — auditoria transversal (Fase 1, ticket 03) e motor de
-// configurações (ticket 02). Rotas em /api/novo-rh/audit e /api/novo-rh/settings.
+// configurações (ticket 02) e estrutura (ticket 04). Rotas em /api/novo-rh/{audit,structure,settings}.
 const auditModule = createAuditModule();
 app.use("/api", auditModule.router);
+const orgStructureModule = createOrgStructureModule({ audit: auditModule.recorder });
+app.use("/api", orgStructureModule.router);
 const settingsModule = createSettingsModule({
   canRetroactive: (req) => !!req.access && can(req.access, "governance.settings_retroactive", "MANAGE"),
   audit: auditModule.recorder,
+  units: orgStructureModule.structure,
 });
 app.use("/api", settingsModule.router);
 

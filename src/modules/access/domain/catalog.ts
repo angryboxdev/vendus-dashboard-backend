@@ -133,6 +133,7 @@ export const ACCESS_CATALOG: CatalogModule[] = [
       { key: "company.calendar", label: "Calendário & Eventos", description: "Eventos da empresa." },
       { key: "company.holidays", label: "Feriados", description: "Feriados nacionais, municipais e próprios." },
       { key: "company.devices", label: "Dispositivos", description: "Emparelhar e revogar quiosques e ecrãs." },
+      { key: "company.structure", label: "Estrutura", description: "Departamentos, grupos, contactos e termos aceites (Novo RH)." },
     ],
     specials: [
       { key: "company.confidential_documents", label: "Documentos confidenciais", description: "Documentos da Empresa com visibilidade só para administração." },

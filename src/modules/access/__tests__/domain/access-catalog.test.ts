@@ -22,7 +22,7 @@ describe("Catálogo de permissões", () => {
   it("a migração semeia exatamente os valores do catálogo (sem divergência)", () => {
     const sql = readFileSync(join(process.cwd(), "supabase/migrations/20261008110000_access_profiles.sql"), "utf8");
     // Migrações seguintes acrescentam chaves com `permissions || '{…}'::jsonb ... where system_key = '<perfil>'`.
-    const patches = ["supabase/migrations/20261012100000_novo_rh_settings_engine.sql"].map((f) => readFileSync(join(process.cwd(), f), "utf8"));
+    const patches = ["supabase/migrations/20261012100000_novo_rh_settings_engine.sql", "supabase/migrations/20261012120000_novo_rh_org_structure.sql"].map((f) => readFileSync(join(process.cwd(), f), "utf8"));
     for (const [key, p] of Object.entries(SYSTEM_PROFILE_DEFAULTS)) {
       const match = sql.match(new RegExp(`\\('${key}', '[^']*', '[^']*', (?:true|false), '([^']*)'::jsonb\\)`));
       expect(match).not.toBeNull();

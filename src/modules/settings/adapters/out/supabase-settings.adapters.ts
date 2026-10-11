@@ -124,14 +124,20 @@ export class SupabaseSettingsRepository implements SettingsRepositoryPort {
   }
 }
 
-/**
- * Centros do colaborador = local principal + outros locais autorizados.
- * Departamentos e grupos: vazios até ao ticket 04 (estrutura organizacional).
- */
-export class SupabaseEmployeeSegments implements EmployeeSegmentsPort {
-  constructor(private readonly scoped: ScopedQueryFactory) {}
+/** Departamentos/grupos de um colaborador e membros de unidades — vem do módulo org-structure. */
+export interface OrgUnitsLookup {
+  unitsOf(orgId: OrganizationId, employeeId: string, date: string): Promise<{ departmentIds: string[]; groupIds: string[] }>;
+  membersOf(orgId: OrganizationId, unitType: "department" | "group", unitIds: string[], date: string): Promise<string[]>;
+}
 
-  async segmentsOf(orgId: OrganizationId, employeeId: string): Promise<EmployeeSegments> {
+/** Centros do colaborador = local principal + outros locais autorizados; departamentos/grupos da estrutura. */
+export class SupabaseEmployeeSegments implements EmployeeSegmentsPort {
+  constructor(
+    private readonly scoped: ScopedQueryFactory,
+    private readonly units: OrgUnitsLookup,
+  ) {}
+
+  async segmentsOf(orgId: OrganizationId, employeeId: string, date: string): Promise<EmployeeSegments> {
     const q = this.scoped(orgId);
     const [emp, extra] = await Promise.all([
       q.table("hr_employees").select("id, primary_location_id").eq("id", employeeId).maybeSingle(),
@@ -140,15 +146,19 @@ export class SupabaseEmployeeSegments implements EmployeeSegmentsPort {
     const e = check(emp) as unknown as { primary_location_id: string | null } | null;
     const locs = (check(extra) as unknown as { location_id: string }[]).map((r) => r.location_id);
     const locationIds = [...new Set([...(e?.primary_location_id ? [e.primary_location_id] : []), ...locs])];
-    return { employeeId, locationIds, departmentIds: [], groupIds: [] };
+    const { departmentIds, groupIds } = await this.units.unitsOf(orgId, employeeId, date);
+    return { employeeId, locationIds, departmentIds, groupIds };
   }
 }
 
 /** Colaboradores ativos abrangidos (pré-visualização de impacto). */
 export class SupabaseSettingsImpact implements SettingsImpactPort {
-  constructor(private readonly scoped: ScopedQueryFactory) {}
+  constructor(
+    private readonly scoped: ScopedQueryFactory,
+    private readonly units: OrgUnitsLookup,
+  ) {}
 
-  async countEmployees(orgId: OrganizationId, scope: { allEmployees: true } | { targets: Pick<SettingTarget, "targetType" | "targetId">[] }): Promise<number> {
+  async countEmployees(orgId: OrganizationId, scope: { allEmployees: true } | { targets: Pick<SettingTarget, "targetType" | "targetId">[] }, date: string): Promise<number> {
     const q = this.scoped(orgId);
     const active = await q.table("hr_employees").select("id, primary_location_id").eq("status", "active");
     const employees = check(active) as unknown as { id: string; primary_location_id: string | null }[];
@@ -161,6 +171,10 @@ export class SupabaseSettingsImpact implements SettingsImpactPort {
       for (const e of employees) if (e.primary_location_id && locationIds.includes(e.primary_location_id)) ids.add(e.id);
       const extra = await q.table("hr_employee_locations").select("employee_id").in("location_id", locationIds);
       for (const r of check(extra) as unknown as { employee_id: string }[]) if (activeIds.has(r.employee_id)) ids.add(r.employee_id);
+    }
+    for (const unitType of ["department", "group"] as const) {
+      const unitIds = scope.targets.filter((t) => t.targetType === unitType).map((t) => t.targetId);
+      for (const id of await this.units.membersOf(orgId, unitType, unitIds, date)) if (activeIds.has(id)) ids.add(id);
     }
     return ids.size;
   }

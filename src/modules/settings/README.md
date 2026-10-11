@@ -90,6 +90,6 @@ regras de cada módulo noutro sítio: os módulos do Novo RH leem daqui
 
 ## Known gaps / open debt
 
-- Departamentos e grupos do colaborador vêm vazios até ao ticket 04 (estrutura).
+- Departamentos e grupos vêm do módulo org-structure (pertença direta; subgrupo não herda o grupo-pai).
 - `resolved_setting_snapshot` (C11.1) fica para a Fase 4, quando houver apuramento diário.
 - Arquivar perfil e terminar vigência de alvo ainda sem endpoint.

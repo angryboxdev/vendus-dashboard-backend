@@ -204,6 +204,12 @@ export const TABLE_REGISTRY = {
   http_idempotency_keys: { organizationColumn: "org_id", locationBearing: false },
   // Novo RH Fase 1 (ticket 03): auditoria transversal append-only, encadeada por hash.
   audit_events: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 1 (ticket 04): estrutura organizacional.
+  org_departments: { organizationColumn: "org_id", locationBearing: false },
+  org_groups: { organizationColumn: "org_id", locationBearing: false },
+  employee_org_assignments: { organizationColumn: "org_id", locationBearing: false },
+  org_contacts: { organizationColumn: "org_id", locationBearing: false },
+  org_terms_acceptances: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;
