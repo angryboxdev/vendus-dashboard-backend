@@ -120,6 +120,7 @@ export const ACCESS_CATALOG: CatalogModule[] = [
       { key: "hr.payslip_import", label: "Importar recibos", description: "Importação em massa de recibos de vencimento." },
       { key: "hr.kiosk_pin", label: "PIN do quiosque", description: "Definir o PIN de picagem do colaborador." },
       { key: "hr.people_export", label: "Exportar colaboradores", description: "Exportar a lista de colaboradores (só as colunas que pode ver)." },
+      { key: "hr.absences_private", label: "Ausências privadas", description: "Ver e gerir ausências marcadas como privadas (tipo e comentário)." },
     ],
   },
   {
@@ -216,6 +217,7 @@ export const SYSTEM_PROFILE_DEFAULTS: Record<SystemProfileKey, { name: string; d
       "hr.sensitive_data": "MANAGE",
       "hr.payslip_import": "MANAGE",
       "hr.people_export": "MANAGE",
+      "hr.absences_private": "MANAGE",
       ...moduleAll("company", "READ"),
       "company.positions": "MANAGE",
     },

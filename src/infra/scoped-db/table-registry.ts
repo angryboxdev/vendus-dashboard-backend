@@ -238,6 +238,12 @@ export const TABLE_REGISTRY = {
   attendance_adjustments: { organizationColumn: "org_id", locationBearing: false },
   attendance_incidents: { organizationColumn: "org_id", locationBearing: false },
   attendance_recalc_queue: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 5: ausências, aprovações e saldos.
+  absence_types: { organizationColumn: "org_id", locationBearing: false },
+  approval_flows: { organizationColumn: "org_id", locationBearing: false },
+  absence_requests: { organizationColumn: "org_id", locationBearing: false },
+  approval_decisions: { organizationColumn: "org_id", locationBearing: false },
+  leave_balance_entries: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;

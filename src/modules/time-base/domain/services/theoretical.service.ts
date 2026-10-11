@@ -33,6 +33,8 @@ export interface TheoreticalDay {
   /** Horário fixo: primeira entrada e última saída planeadas (HH:MM) — atrasos e fecho automático. */
   plannedStart: string | null;
   plannedEnd: string | null;
+  /** Faixas planeadas do dia (horário fixo), para descontar ausências por horas só no que coincide (CF-8). */
+  plannedRanges: { start: string; end: string }[];
   /** Horário noturno: a jornada pode terminar no dia seguinte. */
   night: boolean;
 }
@@ -48,6 +50,7 @@ export function theoreticalDay(i: TheoreticalInput): TheoreticalDay {
     holidayName: i.holiday?.name ?? null,
     plannedStart: sorted[0]?.start ?? null,
     plannedEnd: sorted.at(-1)?.end ?? null,
+    plannedRanges: sorted.map((r) => ({ start: r.start, end: r.end })),
     night: i.schedule?.version.night ?? false,
   };
   const warnings: TheoreticalDay["warnings"] = [];

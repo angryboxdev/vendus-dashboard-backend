@@ -32,6 +32,8 @@ export interface DayPlan {
   excused: boolean;
   /** D8: a gestão validou o incidente deste dia → as horas pendentes contam. */
   incidentValidated?: boolean;
+  /** CF-7: ausência "conta como trabalhado" — segundos somados ao trabalhado. */
+  creditSeconds?: number;
 }
 
 export interface EngineRules {
@@ -200,6 +202,7 @@ export function computeDays(events: EffectiveEvent[], dates: string[], plans: Ma
       worked += d;
       night += nightSeconds(s, workDate, rules);
     }
+    worked += plan.creditSeconds ?? 0;
     if (rules.roundingMinutes > 0) {
       const step = rules.roundingMinutes * 60;
       worked = Math.round(worked / step) * step;

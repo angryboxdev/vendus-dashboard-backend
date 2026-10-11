@@ -62,6 +62,7 @@ import { createNotificationsModule } from "./modules/notifications/notifications
 import { createPeopleModule } from "./modules/people/people.module.js";
 import { createTimeBaseModule } from "./modules/time-base/time-base.module.js";
 import { createAttendanceModule } from "./modules/attendance/attendance.module.js";
+import { createAbsencesModule } from "./modules/absences/absences.module.js";
 import { SupabaseEmployeeSegments, SupabaseSettingsImpact } from "./modules/settings/adapters/out/supabase-settings.adapters.js";
 import { SupabasePeopleRepository } from "./modules/people/adapters/out/supabase-people.repository.js";
 import { portugueseNationalHolidays } from "./modules/calendar/domain/services/portuguese-holidays.service.js";
@@ -438,10 +439,25 @@ const attendanceModule = createAttendanceModule({
     ]);
     return [...tt, ...legal];
   },
+  // Plano diário = teórico do time-base − ausências aprovadas (CF-7, Fase 5).
   plans: async (org, employeeId, from, to) => {
     const { days } = await timeBaseModule.time.theoretical(org, employeeId, from, to);
+    const effects = await absencesModule.absences.dayEffects(org, employeeId, from, to, new Map(days.map((d) => [d.date, d.minutes])));
     return new Map(
-      days.map((d) => [d.date, { theoreticalMinutes: d.minutes, plannedStart: d.plannedStart, plannedEnd: d.plannedEnd, nightSchedule: d.night, excused: d.reason === "holiday" }]),
+      days.map((d) => {
+        const fx = effects.get(d.date);
+        return [
+          d.date,
+          {
+            theoreticalMinutes: Math.max(0, d.minutes - (fx?.reduceMinutes ?? 0)),
+            plannedStart: d.plannedStart,
+            plannedEnd: d.plannedEnd,
+            nightSchedule: d.night,
+            excused: d.reason === "holiday" || !!fx?.excused,
+            creditSeconds: (fx?.creditMinutes ?? 0) * 60,
+          },
+        ];
+      }),
     );
   },
   audit: auditModule.recorder,
@@ -449,6 +465,38 @@ const attendanceModule = createAttendanceModule({
 });
 app.use("/api", attendanceModule.meRouter);
 app.use("/api", attendanceModule.adminRouter);
+
+// Novo RH → Ausências (Fase 5): tipos, pedidos, aprovações multinível, saldos em ledger.
+const absencesModule = createAbsencesModule({
+  contracts: (org, employeeId) => peopleRepo.listContracts(org, employeeId),
+  managers: (org, employeeId) => peopleRepo.listManagers(org, employeeId),
+  planDays: async (org, employeeId, from, to) =>
+    (await timeBaseModule.time.theoretical(org, employeeId, from, to)).days.map((d) => ({ date: d.date, minutes: d.minutes, plannedRanges: d.plannedRanges })),
+  vacationRulesFor: async (org, employeeId, date) => {
+    const a = (await timeBaseModule.time.assignmentsFor(org, employeeId, date)).vacationCalendar;
+    return a ? ((await timeBaseModule.time.listVacationCalendars(org)).find((c) => c.id === a.resourceId) ?? null) : null;
+  },
+  holidayOn: async (org, employeeId, date) => {
+    const a = (await timeBaseModule.time.assignmentsFor(org, employeeId, date)).holidayCalendar;
+    const cal = a ? (await timeBaseModule.time.listHolidayCalendars(org)).find((c) => c.id === a.resourceId) : undefined;
+    const day = cal?.days.find((d) => d.date === date && d.status === "confirmed");
+    return cal && day ? { name: day.name, coefficient: day.coefficient ?? cal.compensationCoefficient, approvalRequired: cal.approvalRequired } : null;
+  },
+  workedSeconds: async (org, employeeId, date) => (await attendanceModule.attendance.days(org, employeeId, date, date)).days[0]?.workedSeconds ?? 0,
+  adminUserIds: (org) => notificationsModule.notifications.adminUserIds(org),
+  today: (org) => new OrganizationTimezoneClock(createScopedQuery).today(org),
+  notifier: {
+    notify: async (org, userIds, n) => {
+      if (!userIds.length) return;
+      await notificationsModule.notifications.notify(org, { recipientUserIds: userIds, kind: "absences.request", title: n.title, body: n.body, link: n.link, dedupeKey: n.dedupeKey });
+    },
+  },
+  audit: auditModule.recorder,
+  canSeeEmployee,
+  canPrivate: (req) => !!req.access && can(req.access, "hr.absences_private", "MANAGE"),
+});
+app.use("/api", absencesModule.meRouter);
+app.use("/api", absencesModule.adminRouter);
 
 // CRM: acessível a managers+
 const crmModule = createCrmModule();

@@ -82,17 +82,17 @@ Fontes: RE = `Especificacao_RH_Engenharia_Reversa` §15 · CF = `Especificacao_R
 
 | ID | Requisito | Estado | Código | Teste |
 |---|---|---|---|---|
-| RE-19 | Dia não disponível | por fazer | | |
-| RE-20 | Dias naturais (baixa 03/06–26/07 = 54) | por fazer | | |
-| RE-21 | Horas dentro do horário | por fazer | | |
-| RE-22 | Sem autoaprovação | por fazer | | |
-| RE-23 | Nível vazio escala para o fallback | por fazer | | |
-| RE-25 | Saldo em ledger | por fazer | | |
-| CF-5 | Fluxo com nível sem aprovador não grava | por fazer | | |
-| CF-7 | Licença "descontar do horário" / "contar como trabalhado" | por fazer | | |
-| CF-8 | Permissão por horas com interseção | por fazer | | |
-| CF-9 | Coeficiente de feriado | por fazer | | |
-| TK-14 | Ausência fora da vigência do contrato → recusada | por fazer | | |
+| RE-19 | Dia não disponível | feito | `src/modules/absences` | `src/modules/absences/__tests__/use-cases/absences.test.ts`; `src/modules/absences/__tests__/adapters/absences.controller.test.ts` |
+| RE-20 | Dias naturais (baixa 03/06–26/07 = 54) | feito | `src/modules/absences` | `src/modules/absences/__tests__/use-cases/absences.test.ts` |
+| RE-21 | Horas dentro do horário | feito | `src/modules/absences` | `src/modules/absences/__tests__/use-cases/absences.test.ts` |
+| RE-22 | Sem autoaprovação | feito | `src/modules/absences` | `src/modules/absences/__tests__/use-cases/absences.test.ts`; `src/modules/absences/__tests__/adapters/absences.controller.test.ts` |
+| RE-23 | Nível vazio escala para o fallback | feito (recurso + alerta, ADR-0028) | `src/modules/absences` | `src/modules/absences/__tests__/use-cases/absences.test.ts` |
+| RE-25 | Saldo em ledger | feito | `src/modules/absences` | `src/modules/absences/__tests__/use-cases/absences.test.ts` |
+| CF-5 | Fluxo com nível sem aprovador não grava | feito | `src/modules/absences` | `src/modules/absences/__tests__/use-cases/absences.test.ts`; `src/modules/absences/__tests__/adapters/absences.controller.test.ts` |
+| CF-7 | Licença "descontar do horário" / "contar como trabalhado" | feito | `src/modules/absences`; `src/modules/attendance` | `src/modules/absences/__tests__/use-cases/absences.test.ts`; `src/modules/attendance/__tests__/domain/day-engine.test.ts` |
+| CF-8 | Permissão por horas com interseção | feito | `src/modules/absences` | `src/modules/absences/__tests__/use-cases/absences.test.ts` |
+| CF-9 | Coeficiente de feriado | feito | `src/modules/absences` | `src/modules/absences/__tests__/use-cases/absences.test.ts` |
+| TK-14 | Ausência fora da vigência do contrato → recusada | feito | `src/modules/absences` | `src/modules/absences/__tests__/use-cases/absences.test.ts`; `src/modules/absences/__tests__/adapters/absences.controller.test.ts` |
 
 ## Fase 6 — Banco de horas
 

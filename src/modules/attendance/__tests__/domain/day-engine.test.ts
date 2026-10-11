@@ -91,6 +91,13 @@ describe("Motor de apuramento (Fase 4)", () => {
     expect(validated).toMatchObject({ workedSeconds: 15 * 3600, pendingSeconds: 0 });
   });
 
+  test("CF_7_licenca_descontar_poe_teorico_a_0_e_contar_como_trabalhado_soma_8h", () => {
+    const reduce = computeDays([], ["2026-10-06"], plans([["2026-10-06", { theoreticalMinutes: 0, excused: true }]]), RULES, "2026-10-12T12:00:00Z")[0]!;
+    expect(reduce).toMatchObject({ theoreticalSeconds: 0, workedSeconds: 0, excessSeconds: 0, incidents: [] });
+    const counted = computeDays([], ["2026-10-06"], plans([["2026-10-06", { excused: true, creditSeconds: 8 * 3600 }]]), RULES, "2026-10-12T12:00:00Z")[0]!;
+    expect(counted).toMatchObject({ theoreticalSeconds: 8 * 3600, workedSeconds: 8 * 3600, excessSeconds: 0, incidents: [] });
+  });
+
   test("falta sem marcações num dia com teórico; feriado/ausência não gera falta", () => {
     expect(computeDays([], ["2026-10-06"], plans([["2026-10-06", {}]]), RULES, "2026-10-12T12:00:00Z")[0]!.incidents).toEqual(["missing_in"]);
     expect(computeDays([], ["2026-10-06"], plans([["2026-10-06", { excused: true }]]), RULES, "2026-10-12T12:00:00Z")[0]!.incidents).toEqual([]);
