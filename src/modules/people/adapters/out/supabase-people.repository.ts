@@ -213,6 +213,10 @@ export class SupabasePeopleRepository implements PeopleRepositoryPort {
     return rows.find((l) => l.id === codeOrId || l.code.toUpperCase() === codeOrId.toUpperCase())?.id ?? null;
   }
 
+  async listLocations(org: OrganizationId) {
+    return check<{ id: string; name: string; code: string }[]>(await this.scoped(org).table("locations").select("id, name, code").eq("is_active", true).order("name"));
+  }
+
   async listContracts(org: OrganizationId, employeeId: string) {
     return check<Record<string, unknown>[]>(await this.scoped(org).table("employment_contracts").select(CONTRACT_COLS).eq("employee_id", employeeId).order("start_date")).map(toContract);
   }
