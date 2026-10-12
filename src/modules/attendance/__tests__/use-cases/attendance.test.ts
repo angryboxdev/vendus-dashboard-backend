@@ -338,3 +338,52 @@ describe("Catálogo de pausas (FE-103)", () => {
     expect(repo.days.filter((d) => d.workDate === "2026-10-12").length).toBe(before);
   });
 });
+
+describe("Tipos de registo (FE-105)", () => {
+  const TRAINING = { name: "Formação", color: "#6366F1", remote: false, remuneration: "paid" as const, hybridPaidMinutes: null, maxMinutesPerDay: 120, blockedWeekdays: [6, 7], blockedHours: [{ start: "12:00", end: "13:00" }] };
+  const TRAVEL = { name: "Deslocação", color: null, remote: false, remuneration: "hybrid" as const, hybridPaidMinutes: 30, maxMinutesPerDay: null, blockedWeekdays: null, blockedHours: [] };
+  const HOME = { name: "Teletrabalho", color: null, remote: true, remuneration: "paid" as const, hybridPaidMinutes: null, maxMinutesPerDay: null, blockedWeekdays: null, blockedHours: [] };
+  const punch = (segmentType: "work" | "off" | "remote", clockTypeId: string | null = null) => ({ segmentType, source: "web" as const, clientEventId: null, locationId: null, latitude: null, longitude: null, ip: null, clockTypeId });
+
+  test("validação: remuneração obrigatória, não bloquear os 7 dias, nome único", async () => {
+    const { uc } = setup();
+    await expect(uc.createClockType(ORG, ADMIN, { ...TRAINING, remuneration: "" as never })).rejects.toMatchObject({ field: "remuneration" });
+    await expect(uc.createClockType(ORG, ADMIN, { ...TRAINING, blockedWeekdays: [1, 2, 3, 4, 5, 6, 7] })).rejects.toMatchObject({ field: "blockedWeekdays" });
+    await uc.createClockType(ORG, ADMIN, TRAINING);
+    await expect(uc.createClockType(ORG, ADMIN, { ...TRAINING, name: "FORMACAO" })).rejects.toMatchObject({ code: "duplicate_name" });
+  });
+
+  test("começar: hora bloqueada → recusa; teletrabalho fica remoto; o máximo do dia impede recomeçar", async () => {
+    const { uc, repo, clock } = setup(at("2026-10-12T12:30:00"));
+    const training = await uc.createClockType(ORG, ADMIN, TRAINING);
+    const home = await uc.createClockType(ORG, ADMIN, HOME);
+    await expect(uc.punch(ORG, EMP, punch("work", training.id))).rejects.toThrow("bloqueado entre 12:00 e 13:00");
+    clock.value = at("2026-10-12T13:00:00");
+    await uc.punch(ORG, EMP, punch("work", training.id));
+    expect(repo.events.at(-1)).toMatchObject({ segmentType: "work", clockTypeId: training.id });
+    clock.value = at("2026-10-12T15:00:00");
+    const r = await uc.punch(ORG, EMP, punch("work", home.id));
+    expect(r.event.segmentType).toBe("remote");
+    clock.value = at("2026-10-12T15:30:00");
+    await expect(uc.punch(ORG, EMP, punch("work", training.id))).rejects.toThrow("máximo de 120 min");
+  });
+
+  test("cálculo: formação conta até 2 h/dia; deslocação híbrida conta só 30 min; obra normal conta tudo", async () => {
+    const { uc, repo, event } = setup(at("2026-10-13T10:00:00"));
+    const training = await uc.createClockType(ORG, ADMIN, TRAINING);
+    const travel = await uc.createClockType(ORG, ADMIN, TRAVEL);
+    const typed = (local: string, id: string) => {
+      event(local, "work");
+      repo.events.at(-1)!.clockTypeId = id;
+    };
+    // 2026-10-12: deslocação 08:00–09:00, obra 09:00–13:00, formação 14:00–17:00.
+    typed("2026-10-12T08:00:00", travel.id);
+    event("2026-10-12T09:00:00");
+    event("2026-10-12T13:00:00", "off");
+    typed("2026-10-12T14:00:00", training.id);
+    event("2026-10-12T17:00:00", "off");
+    const d = (await uc.days(ORG, "e1", "2026-10-12", "2026-10-12")).days[0]!;
+    // 30 min (deslocação) + 4 h (obra) + 2 h (formação, máx.) = 6h30.
+    expect(d.workedSeconds).toBe((6 * 60 + 30) * 60);
+  });
+});

@@ -233,6 +233,7 @@ export const TABLE_REGISTRY = {
   // Novo RH Fase 4: assiduidade. location_id das marcações é só evidência (âmbito por colaborador).
   clock_events: { organizationColumn: "org_id", locationBearing: false },
   break_types: { organizationColumn: "org_id", locationBearing: false },
+  clock_types: { organizationColumn: "org_id", locationBearing: false },
   clock_revisions: { organizationColumn: "org_id", locationBearing: false },
   clock_correction_requests: { organizationColumn: "org_id", locationBearing: false },
   attendance_days: { organizationColumn: "org_id", locationBearing: false },

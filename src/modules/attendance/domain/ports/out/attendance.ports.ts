@@ -2,6 +2,7 @@ import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { ClockEvent, ClockRevision } from "../../entities/clock.js";
 import type { Adjustment, CorrectionRequest, DayVersion, Incident, IncidentStatus } from "../../entities/records.js";
 import type { BreakType, BreakTypeInput } from "../../entities/break-type.js";
+import type { ClockType, ClockTypeInput } from "../../entities/clock-type.js";
 import type { DayPlan, EngineRules, IncidentType } from "../../services/day-engine.js";
 import type { PunchPolicy } from "../../services/punch-policy.js";
 
@@ -14,6 +15,11 @@ export interface AttendanceRepositoryPort {
   /** null = versão desatualizada. */
   updateBreakType(org: OrganizationId, id: string, input: BreakTypeInput, expectedVersion: number): Promise<BreakType | null>;
   archiveBreakType(org: OrganizationId, id: string): Promise<void>;
+  /** FE-105: tipos de registo (inclui arquivados). */
+  listClockTypes(org: OrganizationId): Promise<ClockType[]>;
+  createClockType(org: OrganizationId, input: ClockTypeInput, by: string): Promise<ClockType>;
+  updateClockType(org: OrganizationId, id: string, input: ClockTypeInput, expectedVersion: number): Promise<ClockType | null>;
+  archiveClockType(org: OrganizationId, id: string): Promise<void>;
   findEventByClientId(org: OrganizationId, employeeId: string, clientEventId: string): Promise<ClockEvent | null>;
   getEvent(org: OrganizationId, id: string): Promise<ClockEvent | null>;
   listEvents(org: OrganizationId, employeeId: string, fromUtc: string, toUtc: string): Promise<ClockEvent[]>;

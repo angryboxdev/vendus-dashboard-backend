@@ -3,6 +3,7 @@ import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ClockEvent, ClockRevision } from "../../domain/entities/clock.js";
 import type { Adjustment, CorrectionRequest, DayVersion, Incident, IncidentStatus } from "../../domain/entities/records.js";
 import type { BreakType, BreakTypeInput } from "../../domain/entities/break-type.js";
+import type { ClockType, ClockTypeInput } from "../../domain/entities/clock-type.js";
 import type { AttendanceRepositoryPort } from "../../domain/ports/out/attendance.ports.js";
 import type { IncidentType } from "../../domain/services/day-engine.js";
 
@@ -17,7 +18,8 @@ const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 const iso = (v: unknown) => new Date(String(v)).toISOString();
 const optIso = (v: unknown) => (v === null || v === undefined ? null : iso(v));
 
-const EV = "id, employee_id, occurred_at, segment_type, source, client_event_id, location_id, latitude, longitude, ip, break_type_id";
+const EV = "id, employee_id, occurred_at, segment_type, source, client_event_id, location_id, latitude, longitude, ip, break_type_id, clock_type_id";
+const CT = "id, name, color, remote, remuneration, hybrid_paid_minutes, max_minutes_per_day, blocked_weekdays, blocked_hours, archived, version";
 const BT = "id, name, color, remuneration, hybrid_paid_minutes, max_minutes, window_start, window_end, max_uses_per_day, weekdays, archived, version";
 const REV = "id, employee_id, operation, target_event_id, occurred_at, segment_type, anchor_at, reason, author, state, refusable_until, created_at";
 const COR = "id, employee_id, requested_by, operation, target_event_id, occurred_at, segment_type, reason, status, decided_by, decided_at, decision_comment, revision_id, created_at, levels, current_level";
@@ -37,6 +39,30 @@ const toEvent = (r: Row): ClockEvent => ({
   longitude: num(r.longitude),
   ip: str(r.ip),
   breakTypeId: str(r.break_type_id),
+  clockTypeId: str(r.clock_type_id),
+});
+const toClockType = (r: Row): ClockType => ({
+  id: String(r.id),
+  name: String(r.name),
+  color: str(r.color),
+  remote: r.remote === true,
+  remuneration: r.remuneration as ClockType["remuneration"],
+  hybridPaidMinutes: num(r.hybrid_paid_minutes),
+  maxMinutesPerDay: num(r.max_minutes_per_day),
+  blockedWeekdays: Array.isArray(r.blocked_weekdays) ? (r.blocked_weekdays as number[]).map(Number) : null,
+  blockedHours: Array.isArray(r.blocked_hours) ? (r.blocked_hours as ClockType["blockedHours"]) : [],
+  archived: r.archived === true,
+  version: Number(r.version),
+});
+const clockTypeRow = (i: ClockTypeInput) => ({
+  name: i.name.trim(),
+  color: i.color,
+  remote: i.remote,
+  remuneration: i.remuneration,
+  hybrid_paid_minutes: i.hybridPaidMinutes,
+  max_minutes_per_day: i.maxMinutesPerDay,
+  blocked_weekdays: i.blockedWeekdays,
+  blocked_hours: i.blockedHours,
 });
 const hm = (v: unknown) => (v ? String(v).slice(0, 5) : null);
 const toBreakType = (r: Row): BreakType => ({
@@ -149,6 +175,21 @@ export class SupabaseAttendanceRepository implements AttendanceRepositoryPort {
     check(await this.scoped(org).table("break_types").update({ archived: true, updated_at: new Date().toISOString() }).eq("id", id));
   }
 
+  // ── Tipos de registo (FE-105) ──
+  async listClockTypes(org: OrganizationId) {
+    return check<Row[]>(await this.scoped(org).table("clock_types").select(CT).order("name")).map(toClockType);
+  }
+  async createClockType(org: OrganizationId, input: ClockTypeInput, by: string) {
+    return toClockType(check(await this.scoped(org).table("clock_types").insert({ ...clockTypeRow(input), created_by: by }).select(CT).single()));
+  }
+  async updateClockType(org: OrganizationId, id: string, input: ClockTypeInput, expectedVersion: number) {
+    const rows = check<Row[]>(await this.scoped(org).table("clock_types").update({ ...clockTypeRow(input), version: expectedVersion + 1, updated_at: new Date().toISOString() }).eq("id", id).eq("version", expectedVersion).select(CT));
+    return rows[0] ? toClockType(rows[0]) : null;
+  }
+  async archiveClockType(org: OrganizationId, id: string) {
+    check(await this.scoped(org).table("clock_types").update({ archived: true, updated_at: new Date().toISOString() }).eq("id", id));
+  }
+
   async insertEvent(org: OrganizationId, e: Omit<ClockEvent, "id">) {
     const row = {
       employee_id: e.employeeId,
@@ -161,6 +202,7 @@ export class SupabaseAttendanceRepository implements AttendanceRepositoryPort {
       longitude: e.longitude,
       ip: e.ip,
       break_type_id: e.breakTypeId ?? null,
+      clock_type_id: e.clockTypeId ?? null,
     };
     const res = (await this.scoped(org).table("clock_events").insert(row).select(EV).single()) as Res;
     // RE-9: corrida entre duas tentativas com o mesmo clientEventId → devolve a gravada.

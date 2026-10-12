@@ -20,6 +20,8 @@ export interface Segment {
   forgotten?: boolean;
   /** FE-103: tipo de pausa do catálogo. */
   breakTypeId?: string | null;
+  /** FE-105: tipo de registo do catálogo. */
+  clockTypeId?: string | null;
 }
 
 export interface DayPlan {
@@ -54,6 +56,15 @@ export interface EngineRules {
   nightEnd: string | null;
   /** FE-103: regras do catálogo de pausas por id (pausas com tipo). */
   breakTypes?: Record<string, BreakRule>;
+  /** FE-105: regras dos tipos de registo por id (trabalho com tipo). */
+  clockTypes?: Record<string, ClockTypeRule>;
+}
+
+/** Tipo de registo: remuneração como nas pausas; `maxMinutesPerDay` = o que passar disso no dia não conta. */
+export interface ClockTypeRule {
+  remuneration: "paid" | "unpaid" | "hybrid";
+  hybridPaidMinutes: number | null;
+  maxMinutesPerDay: number | null;
 }
 
 /** Remuneração de um tipo de pausa: paga, não paga ou híbrida (primeiros N minutos do dia pagos); o que passar da duração máxima não é pago. */
@@ -89,7 +100,7 @@ export function buildSegments(events: EffectiveEvent[], now: string): Segment[] 
     const e = events[i]!;
     if (e.segmentType === "off") continue;
     const next = events[i + 1];
-    out.push({ start: e.occurredAt, end: next ? next.occurredAt : now < e.occurredAt ? e.occurredAt : now, type: e.segmentType, open: !next, autoClosed: false, ...(e.breakTypeId ? { breakTypeId: e.breakTypeId } : {}) });
+    out.push({ start: e.occurredAt, end: next ? next.occurredAt : now < e.occurredAt ? e.occurredAt : now, type: e.segmentType, open: !next, autoClosed: false, ...(e.breakTypeId ? { breakTypeId: e.breakTypeId } : {}), ...(e.clockTypeId ? { clockTypeId: e.clockTypeId } : {}) });
   }
   return out;
 }
@@ -202,6 +213,7 @@ export function computeDays(events: EffectiveEvent[], dates: string[], plans: Ma
     let breaks = 0;
     let night = 0;
     const hybridUsed = new Map<string, number>();
+    const typeUse = new Map<string, { used: number; paid: number }>();
     for (const s of segs) {
       const d = secs(s.start, s.end);
       if (s.type === "break_unpaid" || s.type === "break_paid") breaks += d;
@@ -219,6 +231,22 @@ export function computeDays(events: EffectiveEvent[], dates: string[], plans: Ma
           worked += paid;
           night += nightSeconds({ ...s, end: new Date(Date.parse(s.start) + paid * 1000).toISOString() }, workDate, rules);
         } else if (paid > 0) pending += paid;
+        continue;
+      }
+      // FE-105: trabalho com tipo de registo → remuneração e máximo por dia do tipo.
+      const ct = s.clockTypeId ? rules.clockTypes?.[s.clockTypeId] : undefined;
+      if (ct && (s.type === "work" || s.type === "remote")) {
+        const u = typeUse.get(s.clockTypeId!) ?? { used: 0, paid: 0 };
+        let paid = ct.remuneration === "unpaid" ? 0 : d;
+        if (ct.maxMinutesPerDay !== null) paid = Math.min(paid, Math.max(0, ct.maxMinutesPerDay * 60 - u.used));
+        if (ct.remuneration === "hybrid") paid = Math.min(paid, Math.max(0, (ct.hybridPaidMinutes ?? 0) * 60 - u.paid));
+        typeUse.set(s.clockTypeId!, { used: u.used + d, paid: u.paid + paid });
+        if (s.forgotten && !rules.incidentHoursCount && !plan.incidentValidated) {
+          pending += paid;
+          continue;
+        }
+        worked += paid;
+        if (paid > 0) night += nightSeconds({ ...s, end: new Date(Date.parse(s.start) + paid * 1000).toISOString() }, workDate, rules);
         continue;
       }
       if (!WORKING.includes(s.type)) continue;

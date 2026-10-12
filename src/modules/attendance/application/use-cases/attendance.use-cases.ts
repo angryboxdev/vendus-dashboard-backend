@@ -5,7 +5,8 @@ import type { CorrectionRequest, DayVersion, Incident, IncidentStatus } from "..
 import { AttendanceConflictError, AttendanceForbiddenError, AttendanceNotFoundError, AttendanceValidationError, PunchRefusedError } from "../../domain/errors.js";
 import type { AttendanceAuditPort, AttendanceClockPort, AttendanceContextPort, AttendanceRepositoryPort, BackgroundPort, PeriodGuardPort } from "../../domain/ports/out/attendance.ports.js";
 import { configHash } from "../../domain/services/config-hash.js";
-import { computeDays, dayBoard, type DayPlan, type DayResult, type EngineRules } from "../../domain/services/day-engine.js";
+import { buildSegments, computeDays, dayBoard, type DayPlan, type DayResult, type EngineRules } from "../../domain/services/day-engine.js";
+import { clockTypeRefusal, clockTypeRule, validateClockType, type ClockTypeInput } from "../../domain/entities/clock-type.js";
 import { breakRefusal, breakRule, validateBreakType, type BreakTypeInput } from "../../domain/entities/break-type.js";
 import { checkPunch, REFUSAL_MESSAGE } from "../../domain/services/punch-policy.js";
 
@@ -40,6 +41,8 @@ export interface PunchInput {
   occurredAt?: string | null;
   /** FE-103: tipo de pausa do catálogo (só ao iniciar uma pausa). */
   breakTypeId?: string | null;
+  /** FE-105: tipo de registo do catálogo (só ao começar a trabalhar). */
+  clockTypeId?: string | null;
 }
 
 /** Uma marcação offline só é aceite até este atraso; depois, pedido de correção. */
@@ -110,15 +113,17 @@ export class AttendanceUseCases {
   private async compute(org: OrganizationId, employeeId: string, from: string, to: string) {
     const tz = await this.ctx.timeZone(org);
     const now = this.clock.now();
-    const [loaded, plans, cfg, incidents, breakTypes] = await Promise.all([
+    const [loaded, plans, cfg, incidents, breakTypes, clockTypes] = await Promise.all([
       this.load(org, employeeId, from, to, tz),
       this.ctx.plans(org, employeeId, plusDays(from, -1), plusDays(to, 1)),
       this.ctx.config(org, employeeId, to, tz),
       this.repo.listIncidents(org, { employeeId, from, to }),
       this.repo.listBreakTypes(org),
+      this.repo.listClockTypes(org),
     ]);
     // FE-103: regras do catálogo de pausas (incluindo arquivadas — marcações antigas mantêm-nas).
     if (breakTypes.length) cfg.rules.breakTypes = Object.fromEntries(breakTypes.map((b) => [b.id, breakRule(b)]));
+    if (clockTypes.length) cfg.rules.clockTypes = Object.fromEntries(clockTypes.map((c) => [c.id, clockTypeRule(c)]));
     // D8: incidente validado pela gestão → as horas pendentes desse dia contam.
     for (const i of incidents) {
       if (i.status === "resolved_validate") plans.set(i.workDate, { ...(plans.get(i.workDate) ?? EMPTY_PLAN), incidentValidated: true });
@@ -141,9 +146,16 @@ export class AttendanceUseCases {
 
   /** Impressão da configuração de um dia; as regras de pausas só entram se o dia as usa (não mexe nos outros dias). */
   private hashFor(c: { cfg: { rules: EngineRules }; plans: Map<string, DayPlan>; days?: DayResult[] }, date: string) {
-    const { breakTypes, ...rules } = c.cfg.rules;
-    const used = [...new Set((c.days?.find((d) => d.workDate === date)?.segments ?? []).map((s) => s.breakTypeId).filter((x): x is string => !!x))].sort();
-    return configHash({ rules, plan: c.plans.get(date) ?? null, ...(used.length ? { breaks: used.map((id) => [id, breakTypes?.[id] ?? null]) } : {}) });
+    const { breakTypes, clockTypes, ...rules } = c.cfg.rules;
+    const segs = c.days?.find((d) => d.workDate === date)?.segments ?? [];
+    const used = [...new Set(segs.map((s) => s.breakTypeId).filter((x): x is string => !!x))].sort();
+    const usedTypes = [...new Set(segs.map((s) => s.clockTypeId).filter((x): x is string => !!x))].sort();
+    return configHash({
+      rules,
+      plan: c.plans.get(date) ?? null,
+      ...(used.length ? { breaks: used.map((id) => [id, breakTypes?.[id] ?? null]) } : {}),
+      ...(usedTypes.length ? { clockTypes: usedTypes.map((id) => [id, clockTypes?.[id] ?? null]) } : {}),
+    });
   }
 
   /**
@@ -227,8 +239,9 @@ export class AttendanceUseCases {
     const today = localDate(now, tz);
     await this.assertOpen(org, employeeId, [today]);
     const { effective } = await this.load(org, employeeId, plusDays(today, -1), today, tz);
-    const state = effective.filter((e) => e.occurredAt <= now).at(-1)?.segmentType ?? "off";
-    if (state === input.segmentType) throw new AttendanceConflictError(state === "off" ? "Ainda não tem uma entrada registada." : "Já está neste estado.", "same_state");
+    const last = effective.filter((e) => e.occurredAt <= now).at(-1);
+    const state = last?.segmentType ?? "off";
+    if (state === "off" && input.segmentType === "off") throw new AttendanceConflictError("Ainda não tem uma entrada registada.", "same_state");
     // FE-103: pausa com tipo — disponível agora (dia, janela, usos) e remuneração decidida pelo tipo.
     let segmentType = input.segmentType;
     let breakTypeId: string | null = null;
@@ -242,6 +255,23 @@ export class AttendanceUseCases {
       segmentType = type.remuneration === "unpaid" ? "break_unpaid" : "break_paid";
       breakTypeId = type.id;
     }
+    // FE-105: trabalho com tipo de registo — bloqueios e máximo do dia; teletrabalho fica "remoto".
+    let clockTypeId: string | null = null;
+    if (input.clockTypeId) {
+      if (input.segmentType !== "work" && input.segmentType !== "remote") throw new AttendanceValidationError("O tipo de registo só se indica ao começar a trabalhar.", "clockTypeId");
+      const type = (await this.repo.listClockTypes(org)).find((c) => c.id === input.clockTypeId);
+      if (!type) throw new AttendanceValidationError("Tipo de registo não encontrado.", "clockTypeId");
+      const todays = effective.filter((e) => localDate(e.occurredAt, tz) === today && e.occurredAt <= now);
+      const used = buildSegments(todays, now)
+        .filter((sg) => sg.clockTypeId === type.id)
+        .reduce((acc, sg) => acc + Math.max(0, Date.parse(sg.end) - Date.parse(sg.start)) / 1000, 0);
+      const refused = clockTypeRefusal(type, now, tz, used);
+      if (refused) throw new AttendanceValidationError(refused, "clockTypeId");
+      segmentType = type.remote ? "remote" : "work";
+      clockTypeId = type.id;
+    }
+    // Mesmo estado = mesmo tipo de marcação e mesmo tipo de registo/pausa (mudar de "obra" para "Formação" é uma mudança).
+    if (state === segmentType && (last?.clockTypeId ?? null) === clockTypeId && (last?.breakTypeId ?? null) === breakTypeId) throw new AttendanceConflictError("Já está neste estado.", "same_state");
     const [cfg, plans, location] = await Promise.all([
       this.ctx.config(org, employeeId, today, tz),
       this.ctx.plans(org, employeeId, today, today),
@@ -271,6 +301,7 @@ export class AttendanceUseCases {
       longitude: keepCoords ? input.longitude : null,
       ip: input.ip,
       breakTypeId,
+      clockTypeId,
     });
     const serverToday = localDate(serverNow, tz);
     if (today < serverToday) this.recalcLater(org, employeeId, plusDays(today, -1), plusDays(serverToday, -1), "Nova marcação");
@@ -387,6 +418,43 @@ export class AttendanceUseCases {
     if (!cur) throw new AttendanceNotFoundError("Pausa não encontrada.");
     await this.repo.archiveBreakType(org, id);
     await this.log(org, actor.email, "attendance.break_type.archive", "break_type", id, cur, { ...cur, archived: true }, null);
+  }
+
+  // ── Tipos de registo (FE-105) ───────────────────────────────────────
+  listClockTypes(org: OrganizationId) {
+    return this.repo.listClockTypes(org);
+  }
+
+  private async assertUniqueClockTypeName(org: OrganizationId, name: string, exceptId: string | null) {
+    const norm = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+    if ((await this.repo.listClockTypes(org)).some((c) => !c.archived && c.id !== exceptId && norm(c.name) === norm(name))) throw new AttendanceConflictError("Já existe um tipo de registo com este nome.", "duplicate_name");
+  }
+
+  async createClockType(org: OrganizationId, actor: Actor, input: ClockTypeInput) {
+    validateClockType(input);
+    await this.assertUniqueClockTypeName(org, input.name, null);
+    const c = await this.repo.createClockType(org, input, actor.email);
+    await this.log(org, actor.email, "attendance.clock_type.create", "clock_type", c.id, null, c, null);
+    return c;
+  }
+
+  async updateClockType(org: OrganizationId, actor: Actor, id: string, input: ClockTypeInput, expectedVersion: number, reason: string) {
+    validateClockType(input);
+    if (reason.trim().length < 5) throw new AttendanceValidationError("Indique o motivo da alteração (mínimo 5 caracteres).", "reason");
+    const cur = (await this.repo.listClockTypes(org)).find((c) => c.id === id);
+    if (!cur) throw new AttendanceNotFoundError("Tipo de registo não encontrado.");
+    await this.assertUniqueClockTypeName(org, input.name, id);
+    const c = await this.repo.updateClockType(org, id, input, expectedVersion);
+    if (!c) throw new AttendanceConflictError("O tipo de registo foi alterado por outra pessoa. Recarregue.", "stale");
+    await this.log(org, actor.email, "attendance.clock_type.update", "clock_type", id, cur, c, reason.trim());
+    return c;
+  }
+
+  async archiveClockType(org: OrganizationId, actor: Actor, id: string) {
+    const cur = (await this.repo.listClockTypes(org)).find((c) => c.id === id);
+    if (!cur) throw new AttendanceNotFoundError("Tipo de registo não encontrado.");
+    await this.repo.archiveClockType(org, id);
+    await this.log(org, actor.email, "attendance.clock_type.archive", "clock_type", id, cur, { ...cur, archived: true }, null);
   }
 
   async myDays(org: OrganizationId, actor: Actor, from: string, to: string) {

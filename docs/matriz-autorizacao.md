@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 687 · pré-autenticação: 21 · não classificados: 0
+Endpoints: 692 · pré-autenticação: 21 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -332,6 +332,7 @@ Endpoints: 687 · pré-autenticação: 21 · não classificados: 0
 | GET | `/api/me/clock` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/clock` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/clock/break-types` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/clock/clock-types` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/clock/corrections` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/clock/corrections` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/clock/days` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
@@ -396,6 +397,10 @@ Endpoints: 687 · pré-autenticação: 21 · não classificados: 0
 | POST | `/api/novo-rh/attendance/break-types` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | PUT | `/api/novo-rh/attendance/break-types/:id` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/attendance/break-types/:id/archive` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/attendance/clock-types` | permission:hr.attendance:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/attendance/clock-types` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| PUT | `/api/novo-rh/attendance/clock-types/:id` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/attendance/clock-types/:id/archive` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/attendance/corrections` | permission:hr.attendance:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/attendance/corrections/:id/approve` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/attendance/corrections/:id/reject` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |

@@ -5,6 +5,7 @@ import type { Actor, ChangeInput, PunchInput } from "../../application/use-cases
 import type { AttendanceUseCases } from "../../application/use-cases/attendance.use-cases.js";
 import type { SegmentType } from "../../domain/entities/clock.js";
 import type { BreakTypeInput } from "../../domain/entities/break-type.js";
+import type { ClockTypeInput } from "../../domain/entities/clock-type.js";
 import type { CorrectionRequest, IncidentStatus } from "../../domain/entities/records.js";
 import { AttendanceConflictError, AttendanceForbiddenError, AttendanceNotFoundError, AttendanceValidationError, PunchRefusedError } from "../../domain/errors.js";
 
@@ -64,12 +65,15 @@ export function createAttendanceMeRouter(uc: AttendanceUseCases, store: Idempote
       ip: req.ip ?? null,
       occurredAt: optS(b.occurredAt),
       breakTypeId: optS(b.breakTypeId),
+      clockTypeId: optS(b.clockTypeId),
     };
     const out = await run(() => uc.punch(org(req), actorOf(req), input));
     res.status(out.duplicate ? 200 : 201).json(out);
   });
   // FE-103: pausas que se podem escolher ao marcar (só as ativas).
   r.get(`${M}/break-types`, async (req, res) => res.json((await uc.listBreakTypes(org(req))).filter((b) => !b.archived)));
+  // FE-105: tipos de registo que se podem escolher ao começar (só os ativos).
+  r.get(`${M}/clock-types`, async (req, res) => res.json((await uc.listClockTypes(org(req))).filter((c) => !c.archived)));
   r.get(`${M}/days`, async (req, res) => res.json(await run(() => uc.myDays(org(req), actorOf(req), s(req.query.from), s(req.query.to)))));
   r.post(`${M}/revisions/:id/refuse`, async (req, res) => res.json(await run(() => uc.refuseRevision(org(req), actorOf(req), id(req), optS(body(req).comment)))));
   r.get(`${M}/corrections`, async (req, res) => res.json(await run(() => uc.myCorrections(org(req), actorOf(req)))));
@@ -142,6 +146,28 @@ export function createAttendanceAdminRouter(
   });
   r.post(`${A}/break-types/:id/archive`, async (req, res) => {
     await run(() => uc.archiveBreakType(org(req), actorOf(req), id(req)));
+    res.json({ ok: true });
+  });
+
+  // ── Tipos de registo (FE-105) ──
+  const clockTypeInput = (b: Record<string, unknown>): ClockTypeInput => ({
+    name: s(b.name),
+    color: optS(b.color),
+    remote: b.remote === true,
+    remuneration: s(b.remuneration) as ClockTypeInput["remuneration"],
+    hybridPaidMinutes: optN(b.hybridPaidMinutes),
+    maxMinutesPerDay: optN(b.maxMinutesPerDay),
+    blockedWeekdays: Array.isArray(b.blockedWeekdays) ? b.blockedWeekdays.map(Number) : null,
+    blockedHours: Array.isArray(b.blockedHours) ? (b.blockedHours as { start: unknown; end: unknown }[]).map((h) => ({ start: s(h?.start), end: s(h?.end) })) : [],
+  });
+  r.get(`${A}/clock-types`, async (req, res) => res.json(await uc.listClockTypes(org(req))));
+  r.post(`${A}/clock-types`, async (req, res) => res.status(201).json(await run(() => uc.createClockType(org(req), actorOf(req), clockTypeInput(body(req))))));
+  r.put(`${A}/clock-types/:id`, async (req, res) => {
+    const b = body(req);
+    res.json(await run(() => uc.updateClockType(org(req), actorOf(req), id(req), clockTypeInput(b), Number(b.version), s(b.reason))));
+  });
+  r.post(`${A}/clock-types/:id/archive`, async (req, res) => {
+    await run(() => uc.archiveClockType(org(req), actorOf(req), id(req)));
     res.json({ ok: true });
   });
 
