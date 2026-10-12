@@ -916,10 +916,18 @@ const reportsModule = createReportsModule({
           if (!managers.some((m) => m.validFrom <= today && (m.validTo === null || m.validTo >= today))) missing.push("Responsável");
           if (!(await absencesDirectory.userOfEmployee(org, e.id))) missing.push("Conta do Portal");
           if (missing.length) rows.push({ employeeId: e.id, employee: e.fullName, missing: missing.join(", ") });
+        } else if (key === "contracts") {
+          const today = todayUtc();
+          const TYPE: Record<string, string> = { permanent: "Sem termo", fixed_term: "Termo certo", temporary: "Temporário", internship: "Estágio", other: "Outro" };
+          for (const c of await peopleRepo.listContracts(org, e.id)) {
+            const state = c.status === "cancelled" ? "Anulado" : c.startDate > today ? "Futuro" : c.endDate !== null && c.endDate < today ? "Terminado" : "Em vigor";
+            rows.push({ employeeId: e.id, employee: e.fullName, type: TYPE[c.contractType] ?? c.contractType, start: c.startDate, end: c.endDate ?? "", weeklyHours: c.weeklyHours ?? "", probationEnd: c.probationEnd ?? "", state });
+          }
         }
       }
       return rows;
     },
+    employeeLocations: async (org) => new Map((await peopleRepo.list(org, { status: "all" })).map((e) => [e.id, e.primaryLocationId])),
   },
   access: {
     canSeeEmployee,

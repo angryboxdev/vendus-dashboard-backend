@@ -19,7 +19,14 @@ export interface ReportsAccess {
   canAudit: (req: Request) => boolean;
 }
 
-/** Relatórios (`/api/novo-rh/reports`, `hr.employees`): catálogo, ver (JSON) e descarregar (CSV). */
+/** Lista de ids separada por vírgulas (`?locations=a,b`). */
+const ids = (v: unknown): string[] => (typeof v === "string" && v ? [...new Set(v.split(",").map((x) => x.trim()).filter(Boolean))] : []);
+
+/**
+ * Relatórios (`/api/novo-rh/reports`, `hr.employees`): catálogo, ver (JSON) e
+ * descarregar (CSV). Filtros por identificadores: `locations`, `employees` e
+ * `columns` (FE-063).
+ */
 export function createReportsRouter(uc: ReportsUseCases, access: ReportsAccess): Router {
   const r = Router();
   const R = "/novo-rh/reports";
@@ -28,16 +35,22 @@ export function createReportsRouter(uc: ReportsUseCases, access: ReportsAccess):
     const to = String(req.query.to ?? "");
     const today = new Date().toISOString().slice(0, 10);
     return run(() =>
-      uc.run(req.auth!.orgId, req.params.key as string, from || to ? { from, to } : null, {
-        canSee: (employeeId) => access.canSeeEmployee(req, employeeId, /^\d{4}-\d{2}-\d{2}$/.test(to) ? to : today),
-        canAudit: access.canAudit(req),
-      }),
+      uc.run(
+        req.auth!.orgId,
+        req.params.key as string,
+        from || to ? { from, to } : null,
+        {
+          canSee: (employeeId) => access.canSeeEmployee(req, employeeId, /^\d{4}-\d{2}-\d{2}$/.test(to) ? to : today),
+          canAudit: access.canAudit(req),
+        },
+        { locationIds: ids(req.query.locations), employeeIds: ids(req.query.employees), columns: ids(req.query.columns) },
+      ),
     );
   };
-  r.get(R, (_req, res) => res.json(uc.catalog()));
+  r.get(R, (req, res) => res.json(uc.catalog(access.canAudit(req))));
   r.get(`${R}/:key`, async (req, res) => {
     const out = await go(req);
-    res.json({ definition: out.definition, rows: out.rows.map(({ employeeId: _e, ...rest }) => rest) });
+    res.json({ definition: out.definition, columns: out.columns, rows: out.rows.map(({ employeeId: _e, ...rest }) => rest) });
   });
   r.get(`${R}/:key/csv`, async (req, res) => {
     const out = await go(req);

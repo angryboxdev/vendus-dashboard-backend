@@ -12,15 +12,38 @@ const data: Record<ReportKey, ReportRow[]> = {
   balances: [],
   absences: [],
   incomplete_data: [{ employeeId: "e2", employee: "Bruno", missing: "NIF, Contrato ativo" }],
+  contracts: [],
   change_history: [{ when: "2026-10-12 10:00", actor: "rh@demo.invalid", action: "people.update", resource: "employee", reason: "" }],
 };
 
-const uc = new ReportsUseCases({ rows: async (_o, key) => data[key] });
+const uc = new ReportsUseCases({
+  rows: async (_o, key) => data[key],
+  employeeLocations: async () => new Map([
+    ["e1", "porto"],
+    ["e2", "lisboa"],
+  ]),
+});
 const all = { canSee: async () => true, canAudit: true };
 
 describe("Relatórios", () => {
-  test("catálogo com os 5 prioritários", () => {
-    expect(uc.catalog().map((r) => r.key)).toEqual(["attendance", "balances", "absences", "incomplete_data", "change_history"]);
+  test("catálogo por grupos; o histórico só para quem pode auditar", () => {
+    expect(uc.catalog().map((r) => r.key)).toEqual(["attendance", "balances", "absences", "incomplete_data", "contracts", "change_history"]);
+    expect(uc.catalog()[0]).toMatchObject({ group: "time", groupLabel: "Assiduidade e banco de horas" });
+    expect(uc.catalog(false).map((r) => r.key)).not.toContain("change_history");
+  });
+
+  test("FE-063: filtros por centro e por pessoa e escolha de colunas (só as da definição)", async () => {
+    const period = { from: "2026-10-01", to: "2026-10-31" };
+    const porto = await uc.run(ORG, "attendance", period, all, { locationIds: ["porto"], employeeIds: [], columns: [] });
+    expect(porto.rows.map((x) => x.employeeId)).toEqual(["e1"]);
+    const e2 = await uc.run(ORG, "attendance", period, all, { locationIds: [], employeeIds: ["e2"], columns: ["employee", "worked"] });
+    expect(e2.rows).toEqual([{ employeeId: "e2", employee: "=HYPERLINK(\"x\")", worked: 170 }]);
+    expect(e2.csv().split("\r\n")[0]).toBe("﻿Colaborador;Trabalhado (h)");
+    // Uma coluna que não existe na definição (ex.: IBAN) é recusada.
+    await expect(uc.run(ORG, "attendance", period, all, { locationIds: [], employeeIds: [], columns: ["employee", "iban"] })).rejects.toMatchObject({ field: "columns" });
+    // O filtro por pessoa nunca alarga o âmbito.
+    const scoped = await uc.run(ORG, "attendance", period, { canSee: async (id) => id === "e1", canAudit: false }, { locationIds: [], employeeIds: ["e2"], columns: [] });
+    expect(scoped.rows).toEqual([]);
   });
 
   test("filtra pelo âmbito de quem consulta e exige período quando é preciso", async () => {
