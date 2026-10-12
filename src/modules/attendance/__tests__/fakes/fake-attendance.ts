@@ -57,7 +57,7 @@ export class FakeAttendanceRepository implements AttendanceRepositoryPort {
   }
 
   async insertCorrection(_org: OrganizationId, c: Parameters<AttendanceRepositoryPort["insertCorrection"]>[1]) {
-    const row: CorrectionRequest = { ...c, id: nextId(), status: "pending", decidedBy: null, decidedAt: null, decisionComment: null, revisionId: null, createdAt: this.now() };
+    const row: CorrectionRequest = { ...c, id: nextId(), status: "pending", decidedBy: null, decidedAt: null, decisionComment: null, revisionId: null, createdAt: this.now(), currentLevel: 0 };
     this.corrections.push(row);
     return row;
   }
@@ -66,6 +66,12 @@ export class FakeAttendanceRepository implements AttendanceRepositoryPort {
   }
   async listCorrections(_org: OrganizationId, f: { status?: CorrectionRequest["status"]; employeeId?: string }) {
     return this.corrections.filter((c) => (!f.status || c.status === f.status) && (!f.employeeId || c.employeeId === f.employeeId));
+  }
+  async advanceCorrection(_org: OrganizationId, id: string, fromLevel: number) {
+    const c = this.corrections.find((x) => x.id === id && x.status === "pending" && x.currentLevel === fromLevel);
+    if (!c) return null;
+    c.currentLevel = fromLevel + 1;
+    return { ...c };
   }
   async decideCorrection(_org: OrganizationId, id: string, d: { status: "approved" | "rejected"; decidedBy: string; comment: string | null; revisionId: string | null }) {
     const c = this.corrections.find((x) => x.id === id)!;
@@ -144,6 +150,12 @@ export class FakeContext implements AttendanceContextPort {
 
   async employeeForUser(_org: OrganizationId, userId: string) {
     return this.users.get(userId) ?? null;
+  }
+  /** FE-113: null = sem fluxo de ponto (comportamento de sempre). */
+  levels: { approvers: string[]; escalated: boolean }[] | "no_approver" | null = null;
+  async correctionLevels(_o: OrganizationId, _e: string, _d: string, excluded: string[]) {
+    if (!Array.isArray(this.levels)) return this.levels;
+    return this.levels.map((l) => ({ ...l, approvers: l.approvers.filter((u) => !excluded.includes(u)) }));
   }
   async timeZone() {
     return "Europe/Lisbon";

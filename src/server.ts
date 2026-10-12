@@ -562,6 +562,8 @@ async function plannedDays(org: OrganizationId, employeeId: string, from: string
 
 // Novo RH → Assiduidade (Fase 4): marcações, motor de apuramento, revisões, incidentes.
 const attendanceModule = createAttendanceModule({
+  // FE-113: fluxo "Correções de ponto" (absences, âmbito clock) — o módulo de ausências é criado mais abaixo.
+  correctionLevels: (org, employeeId, date, excluded) => absencesModule.absences.correctionLevels(org, employeeId, date, excluded),
   effectiveSettings: async (org, employeeId, date) => {
     const [tt, legal] = await Promise.all([
       settingsModule.settings.effectiveFor(org, employeeId, date, "time_tracking"),
@@ -1010,8 +1012,8 @@ const inboxModule = createInboxModule({
             title: "Correção de ponto",
             detail: `${op}${c.occurredAt ? ` · ${c.occurredAt.slice(0, 10)} ${hm(c.occurredAt)} UTC` : ""}`,
             meta: [{ label: "Motivo", value: c.reason }],
-            blockedReason: (await isOwn(org, actor.userId, c.employeeId)) ? ("own" as const) : null,
-            level: null,
+            blockedReason: (await isOwn(org, actor.userId, c.employeeId)) ? ("own" as const) : c.levels.length && !c.levels[c.currentLevel]?.approvers.includes(actor.userId) ? ("not_current_level" as const) : null,
+            level: c.levels.length ? { current: c.currentLevel + 1, total: c.levels.length } : null,
           });
         }
         return out;

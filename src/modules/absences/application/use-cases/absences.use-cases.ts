@@ -187,6 +187,20 @@ export class AbsencesUseCases {
     return { resolved, fallback: flow.fallbackUserIds.length ? flow.fallbackUserIds : admins };
   }
 
+  /**
+   * FE-113: níveis do fluxo "Correções de ponto" (âmbito clock) para um
+   * colaborador — os mesmos aprovadores, recurso e regras que nas ausências.
+   * null = não há fluxo de ponto ativo; "no_approver" = ninguém pode aprovar.
+   */
+  async correctionLevels(org: OrganizationId, employeeId: string, date: string, excludedUserIds: string[]) {
+    const flows = (await this.repo.listFlows(org)).filter((f) => !f.archived && f.scope === "clock");
+    const flow = flows.find((f) => f.isDefault) ?? flows[0] ?? null;
+    if (!flow) return null;
+    const sets = await this.approverSets(org, flow, employeeId, date);
+    const employeeUser = await this.ctx.userOfEmployee(org, employeeId);
+    return snapshotLevels(sets.resolved, new Set([...excludedUserIds, employeeUser].filter((x): x is string => !!x)), sets.fallback) ?? ("no_approver" as const);
+  }
+
   private async flowFor(org: OrganizationId, type: AbsenceType): Promise<ApprovalFlow | null> {
     const flows = (await this.repo.listFlows(org)).filter((f) => !f.archived && f.scope === "absences");
     return flows.find((f) => f.id === type.flowId) ?? flows.find((f) => f.isDefault) ?? null;

@@ -25,7 +25,7 @@ export class AttendanceConflictError extends Error {
 export class AttendanceForbiddenError extends Error {
   constructor(
     message: string,
-    readonly code: "self_approval" | "self_revision" | "not_own_record",
+    readonly code: "self_approval" | "self_revision" | "not_own_record" | "not_approver",
   ) {
     super(message);
     this.name = "AttendanceForbiddenError";

@@ -231,3 +231,42 @@ describe("Assiduidade — casos de uso (Fase 4)", () => {
     await expect(uc.requestRecalculation(ORG, ADMIN, "e1", "2026-08-01", "2026-10-06")).rejects.toMatchObject({ field: "to" });
   });
 });
+
+describe("Fluxo de aprovação das correções de ponto (FE-113)", () => {
+  const ask = { operation: "add" as const, targetEventId: null, segmentType: "work" as const, reason: "Esqueci-me de picar" };
+  const L2 = { userId: "u-dir", email: "direcao@demo.invalid" };
+
+  test("com fluxo: níveis fixados sem quem pede; só o nível atual decide; aprovar avança e o último cria a revisão", async () => {
+    const { uc, ctx, repo } = setup();
+    ctx.levels = [
+      { approvers: ["u-boss", "u-emp"], escalated: false },
+      { approvers: ["u-dir"], escalated: false },
+    ];
+    const c = await uc.requestCorrection(ORG, EMP, { ...ask, occurredAt: at("2026-10-10T09:00:00") });
+    expect(c.levels[0]!.approvers).toEqual(["u-boss"]);
+    await expect(uc.decideCorrection(ORG, L2, c.id, "approve", null)).rejects.toMatchObject({ code: "not_approver" });
+    const mid = await uc.decideCorrection(ORG, BOSS, c.id, "approve", null);
+    expect(mid).toMatchObject({ status: "pending", currentLevel: 1 });
+    expect(repo.revisions).toHaveLength(0);
+    await expect(uc.decideCorrection(ORG, BOSS, c.id, "approve", null)).rejects.toMatchObject({ code: "not_approver" });
+    const done = await uc.decideCorrection(ORG, L2, c.id, "approve", null);
+    expect(done.status).toBe("approved");
+    expect(repo.revisions).toHaveLength(1);
+  });
+
+  test("recusar no primeiro nível termina o pedido; fluxo sem ninguém para aprovar recusa o pedido logo à entrada", async () => {
+    const { uc, ctx } = setup();
+    ctx.levels = [{ approvers: ["u-boss"], escalated: false }, { approvers: ["u-dir"], escalated: false }];
+    const c = await uc.requestCorrection(ORG, EMP, { ...ask, occurredAt: at("2026-10-10T09:00:00") });
+    expect((await uc.decideCorrection(ORG, BOSS, c.id, "reject", "Não há registo de entrada nesse dia")).status).toBe("rejected");
+    ctx.levels = "no_approver";
+    await expect(uc.requestCorrection(ORG, EMP, { ...ask, occurredAt: at("2026-10-09T09:00:00") })).rejects.toMatchObject({ field: "flow" });
+  });
+
+  test("sem fluxo de ponto: como antes (quem gere a assiduidade decide, nunca o próprio)", async () => {
+    const { uc } = setup();
+    const c = await uc.requestCorrection(ORG, EMP, { ...ask, occurredAt: at("2026-10-10T09:00:00") });
+    expect(c.levels).toEqual([]);
+    expect((await uc.decideCorrection(ORG, BOSS, c.id, "approve", null)).status).toBe("approved");
+  });
+});

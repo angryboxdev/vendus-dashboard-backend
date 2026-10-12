@@ -18,7 +18,7 @@ const optIso = (v: unknown) => (v === null || v === undefined ? null : iso(v));
 
 const EV = "id, employee_id, occurred_at, segment_type, source, client_event_id, location_id, latitude, longitude, ip";
 const REV = "id, employee_id, operation, target_event_id, occurred_at, segment_type, anchor_at, reason, author, state, refusable_until, created_at";
-const COR = "id, employee_id, requested_by, operation, target_event_id, occurred_at, segment_type, reason, status, decided_by, decided_at, decision_comment, revision_id, created_at";
+const COR = "id, employee_id, requested_by, operation, target_event_id, occurred_at, segment_type, reason, status, decided_by, decided_at, decision_comment, revision_id, created_at, levels, current_level";
 const DAY = "employee_id, work_date, version, worked_seconds, break_seconds, night_seconds, theoretical_seconds, excess_seconds, pending_seconds, config_hash, calculated_at";
 const ADJ = "id, employee_id, work_date, from_version, to_version, delta_excess_seconds, reason, created_at";
 const INC = "id, employee_id, work_date, type, source, status, comment, resolved_by, resolved_at";
@@ -64,6 +64,8 @@ const toCorrection = (r: Row): CorrectionRequest => ({
   decisionComment: str(r.decision_comment),
   revisionId: str(r.revision_id),
   createdAt: iso(r.created_at),
+  levels: Array.isArray(r.levels) ? (r.levels as CorrectionRequest["levels"]) : [],
+  currentLevel: Number(r.current_level ?? 0),
 });
 const toDay = (r: Row): DayVersion => ({
   employeeId: String(r.employee_id),
@@ -183,6 +185,7 @@ export class SupabaseAttendanceRepository implements AttendanceRepositoryPort {
       occurred_at: c.occurredAt,
       segment_type: c.segmentType,
       reason: c.reason,
+      levels: c.levels,
     };
     return toCorrection(check(await this.scoped(org).table("clock_correction_requests").insert(row).select(COR).single()));
   }
@@ -195,6 +198,10 @@ export class SupabaseAttendanceRepository implements AttendanceRepositoryPort {
     if (f.status) q = q.eq("status", f.status);
     if (f.employeeId) q = q.eq("employee_id", f.employeeId);
     return check<Row[]>(await q.order("created_at", { ascending: false }).limit(500)).map(toCorrection);
+  }
+  async advanceCorrection(org: OrganizationId, id: string, fromLevel: number) {
+    const rows = check<Row[]>(await this.scoped(org).table("clock_correction_requests").update({ current_level: fromLevel + 1 }).eq("id", id).eq("status", "pending").eq("current_level", fromLevel).select(COR));
+    return rows[0] ? toCorrection(rows[0]) : null;
   }
   async decideCorrection(org: OrganizationId, id: string, d: { status: "approved" | "rejected"; decidedBy: string; comment: string | null; revisionId: string | null }) {
     const patch = { status: d.status, decided_by: d.decidedBy, decided_at: new Date().toISOString(), decision_comment: d.comment, revision_id: d.revisionId };

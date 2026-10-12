@@ -425,9 +425,14 @@ export class AttendanceUseCases {
     this.validateChange(input, this.clock.now());
     const employeeId = await this.employeeOf(org, actor.userId);
     if (input.targetEventId) await this.targetOf(org, employeeId, input.targetEventId);
+    // FE-113: com fluxo "Correções de ponto", os níveis ficam fixados já (sem quem pede — RE-22).
+    const date = input.occurredAt ? input.occurredAt.slice(0, 10) : localDate(this.clock.now(), await this.ctx.timeZone(org));
+    const levels = await this.ctx.correctionLevels(org, employeeId, date, [actor.userId]);
+    if (levels === "no_approver") throw new AttendanceValidationError("Não há ninguém que possa aprovar este pedido. Configure pessoas de recurso no fluxo de correções de ponto.", "flow");
     const c = await this.repo.insertCorrection(org, {
       employeeId,
       requestedBy: actor.email,
+      levels: levels ?? [],
       operation: input.operation,
       targetEventId: input.targetEventId,
       occurredAt: input.occurredAt ? toUtc(input.occurredAt) : null,
@@ -456,6 +461,17 @@ export class AttendanceUseCases {
     if (c.status !== "pending") throw new AttendanceConflictError("Este pedido já foi decidido.", "already_decided");
     if ((await this.ctx.employeeForUser(org, actor.userId)) === c.employeeId) throw new AttendanceForbiddenError("Não pode decidir o seu próprio pedido.", "self_approval");
     if (decision === "reject" && !comment?.trim()) throw new AttendanceValidationError("Indique o motivo da recusa.", "comment");
+    // FE-113: com níveis, só o nível atual decide; aprovar num nível intermédio passa ao seguinte.
+    if (c.levels.length) {
+      const level = c.levels[c.currentLevel];
+      if (!level?.approvers.includes(actor.userId)) throw new AttendanceForbiddenError("Não é aprovador deste pedido neste nível.", "not_approver");
+      if (decision === "approve" && c.currentLevel < c.levels.length - 1) {
+        const next = await this.repo.advanceCorrection(org, id, c.currentLevel);
+        if (!next) throw new AttendanceConflictError("Este pedido acabou de ser decidido por outra pessoa.", "already_decided");
+        await this.log(org, actor.email, "attendance.correction.approve_level", "clock_correction_request", id, c, next, comment);
+        return next;
+      }
+    }
     let revisionId: string | null = null;
     if (decision === "approve") {
       // Pedido do próprio colaborador → a revisão não fica sujeita a recusa.

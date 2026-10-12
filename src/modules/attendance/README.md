@@ -1,7 +1,7 @@
 # Module: attendance
 
 > Status: active
-> Last updated: 2026-10-11
+> Last updated: 2026-10-12
 
 ---
 
@@ -63,6 +63,7 @@ horas (Fase 6), que vai ler os ajustes daqui.
 
 ## Design decisions (ADR summary)
 
+- **Fluxo de aprovação das correções (FE-113):** com um fluxo "Correções de ponto" (absences, âmbito `clock`) ativo, cada pedido fixa na criação os níveis e aprovadores (sem quem pede nem o próprio; nível vazio → recurso, RE-23); só o nível atual decide, aprovar num nível intermédio passa ao seguinte e o último cria a revisão. Sem fluxo, decide quem gere a assiduidade (como antes). Migração `20261022100000` (`levels`, `current_level`).
 - ADR-0027: geolocalização desligada até DPIA; horas de incidentes pendentes até validação; quiosque continua no RH atual.
 - Separação de funções: ninguém corrige, aprova ou valida o próprio registo.
 - As vistas mostram sempre o valor do motor; o gravado é posto em dia em segundo plano (só dias fechados, antes de hoje).

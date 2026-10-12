@@ -21,10 +21,12 @@ export interface AttendanceRepositoryPort {
   /** RE-11: revisões ativas ainda dentro do prazo de recusa (qualquer dia). */
   listRefusableRevisions(org: OrganizationId, employeeId: string, now: string): Promise<ClockRevision[]>;
 
-  insertCorrection(org: OrganizationId, c: Omit<CorrectionRequest, "id" | "status" | "decidedBy" | "decidedAt" | "decisionComment" | "revisionId" | "createdAt">): Promise<CorrectionRequest>;
+  insertCorrection(org: OrganizationId, c: Omit<CorrectionRequest, "id" | "status" | "decidedBy" | "decidedAt" | "decisionComment" | "revisionId" | "createdAt" | "currentLevel">): Promise<CorrectionRequest>;
   getCorrection(org: OrganizationId, id: string): Promise<CorrectionRequest | null>;
   listCorrections(org: OrganizationId, filter: { status?: CorrectionRequest["status"]; employeeId?: string }): Promise<CorrectionRequest[]>;
   decideCorrection(org: OrganizationId, id: string, d: { status: "approved" | "rejected"; decidedBy: string; comment: string | null; revisionId: string | null }): Promise<CorrectionRequest>;
+  /** Passa ao nível seguinte; null se o pedido mudou entretanto (outro aprovador decidiu). */
+  advanceCorrection(org: OrganizationId, id: string, fromLevel: number): Promise<CorrectionRequest | null>;
 
   currentDays(org: OrganizationId, employeeId: string, from: string, to: string): Promise<DayVersion[]>;
   /** A anterior deixa de ser a atual; a nova fica com `version` = anterior + 1. */
@@ -53,6 +55,11 @@ export interface AttendanceConfig {
 /** O que a assiduidade precisa de outros módulos (ligado no composition root). */
 export interface AttendanceContextPort {
   employeeForUser(org: OrganizationId, userId: string): Promise<string | null>;
+  /**
+   * FE-113: níveis do fluxo "Correções de ponto" para este colaborador (sem quem pede).
+   * null = não há fluxo de ponto; "no_approver" = há fluxo mas ninguém pode aprovar.
+   */
+  correctionLevels(org: OrganizationId, employeeId: string, date: string, excludedUserIds: string[]): Promise<{ approvers: string[]; escalated: boolean }[] | "no_approver" | null>;
   timeZone(org: OrganizationId): Promise<string>;
   config(org: OrganizationId, employeeId: string, date: string, timeZone: string): Promise<AttendanceConfig>;
   /** Plano diário (teórico, entrada/saída planeadas, noturno, feriado) — módulo time-base. */

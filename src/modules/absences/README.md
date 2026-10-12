@@ -60,6 +60,7 @@ assiduidade o efeito das ausências aprovadas em cada dia (`dayEffects`).
 
 ## Design decisions (ADR summary)
 
+- O motor de fluxos também serve as **correções de ponto** (âmbito `clock`, FE-113): `correctionLevels` devolve os níveis para a assiduidade (mesmas regras de recurso e de exclusão de quem pede).
 - ADR-0028: D9 recurso = pessoas do fluxo ou administradores; sem autoaprovação; saldos em ledger; nenhum tipo criado por omissão; fora do contrato é sempre recusado; ausências privadas com `hr.absences_private`.
 - Atribuída pela gestão = aprovada (salvo se quem atribui é o próprio colaborador).
 - Uma aprovada só a gestão cancela, com motivo, e gera anulação no saldo.
