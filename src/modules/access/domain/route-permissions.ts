@@ -111,7 +111,9 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/workspace(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/reports(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/alerts(\/|$)/, target: p("hr.overview") },
-  { pattern: /^\/api\/novo-rh\/overview$/, target: p("hr.overview") },
+  { pattern: /^\/api\/novo-rh\/overview(\/plan)?$/, target: p("hr.overview") },
+  // Caixa de pedidos: área de gestão; cada tipo exige a sua permissão dentro do módulo (READ ver, MANAGE decidir).
+  { pattern: /^\/api\/novo-rh\/inbox(\/decide)?$/, target: { kind: "base" } },
 
   // ── Recursos Humanos ─────────────────────────────────────────────────
   { pattern: /^\/api\/hr\/overview(\/|$)/, target: p("hr.overview") },

@@ -68,6 +68,7 @@ import { createRostersModule } from "./modules/rosters/rosters.module.js";
 import { createPeriodsModule } from "./modules/periods/periods.module.js";
 import { createDemoOrgModule } from "./modules/demo-data/demo-data.module.js";
 import { createOverviewModule } from "./modules/overview/overview.module.js";
+import { createInboxModule } from "./modules/inbox/inbox.module.js";
 import type { PeriodsContextPort } from "./modules/periods/domain/ports/out/periods.ports.js";
 import { createAnnouncementsModule } from "./modules/announcements/announcements.module.js";
 import { createAlertsModule } from "./modules/alerts/alerts.module.js";
@@ -593,6 +594,11 @@ app.use("/api", absencesModule.adminRouter);
 
 // Novo RH → Banco de horas (Fase 6): ledger append-only sobre os dias apurados.
 const timeBankModule = createTimeBankModule({
+  directory: async (org) => {
+    const [people, locations] = await Promise.all([peopleRepo.list(org, { status: "active" }), peopleRepo.listLocations(org)]);
+    const loc = new Map(locations.map((l) => [l.id, l.name]));
+    return people.map((p) => ({ id: p.id, name: p.fullName, locationName: p.primaryLocationId ? (loc.get(p.primaryLocationId) ?? null) : null }));
+  },
   attendanceDays: async (org, employeeId, from, to) => {
     const r = await attendanceModule.attendance.days(org, employeeId, from, to);
     return { timeZone: r.timeZone, days: r.days };
@@ -913,6 +919,152 @@ const overviewModule = createOverviewModule({
   }),
 });
 app.use("/api", overviewModule.router);
+
+// Novo RH → Caixa de pedidos (FE-050): ausências, correções, excedente, trocas e solicitações
+// num só sítio; cada decisão passa pela regra do módulo dono (RE-22/23, período fechado).
+const isOwn = async (org: OrganizationId, userId: string, employeeId: string) => (await absencesDirectory.userOfEmployee(org, employeeId)) === userId;
+const hm = (iso: string) => new Date(iso).toISOString().slice(11, 16);
+const inboxModule = createInboxModule({
+  directory: {
+    people: async (org) => {
+      const [people, locations] = await Promise.all([peopleRepo.list(org, { status: "all" }), peopleRepo.listLocations(org)]);
+      const loc = new Map(locations.map((l) => [l.id, l.name]));
+      return people.map((p) => ({ id: p.id, name: p.fullName, locationName: p.primaryLocationId ? (loc.get(p.primaryLocationId) ?? null) : null }));
+    },
+  },
+  sources: [
+    {
+      type: "leave",
+      permission: "hr.leave",
+      list: async (org, actor, { canPrivate }) => {
+        const out = [];
+        for (const r of await absencesModule.absences.listRequests(org, { status: "pending" }, canPrivate, actor.userId)) {
+          const own = r.requestedByUserId === actor.userId || (await isOwn(org, actor.userId, r.employeeId));
+          const level = r.levels[r.currentLevel];
+          out.push({
+            type: "leave" as const,
+            id: r.id,
+            employeeId: r.employeeId,
+            requestedAt: r.createdAt,
+            title: r.typeName,
+            detail: `${r.startDate}${r.endDate !== r.startDate ? ` a ${r.endDate}` : ""} · ${r.amount} ${r.unit === "days" ? "dia(s)" : "hora(s)"}`,
+            meta: [...(level?.escalated ? [{ label: "Nível", value: "Sem aprovador — encaminhado para o aprovador de recurso" }] : []), ...(r.private ? [] : r.comment ? [{ label: "Comentário", value: r.comment }] : [])],
+            blockedReason: own ? ("own" as const) : level?.approvers.includes(actor.userId) ? null : ("not_current_level" as const),
+            level: { current: r.currentLevel + 1, total: r.levels.length },
+          });
+        }
+        return out;
+      },
+      decide: async (org, actor, item, decision, comment) => void (await absencesModule.absences.decide(org, actor, item.id, decision, comment)),
+    },
+    {
+      type: "clock",
+      permission: "hr.attendance",
+      list: async (org, actor) => {
+        const out = [];
+        for (const c of await attendanceModule.attendance.listCorrections(org, { status: "pending" })) {
+          const op = c.operation === "add" ? "Acrescentar marcação" : c.operation === "void" ? "Anular marcação" : "Alterar marcação";
+          out.push({
+            type: "clock" as const,
+            id: c.id,
+            employeeId: c.employeeId,
+            requestedAt: c.createdAt,
+            title: "Correção de ponto",
+            detail: `${op}${c.occurredAt ? ` · ${c.occurredAt.slice(0, 10)} ${hm(c.occurredAt)} UTC` : ""}`,
+            meta: [{ label: "Motivo", value: c.reason }],
+            blockedReason: (await isOwn(org, actor.userId, c.employeeId)) ? ("own" as const) : null,
+            level: null,
+          });
+        }
+        return out;
+      },
+      decide: async (org, actor, item, decision, comment) => void (await attendanceModule.attendance.decideCorrection(org, actor, item.id, decision, comment)),
+    },
+    {
+      type: "overtime",
+      permission: "hr.attendance",
+      list: async (org, actor, { employeeIds }) => {
+        const out = [];
+        for (const employeeId of employeeIds) {
+          const own = await isOwn(org, actor.userId, employeeId);
+          for (const v of await timeBankModule.timeBank.pendingValidations(org, employeeId)) {
+            const h = Math.floor(v.excessSeconds / 3600);
+            const m = Math.floor((v.excessSeconds % 3600) / 60);
+            out.push({
+              type: "overtime" as const,
+              id: `${employeeId}|${v.workDate}`,
+              employeeId,
+              requestedAt: `${v.workDate}T23:59:59.000Z`,
+              title: "Excedente de horas",
+              detail: `${v.workDate} · +${h}h ${String(m).padStart(2, "0")}min`,
+              meta: [],
+              blockedReason: own ? ("own" as const) : null,
+              level: null,
+            });
+          }
+        }
+        return out;
+      },
+      decide: async (org, actor, item, decision, comment) => void (await timeBankModule.timeBank.decideValidation(org, actor, item.employeeId, item.id.split("|")[1]!, decision, comment)),
+    },
+    {
+      type: "swap",
+      permission: "hr.schedules",
+      list: async (org, actor) => {
+        const names = new Map((await peopleRepo.list(org, { status: "all" })).map((p) => [p.id, p.fullName]));
+        const out = [];
+        for (const s of await rostersModule.rosters.listSwaps(org, "pending_manager")) {
+          const own = (await isOwn(org, actor.userId, s.requesterEmployeeId)) || (await isOwn(org, actor.userId, s.targetEmployeeId));
+          out.push({
+            type: "swap" as const,
+            id: s.id,
+            employeeId: s.requesterEmployeeId,
+            requestedAt: s.createdAt,
+            title: "Troca de turno",
+            detail: `Com ${names.get(s.targetEmployeeId) ?? "colega"}${s.counterShiftId ? " (troca de turnos)" : " (cede o turno)"}`,
+            meta: s.comment ? [{ label: "Comentário", value: s.comment }] : [],
+            blockedReason: own ? ("own" as const) : null,
+            level: null,
+          });
+        }
+        return out;
+      },
+      decide: async (org, actor, item, decision, comment) => void (await rostersModule.rosters.decideSwap(org, actor, item.id, decision === "approve", comment, false)),
+    },
+    {
+      type: "custom",
+      permission: "hr.employees",
+      list: async (org, actor) => {
+        const forms = new Map((await workspaceModule.workspace.listForms(org)).map((f) => [f.id, f]));
+        const out = [];
+        for (const r of await workspaceModule.workspace.listRequests(org, "pending")) {
+          out.push({
+            type: "custom" as const,
+            id: r.id,
+            employeeId: r.employeeId,
+            requestedAt: r.createdAt,
+            title: forms.get(r.formId)?.title ?? "Solicitação",
+            detail: r.dueAt ? `Prazo ${r.dueAt.slice(0, 10)}` : "Sem prazo",
+            meta: Object.entries(r.answers)
+              .slice(0, 6)
+              .map(([fieldId, v]) => ({ label: forms.get(r.formId)?.fields.find((f) => f.id === fieldId)?.title ?? fieldId, value: Array.isArray(v) ? v.join(", ") : v })),
+            blockedReason: r.requestedByUserId === actor.userId || (await isOwn(org, actor.userId, r.employeeId)) ? ("own" as const) : null,
+            level: null,
+          });
+        }
+        return out;
+      },
+      decide: async (org, actor, item, decision, comment) => void (await workspaceModule.workspace.decide(org, actor, item.id, decision, comment)),
+    },
+  ],
+  viewerOf: (req) => ({
+    actor: { userId: req.auth!.sub, email: req.auth!.email || req.auth!.sub },
+    can: (permission, level) => !!req.access && can(req.access, permission, level),
+    canSee: (employeeId) => canSeeEmployee(req, employeeId, todayUtc()),
+    canPrivate: !!req.access && can(req.access, "hr.absences_private", "MANAGE"),
+  }),
+});
+app.use("/api", inboxModule.router);
 
 // CRM: acessível a managers+
 const crmModule = createCrmModule();

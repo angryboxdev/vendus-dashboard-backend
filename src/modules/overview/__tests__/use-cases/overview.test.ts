@@ -71,4 +71,24 @@ describe("Painel do Novo RH", () => {
     expect(classifyDay(blankDay("2026-10-10", { openType: "break_unpaid", firstInAt: "x" }), null, "2026-10-12")).toBe("break");
     expect(classifyDay(blankDay("2026-10-10", { firstInAt: "x" }), null, "2026-10-12")).toBe("finished");
   });
+
+  test("faixas do dia escolhido para a linha do tempo", async () => {
+    const { uc, sources } = setup();
+    sources.todayOf["e-ana"] = { ...sources.todayOf["e-ana"], segments: [{ start: "2026-10-12T08:20:00Z", end: "2026-10-12T10:00:00Z", type: "work" }] };
+    const o = await uc.get(ORG, all, null);
+    expect(o.people.find((p) => p.employeeId === "e-ana")!.segments).toHaveLength(1);
+  });
+
+  test("horários planeados: até 14 dias, feriado vs. ausência, sem planeamento primeiro", async () => {
+    const { uc, sources } = setup();
+    sources.todayOf = { "e-eva": { excused: true }, "e-joao": { theoreticalSeconds: 0, plannedStart: null } };
+    sources.daysPlan = { "e-joao": { theoreticalSeconds: 0, plannedStart: null, plannedEnd: null } };
+    const plan = await uc.plan(ORG, all, "2026-10-13", "2026-10-14");
+    expect(plan.people[0]!.name).toBe("João Demo");
+    expect(plan.people[0]!.unplanned).toBe(true);
+    const eva = plan.people.find((p) => p.employeeId === "e-eva")!;
+    expect(eva.days.at(-1)).toMatchObject({ absenceType: "Férias", holiday: false });
+    await expect(uc.plan(ORG, all, "2026-10-01", "2026-10-20")).rejects.toThrow("No máximo 14 dias");
+    await expect(uc.plan(ORG, all, "2026-10-14", "2026-10-13")).rejects.toThrow("depois do início");
+  });
 });

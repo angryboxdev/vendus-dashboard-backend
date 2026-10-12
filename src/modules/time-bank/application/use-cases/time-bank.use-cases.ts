@@ -119,6 +119,19 @@ export class TimeBankUseCases {
     };
   }
 
+  /**
+   * Saldos de vários colaboradores (lista da gestão, FE-034): o que está lançado
+   * até ao último apuramento, sem sincronizar (abrir a pessoa sincroniza).
+   */
+  async balances(org: OrganizationId, employeeIds: string[]) {
+    const out: ({ employeeId: string } & ReturnType<typeof summary>)[] = [];
+    for (let i = 0; i < employeeIds.length; i += 8) {
+      const chunk = employeeIds.slice(i, i + 8);
+      out.push(...(await Promise.all(chunk.map(async (employeeId) => ({ employeeId, ...summary(await this.repo.listEntries(org, employeeId)) })))));
+    }
+    return out;
+  }
+
   async myLedger(org: OrganizationId, actor: Actor) {
     const employeeId = await this.ctx.employeeForUser(org, actor.userId);
     if (!employeeId) throw new TimeBankNotFoundError("Esta conta não está ligada a uma ficha de colaborador.");

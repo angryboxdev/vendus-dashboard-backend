@@ -1,6 +1,7 @@
 import { Router, type Request } from "express";
 import { idempotency, type IdempotencyStore } from "../../../../infra/http/idempotency.js";
 import { problem } from "../../../../infra/http/problem-details.js";
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { Actor, TimeBankUseCases } from "../../application/use-cases/time-bank.use-cases.js";
 import { TimeBankConflictError, TimeBankForbiddenError, TimeBankNotFoundError, TimeBankRuleError, TimeBankValidationError } from "../../domain/errors.js";
 
@@ -29,7 +30,12 @@ const body = (req: Request) => (req.body ?? {}) as Record<string, unknown>;
  * acumulado, sincronizar, compensar, ajustar, validação de excedente e horas
  * categorizadas. `/api/me/time-bank`: o meu histórico, se a regra deixar.
  */
-export function createTimeBankRouter(uc: TimeBankUseCases, store: IdempotencyStore, canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean>): Router {
+export function createTimeBankRouter(
+  uc: TimeBankUseCases,
+  store: IdempotencyStore,
+  canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean>,
+  directory?: (org: OrganizationId) => Promise<{ id: string; name: string; locationName: string | null }[]>,
+): Router {
   const r = Router();
   const B = "/novo-rh/time-bank";
   r.use(B, idempotency(store, { required: true }));
@@ -39,6 +45,15 @@ export function createTimeBankRouter(uc: TimeBankUseCases, store: IdempotencySto
   };
   const emp = (req: Request) => req.params.employeeId as string;
 
+  // Lista de saldos de todos os colaboradores do âmbito (FE-034).
+  if (directory) {
+    r.get(`${B}/balances`, async (req, res) => {
+      const people = [];
+      for (const p of await directory(org(req))) if (await canSeeEmployee(req, p.id, today())) people.push(p);
+      const byId = new Map((await uc.balances(org(req), people.map((p) => p.id))).map((b) => [b.employeeId, b]));
+      res.json(people.map((p) => ({ ...byId.get(p.id)!, name: p.name, locationName: p.locationName })));
+    });
+  }
   r.get(`${B}/employees/:employeeId`, async (req, res) => {
     await scope(req, emp(req));
     res.json(await run(() => uc.ledger(org(req), emp(req), actorOf(req).email)));

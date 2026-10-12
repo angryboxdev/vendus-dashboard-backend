@@ -50,7 +50,8 @@ RE-6) com ausências aprovadas, pendentes e feriados.
 
 ### Input (use cases)
 
-- `OverviewUseCases.get(org, viewer, date?)` — painel de um dia (hoje por omissão; futuro recusado). Âmbito RE-34 por pessoa (`viewer.canSee`); totais calculados só com as pessoas visíveis.
+- `OverviewUseCases.get(org, viewer, date?)` — painel de um dia (hoje por omissão; futuro recusado), com as faixas do dia de cada pessoa (linha do tempo, FE-030). Âmbito RE-34 por pessoa (`viewer.canSee`); totais calculados só com as pessoas visíveis.
+- `OverviewUseCases.plan(org, viewer, from, to)` — horários planeados da equipa (FE-031): horário, feriado e ausência por pessoa e dia, até 14 dias (passados ou futuros); quem não tem planeamento aparece primeiro.
 
 ### Output (domain dependencies)
 
@@ -60,7 +61,7 @@ RE-6) com ausências aprovadas, pendentes e feriados.
 
 ### Input
 
-- `overview.controller.ts` → `GET /api/novo-rh/overview?date=AAAA-MM-DD` (`hr.overview`; `Cache-Control: no-store`). Em modo Demonstração mostra a organização fictícia (ADR-0034).
+- `overview.controller.ts` → `GET /api/novo-rh/overview?date=AAAA-MM-DD` (`hr.overview`; `Cache-Control: no-store`) e `GET /api/novo-rh/overview/plan?from&to` (`hr.overview`). Em modo Demonstração mostra a organização fictícia (ADR-0034).
 
 ### Output
 

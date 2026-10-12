@@ -255,6 +255,8 @@ export interface DayBoard {
   startPassed: boolean;
   /** Tipo do registo aberto agora (null = sem registo aberto). */
   openType: Segment["type"] | null;
+  /** Faixas do dia (UTC), para a linha do tempo. */
+  segments: { start: string; end: string; type: Segment["type"] }[];
 }
 
 export function dayBoard(day: DayResult, plan: DayPlan | undefined, rules: Pick<EngineRules, "timeZone" | "toleranceMinutes">, now: string): DayBoard {
@@ -275,5 +277,6 @@ export function dayBoard(day: DayResult, plan: DayPlan | undefined, rules: Pick<
     lateMinutes: late ? Math.floor((Date.parse(first!.start) - Date.parse(start!)) / 60_000) : 0,
     startPassed: !!limit && now > limit,
     openType: open?.type ?? null,
+    segments: day.segments.map((s) => ({ start: s.start, end: s.end, type: s.type })),
   };
 }

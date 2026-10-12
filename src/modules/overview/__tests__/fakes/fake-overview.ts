@@ -13,6 +13,7 @@ export const blankDay = (workDate: string, over: Partial<OverviewDay> = {}): Ove
   lateMinutes: 0,
   startPassed: true,
   openType: null,
+  segments: [],
   ...over,
 });
 
@@ -27,6 +28,8 @@ export class FakeOverviewSources implements OverviewSourcesPort {
   /** Por colaborador: sobreposições do dia escolhido; os outros dias são "trabalhou a horas". */
   todayOf: Record<string, Partial<OverviewDay>> = {};
   absencesList: OverviewAbsence[] = [];
+  /** Sobreposições aplicadas a todos os dias (horários planeados). */
+  daysPlan: Record<string, Partial<OverviewDay>> = {};
   daysCalls = 0;
 
   async today() {
@@ -46,7 +49,7 @@ export class FakeOverviewSources implements OverviewSourcesPort {
     const out: OverviewDay[] = [];
     for (let d = new Date(`${from}T00:00:00Z`); d.toISOString().slice(0, 10) <= to; d.setUTCDate(d.getUTCDate() + 1)) {
       const date = d.toISOString().slice(0, 10);
-      out.push(date === to ? blankDay(date, this.todayOf[employeeId] ?? {}) : blankDay(date, { firstInAt: `${date}T08:00:00Z`, workedSeconds: 8 * 3600 }));
+      out.push(date === to ? blankDay(date, { ...(this.daysPlan[employeeId] ?? {}), ...(this.todayOf[employeeId] ?? {}) }) : blankDay(date, { firstInAt: `${date}T08:00:00Z`, workedSeconds: 8 * 3600, ...(this.daysPlan[employeeId] ?? {}) }));
     }
     return { timeZone: "Europe/Lisbon", days: out };
   }

@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
-import type { Overview, PersonOverview } from "../../domain/entities/overview.js";
+import type { Overview, PersonOverview, PlanCell, TeamPlan } from "../../domain/entities/overview.js";
 import type { OverviewSourcesPort } from "../../domain/ports/out/overview.ports.js";
 import { absenceOn, byLocation, dayView, kpis, sortPeople, weekTrend } from "../../domain/services/overview.service.js";
 
@@ -16,6 +16,7 @@ const WEEK_DAYS = 7;
 /** Cache curta por organização/dia: o painel é aberto muitas vezes e o apuramento custa vários pedidos por pessoa. */
 const CACHE_MS = 30_000;
 const CONCURRENCY = 6;
+const PLAN_MAX_DAYS = 14;
 
 export interface OverviewViewer {
   /** Âmbito (RE-34): só aparecem as pessoas que o utilizador pode ver. */
@@ -68,6 +69,29 @@ export class OverviewUseCases {
     return { ...base, people: visible, kpis: kpis(visible), locations: byLocation(visible), week: weekTrend(visible, dates) };
   }
 
+  /**
+   * Horários planeados da equipa (FE-031): horário, feriado e ausência por
+   * pessoa e dia, até ${PLAN_MAX_DAYS} dias (passados ou futuros). Mesma fonte do apuramento.
+   */
+  async plan(org: OrganizationId, viewer: OverviewViewer, from: string, to: string): Promise<TeamPlan> {
+    for (const d of [from, to]) if (!DATE.test(d) || !DateTime.fromISO(d).isValid) throw new OverviewValidationError("Data inválida.");
+    if (to < from) throw new OverviewValidationError("O fim tem de ser depois do início.");
+    if (DateTime.fromISO(to).diff(DateTime.fromISO(from), "days").days + 1 > PLAN_MAX_DAYS) throw new OverviewValidationError(`No máximo ${PLAN_MAX_DAYS} dias.`);
+    const [employees, locations, absences] = await Promise.all([this.sources.employees(org), this.sources.locations(org), this.sources.absences(org, from, to, viewer.canPrivate)]);
+    const visible = [];
+    for (const e of employees) if (await viewer.canSee(e.id, from)) visible.push(e);
+    const locName = new Map(locations.map((l) => [l.id, l.name]));
+    const people = await mapLimit(visible, CONCURRENCY, async (e) => {
+      const { days } = await this.sources.days(org, e.id, from, to);
+      const cells: PlanCell[] = days.map((d) => {
+        const absenceType = absenceOn(absences, e.id, d.workDate);
+        return { date: d.workDate, plannedStart: d.plannedStart, plannedEnd: d.plannedEnd, theoreticalSeconds: d.theoreticalSeconds, absenceType, holiday: d.excused && !absenceType };
+      });
+      return { employeeId: e.id, name: e.name, locationId: e.locationId, locationName: e.locationId ? (locName.get(e.locationId) ?? null) : null, days: cells, unplanned: cells.every((c) => c.theoreticalSeconds <= 0 && !c.absenceType && !c.holiday) };
+    });
+    return { from, to, people: people.sort((a, b) => Number(b.unplanned) - Number(a.unplanned) || a.name.localeCompare(b.name, "pt")) };
+  }
+
   private async build(org: OrganizationId, day: string, today: string, canPrivate: boolean) {
     const from = plus(day, -(WEEK_DAYS - 1));
     const [employees, locations, absences, pending, holidays] = await Promise.all([
@@ -84,8 +108,9 @@ export class OverviewUseCases {
       timeZone = res.timeZone;
       const days = res.days;
       const week = days.map((d) => dayView(d, absenceOn(absences, e.id, d.workDate), today));
-      const current = week.find((d) => d.date === day) ?? dayView({ workDate: day, workedSeconds: 0, theoreticalSeconds: 0, plannedStart: null, plannedEnd: null, excused: false, firstInAt: null, lateMinutes: 0, startPassed: false, openType: null }, null, today);
-      return { ...current, employeeId: e.id, name: e.name, locationId: e.locationId, locationName: e.locationId ? (locName.get(e.locationId) ?? null) : null, week };
+      const current = week.find((d) => d.date === day) ?? dayView({ workDate: day, workedSeconds: 0, theoreticalSeconds: 0, plannedStart: null, plannedEnd: null, excused: false, firstInAt: null, lateMinutes: 0, startPassed: false, openType: null, segments: [] }, null, today);
+      const segments = days.find((d) => d.workDate === day)?.segments ?? [];
+      return { ...current, employeeId: e.id, name: e.name, locationId: e.locationId, locationName: e.locationId ? (locName.get(e.locationId) ?? null) : null, week, segments };
     });
     return { date: day, today, timeZone, generatedAt: new Date(this.now()).toISOString(), people: sortPeople(people), pending, holidays };
   }

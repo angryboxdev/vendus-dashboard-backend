@@ -52,6 +52,7 @@ totais) e os parâmetros `time_tracking.bank.*` do settings.
 ### Input
 
 - `createTimeBankRouter` → `/api/novo-rh/time-bank/*` (`hr.attendance`, âmbito por colaborador, Idempotency-Key obrigatório) e `/api/me/time-bank` (só se `employee_sees_history`).
+- `GET /api/novo-rh/time-bank/balances` — saldos de todos os colaboradores do âmbito (FE-034), a partir do que está lançado (sem sincronizar; abrir a pessoa sincroniza).
 
 ### Output
 
