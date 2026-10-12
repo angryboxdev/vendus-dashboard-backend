@@ -66,6 +66,7 @@ import { createAbsencesModule } from "./modules/absences/absences.module.js";
 import { createTimeBankModule } from "./modules/time-bank/time-bank.module.js";
 import { createRostersModule } from "./modules/rosters/rosters.module.js";
 import { createPeriodsModule } from "./modules/periods/periods.module.js";
+import { createDemoOrgModule } from "./modules/demo-data/demo-data.module.js";
 import type { PeriodsContextPort } from "./modules/periods/domain/ports/out/periods.ports.js";
 import { createAnnouncementsModule } from "./modules/announcements/announcements.module.js";
 import { createAlertsModule } from "./modules/alerts/alerts.module.js";
@@ -98,7 +99,7 @@ const corsOptions: cors.CorsOptions = {
     cb(null, allowed);
   },
   // ETag e ID de correlação legíveis pelo frontend (ADR-0022).
-  exposedHeaders: ["ETag", "X-Correlation-Id", "Idempotent-Replayed"],
+  exposedHeaders: ["ETag", "X-Correlation-Id", "Idempotent-Replayed", "X-Novo-RH-Mode"],
 };
 app.use(cors(corsOptions));
 app.use(express.json());
@@ -312,6 +313,18 @@ app.use(restrictEmployeeToPortalRoutes);
 app.use(accessModule.guards.routeGuard);
 // Novo RH (TK-3): perfis de gestão sem MFA (aal2) não passam nas rotas abrangidas por MFA_ENFORCEMENT.
 app.use(accessModule.guards.requireMfa);
+// Novo RH → modo Demonstração (ADR-0034): com `X-Novo-RH-Mode: demo`, um Admin age em
+// /api/novo-rh/* na organização fictícia ligada à sua. Depois dos guardas, antes dos routers.
+const demoOrgModule = createDemoOrgModule({
+  support: {
+    today: (org) => new OrganizationTimezoneClock(createScopedQuery).today(org),
+    audit: (org, e) =>
+      auditModule.recorder.record(org, { actor: e.actor, action: e.action, resourceType: "organization", resourceId: e.resourceId, before: null, after: e.after, reason: null }),
+  },
+  ptHolidays: (year) => portugueseNationalHolidays(year).map((h) => ({ date: h.date, name: h.name })),
+});
+app.use(demoOrgModule.demoContext);
+app.use("/api", demoOrgModule.router);
 // Rotas do Portal (/api/me/*) logo aqui: as montagens seguintes com
 // requireMinRole(...) no próprio mount correm para todo o /api e recusariam
 // o colaborador antes de chegar a elas.

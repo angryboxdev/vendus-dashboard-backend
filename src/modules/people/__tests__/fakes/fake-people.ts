@@ -86,6 +86,9 @@ export class FakePeopleRepo implements PeopleRepositoryPort {
   async locationIdByCode(_o: OrganizationId, code: string) {
     return this.locations.get(code) ?? ([...this.locations.values()].includes(code) ? code : null);
   }
+  async listLocations(_o: OrganizationId) {
+    return [...this.locations].map(([code, id]) => ({ id, name: code, code }));
+  }
   async listContracts(_o: OrganizationId, employeeId: string) {
     return this.contracts.filter((c) => c.employeeId === employeeId).map((c) => ({ ...c }));
   }

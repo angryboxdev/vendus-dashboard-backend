@@ -84,6 +84,11 @@ export class EmploymentUseCases {
     return cancelled;
   }
 
+  // ── Centros (catálogo) ────────────────────────────────────────────
+  listLocations(org: OrganizationId) {
+    return this.repo.listLocations(org);
+  }
+
   // ── Convénios ───────────────────────────────────────────────────────
   listAgreements(org: OrganizationId) {
     return this.repo.listAgreements(org);

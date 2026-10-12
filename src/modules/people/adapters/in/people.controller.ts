@@ -213,6 +213,9 @@ export class PeopleController {
 
     // ── Catálogos (convénios, complementos/benefícios, campos) ────────
     const actor = (req: Request) => req.auth!.email || req.auth!.sub;
+    r.get(`${C}/locations`, async (req, res) => {
+      res.json(await employment.listLocations(org(req)));
+    });
     r.get(`${C}/agreements`, async (req, res) => {
       res.json(await employment.listAgreements(org(req)));
     });

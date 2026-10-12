@@ -22,6 +22,8 @@ export async function listOrganizations(): Promise<OrganizationRow[]> {
   const { data, error } = await supabase
     .from("organizations")
     .select("id, name")
+    // A organização de demonstração do Novo RH nunca entra nos crons (ADR-0034).
+    .eq("is_demo", false)
     .order("name", { ascending: true });
   if (error) throw new Error(error.message);
 

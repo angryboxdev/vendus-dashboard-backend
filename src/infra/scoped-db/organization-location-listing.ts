@@ -18,13 +18,18 @@ export async function listOrganizationLocationPairs(): Promise<OrgLocationPairRo
   const supabase = getSupabaseServiceRole();
   if (!supabase) throw new Error("Supabase service role não configurado");
 
+  // Os centros da organização de demonstração do Novo RH nunca entram nos crons (ADR-0034).
+  const demo = await supabase.from("organizations").select("id").eq("is_demo", true);
+  if (demo.error) throw new Error(demo.error.message);
+  const demoIds = new Set(((demo.data ?? []) as Record<string, unknown>[]).map((r) => String(r.id)));
+
   const { data, error } = await supabase
     .from("locations")
     .select("org_id, id")
     .order("org_id", { ascending: true });
   if (error) throw new Error(error.message);
 
-  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+  return ((data ?? []) as Record<string, unknown>[]).filter((row) => !demoIds.has(String(row.org_id))).map((row) => ({
     organizationId: mintOrganizationId(row.org_id as string),
     locationId: row.id as string,
   }));

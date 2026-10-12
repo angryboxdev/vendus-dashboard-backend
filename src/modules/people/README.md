@@ -55,7 +55,7 @@ chegam num `Viewer` montado pelo `server.ts` a partir do módulo access.
 
 ### Input
 
-- `PeopleController` → `/api/novo-rh/people/*` (`hr.employees`; `export.csv` = especial `hr.people_export`) e `/api/novo-rh/catalog/*` (`company.structure`).
+- `PeopleController` → `/api/novo-rh/people/*` (`hr.employees`; `export.csv` = especial `hr.people_export`) e `/api/novo-rh/catalog/*` (`company.structure`; inclui `catalog/locations` — centros ativos, usado pelo Novo RH também em modo Demonstração).
 
 ### Output
 

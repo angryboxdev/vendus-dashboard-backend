@@ -22,6 +22,8 @@ export interface PeopleRepositoryPort {
   update(org: OrganizationId, id: string, data: EmployeeWrite, expectedVersion: number): Promise<Employee | null>;
   setStatus(org: OrganizationId, id: string, s: { status: "active" | "inactive"; deactivatedAt: string | null; reason: string | null }, expectedVersion: number): Promise<Employee | null>;
   locationIdByCode(org: OrganizationId, codeOrId: string): Promise<string | null>;
+  /** Centros ativos da organização (catálogo do Novo RH). */
+  listLocations(org: OrganizationId): Promise<{ id: string; name: string; code: string }[]>;
 
   listContracts(org: OrganizationId, employeeId: string): Promise<Contract[]>;
   createContract(org: OrganizationId, employeeId: string, input: ContractInput, createdBy: string): Promise<Contract>;
