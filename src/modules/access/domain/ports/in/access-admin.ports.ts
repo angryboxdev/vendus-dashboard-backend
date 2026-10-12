@@ -102,6 +102,8 @@ export interface AccessAdminPort {
   updateUser(command: UpdateUserCommand): Promise<UserDetailDTO>;
   setUserStatus(command: SetUserStatusCommand): Promise<UserDetailDTO>;
   resetPassword(command: AdminCommand & { userId: string }): Promise<{ temporaryPassword: string }>;
+  /** FE-007: repor o segundo fator de outra pessoa (motivo obrigatório). */
+  resetSecondFactor(command: AdminCommand & { userId: string; reason: string }): Promise<{ factorsRemoved: number }>;
   listProfiles(organizationId: OrganizationId): Promise<AccessProfileDTO[]>;
   createProfile(command: CreateProfileCommand): Promise<AccessProfileDTO>;
   updateProfile(command: UpdateProfileCommand): Promise<AccessProfileDTO>;

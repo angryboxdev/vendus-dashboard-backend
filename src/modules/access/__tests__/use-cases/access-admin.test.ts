@@ -82,6 +82,8 @@ class Fakes implements AccessAdminRepositoryPort, EmployeeLinkPort, AccountDirec
   async findByEmail(email: string) { return this.accounts.find((a) => a.email === email) ?? null; }
   async createAccount(email: string) { const userId = `u-${++this.seq}`; this.accounts.push({ userId, email, lastSignInAt: null }); return userId; }
   async setTemporaryPassword() {}
+  factorsReset: string[] = [];
+  async resetSecondFactor(userId: string) { this.factorsReset.push(userId); return 1; }
   async deleteAccount(userId: string) { this.accounts = this.accounts.filter((a) => a.userId !== userId); }
   // AccessAuditPort
   async record(e: { entityType: string; action: string; entityId: string }) { this.audit.push({ entityType: e.entityType, action: e.action, entityId: e.entityId }); }
@@ -218,5 +220,17 @@ describe("TK-4 — revogação de sessões", () => {
     member().sessionsRevokedAt = null;
     await uc.setUserStatus({ ...who, userId: "gabriel", version: 4, status: "disabled" });
     expect(member().sessionsRevokedAt).not.toBeNull();
+  });
+});
+
+describe("FE-007 — repor o segundo fator", () => {
+  it("só para outra pessoa, com motivo, e fica na auditoria", async () => {
+    const { uc, f, who } = setup();
+    await expect(uc.resetSecondFactor({ ...who, userId: "bruno", reason: "Perdeu o telemóvel" })).rejects.toThrow(/próprio/);
+    await expect(uc.resetSecondFactor({ ...who, userId: "gabriel", reason: "x" })).rejects.toThrow(/motivo/);
+    await expect(uc.resetSecondFactor({ ...who, userId: "ninguem", reason: "Perdeu o telemóvel" })).rejects.toThrow();
+    expect(await uc.resetSecondFactor({ ...who, userId: "gabriel", reason: "Perdeu o telemóvel" })).toEqual({ factorsRemoved: 1 });
+    expect(f.factorsReset).toEqual(["gabriel"]);
+    expect(f.audit.at(-1)).toMatchObject({ entityType: "user", action: "mfa_reset", entityId: "gabriel" });
   });
 });

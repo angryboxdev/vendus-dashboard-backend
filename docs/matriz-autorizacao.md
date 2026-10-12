@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 708 · pré-autenticação: 21 · não classificados: 0
+Endpoints: 709 · pré-autenticação: 21 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -704,6 +704,7 @@ Endpoints: 708 · pré-autenticação: 21 · não classificados: 0
 | POST | `/api/users` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/users/:id` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
 | PATCH | `/api/users/:id` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/users/:id/reset-mfa` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/users/:id/reset-password` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/users/:id/scopes` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/users/:id/scopes` | admin | ✔ | ✖ | ✖ | ✖ | ✖ |
