@@ -49,6 +49,7 @@ Tabelas `announcements`, `announcement_versions` (append-only),
 
 ## Design decisions (ADR summary)
 
+- **FE-060/061/062:** lista com leituras e confirmações da versão atual; duplicar (novo rascunho); eliminar só rascunhos (publicados arquivam-se — a prova fica); público também por departamento; `POST …/audience-preview` conta os destinatários antes de publicar; `POST …/:id/remind` lembra quem ainda não leu/confirmou (um por dia, pela chave da notificação); `GET …/:id/proof.csv` = prova de leitura (BOM UTF-8, `;`, fórmulas neutralizadas).
 - ADR-0033: RE-31 (destinatários congelados), RE-32 (recibos por versão), D12 (só notificações na aplicação).
 
 ## How to test

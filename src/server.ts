@@ -781,13 +781,14 @@ const announcementsModule = createAnnouncementsModule({
         ids = [];
         for (const e of active) {
           const units = await segments.segmentsOf(org, e.id, todayUtc());
-          const mine = audience.type === "locations" ? units.locationIds : units.groupIds;
+          const mine = audience.type === "locations" ? units.locationIds : audience.type === "departments" ? units.departmentIds : units.groupIds;
           if (mine.some((x) => audience.ids.includes(x))) ids.push(e.id);
         }
       }
       return Promise.all(ids.map(async (employeeId) => ({ employeeId, userId: await absencesDirectory.userOfEmployee(org, employeeId) })));
     },
     employeeForUser: (org, userId) => absencesDirectory.employeeForUser(org, userId),
+    employeeNames: async (org) => new Map((await peopleRepo.list(org, { status: "all" })).map((p) => [p.id, p.fullName])),
     notify: (org, userIds, n) => inAppNotify(org, userIds, n, "announcements.new"),
     now: () => new Date().toISOString(),
     audit: (org, e) => novoRhAudit(org, e, "announcement"),
