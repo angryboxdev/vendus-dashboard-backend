@@ -44,6 +44,7 @@ totais) e os parâmetros `time_tracking.bank.*` do settings.
 
 ### Output (domain dependencies)
 
+- `PeriodGuardPort` (módulo periods): datas de períodos fechados — escritas recusadas com 409 `period_closed` (TK-17, RE-30).
 - `TimeBankRepositoryPort`, `TimeBankContextPort` (dias da assiduidade, parâmetros por dia, feriado, ficha da conta, hoje), `TimeBankAuditPort`.
 
 ## Adapters

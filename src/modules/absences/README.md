@@ -44,6 +44,7 @@ assiduidade o efeito das ausências aprovadas em cada dia (`dayEffects`).
 
 ### Output (domain dependencies)
 
+- `PeriodGuardPort` (módulo periods): datas de períodos fechados — escritas recusadas com 409 `period_closed` (TK-17, RE-30).
 - `AbsencesRepositoryPort`, `AbsencesContextPort`, `AbsencesNotifierPort`, `AbsencesAuditPort`, `AbsencesClockPort`.
 
 ## Adapters

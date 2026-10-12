@@ -42,6 +42,7 @@ time-base (`plannedDays`) e pede o recálculo da assiduidade a cada publicação
 
 ### Output (domain dependencies)
 
+- `PeriodGuardPort` (módulo periods): datas de períodos fechados — escritas recusadas com 409 `period_closed` (TK-17, RE-30).
 - `RostersRepositoryPort`, `RostersContextPort` (regras por colaborador, ausências aprovadas, contas ↔ fichas), `RostersNotifierPort`, `RosterPublishedPort`, `RostersAuditPort`.
 
 ## Adapters

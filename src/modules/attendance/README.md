@@ -47,6 +47,7 @@ horas (Fase 6), que vai ler os ajustes daqui.
 
 ### Output (domain dependencies)
 
+- `PeriodGuardPort` (módulo periods): datas de períodos fechados — escritas recusadas com 409 `period_closed` (TK-17, RE-30).
 - `AttendanceRepositoryPort`, `AttendanceContextPort` (ficha da conta, fuso, regras efetivas, plano diário, centro), `AttendanceAuditPort`, `AttendanceClockPort`, `BackgroundPort`.
 
 ## Adapters
