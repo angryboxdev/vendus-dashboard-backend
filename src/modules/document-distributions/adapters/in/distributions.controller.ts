@@ -71,7 +71,7 @@ export function createDistributionsRouter(uc: DistributionsUseCases, store: Idem
   r.post(`${D}/:id/remind`, async (req, res) => res.json(await run(() => uc.remind(org(req), actorOf(req), id(req)))));
   r.post(`${D}/:id/archive`, async (req, res) => {
     await run(() => uc.archive(org(req), actorOf(req), id(req)));
-    res.status(204).end();
+    res.json({ id: id(req), status: "archived" });
   });
   r.get(`${D}/:id/download-url`, async (req, res) => res.json(await run(() => uc.downloadUrl(org(req), id(req)))));
   r.get(`${D}/:id/proof.csv`, async (req, res) => {
