@@ -101,6 +101,8 @@ export interface WeekPoint {
 export interface Overview {
   date: string;
   today: string;
+  /** Fuso da organização (horas de entrada e planeadas). */
+  timeZone: string;
   generatedAt: string;
   kpis: OverviewKpis;
   people: PersonOverview[];

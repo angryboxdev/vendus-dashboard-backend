@@ -48,7 +48,7 @@ export class FakeOverviewSources implements OverviewSourcesPort {
       const date = d.toISOString().slice(0, 10);
       out.push(date === to ? blankDay(date, this.todayOf[employeeId] ?? {}) : blankDay(date, { firstInAt: `${date}T08:00:00Z`, workedSeconds: 8 * 3600 }));
     }
-    return out;
+    return { timeZone: "Europe/Lisbon", days: out };
   }
   async absences() {
     return this.absencesList;

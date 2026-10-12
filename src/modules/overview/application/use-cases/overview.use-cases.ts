@@ -78,12 +78,15 @@ export class OverviewUseCases {
       this.sources.holidays(org, today, 4),
     ]);
     const locName = new Map(locations.map((l) => [l.id, l.name]));
+    let timeZone = "Europe/Lisbon";
     const people = await mapLimit(employees, CONCURRENCY, async (e): Promise<PersonOverview> => {
-      const days = await this.sources.days(org, e.id, from, day);
+      const res = await this.sources.days(org, e.id, from, day);
+      timeZone = res.timeZone;
+      const days = res.days;
       const week = days.map((d) => dayView(d, absenceOn(absences, e.id, d.workDate), today));
       const current = week.find((d) => d.date === day) ?? dayView({ workDate: day, workedSeconds: 0, theoreticalSeconds: 0, plannedStart: null, plannedEnd: null, excused: false, firstInAt: null, lateMinutes: 0, startPassed: false, openType: null }, null, today);
       return { ...current, employeeId: e.id, name: e.name, locationId: e.locationId, locationName: e.locationId ? (locName.get(e.locationId) ?? null) : null, week };
     });
-    return { date: day, today, generatedAt: new Date(this.now()).toISOString(), people: sortPeople(people), pending, holidays };
+    return { date: day, today, timeZone, generatedAt: new Date(this.now()).toISOString(), people: sortPeople(people), pending, holidays };
   }
 }

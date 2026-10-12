@@ -8,8 +8,8 @@ export interface OverviewSourcesPort {
   /** Colaboradores ativos, com o centro principal. */
   employees(org: OrganizationId): Promise<{ id: string; name: string; locationId: string | null }[]>;
   locations(org: OrganizationId): Promise<{ id: string; name: string }[]>;
-  /** Dias apurados pela assiduidade (planeado vs. real), sem gravar. */
-  days(org: OrganizationId, employeeId: string, from: string, to: string): Promise<OverviewDay[]>;
+  /** Dias apurados pela assiduidade (planeado vs. real), sem gravar, e o fuso em que se leem. */
+  days(org: OrganizationId, employeeId: string, from: string, to: string): Promise<{ timeZone: string; days: OverviewDay[] }>;
   /** Ausências aprovadas que tocam o período (tipo privado → nome genérico se `canPrivate` = false). */
   absences(org: OrganizationId, from: string, to: string, canPrivate: boolean): Promise<OverviewAbsence[]>;
   pending(org: OrganizationId): Promise<PendingCounts>;

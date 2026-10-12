@@ -884,7 +884,10 @@ const overviewModule = createOverviewModule({
     today: (org) => new OrganizationTimezoneClock(createScopedQuery).today(org),
     employees: async (org) => (await activeEmployees(org)).map((e) => ({ id: e.id, name: e.fullName, locationId: e.primaryLocationId })),
     locations: (org) => peopleRepo.listLocations(org),
-    days: async (org, employeeId, from, to) => (await attendanceModule.attendance.board(org, employeeId, from, to)).days,
+    days: async (org, employeeId, from, to) => {
+      const b = await attendanceModule.attendance.board(org, employeeId, from, to);
+      return { timeZone: b.timeZone, days: b.days };
+    },
     absences: async (org, from, to, canPrivate) =>
       (await absencesModule.absences.listRequests(org, { status: "approved", from, to }, canPrivate, "sistema")).map((r) => ({ employeeId: r.employeeId, typeName: r.typeName, startDate: r.startDate, endDate: r.endDate })),
     pending: async (org) => {
