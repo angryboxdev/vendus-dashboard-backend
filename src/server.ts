@@ -69,6 +69,7 @@ import { createPeriodsModule } from "./modules/periods/periods.module.js";
 import { createDemoOrgModule } from "./modules/demo-data/demo-data.module.js";
 import { createOverviewModule } from "./modules/overview/overview.module.js";
 import { createInboxModule } from "./modules/inbox/inbox.module.js";
+import { createRemindersModule } from "./modules/reminders/reminders.module.js";
 import type { PeriodsContextPort } from "./modules/periods/domain/ports/out/periods.ports.js";
 import { createAnnouncementsModule } from "./modules/announcements/announcements.module.js";
 import { createAlertsModule } from "./modules/alerts/alerts.module.js";
@@ -278,6 +279,8 @@ if (ENV.CRON_SECRET) {
       detectForecastDeviation: stockPlanningModule.detectForecastDeviation,
       generateAllShiftAutomations: hrModule.generateAllAutomations,
       listOrganizations,
+      // Criado mais abaixo (depende dos módulos do Novo RH); só é usado quando o cron corre.
+      runNovoRhReminders: (org) => remindersModule.reminders.run(org),
     }),
   );
 }
@@ -1105,6 +1108,29 @@ const inboxModule = createInboxModule({
   }),
 });
 app.use("/api", inboxModule.router);
+
+// Novo RH → Avisos automáticos (FE-111): regras em Configurações → Notificações; cron de 10 em 10 min.
+const remindersModule = createRemindersModule({
+  sources: {
+    today: (org) => new OrganizationTimezoneClock(createScopedQuery).today(org),
+    employees: async (org) => (await activeEmployees(org)).map((e) => ({ id: e.id, name: e.fullName })),
+    day: async (org, employeeId, date) => {
+      const b = await attendanceModule.attendance.board(org, employeeId, date, date);
+      const d = b.days[0]!;
+      return { date, timeZone: b.timeZone, plannedStart: d.plannedStart, plannedEnd: d.plannedEnd, excused: d.excused, firstInAt: d.firstInAt, openNow: d.openType !== null };
+    },
+    settings: (org, employeeId, date) => settingsModule.settings.effectiveFor(org, employeeId, date, "notifications"),
+    contracts: async (org, employeeId) => (await peopleRepo.listContracts(org, employeeId)).map((c) => ({ id: c.id, status: c.status, probationEnd: c.probationEnd, endDate: c.endDate })),
+    employeeUser: (org, employeeId) => absencesDirectory.userOfEmployee(org, employeeId),
+    directManagerUsers: async (org, employeeId, date) => {
+      const links = (await peopleRepo.listManagers(org, employeeId)).filter((m) => m.kind === "direct" && m.validFrom <= date && (m.validTo === null || date <= m.validTo));
+      return absencesDirectory.usersOfEmployees(org, links.map((m) => m.managerEmployeeId));
+    },
+    adminUsers: (org) => notificationsModule.notifications.adminUserIds(org),
+  },
+  notifier: { notify: (org, userIds, n) => inAppNotify(org, userIds, n, "novo_rh.reminder") },
+});
+app.use("/api", remindersModule.router);
 
 // CRM: acessível a managers+
 const crmModule = createCrmModule();

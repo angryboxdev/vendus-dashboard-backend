@@ -94,6 +94,8 @@ export const ROUTE_RULES: RouteRule[] = [
   // Organização de demonstração (ADR-0034): estado/criação; criar exige ainda Admin.
   { pattern: /^\/api\/novo-rh\/demo(\/refresh)?$/, target: p("governance.settings") },
   { pattern: /^\/api\/novo-rh\/settings(\/|$)/, target: p("governance.settings") },
+  // Avisos automáticos: verificar já (o cron faz o mesmo de 10 em 10 min).
+  { pattern: /^\/api\/novo-rh\/reminders\/run$/, target: p("governance.settings") },
   { pattern: /^\/api\/novo-rh\/audit(\/|$)/, target: p("governance.audit") },
   { pattern: /^\/api\/novo-rh\/structure(\/|$)/, target: p("company.structure") },
   { pattern: /^\/api\/novo-rh\/catalog(\/|$)/, target: p("company.structure") },

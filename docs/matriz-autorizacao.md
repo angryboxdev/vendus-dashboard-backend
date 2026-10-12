@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 680 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 682 · pré-autenticação: 21 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -278,6 +278,7 @@ Endpoints: 680 · pré-autenticação: 20 · não classificados: 0
 | PATCH | `/api/hr/shifts/:id/attendance` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/internal/cron/daily-vendus-consumption` | pré-auth | — | — | — | — | — |
 | POST | `/api/internal/cron/hr-shift-automations` | pré-auth | — | — | — | — | — |
+| POST | `/api/internal/cron/novo-rh-reminders` | pré-auth | — | — | — | — | — |
 | POST | `/api/internal/cron/process-direct-debits` | pré-auth | — | — | — | — | — |
 | POST | `/api/internal/cron/reprocess-missing-stock-reviews` | pré-auth | — | — | — | — | — |
 | POST | `/api/internal/cron/run-daily-forecast` | pré-auth | — | — | — | — | — |
@@ -451,6 +452,7 @@ Endpoints: 680 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/novo-rh/periods/reopenings` | permission:hr.closure:READ | ✔ | ✖ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/periods/reopenings/:id/approve` | permission:hr.closure:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/periods/reopenings/:id/reject` | permission:hr.closure:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/reminders/run` | permission:governance.settings:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/reports` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/reports/:key` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/reports/:key/csv` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
