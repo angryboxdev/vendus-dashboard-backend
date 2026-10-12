@@ -105,7 +105,8 @@ app.use(express.json());
 // ID de correlação em todos os pedidos (ADR-0022) — devolvido em X-Correlation-Id.
 app.use(correlationId);
 
-app.get("/api/health", (_req, res) => res.json({ ok: true }));
+// `commit` (fornecido pelo Render) confirma qual versão está no ar depois de um deploy.
+app.get("/api/health", (_req, res) => res.json({ ok: true, commit: (process.env.RENDER_GIT_COMMIT ?? "").slice(0, 7) || null }));
 
 // populateAuth runs for ALL routes (populates req.auth from Bearer token if present)
 app.use(populateAuth);
