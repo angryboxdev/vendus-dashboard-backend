@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 678 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 679 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -411,6 +411,7 @@ Endpoints: 678 · pré-autenticação: 20 · não classificados: 0
 | POST | `/api/novo-rh/catalog/custom-fields` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/catalog/custom-fields/:id/archive` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/catalog/locations` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
+| GET | `/api/novo-rh/catalog/positions` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
 | GET | `/api/novo-rh/demo` | permission:governance.settings:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/demo` | permission:governance.settings:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/inbox` | base | ✔ | ✔ | ✔ | ✔ | ✖ |

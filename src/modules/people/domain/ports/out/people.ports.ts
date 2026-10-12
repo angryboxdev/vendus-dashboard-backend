@@ -24,6 +24,8 @@ export interface PeopleRepositoryPort {
   locationIdByCode(org: OrganizationId, codeOrId: string): Promise<string | null>;
   /** Centros ativos da organização (catálogo do Novo RH). */
   listLocations(org: OrganizationId): Promise<{ id: string; name: string; code: string }[]>;
+  /** Cargos ativos da organização (catálogo do Novo RH). */
+  listPositions(org: OrganizationId): Promise<{ id: string; name: string }[]>;
 
   listContracts(org: OrganizationId, employeeId: string): Promise<Contract[]>;
   createContract(org: OrganizationId, employeeId: string, input: ContractInput, createdBy: string): Promise<Contract>;

@@ -217,6 +217,10 @@ export class SupabasePeopleRepository implements PeopleRepositoryPort {
     return check<{ id: string; name: string; code: string }[]>(await this.scoped(org).table("locations").select("id, name, code").eq("is_active", true).order("name"));
   }
 
+  async listPositions(org: OrganizationId) {
+    return check<{ id: string; name: string }[]>(await this.scoped(org).table("hr_positions").select("id, name").eq("active", true).order("name"));
+  }
+
   async listContracts(org: OrganizationId, employeeId: string) {
     return check<Record<string, unknown>[]>(await this.scoped(org).table("employment_contracts").select(CONTRACT_COLS).eq("employee_id", employeeId).order("start_date")).map(toContract);
   }

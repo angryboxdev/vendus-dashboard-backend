@@ -73,4 +73,12 @@ describe("API /api/novo-rh/people", () => {
     expect(text).toContain("NIF");
     expect(text).not.toContain("IBAN");
   });
+
+  test("catálogos de centros e cargos do Novo RH (também em modo Demonstração)", async () => {
+    const catalog = base.replace("/people", "/catalog");
+    const loc = await (await fetch(`${catalog}/locations`, { headers: { "Idempotency-Key": "c1" } })).json();
+    expect(loc.map((l: { code: string }) => l.code)).toEqual(["PRT", "BRG"]);
+    const pos = await (await fetch(`${catalog}/positions`, { headers: { "Idempotency-Key": "c2" } })).json();
+    expect(pos).toEqual([{ id: "pos-op", name: "Operador" }]);
+  });
 });
