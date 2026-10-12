@@ -23,6 +23,10 @@ export interface ClockEvent {
   latitude: number | null;
   longitude: number | null;
   ip: string | null;
+  /** FE-103: tipo de pausa do catálogo (só em marcações de pausa; null = pausa sem tipo, como antes). */
+  breakTypeId?: string | null;
+  /** FE-105: tipo de registo do catálogo (só em marcações de trabalho; null = registo normal). */
+  clockTypeId?: string | null;
 }
 
 export type RevisionOperation = "add" | "update" | "void";
@@ -50,6 +54,8 @@ export interface EffectiveEvent {
   occurredAt: string;
   segmentType: SegmentType;
   revised: boolean;
+  breakTypeId?: string | null;
+  clockTypeId?: string | null;
 }
 
 /**
@@ -59,7 +65,7 @@ export interface EffectiveEvent {
  */
 export function effectiveEvents(events: ClockEvent[], revisions: ClockRevision[]): EffectiveEvent[] {
   const active = revisions.filter((r) => r.state === "active").sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-  const byId = new Map<string, EffectiveEvent>(events.map((e) => [e.id, { id: e.id, occurredAt: e.occurredAt, segmentType: e.segmentType, revised: false }]));
+  const byId = new Map<string, EffectiveEvent>(events.map((e) => [e.id, { id: e.id, occurredAt: e.occurredAt, segmentType: e.segmentType, revised: false, breakTypeId: e.breakTypeId ?? null, clockTypeId: e.clockTypeId ?? null }]));
   for (const r of active) {
     if (r.operation === "add" && r.occurredAt && r.segmentType) {
       byId.set(`rev:${r.id}`, { id: `rev:${r.id}`, occurredAt: r.occurredAt, segmentType: r.segmentType, revised: true });
@@ -67,7 +73,9 @@ export function effectiveEvents(events: ClockEvent[], revisions: ClockRevision[]
       byId.delete(r.targetEventId);
     } else if (r.operation === "update" && r.targetEventId && byId.has(r.targetEventId)) {
       const cur = byId.get(r.targetEventId)!;
-      byId.set(r.targetEventId, { ...cur, occurredAt: r.occurredAt ?? cur.occurredAt, segmentType: r.segmentType ?? cur.segmentType, revised: true });
+      // Mudar o tipo de marcação tira o tipo de pausa (deixa de ser a mesma pausa).
+      const segmentType = r.segmentType ?? cur.segmentType;
+      byId.set(r.targetEventId, { ...cur, occurredAt: r.occurredAt ?? cur.occurredAt, segmentType, revised: true, breakTypeId: segmentType === cur.segmentType ? (cur.breakTypeId ?? null) : null, clockTypeId: segmentType === cur.segmentType ? (cur.clockTypeId ?? null) : null });
     }
   }
   return [...byId.values()].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id));

@@ -8,7 +8,7 @@ import { configFromSettings } from "./adapters/out/settings-config.js";
 import { SupabaseAttendanceDirectory } from "./adapters/out/supabase-attendance-directory.js";
 import { SupabaseAttendanceRepository } from "./adapters/out/supabase-attendance.repository.js";
 import { AttendanceUseCases } from "./application/use-cases/attendance.use-cases.js";
-import type { AttendanceAuditPort, PeriodGuardPort } from "./domain/ports/out/attendance.ports.js";
+import type { AttendanceAuditPort, AttendanceContextPort, PeriodGuardPort } from "./domain/ports/out/attendance.ports.js";
 import type { DayPlan } from "./domain/services/day-engine.js";
 
 /**
@@ -21,12 +21,15 @@ export function createAttendanceModule(deps: {
   audit: AttendanceAuditPort;
   canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean>;
   periods?: PeriodGuardPort;
+  /** FE-113: níveis do fluxo "Correções de ponto" (módulo absences). Omisso = sem fluxo. */
+  correctionLevels?: AttendanceContextPort["correctionLevels"];
 }): { meRouter: Router; adminRouter: Router; attendance: AttendanceUseCases } {
   const directory = new SupabaseAttendanceDirectory(createScopedQuery);
   const attendance = new AttendanceUseCases(
     new SupabaseAttendanceRepository(createScopedQuery),
     {
       employeeForUser: (org, userId) => directory.employeeForUser(org, userId),
+      correctionLevels: deps.correctionLevels ?? (async () => null),
       timeZone: (org) => directory.timeZone(org),
       punchLocation: (org, employeeId, locationId) => directory.punchLocation(org, employeeId, locationId),
       config: async (org, employeeId, date, tz) => configFromSettings(await deps.effectiveSettings(org, employeeId, date), tz),

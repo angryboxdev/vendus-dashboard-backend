@@ -15,6 +15,9 @@ class FakeRepo implements AnnouncementsRepositoryPort {
   async list() {
     return this.items.map((a) => ({ ...a }));
   }
+  async deleteDraft(_o: OrganizationId, id: string) {
+    this.items = this.items.filter((x) => !(x.id === id && x.status === "draft"));
+  }
   async get(_o: OrganizationId, id: string) {
     const a = this.items.find((x) => x.id === id);
     return a ? { ...a } : null;
@@ -60,7 +63,7 @@ class FakeRepo implements AnnouncementsRepositoryPort {
 }
 
 class FakeCtx implements AnnouncementsContextPort {
-  sent: { userIds: string[]; title: string }[] = [];
+  sent: { userIds: string[]; title: string; dedupeKey?: string }[] = [];
   people = [
     { employeeId: "e1", userId: "u-e1", location: "porto" },
     { employeeId: "e2", userId: null, location: "lisboa" },
@@ -74,8 +77,14 @@ class FakeCtx implements AnnouncementsContextPort {
   async employeeForUser(_o: OrganizationId, userId: string) {
     return this.people.find((p) => p.userId === userId)?.employeeId ?? null;
   }
-  async notify(_o: OrganizationId, userIds: string[], n: { title: string }) {
-    this.sent.push({ userIds, title: n.title });
+  async notify(_o: OrganizationId, userIds: string[], n: { title: string; dedupeKey: string }) {
+    this.sent.push({ userIds, title: n.title, dedupeKey: n.dedupeKey });
+  }
+  async employeeNames() {
+    return new Map([
+      ["e1", "Ana Demo"],
+      ["e2", "=Rui Demo"],
+    ]);
   }
   now() {
     return "2026-10-12T11:00:00Z";
@@ -97,7 +106,7 @@ describe("Comunicados", () => {
     await uc.update(ORG, ADMIN, a.id, { audience: { type: "all" } });
     await uc.publish(ORG, ADMIN, a.id);
     expect(repo.recipients.map((r) => r.employeeId)).toEqual(["e1", "e2"]);
-    expect(ctx.sent.at(-1)).toEqual({ userIds: ["u-e1"], title: "Comunicado: Novo horário de verão" });
+    expect(ctx.sent.at(-1)).toMatchObject({ userIds: ["u-e1"], title: "Comunicado: Novo horário de verão" });
     await expect(uc.update(ORG, ADMIN, a.id, { audience: { type: "employees", ids: ["e1"] } })).rejects.toMatchObject({ code: "audience_frozen" });
     // Mesmo que entrem pessoas novas na organização, a lista não muda.
     ctx.people.push({ employeeId: "e3", userId: "u-e3", location: "porto" });
@@ -133,5 +142,33 @@ describe("Comunicados", () => {
     await uc.publish(ORG, ADMIN, a.id);
     await expect(uc.confirm(ORG, ANA, a.id)).rejects.toMatchObject({ code: "confirmation_not_required" });
     expect(ctx.sent).toHaveLength(1);
+  });
+});
+
+describe("Comunicados — FE-060/062", () => {
+  test("duplicar, eliminar só rascunhos, contagem de destinatários, lembrete e prova de leitura", async () => {
+    const { uc, ctx } = setup();
+    expect(await uc.previewAudience(ORG, { type: "all" })).toEqual({ recipients: 2, withoutAccount: 1 });
+    await expect(uc.previewAudience(ORG, { type: "locations", ids: [] })).rejects.toMatchObject({ code: "validation" });
+    const a = await uc.create(ORG, ADMIN, { title: "Regras de segurança", body: "Ler com atenção.", audience: { type: "all" }, requiresConfirmation: true });
+    const copy = await uc.duplicate(ORG, ADMIN, a.id);
+    expect(copy).toMatchObject({ title: "Cópia de Regras de segurança", status: "draft" });
+    await uc.deleteDraft(ORG, ADMIN, copy.id);
+    await uc.publish(ORG, ADMIN, a.id);
+    await expect(uc.deleteDraft(ORG, ADMIN, a.id)).rejects.toMatchObject({ code: "invalid_state" });
+    await uc.confirm(ORG, { userId: "u-e1", email: "ana@demo.invalid" }, a.id);
+    // Só falta o e2 (sem conta): o lembrete conta-o mas não tem a quem enviar.
+    expect(await uc.remind(ORG, ADMIN, a.id)).toEqual({ pending: 1, notified: 0, withoutAccount: 1 });
+    expect(ctx.sent.at(-1)!.dedupeKey).toBe(`announcement:${a.id}:1:remind:2026-10-12`);
+    const list = await uc.listWithStats(ORG);
+    expect(list.find((x) => x.id === a.id)!.stats).toEqual({ recipients: 2, read: 1, confirmed: 1 });
+    const proof = await uc.proof(ORG, a.id);
+    expect(proof.fileName).toBe("prova-leitura-Regras_de_seguran_a-v1.csv");
+    expect(proof.content.charCodeAt(0)).toBe(0xfeff);
+    const lines = proof.content.slice(1).split("\r\n");
+    expect(lines[0]).toBe("Colaborador;Versão;Entregue;Lido;Confirmado");
+    // Nome começado por "=" fica neutralizado (não é fórmula no Excel).
+    expect(lines[1]!.startsWith(`"'=Rui Demo";1;`)).toBe(true);
+    expect(lines[2]).toBe(`"Ana Demo";1;"2026-10-12T10:00:00Z";"2026-10-12T11:00:00Z";"2026-10-12T11:00:00Z"`);
   });
 });

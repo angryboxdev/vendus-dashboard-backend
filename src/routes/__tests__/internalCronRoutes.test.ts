@@ -131,3 +131,37 @@ describe("POST /internal/cron/process-direct-debits", () => {
     expect(executedFor).toEqual([]);
   });
 });
+
+describe("POST /internal/cron/novo-rh-reminders (FE-111)", () => {
+  let server: Server;
+  let baseUrl: string;
+
+  async function start(run: ((org: string) => Promise<unknown>) | undefined) {
+    const { createInternalCronRouter } = await import("../internalCronRoutes.js");
+    const deps = { listOrganizations: async () => [orgRow("org-1"), orgRow("org-2")], ...(run && { runNovoRhReminders: run }) } as unknown as Parameters<typeof createInternalCronRouter>[0];
+    const app = express();
+    app.use("/api", createInternalCronRouter(deps));
+    await new Promise<void>((resolve) => {
+      server = app.listen(0, resolve);
+    });
+    baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  }
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it("corre os avisos para cada organização; sem segredo → 401; sem módulo → 503", async () => {
+    const ran: string[] = [];
+    await start(async (org) => {
+      ran.push(org);
+      return { notices: 0 };
+    });
+    expect((await fetch(`${baseUrl}/api/internal/cron/novo-rh-reminders`, { method: "POST" })).status).toBe(401);
+    const ok = await fetch(`${baseUrl}/api/internal/cron/novo-rh-reminders`, { method: "POST", headers: { Authorization: "Bearer test-secret" } });
+    expect(ok.status).toBe(200);
+    expect(ran.sort()).toEqual(["org-1", "org-2"]);
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await start(undefined);
+    expect((await fetch(`${baseUrl}/api/internal/cron/novo-rh-reminders`, { method: "POST", headers: { Authorization: "Bearer test-secret" } })).status).toBe(503);
+  });
+});

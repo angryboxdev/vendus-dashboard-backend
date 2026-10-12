@@ -191,6 +191,17 @@ export class SupabaseAccountDirectory implements AccountDirectoryPort {
     const { error } = await authAdmin.deleteUser(userId);
     if (error) throw new Error(error.message);
   }
+
+  async resetSecondFactor(userId: string): Promise<number> {
+    const { data, error } = await authAdmin.listFactors(userId);
+    if (error) throw new Error(error.message);
+    const factors = data?.factors ?? [];
+    for (const f of factors) {
+      const res = await authAdmin.deleteFactor(userId, f.id);
+      if (res.error) throw new Error(res.error.message);
+    }
+    return factors.length;
+  }
 }
 
 /** Histórico de utilizadores/perfis em `organization_audit_logs` (sem tabela nova). Fire-and-forget. */

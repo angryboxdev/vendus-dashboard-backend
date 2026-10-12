@@ -62,7 +62,7 @@ class FakeRepo implements WorkspaceRepositoryPort {
 class FakeCtx implements WorkspaceContextPort {
   users = new Map([["u-e1", "e1"], ["u-e2", "e2"], ["u-boss", "e9"]]);
   locations = new Map([["e1", ["porto"]], ["e2", ["lisboa"]], ["e9", ["porto"]]]);
-  scope: "own_location" | "organization" = "own_location";
+  scope: "off" | "own_location" | "organization" = "own_location";
   present: Presence[] = [
     { employeeId: "e9", name: "Gestora", state: "work", since: "2026-10-12T08:00:00Z", locationIds: ["porto"] },
     { employeeId: "e2", name: "Bruno", state: "remote", since: "2026-10-12T08:30:00Z", locationIds: ["lisboa"] },
@@ -103,6 +103,14 @@ describe("Quem está (CF-15)", () => {
     expect(own.people[0]).toEqual({ employeeId: "e9", name: "Gestora", state: "work", since: "2026-10-12T08:00:00Z" });
     ctx.scope = "organization";
     expect((await uc.whosIn(ORG, ANA)).people.map((p) => p.employeeId)).toEqual(["e9", "e2"]);
+  });
+
+  test("FE-116: secção desligada — a API recusa e a visibilidade diz ao Portal para esconder", async () => {
+    const { uc, ctx } = setup();
+    expect(await uc.myVisibility(ORG, ANA)).toEqual({ whosIn: true, whosInScope: "own_location" });
+    ctx.scope = "off";
+    await expect(uc.whosIn(ORG, ANA)).rejects.toMatchObject({ code: "forbidden" });
+    expect(await uc.myVisibility(ORG, ANA)).toEqual({ whosIn: false, whosInScope: "off" });
   });
 });
 

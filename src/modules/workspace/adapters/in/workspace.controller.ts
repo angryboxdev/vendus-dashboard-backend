@@ -72,6 +72,7 @@ export function createWorkspaceRouter(uc: WorkspaceUseCases, store: IdempotencyS
     const b = body(req);
     res.status(201).json(await run(() => uc.submit(org(req), actorOf(req), String(b.formId ?? ""), (b.answers && typeof b.answers === "object" ? b.answers : {}) as Record<string, unknown>)));
   });
+  r.get("/me/visibility", async (req, res) => res.json(await run(() => uc.myVisibility(org(req), actorOf(req)))));
   r.get("/me/whos-in", async (req, res) => res.json(await run(() => uc.whosIn(org(req), actorOf(req)))));
   return r;
 }

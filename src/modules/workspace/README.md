@@ -38,7 +38,7 @@ Tabelas `ops_tasks`, `custom_request_forms`, `custom_requests` — migração
 
 ### Input
 
-- `createWorkspaceRouter` → `/api/novo-rh/workspace/*` (`hr.employees`), `/api/me/ops-tasks*`, `/api/me/custom-requests*`, `/api/me/whos-in`.
+- `createWorkspaceRouter` → `/api/novo-rh/workspace/*` (`hr.employees`), `/api/me/ops-tasks*`, `/api/me/custom-requests*`, `/api/me/whos-in` (recusa com 403 se a secção estiver desligada — FE-116), `/api/me/visibility` (secções visíveis ao colaborador).
 
 ### Output
 

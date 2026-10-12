@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
-import { AnnouncementError, receiptStatus, validateDraft, type Audience } from "../../domain/entities/announcement.js";
+import { AnnouncementError, proofCsv, receiptStatus, validateDraft, type Audience } from "../../domain/entities/announcement.js";
 import type { AnnouncementsContextPort, AnnouncementsRepositoryPort } from "../../domain/ports/out/announcements.ports.js";
 
 export interface Actor {
@@ -21,6 +21,63 @@ export class AnnouncementsUseCases {
 
   list(org: OrganizationId) {
     return this.repo.list(org);
+  }
+
+  /** Lista com leituras e confirmações da versão atual (FE-060). */
+  async listWithStats(org: OrganizationId) {
+    const list = await this.repo.list(org);
+    return Promise.all(
+      list.map(async (a) => {
+        if (a.status === "draft") return { ...a, stats: null };
+        const current = (await this.repo.listReceipts(org, a.id)).filter((r) => r.version === a.currentVersion);
+        return { ...a, stats: { recipients: current.length, read: current.filter((r) => r.readAt).length, confirmed: current.filter((r) => r.confirmedAt).length } };
+      }),
+    );
+  }
+
+  /** Quantas pessoas o público escolhido abrange agora (FE-061), sem gravar nada. */
+  async previewAudience(org: OrganizationId, audience: Audience) {
+    validateDraft({ title: "x", body: "", audience });
+    const r = await this.ctx.resolveAudience(org, audience);
+    return { recipients: r.length, withoutAccount: r.filter((x) => !x.userId).length };
+  }
+
+  /** Duplicar: novo rascunho com o mesmo texto e público (FE-060). */
+  async duplicate(org: OrganizationId, actor: Actor, id: string) {
+    const cur = await this.one(org, id);
+    return this.create(org, actor, { title: `Cópia de ${cur.title}`.slice(0, 160), body: cur.body, audience: cur.audience, requiresConfirmation: cur.requiresConfirmation });
+  }
+
+  /** Eliminar só rascunhos; publicados arquivam-se (a prova de leitura fica). */
+  async deleteDraft(org: OrganizationId, actor: Actor, id: string) {
+    const cur = await this.one(org, id);
+    if (cur.status !== "draft") throw new AnnouncementError("Só se elimina um rascunho. Os publicados arquivam-se.", "invalid_state");
+    await this.repo.deleteDraft(org, id);
+    await this.ctx.audit(org, { actor: actor.email, action: "announcements.delete_draft", resourceId: id, after: null });
+  }
+
+  /** Lembrete a quem ainda não leu (ou não confirmou, se pede confirmação) — no máximo um por dia (FE-062). */
+  async remind(org: OrganizationId, actor: Actor, id: string) {
+    const a = await this.one(org, id);
+    if (a.status !== "published") throw new AnnouncementError("Só se lembra um comunicado publicado.", "invalid_state");
+    const receipts = (await this.repo.listReceipts(org, id)).filter((r) => r.version === a.currentVersion && (a.requiresConfirmation ? !r.confirmedAt : !r.readAt));
+    const pending = new Set(receipts.map((r) => r.employeeId));
+    const users = (await this.repo.listRecipients(org, id)).filter((r) => pending.has(r.employeeId)).map((r) => r.userId).filter((u): u is string => !!u);
+    const day = this.ctx.now().slice(0, 10);
+    await this.ctx.notify(org, users, { title: `Lembrete: ${a.title}`, body: a.requiresConfirmation ? "Ainda falta confirmar a leitura." : "Ainda não leu este comunicado.", link: "/hr/novo/comunicados", dedupeKey: `announcement:${id}:${a.currentVersion}:remind:${day}` });
+    await this.ctx.audit(org, { actor: actor.email, action: "announcements.remind", resourceId: id, after: { pending: pending.size, notified: users.length } });
+    return { pending: pending.size, notified: users.length, withoutAccount: pending.size - users.length };
+  }
+
+  /** Prova de leitura em CSV (versão atual), para guardar ou enviar (FE-062). */
+  async proof(org: OrganizationId, id: string) {
+    const a = await this.one(org, id);
+    const [receipts, names] = await Promise.all([this.repo.listReceipts(org, id), this.ctx.employeeNames(org)]);
+    const rows = receipts
+      .filter((r) => r.version === a.currentVersion)
+      .map((r) => ({ name: names.get(r.employeeId) ?? r.employeeId, version: r.version, deliveredAt: r.deliveredAt, readAt: r.readAt, confirmedAt: r.confirmedAt }))
+      .sort((x, y) => x.name.localeCompare(y.name, "pt"));
+    return { fileName: `prova-leitura-${a.title.replace(/[^\w-]+/g, "_").slice(0, 40)}-v${a.currentVersion}.csv`, content: proofCsv(rows) };
   }
 
   async create(org: OrganizationId, actor: Actor, input: { title: string; body: string; audience: Audience; requiresConfirmation: boolean }) {

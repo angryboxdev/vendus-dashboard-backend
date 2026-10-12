@@ -259,3 +259,21 @@ describe("Ausências — pedidos e aprovações", () => {
     expect(b).toMatchObject({ accrued: 10, adjusted: 2, balance: 12 });
   });
 });
+
+describe("Fluxo de correções de ponto (FE-113)", () => {
+  test("sem fluxo de ponto → null; com fluxo → níveis sem quem pede nem o próprio; ninguém → no_approver", async () => {
+    const { uc } = setup();
+    expect(await uc.correctionLevels(ORG, "e1", "2026-10-10", ["u-emp"])).toBeNull();
+    await uc.createFlow(ORG, ADMIN, { name: "Correções", scope: "clock", isDefault: true, levels: [{ people: ["u-boss", "u-emp"], roles: [] }, { people: ["u-rh"], roles: [] }], fallbackUserIds: ["u-admin"] });
+    expect(await uc.correctionLevels(ORG, "e1", "2026-10-10", ["u-emp"])).toEqual([
+      { approvers: ["u-boss"], escalated: false },
+      { approvers: ["u-rh"], escalated: false },
+    ]);
+    // Nível só com quem pede → recurso (RE-23).
+    expect(await uc.correctionLevels(ORG, "e1", "2026-10-10", ["u-emp", "u-boss"])).toEqual([
+      { approvers: ["u-admin"], escalated: true },
+      { approvers: ["u-rh"], escalated: false },
+    ]);
+    expect(await uc.correctionLevels(ORG, "e1", "2026-10-10", ["u-emp", "u-boss", "u-admin"])).toBe("no_approver");
+  });
+});

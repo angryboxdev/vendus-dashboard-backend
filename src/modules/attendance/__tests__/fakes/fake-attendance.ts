@@ -1,5 +1,7 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ClockEvent, ClockRevision } from "../../domain/entities/clock.js";
+import type { BreakType, BreakTypeInput } from "../../domain/entities/break-type.js";
+import type { ClockType, ClockTypeInput } from "../../domain/entities/clock-type.js";
 import type { Adjustment, CorrectionRequest, DayVersion, Incident, IncidentStatus } from "../../domain/entities/records.js";
 import type { AttendanceConfig, AttendanceContextPort, AttendanceRepositoryPort, BackgroundPort } from "../../domain/ports/out/attendance.ports.js";
 import type { DayPlan, IncidentType } from "../../domain/services/day-engine.js";
@@ -23,6 +25,42 @@ export class FakeAttendanceRepository implements AttendanceRepositoryPort {
     const event = { ...e, id: nextId() };
     this.events.push(event);
     return { event, duplicate: false };
+  }
+  breakTypes: BreakType[] = [];
+  async listBreakTypes() {
+    return this.breakTypes.map((b) => ({ ...b }));
+  }
+  async createBreakType(_o: OrganizationId, input: BreakTypeInput) {
+    const b: BreakType = { ...input, name: input.name.trim(), id: nextId(), archived: false, version: 1 };
+    this.breakTypes.push(b);
+    return { ...b };
+  }
+  async updateBreakType(_o: OrganizationId, id: string, input: BreakTypeInput, v: number) {
+    const b = this.breakTypes.find((x) => x.id === id)!;
+    if (b.version !== v) return null;
+    Object.assign(b, input, { version: v + 1 });
+    return { ...b };
+  }
+  async archiveBreakType(_o: OrganizationId, id: string) {
+    this.breakTypes.find((x) => x.id === id)!.archived = true;
+  }
+  clockTypes: ClockType[] = [];
+  async listClockTypes() {
+    return this.clockTypes.map((c) => ({ ...c }));
+  }
+  async createClockType(_o: OrganizationId, input: ClockTypeInput) {
+    const c: ClockType = { ...input, name: input.name.trim(), id: nextId(), archived: false, version: 1 };
+    this.clockTypes.push(c);
+    return { ...c };
+  }
+  async updateClockType(_o: OrganizationId, id: string, input: ClockTypeInput, v: number) {
+    const c = this.clockTypes.find((x) => x.id === id)!;
+    if (c.version !== v) return null;
+    Object.assign(c, input, { version: v + 1 });
+    return { ...c };
+  }
+  async archiveClockType(_o: OrganizationId, id: string) {
+    this.clockTypes.find((x) => x.id === id)!.archived = true;
   }
   async findEventByClientId(_org: OrganizationId, employeeId: string, clientEventId: string) {
     return this.events.find((x) => x.employeeId === employeeId && x.clientEventId === clientEventId) ?? null;
@@ -57,7 +95,7 @@ export class FakeAttendanceRepository implements AttendanceRepositoryPort {
   }
 
   async insertCorrection(_org: OrganizationId, c: Parameters<AttendanceRepositoryPort["insertCorrection"]>[1]) {
-    const row: CorrectionRequest = { ...c, id: nextId(), status: "pending", decidedBy: null, decidedAt: null, decisionComment: null, revisionId: null, createdAt: this.now() };
+    const row: CorrectionRequest = { ...c, id: nextId(), status: "pending", decidedBy: null, decidedAt: null, decisionComment: null, revisionId: null, createdAt: this.now(), currentLevel: 0 };
     this.corrections.push(row);
     return row;
   }
@@ -66,6 +104,12 @@ export class FakeAttendanceRepository implements AttendanceRepositoryPort {
   }
   async listCorrections(_org: OrganizationId, f: { status?: CorrectionRequest["status"]; employeeId?: string }) {
     return this.corrections.filter((c) => (!f.status || c.status === f.status) && (!f.employeeId || c.employeeId === f.employeeId));
+  }
+  async advanceCorrection(_org: OrganizationId, id: string, fromLevel: number) {
+    const c = this.corrections.find((x) => x.id === id && x.status === "pending" && x.currentLevel === fromLevel);
+    if (!c) return null;
+    c.currentLevel = fromLevel + 1;
+    return { ...c };
   }
   async decideCorrection(_org: OrganizationId, id: string, d: { status: "approved" | "rejected"; decidedBy: string; comment: string | null; revisionId: string | null }) {
     const c = this.corrections.find((x) => x.id === id)!;
@@ -144,6 +188,12 @@ export class FakeContext implements AttendanceContextPort {
 
   async employeeForUser(_org: OrganizationId, userId: string) {
     return this.users.get(userId) ?? null;
+  }
+  /** FE-113: null = sem fluxo de ponto (comportamento de sempre). */
+  levels: { approvers: string[]; escalated: boolean }[] | "no_approver" | null = null;
+  async correctionLevels(_o: OrganizationId, _e: string, _d: string, excluded: string[]) {
+    if (!Array.isArray(this.levels)) return this.levels;
+    return this.levels.map((l) => ({ ...l, approvers: l.approvers.filter((u) => !excluded.includes(u)) }));
   }
   async timeZone() {
     return "Europe/Lisbon";

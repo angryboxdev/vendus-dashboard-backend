@@ -17,6 +17,9 @@ export interface CorrectionRequest {
   decisionComment: string | null;
   revisionId: string | null;
   createdAt: string;
+  /** FE-113: níveis do fluxo "Correções de ponto" fixados na criação ([] = sem fluxo: decide quem gere a assiduidade). */
+  levels: { approvers: string[]; escalated: boolean }[];
+  currentLevel: number;
 }
 
 export type IncidentStatus = "open" | "resolved_correct" | "resolved_validate" | "dismissed";

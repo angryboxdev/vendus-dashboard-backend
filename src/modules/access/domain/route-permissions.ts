@@ -92,11 +92,15 @@ export const ROUTE_RULES: RouteRule[] = [
   // ── Novo RH (task faseada) ───────────────────────────────────────────
   // Pré-visualizar impacto não grava nada, mas só serve a quem vai alterar.
   // Organização de demonstração (ADR-0034): estado/criação; criar exige ainda Admin.
-  { pattern: /^\/api\/novo-rh\/demo$/, target: p("governance.settings") },
+  { pattern: /^\/api\/novo-rh\/demo(\/refresh)?$/, target: p("governance.settings") },
   { pattern: /^\/api\/novo-rh\/settings(\/|$)/, target: p("governance.settings") },
+  // Avisos automáticos: verificar já (o cron faz o mesmo de 10 em 10 min).
+  { pattern: /^\/api\/novo-rh\/reminders\/run$/, target: p("governance.settings") },
   { pattern: /^\/api\/novo-rh\/audit(\/|$)/, target: p("governance.audit") },
   { pattern: /^\/api\/novo-rh\/structure(\/|$)/, target: p("company.structure") },
   { pattern: /^\/api\/novo-rh\/catalog(\/|$)/, target: p("company.structure") },
+  // Entidades legais e a entidade de cada centro (FE-092/093): dados da empresa.
+  { pattern: /^\/api\/novo-rh\/legal-entities(\/|$)/, target: p("company.structure") },
   { pattern: /^\/api\/novo-rh\/people\/export\.csv$/, target: p("hr.people_export", "MANAGE") },
   { pattern: /^\/api\/novo-rh\/people(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/time\/(holiday-calendars|holidays)(\/|$)/, target: p("company.holidays") },
@@ -108,6 +112,10 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/rosters(\/|$)/, target: p("hr.schedules") },
   { pattern: /^\/api\/novo-rh\/periods(\/|$)/, target: p("hr.closure") },
   { pattern: /^\/api\/novo-rh\/announcements(\/|$)/, target: p("hr.employees") },
+  // Convites e pedidos de adesão (FE-054): gestão de pessoas. O pedido em si é público (/api/public/join, pré-auth).
+  { pattern: /^\/api\/novo-rh\/invitations(\/|$)/, target: p("hr.employees") },
+  // Envio de documentos a vários colaboradores (FE-065): a mesma permissão dos documentos de colaborador.
+  { pattern: /^\/api\/novo-rh\/document-distributions(\/|$)/, target: p("hr.documents") },
   { pattern: /^\/api\/novo-rh\/workspace(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/reports(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/alerts(\/|$)/, target: p("hr.overview") },

@@ -69,6 +69,8 @@ export interface AccountDirectoryPort {
   createAccount(email: string, temporaryPassword: string): Promise<string>;
   setTemporaryPassword(userId: string, temporaryPassword: string): Promise<void>;
   deleteAccount(userId: string): Promise<void>;
+  /** Remove todos os fatores MFA da conta (a pessoa volta a ativar no próximo acesso). Devolve quantos removeu. */
+  resetSecondFactor(userId: string): Promise<number>;
 }
 
 export type AccessAuditEntity = "user" | "access_profile";

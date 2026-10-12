@@ -1,12 +1,25 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { ClockEvent, ClockRevision } from "../../entities/clock.js";
 import type { Adjustment, CorrectionRequest, DayVersion, Incident, IncidentStatus } from "../../entities/records.js";
+import type { BreakType, BreakTypeInput } from "../../entities/break-type.js";
+import type { ClockType, ClockTypeInput } from "../../entities/clock-type.js";
 import type { DayPlan, EngineRules, IncidentType } from "../../services/day-engine.js";
 import type { PunchPolicy } from "../../services/punch-policy.js";
 
 export interface AttendanceRepositoryPort {
   /** RE-9: com o mesmo `clientEventId` devolve a marcação já gravada (`duplicate: true`). */
   insertEvent(org: OrganizationId, e: Omit<ClockEvent, "id">): Promise<{ event: ClockEvent; duplicate: boolean }>;
+  /** FE-103: catálogo de pausas (inclui arquivadas — as marcações antigas mantêm a regra). */
+  listBreakTypes(org: OrganizationId): Promise<BreakType[]>;
+  createBreakType(org: OrganizationId, input: BreakTypeInput, by: string): Promise<BreakType>;
+  /** null = versão desatualizada. */
+  updateBreakType(org: OrganizationId, id: string, input: BreakTypeInput, expectedVersion: number): Promise<BreakType | null>;
+  archiveBreakType(org: OrganizationId, id: string): Promise<void>;
+  /** FE-105: tipos de registo (inclui arquivados). */
+  listClockTypes(org: OrganizationId): Promise<ClockType[]>;
+  createClockType(org: OrganizationId, input: ClockTypeInput, by: string): Promise<ClockType>;
+  updateClockType(org: OrganizationId, id: string, input: ClockTypeInput, expectedVersion: number): Promise<ClockType | null>;
+  archiveClockType(org: OrganizationId, id: string): Promise<void>;
   findEventByClientId(org: OrganizationId, employeeId: string, clientEventId: string): Promise<ClockEvent | null>;
   getEvent(org: OrganizationId, id: string): Promise<ClockEvent | null>;
   listEvents(org: OrganizationId, employeeId: string, fromUtc: string, toUtc: string): Promise<ClockEvent[]>;
@@ -21,10 +34,12 @@ export interface AttendanceRepositoryPort {
   /** RE-11: revisões ativas ainda dentro do prazo de recusa (qualquer dia). */
   listRefusableRevisions(org: OrganizationId, employeeId: string, now: string): Promise<ClockRevision[]>;
 
-  insertCorrection(org: OrganizationId, c: Omit<CorrectionRequest, "id" | "status" | "decidedBy" | "decidedAt" | "decisionComment" | "revisionId" | "createdAt">): Promise<CorrectionRequest>;
+  insertCorrection(org: OrganizationId, c: Omit<CorrectionRequest, "id" | "status" | "decidedBy" | "decidedAt" | "decisionComment" | "revisionId" | "createdAt" | "currentLevel">): Promise<CorrectionRequest>;
   getCorrection(org: OrganizationId, id: string): Promise<CorrectionRequest | null>;
   listCorrections(org: OrganizationId, filter: { status?: CorrectionRequest["status"]; employeeId?: string }): Promise<CorrectionRequest[]>;
   decideCorrection(org: OrganizationId, id: string, d: { status: "approved" | "rejected"; decidedBy: string; comment: string | null; revisionId: string | null }): Promise<CorrectionRequest>;
+  /** Passa ao nível seguinte; null se o pedido mudou entretanto (outro aprovador decidiu). */
+  advanceCorrection(org: OrganizationId, id: string, fromLevel: number): Promise<CorrectionRequest | null>;
 
   currentDays(org: OrganizationId, employeeId: string, from: string, to: string): Promise<DayVersion[]>;
   /** A anterior deixa de ser a atual; a nova fica com `version` = anterior + 1. */
@@ -53,6 +68,11 @@ export interface AttendanceConfig {
 /** O que a assiduidade precisa de outros módulos (ligado no composition root). */
 export interface AttendanceContextPort {
   employeeForUser(org: OrganizationId, userId: string): Promise<string | null>;
+  /**
+   * FE-113: níveis do fluxo "Correções de ponto" para este colaborador (sem quem pede).
+   * null = não há fluxo de ponto; "no_approver" = há fluxo mas ninguém pode aprovar.
+   */
+  correctionLevels(org: OrganizationId, employeeId: string, date: string, excludedUserIds: string[]): Promise<{ approvers: string[]; escalated: boolean }[] | "no_approver" | null>;
   timeZone(org: OrganizationId): Promise<string>;
   config(org: OrganizationId, employeeId: string, date: string, timeZone: string): Promise<AttendanceConfig>;
   /** Plano diário (teórico, entrada/saída planeadas, noturno, feriado) — módulo time-base. */

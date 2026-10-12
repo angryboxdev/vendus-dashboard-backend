@@ -69,12 +69,16 @@ import { createPeriodsModule } from "./modules/periods/periods.module.js";
 import { createDemoOrgModule } from "./modules/demo-data/demo-data.module.js";
 import { createOverviewModule } from "./modules/overview/overview.module.js";
 import { createInboxModule } from "./modules/inbox/inbox.module.js";
+import { createRemindersModule } from "./modules/reminders/reminders.module.js";
 import type { PeriodsContextPort } from "./modules/periods/domain/ports/out/periods.ports.js";
 import { createAnnouncementsModule } from "./modules/announcements/announcements.module.js";
 import { createAlertsModule } from "./modules/alerts/alerts.module.js";
 import type { AlertsContextPort } from "./modules/alerts/domain/ports/out/alerts.ports.js";
 import { createWorkspaceModule } from "./modules/workspace/workspace.module.js";
 import { createReportsModule } from "./modules/reports/reports.module.js";
+import { createDocumentDistributionsModule } from "./modules/document-distributions/document-distributions.module.js";
+import { createLegalEntitiesModule } from "./modules/legal-entities/legal-entities.module.js";
+import { createInvitationsModule } from "./modules/invitations/invitations.module.js";
 import type { ReportRow } from "./modules/reports/domain/entities/report.js";
 import { SupabaseAbsencesDirectory } from "./modules/absences/adapters/out/supabase-absences-directory.js";
 import type { OrganizationId } from "./kernel/organization-id.js";
@@ -278,9 +282,24 @@ if (ENV.CRON_SECRET) {
       detectForecastDeviation: stockPlanningModule.detectForecastDeviation,
       generateAllShiftAutomations: hrModule.generateAllAutomations,
       listOrganizations,
+      // Criado mais abaixo (depende dos módulos do Novo RH); só é usado quando o cron corre.
+      runNovoRhReminders: (org) => remindersModule.reminders.run(org),
     }),
   );
 }
+
+// Novo RH → Convites (FE-054): o pedido de adesão é público (sem sessão), por isso
+// o router público monta-se antes do requireAuth. O contexto usa repositórios
+// criados mais abaixo — só é chamado quando chega um pedido.
+const invitationsModule = createInvitationsModule({
+  context: {
+    employeeByEmail: async (org, email) =>
+      (await peopleRepo.list(org, { status: "all" })).find((e) => [e.email, e.personalEmail].some((m) => m?.trim().toLowerCase() === email))?.id ?? null,
+    now: () => new Date().toISOString(),
+    audit: (org, e) => novoRhAudit(org, e, "invitation"),
+  },
+});
+app.use("/api", invitationsModule.publicRouter);
 
 // All routes below this line require authentication
 app.use(requireAuth);
@@ -324,6 +343,44 @@ const demoOrgModule = createDemoOrgModule({
       auditModule.recorder.record(org, { actor: e.actor, action: e.action, resourceType: "organization", resourceId: e.resourceId, before: null, after: e.after, reason: null }),
   },
   ptHolidays: (year) => portugueseNationalHolidays(year).map((h) => ({ date: h.date, name: h.name })),
+  // Cenário da demonstração pelos casos de uso dos módulos donos (as mesmas regras do uso real).
+  // Os módulos de escalas e ausências são criados mais abaixo; só se usam quando o cenário corre.
+  scenario: {
+    hasScenario: async (org) => (await rostersModule.rosters.listRosters(org)).length > 0,
+    build: async (org, actor, plan) => {
+      const templates = new Map<string, string>();
+      for (const t of plan.templates) templates.set(t.name, (await rostersModule.rosters.createTemplate(org, actor, { name: t.name, abbreviation: t.abbreviation, color: t.color, onCall: false, segments: t.segments })).id);
+      for (const r of plan.rosters) {
+        const roster = await rostersModule.rosters.createRoster(org, actor, { name: r.name, targetType: "location", targetId: r.locationId });
+        const assign = (range: { from: string; to: string }) =>
+          Promise.all(r.groups.map((g) => rostersModule.rosters.assignBulk(org, actor, roster.id, { employeeIds: g.employeeIds, from: range.from, to: range.to, weekdays: g.weekdays, kind: "shift", templateId: templates.get(g.templateName) ?? null })));
+        await assign(r.published);
+        await rostersModule.rosters.publish(org, actor, roster.id, { reason: "Escala de demonstração", confirm: true });
+        await assign(r.draft);
+      }
+      const vacation = (await absencesModule.absences.listTypes(org)).find((t) => t.category === "vacation" && !t.archived);
+      let approved = 0;
+      let pending = 0;
+      if (vacation) {
+        await absencesModule.absences.createFlow(org, actor, { name: "Aprovação de férias (demo)", scope: "absences", isDefault: true, levels: [{ people: [actor.userId], roles: [] }], fallbackUserIds: [actor.userId] });
+        const input = (a: { employeeId: string; startDate: string; endDate: string }, comment: string) => ({ ...a, typeId: vacation.id, startTime: null, endTime: null, halfDay: false, comment, attachmentDocumentId: null });
+        const attempt = async (fn: () => Promise<unknown>) => {
+          try {
+            await fn();
+            return 1;
+          } catch (e) {
+            console.error("[demo] ausência do cenário recusada:", e instanceof Error ? e.message : e);
+            return 0;
+          }
+        };
+        for (const a of plan.approved) approved += await attempt(() => absencesModule.absences.createRequest(org, actor, input(a, "Férias marcadas (demonstração)"), "assign"));
+        // Pedidos feitos "pelo colaborador" (conta fictícia) — ficam à espera do Admin na caixa de Pedidos.
+        for (const p of plan.pending) pending += await attempt(() => absencesModule.absences.createRequest(org, { userId: `demo-colaborador:${p.employeeId}`, email: "colaborador@demo.invalid" }, input(p, "Pedido de férias (demonstração)"), "self"));
+      }
+      return { rosters: plan.rosters.length, approved, pending };
+    },
+  },
+  onError: (e) => console.error("[demo] atualização da demonstração falhou:", e instanceof Error ? e.message : e),
 });
 app.use(demoOrgModule.demoContext);
 app.use("/api", demoOrgModule.router);
@@ -524,6 +581,8 @@ async function plannedDays(org: OrganizationId, employeeId: string, from: string
 
 // Novo RH → Assiduidade (Fase 4): marcações, motor de apuramento, revisões, incidentes.
 const attendanceModule = createAttendanceModule({
+  // FE-113: fluxo "Correções de ponto" (absences, âmbito clock) — o módulo de ausências é criado mais abaixo.
+  correctionLevels: (org, employeeId, date, excluded) => absencesModule.absences.correctionLevels(org, employeeId, date, excluded),
   effectiveSettings: async (org, employeeId, date) => {
     const [tt, legal] = await Promise.all([
       settingsModule.settings.effectiveFor(org, employeeId, date, "time_tracking"),
@@ -727,30 +786,67 @@ const novoRhAudit = (org: OrganizationId, e: { actor: string; action: string; re
 const todayUtc = () => new Date().toISOString().slice(0, 10);
 const activeEmployees = (org: OrganizationId) => peopleRepo.list(org, { status: "active" });
 
+// Público (todos, centros, departamentos, grupos ou pessoas) → colaboradores ativos com a conta, se tiverem.
+const resolveNovoRhAudience = async (org: OrganizationId, audience: { type: "all" } | { type: "locations" | "departments" | "groups" | "employees"; ids: string[] }) => {
+  const active = await activeEmployees(org);
+  let ids: string[];
+  if (audience.type === "all") ids = active.map((e) => e.id);
+  else if (audience.type === "employees") ids = active.filter((e) => audience.ids.includes(e.id)).map((e) => e.id);
+  else {
+    ids = [];
+    for (const e of active) {
+      const units = await segments.segmentsOf(org, e.id, todayUtc());
+      const mine = audience.type === "locations" ? units.locationIds : audience.type === "departments" ? units.departmentIds : units.groupIds;
+      if (mine.some((x) => audience.ids.includes(x))) ids.push(e.id);
+    }
+  }
+  return Promise.all(ids.map(async (employeeId) => ({ employeeId, userId: await absencesDirectory.userOfEmployee(org, employeeId) })));
+};
+
 const announcementsModule = createAnnouncementsModule({
   context: {
-    resolveAudience: async (org, audience) => {
-      const active = await activeEmployees(org);
-      let ids: string[];
-      if (audience.type === "all") ids = active.map((e) => e.id);
-      else if (audience.type === "employees") ids = active.filter((e) => audience.ids.includes(e.id)).map((e) => e.id);
-      else {
-        ids = [];
-        for (const e of active) {
-          const units = await segments.segmentsOf(org, e.id, todayUtc());
-          const mine = audience.type === "locations" ? units.locationIds : units.groupIds;
-          if (mine.some((x) => audience.ids.includes(x))) ids.push(e.id);
-        }
-      }
-      return Promise.all(ids.map(async (employeeId) => ({ employeeId, userId: await absencesDirectory.userOfEmployee(org, employeeId) })));
-    },
+    resolveAudience: resolveNovoRhAudience,
     employeeForUser: (org, userId) => absencesDirectory.employeeForUser(org, userId),
+    employeeNames: async (org) => new Map((await peopleRepo.list(org, { status: "all" })).map((p) => [p.id, p.fullName])),
     notify: (org, userIds, n) => inAppNotify(org, userIds, n, "announcements.new"),
     now: () => new Date().toISOString(),
     audit: (org, e) => novoRhAudit(org, e, "announcement"),
   },
 });
 app.use("/api", announcementsModule.router);
+
+// Novo RH → Documentos (FE-065): enviar um documento a vários colaboradores, com confirmação de leitura.
+const documentDistributionsModule = createDocumentDistributionsModule({
+  context: {
+    resolveAudience: resolveNovoRhAudience,
+    employeeForUser: (org, userId) => absencesDirectory.employeeForUser(org, userId),
+    employeeNames: async (org) => new Map((await peopleRepo.list(org, { status: "all" })).map((p) => [p.id, p.fullName])),
+    notify: (org, userIds, n) => inAppNotify(org, userIds, n, "documents.distribution"),
+    now: () => new Date().toISOString(),
+    audit: (org, e) => novoRhAudit(org, e, "document_distribution"),
+  },
+});
+app.use("/api", documentDistributionsModule.router);
+
+// Novo RH → Entidades legais (FE-092) e a entidade de cada centro (FE-093).
+const legalEntitiesModule = createLegalEntitiesModule({
+  context: {
+    activeLocations: (org) => peopleRepo.listLocations(org),
+    activeContractsAt: async (org, locationIds) => {
+      const today = todayUtc();
+      let n = 0;
+      for (const e of await activeEmployees(org)) {
+        if (!e.primaryLocationId || !locationIds.includes(e.primaryLocationId)) continue;
+        n += (await peopleRepo.listContracts(org, e.id)).filter((c) => c.status === "active" && c.startDate <= today && (c.endDate === null || c.endDate >= today)).length;
+      }
+      return n;
+    },
+    now: () => new Date().toISOString(),
+    audit: (org, e) => novoRhAudit(org, { actor: e.actor, action: e.action, resourceId: e.resourceId, after: { before: e.before, after: e.after }, reason: e.reason }, "legal_entity"),
+  },
+});
+app.use("/api", legalEntitiesModule.router);
+app.use("/api", invitationsModule.router);
 
 const workspaceModule = createWorkspaceModule({
   context: {
@@ -768,7 +864,7 @@ const workspaceModule = createWorkspaceModule({
     },
     whosInScope: async (org, employeeId) => {
       const s = (await settingsModule.settings.effectiveFor(org, employeeId, todayUtc(), "security")).find((x) => x.key === "security.visibility.whos_in_scope");
-      return s?.value === "organization" ? "organization" : "own_location";
+      return s?.value === "organization" ? "organization" : s?.value === "off" ? "off" : "own_location";
     },
     now: () => new Date().toISOString(),
     notify: (org, userIds, n) => inAppNotify(org, userIds, n, "workspace.update"),
@@ -872,10 +968,18 @@ const reportsModule = createReportsModule({
           if (!managers.some((m) => m.validFrom <= today && (m.validTo === null || m.validTo >= today))) missing.push("Responsável");
           if (!(await absencesDirectory.userOfEmployee(org, e.id))) missing.push("Conta do Portal");
           if (missing.length) rows.push({ employeeId: e.id, employee: e.fullName, missing: missing.join(", ") });
+        } else if (key === "contracts") {
+          const today = todayUtc();
+          const TYPE: Record<string, string> = { permanent: "Sem termo", fixed_term: "Termo certo", temporary: "Temporário", internship: "Estágio", other: "Outro" };
+          for (const c of await peopleRepo.listContracts(org, e.id)) {
+            const state = c.status === "cancelled" ? "Anulado" : c.startDate > today ? "Futuro" : c.endDate !== null && c.endDate < today ? "Terminado" : "Em vigor";
+            rows.push({ employeeId: e.id, employee: e.fullName, type: TYPE[c.contractType] ?? c.contractType, start: c.startDate, end: c.endDate ?? "", weeklyHours: c.weeklyHours ?? "", probationEnd: c.probationEnd ?? "", state });
+          }
         }
       }
       return rows;
     },
+    employeeLocations: async (org) => new Map((await peopleRepo.list(org, { status: "all" })).map((e) => [e.id, e.primaryLocationId])),
   },
   access: {
     canSeeEmployee,
@@ -972,8 +1076,8 @@ const inboxModule = createInboxModule({
             title: "Correção de ponto",
             detail: `${op}${c.occurredAt ? ` · ${c.occurredAt.slice(0, 10)} ${hm(c.occurredAt)} UTC` : ""}`,
             meta: [{ label: "Motivo", value: c.reason }],
-            blockedReason: (await isOwn(org, actor.userId, c.employeeId)) ? ("own" as const) : null,
-            level: null,
+            blockedReason: (await isOwn(org, actor.userId, c.employeeId)) ? ("own" as const) : c.levels.length && !c.levels[c.currentLevel]?.approvers.includes(actor.userId) ? ("not_current_level" as const) : null,
+            level: c.levels.length ? { current: c.currentLevel + 1, total: c.levels.length } : null,
           });
         }
         return out;
@@ -1065,6 +1169,29 @@ const inboxModule = createInboxModule({
   }),
 });
 app.use("/api", inboxModule.router);
+
+// Novo RH → Avisos automáticos (FE-111): regras em Configurações → Notificações; cron de 10 em 10 min.
+const remindersModule = createRemindersModule({
+  sources: {
+    today: (org) => new OrganizationTimezoneClock(createScopedQuery).today(org),
+    employees: async (org) => (await activeEmployees(org)).map((e) => ({ id: e.id, name: e.fullName })),
+    day: async (org, employeeId, date) => {
+      const b = await attendanceModule.attendance.board(org, employeeId, date, date);
+      const d = b.days[0]!;
+      return { date, timeZone: b.timeZone, plannedStart: d.plannedStart, plannedEnd: d.plannedEnd, excused: d.excused, firstInAt: d.firstInAt, openNow: d.openType !== null };
+    },
+    settings: (org, employeeId, date) => settingsModule.settings.effectiveFor(org, employeeId, date, "notifications"),
+    contracts: async (org, employeeId) => (await peopleRepo.listContracts(org, employeeId)).map((c) => ({ id: c.id, status: c.status, probationEnd: c.probationEnd, endDate: c.endDate })),
+    employeeUser: (org, employeeId) => absencesDirectory.userOfEmployee(org, employeeId),
+    directManagerUsers: async (org, employeeId, date) => {
+      const links = (await peopleRepo.listManagers(org, employeeId)).filter((m) => m.kind === "direct" && m.validFrom <= date && (m.validTo === null || date <= m.validTo));
+      return absencesDirectory.usersOfEmployees(org, links.map((m) => m.managerEmployeeId));
+    },
+    adminUsers: (org) => notificationsModule.notifications.adminUserIds(org),
+  },
+  notifier: { notify: (org, userIds, n) => inAppNotify(org, userIds, n, "novo_rh.reminder") },
+});
+app.use("/api", remindersModule.router);
 
 // CRM: acessível a managers+
 const crmModule = createCrmModule();

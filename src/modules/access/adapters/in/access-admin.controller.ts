@@ -80,6 +80,7 @@ export function createAccessAdminRouter(admin: AccessAdminPort): Router {
     }),
   );
   router.post("/users/:id/reset-password", run((req) => admin.resetPassword({ ...who(req), userId: id(req) })));
+  router.post("/users/:id/reset-mfa", run((req) => admin.resetSecondFactor({ ...who(req), userId: id(req), reason: str(((req.body ?? {}) as Record<string, unknown>).reason) ?? "" })));
 
   router.get("/access-profiles", run((req) => admin.listProfiles(req.auth!.orgId)));
   router.post(

@@ -45,4 +45,14 @@ export const authAdmin = {
   deleteUser(userId: string) {
     return client().auth.admin.deleteUser(userId);
   },
+
+  /** FE-007: recuperação do segundo fator — fatores MFA da conta. */
+  listFactors(userId: string) {
+    return client().auth.admin.mfa.listFactors({ userId });
+  },
+
+  /** Remover um fator verificado termina as sessões abertas da conta (Supabase). */
+  deleteFactor(userId: string, factorId: string) {
+    return client().auth.admin.mfa.deleteFactor({ userId, id: factorId });
+  },
 };

@@ -54,7 +54,9 @@ pedidos `/api/novo-rh/*` de um Admin da organização real passam a agir nela.
 ### Input (use cases)
 
 - `GenerateDemoDatasetPort` — valida as opções, gera e entrega ao destino; devolve um resumo.
-- `DemoOrgUseCases` — `status`, `resolve` (cache 60 s, para o middleware) e `create` (só Admin; uma por organização real; 5 colaboradores por centro, marcações das últimas 4 semanas até ontem; audita `demo.organization.create` na organização real).
+- `DemoOrgUseCases` — `status`, `resolve` (cache 60 s, para o middleware), `create` (só Admin; uma por organização real; 5 colaboradores por centro; audita `demo.organization.create` na organização real) e `refresh` (mantém a demo viva: cria o cenário se faltar e acrescenta as marcações em falta dos últimos 30 dias **até agora**, sem duplicar; automático no máximo de 10 em 10 min, a cada pedido em Demonstração; `force` pelo botão).
+- Marcações (`generatePunches`): reprodutíveis por colaborador e dia (`clientEventId` fixo); ~12% chegam 6–40 min tarde, ~5% faltam, ~3% esquecem a saída, turnos de 6 h+ fazem muitas vezes pausa; ninguém pica em dias de ausência.
+- Cenário (`planScenario`): por centro, uma escala com a semana passada e a atual publicadas, a próxima em rascunho e a seguinte por fazer; 2 colaboradores de férias a decorrer hoje (aprovadas); 3 pedidos de férias pendentes, a aprovar pelo Admin que criou a demo (fluxo "Aprovação de férias (demo)").
 
 ### Output (domain dependencies)
 
@@ -62,13 +64,15 @@ pedidos `/api/novo-rh/*` de um Admin da organização real passam a agir nela.
 - `DemoOrgRepositoryPort` — ler a organização, encontrar/criar a demo ligada.
 - `DemoSeedPort` — gravar o conjunto na demo (recusa se a organização não for `is_demo`).
 - `DemoOrgSupportPort` — data de hoje no fuso da organização e auditoria.
+- `DemoLivePort` — colaboradores, ids das marcações existentes, ausências, inserir marcações, garantir o tipo "Férias (demo)" (`SupabaseDemoLive`, recusa organizações não demo).
+- `DemoScenarioPort` — escalas e ausências pelos casos de uso dos módulos rosters e absences (ligado no `server.ts`; as mesmas regras do uso real).
 
 ## Adapters
 
 ### Input
 
 - `demo-data.cli.ts` → `npm run demo:generate -- --seed 42 --per-center 40 --from 2026-10-19 --to 2026-11-01 --out .demo/dataset.json`.
-- `demo-org.controller.ts` → `GET/POST /api/novo-rh/demo` (`governance.settings`; criar exige Admin e Idempotency-Key). Sempre na organização real.
+- `demo-org.controller.ts` → `GET/POST /api/novo-rh/demo` e `POST /api/novo-rh/demo/refresh` (`governance.settings`; criar e atualizar exigem Admin e Idempotency-Key). Sempre na organização real.
 - `demo-context.middleware.ts` → troca `req.auth.orgId` para a demo em `/api/novo-rh/*` com `X-Novo-RH-Mode: demo`; 403 `demo_admin_only` se não for Admin; 409 `demo_not_created`. Montado depois de `requireMfa`.
 
 ### Output

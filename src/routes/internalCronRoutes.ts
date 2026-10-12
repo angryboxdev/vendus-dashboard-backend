@@ -28,6 +28,8 @@ export function createInternalCronRouter(deps: {
   detectForecastDeviation: DetectForecastDeviationPort;
   generateAllShiftAutomations: GenerateAllAutomationsPort;
   listOrganizations: () => Promise<OrganizationRow[]>;
+  /** Novo RH (FE-111): avisos automáticos de uma organização. */
+  runNovoRhReminders?: (organizationId: OrganizationRow["organizationId"]) => Promise<unknown>;
 }): Router {
   const router = Router();
 
@@ -178,6 +180,32 @@ export function createInternalCronRouter(deps: {
           const result = await deps.generateAllShiftAutomations.execute({ organizationId: org.organizationId, actor: "sistema (cron)" });
           return { status: "success" as const, ...result };
         },
+        { describeItem: (org) => org.organizationId },
+      );
+      res.json(summary);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erro no job";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  /**
+   * POST /api/internal/cron/novo-rh-reminders — avisos automáticos do Novo RH
+   * (entrada em falta, saída por registar, fim de contrato/período experimental).
+   * Agendar de 10 em 10 minutos. Organizações de demonstração ficam de fora.
+   */
+  router.post("/internal/cron/novo-rh-reminders", async (req: Request, res: Response) => {
+    if (!requireCronSecret(req, res)) return;
+    const run = deps.runNovoRhReminders;
+    if (!run) {
+      res.status(503).json({ error: "Avisos do Novo RH indisponíveis" });
+      return;
+    }
+    try {
+      const organizations = await deps.listOrganizations();
+      const summary = await fanOut(
+        organizations,
+        async (org) => ({ status: "success" as const, result: await run(org.organizationId) }),
         { describeItem: (org) => org.organizationId },
       );
       res.json(summary);

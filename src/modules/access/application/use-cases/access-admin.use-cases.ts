@@ -247,6 +247,23 @@ export class AccessAdminUseCases implements AccessAdminPort {
     return { temporaryPassword };
   }
 
+  /**
+   * FE-007: recuperação de acesso quando a pessoa perdeu o segundo fator. Só
+   * outro administrador, com motivo; fica na auditoria. A pessoa volta a
+   * ativar o fator no próximo acesso.
+   */
+  async resetSecondFactor(cmd: { organizationId: OrganizationId; actor: string; actorUserId: string; userId: string; reason: string }) {
+    if (cmd.userId === cmd.actorUserId) throw new AccessValidationError("Não pode repor o seu próprio segundo fator; peça a outro administrador");
+    const reason = cmd.reason.trim();
+    if (reason.length < 5) throw new AccessValidationError("Indique o motivo (mínimo 5 caracteres)");
+    const member = (await this.repo.listMembers(cmd.organizationId)).find((m) => m.userId === cmd.userId);
+    if (!member) throw new AccessNotFoundError("Utilizador");
+    const removed = await this.accounts.resetSecondFactor(member.userId);
+    this.resolveAccess.invalidate(cmd.organizationId, member.userId);
+    await this.audit.record({ organizationId: cmd.organizationId, actor: cmd.actor, entityType: "user", entityId: member.userId, action: "mfa_reset", after: { factorsRemoved: removed, reason } });
+    return { factorsRemoved: removed };
+  }
+
   // ── perfis ────────────────────────────────────────────────────────────
 
   private toProfileDTO(p: AccessProfileRecord, loaded: Loaded): AccessProfileDTO {

@@ -216,6 +216,9 @@ export class PeopleController {
     r.get(`${C}/locations`, async (req, res) => {
       res.json(await employment.listLocations(org(req)));
     });
+    r.get(`${C}/positions`, async (req, res) => {
+      res.json(await employment.listPositions(org(req)));
+    });
     r.get(`${C}/agreements`, async (req, res) => {
       res.json(await employment.listAgreements(org(req)));
     });

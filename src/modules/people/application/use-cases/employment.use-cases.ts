@@ -89,6 +89,10 @@ export class EmploymentUseCases {
     return this.repo.listLocations(org);
   }
 
+  listPositions(org: OrganizationId) {
+    return this.repo.listPositions(org);
+  }
+
   // ── Convénios ───────────────────────────────────────────────────────
   listAgreements(org: OrganizationId) {
     return this.repo.listAgreements(org);

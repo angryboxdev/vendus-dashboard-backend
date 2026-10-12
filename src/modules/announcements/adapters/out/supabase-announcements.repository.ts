@@ -41,6 +41,9 @@ export class SupabaseAnnouncementsRepository implements AnnouncementsRepositoryP
   async list(org: OrganizationId) {
     return check<Row[]>(await this.scoped(org).table("announcements").select(ANN).order("created_at", { ascending: false }).limit(200)).map(toAnn);
   }
+  async deleteDraft(org: OrganizationId, id: string) {
+    check(await this.scoped(org).table("announcements").delete().eq("id", id).eq("status", "draft"));
+  }
   async get(org: OrganizationId, id: string) {
     const r = check<Row | null>(await this.scoped(org).table("announcements").select(ANN).eq("id", id).maybeSingle());
     return r ? toAnn(r) : null;

@@ -232,6 +232,8 @@ export const TABLE_REGISTRY = {
   time_assignments: { organizationColumn: "org_id", locationBearing: false },
   // Novo RH Fase 4: assiduidade. location_id das marcações é só evidência (âmbito por colaborador).
   clock_events: { organizationColumn: "org_id", locationBearing: false },
+  break_types: { organizationColumn: "org_id", locationBearing: false },
+  clock_types: { organizationColumn: "org_id", locationBearing: false },
   clock_revisions: { organizationColumn: "org_id", locationBearing: false },
   clock_correction_requests: { organizationColumn: "org_id", locationBearing: false },
   attendance_days: { organizationColumn: "org_id", locationBearing: false },
@@ -264,6 +266,15 @@ export const TABLE_REGISTRY = {
   announcement_versions: { organizationColumn: "org_id", locationBearing: false },
   announcement_recipients: { organizationColumn: "org_id", locationBearing: false },
   announcement_receipts: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH FE-065: envio de documentos a vários colaboradores.
+  document_distributions: { organizationColumn: "org_id", locationBearing: false },
+  document_distribution_recipients: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH FE-092: entidades legais e a entidade de cada centro.
+  legal_entities: { organizationColumn: "org_id", locationBearing: false },
+  legal_entity_locations: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH FE-054: convites e pedidos de adesão.
+  invitations: { organizationColumn: "org_id", locationBearing: false },
+  join_requests: { organizationColumn: "org_id", locationBearing: false },
   alert_rules: { organizationColumn: "org_id", locationBearing: false },
   alerts: { organizationColumn: "org_id", locationBearing: false },
   custom_request_forms: { organizationColumn: "org_id", locationBearing: false },

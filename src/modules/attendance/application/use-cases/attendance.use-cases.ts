@@ -5,7 +5,9 @@ import type { CorrectionRequest, DayVersion, Incident, IncidentStatus } from "..
 import { AttendanceConflictError, AttendanceForbiddenError, AttendanceNotFoundError, AttendanceValidationError, PunchRefusedError } from "../../domain/errors.js";
 import type { AttendanceAuditPort, AttendanceClockPort, AttendanceContextPort, AttendanceRepositoryPort, BackgroundPort, PeriodGuardPort } from "../../domain/ports/out/attendance.ports.js";
 import { configHash } from "../../domain/services/config-hash.js";
-import { computeDays, dayBoard, type DayPlan, type DayResult } from "../../domain/services/day-engine.js";
+import { buildSegments, computeDays, dayBoard, type DayPlan, type DayResult, type EngineRules } from "../../domain/services/day-engine.js";
+import { clockTypeRefusal, clockTypeRule, validateClockType, type ClockTypeInput } from "../../domain/entities/clock-type.js";
+import { breakRefusal, breakRule, validateBreakType, type BreakTypeInput } from "../../domain/entities/break-type.js";
 import { checkPunch, REFUSAL_MESSAGE } from "../../domain/services/punch-policy.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -37,6 +39,10 @@ export interface PunchInput {
   ip: string | null;
   /** Hora do dispositivo, para marcações feitas sem rede (fila offline). null = agora. */
   occurredAt?: string | null;
+  /** FE-103: tipo de pausa do catálogo (só ao iniciar uma pausa). */
+  breakTypeId?: string | null;
+  /** FE-105: tipo de registo do catálogo (só ao começar a trabalhar). */
+  clockTypeId?: string | null;
 }
 
 /** Uma marcação offline só é aceite até este atraso; depois, pedido de correção. */
@@ -107,12 +113,17 @@ export class AttendanceUseCases {
   private async compute(org: OrganizationId, employeeId: string, from: string, to: string) {
     const tz = await this.ctx.timeZone(org);
     const now = this.clock.now();
-    const [loaded, plans, cfg, incidents] = await Promise.all([
+    const [loaded, plans, cfg, incidents, breakTypes, clockTypes] = await Promise.all([
       this.load(org, employeeId, from, to, tz),
       this.ctx.plans(org, employeeId, plusDays(from, -1), plusDays(to, 1)),
       this.ctx.config(org, employeeId, to, tz),
       this.repo.listIncidents(org, { employeeId, from, to }),
+      this.repo.listBreakTypes(org),
+      this.repo.listClockTypes(org),
     ]);
+    // FE-103: regras do catálogo de pausas (incluindo arquivadas — marcações antigas mantêm-nas).
+    if (breakTypes.length) cfg.rules.breakTypes = Object.fromEntries(breakTypes.map((b) => [b.id, breakRule(b)]));
+    if (clockTypes.length) cfg.rules.clockTypes = Object.fromEntries(clockTypes.map((c) => [c.id, clockTypeRule(c)]));
     // D8: incidente validado pela gestão → as horas pendentes desse dia contam.
     for (const i of incidents) {
       if (i.status === "resolved_validate") plans.set(i.workDate, { ...(plans.get(i.workDate) ?? EMPTY_PLAN), incidentValidated: true });
@@ -133,8 +144,18 @@ export class AttendanceUseCases {
     );
   }
 
-  private hashFor(c: { cfg: { rules: unknown }; plans: Map<string, DayPlan> }, date: string) {
-    return configHash({ rules: c.cfg.rules, plan: c.plans.get(date) ?? null });
+  /** Impressão da configuração de um dia; as regras de pausas só entram se o dia as usa (não mexe nos outros dias). */
+  private hashFor(c: { cfg: { rules: EngineRules }; plans: Map<string, DayPlan>; days?: DayResult[] }, date: string) {
+    const { breakTypes, clockTypes, ...rules } = c.cfg.rules;
+    const segs = c.days?.find((d) => d.workDate === date)?.segments ?? [];
+    const used = [...new Set(segs.map((s) => s.breakTypeId).filter((x): x is string => !!x))].sort();
+    const usedTypes = [...new Set(segs.map((s) => s.clockTypeId).filter((x): x is string => !!x))].sort();
+    return configHash({
+      rules,
+      plan: c.plans.get(date) ?? null,
+      ...(used.length ? { breaks: used.map((id) => [id, breakTypes?.[id] ?? null]) } : {}),
+      ...(usedTypes.length ? { clockTypes: usedTypes.map((id) => [id, clockTypes?.[id] ?? null]) } : {}),
+    });
   }
 
   /**
@@ -218,8 +239,39 @@ export class AttendanceUseCases {
     const today = localDate(now, tz);
     await this.assertOpen(org, employeeId, [today]);
     const { effective } = await this.load(org, employeeId, plusDays(today, -1), today, tz);
-    const state = effective.filter((e) => e.occurredAt <= now).at(-1)?.segmentType ?? "off";
-    if (state === input.segmentType) throw new AttendanceConflictError(state === "off" ? "Ainda não tem uma entrada registada." : "Já está neste estado.", "same_state");
+    const last = effective.filter((e) => e.occurredAt <= now).at(-1);
+    const state = last?.segmentType ?? "off";
+    if (state === "off" && input.segmentType === "off") throw new AttendanceConflictError("Ainda não tem uma entrada registada.", "same_state");
+    // FE-103: pausa com tipo — disponível agora (dia, janela, usos) e remuneração decidida pelo tipo.
+    let segmentType = input.segmentType;
+    let breakTypeId: string | null = null;
+    if (input.breakTypeId) {
+      if (input.segmentType !== "break_paid" && input.segmentType !== "break_unpaid") throw new AttendanceValidationError("O tipo de pausa só se indica ao iniciar uma pausa.", "breakTypeId");
+      const type = (await this.repo.listBreakTypes(org)).find((b) => b.id === input.breakTypeId);
+      if (!type) throw new AttendanceValidationError("Tipo de pausa não encontrado.", "breakTypeId");
+      const usesToday = effective.filter((e) => e.breakTypeId === type.id && localDate(e.occurredAt, tz) === today).length;
+      const refused = breakRefusal(type, now, tz, usesToday);
+      if (refused) throw new AttendanceValidationError(refused, "breakTypeId");
+      segmentType = type.remuneration === "unpaid" ? "break_unpaid" : "break_paid";
+      breakTypeId = type.id;
+    }
+    // FE-105: trabalho com tipo de registo — bloqueios e máximo do dia; teletrabalho fica "remoto".
+    let clockTypeId: string | null = null;
+    if (input.clockTypeId) {
+      if (input.segmentType !== "work" && input.segmentType !== "remote") throw new AttendanceValidationError("O tipo de registo só se indica ao começar a trabalhar.", "clockTypeId");
+      const type = (await this.repo.listClockTypes(org)).find((c) => c.id === input.clockTypeId);
+      if (!type) throw new AttendanceValidationError("Tipo de registo não encontrado.", "clockTypeId");
+      const todays = effective.filter((e) => localDate(e.occurredAt, tz) === today && e.occurredAt <= now);
+      const used = buildSegments(todays, now)
+        .filter((sg) => sg.clockTypeId === type.id)
+        .reduce((acc, sg) => acc + Math.max(0, Date.parse(sg.end) - Date.parse(sg.start)) / 1000, 0);
+      const refused = clockTypeRefusal(type, now, tz, used);
+      if (refused) throw new AttendanceValidationError(refused, "clockTypeId");
+      segmentType = type.remote ? "remote" : "work";
+      clockTypeId = type.id;
+    }
+    // Mesmo estado = mesmo tipo de marcação e mesmo tipo de registo/pausa (mudar de "obra" para "Formação" é uma mudança).
+    if (state === segmentType && (last?.clockTypeId ?? null) === clockTypeId && (last?.breakTypeId ?? null) === breakTypeId) throw new AttendanceConflictError("Já está neste estado.", "same_state");
     const [cfg, plans, location] = await Promise.all([
       this.ctx.config(org, employeeId, today, tz),
       this.ctx.plans(org, employeeId, today, today),
@@ -241,13 +293,15 @@ export class AttendanceUseCases {
     const { event, duplicate } = await this.repo.insertEvent(org, {
       employeeId,
       occurredAt: now,
-      segmentType: input.segmentType,
+      segmentType,
       source: input.source,
       clientEventId: input.clientEventId,
       locationId: location?.id ?? null,
       latitude: keepCoords ? input.latitude : null,
       longitude: keepCoords ? input.longitude : null,
       ip: input.ip,
+      breakTypeId,
+      clockTypeId,
     });
     const serverToday = localDate(serverNow, tz);
     if (today < serverToday) this.recalcLater(org, employeeId, plusDays(today, -1), plusDays(serverToday, -1), "Nova marcação");
@@ -326,6 +380,81 @@ export class AttendanceUseCases {
     this.range(from, to);
     const c = await this.compute(org, employeeId, from, to);
     return { timeZone: c.tz, today: c.today, days: c.days.map((d) => dayBoard(d, c.plans.get(d.workDate), c.cfg.rules, c.now)) };
+  }
+
+  // ── Catálogo de pausas (FE-103) ─────────────────────────────────────
+  listBreakTypes(org: OrganizationId) {
+    return this.repo.listBreakTypes(org);
+  }
+
+  private async assertUniqueBreakName(org: OrganizationId, name: string, exceptId: string | null) {
+    const norm = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+    if ((await this.repo.listBreakTypes(org)).some((b) => !b.archived && b.id !== exceptId && norm(b.name) === norm(name))) throw new AttendanceConflictError("Já existe uma pausa com este nome.", "duplicate_name");
+  }
+
+  async createBreakType(org: OrganizationId, actor: Actor, input: BreakTypeInput) {
+    validateBreakType(input);
+    await this.assertUniqueBreakName(org, input.name, null);
+    const b = await this.repo.createBreakType(org, input, actor.email);
+    await this.log(org, actor.email, "attendance.break_type.create", "break_type", b.id, null, b, null);
+    return b;
+  }
+
+  /** Alterar fica auditado com motivo; os dias já apurados que usam a pausa ganham movimento de ajuste (TK-13). */
+  async updateBreakType(org: OrganizationId, actor: Actor, id: string, input: BreakTypeInput, expectedVersion: number, reason: string) {
+    validateBreakType(input);
+    if (reason.trim().length < 5) throw new AttendanceValidationError("Indique o motivo da alteração (mínimo 5 caracteres).", "reason");
+    const cur = (await this.repo.listBreakTypes(org)).find((b) => b.id === id);
+    if (!cur) throw new AttendanceNotFoundError("Pausa não encontrada.");
+    await this.assertUniqueBreakName(org, input.name, id);
+    const b = await this.repo.updateBreakType(org, id, input, expectedVersion);
+    if (!b) throw new AttendanceConflictError("A pausa foi alterada por outra pessoa. Recarregue.", "stale");
+    await this.log(org, actor.email, "attendance.break_type.update", "break_type", id, cur, b, reason.trim());
+    return b;
+  }
+
+  async archiveBreakType(org: OrganizationId, actor: Actor, id: string) {
+    const cur = (await this.repo.listBreakTypes(org)).find((b) => b.id === id);
+    if (!cur) throw new AttendanceNotFoundError("Pausa não encontrada.");
+    await this.repo.archiveBreakType(org, id);
+    await this.log(org, actor.email, "attendance.break_type.archive", "break_type", id, cur, { ...cur, archived: true }, null);
+  }
+
+  // ── Tipos de registo (FE-105) ───────────────────────────────────────
+  listClockTypes(org: OrganizationId) {
+    return this.repo.listClockTypes(org);
+  }
+
+  private async assertUniqueClockTypeName(org: OrganizationId, name: string, exceptId: string | null) {
+    const norm = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+    if ((await this.repo.listClockTypes(org)).some((c) => !c.archived && c.id !== exceptId && norm(c.name) === norm(name))) throw new AttendanceConflictError("Já existe um tipo de registo com este nome.", "duplicate_name");
+  }
+
+  async createClockType(org: OrganizationId, actor: Actor, input: ClockTypeInput) {
+    validateClockType(input);
+    await this.assertUniqueClockTypeName(org, input.name, null);
+    const c = await this.repo.createClockType(org, input, actor.email);
+    await this.log(org, actor.email, "attendance.clock_type.create", "clock_type", c.id, null, c, null);
+    return c;
+  }
+
+  async updateClockType(org: OrganizationId, actor: Actor, id: string, input: ClockTypeInput, expectedVersion: number, reason: string) {
+    validateClockType(input);
+    if (reason.trim().length < 5) throw new AttendanceValidationError("Indique o motivo da alteração (mínimo 5 caracteres).", "reason");
+    const cur = (await this.repo.listClockTypes(org)).find((c) => c.id === id);
+    if (!cur) throw new AttendanceNotFoundError("Tipo de registo não encontrado.");
+    await this.assertUniqueClockTypeName(org, input.name, id);
+    const c = await this.repo.updateClockType(org, id, input, expectedVersion);
+    if (!c) throw new AttendanceConflictError("O tipo de registo foi alterado por outra pessoa. Recarregue.", "stale");
+    await this.log(org, actor.email, "attendance.clock_type.update", "clock_type", id, cur, c, reason.trim());
+    return c;
+  }
+
+  async archiveClockType(org: OrganizationId, actor: Actor, id: string) {
+    const cur = (await this.repo.listClockTypes(org)).find((c) => c.id === id);
+    if (!cur) throw new AttendanceNotFoundError("Tipo de registo não encontrado.");
+    await this.repo.archiveClockType(org, id);
+    await this.log(org, actor.email, "attendance.clock_type.archive", "clock_type", id, cur, { ...cur, archived: true }, null);
   }
 
   async myDays(org: OrganizationId, actor: Actor, from: string, to: string) {
@@ -425,9 +554,14 @@ export class AttendanceUseCases {
     this.validateChange(input, this.clock.now());
     const employeeId = await this.employeeOf(org, actor.userId);
     if (input.targetEventId) await this.targetOf(org, employeeId, input.targetEventId);
+    // FE-113: com fluxo "Correções de ponto", os níveis ficam fixados já (sem quem pede — RE-22).
+    const date = input.occurredAt ? input.occurredAt.slice(0, 10) : localDate(this.clock.now(), await this.ctx.timeZone(org));
+    const levels = await this.ctx.correctionLevels(org, employeeId, date, [actor.userId]);
+    if (levels === "no_approver") throw new AttendanceValidationError("Não há ninguém que possa aprovar este pedido. Configure pessoas de recurso no fluxo de correções de ponto.", "flow");
     const c = await this.repo.insertCorrection(org, {
       employeeId,
       requestedBy: actor.email,
+      levels: levels ?? [],
       operation: input.operation,
       targetEventId: input.targetEventId,
       occurredAt: input.occurredAt ? toUtc(input.occurredAt) : null,
@@ -456,6 +590,17 @@ export class AttendanceUseCases {
     if (c.status !== "pending") throw new AttendanceConflictError("Este pedido já foi decidido.", "already_decided");
     if ((await this.ctx.employeeForUser(org, actor.userId)) === c.employeeId) throw new AttendanceForbiddenError("Não pode decidir o seu próprio pedido.", "self_approval");
     if (decision === "reject" && !comment?.trim()) throw new AttendanceValidationError("Indique o motivo da recusa.", "comment");
+    // FE-113: com níveis, só o nível atual decide; aprovar num nível intermédio passa ao seguinte.
+    if (c.levels.length) {
+      const level = c.levels[c.currentLevel];
+      if (!level?.approvers.includes(actor.userId)) throw new AttendanceForbiddenError("Não é aprovador deste pedido neste nível.", "not_approver");
+      if (decision === "approve" && c.currentLevel < c.levels.length - 1) {
+        const next = await this.repo.advanceCorrection(org, id, c.currentLevel);
+        if (!next) throw new AttendanceConflictError("Este pedido acabou de ser decidido por outra pessoa.", "already_decided");
+        await this.log(org, actor.email, "attendance.correction.approve_level", "clock_correction_request", id, c, next, comment);
+        return next;
+      }
+    }
     let revisionId: string | null = null;
     if (decision === "approve") {
       // Pedido do próprio colaborador → a revisão não fica sujeita a recusa.
