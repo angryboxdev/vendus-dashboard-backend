@@ -19,6 +19,8 @@ export function createTimeBankModule(deps: {
   audit: TimeBankAuditPort;
   canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean>;
   periods?: PeriodGuardPort;
+  /** Colaboradores ativos (lista de saldos, FE-034). */
+  directory?: (org: OrganizationId) => Promise<{ id: string; name: string; locationName: string | null }[]>;
 }): { router: Router; timeBank: TimeBankUseCases } {
   const timeBank = new TimeBankUseCases(
     new SupabaseTimeBankRepository(createScopedQuery),
@@ -32,5 +34,5 @@ export function createTimeBankModule(deps: {
     deps.audit,
     deps.periods,
   );
-  return { router: createTimeBankRouter(timeBank, new SupabaseIdempotencyStore(createScopedQuery), deps.canSeeEmployee), timeBank };
+  return { router: createTimeBankRouter(timeBank, new SupabaseIdempotencyStore(createScopedQuery), deps.canSeeEmployee, deps.directory), timeBank };
 }

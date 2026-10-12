@@ -204,3 +204,18 @@ describe("Banco de horas — casos de uso", () => {
     }
   });
 });
+
+describe("Banco de horas — lista de saldos (FE-034)", () => {
+  test("saldo e resumo por colaborador a partir do lançado, sem sincronizar", async () => {
+    const { repo, uc } = setup();
+    const e = (employeeId: string, seconds: number, kind: "excess" | "compensation_rest") => ({ id: `${employeeId}${seconds}${kind}`, employeeId, kind, seconds, workDate: "2026-09-10", postedOn: "2026-09-10", paymentMonth: null, reason: "", createdBy: "", createdAt: "2026-09-10" });
+    repo.entries.push(e("e1", 7200, "excess"), e("e1", -3600, "compensation_rest"), e("e2", 1800, "excess"));
+    const list = await uc.balances(ORG, ["e1", "e2", "e3"]);
+    expect(list.map((b) => [b.employeeId, b.balance, b.compensatedRest])).toEqual([
+      ["e1", 3600, 3600],
+      ["e2", 1800, 0],
+      ["e3", 0, 0],
+    ]);
+    expect(repo.entries).toHaveLength(3);
+  });
+});

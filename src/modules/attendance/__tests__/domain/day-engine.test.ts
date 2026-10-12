@@ -1,5 +1,5 @@
 import { effectiveEvents, type ClockEvent, type ClockRevision } from "../../domain/entities/clock.js";
-import { computeDays, formatWorked, type DayPlan, type EngineRules } from "../../domain/services/day-engine.js";
+import { computeDays, dayBoard, formatWorked, type DayPlan, type EngineRules } from "../../domain/services/day-engine.js";
 import { checkPunch, distanceMeters, type PunchPolicy } from "../../domain/services/punch-policy.js";
 
 const TZ = "Europe/Lisbon";
@@ -148,5 +148,26 @@ describe("Regras ao picar", () => {
   test("restrição por IP", () => {
     expect(checkPunch({ ...OFF, ipAllowlist: ["203.0.113.9"] }, CTX)).toBe("ip_not_allowed");
     expect(checkPunch({ ...OFF, ipAllowlist: ["198.51.100.1"] }, CTX)).toBeNull();
+  });
+});
+
+describe("Quadro do dia (painel da gestão)", () => {
+  const rules = { ...RULES, toleranceMinutes: 5 };
+  const p = plans([["2026-10-07", { plannedStart: "09:00", plannedEnd: "17:00" }]]);
+
+  test("atraso em minutos a contar do início planeado; registo aberto agora", () => {
+    const events = [ev("2026-10-07T09:17:30", "work")];
+    const [day] = computeDays(eff(events), ["2026-10-07"], p, rules, "2026-10-07T11:00:00Z");
+    const b = dayBoard(day!, p.get("2026-10-07"), rules, "2026-10-07T11:00:00Z");
+    expect(b).toMatchObject({ plannedStart: "09:00", lateMinutes: 17, startPassed: true, openType: "work" });
+    expect(b.firstInAt).toBe("2026-10-07T08:17:30.000Z");
+  });
+
+  test("dentro da tolerância não é atraso; sem marcação antes da hora = ainda não começou", () => {
+    const [ontime] = computeDays(eff([ev("2026-10-07T09:04:00", "work"), ev("2026-10-07T17:00:00", "off")]), ["2026-10-07"], p, rules, "2026-10-07T18:00:00Z");
+    expect(dayBoard(ontime!, p.get("2026-10-07"), rules, "2026-10-07T18:00:00Z")).toMatchObject({ lateMinutes: 0, openType: null });
+    const [empty] = computeDays([], ["2026-10-07"], p, rules, "2026-10-07T07:30:00Z");
+    expect(dayBoard(empty!, p.get("2026-10-07"), rules, "2026-10-07T07:30:00Z")).toMatchObject({ firstInAt: null, startPassed: false });
+    expect(dayBoard(empty!, p.get("2026-10-07"), rules, "2026-10-07T08:10:00Z").startPassed).toBe(true);
   });
 });

@@ -237,3 +237,46 @@ export function formatWorked(seconds: number): string {
   const m = Math.floor(Math.abs(seconds) / 60);
   return `${sign}${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}min`;
 }
+
+/** Quadro do dia para o painel da gestão: planeado vs. real de um dia já apurado. */
+export interface DayBoard {
+  workDate: string;
+  workedSeconds: number;
+  theoreticalSeconds: number;
+  incidents: IncidentType[];
+  plannedStart: string | null;
+  plannedEnd: string | null;
+  /** Feriado confirmado ou ausência registada. */
+  excused: boolean;
+  /** Primeira entrada a trabalhar (UTC) e minutos depois do início planeado (0 = a horas). */
+  firstInAt: string | null;
+  lateMinutes: number;
+  /** A hora de início planeada (+ tolerância) já passou. */
+  startPassed: boolean;
+  /** Tipo do registo aberto agora (null = sem registo aberto). */
+  openType: Segment["type"] | null;
+  /** Faixas do dia (UTC), para a linha do tempo. */
+  segments: { start: string; end: string; type: Segment["type"] }[];
+}
+
+export function dayBoard(day: DayResult, plan: DayPlan | undefined, rules: Pick<EngineRules, "timeZone" | "toleranceMinutes">, now: string): DayBoard {
+  const first = day.segments.find((s) => WORKING.includes(s.type));
+  const start = plan?.plannedStart ? at(day.workDate, plan.plannedStart, rules.timeZone) : null;
+  const limit = start ? DateTime.fromISO(start).plus({ minutes: rules.toleranceMinutes }).toUTC().toISO()! : null;
+  const late = !!(first && start && limit && first.start > limit);
+  const open = day.segments.find((s) => s.open && !s.autoClosed && !s.forgotten);
+  return {
+    workDate: day.workDate,
+    workedSeconds: day.workedSeconds,
+    theoreticalSeconds: day.theoreticalSeconds,
+    incidents: day.incidents,
+    plannedStart: plan?.plannedStart ?? null,
+    plannedEnd: plan?.plannedEnd ?? null,
+    excused: plan?.excused ?? false,
+    firstInAt: first?.start ?? null,
+    lateMinutes: late ? Math.floor((Date.parse(first!.start) - Date.parse(start!)) / 60_000) : 0,
+    startPassed: !!limit && now > limit,
+    openType: open?.type ?? null,
+    segments: day.segments.map((s) => ({ start: s.start, end: s.end, type: s.type })),
+  };
+}

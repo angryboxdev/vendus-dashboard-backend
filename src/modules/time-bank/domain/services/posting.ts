@@ -122,8 +122,8 @@ export function summary(entries: TimeBankEntry[]) {
   return {
     balance: entries.reduce((s, e) => s + e.seconds, 0),
     generated: sum(["excess", "deficit", "multiplier", "holiday", "adjustment"]),
-    compensatedRest: -sum(["compensation_rest"]),
-    compensatedPaid: -sum(["compensation_paid"]),
-    expired: -sum(["expiry"]),
+    compensatedRest: 0 - sum(["compensation_rest"]),
+    compensatedPaid: 0 - sum(["compensation_paid"]),
+    expired: 0 - sum(["expiry"]),
   };
 }

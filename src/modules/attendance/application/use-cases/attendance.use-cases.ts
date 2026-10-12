@@ -5,7 +5,7 @@ import type { CorrectionRequest, DayVersion, Incident, IncidentStatus } from "..
 import { AttendanceConflictError, AttendanceForbiddenError, AttendanceNotFoundError, AttendanceValidationError, PunchRefusedError } from "../../domain/errors.js";
 import type { AttendanceAuditPort, AttendanceClockPort, AttendanceContextPort, AttendanceRepositoryPort, BackgroundPort, PeriodGuardPort } from "../../domain/ports/out/attendance.ports.js";
 import { configHash } from "../../domain/services/config-hash.js";
-import { computeDays, type DayPlan, type DayResult } from "../../domain/services/day-engine.js";
+import { computeDays, dayBoard, type DayPlan, type DayResult } from "../../domain/services/day-engine.js";
 import { checkPunch, REFUSAL_MESSAGE } from "../../domain/services/punch-policy.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -319,6 +319,13 @@ export class AttendanceUseCases {
       incidents: c.incidents,
       refusable: await this.repo.listRefusableRevisions(org, employeeId, c.now),
     };
+  }
+
+  /** Painel da gestão: planeado vs. real por dia, da mesma fonte que as vistas (RE-6), sem gravar. */
+  async board(org: OrganizationId, employeeId: string, from: string, to: string) {
+    this.range(from, to);
+    const c = await this.compute(org, employeeId, from, to);
+    return { timeZone: c.tz, today: c.today, days: c.days.map((d) => dayBoard(d, c.plans.get(d.workDate), c.cfg.rules, c.now)) };
   }
 
   async myDays(org: OrganizationId, actor: Actor, from: string, to: string) {
