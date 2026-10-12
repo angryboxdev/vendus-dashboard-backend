@@ -97,7 +97,18 @@ export class TimeBankUseCases {
     const entries = await this.repo.listEntries(org, employeeId);
     const today = await this.ctx.today(org);
     const validationDays = await this.pendingValidations(org, employeeId);
-    return { employeeId, cutoff: cut, today, ...summary(entries), available: summary(entries).balance, pendingValidation: validationDays, entries: running(entries) };
+    const s = await this.ctx.settingsAt(org, employeeId, today);
+    const totals = summary(entries);
+    return {
+      employeeId,
+      cutoff: cut,
+      today,
+      ...totals,
+      available: totals.balance,
+      compensateBeyondBalance: s.compensateBeyondBalance,
+      pendingValidation: validationDays,
+      entries: running(entries),
+    };
   }
 
   async myLedger(org: OrganizationId, actor: Actor) {
