@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 697 · pré-autenticação: 21 · não classificados: 0
+Endpoints: 708 · pré-autenticação: 21 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -340,6 +340,9 @@ Endpoints: 697 · pré-autenticação: 21 · não classificados: 0
 | GET | `/api/me/custom-requests` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/custom-requests` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/custom-requests/forms` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/document-distributions` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| POST | `/api/me/document-distributions/:id/confirm` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/document-distributions/:id/download-url` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/documents` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/documents/:id/download-url` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/documents/:id/replace` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
@@ -431,6 +434,14 @@ Endpoints: 697 · pré-autenticação: 21 · não classificados: 0
 | GET | `/api/novo-rh/demo` | permission:governance.settings:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/demo` | permission:governance.settings:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/demo/refresh` | permission:governance.settings:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/document-distributions` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/document-distributions` | permission:hr.documents:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/document-distributions/:id/archive` | permission:hr.documents:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/document-distributions/:id/download-url` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/document-distributions/:id/proof.csv` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/document-distributions/:id/remind` | permission:hr.documents:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/document-distributions/:id/report` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/document-distributions/audience-preview` | permission:hr.documents:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/inbox` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
 | POST | `/api/novo-rh/inbox/decide` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
 | GET | `/api/novo-rh/overview` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |

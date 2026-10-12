@@ -76,6 +76,7 @@ import { createAlertsModule } from "./modules/alerts/alerts.module.js";
 import type { AlertsContextPort } from "./modules/alerts/domain/ports/out/alerts.ports.js";
 import { createWorkspaceModule } from "./modules/workspace/workspace.module.js";
 import { createReportsModule } from "./modules/reports/reports.module.js";
+import { createDocumentDistributionsModule } from "./modules/document-distributions/document-distributions.module.js";
 import type { ReportRow } from "./modules/reports/domain/entities/report.js";
 import { SupabaseAbsencesDirectory } from "./modules/absences/adapters/out/supabase-absences-directory.js";
 import type { OrganizationId } from "./kernel/organization-id.js";
@@ -770,23 +771,26 @@ const novoRhAudit = (org: OrganizationId, e: { actor: string; action: string; re
 const todayUtc = () => new Date().toISOString().slice(0, 10);
 const activeEmployees = (org: OrganizationId) => peopleRepo.list(org, { status: "active" });
 
+// Público (todos, centros, departamentos, grupos ou pessoas) → colaboradores ativos com a conta, se tiverem.
+const resolveNovoRhAudience = async (org: OrganizationId, audience: { type: "all" } | { type: "locations" | "departments" | "groups" | "employees"; ids: string[] }) => {
+  const active = await activeEmployees(org);
+  let ids: string[];
+  if (audience.type === "all") ids = active.map((e) => e.id);
+  else if (audience.type === "employees") ids = active.filter((e) => audience.ids.includes(e.id)).map((e) => e.id);
+  else {
+    ids = [];
+    for (const e of active) {
+      const units = await segments.segmentsOf(org, e.id, todayUtc());
+      const mine = audience.type === "locations" ? units.locationIds : audience.type === "departments" ? units.departmentIds : units.groupIds;
+      if (mine.some((x) => audience.ids.includes(x))) ids.push(e.id);
+    }
+  }
+  return Promise.all(ids.map(async (employeeId) => ({ employeeId, userId: await absencesDirectory.userOfEmployee(org, employeeId) })));
+};
+
 const announcementsModule = createAnnouncementsModule({
   context: {
-    resolveAudience: async (org, audience) => {
-      const active = await activeEmployees(org);
-      let ids: string[];
-      if (audience.type === "all") ids = active.map((e) => e.id);
-      else if (audience.type === "employees") ids = active.filter((e) => audience.ids.includes(e.id)).map((e) => e.id);
-      else {
-        ids = [];
-        for (const e of active) {
-          const units = await segments.segmentsOf(org, e.id, todayUtc());
-          const mine = audience.type === "locations" ? units.locationIds : audience.type === "departments" ? units.departmentIds : units.groupIds;
-          if (mine.some((x) => audience.ids.includes(x))) ids.push(e.id);
-        }
-      }
-      return Promise.all(ids.map(async (employeeId) => ({ employeeId, userId: await absencesDirectory.userOfEmployee(org, employeeId) })));
-    },
+    resolveAudience: resolveNovoRhAudience,
     employeeForUser: (org, userId) => absencesDirectory.employeeForUser(org, userId),
     employeeNames: async (org) => new Map((await peopleRepo.list(org, { status: "all" })).map((p) => [p.id, p.fullName])),
     notify: (org, userIds, n) => inAppNotify(org, userIds, n, "announcements.new"),
@@ -795,6 +799,19 @@ const announcementsModule = createAnnouncementsModule({
   },
 });
 app.use("/api", announcementsModule.router);
+
+// Novo RH → Documentos (FE-065): enviar um documento a vários colaboradores, com confirmação de leitura.
+const documentDistributionsModule = createDocumentDistributionsModule({
+  context: {
+    resolveAudience: resolveNovoRhAudience,
+    employeeForUser: (org, userId) => absencesDirectory.employeeForUser(org, userId),
+    employeeNames: async (org) => new Map((await peopleRepo.list(org, { status: "all" })).map((p) => [p.id, p.fullName])),
+    notify: (org, userIds, n) => inAppNotify(org, userIds, n, "documents.distribution"),
+    now: () => new Date().toISOString(),
+    audit: (org, e) => novoRhAudit(org, e, "document_distribution"),
+  },
+});
+app.use("/api", documentDistributionsModule.router);
 
 const workspaceModule = createWorkspaceModule({
   context: {

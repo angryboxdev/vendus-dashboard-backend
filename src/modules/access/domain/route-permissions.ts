@@ -110,6 +110,8 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/rosters(\/|$)/, target: p("hr.schedules") },
   { pattern: /^\/api\/novo-rh\/periods(\/|$)/, target: p("hr.closure") },
   { pattern: /^\/api\/novo-rh\/announcements(\/|$)/, target: p("hr.employees") },
+  // Envio de documentos a vários colaboradores (FE-065): a mesma permissão dos documentos de colaborador.
+  { pattern: /^\/api\/novo-rh\/document-distributions(\/|$)/, target: p("hr.documents") },
   { pattern: /^\/api\/novo-rh\/workspace(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/reports(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/alerts(\/|$)/, target: p("hr.overview") },

@@ -266,6 +266,9 @@ export const TABLE_REGISTRY = {
   announcement_versions: { organizationColumn: "org_id", locationBearing: false },
   announcement_recipients: { organizationColumn: "org_id", locationBearing: false },
   announcement_receipts: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH FE-065: envio de documentos a vários colaboradores.
+  document_distributions: { organizationColumn: "org_id", locationBearing: false },
+  document_distribution_recipients: { organizationColumn: "org_id", locationBearing: false },
   alert_rules: { organizationColumn: "org_id", locationBearing: false },
   alerts: { organizationColumn: "org_id", locationBearing: false },
   custom_request_forms: { organizationColumn: "org_id", locationBearing: false },
