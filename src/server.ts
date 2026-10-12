@@ -78,6 +78,7 @@ import { createWorkspaceModule } from "./modules/workspace/workspace.module.js";
 import { createReportsModule } from "./modules/reports/reports.module.js";
 import { createDocumentDistributionsModule } from "./modules/document-distributions/document-distributions.module.js";
 import { createLegalEntitiesModule } from "./modules/legal-entities/legal-entities.module.js";
+import { createInvitationsModule } from "./modules/invitations/invitations.module.js";
 import type { ReportRow } from "./modules/reports/domain/entities/report.js";
 import { SupabaseAbsencesDirectory } from "./modules/absences/adapters/out/supabase-absences-directory.js";
 import type { OrganizationId } from "./kernel/organization-id.js";
@@ -286,6 +287,19 @@ if (ENV.CRON_SECRET) {
     }),
   );
 }
+
+// Novo RH → Convites (FE-054): o pedido de adesão é público (sem sessão), por isso
+// o router público monta-se antes do requireAuth. O contexto usa repositórios
+// criados mais abaixo — só é chamado quando chega um pedido.
+const invitationsModule = createInvitationsModule({
+  context: {
+    employeeByEmail: async (org, email) =>
+      (await peopleRepo.list(org, { status: "all" })).find((e) => [e.email, e.personalEmail].some((m) => m?.trim().toLowerCase() === email))?.id ?? null,
+    now: () => new Date().toISOString(),
+    audit: (org, e) => novoRhAudit(org, e, "invitation"),
+  },
+});
+app.use("/api", invitationsModule.publicRouter);
 
 // All routes below this line require authentication
 app.use(requireAuth);
@@ -832,6 +846,7 @@ const legalEntitiesModule = createLegalEntitiesModule({
   },
 });
 app.use("/api", legalEntitiesModule.router);
+app.use("/api", invitationsModule.router);
 
 const workspaceModule = createWorkspaceModule({
   context: {

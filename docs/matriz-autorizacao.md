@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 718 · pré-autenticação: 21 · não classificados: 0
+Endpoints: 727 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -444,6 +444,13 @@ Endpoints: 718 · pré-autenticação: 21 · não classificados: 0
 | POST | `/api/novo-rh/document-distributions/audience-preview` | permission:hr.documents:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/inbox` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
 | POST | `/api/novo-rh/inbox/decide` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
+| GET | `/api/novo-rh/invitations` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/invitations` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/invitations/:id/revoke` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/invitations/requests` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/invitations/requests/:id/accept` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/invitations/requests/:id/complete` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/invitations/requests/:id/reject` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/legal-entities` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
 | POST | `/api/novo-rh/legal-entities` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | PATCH | `/api/novo-rh/legal-entities/:id` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
@@ -639,6 +646,8 @@ Endpoints: 718 · pré-autenticação: 21 · não classificados: 0
 | POST | `/api/preparations/:id/items` | permission:stock.recipes:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | DELETE | `/api/preparations/:id/items/:itemId` | permission:stock.recipes:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | PUT | `/api/preparations/:id/items/:itemId` | permission:stock.recipes:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/public/join/:code` | pré-auth | — | — | — | — | — |
+| POST | `/api/public/join/:code` | pré-auth | — | — | — | — | — |
 | GET | `/api/reports/dre/custos-fixos` | permission:dre.fixed_costs:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/reports/dre/custos-fixos` | permission:dre.fixed_costs:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | DELETE | `/api/reports/dre/custos-fixos/:id` | permission:dre.fixed_costs:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |

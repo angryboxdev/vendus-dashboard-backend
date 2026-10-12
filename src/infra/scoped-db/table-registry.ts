@@ -272,6 +272,9 @@ export const TABLE_REGISTRY = {
   // Novo RH FE-092: entidades legais e a entidade de cada centro.
   legal_entities: { organizationColumn: "org_id", locationBearing: false },
   legal_entity_locations: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH FE-054: convites e pedidos de adesão.
+  invitations: { organizationColumn: "org_id", locationBearing: false },
+  join_requests: { organizationColumn: "org_id", locationBearing: false },
   alert_rules: { organizationColumn: "org_id", locationBearing: false },
   alerts: { organizationColumn: "org_id", locationBearing: false },
   custom_request_forms: { organizationColumn: "org_id", locationBearing: false },

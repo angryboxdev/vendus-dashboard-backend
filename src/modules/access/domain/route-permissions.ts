@@ -112,6 +112,8 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/rosters(\/|$)/, target: p("hr.schedules") },
   { pattern: /^\/api\/novo-rh\/periods(\/|$)/, target: p("hr.closure") },
   { pattern: /^\/api\/novo-rh\/announcements(\/|$)/, target: p("hr.employees") },
+  // Convites e pedidos de adesão (FE-054): gestão de pessoas. O pedido em si é público (/api/public/join, pré-auth).
+  { pattern: /^\/api\/novo-rh\/invitations(\/|$)/, target: p("hr.employees") },
   // Envio de documentos a vários colaboradores (FE-065): a mesma permissão dos documentos de colaborador.
   { pattern: /^\/api\/novo-rh\/document-distributions(\/|$)/, target: p("hr.documents") },
   { pattern: /^\/api\/novo-rh\/workspace(\/|$)/, target: p("hr.employees") },
