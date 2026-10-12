@@ -102,6 +102,18 @@ export class DistributionsUseCases {
     return { url: await this.files.signedUrl(org, d.storagePath, d.fileName) };
   }
 
+  /** Ficha (FE-022): envios recebidos por uma pessoa, com o estado de leitura (inclui arquivados). */
+  async forEmployee(org: OrganizationId, employeeId: string) {
+    const out: (Distribution & { readAt: string | null; confirmedAt: string | null })[] = [];
+    for (const r of await this.repo.recipientRows(org, employeeId)) {
+      const d = await this.repo.get(org, r.distributionId);
+      if (!d) continue;
+      const { storagePath: _p, ...rest } = d;
+      out.push({ ...rest, readAt: r.readAt, confirmedAt: r.confirmedAt });
+    }
+    return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
   // ── Colaborador ──────────────────────────────────────────────────────
   private async me(org: OrganizationId, actor: Actor) {
     const employeeId = await this.ctx.employeeForUser(org, actor.userId);

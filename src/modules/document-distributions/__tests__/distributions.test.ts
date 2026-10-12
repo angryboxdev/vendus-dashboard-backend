@@ -56,6 +56,7 @@ describe("Envio de documentos (FE-065)", () => {
     await uc.confirm(ORG, ANA, d.id);
     r = await uc.report(ORG, d.id);
     expect(r.totals).toEqual({ recipients: 1, read: 1, confirmed: 1 });
+    expect((await uc.forEmployee(ORG, "e1")).map((x) => ({ id: x.id, confirmedAt: x.confirmedAt }))).toEqual([{ id: d.id, confirmedAt: "2026-10-12T11:00:00.000Z" }]);
     // Arquivado deixa de aparecer ao colaborador; a prova fica.
     await uc.archive(ORG, ADMIN, d.id);
     expect(await uc.mine(ORG, ANA)).toEqual([]);

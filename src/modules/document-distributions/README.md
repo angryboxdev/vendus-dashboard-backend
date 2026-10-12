@@ -68,7 +68,7 @@ ficha (módulos `documents`/`hr`).
 
 ### Input
 
-- `createDistributionsRouter` → `/api/novo-rh/document-distributions` (`hr.documents`): `GET` lista, `POST` (multipart: `file`, `title`, `audience` em JSON, `requiresConfirmation`), `POST /audience-preview`, `GET /:id/report`, `POST /:id/remind`, `POST /:id/archive`, `GET /:id/download-url`, `GET /:id/proof.csv`.
+- `createDistributionsRouter` → `/api/novo-rh/document-distributions` (`hr.documents`): `GET` lista, `POST` (multipart: `file`, `title`, `audience` em JSON, `requiresConfirmation`), `POST /audience-preview`, `GET /:id/report`, `POST /:id/remind`, `POST /:id/archive`, `GET /:id/download-url`, `GET /:id/proof.csv`, `GET /by-employee/:employeeId` (ficha, FE-022).
 - Colaborador (Portal): `GET /api/me/document-distributions`, `GET /:id/download-url`, `POST /:id/confirm`.
 
 ### Output

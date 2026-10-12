@@ -67,6 +67,7 @@ export function createDistributionsRouter(uc: DistributionsUseCases, store: Idem
     const out = await run(() => uc.send(org(req), actorOf(req), { title: String(b.title ?? ""), audience: audience(b.audience), requiresConfirmation: b.requiresConfirmation === "true" || b.requiresConfirmation === true, file }));
     res.status(201).json(out);
   });
+  r.get(`${D}/by-employee/:employeeId`, async (req, res) => res.json(await uc.forEmployee(org(req), req.params.employeeId as string)));
   r.get(`${D}/:id/report`, async (req, res) => res.json(await run(() => uc.report(org(req), id(req)))));
   r.post(`${D}/:id/remind`, async (req, res) => res.json(await run(() => uc.remind(org(req), actorOf(req), id(req)))));
   r.post(`${D}/:id/archive`, async (req, res) => {
