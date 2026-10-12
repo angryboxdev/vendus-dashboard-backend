@@ -29,6 +29,10 @@ export interface AuthPayload {
   orgId: OrganizationId;
   /** Role held within `orgId` — org-scoped, per ADR-0003. */
   orgRole: AppRole;
+  /** Emissão do token (segundos, claim `iat`) — revogação de sessões (Novo RH, TK-4). */
+  issuedAt?: number;
+  /** Nível de autenticação Supabase (`aal1` | `aal2`) — MFA (Novo RH, TK-3). */
+  aal?: string;
 }
 
 declare global {
@@ -61,6 +65,8 @@ export interface VerifiedClaims {
   orgId?: string;
   /** Present only when the token itself carries the `org_role` claim. */
   role?: AppRole;
+  issuedAt?: number;
+  aal?: string;
 }
 
 /** Verifies a bearer token and extracts its claims. Returns null when invalid. */
@@ -109,6 +115,7 @@ export async function resolveAuth(
 
   const claims = await verifyToken(token);
   if (!claims) return { status: "no-auth" };
+  const session = { ...(claims.issuedAt !== undefined && { issuedAt: claims.issuedAt }), ...(claims.aal !== undefined && { aal: claims.aal }) };
 
   // Token already carries the org + role claims (custom_access_token_hook
   // injected them) — trust it directly, no membership lookup.
@@ -120,6 +127,7 @@ export async function resolveAuth(
         email: claims.email,
         orgId: mintOrganizationId(claims.orgId),
         orgRole: claims.role,
+        ...session,
       },
     };
   }
@@ -136,6 +144,7 @@ export async function resolveAuth(
       email: claims.email,
       orgId: mintOrganizationId(membership.orgId),
       orgRole: membership.role,
+      ...session,
     },
   };
 }

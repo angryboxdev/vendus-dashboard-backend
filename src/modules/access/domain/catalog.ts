@@ -119,6 +119,8 @@ export const ACCESS_CATALOG: CatalogModule[] = [
       { key: "hr.reopen_month", label: "Reabrir mês fechado", description: "Reabrir um mês de assiduidade já fechado." },
       { key: "hr.payslip_import", label: "Importar recibos", description: "Importação em massa de recibos de vencimento." },
       { key: "hr.kiosk_pin", label: "PIN do quiosque", description: "Definir o PIN de picagem do colaborador." },
+      { key: "hr.people_export", label: "Exportar colaboradores", description: "Exportar a lista de colaboradores (só as colunas que pode ver)." },
+      { key: "hr.absences_private", label: "Ausências privadas", description: "Ver e gerir ausências marcadas como privadas (tipo e comentário)." },
     ],
   },
   {
@@ -133,9 +135,24 @@ export const ACCESS_CATALOG: CatalogModule[] = [
       { key: "company.calendar", label: "Calendário & Eventos", description: "Eventos da empresa." },
       { key: "company.holidays", label: "Feriados", description: "Feriados nacionais, municipais e próprios." },
       { key: "company.devices", label: "Dispositivos", description: "Emparelhar e revogar quiosques e ecrãs." },
+      { key: "company.structure", label: "Estrutura", description: "Departamentos, grupos, contactos e termos aceites (Novo RH)." },
     ],
     specials: [
       { key: "company.confidential_documents", label: "Documentos confidenciais", description: "Documentos da Empresa com visibilidade só para administração." },
+    ],
+  },
+  {
+    // Novo RH (Fase 1): motor de configurações e auditoria. Fora de "company"
+    // de propósito — os perfis de sistema leem "company" inteiro e isto não deve vir por arrasto.
+    key: "governance",
+    label: "Configurações & Auditoria",
+    description: "Regras configuráveis do Novo RH e histórico de alterações.",
+    functions: [
+      { key: "governance.settings", label: "Configurações", description: "Ver e alterar as regras do Novo RH, com data de efeito e motivo." },
+      { key: "governance.audit", label: "Auditoria", description: "Consultar e exportar o registo de auditoria." },
+    ],
+    specials: [
+      { key: "governance.settings_retroactive", label: "Alterações retroativas", description: "Alterar regras com data de efeito no passado." },
     ],
   },
 ];
@@ -199,6 +216,8 @@ export const SYSTEM_PROFILE_DEFAULTS: Record<SystemProfileKey, { name: string; d
       "hr.schedules": "READ",
       "hr.sensitive_data": "MANAGE",
       "hr.payslip_import": "MANAGE",
+      "hr.people_export": "MANAGE",
+      "hr.absences_private": "MANAGE",
       ...moduleAll("company", "READ"),
       "company.positions": "MANAGE",
     },

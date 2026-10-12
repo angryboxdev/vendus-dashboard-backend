@@ -63,6 +63,14 @@ export class ScopedQuery {
    * `20260829140000_scope_stock_quantities_rpc.sql`); this method is the only
    * place in `src/**` that may call it, so it cannot be invoked unscoped.
    */
+  /**
+   * Novo RH — auditoria: primeiro `seq` com a cadeia de hash quebrada nesta
+   * organização (null = íntegra). Ver `20261012110000_novo_rh_audit_events.sql`.
+   */
+  verifyAuditChain() {
+    return this.client.rpc("verify_audit_chain", { p_org: this.organizationId });
+  }
+
   getStockQuantitiesWithLastPurchase(itemIds: string[]) {
     return this.client.rpc("get_stock_quantities_with_last_purchase", {
       p_org_id: this.organizationId,

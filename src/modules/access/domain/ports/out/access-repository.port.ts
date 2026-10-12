@@ -12,6 +12,8 @@ export interface AccessMemberRecord {
   overrides: PermissionMap;
   status: MemberStatus;
   version: number;
+  /** Tokens emitidos antes disto deixam de valer (mudança de perfil/estado — TK-4). */
+  sessionsRevokedAt?: string | null;
 }
 
 export interface AccessProfileRecord {

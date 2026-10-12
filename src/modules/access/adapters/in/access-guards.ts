@@ -2,7 +2,8 @@ import type { RequestHandler } from "express";
 import type { AccessLevel } from "../../domain/catalog.js";
 import type { AccessContext, ResolveAccessPort } from "../../domain/ports/in/resolve-access.port.js";
 import { can } from "../../domain/services/effective-access.service.js";
-import { classifyRoute } from "../../domain/route-permissions.js";
+import { classifyRoute, isRouteAllowed, mfaRequired, sessionRevoked, type MfaEnforcement } from "../../domain/route-permissions.js";
+import { problem, sendProblem } from "../../../../infra/http/problem-details.js";
 
 declare global {
   namespace Express {
@@ -26,9 +27,14 @@ export interface AccessGuards {
    * classificada → 403 (falha fechada).
    */
   routeGuard: RequestHandler;
+  /**
+   * Global, depois do `routeGuard`: perfis de gestão sem MFA (`aal2`) → 403
+   * `mfa_required` nas rotas abrangidas por `MFA_ENFORCEMENT` (TK-3).
+   */
+  requireMfa: RequestHandler;
 }
 
-export function createAccessGuards(resolveAccess: ResolveAccessPort): AccessGuards {
+export function createAccessGuards(resolveAccess: ResolveAccessPort, options: { mfa: MfaEnforcement } = { mfa: "off" }): AccessGuards {
   const loadAccess: RequestHandler = async (req, res, next) => {
     if (!req.auth) {
       next();
@@ -42,6 +48,11 @@ export function createAccessGuards(resolveAccess: ResolveAccessPort): AccessGuar
       }
       if (!access.active) {
         res.status(403).json({ error: "Esta conta está desativada", code: "USER_DISABLED" });
+        return;
+      }
+      // TK-4: perfil/estado mudou depois de este token ser emitido → entrar de novo.
+      if (sessionRevoked(access.sessionsRevokedAt, req.auth.issuedAt)) {
+        sendProblem(res, problem(401, "session_revoked", "O seu acesso foi alterado. Entre de novo.", { code: "SESSION_REVOKED" }).problem);
         return;
       }
       req.access = access;
@@ -77,14 +88,7 @@ export function createAccessGuards(resolveAccess: ResolveAccessPort): AccessGuar
     const path = req.originalUrl.split("?")[0] ?? "";
     const { target, level } = classifyRoute(req.method, path);
     const access = req.access;
-    const allowed =
-      !!access &&
-      access.active &&
-      !!target &&
-      (target.kind === "portal" ||
-        (target.kind === "base" && !access.portalOnly) ||
-        (target.kind === "admin" && access.isAdmin) ||
-        (target.kind === "permission" && can(access, target.key, level)));
+    const allowed = !!access && isRouteAllowed(access, req.method, path);
     if (allowed) {
       next();
       return;
@@ -96,5 +100,14 @@ export function createAccessGuards(resolveAccess: ResolveAccessPort): AccessGuar
     });
   };
 
-  return { loadAccess, requirePermission, requireAdmin, routeGuard };
+  const requireMfa: RequestHandler = (req, res, next) => {
+    const path = req.originalUrl.split("?")[0] ?? "";
+    if (!req.auth || !req.access || !mfaRequired(req.access, path, options.mfa) || req.auth.aal === "aal2") {
+      next();
+      return;
+    }
+    sendProblem(res, problem(403, "mfa_required", "Esta área exige autenticação de dois fatores.", { code: "MFA_REQUIRED" }).problem);
+  };
+
+  return { loadAccess, requirePermission, requireAdmin, routeGuard, requireMfa };
 }

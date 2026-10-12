@@ -192,10 +192,12 @@ export class AccessAdminUseCases implements AccessAdminPort {
           ? sanitizePermissionMap(cmd.overrides)
           : member.overrides;
 
+    // TK-4: mudar o perfil ou as exceções revoga as sessões abertas (entra de novo com o acesso novo).
+    const accessChanged = nextProfile?.id !== currentProfile?.id || JSON.stringify(overrides) !== JSON.stringify(member.overrides);
     const ok = await this.repo.updateMember(
       org,
       member.userId,
-      { ...(nextProfile && { profileId: nextProfile.id }), legacyRole: legacyRoleFor(nextProfile?.systemKey ?? null), overrides },
+      { ...(nextProfile && { profileId: nextProfile.id }), legacyRole: legacyRoleFor(nextProfile?.systemKey ?? null), overrides, ...(accessChanged && { revokeSessions: true as const }) },
       cmd.version,
     );
     if (!ok) throw new AccessConflictError();
@@ -229,7 +231,7 @@ export class AccessAdminUseCases implements AccessAdminPort {
       if (member.userId === cmd.actorUserId) throw new AccessValidationError("Não pode desativar a sua própria conta");
       this.assertKeepsAnAdmin(members, profiles, member.userId);
     }
-    const ok = await this.repo.updateMember(org, member.userId, { status: cmd.status }, cmd.version);
+    const ok = await this.repo.updateMember(org, member.userId, { status: cmd.status, revokeSessions: true }, cmd.version);
     if (!ok) throw new AccessConflictError();
     this.resolveAccess.invalidate(org, member.userId);
     await this.audit.record({ organizationId: org, actor: cmd.actor, entityType: "user", entityId: member.userId, action: cmd.status === "disabled" ? "disabled" : "enabled", before: { status: member.status }, after: { status: cmd.status } });

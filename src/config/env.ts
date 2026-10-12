@@ -65,6 +65,13 @@ export const ENV = {
   CRON_SECRET: process.env.CRON_SECRET ?? "",
 
   /**
+   * MFA obrigatória para perfis de gestão (Novo RH, TK-3, ADR-0024):
+   * `off` | `novo-rh` (só /api/novo-rh, por omissão) | `all` (toda a área de gestão).
+   * Passar a `all` só depois de todos os gestores terem ativado a app autenticadora.
+   */
+  MFA_ENFORCEMENT: (["off", "novo-rh", "all"] as const).find((m) => m === process.env.MFA_ENFORCEMENT) ?? "novo-rh",
+
+  /**
    * Origens CORS extra, separadas por vírgula (ex.: o URL https do túnel
    * usado para testar o Portal do Colaborador no telemóvel). Vazio por omissão.
    */

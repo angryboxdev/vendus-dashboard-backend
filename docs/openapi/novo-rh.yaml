@@ -1,0 +1,181 @@
+openapi: 3.1.0
+info:
+  title: Mezza ERP — Novo RH
+  version: 0.0.1
+  description: >
+    Contrato da API do Novo RH (task RH faseada). Cresce com cada fase; cada
+    endpoint de escrita usa Idempotency-Key e If-Match e devolve erros RFC 7807
+    (ADR-0022).
+servers:
+  - url: /api
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      summary: Estado do serviço
+      security: []
+      responses:
+        "200":
+          description: Serviço disponível
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+  /novo-rh/settings/definitions:
+    get:
+      summary: Catálogo de parâmetros (C11.1)
+      parameters:
+        - { name: domain, in: query, schema: { type: string, enum: [security, time_tracking, notifications] } }
+      responses: { "200": { description: Lista de SettingDefinition } }
+  /novo-rh/settings/profiles:
+    get:
+      summary: Perfis (global, segmento, pessoal)
+      responses: { "200": { description: Lista de perfis } }
+    post:
+      summary: Criar perfil
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [domain, name, kind]
+              properties:
+                domain: { type: string, enum: [security, time_tracking, notifications] }
+                name: { type: string, maxLength: 120 }
+                kind: { type: string, enum: [global, segment, personal] }
+      responses:
+        "201": { description: Perfil criado }
+        "400": { $ref: "#/components/responses/Problem" }
+  /novo-rh/settings/profiles/{id}:
+    get:
+      summary: Detalhe do perfil (alvos, valores em vigor) com ETag
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Detalhe, headers: { ETag: { $ref: "#/components/headers/ETag" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /novo-rh/settings/profiles/{id}/targets:
+    post:
+      summary: Associar alvo com vigência
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/IfMatch" }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetType, targetId, validFrom]
+              properties:
+                targetType: { type: string, enum: [employee, group, department, location] }
+                targetId: { type: string, format: uuid }
+                validFrom: { type: string, format: date }
+                validTo: { type: string, format: date, nullable: true }
+      responses:
+        "201": { description: Alvo criado }
+        "403": { description: retroactive_not_allowed, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+        "412": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+  /novo-rh/settings/profiles/{id}/values:
+    post:
+      summary: Novo valor (append-only) com data de efeito e motivo
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/IfMatch" }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key, validFrom, reason]
+              properties:
+                key: { type: string }
+                value: { description: "Valor do tipo do parâmetro; null = deixar de definir" }
+                validFrom: { type: string, format: date }
+                reason: { type: string }
+      responses:
+        "201": { description: "{ value, impact } — impact só quando a data é passada" }
+        "403": { description: retroactive_not_allowed (TK-6) }
+        "412": { $ref: "#/components/responses/Problem" }
+        "422": { description: "rule_violation com `requires` (TK-7)", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+  /novo-rh/settings/profiles/{id}/impact-preview:
+    post:
+      summary: Pré-visualizar impacto (colaboradores e dias passados)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "200": { description: "{ employees, pastDays, validFrom }" } }
+  /novo-rh/settings/effective:
+    get:
+      summary: Valores efetivos de um colaborador numa data, com origem e herdado
+      parameters:
+        - { name: employeeId, in: query, required: true, schema: { type: string } }
+        - { name: date, in: query, required: true, schema: { type: string, format: date } }
+        - { name: domain, in: query, schema: { type: string } }
+      responses: { "200": { description: Lista de EffectiveSetting } }
+  /novo-rh/settings/history:
+    get:
+      summary: Histórico (antes, depois, motivo, autor) — CF-12
+      parameters: [{ name: key, in: query, schema: { type: string } }, { name: profileId, in: query, schema: { type: string } }]
+      responses: { "200": { description: Lista de HistoryEntry } }
+  /novo-rh/settings/history.csv:
+    get:
+      summary: Exportação CSV do histórico — CF-12
+      responses: { "200": { description: CSV (;) com BOM, content: { text/csv: {} } } }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Chave única por intenção de escrita (1–255 caracteres visíveis). Repetir o pedido com a mesma chave devolve a mesma resposta.
+      schema: { type: string, minLength: 1, maxLength: 255 }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: ETag da versão lida. Desatualizado → 412; em falta → 428.
+      schema: { type: string }
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: ID de correlação do cliente (8–64 caracteres [A-Za-z0-9._-]); senão é gerado.
+      schema: { type: string }
+  headers:
+    ETag:
+      description: Versão do recurso.
+      schema: { type: string }
+    XCorrelationId:
+      description: ID de correlação do pedido.
+      schema: { type: string }
+    IdempotentReplayed:
+      description: "true quando a resposta é a repetição guardada de um pedido anterior."
+      schema: { type: string, enum: ["true"] }
+  schemas:
+    Problem:
+      type: object
+      description: RFC 7807. Pode ter membros de extensão (ex. field, requires).
+      required: [type, title, status]
+      properties:
+        type: { type: string, example: /problems/precondition_failed }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        correlationId: { type: string }
+        error: { type: string, description: Igual a detail (compatibilidade com o frontend atual). }
+  responses:
+    Problem:
+      description: Erro no formato RFC 7807
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }

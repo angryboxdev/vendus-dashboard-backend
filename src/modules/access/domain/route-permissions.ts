@@ -1,4 +1,5 @@
 import type { AccessLevel } from "./catalog.js";
+import { can, type AccessSubject } from "./services/effective-access.service.js";
 
 /**
  * Tabela central rota → permissão (Utilizadores & Perfis de Acesso 2.0,
@@ -88,6 +89,27 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/crm\/(scripts|parameters|action-types)(\/|$)/, target: p("crm.settings") },
   { pattern: /^\/api\/crm(\/|$)/, target: p("crm.customers") },
 
+  // ── Novo RH (task faseada) ───────────────────────────────────────────
+  // Pré-visualizar impacto não grava nada, mas só serve a quem vai alterar.
+  { pattern: /^\/api\/novo-rh\/settings(\/|$)/, target: p("governance.settings") },
+  { pattern: /^\/api\/novo-rh\/audit(\/|$)/, target: p("governance.audit") },
+  { pattern: /^\/api\/novo-rh\/structure(\/|$)/, target: p("company.structure") },
+  { pattern: /^\/api\/novo-rh\/catalog(\/|$)/, target: p("company.structure") },
+  { pattern: /^\/api\/novo-rh\/people\/export\.csv$/, target: p("hr.people_export", "MANAGE") },
+  { pattern: /^\/api\/novo-rh\/people(\/|$)/, target: p("hr.employees") },
+  { pattern: /^\/api\/novo-rh\/time\/(holiday-calendars|holidays)(\/|$)/, target: p("company.holidays") },
+  { pattern: /^\/api\/novo-rh\/time\/vacation-calendars(\/|$)/, target: p("hr.leave") },
+  { pattern: /^\/api\/novo-rh\/time(\/|$)/, target: p("hr.schedules") },
+  { pattern: /^\/api\/novo-rh\/attendance(\/|$)/, target: p("hr.attendance") },
+  { pattern: /^\/api\/novo-rh\/absences(\/|$)/, target: p("hr.leave") },
+  { pattern: /^\/api\/novo-rh\/time-bank(\/|$)/, target: p("hr.attendance") },
+  { pattern: /^\/api\/novo-rh\/rosters(\/|$)/, target: p("hr.schedules") },
+  { pattern: /^\/api\/novo-rh\/periods(\/|$)/, target: p("hr.closure") },
+  { pattern: /^\/api\/novo-rh\/announcements(\/|$)/, target: p("hr.employees") },
+  { pattern: /^\/api\/novo-rh\/workspace(\/|$)/, target: p("hr.employees") },
+  { pattern: /^\/api\/novo-rh\/reports(\/|$)/, target: p("hr.employees") },
+  { pattern: /^\/api\/novo-rh\/alerts(\/|$)/, target: p("hr.overview") },
+
   // ── Recursos Humanos ─────────────────────────────────────────────────
   { pattern: /^\/api\/hr\/overview(\/|$)/, target: p("hr.overview") },
   { pattern: /^\/api\/hr\/attendance\/closure\/reopen$/, target: p("hr.reopen_month") },
@@ -125,4 +147,50 @@ export function classifyRoute(method: string, path: string): RouteDecision {
     return { target: rule.target, level };
   }
   return { target: null, level: defaultLevel };
+}
+
+/** Quem pede, para a decisão de rota (= AccessContext sem a identidade). */
+export interface RouteSubject extends AccessSubject {
+  portalOnly: boolean;
+}
+
+/**
+ * A decisão do `routeGuard` — pura, para o guarda e para o gerador da matriz
+ * de autorização (TK-5) darem sempre o mesmo resultado.
+ */
+export function isRouteAllowed(subject: RouteSubject, method: string, path: string): boolean {
+  const { target, level } = classifyRoute(method, path);
+  if (!subject.active || !target) return false;
+  switch (target.kind) {
+    case "portal":
+      return true;
+    case "base":
+      return !subject.portalOnly;
+    case "admin":
+      return subject.isAdmin;
+    case "permission":
+      return can(subject, target.key, level);
+  }
+}
+
+/** Âmbito da MFA obrigatória (`MFA_ENFORCEMENT`): desligada, só o Novo RH, ou toda a área de gestão. */
+export type MfaEnforcement = "off" | "novo-rh" | "all";
+
+/** Perfil de gestão = Admin ou qualquer permissão de gerir (ADR-0024, D2). */
+export function isManagementSubject(subject: RouteSubject): boolean {
+  return subject.isAdmin || Object.values(subject.permissions).some((l) => l === "MANAGE");
+}
+
+/** TK-3: o pedido exige sessão com MFA (`aal2`)? O Portal (`/api/me`) nunca exige. */
+export function mfaRequired(subject: RouteSubject, path: string, mode: MfaEnforcement): boolean {
+  if (mode === "off" || subject.portalOnly || !isManagementSubject(subject)) return false;
+  if (/^\/api\/me(\/|$)/.test(path)) return false;
+  return mode === "all" ? path.startsWith("/api/") : /^\/api\/novo-rh(\/|$)/.test(path);
+}
+
+/** TK-4: o token foi emitido antes da revogação das sessões deste utilizador? */
+export function sessionRevoked(revokedAt: string | null, issuedAtSeconds: number | undefined): boolean {
+  if (!revokedAt) return false;
+  if (issuedAtSeconds === undefined) return true;
+  return issuedAtSeconds * 1000 < Date.parse(revokedAt);
 }

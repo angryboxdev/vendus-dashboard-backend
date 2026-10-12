@@ -197,6 +197,78 @@ export const TABLE_REGISTRY = {
   // spec C ticket 03: keyed by (org_id, location_id), like location_tokens/pairing_codes.
   vendus_location_config: { organizationColumn: "org_id", locationBearing: true },
   sales_summary_cache: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 1 (ticket 02): motor de configurações (C11) e Idempotency-Key persistente (ADR-0022).
+  setting_profiles: { organizationColumn: "org_id", locationBearing: false },
+  setting_profile_targets: { organizationColumn: "org_id", locationBearing: false },
+  setting_values: { organizationColumn: "org_id", locationBearing: false },
+  http_idempotency_keys: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 1 (ticket 03): auditoria transversal append-only, encadeada por hash.
+  audit_events: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 1 (ticket 04): estrutura organizacional.
+  org_departments: { organizationColumn: "org_id", locationBearing: false },
+  org_groups: { organizationColumn: "org_id", locationBearing: false },
+  employee_org_assignments: { organizationColumn: "org_id", locationBearing: false },
+  org_contacts: { organizationColumn: "org_id", locationBearing: false },
+  org_terms_acceptances: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 1 (ticket 05): âmbitos de utilizadores e privacidade por campo.
+  access_scopes: { organizationColumn: "org_id", locationBearing: false },
+  access_field_privacy: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 1 (ticket 10): notificações na aplicação.
+  notifications: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 2: pessoas e contratos.
+  collective_agreements: { organizationColumn: "org_id", locationBearing: false },
+  employment_contracts: { organizationColumn: "org_id", locationBearing: false },
+  employee_managers: { organizationColumn: "org_id", locationBearing: false },
+  compensation_items: { organizationColumn: "org_id", locationBearing: false },
+  employee_compensations: { organizationColumn: "org_id", locationBearing: false },
+  custom_field_definitions: { organizationColumn: "org_id", locationBearing: false },
+  employee_custom_values: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 3: base do tempo.
+  work_schedules: { organizationColumn: "org_id", locationBearing: false },
+  work_schedule_versions: { organizationColumn: "org_id", locationBearing: false },
+  holiday_calendars: { organizationColumn: "org_id", locationBearing: false },
+  holiday_calendar_days: { organizationColumn: "org_id", locationBearing: false },
+  vacation_calendars: { organizationColumn: "org_id", locationBearing: false },
+  time_assignments: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 4: assiduidade. location_id das marcações é só evidência (âmbito por colaborador).
+  clock_events: { organizationColumn: "org_id", locationBearing: false },
+  clock_revisions: { organizationColumn: "org_id", locationBearing: false },
+  clock_correction_requests: { organizationColumn: "org_id", locationBearing: false },
+  attendance_days: { organizationColumn: "org_id", locationBearing: false },
+  attendance_adjustments: { organizationColumn: "org_id", locationBearing: false },
+  attendance_incidents: { organizationColumn: "org_id", locationBearing: false },
+  attendance_recalc_queue: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 5: ausências, aprovações e saldos.
+  absence_types: { organizationColumn: "org_id", locationBearing: false },
+  approval_flows: { organizationColumn: "org_id", locationBearing: false },
+  absence_requests: { organizationColumn: "org_id", locationBearing: false },
+  approval_decisions: { organizationColumn: "org_id", locationBearing: false },
+  leave_balance_entries: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 6: banco de horas.
+  time_bank_entries: { organizationColumn: "org_id", locationBearing: false },
+  time_bank_validations: { organizationColumn: "org_id", locationBearing: false },
+  hour_categories: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 7: escalas e turnos.
+  roster_shift_templates: { organizationColumn: "org_id", locationBearing: false },
+  rosters: { organizationColumn: "org_id", locationBearing: false },
+  roster_shifts: { organizationColumn: "org_id", locationBearing: false },
+  roster_publications: { organizationColumn: "org_id", locationBearing: false },
+  roster_swaps: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 8: períodos, fechos, reaberturas e exportações.
+  pay_periods: { organizationColumn: "org_id", locationBearing: false },
+  pay_period_closures: { organizationColumn: "org_id", locationBearing: false },
+  pay_period_reopenings: { organizationColumn: "org_id", locationBearing: false },
+  export_jobs: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 9: comunicados, alertas, solicitações e tarefas.
+  announcements: { organizationColumn: "org_id", locationBearing: false },
+  announcement_versions: { organizationColumn: "org_id", locationBearing: false },
+  announcement_recipients: { organizationColumn: "org_id", locationBearing: false },
+  announcement_receipts: { organizationColumn: "org_id", locationBearing: false },
+  alert_rules: { organizationColumn: "org_id", locationBearing: false },
+  alerts: { organizationColumn: "org_id", locationBearing: false },
+  custom_request_forms: { organizationColumn: "org_id", locationBearing: false },
+  custom_requests: { organizationColumn: "org_id", locationBearing: false },
+  ops_tasks: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;
