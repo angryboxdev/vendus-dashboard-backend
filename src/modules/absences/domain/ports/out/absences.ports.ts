@@ -66,3 +66,8 @@ export interface AbsencesAuditPort {
 export interface AbsencesClockPort {
   today(org: OrganizationId): Promise<string>;
 }
+
+/** Períodos fechados (módulo periods): datas congeladas para um colaborador (TK-17). */
+export interface PeriodGuardPort {
+  closedDates(org: OrganizationId, employeeId: string, from: string, to: string): Promise<Set<string>>;
+}

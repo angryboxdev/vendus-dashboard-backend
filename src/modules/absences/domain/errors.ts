@@ -34,7 +34,7 @@ export class AbsenceRuleError extends Error {
 export class AbsenceConflictError extends Error {
   constructor(
     message: string,
-    readonly code: "overlap" | "duplicate_name" | "not_pending" | "already_decided",
+    readonly code: "overlap" | "duplicate_name" | "not_pending" | "already_decided" | "period_closed",
   ) {
     super(message);
     this.name = "AbsenceConflictError";

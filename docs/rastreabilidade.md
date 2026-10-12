@@ -119,10 +119,10 @@ Fontes: RE = `Especificacao_RH_Engenharia_Reversa` §15 · CF = `Especificacao_R
 
 | ID | Requisito | Estado | Código | Teste |
 |---|---|---|---|---|
-| RE-30 | Correção em período fechado → 409; reabertura com dupla aprovação | por fazer | | |
-| TK-17 | Fecho bloqueia escritas dentro do período | por fazer | | |
-| TK-18 | Reabertura com 2 aprovadores distintos, nenhum o requerente | por fazer | | |
-| TK-19 | Totais exportados = soma dos dias e movimentos | por fazer | | |
+| RE-30 | Correção em período fechado → 409; reabertura com dupla aprovação | feito | `src/modules/periods`; attendance; absences; time-bank; rosters | `src/modules/periods/__tests__/use-cases/periods.test.ts` |
+| TK-17 | Fecho bloqueia escritas dentro do período | feito | `src/modules/periods`; attendance; absences; time-bank; rosters | `src/modules/periods/__tests__/use-cases/periods.test.ts` |
+| TK-18 | Reabertura com 2 aprovadores distintos, nenhum o requerente | feito | `src/modules/periods` | `src/modules/periods/__tests__/use-cases/periods.test.ts` |
+| TK-19 | Totais exportados = soma dos dias e movimentos | feito | `src/modules/periods` | `src/modules/periods/__tests__/use-cases/periods.test.ts`; `src/modules/periods/__tests__/adapters/periods.controller.test.ts` |
 
 ## Fase 9 — Comunicação, alertas, tarefas e relatórios
 

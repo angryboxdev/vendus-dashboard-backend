@@ -2,7 +2,7 @@ import { DateTime } from "luxon";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import { validateCategory, type BankSettings, type HourCategoryInput, type NewEntry } from "../../domain/entities/time-bank.js";
 import { TimeBankConflictError, TimeBankForbiddenError, TimeBankNotFoundError, TimeBankRuleError, TimeBankValidationError } from "../../domain/errors.js";
-import type { TimeBankAuditPort, TimeBankContextPort, TimeBankRepositoryPort } from "../../domain/ports/out/time-bank.ports.js";
+import type { PeriodGuardPort, TimeBankAuditPort, TimeBankContextPort, TimeBankRepositoryPort } from "../../domain/ports/out/time-bank.ports.js";
 import { cutoff, dayTarget, postingsFor, running, secondsInCategory, summary, toExpire, type BankDay } from "../../domain/services/posting.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -23,7 +23,13 @@ export class TimeBankUseCases {
     private readonly repo: TimeBankRepositoryPort,
     private readonly ctx: TimeBankContextPort,
     private readonly audit: TimeBankAuditPort,
+    private readonly periods: PeriodGuardPort = { closedDates: async () => new Set<string>() },
   ) {}
+
+  /** TK-17: movimentos com data num período fechado são recusados. */
+  private async assertOpen(org: OrganizationId, employeeId: string, date: string) {
+    if ((await this.periods.closedDates(org, employeeId, date, date)).has(date)) throw new TimeBankConflictError(`O dia ${date} está num período fechado. Peça a reabertura do período.`, "period_closed");
+  }
 
   private log(org: OrganizationId, actor: string, action: string, resourceId: string | null, after: unknown, reason: string | null) {
     return this.audit.record(org, { actor, action, resourceType: "time_bank", resourceId, before: null, after, reason });
@@ -70,8 +76,10 @@ export class TimeBankUseCases {
       return settingsCache.get(d)!;
     };
     const fresh: NewEntry[] = [];
+    // Dias de períodos fechados estão congelados: não recebem lançamentos nem ajustes.
+    const frozen = await this.periods.closedDates(org, employeeId, from, to);
     for (const day of att.days) {
-      if (day.workDate > cut) continue;
+      if (day.workDate > cut || frozen.has(day.workDate)) continue;
       const s = await settingsAt(day.workDate);
       const target = dayTarget(day, {
         timeZone: att.timeZone,
@@ -131,6 +139,7 @@ export class TimeBankUseCases {
     if ((await this.ctx.employeeForUser(org, actor.userId)) === employeeId) throw new TimeBankForbiddenError("Não pode compensar o seu próprio banco de horas.");
     await this.sync(org, employeeId, actor.email);
     const today = await this.ctx.today(org);
+    await this.assertOpen(org, employeeId, today);
     const s = await this.ctx.settingsAt(org, employeeId, today);
     const entries = await this.repo.listEntries(org, employeeId);
     const available = summary(entries).balance;
@@ -166,9 +175,15 @@ export class TimeBankUseCases {
     if (input.workDate !== null && !DATE.test(input.workDate)) throw new TimeBankValidationError("Dia inválido.", "workDate");
     if ((await this.ctx.employeeForUser(org, actor.userId)) === employeeId) throw new TimeBankForbiddenError("Não pode ajustar o seu próprio banco de horas.");
     const today = await this.ctx.today(org);
+    await this.assertOpen(org, employeeId, input.workDate ?? today);
     const [e] = await this.repo.insertEntries(org, [{ employeeId, kind: "adjustment", seconds: input.seconds, workDate: input.workDate ?? today, postedOn: today, paymentMonth: null, reason: input.reason.trim(), createdBy: actor.email }]);
     await this.log(org, actor.email, "time_bank.adjust", employeeId, e, input.reason);
     return e;
+  }
+
+  /** Movimentos com data no período (fotografia do fecho — TK-19). */
+  async entriesBetween(org: OrganizationId, employeeId: string, from: string, to: string) {
+    return (await this.repo.listEntries(org, employeeId)).filter((e) => e.workDate >= from && e.workDate <= to);
   }
 
   // ── Validação de excedente (C6.5, CF-6) ─────────────────────────────
@@ -190,6 +205,7 @@ export class TimeBankUseCases {
     if (!DATE.test(workDate)) throw new TimeBankValidationError("Dia inválido.", "workDate");
     if ((await this.ctx.employeeForUser(org, actor.userId)) === employeeId) throw new TimeBankForbiddenError("Não pode validar o seu próprio excedente.");
     if (!(await this.ctx.settingsAt(org, employeeId, workDate)).excessValidation) throw new TimeBankConflictError("Este dia não precisa de validação.", "not_required");
+    await this.assertOpen(org, employeeId, workDate);
     if (decision === "reject" && !comment?.trim()) throw new TimeBankValidationError("Indique o motivo da recusa.", "comment");
     const v = await this.repo.insertValidation(org, { employeeId, workDate, status: decision === "approve" ? "approved" : "rejected", comment: comment?.trim() || null, decidedBy: actor.email });
     if (!v) throw new TimeBankConflictError("Este dia já foi decidido.", "already_decided");

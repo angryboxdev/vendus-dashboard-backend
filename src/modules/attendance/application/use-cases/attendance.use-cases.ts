@@ -3,7 +3,7 @@ import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import { effectiveEvents, SEGMENT_TYPES, type ClockEvent, type RevisionOperation, type SegmentType } from "../../domain/entities/clock.js";
 import type { CorrectionRequest, DayVersion, Incident, IncidentStatus } from "../../domain/entities/records.js";
 import { AttendanceConflictError, AttendanceForbiddenError, AttendanceNotFoundError, AttendanceValidationError, PunchRefusedError } from "../../domain/errors.js";
-import type { AttendanceAuditPort, AttendanceClockPort, AttendanceContextPort, AttendanceRepositoryPort, BackgroundPort } from "../../domain/ports/out/attendance.ports.js";
+import type { AttendanceAuditPort, AttendanceClockPort, AttendanceContextPort, AttendanceRepositoryPort, BackgroundPort, PeriodGuardPort } from "../../domain/ports/out/attendance.ports.js";
 import { configHash } from "../../domain/services/config-hash.js";
 import { computeDays, type DayPlan, type DayResult } from "../../domain/services/day-engine.js";
 import { checkPunch, REFUSAL_MESSAGE } from "../../domain/services/punch-policy.js";
@@ -68,7 +68,17 @@ export class AttendanceUseCases {
     private readonly audit: AttendanceAuditPort,
     private readonly clock: AttendanceClockPort,
     private readonly background: BackgroundPort,
+    private readonly periods: PeriodGuardPort = { closedDates: async () => new Set<string>() },
   ) {}
+
+  /** TK-17/RE-30: nenhuma escrita com data num período fechado. */
+  private async assertOpen(org: OrganizationId, employeeId: string, dates: string[]) {
+    const sorted = [...new Set(dates)].sort();
+    if (!sorted.length) return;
+    const closed = await this.periods.closedDates(org, employeeId, sorted[0]!, sorted.at(-1)!);
+    const hit = sorted.find((d) => closed.has(d));
+    if (hit) throw new AttendanceConflictError(`O dia ${hit} está num período fechado. Peça a reabertura do período.`, "period_closed");
+  }
 
   private log(org: OrganizationId, actor: string, action: string, resourceType: string, resourceId: string | null, before: unknown, after: unknown, reason: string | null = null) {
     return this.audit.record(org, { actor, action, resourceType, resourceId, before, after, reason });
@@ -137,10 +147,12 @@ export class AttendanceUseCases {
   async recalculate(org: OrganizationId, employeeId: string, from: string, to: string, reason: string): Promise<{ changed: number }> {
     const c = await this.compute(org, employeeId, from, to);
     const current = await this.repo.currentDays(org, employeeId, from, to);
+    // Dias de períodos fechados estão congelados (não ganham versões novas nem incidentes).
+    const frozen = await this.periods.closedDates(org, employeeId, from, to);
     const found: { employeeId: string; workDate: string; type: DayResult["incidents"][number] }[] = [];
     let changed = 0;
     for (const d of c.days) {
-      if (d.workDate >= c.today) continue;
+      if (d.workDate >= c.today || frozen.has(d.workDate)) continue;
       for (const type of d.incidents) found.push({ employeeId, workDate: d.workDate, type });
       const hash = this.hashFor(c, d.workDate);
       const cur = current.find((x) => x.workDate === d.workDate);
@@ -164,7 +176,7 @@ export class AttendanceUseCases {
     }
     if (found.length) await this.repo.ensureIncidents(org, found);
     for (const i of c.incidents) {
-      if (i.status !== "open" || i.source !== "engine" || i.workDate >= c.today) continue;
+      if (i.status !== "open" || i.source !== "engine" || i.workDate >= c.today || frozen.has(i.workDate)) continue;
       if (!found.some((f) => f.workDate === i.workDate && f.type === i.type)) {
         await this.repo.resolveIncident(org, i.id, { status: "resolved_correct", comment: "Resolvido pela correção das marcações.", resolvedBy: "sistema" });
       }
@@ -204,6 +216,7 @@ export class AttendanceUseCases {
       now = new Date(Math.min(at, Date.parse(serverNow))).toISOString();
     }
     const today = localDate(now, tz);
+    await this.assertOpen(org, employeeId, [today]);
     const { effective } = await this.load(org, employeeId, plusDays(today, -1), today, tz);
     const state = effective.filter((e) => e.occurredAt <= now).at(-1)?.segmentType ?? "off";
     if (state === input.segmentType) throw new AttendanceConflictError(state === "off" ? "Ainda não tem uma entrada registada." : "Já está neste estado.", "same_state");
@@ -299,6 +312,11 @@ export class AttendanceUseCases {
     return this.days(org, await this.employeeOf(org, actor.userId), from, to);
   }
 
+  /** Dias gravados (versões atuais) — fonte dos totais do fecho (TK-19). */
+  storedDays(org: OrganizationId, employeeId: string, from: string, to: string) {
+    return this.repo.currentDays(org, employeeId, from, to);
+  }
+
   async adjustments(org: OrganizationId, employeeId: string, from: string, to: string) {
     this.range(from, to);
     return this.repo.listAdjustments(org, employeeId, from, to);
@@ -335,6 +353,7 @@ export class AttendanceUseCases {
     const now = this.clock.now();
     const occurredAt = input.occurredAt ? toUtc(input.occurredAt) : null;
     const anchorAt = occurredAt ?? target!.occurredAt;
+    await this.assertOpen(org, employeeId, [anchorAt, target?.occurredAt].filter((x): x is string => !!x).map((x) => localDate(x, tz)));
     const cfg = await this.ctx.config(org, employeeId, localDate(anchorAt, tz), tz);
     const refusableUntil = refusable && cfg.refusal.enabled ? DateTime.fromISO(now, { zone: "utc" }).plus({ hours: cfg.refusal.hours }).toUTC().toISO()! : null;
     const revision = await this.repo.insertRevision(org, {
@@ -373,6 +392,7 @@ export class AttendanceUseCases {
     if (!r || r.employeeId !== employeeId) throw new AttendanceNotFoundError("Correção não encontrada.");
     if (r.state !== "active" || r.refusableUntil === null) throw new AttendanceConflictError("Esta correção não pode ser recusada.", "not_refusable");
     if (this.clock.now() > r.refusableUntil) throw new AttendanceConflictError("O prazo para recusar esta correção terminou.", "refusal_window_closed");
+    await this.assertOpen(org, employeeId, [localDate(r.anchorAt, await this.ctx.timeZone(org))]);
     const updated = await this.repo.refuseRevision(org, revisionId, comment?.trim() || null);
     await this.log(org, actor.email, "attendance.revision.refuse", "clock_revision", revisionId, r, updated, comment);
     const date = localDate(r.anchorAt, await this.ctx.timeZone(org));
@@ -449,6 +469,7 @@ export class AttendanceUseCases {
     if (!["correct", "validate", "dismiss"].includes(resolution)) throw new AttendanceValidationError("Resolução inválida.", "resolution");
     if (resolution !== "correct" && !comment?.trim()) throw new AttendanceValidationError("Indique um comentário.", "comment");
     if ((await this.ctx.employeeForUser(org, actor.userId)) === i.employeeId) throw new AttendanceForbiddenError("Não pode resolver um incidente seu.", "self_approval");
+    if (resolution === "validate") await this.assertOpen(org, i.employeeId, [i.workDate]);
     const status = resolution === "correct" ? "resolved_correct" : resolution === "validate" ? "resolved_validate" : "dismissed";
     const r = await this.repo.resolveIncident(org, id, { status, comment: comment?.trim() || null, resolvedBy: actor.email });
     await this.log(org, actor.email, `attendance.incident.${resolution}`, "attendance_incident", id, i, r, comment);

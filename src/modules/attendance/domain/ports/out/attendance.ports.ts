@@ -74,3 +74,8 @@ export interface AttendanceClockPort {
 export interface BackgroundPort {
   run(task: () => Promise<void>): void;
 }
+
+/** Períodos fechados (módulo periods): datas congeladas para um colaborador (TK-17). */
+export interface PeriodGuardPort {
+  closedDates(org: OrganizationId, employeeId: string, from: string, to: string): Promise<Set<string>>;
+}

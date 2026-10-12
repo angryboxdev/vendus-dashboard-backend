@@ -5,7 +5,7 @@ import type { OrganizationId } from "../../kernel/organization-id.js";
 import { createRostersRouter } from "./adapters/in/rosters.controller.js";
 import { SupabaseRostersRepository } from "./adapters/out/supabase-rosters.repository.js";
 import { RostersUseCases } from "./application/use-cases/rosters.use-cases.js";
-import type { RosterPublishedPort, RostersAuditPort, RostersNotifierPort } from "./domain/ports/out/rosters.ports.js";
+import type { PeriodGuardPort, RosterPublishedPort, RostersAuditPort, RostersNotifierPort } from "./domain/ports/out/rosters.ports.js";
 import type { Rules, Severity } from "./domain/services/constraints.js";
 
 /** Parâmetros efetivos (legal + time_tracking.roster.*) → regras do motor de restrições. */
@@ -34,6 +34,7 @@ export function createRostersModule(deps: {
   published: RosterPublishedPort;
   audit: RostersAuditPort;
   canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean>;
+  periods?: PeriodGuardPort;
 }): { router: Router; rosters: RostersUseCases } {
   const rosters = new RostersUseCases(
     new SupabaseRostersRepository(createScopedQuery),
@@ -46,6 +47,7 @@ export function createRostersModule(deps: {
     deps.notifier,
     deps.published,
     deps.audit,
+    deps.periods,
   );
   return { router: createRostersRouter(rosters, new SupabaseIdempotencyStore(createScopedQuery), deps.canSeeEmployee), rosters };
 }

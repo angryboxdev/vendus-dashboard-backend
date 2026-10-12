@@ -4,7 +4,7 @@ import { rulesFor, validateType, type AbsenceType, type AbsenceTypeInput, type L
 import { snapshotLevels, validateFlow, type ApprovalFlow, type ApprovalFlowInput } from "../../domain/entities/approval-flow.js";
 import { overlaps, type AbsenceRequest, type RequestStatus } from "../../domain/entities/request.js";
 import { AbsenceConflictError, AbsenceForbiddenError, AbsenceNotFoundError, AbsenceRuleError, AbsenceValidationError } from "../../domain/errors.js";
-import type { AbsencesAuditPort, AbsencesClockPort, AbsencesContextPort, AbsencesNotifierPort, AbsencesRepositoryPort } from "../../domain/ports/out/absences.ports.js";
+import type { AbsencesAuditPort, AbsencesClockPort, AbsencesContextPort, AbsencesNotifierPort, AbsencesRepositoryPort, PeriodGuardPort } from "../../domain/ports/out/absences.ports.js";
 import { absenceEffect, accrualFor, periodStart, requestAmount, summarize, type DayEffect, type PlanDay } from "../../domain/services/absence-calc.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -45,7 +45,14 @@ export class AbsencesUseCases {
     private readonly notifier: AbsencesNotifierPort,
     private readonly audit: AbsencesAuditPort,
     private readonly clock: AbsencesClockPort,
+    private readonly periods: PeriodGuardPort = { closedDates: async () => new Set<string>() },
   ) {}
+
+  /** TK-17: ausências com dias num período fechado não se criam, aprovam nem cancelam. */
+  private async assertOpen(org: OrganizationId, employeeId: string, from: string, to: string) {
+    const closed = await this.periods.closedDates(org, employeeId, from, to);
+    if (closed.size) throw new AbsenceConflictError(`O dia ${[...closed].sort()[0]} está num período fechado. Peça a reabertura do período.`, "period_closed");
+  }
 
   private log(org: OrganizationId, actor: string, action: string, resourceType: string, resourceId: string | null, before: unknown, after: unknown, reason: string | null = null) {
     return this.audit.record(org, { actor, action, resourceType, resourceId, before, after, reason });
@@ -227,6 +234,7 @@ export class AbsencesUseCases {
       if (rules.minConsecutive !== null && calc.amount < rules.minConsecutive) throw new AbsenceRuleError(`Mínimo de ${rules.minConsecutive} dia(s) por pedido.`, "min_consecutive");
       if (rules.maxConsecutive !== null && calc.amount > rules.maxConsecutive) throw new AbsenceRuleError(`Máximo de ${rules.maxConsecutive} dia(s) por pedido.`, "max_consecutive");
     }
+    await this.assertOpen(org, input.employeeId, input.startDate, input.endDate);
     const existing = (await this.repo.listRequests(org, { employeeId: input.employeeId })).filter((r) => r.status === "pending" || r.status === "approved");
     if (existing.some((r) => r.kind === "absence" && overlaps(r, input))) throw new AbsenceConflictError("Já existe uma ausência pedida ou aprovada nestas datas.", "overlap");
 
@@ -297,6 +305,7 @@ export class AbsencesUseCases {
         : last
           ? { status: "approved" as RequestStatus, decidedAt: new Date().toISOString() }
           : { currentLevel: r.currentLevel + 1 };
+    if (patch.status === "approved") await this.assertOpen(org, r.employeeId, r.startDate, r.endDate);
     const updated = await this.repo.updateRequest(org, id, { status: "pending", currentLevel: r.currentLevel }, patch);
     if (!updated) throw new AbsenceConflictError("Este pedido acabou de ser decidido por outra pessoa.", "already_decided");
     await this.repo.insertDecision(org, { requestId: id, level: r.currentLevel, actor: actor.email, actorUserId: actor.userId, decision, comment: comment?.trim() || null });
@@ -329,6 +338,7 @@ export class AbsencesUseCases {
       if (!canManage) throw new AbsenceForbiddenError("Uma ausência aprovada só pode ser cancelada pela gestão.", "not_allowed");
       if (!reason?.trim()) throw new AbsenceValidationError("Indique o motivo do cancelamento.", "reason");
     }
+    if (r.status === "approved") await this.assertOpen(org, r.employeeId, r.startDate, r.endDate);
     const updated = await this.repo.updateRequest(org, id, { status: r.status, currentLevel: r.currentLevel }, { status: "cancelled", cancelReason: reason?.trim() || null, decidedAt: new Date().toISOString() });
     if (!updated) throw new AbsenceConflictError("Este pedido acabou de mudar.", "already_decided");
     await this.repo.insertDecision(org, { requestId: id, level: r.currentLevel, actor: actor.email, actorUserId: actor.userId, decision: "cancel", comment: reason?.trim() || null });

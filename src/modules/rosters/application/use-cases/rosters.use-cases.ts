@@ -2,7 +2,7 @@ import { DateTime } from "luxon";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import { sameState, stateOf, validateSegments, validateTemplate, type Roster, type RosterShift, type Segment, type ShiftState, type ShiftTemplateInput } from "../../domain/entities/roster.js";
 import { RosterBlockedError, RosterConflictError, RosterForbiddenError, RosterNotFoundError, RosterValidationError } from "../../domain/errors.js";
-import type { RosterPublishedPort, RostersAuditPort, RostersContextPort, RostersNotifierPort, RostersRepositoryPort } from "../../domain/ports/out/rosters.ports.js";
+import type { PeriodGuardPort, RosterPublishedPort, RostersAuditPort, RostersContextPort, RostersNotifierPort, RostersRepositoryPort } from "../../domain/ports/out/rosters.ports.js";
 import { evaluate, type Violation } from "../../domain/services/constraints.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -34,6 +34,7 @@ export class RostersUseCases {
     private readonly notifier: RostersNotifierPort,
     private readonly hook: RosterPublishedPort,
     private readonly audit: RostersAuditPort,
+    private readonly periods: PeriodGuardPort = { closedDates: async () => new Set<string>() },
   ) {}
 
   private log(org: OrganizationId, actor: string, action: string, resourceType: string, resourceId: string | null, before: unknown, after: unknown, reason: string | null = null) {
@@ -214,6 +215,14 @@ export class RostersUseCases {
   }
 
   private async checkOrThrow(org: OrganizationId, draftIds: Set<string>, drafts: RosterShift[], confirm: boolean): Promise<Violation[]> {
+    // TK-17: não se publicam (nem retiram) turnos em dias de períodos fechados.
+    for (const d of drafts) {
+      for (const s of [d, d.published].filter((x): x is NonNullable<typeof x> => !!x)) {
+        if ((await this.periods.closedDates(org, s.employeeId, s.workDate, s.workDate)).has(s.workDate)) {
+          throw new RosterConflictError(`O dia ${s.workDate} está num período fechado. Peça a reabertura do período.`, "period_closed");
+        }
+      }
+    }
     const violations = await this.violationsFor(org, draftIds, drafts);
     const blocking = violations.filter((v) => v.severity === "block");
     if (blocking.length) throw new RosterBlockedError(blocking);

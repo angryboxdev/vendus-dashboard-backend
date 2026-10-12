@@ -6,7 +6,7 @@ import { createTimeBankRouter } from "./adapters/in/time-bank.controller.js";
 import { bankSettingsFrom } from "./adapters/out/settings-bank.js";
 import { SupabaseTimeBankRepository } from "./adapters/out/supabase-time-bank.repository.js";
 import { TimeBankUseCases } from "./application/use-cases/time-bank.use-cases.js";
-import type { TimeBankAuditPort } from "./domain/ports/out/time-bank.ports.js";
+import type { PeriodGuardPort, TimeBankAuditPort } from "./domain/ports/out/time-bank.ports.js";
 import type { BankDay } from "./domain/services/posting.js";
 
 /** Composition root do Novo RH → Banco de horas (Fase 6). Dias vêm da assiduidade, regras do settings. */
@@ -18,6 +18,7 @@ export function createTimeBankModule(deps: {
   today: (org: OrganizationId) => Promise<string>;
   audit: TimeBankAuditPort;
   canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean>;
+  periods?: PeriodGuardPort;
 }): { router: Router; timeBank: TimeBankUseCases } {
   const timeBank = new TimeBankUseCases(
     new SupabaseTimeBankRepository(createScopedQuery),
@@ -29,6 +30,7 @@ export function createTimeBankModule(deps: {
       today: deps.today,
     },
     deps.audit,
+    deps.periods,
   );
   return { router: createTimeBankRouter(timeBank, new SupabaseIdempotencyStore(createScopedQuery), deps.canSeeEmployee), timeBank };
 }

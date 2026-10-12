@@ -7,7 +7,7 @@ import { coverage, SupabaseAbsencesDirectory } from "./adapters/out/supabase-abs
 import { SupabaseAbsencesRepository } from "./adapters/out/supabase-absences.repository.js";
 import { AbsencesUseCases } from "./application/use-cases/absences.use-cases.js";
 import type { VacationRules } from "./domain/entities/absence-type.js";
-import type { AbsencesAuditPort, AbsencesNotifierPort } from "./domain/ports/out/absences.ports.js";
+import type { AbsencesAuditPort, AbsencesNotifierPort, PeriodGuardPort } from "./domain/ports/out/absences.ports.js";
 import type { PlanDay } from "./domain/services/absence-calc.js";
 
 /**
@@ -28,6 +28,7 @@ export function createAbsencesModule(deps: {
   audit: AbsencesAuditPort;
   canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean>;
   canPrivate: (req: Request) => boolean;
+  periods?: PeriodGuardPort;
 }): { adminRouter: Router; meRouter: Router; absences: AbsencesUseCases } {
   const dir = new SupabaseAbsencesDirectory(createScopedQuery);
   const absences = new AbsencesUseCases(
@@ -51,6 +52,7 @@ export function createAbsencesModule(deps: {
     deps.notifier,
     deps.audit,
     { today: deps.today },
+    deps.periods,
   );
   const store = new SupabaseIdempotencyStore(createScopedQuery);
   return {

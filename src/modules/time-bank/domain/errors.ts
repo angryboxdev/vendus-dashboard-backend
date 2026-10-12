@@ -25,7 +25,7 @@ export class TimeBankRuleError extends Error {
 export class TimeBankConflictError extends Error {
   constructor(
     message: string,
-    readonly code: "duplicate_name" | "already_decided" | "not_required",
+    readonly code: "duplicate_name" | "already_decided" | "not_required" | "period_closed",
   ) {
     super(message);
     this.name = "TimeBankConflictError";

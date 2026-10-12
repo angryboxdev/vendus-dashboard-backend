@@ -65,6 +65,8 @@ import { createAttendanceModule } from "./modules/attendance/attendance.module.j
 import { createAbsencesModule } from "./modules/absences/absences.module.js";
 import { createTimeBankModule } from "./modules/time-bank/time-bank.module.js";
 import { createRostersModule } from "./modules/rosters/rosters.module.js";
+import { createPeriodsModule } from "./modules/periods/periods.module.js";
+import type { PeriodsContextPort } from "./modules/periods/domain/ports/out/periods.ports.js";
 import { SupabaseAbsencesDirectory } from "./modules/absences/adapters/out/supabase-absences-directory.js";
 import type { OrganizationId } from "./kernel/organization-id.js";
 import { SupabaseEmployeeSegments, SupabaseSettingsImpact } from "./modules/settings/adapters/out/supabase-settings.adapters.js";
@@ -436,6 +438,8 @@ app.use("/api", timeBaseModule.router);
 
 // Novo RH → Escalas (Fase 7): modelos, escalas com versões publicadas, restrições, trocas.
 const absencesDirectory = new SupabaseAbsencesDirectory(createScopedQuery);
+// TK-17: guarda partilhada — datas de períodos fechados (módulo periods, ligado mais abaixo).
+const periodGuard = { closedDates: (org: OrganizationId, employeeId: string, from: string, to: string) => periodsModule.periods.closedDates(org, employeeId, from, to) };
 const rostersModule = createRostersModule({
   effectiveSettings: async (org, employeeId, date) => {
     const [tt, legal] = await Promise.all([
@@ -473,6 +477,7 @@ const rostersModule = createRostersModule({
   },
   audit: auditModule.recorder,
   canSeeEmployee,
+  periods: periodGuard,
 });
 app.use("/api", rostersModule.router);
 
@@ -527,6 +532,7 @@ const attendanceModule = createAttendanceModule({
   },
   audit: auditModule.recorder,
   canSeeEmployee,
+  periods: periodGuard,
 });
 app.use("/api", attendanceModule.meRouter);
 app.use("/api", attendanceModule.adminRouter);
@@ -559,6 +565,7 @@ const absencesModule = createAbsencesModule({
   audit: auditModule.recorder,
   canSeeEmployee,
   canPrivate: (req) => !!req.access && can(req.access, "hr.absences_private", "MANAGE"),
+  periods: periodGuard,
 });
 app.use("/api", absencesModule.meRouter);
 app.use("/api", absencesModule.adminRouter);
@@ -580,8 +587,107 @@ const timeBankModule = createTimeBankModule({
   today: (org) => new OrganizationTimezoneClock(createScopedQuery).today(org),
   audit: auditModule.recorder,
   canSeeEmployee,
+  periods: periodGuard,
 });
 app.use("/api", timeBankModule.router);
+
+// Novo RH → Períodos (Fase 8): fecho com fotografia, reabertura com dupla aprovação, exportações.
+const periodsModule = createPeriodsModule({
+  context: {
+    employeesInScope: async (org, p) => {
+      const list = await peopleRepo.list(org, { status: "all", ...(p.scopeType === "location" && p.scopeId ? { locationId: p.scopeId } : {}) });
+      const out: string[] = [];
+      for (const e of list) {
+        if (e.status === "active") {
+          out.push(e.id);
+          continue;
+        }
+        // Quem saiu entra se tinha contrato em parte do período.
+        const contracts = await peopleRepo.listContracts(org, e.id);
+        if (contracts.some((c) => c.status === "active" && c.startDate <= p.endDate && (c.endDate === null || c.endDate >= p.startDate))) out.push(e.id);
+      }
+      return out;
+    },
+    employeeLocations: async (org, employeeId, date) => (await segments.segmentsOf(org, employeeId, date)).locationIds,
+    pendingItems: async (org, employeeIds, from, to) => {
+      const items: Awaited<ReturnType<PeriodsContextPort["pendingItems"]>> = [];
+      for (const e of employeeIds) {
+        for (const i of await attendanceModule.attendance.listIncidents(org, { status: "open", employeeId: e, from, to })) {
+          items.push({ type: "incident", id: i.id, employeeId: e, date: i.workDate, label: `Incidente: ${i.type}` });
+        }
+        for (const c of await attendanceModule.attendance.listCorrections(org, { status: "pending", employeeId: e })) {
+          const d = (c.occurredAt ?? c.createdAt).slice(0, 10);
+          if (d >= from && d <= to) items.push({ type: "correction_request", id: c.id, employeeId: e, date: d, label: "Pedido de correção pendente" });
+        }
+        for (const r of await absencesModule.absences.listRequests(org, { status: "pending", employeeId: e, from, to }, true, "sistema")) {
+          items.push({ type: "absence_request", id: r.id, employeeId: e, date: r.startDate, label: `Ausência pendente: ${r.typeName}` });
+        }
+        for (const v of await timeBankModule.timeBank.pendingValidations(org, e)) {
+          if (v.workDate >= from && v.workDate <= to) items.push({ type: "excess_validation", id: `${e}:${v.workDate}`, employeeId: e, date: v.workDate, label: "Excedente por validar" });
+        }
+      }
+      return items;
+    },
+    prepare: async (org, employeeId, from, to) => {
+      for (let s = from; s <= to; ) {
+        const end = new Date(`${s}T00:00:00Z`);
+        end.setUTCDate(end.getUTCDate() + 30);
+        const e = end.toISOString().slice(0, 10) < to ? end.toISOString().slice(0, 10) : to;
+        await attendanceModule.attendance.recalculate(org, employeeId, s, e, "Fecho de período");
+        end.setUTCDate(end.getUTCDate() + 1);
+        s = end.toISOString().slice(0, 10);
+      }
+      await timeBankModule.timeBank.sync(org, employeeId, "sistema", { from, to });
+    },
+    totals: async (org, employeeId, from, to) => {
+      const [days, entries, absences] = await Promise.all([
+        attendanceModule.attendance.storedDays(org, employeeId, from, to),
+        timeBankModule.timeBank.entriesBetween(org, employeeId, from, to),
+        absencesModule.absences.listRequests(org, { status: "approved", employeeId, from, to }, true, "sistema"),
+      ]);
+      const types = await absencesModule.absences.listTypes(org);
+      const sum = (f: "workedSeconds" | "theoreticalSeconds" | "excessSeconds" | "nightSeconds" | "pendingSeconds") => days.reduce((s, d) => s + d[f], 0);
+      const byLocation = new Map<string | null, number>();
+      for (const d of days) {
+        const loc = (await segments.segmentsOf(org, employeeId, d.workDate)).locationIds[0] ?? null;
+        byLocation.set(loc, (byLocation.get(loc) ?? 0) + d.workedSeconds);
+      }
+      const span = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000) + 1;
+      return {
+        employeeId,
+        workedSeconds: sum("workedSeconds"),
+        theoreticalSeconds: sum("theoreticalSeconds"),
+        excessSeconds: sum("excessSeconds"),
+        nightSeconds: sum("nightSeconds"),
+        pendingSeconds: sum("pendingSeconds"),
+        // Ausências que atravessam o período contam pela parte de dias dentro dele.
+        absences: absences
+          .filter((r) => r.kind === "absence")
+          .map((r) => {
+            const a = r.startDate > from ? r.startDate : from;
+            const b = r.endDate < to ? r.endDate : to;
+            const share = r.unit === "hours" ? 1 : span(a, b) / span(r.startDate, r.endDate);
+            const t = types.find((x) => x.id === r.typeId);
+            return { typeId: r.typeId, typeName: t?.name ?? r.typeName, code: t?.code ?? null, unit: r.unit, amount: Math.round(r.amount * share * 100) / 100 };
+          }),
+        bankSeconds: entries.reduce((s, e) => s + e.seconds, 0),
+        bankPaidSeconds: -entries.filter((e) => e.kind === "compensation_paid").reduce((s, e) => s + e.seconds, 0),
+        byLocation: [...byLocation].map(([locationId, workedSeconds]) => ({ locationId, workedSeconds })),
+      };
+    },
+    employeeInfo: async (org, employeeIds) => {
+      const out = [];
+      for (const id of employeeIds) {
+        const e = await peopleRepo.get(org, id);
+        out.push({ employeeId: id, name: e?.fullName ?? "", nif: e?.nif ?? null });
+      }
+      return out;
+    },
+  },
+  audit: auditModule.recorder,
+  canSensitive: (req) => !!req.access && can(req.access, "hr.sensitive_data", "MANAGE"),
+});
+app.use("/api", periodsModule.router);
 
 // CRM: acessível a managers+
 const crmModule = createCrmModule();

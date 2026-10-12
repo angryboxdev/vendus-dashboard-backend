@@ -36,3 +36,8 @@ export interface TimeBankAuditPort {
     e: { actor: string; action: string; resourceType: string; resourceId: string | null; before: unknown; after: unknown; reason: string | null },
   ): Promise<void>;
 }
+
+/** Períodos fechados (módulo periods): datas congeladas para um colaborador (TK-17). */
+export interface PeriodGuardPort {
+  closedDates(org: OrganizationId, employeeId: string, from: string, to: string): Promise<Set<string>>;
+}

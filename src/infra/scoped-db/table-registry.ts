@@ -254,6 +254,11 @@ export const TABLE_REGISTRY = {
   roster_shifts: { organizationColumn: "org_id", locationBearing: false },
   roster_publications: { organizationColumn: "org_id", locationBearing: false },
   roster_swaps: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 8: períodos, fechos, reaberturas e exportações.
+  pay_periods: { organizationColumn: "org_id", locationBearing: false },
+  pay_period_closures: { organizationColumn: "org_id", locationBearing: false },
+  pay_period_reopenings: { organizationColumn: "org_id", locationBearing: false },
+  export_jobs: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;

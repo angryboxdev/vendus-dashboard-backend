@@ -8,7 +8,7 @@ import { configFromSettings } from "./adapters/out/settings-config.js";
 import { SupabaseAttendanceDirectory } from "./adapters/out/supabase-attendance-directory.js";
 import { SupabaseAttendanceRepository } from "./adapters/out/supabase-attendance.repository.js";
 import { AttendanceUseCases } from "./application/use-cases/attendance.use-cases.js";
-import type { AttendanceAuditPort } from "./domain/ports/out/attendance.ports.js";
+import type { AttendanceAuditPort, PeriodGuardPort } from "./domain/ports/out/attendance.ports.js";
 import type { DayPlan } from "./domain/services/day-engine.js";
 
 /**
@@ -20,6 +20,7 @@ export function createAttendanceModule(deps: {
   plans: (org: OrganizationId, employeeId: string, from: string, to: string) => Promise<Map<string, DayPlan>>;
   audit: AttendanceAuditPort;
   canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean>;
+  periods?: PeriodGuardPort;
 }): { meRouter: Router; adminRouter: Router; attendance: AttendanceUseCases } {
   const directory = new SupabaseAttendanceDirectory(createScopedQuery);
   const attendance = new AttendanceUseCases(
@@ -40,6 +41,7 @@ export function createAttendanceModule(deps: {
           task().catch((e: unknown) => log("error", "attendance.recalculate_failed", { error: e instanceof Error ? e.message : String(e) }));
         }),
     },
+    deps.periods,
   );
   const store = new SupabaseIdempotencyStore(createScopedQuery);
   return { meRouter: createAttendanceMeRouter(attendance, store), adminRouter: createAttendanceAdminRouter(attendance, store, deps.canSeeEmployee), attendance };

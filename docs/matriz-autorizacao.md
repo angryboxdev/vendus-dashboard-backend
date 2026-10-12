@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 621 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 634 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -406,6 +406,19 @@ Endpoints: 621 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/novo-rh/people/export-columns` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/people/export.csv` | permission:hr.people_export:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/people/import` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/periods` | permission:hr.closure:READ | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/periods` | permission:hr.closure:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/periods/:id/close` | permission:hr.closure:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/periods/:id/closures` | permission:hr.closure:READ | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/periods/:id/exports` | permission:hr.closure:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/periods/:id/precheck` | permission:hr.closure:READ | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/periods/:id/reopen` | permission:hr.closure:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/periods/exports` | permission:hr.closure:READ | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/periods/exports/:id/download` | permission:hr.closure:READ | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/periods/exports/:id/link` | permission:hr.closure:READ | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/periods/reopenings` | permission:hr.closure:READ | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/periods/reopenings/:id/approve` | permission:hr.closure:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/periods/reopenings/:id/reject` | permission:hr.closure:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/rosters` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters/:id/archive` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
