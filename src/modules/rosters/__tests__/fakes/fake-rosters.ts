@@ -1,0 +1,131 @@
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { Publication, Roster, RosterShift, ShiftState, ShiftTemplate, ShiftTemplateInput, Swap } from "../../domain/entities/roster.js";
+import type { RostersContextPort, RostersRepositoryPort } from "../../domain/ports/out/rosters.ports.js";
+import type { Rules } from "../../domain/services/constraints.js";
+
+let seq = 0;
+const nextId = () => `00000000-0000-4000-b000-${String(++seq).padStart(12, "0")}`;
+
+export class FakeRostersRepository implements RostersRepositoryPort {
+  templates: ShiftTemplate[] = [];
+  rosters: Roster[] = [];
+  shifts: RosterShift[] = [];
+  publications: Publication[] = [];
+  swaps: Swap[] = [];
+
+  async listTemplates() {
+    return this.templates.map((t) => ({ ...t }));
+  }
+  async createTemplate(_o: OrganizationId, t: ShiftTemplateInput) {
+    const row = { ...t, id: nextId(), archived: false };
+    this.templates.push(row);
+    return row;
+  }
+  async archiveTemplate(_o: OrganizationId, id: string) {
+    this.templates.find((t) => t.id === id)!.archived = true;
+  }
+  async listRosters() {
+    return this.rosters.map((r) => ({ ...r }));
+  }
+  async createRoster(_o: OrganizationId, r: Pick<Roster, "name" | "targetType" | "targetId">) {
+    const row = { ...r, id: nextId(), version: 0, archived: false };
+    this.rosters.push(row);
+    return { ...row };
+  }
+  async archiveRoster(_o: OrganizationId, id: string) {
+    this.rosters.find((r) => r.id === id)!.archived = true;
+  }
+  async bumpVersion(_o: OrganizationId, id: string, expected: number) {
+    const r = this.rosters.find((x) => x.id === id)!;
+    if (r.version !== expected) return false;
+    r.version++;
+    return true;
+  }
+  async listShifts(_o: OrganizationId, f: { rosterId?: string; employeeIds?: string[]; from: string; to: string; includeDeleted?: boolean }) {
+    return this.shifts
+      .filter((s) => (!f.rosterId || s.rosterId === f.rosterId) && (!f.employeeIds || f.employeeIds.includes(s.employeeId)) && s.workDate >= f.from && s.workDate <= f.to && (f.includeDeleted || !s.deleted))
+      .map((s) => structuredClone(s));
+  }
+  async getShift(_o: OrganizationId, id: string) {
+    const s = this.shifts.find((x) => x.id === id);
+    return s ? structuredClone(s) : null;
+  }
+  async insertShifts(_o: OrganizationId, rows: (ShiftState & { rosterId: string })[]) {
+    const out = rows.map((r) => ({ ...r, id: nextId(), deleted: false, dirty: true, published: null, publishedVersion: null }));
+    this.shifts.push(...out);
+    return out.map((s) => structuredClone(s));
+  }
+  async updateShift(_o: OrganizationId, id: string, patch: Partial<RosterShift>) {
+    const s = this.shifts.find((x) => x.id === id)!;
+    Object.assign(s, structuredClone(patch));
+    return structuredClone(s);
+  }
+  async insertPublication(_o: OrganizationId, p: Omit<Publication, "id" | "createdAt">) {
+    const row = { ...structuredClone(p), id: nextId(), createdAt: new Date().toISOString() };
+    this.publications.push(row);
+    return row;
+  }
+  async listPublications(_o: OrganizationId, rosterId: string) {
+    return this.publications.filter((p) => p.rosterId === rosterId);
+  }
+  async insertSwap(_o: OrganizationId, s: Omit<Swap, "id" | "status" | "decidedBy" | "createdAt">) {
+    const row: Swap = { ...s, id: nextId(), status: "pending_target", decidedBy: null, createdAt: new Date().toISOString() };
+    this.swaps.push(row);
+    return { ...row };
+  }
+  async getSwap(_o: OrganizationId, id: string) {
+    const s = this.swaps.find((x) => x.id === id);
+    return s ? { ...s } : null;
+  }
+  async listSwaps(_o: OrganizationId, f: { status?: Swap["status"]; employeeId?: string }) {
+    return this.swaps.filter((s) => (!f.status || s.status === f.status) && (!f.employeeId || s.requesterEmployeeId === f.employeeId || s.targetEmployeeId === f.employeeId));
+  }
+  async updateSwap(_o: OrganizationId, id: string, expected: Swap["status"], patch: { status: Swap["status"]; decidedBy?: string; comment?: string | null }) {
+    const s = this.swaps.find((x) => x.id === id);
+    if (!s || s.status !== expected) return null;
+    Object.assign(s, patch);
+    return { ...s };
+  }
+}
+
+export const NO_RULES: Rules = { minRestMinutes: null, maxDailyMinutes: null, maxWeeklyMinutes: null, maxAnnualHours: null, restSeverity: "warning", limitsSeverity: "warning", absenceSeverity: "warning" };
+
+export class FakeRostersContext implements RostersContextPort {
+  rules_: Rules = { ...NO_RULES };
+  absences = new Map<string, string[]>();
+  users = new Map([["e1", "u-e1"], ["e2", "u-e2"], ["e9", "u-boss"]]);
+
+  async rules() {
+    return this.rules_;
+  }
+  async approvedAbsenceDates(_o: OrganizationId, employeeId: string) {
+    return this.absences.get(employeeId) ?? [];
+  }
+  async employeeForUser(_o: OrganizationId, userId: string) {
+    return [...this.users.entries()].find(([, u]) => u === userId)?.[0] ?? null;
+  }
+  async userOfEmployee(_o: OrganizationId, employeeId: string) {
+    return this.users.get(employeeId) ?? null;
+  }
+}
+
+export class FakeRostersNotifier {
+  sent: { userIds: string[]; title: string }[] = [];
+  async notify(_o: OrganizationId, userIds: string[], n: { title: string }) {
+    this.sent.push({ userIds, title: n.title });
+  }
+}
+
+export class FakePublishedHook {
+  calls: { employeeId: string; workDate: string }[][] = [];
+  published(_o: OrganizationId, changes: { employeeId: string; workDate: string }[]) {
+    this.calls.push(changes);
+  }
+}
+
+export class FakeRostersAudit {
+  actions: { action: string; reason: string | null }[] = [];
+  async record(_o: OrganizationId, e: { action: string; reason: string | null }) {
+    this.actions.push({ action: e.action, reason: e.reason });
+  }
+}

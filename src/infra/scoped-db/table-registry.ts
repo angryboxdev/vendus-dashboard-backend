@@ -248,6 +248,12 @@ export const TABLE_REGISTRY = {
   time_bank_entries: { organizationColumn: "org_id", locationBearing: false },
   time_bank_validations: { organizationColumn: "org_id", locationBearing: false },
   hour_categories: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 7: escalas e turnos.
+  roster_shift_templates: { organizationColumn: "org_id", locationBearing: false },
+  rosters: { organizationColumn: "org_id", locationBearing: false },
+  roster_shifts: { organizationColumn: "org_id", locationBearing: false },
+  roster_publications: { organizationColumn: "org_id", locationBearing: false },
+  roster_swaps: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;

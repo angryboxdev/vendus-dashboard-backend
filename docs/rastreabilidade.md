@@ -109,11 +109,11 @@ Fontes: RE = `Especificacao_RH_Engenharia_Reversa` §15 · CF = `Especificacao_R
 
 | ID | Requisito | Estado | Código | Teste |
 |---|---|---|---|---|
-| RE-15 | Obrigatórios do modelo de turno | por fazer | | |
-| RE-16 | Descanso mínimo com aviso ou bloqueio | por fazer | | |
-| RE-17 | Publicação notifica e guarda histórico | por fazer | | |
-| RE-18 | Conflito com férias | por fazer | | |
-| TK-16 | Alterar turno publicado exige motivo, nova versão e notificação | por fazer | | |
+| RE-15 | Obrigatórios do modelo de turno | feito | `src/modules/rosters` | `src/modules/rosters/__tests__/use-cases/rosters.test.ts`; `src/modules/rosters/__tests__/adapters/rosters.controller.test.ts` |
+| RE-16 | Descanso mínimo com aviso ou bloqueio | feito | `src/modules/rosters` | `src/modules/rosters/__tests__/use-cases/rosters.test.ts`; `src/modules/rosters/__tests__/adapters/rosters.controller.test.ts` |
+| RE-17 | Publicação notifica e guarda histórico | feito | `src/modules/rosters` | `src/modules/rosters/__tests__/use-cases/rosters.test.ts` |
+| RE-18 | Conflito com férias | feito | `src/modules/rosters` | `src/modules/rosters/__tests__/use-cases/rosters.test.ts` |
+| TK-16 | Alterar turno publicado exige motivo, nova versão e notificação | feito | `src/modules/rosters` | `src/modules/rosters/__tests__/use-cases/rosters.test.ts`; `src/modules/rosters/__tests__/adapters/rosters.controller.test.ts` |
 
 ## Fase 8 — Fecho de período e exportação
 

@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 601 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 621 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -343,6 +343,10 @@ Endpoints: 601 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/me/requests` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/requests` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/requests/:id/cancel` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/roster` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/roster/swaps` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| POST | `/api/me/roster/swaps` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| POST | `/api/me/roster/swaps/:id/respond` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/session-policy` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/shifts` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/shifts/:id/coworkers` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
@@ -402,6 +406,22 @@ Endpoints: 601 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/novo-rh/people/export-columns` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/people/export.csv` | permission:hr.people_export:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/people/import` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/rosters` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/rosters` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/rosters/:id/archive` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/rosters/:id/check` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/rosters/:id/history` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/rosters/:id/publish` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/rosters/:id/shifts` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/rosters/:id/shifts` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/rosters/:id/shifts/bulk` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| PATCH | `/api/novo-rh/rosters/shifts/:id` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/rosters/shifts/:id/delete` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/rosters/swaps` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/rosters/swaps/:id/decide` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/rosters/templates` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/rosters/templates` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/rosters/templates/:id/archive` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/settings/definitions` | permission:governance.settings:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/settings/effective` | permission:governance.settings:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/settings/history` | permission:governance.settings:READ | ✔ | ✖ | ✖ | ✖ | ✖ |

@@ -64,6 +64,9 @@ import { createTimeBaseModule } from "./modules/time-base/time-base.module.js";
 import { createAttendanceModule } from "./modules/attendance/attendance.module.js";
 import { createAbsencesModule } from "./modules/absences/absences.module.js";
 import { createTimeBankModule } from "./modules/time-bank/time-bank.module.js";
+import { createRostersModule } from "./modules/rosters/rosters.module.js";
+import { SupabaseAbsencesDirectory } from "./modules/absences/adapters/out/supabase-absences-directory.js";
+import type { OrganizationId } from "./kernel/organization-id.js";
 import { SupabaseEmployeeSegments, SupabaseSettingsImpact } from "./modules/settings/adapters/out/supabase-settings.adapters.js";
 import { SupabasePeopleRepository } from "./modules/people/adapters/out/supabase-people.repository.js";
 import { portugueseNationalHolidays } from "./modules/calendar/domain/services/portuguese-holidays.service.js";
@@ -431,6 +434,67 @@ const timeBaseModule = createTimeBaseModule({
 });
 app.use("/api", timeBaseModule.router);
 
+// Novo RH → Escalas (Fase 7): modelos, escalas com versões publicadas, restrições, trocas.
+const absencesDirectory = new SupabaseAbsencesDirectory(createScopedQuery);
+const rostersModule = createRostersModule({
+  effectiveSettings: async (org, employeeId, date) => {
+    const [tt, legal] = await Promise.all([
+      settingsModule.settings.effectiveFor(org, employeeId, date, "time_tracking"),
+      settingsModule.settings.effectiveFor(org, employeeId, date, "legal"),
+    ]);
+    return [...tt, ...legal];
+  },
+  approvedAbsenceDates: async (org, employeeId, from, to) => {
+    const approved = await absencesModule.absences.listRequests(org, { employeeId, status: "approved", from, to }, true, "sistema");
+    const dates: string[] = [];
+    for (const r of approved.filter((x) => x.kind === "absence")) {
+      for (let d = new Date(`${r.startDate}T00:00:00Z`); d.toISOString().slice(0, 10) <= r.endDate; d.setUTCDate(d.getUTCDate() + 1)) dates.push(d.toISOString().slice(0, 10));
+    }
+    return dates;
+  },
+  employeeForUser: (org, userId) => absencesDirectory.employeeForUser(org, userId),
+  userOfEmployee: (org, employeeId) => absencesDirectory.userOfEmployee(org, employeeId),
+  notifier: {
+    notify: async (org, userIds, n) => {
+      if (!userIds.length) return;
+      await notificationsModule.notifications.notify(org, { recipientUserIds: userIds, kind: "rosters.change", title: n.title, body: n.body, link: n.link, dedupeKey: n.dedupeKey });
+    },
+  },
+  // Cada publicação pede o recálculo da assiduidade dos dias afetados (o teórico mudou).
+  published: {
+    published: (org, changes) => {
+      const byEmployee = new Map<string, string[]>();
+      for (const c of changes) byEmployee.set(c.employeeId, [...(byEmployee.get(c.employeeId) ?? []), c.workDate]);
+      for (const [employeeId, dates] of byEmployee) {
+        dates.sort();
+        void attendanceModule.attendance.requestRecalculation(org, { userId: "sistema", email: "sistema" }, employeeId, dates[0]!, dates.at(-1)!).catch(() => undefined);
+      }
+    },
+  },
+  audit: auditModule.recorder,
+  canSeeEmployee,
+});
+app.use("/api", rostersModule.router);
+
+/** Teórico do dia: turno publicado da escala, senão o horário (Fase 3); feriado confirmado prevalece (ADR-0030). */
+async function plannedDays(org: OrganizationId, employeeId: string, from: string, to: string) {
+  const [{ days }, roster] = await Promise.all([timeBaseModule.time.theoretical(org, employeeId, from, to), rostersModule.rosters.plannedFor(org, employeeId, from, to)]);
+  return days.map((d) => {
+    const r = roster.get(d.date);
+    if (!r || d.reason === "holiday") return d;
+    const segs = r.segments;
+    return {
+      ...d,
+      minutes: r.minutes,
+      reason: r.dayOff ? ("rest_day" as const) : ("schedule" as const),
+      plannedStart: segs[0]?.start ?? null,
+      plannedEnd: segs.at(-1)?.end ?? null,
+      plannedRanges: segs,
+      night: r.night,
+    };
+  });
+}
+
 // Novo RH → Assiduidade (Fase 4): marcações, motor de apuramento, revisões, incidentes.
 const attendanceModule = createAttendanceModule({
   effectiveSettings: async (org, employeeId, date) => {
@@ -442,7 +506,7 @@ const attendanceModule = createAttendanceModule({
   },
   // Plano diário = teórico do time-base − ausências aprovadas (CF-7, Fase 5).
   plans: async (org, employeeId, from, to) => {
-    const { days } = await timeBaseModule.time.theoretical(org, employeeId, from, to);
+    const days = await plannedDays(org, employeeId, from, to);
     const effects = await absencesModule.absences.dayEffects(org, employeeId, from, to, new Map(days.map((d) => [d.date, d.minutes])));
     return new Map(
       days.map((d) => {
@@ -472,7 +536,7 @@ const absencesModule = createAbsencesModule({
   contracts: (org, employeeId) => peopleRepo.listContracts(org, employeeId),
   managers: (org, employeeId) => peopleRepo.listManagers(org, employeeId),
   planDays: async (org, employeeId, from, to) =>
-    (await timeBaseModule.time.theoretical(org, employeeId, from, to)).days.map((d) => ({ date: d.date, minutes: d.minutes, plannedRanges: d.plannedRanges })),
+    (await plannedDays(org, employeeId, from, to)).map((d) => ({ date: d.date, minutes: d.minutes, plannedRanges: d.plannedRanges })),
   vacationRulesFor: async (org, employeeId, date) => {
     const a = (await timeBaseModule.time.assignmentsFor(org, employeeId, date)).vacationCalendar;
     return a ? ((await timeBaseModule.time.listVacationCalendars(org)).find((c) => c.id === a.resourceId) ?? null) : null;
