@@ -67,6 +67,7 @@ import { createTimeBankModule } from "./modules/time-bank/time-bank.module.js";
 import { createRostersModule } from "./modules/rosters/rosters.module.js";
 import { createPeriodsModule } from "./modules/periods/periods.module.js";
 import { createDemoOrgModule } from "./modules/demo-data/demo-data.module.js";
+import { createOverviewModule } from "./modules/overview/overview.module.js";
 import type { PeriodsContextPort } from "./modules/periods/domain/ports/out/periods.ports.js";
 import { createAnnouncementsModule } from "./modules/announcements/announcements.module.js";
 import { createAlertsModule } from "./modules/alerts/alerts.module.js";
@@ -876,6 +877,39 @@ const reportsModule = createReportsModule({
   },
 });
 app.use("/api", reportsModule.router);
+
+// Novo RH → Painel (visão do dono): quem está, quem faltou, atrasos, ausências e pendentes do dia.
+const overviewModule = createOverviewModule({
+  sources: {
+    today: (org) => new OrganizationTimezoneClock(createScopedQuery).today(org),
+    employees: async (org) => (await activeEmployees(org)).map((e) => ({ id: e.id, name: e.fullName, locationId: e.primaryLocationId })),
+    locations: (org) => peopleRepo.listLocations(org),
+    days: async (org, employeeId, from, to) => (await attendanceModule.attendance.board(org, employeeId, from, to)).days,
+    absences: async (org, from, to, canPrivate) =>
+      (await absencesModule.absences.listRequests(org, { status: "approved", from, to }, canPrivate, "sistema")).map((r) => ({ employeeId: r.employeeId, typeName: r.typeName, startDate: r.startDate, endDate: r.endDate })),
+    pending: async (org) => {
+      const today = todayUtc();
+      const [absences, corrections, incidents, requests, alerts] = await Promise.all([
+        absencesModule.absences.listRequests(org, { status: "pending" }, false, "sistema"),
+        attendanceModule.attendance.listCorrections(org, { status: "pending" }),
+        attendanceModule.attendance.listIncidents(org, { status: "open", from: new Date(Date.parse(today) - 90 * 86_400_000).toISOString().slice(0, 10), to: today }),
+        workspaceModule.workspace.listRequests(org, "pending"),
+        alertsModule.alerts.list(org, "active"),
+      ]);
+      return { absenceRequests: absences.length, corrections: corrections.length, incidents: incidents.length, customRequests: requests.length, alerts: alerts.length };
+    },
+    holidays: async (org, from, limit) => {
+      const seen = new Map<string, string>();
+      for (const c of await timeBaseModule.time.listHolidayCalendars(org)) for (const d of c.days) if (d.date >= from && !seen.has(d.date)) seen.set(d.date, d.name);
+      return [...seen].sort(([a], [b]) => a.localeCompare(b)).slice(0, limit).map(([date, name]) => ({ date, name }));
+    },
+  },
+  viewerOf: (req) => ({
+    canSee: (employeeId, date) => canSeeEmployee(req, employeeId, date),
+    canPrivate: !!req.access && can(req.access, "hr.absences_private", "MANAGE"),
+  }),
+});
+app.use("/api", overviewModule.router);
 
 // CRM: acessível a managers+
 const crmModule = createCrmModule();

@@ -111,6 +111,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/workspace(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/reports(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/alerts(\/|$)/, target: p("hr.overview") },
+  { pattern: /^\/api\/novo-rh\/overview$/, target: p("hr.overview") },
 
   // ── Recursos Humanos ─────────────────────────────────────────────────
   { pattern: /^\/api\/hr\/overview(\/|$)/, target: p("hr.overview") },
