@@ -63,6 +63,7 @@ import { createPeopleModule } from "./modules/people/people.module.js";
 import { createTimeBaseModule } from "./modules/time-base/time-base.module.js";
 import { createAttendanceModule } from "./modules/attendance/attendance.module.js";
 import { createAbsencesModule } from "./modules/absences/absences.module.js";
+import { createTimeBankModule } from "./modules/time-bank/time-bank.module.js";
 import { SupabaseEmployeeSegments, SupabaseSettingsImpact } from "./modules/settings/adapters/out/supabase-settings.adapters.js";
 import { SupabasePeopleRepository } from "./modules/people/adapters/out/supabase-people.repository.js";
 import { portugueseNationalHolidays } from "./modules/calendar/domain/services/portuguese-holidays.service.js";
@@ -497,6 +498,26 @@ const absencesModule = createAbsencesModule({
 });
 app.use("/api", absencesModule.meRouter);
 app.use("/api", absencesModule.adminRouter);
+
+// Novo RH → Banco de horas (Fase 6): ledger append-only sobre os dias apurados.
+const timeBankModule = createTimeBankModule({
+  attendanceDays: async (org, employeeId, from, to) => {
+    const r = await attendanceModule.attendance.days(org, employeeId, from, to);
+    return { timeZone: r.timeZone, days: r.days };
+  },
+  effectiveSettings: (org, employeeId, date) => settingsModule.settings.effectiveFor(org, employeeId, date, "time_tracking"),
+  holidayOn: async (org, employeeId, date) => {
+    const a = (await timeBaseModule.time.assignmentsFor(org, employeeId, date)).holidayCalendar;
+    const cal = a ? (await timeBaseModule.time.listHolidayCalendars(org)).find((c) => c.id === a.resourceId) : undefined;
+    const day = cal?.days.find((d) => d.date === date && d.status === "confirmed");
+    return cal && day ? { coefficient: day.coefficient ?? cal.compensationCoefficient } : null;
+  },
+  employeeForUser: (org, userId) => absencesModule.absences.myEmployeeId(org, { userId, email: "" }).catch(() => null),
+  today: (org) => new OrganizationTimezoneClock(createScopedQuery).today(org),
+  audit: auditModule.recorder,
+  canSeeEmployee,
+});
+app.use("/api", timeBankModule.router);
 
 // CRM: acessível a managers+
 const crmModule = createCrmModule();

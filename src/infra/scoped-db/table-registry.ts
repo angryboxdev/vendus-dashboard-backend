@@ -244,6 +244,10 @@ export const TABLE_REGISTRY = {
   absence_requests: { organizationColumn: "org_id", locationBearing: false },
   approval_decisions: { organizationColumn: "org_id", locationBearing: false },
   leave_balance_entries: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 6: banco de horas.
+  time_bank_entries: { organizationColumn: "org_id", locationBearing: false },
+  time_bank_validations: { organizationColumn: "org_id", locationBearing: false },
+  hour_categories: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;

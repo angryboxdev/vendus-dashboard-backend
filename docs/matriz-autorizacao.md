@@ -1,10 +1,10 @@
 # Matriz de autorização (perfil × endpoint)
 
-> Gerado por `npm run authz:matrix` em 2026-10-11. Não editar à mão.
+> Gerado por `npm run authz:matrix` em 2026-10-12. Não editar à mão.
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 590 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 601 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -346,6 +346,7 @@ Endpoints: 590 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/me/session-policy` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/shifts` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/shifts/:id/coworkers` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/time-bank` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/novo-rh/absences/balances` | permission:hr.leave:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/absences/balances/adjust` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/absences/flows` | permission:hr.leave:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
@@ -425,6 +426,16 @@ Endpoints: 590 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/novo-rh/structure/terms` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
 | POST | `/api/novo-rh/structure/terms/accept` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/structure/transfers` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/time-bank/categories` | permission:hr.attendance:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/time-bank/categories` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/time-bank/categories/:id/archive` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/time-bank/employees/:employeeId` | permission:hr.attendance:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/time-bank/employees/:employeeId/adjust` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/time-bank/employees/:employeeId/categorized` | permission:hr.attendance:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/time-bank/employees/:employeeId/compensate` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/time-bank/employees/:employeeId/sync` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/time-bank/employees/:employeeId/validations` | permission:hr.attendance:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/time-bank/employees/:employeeId/validations` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/time/assignments` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/time/assignments` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/time/assignments-for` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |

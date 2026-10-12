@@ -102,6 +102,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/time(\/|$)/, target: p("hr.schedules") },
   { pattern: /^\/api\/novo-rh\/attendance(\/|$)/, target: p("hr.attendance") },
   { pattern: /^\/api\/novo-rh\/absences(\/|$)/, target: p("hr.leave") },
+  { pattern: /^\/api\/novo-rh\/time-bank(\/|$)/, target: p("hr.attendance") },
 
   // ── Recursos Humanos ─────────────────────────────────────────────────
   { pattern: /^\/api\/hr\/overview(\/|$)/, target: p("hr.overview") },

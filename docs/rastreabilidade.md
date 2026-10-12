@@ -98,12 +98,12 @@ Fontes: RE = `Especificacao_RH_Engenharia_Reversa` §15 · CF = `Especificacao_R
 
 | ID | Requisito | Estado | Código | Teste |
 |---|---|---|---|---|
-| RE-26 | Ledger diário | por fazer | | |
-| RE-27 | Mês vencido | por fazer | | |
-| RE-28 | Limite de compensação | por fazer | | |
-| RE-29 | Correção retroativa gera ajuste | por fazer | | |
-| CF-6 | Validação de excedente não retroativa | por fazer | | |
-| TK-15 | Saldo = soma dos movimentos (teste de propriedades) | por fazer | | |
+| RE-26 | Ledger diário | feito | `src/modules/time-bank` | `src/modules/time-bank/__tests__/use-cases/time-bank.test.ts` |
+| RE-27 | Mês vencido | feito | `src/modules/time-bank` | `src/modules/time-bank/__tests__/use-cases/time-bank.test.ts` |
+| RE-28 | Limite de compensação | feito (422 com o disponível) | `src/modules/time-bank` | `src/modules/time-bank/__tests__/use-cases/time-bank.test.ts`; `src/modules/time-bank/__tests__/adapters/time-bank.controller.test.ts` |
+| RE-29 | Correção retroativa gera ajuste | feito | `src/modules/time-bank` | `src/modules/time-bank/__tests__/use-cases/time-bank.test.ts` |
+| CF-6 | Validação de excedente não retroativa | feito | `src/modules/time-bank` | `src/modules/time-bank/__tests__/use-cases/time-bank.test.ts` |
+| TK-15 | Saldo = soma dos movimentos (teste de propriedades) | feito (gerador com semente, 25 sequências) | `src/modules/time-bank` | `src/modules/time-bank/__tests__/use-cases/time-bank.test.ts` |
 
 ## Fase 7 — Escalas e turnos
 
