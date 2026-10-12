@@ -21,7 +21,8 @@ export interface WorkspaceContextPort {
   employeeLocations(org: OrganizationId, employeeId: string): Promise<string[]>;
   /** Quem está a trabalhar agora (última marcação de hoje ≠ saída). */
   presentNow(org: OrganizationId): Promise<Presence[]>;
-  whosInScope(org: OrganizationId, employeeId: string): Promise<"own_location" | "organization">;
+  /** "off" = secção desligada para os colaboradores (FE-116). */
+  whosInScope(org: OrganizationId, employeeId: string): Promise<"off" | "own_location" | "organization">;
   now(): string;
   notify(org: OrganizationId, userIds: string[], n: { title: string; body: string; link: string; dedupeKey: string }): Promise<void>;
   userOfEmployee(org: OrganizationId, employeeId: string): Promise<string | null>;

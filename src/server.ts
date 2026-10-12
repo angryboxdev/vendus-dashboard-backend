@@ -864,7 +864,7 @@ const workspaceModule = createWorkspaceModule({
     },
     whosInScope: async (org, employeeId) => {
       const s = (await settingsModule.settings.effectiveFor(org, employeeId, todayUtc(), "security")).find((x) => x.key === "security.visibility.whos_in_scope");
-      return s?.value === "organization" ? "organization" : "own_location";
+      return s?.value === "organization" ? "organization" : s?.value === "off" ? "off" : "own_location";
     },
     now: () => new Date().toISOString(),
     notify: (org, userIds, n) => inAppNotify(org, userIds, n, "workspace.update"),

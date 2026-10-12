@@ -138,9 +138,19 @@ export class WorkspaceUseCases {
   }
 
   // ── Quem está (C6.7, CF-15) ─────────────────────────────────────────
+  /** Secções visíveis ao colaborador (FE-116): o Portal esconde o menu; a API recusa na mesma. */
+  async myVisibility(org: OrganizationId, actor: Actor) {
+    const employeeId = await this.me(org, actor);
+    const scope = await this.ctx.whosInScope(org, employeeId);
+    return { whosIn: scope !== "off", whosInScope: scope };
+  }
+
   async whosIn(org: OrganizationId, actor: Actor) {
     const employeeId = await this.me(org, actor);
-    const [rows, locations, scope] = await Promise.all([this.ctx.presentNow(org), this.ctx.employeeLocations(org, employeeId), this.ctx.whosInScope(org, employeeId)]);
+    const scope = await this.ctx.whosInScope(org, employeeId);
+    // FE-116: secção desligada → recusa no servidor (a UI só esconde o menu).
+    if (scope === "off") throw new WorkspaceError("A secção Quem está não está disponível.", "forbidden");
+    const [rows, locations] = await Promise.all([this.ctx.presentNow(org), this.ctx.employeeLocations(org, employeeId)]);
     // Só nome, estado e desde quando — sem contactos (minimização).
     return { scope, people: visiblePresence(rows, locations, scope).map((p) => ({ employeeId: p.employeeId, name: p.name, state: p.state, since: p.since })) };
   }

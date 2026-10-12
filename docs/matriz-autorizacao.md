@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 728 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 729 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -366,6 +366,7 @@ Endpoints: 728 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/me/shifts` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/shifts/:id/coworkers` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/time-bank` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/visibility` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/whos-in` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/novo-rh/absences/balances` | permission:hr.leave:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/absences/balances/adjust` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
