@@ -99,6 +99,8 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/audit(\/|$)/, target: p("governance.audit") },
   { pattern: /^\/api\/novo-rh\/structure(\/|$)/, target: p("company.structure") },
   { pattern: /^\/api\/novo-rh\/catalog(\/|$)/, target: p("company.structure") },
+  // Entidades legais e a entidade de cada centro (FE-092/093): dados da empresa.
+  { pattern: /^\/api\/novo-rh\/legal-entities(\/|$)/, target: p("company.structure") },
   { pattern: /^\/api\/novo-rh\/people\/export\.csv$/, target: p("hr.people_export", "MANAGE") },
   { pattern: /^\/api\/novo-rh\/people(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/time\/(holiday-calendars|holidays)(\/|$)/, target: p("company.holidays") },

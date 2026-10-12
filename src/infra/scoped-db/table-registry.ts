@@ -269,6 +269,9 @@ export const TABLE_REGISTRY = {
   // Novo RH FE-065: envio de documentos a vários colaboradores.
   document_distributions: { organizationColumn: "org_id", locationBearing: false },
   document_distribution_recipients: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH FE-092: entidades legais e a entidade de cada centro.
+  legal_entities: { organizationColumn: "org_id", locationBearing: false },
+  legal_entity_locations: { organizationColumn: "org_id", locationBearing: false },
   alert_rules: { organizationColumn: "org_id", locationBearing: false },
   alerts: { organizationColumn: "org_id", locationBearing: false },
   custom_request_forms: { organizationColumn: "org_id", locationBearing: false },

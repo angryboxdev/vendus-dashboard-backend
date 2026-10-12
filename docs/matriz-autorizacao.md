@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 709 · pré-autenticação: 21 · não classificados: 0
+Endpoints: 718 · pré-autenticação: 21 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -444,6 +444,15 @@ Endpoints: 709 · pré-autenticação: 21 · não classificados: 0
 | POST | `/api/novo-rh/document-distributions/audience-preview` | permission:hr.documents:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/inbox` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
 | POST | `/api/novo-rh/inbox/decide` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
+| GET | `/api/novo-rh/legal-entities` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
+| POST | `/api/novo-rh/legal-entities` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| PATCH | `/api/novo-rh/legal-entities/:id` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/legal-entities/:id/archive` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/legal-entities/:id/restore` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/legal-entities/:id/usage` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
+| GET | `/api/novo-rh/legal-entities/catalog` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
+| GET | `/api/novo-rh/legal-entities/locations` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
+| PUT | `/api/novo-rh/legal-entities/locations/:locationId` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/overview` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/overview/plan` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/people` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |

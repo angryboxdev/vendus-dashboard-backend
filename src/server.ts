@@ -77,6 +77,7 @@ import type { AlertsContextPort } from "./modules/alerts/domain/ports/out/alerts
 import { createWorkspaceModule } from "./modules/workspace/workspace.module.js";
 import { createReportsModule } from "./modules/reports/reports.module.js";
 import { createDocumentDistributionsModule } from "./modules/document-distributions/document-distributions.module.js";
+import { createLegalEntitiesModule } from "./modules/legal-entities/legal-entities.module.js";
 import type { ReportRow } from "./modules/reports/domain/entities/report.js";
 import { SupabaseAbsencesDirectory } from "./modules/absences/adapters/out/supabase-absences-directory.js";
 import type { OrganizationId } from "./kernel/organization-id.js";
@@ -812,6 +813,25 @@ const documentDistributionsModule = createDocumentDistributionsModule({
   },
 });
 app.use("/api", documentDistributionsModule.router);
+
+// Novo RH → Entidades legais (FE-092) e a entidade de cada centro (FE-093).
+const legalEntitiesModule = createLegalEntitiesModule({
+  context: {
+    activeLocations: (org) => peopleRepo.listLocations(org),
+    activeContractsAt: async (org, locationIds) => {
+      const today = todayUtc();
+      let n = 0;
+      for (const e of await activeEmployees(org)) {
+        if (!e.primaryLocationId || !locationIds.includes(e.primaryLocationId)) continue;
+        n += (await peopleRepo.listContracts(org, e.id)).filter((c) => c.status === "active" && c.startDate <= today && (c.endDate === null || c.endDate >= today)).length;
+      }
+      return n;
+    },
+    now: () => new Date().toISOString(),
+    audit: (org, e) => novoRhAudit(org, { actor: e.actor, action: e.action, resourceId: e.resourceId, after: { before: e.before, after: e.after }, reason: e.reason }, "legal_entity"),
+  },
+});
+app.use("/api", legalEntitiesModule.router);
 
 const workspaceModule = createWorkspaceModule({
   context: {
