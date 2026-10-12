@@ -1,5 +1,6 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ClockEvent, ClockRevision } from "../../domain/entities/clock.js";
+import type { BreakType, BreakTypeInput } from "../../domain/entities/break-type.js";
 import type { Adjustment, CorrectionRequest, DayVersion, Incident, IncidentStatus } from "../../domain/entities/records.js";
 import type { AttendanceConfig, AttendanceContextPort, AttendanceRepositoryPort, BackgroundPort } from "../../domain/ports/out/attendance.ports.js";
 import type { DayPlan, IncidentType } from "../../domain/services/day-engine.js";
@@ -23,6 +24,24 @@ export class FakeAttendanceRepository implements AttendanceRepositoryPort {
     const event = { ...e, id: nextId() };
     this.events.push(event);
     return { event, duplicate: false };
+  }
+  breakTypes: BreakType[] = [];
+  async listBreakTypes() {
+    return this.breakTypes.map((b) => ({ ...b }));
+  }
+  async createBreakType(_o: OrganizationId, input: BreakTypeInput) {
+    const b: BreakType = { ...input, name: input.name.trim(), id: nextId(), archived: false, version: 1 };
+    this.breakTypes.push(b);
+    return { ...b };
+  }
+  async updateBreakType(_o: OrganizationId, id: string, input: BreakTypeInput, v: number) {
+    const b = this.breakTypes.find((x) => x.id === id)!;
+    if (b.version !== v) return null;
+    Object.assign(b, input, { version: v + 1 });
+    return { ...b };
+  }
+  async archiveBreakType(_o: OrganizationId, id: string) {
+    this.breakTypes.find((x) => x.id === id)!.archived = true;
   }
   async findEventByClientId(_org: OrganizationId, employeeId: string, clientEventId: string) {
     return this.events.find((x) => x.employeeId === employeeId && x.clientEventId === clientEventId) ?? null;

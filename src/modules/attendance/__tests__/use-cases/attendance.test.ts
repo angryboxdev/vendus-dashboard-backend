@@ -270,3 +270,71 @@ describe("Fluxo de aprovação das correções de ponto (FE-113)", () => {
     expect((await uc.decideCorrection(ORG, BOSS, c.id, "approve", null)).status).toBe("approved");
   });
 });
+
+describe("Catálogo de pausas (FE-103)", () => {
+  const LUNCH = { name: "Almoço", color: "#10B981", remuneration: "unpaid" as const, hybridPaidMinutes: null, maxMinutes: 60, windowStart: "11:30", windowEnd: "15:00", maxUsesPerDay: 1, weekdays: [1, 2, 3, 4, 5] };
+  const COFFEE = { name: "Café", color: null, remuneration: "hybrid" as const, hybridPaidMinutes: 15, maxMinutes: null, windowStart: null, windowEnd: null, maxUsesPerDay: null, weekdays: null };
+  const punch = (segmentType: "work" | "off" | "break_paid" | "break_unpaid", breakTypeId: string | null = null) => ({ segmentType, source: "web" as const, clientEventId: null, locationId: null, latitude: null, longitude: null, ip: null, breakTypeId });
+
+  test("remuneração é escolha obrigatória; nome único (sem acentos nem maiúsculas); alterar exige motivo", async () => {
+    const { uc } = setup();
+    await expect(uc.createBreakType(ORG, ADMIN, { ...LUNCH, remuneration: "" as never })).rejects.toMatchObject({ field: "remuneration" });
+    await expect(uc.createBreakType(ORG, ADMIN, { ...COFFEE, hybridPaidMinutes: null })).rejects.toMatchObject({ field: "hybridPaidMinutes" });
+    const b = await uc.createBreakType(ORG, ADMIN, LUNCH);
+    await expect(uc.createBreakType(ORG, ADMIN, { ...LUNCH, name: " almoco " })).rejects.toMatchObject({ code: "duplicate_name" });
+    await expect(uc.updateBreakType(ORG, ADMIN, b.id, { ...LUNCH, maxMinutes: 45 }, b.version, "")).rejects.toMatchObject({ field: "reason" });
+    expect((await uc.updateBreakType(ORG, ADMIN, b.id, { ...LUNCH, maxMinutes: 45 }, b.version, "Acordo com a equipa")).maxMinutes).toBe(45);
+    await expect(uc.updateBreakType(ORG, ADMIN, b.id, LUNCH, b.version, "Versão antiga")).rejects.toMatchObject({ code: "stale" });
+  });
+
+  test("iniciar pausa: fora da janela e acima das utilizações do dia → recusada; o tipo decide paga/não paga", async () => {
+    // 10:00 em Lisboa (segunda): fora da janela do almoço.
+    const { uc, repo, clock } = setup(at("2026-10-12T10:00:00"));
+    const lunch = await uc.createBreakType(ORG, ADMIN, LUNCH);
+    await uc.punch(ORG, EMP, punch("work"));
+    await expect(uc.punch(ORG, EMP, punch("break_paid", lunch.id))).rejects.toMatchObject({ field: "breakTypeId" });
+    clock.value = at("2026-10-12T12:30:00");
+    const r = await uc.punch(ORG, EMP, punch("break_paid", lunch.id));
+    expect(r.event.segmentType).toBe("break_unpaid");
+    expect(repo.events.at(-1)!.breakTypeId).toBe(lunch.id);
+    clock.value = at("2026-10-12T13:15:00");
+    await uc.punch(ORG, EMP, punch("work"));
+    clock.value = at("2026-10-12T13:40:00");
+    await expect(uc.punch(ORG, EMP, punch("break_unpaid", lunch.id))).rejects.toThrow("máximo 1");
+  });
+
+  test("cálculo: não paga não conta; híbrida paga só os primeiros minutos do dia; acima da duração máxima não conta", async () => {
+    const { uc, repo, event } = setup(at("2026-10-13T10:00:00"));
+    const coffee = await uc.createBreakType(ORG, ADMIN, COFFEE);
+    const capped = await uc.createBreakType(ORG, ADMIN, { ...COFFEE, name: "Paga curta", remuneration: "paid", hybridPaidMinutes: null, maxMinutes: 10 });
+    const typed = (local: string, segmentType: "break_paid" | "break_unpaid", breakTypeId: string) => {
+      event(local, segmentType);
+      repo.events.at(-1)!.breakTypeId = breakTypeId;
+    };
+    // 2026-10-12: 09:00–17:00 com café 10:00–10:10 e 15:00–15:10 (híbrida 15 min) e pausa paga 12:00–12:30 (máx. 10).
+    event("2026-10-12T09:00:00");
+    typed("2026-10-12T10:00:00", "break_paid", coffee.id);
+    event("2026-10-12T10:10:00");
+    typed("2026-10-12T12:00:00", "break_paid", capped.id);
+    event("2026-10-12T12:30:00");
+    typed("2026-10-12T15:00:00", "break_paid", coffee.id);
+    event("2026-10-12T15:10:00");
+    event("2026-10-12T17:00:00", "off");
+    const d = (await uc.days(ORG, "e1", "2026-10-12", "2026-10-12")).days[0]!;
+    // Trabalho 8 h − 50 min de pausas = 7h10; pagas: café 10 + 5 (quota 15) + pausa curta 10 → 7h35.
+    expect(d.workedSeconds).toBe((7 * 60 + 35) * 60);
+    expect(d.breakSeconds).toBe(50 * 60);
+  });
+
+  test("dias sem pausas com tipo mantêm a mesma impressão de configuração (criar pausas não gera versões em massa)", async () => {
+    const { uc, repo, event } = setup(at("2026-10-13T10:00:00"));
+    event("2026-10-12T09:00:00");
+    event("2026-10-12T17:00:00", "off");
+    await uc.recalculate(ORG, "e1", "2026-10-12", "2026-10-12", "teste");
+    const before = repo.days.filter((d) => d.workDate === "2026-10-12").length;
+    await uc.createBreakType(ORG, ADMIN, COFFEE);
+    const r = await uc.recalculate(ORG, "e1", "2026-10-12", "2026-10-12", "teste");
+    expect(r.changed).toBe(0);
+    expect(repo.days.filter((d) => d.workDate === "2026-10-12").length).toBe(before);
+  });
+});

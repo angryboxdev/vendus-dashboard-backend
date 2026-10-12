@@ -63,6 +63,7 @@ horas (Fase 6), que vai ler os ajustes daqui.
 
 ## Design decisions (ADR summary)
 
+- **Catálogo de pausas (FE-103):** `break_types` (remuneração escolhida sempre: paga / não paga / híbrida com N minutos pagos por dia; duração máxima — o excedente não é pago; janela, usos por dia, dias). Ao iniciar uma pausa com tipo, o servidor verifica dia, janela e usos e grava `break_type_id`; o motor aplica a regra do tipo (`BreakRule`). Pausas sem tipo funcionam como antes. As regras de pausas só entram na impressão de configuração dos dias que as usam (criar/alterar uma pausa não gera versões em dias sem ela); alterações são auditadas com motivo e os dias afetados ganham movimento de ajuste (TK-13). Rotas: `/api/novo-rh/attendance/break-types` (catálogo) e `/api/me/clock/break-types` (ativas). Migração `20261023100000`. Fora desta versão: automações de abrir/fechar pausas e alterações agendadas.
 - **Fluxo de aprovação das correções (FE-113):** com um fluxo "Correções de ponto" (absences, âmbito `clock`) ativo, cada pedido fixa na criação os níveis e aprovadores (sem quem pede nem o próprio; nível vazio → recurso, RE-23); só o nível atual decide, aprovar num nível intermédio passa ao seguinte e o último cria a revisão. Sem fluxo, decide quem gere a assiduidade (como antes). Migração `20261022100000` (`levels`, `current_level`).
 - ADR-0027: geolocalização desligada até DPIA; horas de incidentes pendentes até validação; quiosque continua no RH atual.
 - Separação de funções: ninguém corrige, aprova ou valida o próprio registo.

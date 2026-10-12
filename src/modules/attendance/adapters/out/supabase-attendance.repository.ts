@@ -2,6 +2,7 @@ import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-quer
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ClockEvent, ClockRevision } from "../../domain/entities/clock.js";
 import type { Adjustment, CorrectionRequest, DayVersion, Incident, IncidentStatus } from "../../domain/entities/records.js";
+import type { BreakType, BreakTypeInput } from "../../domain/entities/break-type.js";
 import type { AttendanceRepositoryPort } from "../../domain/ports/out/attendance.ports.js";
 import type { IncidentType } from "../../domain/services/day-engine.js";
 
@@ -16,7 +17,8 @@ const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 const iso = (v: unknown) => new Date(String(v)).toISOString();
 const optIso = (v: unknown) => (v === null || v === undefined ? null : iso(v));
 
-const EV = "id, employee_id, occurred_at, segment_type, source, client_event_id, location_id, latitude, longitude, ip";
+const EV = "id, employee_id, occurred_at, segment_type, source, client_event_id, location_id, latitude, longitude, ip, break_type_id";
+const BT = "id, name, color, remuneration, hybrid_paid_minutes, max_minutes, window_start, window_end, max_uses_per_day, weekdays, archived, version";
 const REV = "id, employee_id, operation, target_event_id, occurred_at, segment_type, anchor_at, reason, author, state, refusable_until, created_at";
 const COR = "id, employee_id, requested_by, operation, target_event_id, occurred_at, segment_type, reason, status, decided_by, decided_at, decision_comment, revision_id, created_at, levels, current_level";
 const DAY = "employee_id, work_date, version, worked_seconds, break_seconds, night_seconds, theoretical_seconds, excess_seconds, pending_seconds, config_hash, calculated_at";
@@ -34,6 +36,33 @@ const toEvent = (r: Row): ClockEvent => ({
   latitude: num(r.latitude),
   longitude: num(r.longitude),
   ip: str(r.ip),
+  breakTypeId: str(r.break_type_id),
+});
+const hm = (v: unknown) => (v ? String(v).slice(0, 5) : null);
+const toBreakType = (r: Row): BreakType => ({
+  id: String(r.id),
+  name: String(r.name),
+  color: str(r.color),
+  remuneration: r.remuneration as BreakType["remuneration"],
+  hybridPaidMinutes: num(r.hybrid_paid_minutes),
+  maxMinutes: num(r.max_minutes),
+  windowStart: hm(r.window_start),
+  windowEnd: hm(r.window_end),
+  maxUsesPerDay: num(r.max_uses_per_day),
+  weekdays: Array.isArray(r.weekdays) ? (r.weekdays as number[]).map(Number) : null,
+  archived: r.archived === true,
+  version: Number(r.version),
+});
+const breakRow = (i: BreakTypeInput) => ({
+  name: i.name.trim(),
+  color: i.color,
+  remuneration: i.remuneration,
+  hybrid_paid_minutes: i.hybridPaidMinutes,
+  max_minutes: i.maxMinutes,
+  window_start: i.windowStart,
+  window_end: i.windowEnd,
+  max_uses_per_day: i.maxUsesPerDay,
+  weekdays: i.weekdays,
 });
 const toRevision = (r: Row): ClockRevision => ({
   id: String(r.id),
@@ -105,6 +134,21 @@ const toIncident = (r: Row): Incident => ({
 export class SupabaseAttendanceRepository implements AttendanceRepositoryPort {
   constructor(private readonly scoped: ScopedQueryFactory) {}
 
+  // ── Catálogo de pausas (FE-103) ──
+  async listBreakTypes(org: OrganizationId) {
+    return check<Row[]>(await this.scoped(org).table("break_types").select(BT).order("name")).map(toBreakType);
+  }
+  async createBreakType(org: OrganizationId, input: BreakTypeInput, by: string) {
+    return toBreakType(check(await this.scoped(org).table("break_types").insert({ ...breakRow(input), created_by: by }).select(BT).single()));
+  }
+  async updateBreakType(org: OrganizationId, id: string, input: BreakTypeInput, expectedVersion: number) {
+    const rows = check<Row[]>(await this.scoped(org).table("break_types").update({ ...breakRow(input), version: expectedVersion + 1, updated_at: new Date().toISOString() }).eq("id", id).eq("version", expectedVersion).select(BT));
+    return rows[0] ? toBreakType(rows[0]) : null;
+  }
+  async archiveBreakType(org: OrganizationId, id: string) {
+    check(await this.scoped(org).table("break_types").update({ archived: true, updated_at: new Date().toISOString() }).eq("id", id));
+  }
+
   async insertEvent(org: OrganizationId, e: Omit<ClockEvent, "id">) {
     const row = {
       employee_id: e.employeeId,
@@ -116,6 +160,7 @@ export class SupabaseAttendanceRepository implements AttendanceRepositoryPort {
       latitude: e.latitude,
       longitude: e.longitude,
       ip: e.ip,
+      break_type_id: e.breakTypeId ?? null,
     };
     const res = (await this.scoped(org).table("clock_events").insert(row).select(EV).single()) as Res;
     // RE-9: corrida entre duas tentativas com o mesmo clientEventId → devolve a gravada.

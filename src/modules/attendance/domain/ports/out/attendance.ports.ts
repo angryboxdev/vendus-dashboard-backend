@@ -1,12 +1,19 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { ClockEvent, ClockRevision } from "../../entities/clock.js";
 import type { Adjustment, CorrectionRequest, DayVersion, Incident, IncidentStatus } from "../../entities/records.js";
+import type { BreakType, BreakTypeInput } from "../../entities/break-type.js";
 import type { DayPlan, EngineRules, IncidentType } from "../../services/day-engine.js";
 import type { PunchPolicy } from "../../services/punch-policy.js";
 
 export interface AttendanceRepositoryPort {
   /** RE-9: com o mesmo `clientEventId` devolve a marcação já gravada (`duplicate: true`). */
   insertEvent(org: OrganizationId, e: Omit<ClockEvent, "id">): Promise<{ event: ClockEvent; duplicate: boolean }>;
+  /** FE-103: catálogo de pausas (inclui arquivadas — as marcações antigas mantêm a regra). */
+  listBreakTypes(org: OrganizationId): Promise<BreakType[]>;
+  createBreakType(org: OrganizationId, input: BreakTypeInput, by: string): Promise<BreakType>;
+  /** null = versão desatualizada. */
+  updateBreakType(org: OrganizationId, id: string, input: BreakTypeInput, expectedVersion: number): Promise<BreakType | null>;
+  archiveBreakType(org: OrganizationId, id: string): Promise<void>;
   findEventByClientId(org: OrganizationId, employeeId: string, clientEventId: string): Promise<ClockEvent | null>;
   getEvent(org: OrganizationId, id: string): Promise<ClockEvent | null>;
   listEvents(org: OrganizationId, employeeId: string, fromUtc: string, toUtc: string): Promise<ClockEvent[]>;

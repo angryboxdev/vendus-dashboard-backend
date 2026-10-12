@@ -4,6 +4,7 @@ import { problem } from "../../../../infra/http/problem-details.js";
 import type { Actor, ChangeInput, PunchInput } from "../../application/use-cases/attendance.use-cases.js";
 import type { AttendanceUseCases } from "../../application/use-cases/attendance.use-cases.js";
 import type { SegmentType } from "../../domain/entities/clock.js";
+import type { BreakTypeInput } from "../../domain/entities/break-type.js";
 import type { CorrectionRequest, IncidentStatus } from "../../domain/entities/records.js";
 import { AttendanceConflictError, AttendanceForbiddenError, AttendanceNotFoundError, AttendanceValidationError, PunchRefusedError } from "../../domain/errors.js";
 
@@ -62,10 +63,13 @@ export function createAttendanceMeRouter(uc: AttendanceUseCases, store: Idempote
       longitude: optN(b.longitude),
       ip: req.ip ?? null,
       occurredAt: optS(b.occurredAt),
+      breakTypeId: optS(b.breakTypeId),
     };
     const out = await run(() => uc.punch(org(req), actorOf(req), input));
     res.status(out.duplicate ? 200 : 201).json(out);
   });
+  // FE-103: pausas que se podem escolher ao marcar (só as ativas).
+  r.get(`${M}/break-types`, async (req, res) => res.json((await uc.listBreakTypes(org(req))).filter((b) => !b.archived)));
   r.get(`${M}/days`, async (req, res) => res.json(await run(() => uc.myDays(org(req), actorOf(req), s(req.query.from), s(req.query.to)))));
   r.post(`${M}/revisions/:id/refuse`, async (req, res) => res.json(await run(() => uc.refuseRevision(org(req), actorOf(req), id(req), optS(body(req).comment)))));
   r.get(`${M}/corrections`, async (req, res) => res.json(await run(() => uc.myCorrections(org(req), actorOf(req)))));
@@ -116,6 +120,29 @@ export function createAttendanceAdminRouter(
     const employeeId = s(b.employeeId);
     await scope(req, employeeId, s(b.occurredAt).slice(0, 10) || today());
     res.status(201).json(await run(() => uc.revise(org(req), actorOf(req), employeeId, change(b))));
+  });
+
+  // ── Catálogo de pausas (FE-103) ──
+  const breakInput = (b: Record<string, unknown>): BreakTypeInput => ({
+    name: s(b.name),
+    color: optS(b.color),
+    remuneration: s(b.remuneration) as BreakTypeInput["remuneration"],
+    hybridPaidMinutes: optN(b.hybridPaidMinutes),
+    maxMinutes: optN(b.maxMinutes),
+    windowStart: optS(b.windowStart),
+    windowEnd: optS(b.windowEnd),
+    maxUsesPerDay: optN(b.maxUsesPerDay),
+    weekdays: Array.isArray(b.weekdays) ? b.weekdays.map(Number) : null,
+  });
+  r.get(`${A}/break-types`, async (req, res) => res.json(await uc.listBreakTypes(org(req))));
+  r.post(`${A}/break-types`, async (req, res) => res.status(201).json(await run(() => uc.createBreakType(org(req), actorOf(req), breakInput(body(req))))));
+  r.put(`${A}/break-types/:id`, async (req, res) => {
+    const b = body(req);
+    res.json(await run(() => uc.updateBreakType(org(req), actorOf(req), id(req), breakInput(b), Number(b.version), s(b.reason))));
+  });
+  r.post(`${A}/break-types/:id/archive`, async (req, res) => {
+    await run(() => uc.archiveBreakType(org(req), actorOf(req), id(req)));
+    res.json({ ok: true });
   });
 
   r.get(`${A}/corrections`, async (req, res) => {

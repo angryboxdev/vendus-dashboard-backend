@@ -18,6 +18,8 @@ export interface Segment {
   autoClosed: boolean;
   /** Registo esquecido (aberto há mais de `maxOpenHours`) — horas pendentes até validação (D8). */
   forgotten?: boolean;
+  /** FE-103: tipo de pausa do catálogo. */
+  breakTypeId?: string | null;
 }
 
 export interface DayPlan {
@@ -50,6 +52,15 @@ export interface EngineRules {
   /** Janela noturna legal (HH:MM); null = sem cálculo de noturno (D6). */
   nightStart: string | null;
   nightEnd: string | null;
+  /** FE-103: regras do catálogo de pausas por id (pausas com tipo). */
+  breakTypes?: Record<string, BreakRule>;
+}
+
+/** Remuneração de um tipo de pausa: paga, não paga ou híbrida (primeiros N minutos do dia pagos); o que passar da duração máxima não é pago. */
+export interface BreakRule {
+  remuneration: "paid" | "unpaid" | "hybrid";
+  hybridPaidMinutes: number | null;
+  maxMinutes: number | null;
 }
 
 export type IncidentType = "missing_in" | "missing_out" | "auto_closed" | "late";
@@ -78,7 +89,7 @@ export function buildSegments(events: EffectiveEvent[], now: string): Segment[] 
     const e = events[i]!;
     if (e.segmentType === "off") continue;
     const next = events[i + 1];
-    out.push({ start: e.occurredAt, end: next ? next.occurredAt : now < e.occurredAt ? e.occurredAt : now, type: e.segmentType, open: !next, autoClosed: false });
+    out.push({ start: e.occurredAt, end: next ? next.occurredAt : now < e.occurredAt ? e.occurredAt : now, type: e.segmentType, open: !next, autoClosed: false, ...(e.breakTypeId ? { breakTypeId: e.breakTypeId } : {}) });
   }
   return out;
 }
@@ -190,9 +201,26 @@ export function computeDays(events: EffectiveEvent[], dates: string[], plans: Ma
     let pending = 0;
     let breaks = 0;
     let night = 0;
+    const hybridUsed = new Map<string, number>();
     for (const s of segs) {
       const d = secs(s.start, s.end);
       if (s.type === "break_unpaid" || s.type === "break_paid") breaks += d;
+      // FE-103: pausa com tipo do catálogo → a regra do tipo decide quanto conta como trabalhado.
+      const rule = s.breakTypeId ? rules.breakTypes?.[s.breakTypeId] : undefined;
+      if (rule && (s.type === "break_unpaid" || s.type === "break_paid")) {
+        let paid = rule.remuneration === "unpaid" ? 0 : d;
+        if (rule.maxMinutes !== null) paid = Math.min(paid, rule.maxMinutes * 60);
+        if (rule.remuneration === "hybrid") {
+          const used = hybridUsed.get(s.breakTypeId!) ?? 0;
+          paid = Math.min(paid, Math.max(0, (rule.hybridPaidMinutes ?? 0) * 60 - used));
+          hybridUsed.set(s.breakTypeId!, used + paid);
+        }
+        if (paid > 0 && !(s.forgotten && !rules.incidentHoursCount && !plan.incidentValidated)) {
+          worked += paid;
+          night += nightSeconds({ ...s, end: new Date(Date.parse(s.start) + paid * 1000).toISOString() }, workDate, rules);
+        } else if (paid > 0) pending += paid;
+        continue;
+      }
       if (!WORKING.includes(s.type)) continue;
       // D8: horas de um registo esquecido/fechado automaticamente ficam pendentes até validação.
       if (s.forgotten && !rules.incidentHoursCount && !plan.incidentValidated) {
