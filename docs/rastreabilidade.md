@@ -128,8 +128,8 @@ Fontes: RE = `Especificacao_RH_Engenharia_Reversa` §15 · CF = `Especificacao_R
 
 | ID | Requisito | Estado | Código | Teste |
 |---|---|---|---|---|
-| RE-24 | Pedido pendente há mais de N dias gera alerta | por fazer | | |
-| RE-31 | Destinatários imutáveis depois de publicar | por fazer | | |
-| RE-32 | Relatório entregue/lido/confirmado com data e versão | por fazer | | |
-| RE-36 | Alerta com ciclo completo | por fazer | | |
-| CF-15 | Visibilidade só do próprio centro (UI e API) | por fazer | | |
+| RE-24 | Pedido pendente há mais de N dias gera alerta | feito (alerta + escalonamento) | `src/modules/alerts` | `src/modules/alerts/__tests__/alerts.test.ts` |
+| RE-31 | Destinatários imutáveis depois de publicar | feito | `src/modules/announcements` | `src/modules/announcements/__tests__/announcements.test.ts`; `announcements.controller.test.ts` |
+| RE-32 | Relatório entregue/lido/confirmado com data e versão | feito | `src/modules/announcements` | `src/modules/announcements/__tests__/announcements.test.ts` |
+| RE-36 | Alerta com ciclo completo | feito | `src/modules/alerts` | `src/modules/alerts/__tests__/alerts.test.ts` |
+| CF-15 | Visibilidade só do próprio centro (UI e API) | feito | `src/modules/workspace` | `src/modules/workspace/__tests__/workspace.test.ts`; `workspace.controller.test.ts` |

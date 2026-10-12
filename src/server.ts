@@ -67,6 +67,12 @@ import { createTimeBankModule } from "./modules/time-bank/time-bank.module.js";
 import { createRostersModule } from "./modules/rosters/rosters.module.js";
 import { createPeriodsModule } from "./modules/periods/periods.module.js";
 import type { PeriodsContextPort } from "./modules/periods/domain/ports/out/periods.ports.js";
+import { createAnnouncementsModule } from "./modules/announcements/announcements.module.js";
+import { createAlertsModule } from "./modules/alerts/alerts.module.js";
+import type { AlertsContextPort } from "./modules/alerts/domain/ports/out/alerts.ports.js";
+import { createWorkspaceModule } from "./modules/workspace/workspace.module.js";
+import { createReportsModule } from "./modules/reports/reports.module.js";
+import type { ReportRow } from "./modules/reports/domain/entities/report.js";
 import { SupabaseAbsencesDirectory } from "./modules/absences/adapters/out/supabase-absences-directory.js";
 import type { OrganizationId } from "./kernel/organization-id.js";
 import { SupabaseEmployeeSegments, SupabaseSettingsImpact } from "./modules/settings/adapters/out/supabase-settings.adapters.js";
@@ -688,6 +694,174 @@ const periodsModule = createPeriodsModule({
   canSensitive: (req) => !!req.access && can(req.access, "hr.sensitive_data", "MANAGE"),
 });
 app.use("/api", periodsModule.router);
+
+// Novo RH → Fase 9: comunicados, alertas, espaço de trabalho (tarefas, solicitações, quem está) e relatórios.
+const inAppNotify = async (org: OrganizationId, userIds: string[], n: { title: string; body: string; link: string; dedupeKey: string }, kind: string) => {
+  // D12 (ADR-0033): só na aplicação; e-mail/push/WhatsApp desligados até decisão.
+  if (!userIds.length) return;
+  await notificationsModule.notifications.notify(org, { recipientUserIds: [...new Set(userIds)], kind, title: n.title, body: n.body, link: n.link, dedupeKey: n.dedupeKey });
+};
+const novoRhAudit = (org: OrganizationId, e: { actor: string; action: string; resourceId: string; after: unknown; reason?: string | null }, resourceType: string) =>
+  auditModule.recorder.record(org, { actor: e.actor, action: e.action, resourceType, resourceId: e.resourceId, before: null, after: e.after, reason: e.reason ?? null });
+const todayUtc = () => new Date().toISOString().slice(0, 10);
+const activeEmployees = (org: OrganizationId) => peopleRepo.list(org, { status: "active" });
+
+const announcementsModule = createAnnouncementsModule({
+  context: {
+    resolveAudience: async (org, audience) => {
+      const active = await activeEmployees(org);
+      let ids: string[];
+      if (audience.type === "all") ids = active.map((e) => e.id);
+      else if (audience.type === "employees") ids = active.filter((e) => audience.ids.includes(e.id)).map((e) => e.id);
+      else {
+        ids = [];
+        for (const e of active) {
+          const units = await segments.segmentsOf(org, e.id, todayUtc());
+          const mine = audience.type === "locations" ? units.locationIds : units.groupIds;
+          if (mine.some((x) => audience.ids.includes(x))) ids.push(e.id);
+        }
+      }
+      return Promise.all(ids.map(async (employeeId) => ({ employeeId, userId: await absencesDirectory.userOfEmployee(org, employeeId) })));
+    },
+    employeeForUser: (org, userId) => absencesDirectory.employeeForUser(org, userId),
+    notify: (org, userIds, n) => inAppNotify(org, userIds, n, "announcements.new"),
+    now: () => new Date().toISOString(),
+    audit: (org, e) => novoRhAudit(org, e, "announcement"),
+  },
+});
+app.use("/api", announcementsModule.router);
+
+const workspaceModule = createWorkspaceModule({
+  context: {
+    employeeForUser: (org, userId) => absencesDirectory.employeeForUser(org, userId),
+    employeeLocations: async (org, employeeId) => (await segments.segmentsOf(org, employeeId, todayUtc())).locationIds,
+    presentNow: async (org) => {
+      const rows = await attendanceModule.attendance.presentNow(org);
+      return Promise.all(
+        rows.map(async (r) => ({
+          ...r,
+          name: (await peopleRepo.get(org, r.employeeId))?.fullName ?? "",
+          locationIds: (await segments.segmentsOf(org, r.employeeId, todayUtc())).locationIds,
+        })),
+      );
+    },
+    whosInScope: async (org, employeeId) => {
+      const s = (await settingsModule.settings.effectiveFor(org, employeeId, todayUtc(), "security")).find((x) => x.key === "security.visibility.whos_in_scope");
+      return s?.value === "organization" ? "organization" : "own_location";
+    },
+    now: () => new Date().toISOString(),
+    notify: (org, userIds, n) => inAppNotify(org, userIds, n, "workspace.update"),
+    userOfEmployee: (org, employeeId) => absencesDirectory.userOfEmployee(org, employeeId),
+    audit: (org, e) => novoRhAudit(org, e, "workspace"),
+  },
+});
+app.use("/api", workspaceModule.router);
+
+const alertsModule = createAlertsModule({
+  context: {
+    candidates: async (org, kind) => {
+      const out: Awaited<ReturnType<AlertsContextPort["candidates"]>> = [];
+      if (kind === "pending_absence") {
+        for (const r of await absencesModule.absences.listRequests(org, { status: "pending" }, false, "sistema")) {
+          out.push({ sourceType: "absence_request", sourceId: r.id, employeeId: r.employeeId, title: `Ausência pendente: ${r.typeName} (${r.startDate})`, mode: "since", at: r.createdAt });
+        }
+      } else if (kind === "pending_correction") {
+        for (const c of await attendanceModule.attendance.listCorrections(org, { status: "pending" })) {
+          out.push({ sourceType: "correction_request", sourceId: c.id, employeeId: c.employeeId, title: "Pedido de correção de marcação pendente", mode: "since", at: c.createdAt });
+        }
+      } else if (kind === "pending_reopening") {
+        for (const r of (await periodsModule.periods.listReopenings(org)).filter((x) => x.status === "pending")) {
+          out.push({ sourceType: "period_reopening", sourceId: r.id, employeeId: null, title: `Reabertura de período pendente (${r.requestedBy})`, mode: "since", at: r.createdAt });
+        }
+      } else if (kind === "pending_swap") {
+        for (const s of [...(await rostersModule.rosters.listSwaps(org, "pending_target")), ...(await rostersModule.rosters.listSwaps(org, "pending_manager"))]) {
+          out.push({ sourceType: "roster_swap", sourceId: s.id, employeeId: s.requesterEmployeeId, title: "Troca de turno pendente", mode: "since", at: s.createdAt });
+        }
+      } else if (kind === "pending_custom_request") {
+        for (const r of await workspaceModule.workspace.listRequests(org, "pending")) {
+          out.push({ sourceType: "custom_request", sourceId: r.id, employeeId: r.employeeId, title: "Solicitação pendente", mode: "since", at: r.createdAt });
+        }
+      } else if (kind === "overdue_task") {
+        for (const t of await workspaceModule.workspace.listTasks(org, "open")) {
+          if (t.dueAt && t.dueAt < new Date().toISOString()) out.push({ sourceType: "ops_task", sourceId: t.id, employeeId: t.assigneeEmployeeId, title: `Tarefa em atraso: ${t.title}`, mode: "since", at: t.dueAt });
+        }
+      } else {
+        // contract_end / probation_end: contratos ativos com fim (ou fim do período experimental) definido.
+        for (const e of await activeEmployees(org)) {
+          for (const c of await peopleRepo.listContracts(org, e.id)) {
+            if (c.status !== "active") continue;
+            const at = kind === "contract_end" ? c.endDate : c.probationEnd;
+            if (at) out.push({ sourceType: kind === "contract_end" ? "contract" : "probation", sourceId: c.id, employeeId: e.id, title: `${kind === "contract_end" ? "Fim de contrato" : "Fim do período experimental"}: ${e.fullName} (${at})`, mode: "until", at });
+          }
+        }
+      }
+      return out;
+    },
+    resolveOwner: async (org, owner) => {
+      if (owner === "admins") return notificationsModule.notifications.adminUserIds(org);
+      if (owner.startsWith("profile:")) return absencesDirectory.profileUserIds(org, owner.slice(8));
+      return owner.startsWith("user:") ? [owner.slice(5)] : [];
+    },
+    notify: (org, userIds, n) => inAppNotify(org, userIds, n, "alerts.alert"),
+    now: () => new Date().toISOString(),
+    audit: (org, e) => novoRhAudit(org, e, "alert"),
+  },
+});
+app.use("/api", alertsModule.router);
+
+const reportsModule = createReportsModule({
+  sources: {
+    rows: async (org, key, period) => {
+      const rows: ReportRow[] = [];
+      const h = (s: number) => Math.round((s / 3600) * 100) / 100;
+      if (key === "change_history") {
+        for (const ev of await auditModule.queries.list(org, { from: period!.from, to: period!.to, limit: 1000 })) {
+          rows.push({ when: ev.occurredAt.slice(0, 16).replace("T", " "), actor: ev.actor, action: ev.action, resource: ev.resourceType, reason: ev.reason ?? "" });
+        }
+        return rows;
+      }
+      if (key === "absences") {
+        for (const r of await absencesModule.absences.listRequests(org, { status: "approved", from: period!.from, to: period!.to }, false, "sistema")) {
+          rows.push({ employeeId: r.employeeId, employee: (await peopleRepo.get(org, r.employeeId))?.fullName ?? "", type: r.typeName, start: r.startDate, end: r.endDate, amount: r.amount, unit: r.unit === "days" ? "dias" : "horas" });
+        }
+        return rows;
+      }
+      for (const e of await activeEmployees(org)) {
+        if (key === "attendance") {
+          const days = await attendanceModule.attendance.storedDays(org, e.id, period!.from, period!.to);
+          const sum = (f: "workedSeconds" | "theoreticalSeconds" | "excessSeconds" | "nightSeconds" | "pendingSeconds") => days.reduce((s, d) => s + d[f], 0);
+          const open = await attendanceModule.attendance.listIncidents(org, { status: "open", employeeId: e.id, from: period!.from, to: period!.to });
+          rows.push({ employeeId: e.id, employee: e.fullName, worked: h(sum("workedSeconds")), theoretical: h(sum("theoreticalSeconds")), difference: h(sum("excessSeconds")), night: h(sum("nightSeconds")), pending: h(sum("pendingSeconds")), openIncidents: open.length });
+        } else if (key === "balances") {
+          for (const b of await absencesModule.absences.balances(org, e.id, null, false)) {
+            rows.push({ employeeId: e.id, employee: e.fullName, type: b.typeName, unit: b.unit === "days" ? "dias" : "horas", accrued: b.accrued, used: b.used, pending: b.pending, available: b.available });
+          }
+          const bank = (await timeBankModule.timeBank.entriesBetween(org, e.id, "1900-01-01", "2999-12-31")).reduce((s, x) => s + x.seconds, 0);
+          rows.push({ employeeId: e.id, employee: e.fullName, type: "Banco de horas", unit: "horas", accrued: "", used: "", pending: "", available: h(bank) });
+        } else if (key === "incomplete_data") {
+          const today = todayUtc();
+          const missing: string[] = [];
+          if (!e.nif) missing.push("NIF");
+          const contracts = await peopleRepo.listContracts(org, e.id);
+          if (!contracts.some((c) => c.status === "active" && c.startDate <= today && (c.endDate === null || c.endDate >= today))) missing.push("Contrato ativo");
+          const hasSchedule = !!(await timeBaseModule.time.assignmentsFor(org, e.id, today)).schedule;
+          const hasRoster = (await rostersModule.rosters.plannedFor(org, e.id, today, today)).size > 0;
+          if (!hasSchedule && !hasRoster) missing.push("Horário ou escala");
+          const managers = await peopleRepo.listManagers(org, e.id);
+          if (!managers.some((m) => m.validFrom <= today && (m.validTo === null || m.validTo >= today))) missing.push("Responsável");
+          if (!(await absencesDirectory.userOfEmployee(org, e.id))) missing.push("Conta do Portal");
+          if (missing.length) rows.push({ employeeId: e.id, employee: e.fullName, missing: missing.join(", ") });
+        }
+      }
+      return rows;
+    },
+  },
+  access: {
+    canSeeEmployee,
+    canAudit: (req) => !!req.access && can(req.access, "governance.audit", "READ"),
+  },
+});
+app.use("/api", reportsModule.router);
 
 // CRM: acessível a managers+
 const crmModule = createCrmModule();

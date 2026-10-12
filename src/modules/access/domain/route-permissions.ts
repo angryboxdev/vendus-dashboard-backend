@@ -105,6 +105,10 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/time-bank(\/|$)/, target: p("hr.attendance") },
   { pattern: /^\/api\/novo-rh\/rosters(\/|$)/, target: p("hr.schedules") },
   { pattern: /^\/api\/novo-rh\/periods(\/|$)/, target: p("hr.closure") },
+  { pattern: /^\/api\/novo-rh\/announcements(\/|$)/, target: p("hr.employees") },
+  { pattern: /^\/api\/novo-rh\/workspace(\/|$)/, target: p("hr.employees") },
+  { pattern: /^\/api\/novo-rh\/reports(\/|$)/, target: p("hr.employees") },
+  { pattern: /^\/api\/novo-rh\/alerts(\/|$)/, target: p("hr.overview") },
 
   // ── Recursos Humanos ─────────────────────────────────────────────────
   { pattern: /^\/api\/hr\/overview(\/|$)/, target: p("hr.overview") },

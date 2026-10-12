@@ -11,7 +11,7 @@ export interface PeriodsRepositoryPort {
   insertClosure(org: OrganizationId, c: Omit<Closure, "id" | "createdAt">): Promise<Closure>;
   listReopenings(org: OrganizationId, periodId?: string): Promise<Reopening[]>;
   getReopening(org: OrganizationId, id: string): Promise<Reopening | null>;
-  insertReopening(org: OrganizationId, r: Omit<Reopening, "id" | "approvals" | "status">): Promise<Reopening>;
+  insertReopening(org: OrganizationId, r: Omit<Reopening, "id" | "approvals" | "status" | "createdAt">): Promise<Reopening>;
   updateReopening(org: OrganizationId, id: string, expectedApprovals: number, patch: Pick<Reopening, "approvals" | "status">): Promise<Reopening | null>;
   insertExport(org: OrganizationId, j: Pick<ExportJob, "periodId" | "kind" | "requestedBy" | "requestedByUserId" | "includeSensitive">): Promise<ExportJob>;
   updateExport(org: OrganizationId, id: string, patch: Partial<Pick<ExportJob, "status" | "error" | "fileName" | "totals" | "expiresAt">> & { content?: string; token?: string }): Promise<void>;

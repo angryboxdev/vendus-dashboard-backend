@@ -60,6 +60,7 @@ export interface Reopening {
   reason: string;
   approvals: { userId: string; by: string; at: string }[];
   status: "pending" | "approved" | "rejected";
+  createdAt: string;
 }
 
 export interface ExportJob {

@@ -10,6 +10,8 @@ export interface AttendanceRepositoryPort {
   findEventByClientId(org: OrganizationId, employeeId: string, clientEventId: string): Promise<ClockEvent | null>;
   getEvent(org: OrganizationId, id: string): Promise<ClockEvent | null>;
   listEvents(org: OrganizationId, employeeId: string, fromUtc: string, toUtc: string): Promise<ClockEvent[]>;
+  /** Marcações de toda a organização desde um instante ("Quem está"). */
+  listEventsSince(org: OrganizationId, sinceUtc: string): Promise<ClockEvent[]>;
 
   insertRevision(org: OrganizationId, r: Omit<ClockRevision, "id" | "createdAt"> & { before: unknown }): Promise<ClockRevision>;
   getRevision(org: OrganizationId, id: string): Promise<ClockRevision | null>;

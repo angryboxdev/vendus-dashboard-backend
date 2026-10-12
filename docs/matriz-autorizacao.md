@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 634 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 670 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -322,6 +322,9 @@ Endpoints: 634 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/me/absences/balances` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/absences/types` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/access` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/announcements` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| POST | `/api/me/announcements/:id/confirm` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| POST | `/api/me/announcements/:id/read` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/approvals` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/approvals/:id/approve` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/approvals/:id/reject` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
@@ -331,6 +334,9 @@ Endpoints: 634 · pré-autenticação: 20 · não classificados: 0
 | POST | `/api/me/clock/corrections` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/clock/days` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/clock/revisions/:id/refuse` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/custom-requests` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| POST | `/api/me/custom-requests` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/custom-requests/forms` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/documents` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/documents/:id/download-url` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/documents/:id/replace` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
@@ -339,6 +345,9 @@ Endpoints: 634 · pré-autenticação: 20 · não classificados: 0
 | POST | `/api/me/notifications/:id/read` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/notifications/read-all` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/notifications/unread-count` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/ops-tasks` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| POST | `/api/me/ops-tasks/:id/complete` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| POST | `/api/me/ops-tasks/:id/items/:itemId` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/punches` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/requests` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/requests` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
@@ -351,6 +360,7 @@ Endpoints: 634 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/me/shifts` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/shifts/:id/coworkers` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/time-bank` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/whos-in` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/novo-rh/absences/balances` | permission:hr.leave:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/absences/balances/adjust` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/absences/flows` | permission:hr.leave:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
@@ -366,6 +376,19 @@ Endpoints: 634 · pré-autenticação: 20 · não classificados: 0
 | POST | `/api/novo-rh/absences/types` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | PUT | `/api/novo-rh/absences/types/:id` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/absences/types/:id/archive` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/alerts` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/alerts/:id/close` | permission:hr.overview:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/alerts/:id/take` | permission:hr.overview:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/alerts/rules` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/alerts/rules` | permission:hr.overview:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| PUT | `/api/novo-rh/alerts/rules/:id` | permission:hr.overview:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/alerts/run` | permission:hr.overview:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/announcements` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/announcements` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| PATCH | `/api/novo-rh/announcements/:id` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/announcements/:id/archive` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/announcements/:id/publish` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/announcements/:id/report` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/attendance/adjustments` | permission:hr.attendance:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/attendance/corrections` | permission:hr.attendance:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/attendance/corrections/:id/approve` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
@@ -419,6 +442,9 @@ Endpoints: 634 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/novo-rh/periods/reopenings` | permission:hr.closure:READ | ✔ | ✖ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/periods/reopenings/:id/approve` | permission:hr.closure:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/periods/reopenings/:id/reject` | permission:hr.closure:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/reports` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/reports/:key` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/reports/:key/csv` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/rosters` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters/:id/archive` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
@@ -492,6 +518,16 @@ Endpoints: 634 · pré-autenticação: 20 · não classificados: 0
 | PUT | `/api/novo-rh/time/vacation-calendars/:id` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/time/vacation-calendars/:id/delete` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/time/vacation-calendars/:id/delete-preview` | permission:hr.leave:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/workspace/forms` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/workspace/forms` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/workspace/forms/:id/archive` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/workspace/requests` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/workspace/requests/:id/decide` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/workspace/tasks` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/workspace/tasks` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/workspace/tasks/:id/cancel` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/workspace/tasks/:id/complete` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/workspace/tasks/:id/items/:itemId` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/organization` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
 | PATCH | `/api/organization` | permission:company.organization:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/organization/history` | permission:company.organization:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |

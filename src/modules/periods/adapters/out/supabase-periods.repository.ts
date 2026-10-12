@@ -14,7 +14,7 @@ const iso = (v: unknown) => new Date(String(v)).toISOString();
 
 const PER = "id, scope_type, scope_id, start_date, end_date, status";
 const CLO = "id, period_id, closure_no, closed_by, exception_reason, exceptions, totals, diff, created_at";
-const REO = "id, period_id, requested_by, requested_by_user_id, reason, approvals, status";
+const REO = "id, period_id, requested_by, requested_by_user_id, reason, approvals, status, created_at";
 const EXP = "id, period_id, kind, requested_by, requested_by_user_id, include_sensitive, status, error, file_name, totals, expires_at, created_at";
 
 const toPer = (r: Row): PayPeriod => ({ id: String(r.id), scopeType: r.scope_type as PayPeriod["scopeType"], scopeId: str(r.scope_id), startDate: String(r.start_date), endDate: String(r.end_date), status: r.status as PayPeriod["status"] });
@@ -37,6 +37,7 @@ const toReo = (r: Row): Reopening => ({
   reason: String(r.reason),
   approvals: (Array.isArray(r.approvals) ? r.approvals : []) as Reopening["approvals"],
   status: r.status as Reopening["status"],
+  createdAt: iso(r.created_at),
 });
 const toExp = (r: Row): ExportJob => ({
   id: String(r.id),
@@ -82,7 +83,7 @@ export class SupabasePeriodsRepository implements PeriodsRepositoryPort {
     const r = check<Row | null>(await this.scoped(org).table("pay_period_reopenings").select(REO).eq("id", id).maybeSingle());
     return r ? toReo(r) : null;
   }
-  async insertReopening(org: OrganizationId, r: Omit<Reopening, "id" | "approvals" | "status">) {
+  async insertReopening(org: OrganizationId, r: Omit<Reopening, "id" | "approvals" | "status" | "createdAt">) {
     const row = { period_id: r.periodId, requested_by: r.requestedBy, requested_by_user_id: r.requestedByUserId, reason: r.reason };
     return toReo(check(await this.scoped(org).table("pay_period_reopenings").insert(row).select(REO).single()));
   }

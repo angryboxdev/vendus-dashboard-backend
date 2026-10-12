@@ -33,6 +33,9 @@ export class FakeAttendanceRepository implements AttendanceRepositoryPort {
   async listEvents(_org: OrganizationId, employeeId: string, fromUtc: string, toUtc: string) {
     return this.events.filter((e) => e.employeeId === employeeId && e.occurredAt >= fromUtc && e.occurredAt < toUtc);
   }
+  async listEventsSince(_org: OrganizationId, sinceUtc: string) {
+    return this.events.filter((e) => e.occurredAt >= sinceUtc);
+  }
   async insertRevision(_org: OrganizationId, r: Omit<ClockRevision, "id" | "createdAt"> & { before: unknown }) {
     const rev = { ...r, id: nextId(), createdAt: this.now() };
     this.revisions.push(rev);

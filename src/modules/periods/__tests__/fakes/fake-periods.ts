@@ -40,8 +40,8 @@ export class FakePeriodsRepository implements PeriodsRepositoryPort {
     const r = this.reopenings.find((x) => x.id === id);
     return r ? structuredClone(r) : null;
   }
-  async insertReopening(_o: OrganizationId, r: Omit<Reopening, "id" | "approvals" | "status">) {
-    const row: Reopening = { ...r, id: nextId(), approvals: [], status: "pending" };
+  async insertReopening(_o: OrganizationId, r: Omit<Reopening, "id" | "approvals" | "status" | "createdAt">) {
+    const row: Reopening = { ...r, id: nextId(), approvals: [], status: "pending", createdAt: new Date().toISOString() };
     this.reopenings.push(row);
     return structuredClone(row);
   }

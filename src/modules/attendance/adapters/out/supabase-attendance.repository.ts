@@ -136,6 +136,10 @@ export class SupabaseAttendanceRepository implements AttendanceRepositoryPort {
     return check<Row[]>(await q.order("occurred_at")).map(toEvent);
   }
 
+  async listEventsSince(org: OrganizationId, sinceUtc: string) {
+    return check<Row[]>(await this.scoped(org).table("clock_events").select(EV).gte("occurred_at", sinceUtc).order("occurred_at").limit(5000)).map(toEvent);
+  }
+
   async insertRevision(org: OrganizationId, r: Omit<ClockRevision, "id" | "createdAt"> & { before: unknown }) {
     const row = {
       employee_id: r.employeeId,

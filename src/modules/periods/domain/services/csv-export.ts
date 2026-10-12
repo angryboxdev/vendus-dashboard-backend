@@ -9,7 +9,8 @@ const hours = (seconds: number) => (seconds / 3600).toFixed(2).replace(".", ",")
 const num = (n: number) => String(Math.round(n * 100) / 100).replace(".", ",");
 /** Evita injeção de fórmulas em folhas de cálculo e escapa `;`/aspas. */
 function cell(v: string): string {
-  const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
+  // Números (ex.: "-8,00") não são fórmulas; o resto que comece por = + - @ é neutralizado.
+  const safe = /^-?\d+(,\d+)?$/.test(v) || !/^[=+\-@\t\r]/.test(v) ? v : `'${v}`;
   return /[;"\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 const line = (cells: string[]) => cells.map(cell).join(";");

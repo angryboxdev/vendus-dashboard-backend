@@ -149,6 +149,8 @@ describe("Exportações (TK-19)", () => {
     expect(file.content).not.toContain("123456789");
     expect(file.content).toContain("ausencia_FER_dias");
     expect(file.content).toContain("160,00");
+    // Diferença negativa sai como número (sem apóstrofo).
+    expect(file.content).toContain(";-8,00;");
     // Um nome que começa por "=" fica neutralizado (sem fórmula) e entre aspas por ter ";".
     expect(file.content).toContain(`"'=Bruno;Teste"`);
     const cells = (line: string) => [...line.matchAll(/("(?:[^"]|"")*"|[^;]*)(?:;|$)/g)].map((m) => m[1]!).slice(0, -1);

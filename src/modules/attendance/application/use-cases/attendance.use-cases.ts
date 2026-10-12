@@ -255,6 +255,19 @@ export class AttendanceUseCases {
     return { event: view(event), duplicate };
   }
 
+  /** Quem está a trabalhar agora: última marcação das últimas 16 h que não é saída. */
+  async presentNow(org: OrganizationId): Promise<{ employeeId: string; state: Exclude<SegmentType, "off">; since: string }[]> {
+    const now = this.clock.now();
+    const since = new Date(Date.parse(now) - 16 * 3_600_000).toISOString();
+    const last = new Map<string, ClockEvent>();
+    for (const e of await this.repo.listEventsSince(org, since)) {
+      if (e.occurredAt > now) continue;
+      const cur = last.get(e.employeeId);
+      if (!cur || e.occurredAt >= cur.occurredAt) last.set(e.employeeId, e);
+    }
+    return [...last.values()].filter((e) => e.segmentType !== "off").map((e) => ({ employeeId: e.employeeId, state: e.segmentType as Exclude<SegmentType, "off">, since: e.occurredAt }));
+  }
+
   /** Estado atual e o dia de hoje (Portal). */
   async myStatus(org: OrganizationId, actor: Actor) {
     const employeeId = await this.employeeOf(org, actor.userId);

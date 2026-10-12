@@ -259,6 +259,16 @@ export const TABLE_REGISTRY = {
   pay_period_closures: { organizationColumn: "org_id", locationBearing: false },
   pay_period_reopenings: { organizationColumn: "org_id", locationBearing: false },
   export_jobs: { organizationColumn: "org_id", locationBearing: false },
+  // Novo RH Fase 9: comunicados, alertas, solicitações e tarefas.
+  announcements: { organizationColumn: "org_id", locationBearing: false },
+  announcement_versions: { organizationColumn: "org_id", locationBearing: false },
+  announcement_recipients: { organizationColumn: "org_id", locationBearing: false },
+  announcement_receipts: { organizationColumn: "org_id", locationBearing: false },
+  alert_rules: { organizationColumn: "org_id", locationBearing: false },
+  alerts: { organizationColumn: "org_id", locationBearing: false },
+  custom_request_forms: { organizationColumn: "org_id", locationBearing: false },
+  custom_requests: { organizationColumn: "org_id", locationBearing: false },
+  ops_tasks: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;
