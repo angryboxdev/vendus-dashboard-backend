@@ -1,4 +1,5 @@
 import type { DemoDataset } from "../../domain/entities/demo-dataset.js";
+import { PUNCH_SEGMENT } from "../../domain/services/demo-dataset.generator.js";
 
 /**
  * Linhas a gravar na organização de demonstração, por tabela e pela ordem
@@ -93,13 +94,14 @@ export function buildSeedPlan(
     id: newId(),
     employee_id: empId.get(p.employeeKey),
     occurred_at: p.atUtc,
-    segment_type: p.kind === "in" ? "work" : "off",
+    segment_type: PUNCH_SEGMENT[p.kind],
     source: "web",
     client_event_id: p.clientEventId,
     location_id: locId.get(centerOf.get(p.employeeKey)!) ?? null,
   }));
 
   const absenceTypes: Row[] = [
+    { id: newId(), name: "Férias (demo)", category: "vacation", unit: "days", counting: "working", limit_amount: 22, requires_approval: true, time_impact: "reduce_theoretical", created_by: actor },
     { id: newId(), name: "Consulta médica (demo)", category: "permission", unit: "hours", counting: "working", limit_amount: 18, requires_approval: true, time_impact: "reduce_theoretical", created_by: actor },
     { id: newId(), name: "Formação (demo)", category: "permission", unit: "days", counting: "working", limit_amount: null, requires_approval: false, time_impact: "count_as_worked", created_by: actor },
     { id: newId(), name: "Compensação de feriado (demo)", category: "compensation", unit: "days", counting: "calendar", limit_amount: null, requires_approval: false, time_impact: "reduce_theoretical", created_by: actor },

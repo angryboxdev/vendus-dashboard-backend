@@ -8,6 +8,7 @@ import type {
   DemoPunch,
   DemoSchedule,
   DemoTenant,
+  PunchKind,
 } from "../entities/demo-dataset.js";
 
 /**
@@ -103,31 +104,7 @@ export function generateDemoDataset(options: DemoDatasetOptions): DemoDataset {
     }
   }
 
-  const centerByKey = new Map(CENTERS.map((c) => [c.key, c]));
-  const scheduleByKey = new Map(schedules.map((s) => [s.key, s]));
-  const punches: DemoPunch[] = [];
-  const from = DateTime.fromISO(options.from);
-  const to = DateTime.fromISO(options.to);
-  for (const e of employees) {
-    const zone = centerByKey.get(e.centerKey)!.timeZone;
-    const s = scheduleByKey.get(e.scheduleKey)!;
-    for (let d = from; d <= to; d = d.plus({ days: 1 })) {
-      if (!s.weekdays.includes(d.weekday)) continue;
-      if (rnd() < 0.04) continue; // falta ocasional — gera ocorrências para a Assiduidade
-      const workDate = d.toISODate()!;
-      const start = DateTime.fromISO(`${workDate}T${s.start}`, { zone });
-      let end = DateTime.fromISO(`${workDate}T${s.end}`, { zone });
-      if (s.endsNextDay) end = end.plus({ days: 1 });
-      // Desvios realistas: -8..+12 min na entrada, -5..+25 min na saída.
-      const inAt = start.plus({ minutes: Math.floor(rnd() * 21) - 8 });
-      const outAt = end.plus({ minutes: Math.floor(rnd() * 31) - 5 });
-      const forgotOut = rnd() < 0.02; // esquecimento de saída
-      punches.push({ employeeKey: e.key, kind: "in", atUtc: inAt.toUTC().toISO()!, timeZone: zone, workDate, clientEventId: `${e.key}-${workDate}-in` });
-      if (!forgotOut) {
-        punches.push({ employeeKey: e.key, kind: "out", atUtc: outAt.toUTC().toISO()!, timeZone: zone, workDate, clientEventId: `${e.key}-${workDate}-out` });
-      }
-    }
-  }
+  const punches = generatePunches({ seed: options.seed, employees, schedules, from: options.from, to: options.to });
 
   return {
     seed: options.seed,
@@ -139,4 +116,60 @@ export function generateDemoDataset(options: DemoDatasetOptions): DemoDataset {
     employees,
     punches,
   };
+}
+
+/** Tipo de marcação no motor de ponto para cada marcação do gerador. */
+export const PUNCH_SEGMENT: Record<PunchKind, "work" | "break_unpaid" | "off"> = { in: "work", back: "work", break: "break_unpaid", out: "off" };
+
+/** Semente estável por texto (FNV-1a): o mesmo colaborador e dia dão sempre as mesmas marcações. */
+function hashSeed(text: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+/**
+ * Marcações de um período, reprodutíveis por colaborador e dia (para se
+ * poderem acrescentar mais tarde sem duplicar — o `clientEventId` é fixo).
+ * A maioria entra a horas (até 10 min antes); ~12% chega 6–40 min tarde;
+ * ~5% falta; ~3% esquece a saída; turnos de 6 h+ fazem muitas vezes uma
+ * pausa de 20–40 min a meio. Com `nowUtc`, nada depois desse instante.
+ */
+export function generatePunches(input: { seed: number; employees: DemoEmployee[]; schedules: DemoSchedule[]; from: string; to: string; nowUtc?: string }): DemoPunch[] {
+  const centerByKey = new Map(CENTERS.map((c) => [c.key, c]));
+  const scheduleByKey = new Map(input.schedules.map((s) => [s.key, s]));
+  const out: DemoPunch[] = [];
+  const from = DateTime.fromISO(input.from);
+  const to = DateTime.fromISO(input.to);
+  for (const e of input.employees) {
+    const zone = centerByKey.get(e.centerKey)!.timeZone;
+    const s = scheduleByKey.get(e.scheduleKey)!;
+    for (let d = from; d <= to; d = d.plus({ days: 1 })) {
+      if (!s.weekdays.includes(d.weekday)) continue;
+      const workDate = d.toISODate()!;
+      const rnd = createRandom(hashSeed(`${input.seed}|${e.key}|${workDate}`));
+      if (rnd() < 0.05) continue; // falta — aparece no Painel e na Assiduidade
+      const start = DateTime.fromISO(`${workDate}T${s.start}`, { zone });
+      let end = DateTime.fromISO(`${workDate}T${s.end}`, { zone });
+      if (s.endsNextDay) end = end.plus({ days: 1 });
+      const late = rnd() < 0.12;
+      const inAt = late ? start.plus({ minutes: 6 + Math.floor(rnd() * 35) }) : start.minus({ minutes: Math.floor(rnd() * 11) });
+      const outAt = end.plus({ minutes: Math.floor(rnd() * 26) - 5 });
+      const forgotOut = rnd() < 0.03;
+      const withBreak = end.diff(start, "hours").hours >= 6 && rnd() < 0.7;
+      const mid = start.plus({ milliseconds: end.diff(start).milliseconds / 2 }).plus({ minutes: Math.floor(rnd() * 31) - 15 });
+      const breakEnd = mid.plus({ minutes: 20 + Math.floor(rnd() * 21) });
+      const push = (kind: PunchKind, at: DateTime) => out.push({ employeeKey: e.key, kind, atUtc: at.toUTC().toISO()!, timeZone: zone, workDate, clientEventId: `${e.key}-${workDate}-${kind}` });
+      push("in", inAt);
+      if (withBreak) {
+        push("break", mid);
+        push("back", breakEnd);
+      }
+      if (!forgotOut) push("out", outAt);
+    }
+  }
+  return input.nowUtc ? out.filter((p) => p.atUtc <= input.nowUtc!) : out;
 }

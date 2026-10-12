@@ -6,7 +6,7 @@ import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { demoContext } from "../../adapters/in/demo-context.middleware.js";
 import { createDemoOrgRouter } from "../../adapters/in/demo-org.controller.js";
 import { DemoOrgUseCases } from "../../application/use-cases/demo-org.use-cases.js";
-import { FakeDemoOrgRepository, FakeDemoSeeder, FakeDemoSupport } from "../fakes/fake-demo-org.js";
+import { FakeDemoLive, FakeDemoOrgRepository, FakeDemoScenario, FakeDemoSeeder, FakeDemoSupport } from "../fakes/fake-demo-org.js";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const express = require("express") as typeof import("express");
@@ -19,7 +19,8 @@ describe("Modo Demonstração — /api/novo-rh/demo e cabeçalho X-Novo-RH-Mode"
 
   beforeEach(async () => {
     isAdmin = true;
-    const uc = new DemoOrgUseCases(new FakeDemoOrgRepository(), new FakeDemoSeeder(), new FakeDemoSupport());
+    const live = new FakeDemoLive();
+    const uc = new DemoOrgUseCases(new FakeDemoOrgRepository(), new FakeDemoSeeder(), new FakeDemoSupport(), live, new FakeDemoScenario(live));
     const app = express();
     app.use(express.json());
     app.use((req, _res, next) => {

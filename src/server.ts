@@ -324,6 +324,44 @@ const demoOrgModule = createDemoOrgModule({
       auditModule.recorder.record(org, { actor: e.actor, action: e.action, resourceType: "organization", resourceId: e.resourceId, before: null, after: e.after, reason: null }),
   },
   ptHolidays: (year) => portugueseNationalHolidays(year).map((h) => ({ date: h.date, name: h.name })),
+  // Cenário da demonstração pelos casos de uso dos módulos donos (as mesmas regras do uso real).
+  // Os módulos de escalas e ausências são criados mais abaixo; só se usam quando o cenário corre.
+  scenario: {
+    hasScenario: async (org) => (await rostersModule.rosters.listRosters(org)).length > 0,
+    build: async (org, actor, plan) => {
+      const templates = new Map<string, string>();
+      for (const t of plan.templates) templates.set(t.name, (await rostersModule.rosters.createTemplate(org, actor, { name: t.name, abbreviation: t.abbreviation, color: t.color, onCall: false, segments: t.segments })).id);
+      for (const r of plan.rosters) {
+        const roster = await rostersModule.rosters.createRoster(org, actor, { name: r.name, targetType: "location", targetId: r.locationId });
+        const assign = (range: { from: string; to: string }) =>
+          Promise.all(r.groups.map((g) => rostersModule.rosters.assignBulk(org, actor, roster.id, { employeeIds: g.employeeIds, from: range.from, to: range.to, weekdays: g.weekdays, kind: "shift", templateId: templates.get(g.templateName) ?? null })));
+        await assign(r.published);
+        await rostersModule.rosters.publish(org, actor, roster.id, { reason: "Escala de demonstração", confirm: true });
+        await assign(r.draft);
+      }
+      const vacation = (await absencesModule.absences.listTypes(org)).find((t) => t.category === "vacation" && !t.archived);
+      let approved = 0;
+      let pending = 0;
+      if (vacation) {
+        await absencesModule.absences.createFlow(org, actor, { name: "Aprovação de férias (demo)", scope: "absences", isDefault: true, levels: [{ people: [actor.userId], roles: [] }], fallbackUserIds: [actor.userId] });
+        const input = (a: { employeeId: string; startDate: string; endDate: string }, comment: string) => ({ ...a, typeId: vacation.id, startTime: null, endTime: null, halfDay: false, comment, attachmentDocumentId: null });
+        const attempt = async (fn: () => Promise<unknown>) => {
+          try {
+            await fn();
+            return 1;
+          } catch (e) {
+            console.error("[demo] ausência do cenário recusada:", e instanceof Error ? e.message : e);
+            return 0;
+          }
+        };
+        for (const a of plan.approved) approved += await attempt(() => absencesModule.absences.createRequest(org, actor, input(a, "Férias marcadas (demonstração)"), "assign"));
+        // Pedidos feitos "pelo colaborador" (conta fictícia) — ficam à espera do Admin na caixa de Pedidos.
+        for (const p of plan.pending) pending += await attempt(() => absencesModule.absences.createRequest(org, { userId: `demo-colaborador:${p.employeeId}`, email: "colaborador@demo.invalid" }, input(p, "Pedido de férias (demonstração)"), "self"));
+      }
+      return { rosters: plan.rosters.length, approved, pending };
+    },
+  },
+  onError: (e) => console.error("[demo] atualização da demonstração falhou:", e instanceof Error ? e.message : e),
 });
 app.use(demoOrgModule.demoContext);
 app.use("/api", demoOrgModule.router);

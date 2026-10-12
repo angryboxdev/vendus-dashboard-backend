@@ -92,7 +92,7 @@ export const ROUTE_RULES: RouteRule[] = [
   // ── Novo RH (task faseada) ───────────────────────────────────────────
   // Pré-visualizar impacto não grava nada, mas só serve a quem vai alterar.
   // Organização de demonstração (ADR-0034): estado/criação; criar exige ainda Admin.
-  { pattern: /^\/api\/novo-rh\/demo$/, target: p("governance.settings") },
+  { pattern: /^\/api\/novo-rh\/demo(\/refresh)?$/, target: p("governance.settings") },
   { pattern: /^\/api\/novo-rh\/settings(\/|$)/, target: p("governance.settings") },
   { pattern: /^\/api\/novo-rh\/audit(\/|$)/, target: p("governance.audit") },
   { pattern: /^\/api\/novo-rh\/structure(\/|$)/, target: p("company.structure") },

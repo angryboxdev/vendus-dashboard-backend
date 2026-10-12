@@ -1,22 +1,35 @@
 import { DateTime } from "luxon";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import { DemoOrgError, type DemoOrg } from "../../domain/entities/demo-org.js";
-import type { DemoOrgRepositoryPort, DemoOrgSupportPort, DemoSeedPort } from "../../domain/ports/out/demo-org.ports.js";
-import { generateDemoDataset } from "../../domain/services/demo-dataset.generator.js";
+import type { DemoLivePort, DemoOrgRepositoryPort, DemoOrgSupportPort, DemoScenarioPort, DemoSeedPort } from "../../domain/ports/out/demo-org.ports.js";
+import { generateDemoDataset, generatePunches, PUNCH_SEGMENT } from "../../domain/services/demo-dataset.generator.js";
+import { keyFromEmail, planScenario } from "../../domain/services/demo-scenario.js";
 
 const SEED = 20261012;
 const EMPLOYEES_PER_CENTER = 5;
-const HISTORY_DAYS = 28;
+/** Marcações mantidas em dia: últimos 30 dias até agora. */
+const WINDOW_DAYS = 30;
 /** Cache curto da ligação real → demo (lida em cada pedido em modo Demonstração). */
 const CACHE_MS = 60_000;
+/** Atualização automática no máximo de 10 em 10 minutos por organização. */
+const REFRESH_MS = 10 * 60_000;
+
+export interface DemoActor {
+  userId: string;
+  email: string;
+}
 
 export class DemoOrgUseCases {
   private readonly cache = new Map<string, { at: number; demo: DemoOrg | null }>();
+  private readonly refreshed = new Map<string, number>();
+  private readonly running = new Map<string, Promise<unknown>>();
 
   constructor(
     private readonly repo: DemoOrgRepositoryPort,
     private readonly seeder: DemoSeedPort,
     private readonly support: DemoOrgSupportPort,
+    private readonly live: DemoLivePort,
+    private readonly scenario: DemoScenarioPort,
     private readonly now: () => number = () => Date.now(),
   ) {}
 
@@ -36,10 +49,10 @@ export class DemoOrgUseCases {
 
   /**
    * Criar a organização de demonstração e carregar os dados fictícios
-   * (centros, cargos, horários, colaboradores, contratos, marcações das
-   * últimas 4 semanas, feriados de PT, tipos de ausência).
+   * (centros, cargos, horários, colaboradores, contratos, feriados de PT,
+   * tipos de ausência) e logo a seguir o cenário e as marcações até agora.
    */
-  async create(realOrg: OrganizationId, actor: { email: string; isAdmin: boolean }) {
+  async create(realOrg: OrganizationId, actor: DemoActor & { isAdmin: boolean }) {
     if (!actor.isAdmin) throw new DemoOrgError("Só um Admin pode criar a organização de demonstração.", "admin_only");
     const real = await this.repo.organization(realOrg);
     if (!real) throw new DemoOrgError("Organização não encontrada.", "not_found");
@@ -49,11 +62,66 @@ export class DemoOrgUseCases {
     const demo = await this.repo.createDemo(realOrg, { name: `${real.name} — Demonstração`, nif: `DEMO-${realOrg.slice(0, 8).toUpperCase()}` });
     this.cache.delete(realOrg);
     const today = await this.support.today(realOrg);
-    const to = DateTime.fromISO(today, { zone: "utc" }).minus({ days: 1 }).toISODate()!;
-    const from = DateTime.fromISO(today, { zone: "utc" }).minus({ days: HISTORY_DAYS }).toISODate()!;
-    const dataset = generateDemoDataset({ seed: SEED, employeesPerCenter: EMPLOYEES_PER_CENTER, from, to });
+    // As marcações entram no refresh, depois das ausências do cenário (ninguém pica de férias).
+    const dataset = { ...generateDemoDataset({ seed: SEED, employeesPerCenter: EMPLOYEES_PER_CENTER, from: today, to: today }), punches: [] };
     const summary = await this.seeder.seed(demo.id, dataset, { actor: actor.email, year: Number(today.slice(0, 4)) });
-    await this.support.audit(realOrg, { actor: actor.email, action: "demo.organization.create", resourceId: demo.id, after: { name: demo.name, ...summary } });
-    return { demo, summary };
+    const live = await this.update(demo.id, actor, today);
+    await this.support.audit(realOrg, { actor: actor.email, action: "demo.organization.create", resourceId: demo.id, after: { name: demo.name, ...summary, ...live } });
+    return { demo, summary: { ...summary, clockEvents: live.punches } };
+  }
+
+  /**
+   * Manter a demonstração "viva": cria o cenário se faltar (escalas e
+   * ausências) e acrescenta as marcações em falta até agora. Idempotente
+   * (as marcações têm id fixo); sem `force`, no máximo de 10 em 10 minutos.
+   */
+  async refresh(realOrg: OrganizationId, actor: DemoActor, opts: { force?: boolean } = {}) {
+    const demo = await this.resolve(realOrg);
+    if (!demo) throw new DemoOrgError("A organização de demonstração ainda não foi criada.", "not_found");
+    const last = this.refreshed.get(demo);
+    if (!opts.force && last !== undefined && this.now() - last < REFRESH_MS) return { skipped: true, punches: 0, scenario: false };
+    const inFlight = this.running.get(demo);
+    if (inFlight) return { skipped: true, punches: 0, scenario: false };
+    this.refreshed.set(demo, this.now());
+    const job = this.support.today(realOrg).then((today) => this.update(demo, actor, today));
+    this.running.set(demo, job);
+    try {
+      return { skipped: false, ...(await job) };
+    } finally {
+      this.running.delete(demo);
+    }
+  }
+
+  private async update(demo: OrganizationId, actor: DemoActor, today: string) {
+    const dataset = generateDemoDataset({ seed: SEED, employeesPerCenter: EMPLOYEES_PER_CENTER, from: today, to: today });
+    const rows = await this.live.employees(demo);
+    const byKey = new Map(rows.map((r) => [keyFromEmail(r.email), r]));
+    const scheduleName = new Map(dataset.schedules.map((s) => [s.key, s.name]));
+
+    let scenario = false;
+    if (!(await this.scenario.hasScenario(demo))) {
+      await this.live.ensureVacationType(demo, actor.email);
+      const people = dataset.employees
+        .map((e) => ({ e, row: byKey.get(e.key) }))
+        .filter((x) => x.row)
+        .map(({ e, row }) => ({ id: row!.id, key: e.key, locationId: row!.locationId, scheduleName: scheduleName.get(e.scheduleKey)! }));
+      const schedules = dataset.schedules.filter((s, i, a) => a.findIndex((x) => x.name === s.name) === i);
+      await this.scenario.build(demo, actor, planScenario(people, schedules, today));
+      scenario = true;
+    }
+
+    const from = DateTime.fromISO(today, { zone: "utc" }).minus({ days: WINDOW_DAYS }).toISODate()!;
+    const nowUtc = new Date(this.now()).toISOString();
+    const punches = generatePunches({ seed: SEED, employees: dataset.employees, schedules: dataset.schedules, from, to: today, nowUtc });
+    const [existing, absences] = await Promise.all([this.live.existingEventIds(demo, `${DateTime.fromISO(from, { zone: "utc" }).minus({ days: 1 }).toISODate()}T00:00:00.000Z`), this.live.absenceDays(demo, from, today)]);
+    const absent = (employeeId: string, date: string) => absences.some((a) => a.employeeId === employeeId && a.startDate <= date && a.endDate >= date);
+    const toInsert = [];
+    for (const p of punches) {
+      const row = byKey.get(p.employeeKey);
+      if (!row || existing.has(p.clientEventId) || absent(row.id, p.workDate)) continue;
+      toInsert.push({ employeeId: row.id, occurredAt: p.atUtc, segmentType: PUNCH_SEGMENT[p.kind], clientEventId: p.clientEventId, locationId: row.locationId });
+    }
+    const inserted = toInsert.length ? await this.live.insertPunches(demo, toInsert) : 0;
+    return { punches: inserted, scenario };
   }
 }
