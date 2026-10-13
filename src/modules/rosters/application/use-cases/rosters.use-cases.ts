@@ -178,6 +178,33 @@ export class RostersUseCases {
     return { shift: s!, warnings: await this.violationsFor(org, new Set([s!.id])) };
   }
 
+  /**
+   * Limpar os turnos pendentes (nunca publicados) de um colaborador na semana
+   * visível desta escala, numa só operação. Publicados, outras semanas e
+   * outras escalas não mexem. Devolve os retirados (para "desfazer").
+   */
+  async clearPending(org: OrganizationId, actor: Actor, rosterId: string, input: { employeeId: string; from: string; to: string; shiftIds?: string[] }) {
+    await this.roster(org, rosterId);
+    if (!input.employeeId) throw new RosterValidationError("Indique o colaborador.", "employeeId");
+    if (!DATE.test(input.from) || !DATE.test(input.to) || input.to < input.from || span(input.from, input.to) > MAX_VIEW_DAYS) throw new RosterValidationError(`Período inválido (máx. ${MAX_VIEW_DAYS} dias).`, "from");
+    if (input.shiftIds && input.shiftIds.length > MAX_BULK) throw new RosterValidationError(`No máximo ${MAX_BULK} turnos de uma vez.`, "shiftIds");
+    const removed = await this.repo.clearPending(org, { rosterId, employeeId: input.employeeId, from: input.from, to: input.to, ...(input.shiftIds && { ids: input.shiftIds }) }, actor.email);
+    if (removed.length) await this.log(org, actor.email, "rosters.shift.clear_pending", "roster", rosterId, null, { employeeId: input.employeeId, from: input.from, to: input.to, shiftIds: removed.map((s) => s.id) });
+    return { removed };
+  }
+
+  /** Desfazer: repõe turnos pendentes retirados (com as regras de sobreposição de sempre). */
+  async restoreShifts(org: OrganizationId, actor: Actor, rosterId: string, ids: string[]) {
+    await this.roster(org, rosterId);
+    if (!ids.length) return { restored: [], warnings: [] };
+    if (ids.length > MAX_BULK) throw new RosterValidationError(`No máximo ${MAX_BULK} turnos de uma vez.`, "shiftIds");
+    const rows = (await Promise.all(ids.map((id) => this.repo.getShift(org, id)))).filter((s): s is RosterShift => !!s && s.rosterId === rosterId && s.deleted && s.published === null);
+    await this.assertNoOverlap(org, rows.map(stateOf));
+    const restored = await this.repo.restoreShifts(org, rosterId, rows.map((s) => s.id), actor.email);
+    if (restored.length) await this.log(org, actor.email, "rosters.shift.restore", "roster", rosterId, null, { shiftIds: restored.map((s) => s.id) });
+    return { restored, warnings: restored.length ? await this.violationsFor(org, new Set(restored.map((s) => s.id))) : [] };
+  }
+
   /** Atribuição em massa: colaboradores × dias (com filtro de dias da semana). */
   async assignBulk(org: OrganizationId, actor: Actor, rosterId: string, input: { employeeIds: string[]; from: string; to: string; weekdays: string[]; kind: "shift" | "day_off"; templateId: string | null }) {
     await this.roster(org, rosterId);

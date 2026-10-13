@@ -79,6 +79,15 @@ export function createRostersRouter(uc: RostersUseCases, store: IdempotencyStore
     for (const e of employeeIds) await scope(req, e, s(b.from));
     res.status(201).json(await run(() => uc.assignBulk(org(req), actorOf(req), id(req), { employeeIds, from: s(b.from), to: s(b.to), weekdays: strArr(b.weekdays), kind: s(b.kind) === "day_off" ? "day_off" : "shift", templateId: optS(b.templateId) })));
   });
+  r.post(`${R}/:id/clear-pending`, async (req, res) => {
+    const b = body(req);
+    await scope(req, s(b.employeeId), s(b.from));
+    res.json(await run(() => uc.clearPending(org(req), actorOf(req), id(req), { employeeId: s(b.employeeId), from: s(b.from), to: s(b.to), ...(Array.isArray(b.shiftIds) && { shiftIds: strArr(b.shiftIds) }) })));
+  });
+  r.post(`${R}/:id/shifts/restore`, async (req, res) => {
+    const b = body(req);
+    res.json(await run(() => uc.restoreShifts(org(req), actorOf(req), id(req), strArr(b.shiftIds))));
+  });
   r.get(`${R}/:id/check`, async (req, res) => res.json(await run(() => uc.check(org(req), id(req)))));
   r.post(`${R}/:id/publish`, async (req, res) => res.json(await run(() => uc.publish(org(req), actorOf(req), id(req), opts(body(req))))));
   r.get(`${R}/:id/history`, async (req, res) => res.json(await run(() => uc.history(org(req), id(req)))));

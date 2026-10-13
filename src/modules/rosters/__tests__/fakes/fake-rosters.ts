@@ -46,6 +46,16 @@ export class FakeRostersRepository implements RostersRepositoryPort {
       .filter((s) => (!f.rosterId || s.rosterId === f.rosterId) && (!f.employeeIds || f.employeeIds.includes(s.employeeId)) && s.workDate >= f.from && s.workDate <= f.to && (f.includeDeleted || !s.deleted))
       .map((s) => structuredClone(s));
   }
+  async clearPending(_o: OrganizationId, f: { rosterId: string; employeeId: string; from: string; to: string; ids?: string[] }) {
+    const hit = this.shifts.filter((s) => s.rosterId === f.rosterId && s.employeeId === f.employeeId && s.workDate >= f.from && s.workDate <= f.to && !s.deleted && s.published === null && (!f.ids || f.ids.includes(s.id)));
+    for (const s of hit) Object.assign(s, { deleted: true, dirty: false });
+    return hit.map((s) => structuredClone(s));
+  }
+  async restoreShifts(_o: OrganizationId, rosterId: string, ids: string[]) {
+    const hit = this.shifts.filter((s) => s.rosterId === rosterId && ids.includes(s.id) && s.deleted && s.published === null);
+    for (const s of hit) Object.assign(s, { deleted: false, dirty: true });
+    return hit.map((s) => structuredClone(s));
+  }
   async getShift(_o: OrganizationId, id: string) {
     const s = this.shifts.find((x) => x.id === id);
     return s ? structuredClone(s) : null;

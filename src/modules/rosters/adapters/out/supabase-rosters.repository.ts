@@ -102,6 +102,30 @@ export class SupabaseRostersRepository implements RostersRepositoryPort {
     const r = check<Row | null>(await this.scoped(org).table("roster_shifts").select(SHF).eq("id", id).maybeSingle());
     return r ? toShf(r) : null;
   }
+  async clearPending(org: OrganizationId, f: { rosterId: string; employeeId: string; from: string; to: string; ids?: string[] }, by: string) {
+    let q = this.scoped(org)
+      .table("roster_shifts")
+      .update({ deleted: true, dirty: false, updated_by: by, updated_at: new Date().toISOString() })
+      .eq("roster_id", f.rosterId)
+      .eq("employee_id", f.employeeId)
+      .gte("work_date", f.from)
+      .lte("work_date", f.to)
+      .eq("deleted", false)
+      .is("published", null);
+    if (f.ids) q = q.in("id", f.ids.length ? f.ids : ["00000000-0000-0000-0000-000000000000"]);
+    return check<Row[]>(await q.select(SHF)).map(toShf);
+  }
+  async restoreShifts(org: OrganizationId, rosterId: string, ids: string[], by: string) {
+    if (!ids.length) return [];
+    const q = this.scoped(org)
+      .table("roster_shifts")
+      .update({ deleted: false, dirty: true, updated_by: by, updated_at: new Date().toISOString() })
+      .eq("roster_id", rosterId)
+      .in("id", ids)
+      .eq("deleted", true)
+      .is("published", null);
+    return check<Row[]>(await q.select(SHF)).map(toShf);
+  }
   async insertShifts(org: OrganizationId, rows: (ShiftState & { rosterId: string })[], by: string) {
     if (!rows.length) return [];
     const data = rows.map((r) => ({ roster_id: r.rosterId, employee_id: r.employeeId, work_date: r.workDate, kind: r.kind, segments: r.segments, template_id: r.templateId, on_call: r.onCall, updated_by: by }));
