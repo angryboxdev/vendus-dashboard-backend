@@ -23,6 +23,9 @@ export class DemoOrgUseCases {
   private readonly cache = new Map<string, { at: number; demo: DemoOrg | null }>();
   private readonly refreshed = new Map<string, number>();
   private readonly running = new Map<string, Promise<unknown>>();
+  private readonly runningSince = new Map<string, number>();
+  /** Última atualização por organização demo (para o ecrã mostrar o que aconteceu). */
+  private readonly lastRun = new Map<string, { at: string; result: unknown; error: string | null }>();
 
   constructor(
     private readonly repo: DemoOrgRepositoryPort,
@@ -35,7 +38,8 @@ export class DemoOrgUseCases {
 
   async status(realOrg: OrganizationId) {
     const demo = await this.repo.demoOf(realOrg);
-    return { exists: !!demo, name: demo?.name ?? null };
+    const last = demo ? this.lastRun.get(demo.id) : undefined;
+    return { exists: !!demo, name: demo?.name ?? null, refresh: { running: !!demo && this.running.has(demo.id), lastAt: last?.at ?? null, last: last?.result ?? null, error: last?.error ?? null } };
   }
 
   /** Para o middleware: a organização demo ligada a esta organização real (ou null). */
@@ -81,14 +85,20 @@ export class DemoOrgUseCases {
     const last = this.refreshed.get(demo);
     if (!opts.force && last !== undefined && this.now() - last < REFRESH_MS) return { skipped: true, punches: 0, scenario: false };
     const inFlight = this.running.get(demo);
-    if (inFlight) return { skipped: true, punches: 0, scenario: false };
+    // Uma de cada vez; uma atualização presa há mais de 10 min não bloqueia as seguintes.
+    if (inFlight && this.now() - (this.runningSince.get(demo) ?? 0) < REFRESH_MS) return { skipped: true, running: true, punches: 0, scenario: false };
     this.refreshed.set(demo, this.now());
     const job = this.support.today(realOrg).then((today) => this.update(demo, actor, today));
     this.running.set(demo, job);
+    this.runningSince.set(demo, this.now());
+    job.then(
+      (result) => this.lastRun.set(demo, { at: new Date(this.now()).toISOString(), result, error: null }),
+      (e) => this.lastRun.set(demo, { at: new Date(this.now()).toISOString(), result: null, error: e instanceof Error ? e.message : String(e) }),
+    );
     try {
       return { skipped: false, ...(await job) };
     } finally {
-      this.running.delete(demo);
+      if (this.running.get(demo) === job) this.running.delete(demo);
     }
   }
 

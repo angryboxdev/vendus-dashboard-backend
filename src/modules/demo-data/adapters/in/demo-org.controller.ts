@@ -16,10 +16,11 @@ const REFRESH_WAIT_MS = 15_000;
 export function createDemoOrgRouter(uc: DemoOrgUseCases, store: IdempotencyStore): Router {
   const r = Router();
   const P = "/novo-rh/demo";
-  // Uma só vez: `r.use(P, …)` já cobre `${P}/refresh` (montar outra vez fazia o mesmo pedido "ainda em curso").
-  r.use(P, idempotency(store, { required: true }));
   r.get(P, async (req, res) => res.json(await uc.status(req.auth!.orgId)));
-  r.post(P, async (req, res) => {
+  // Idempotency-Key só na criação. O /refresh é idempotente por natureza (marcações com id
+  // fixo; o enriquecimento só cria o que falta; uma atualização de cada vez), e um pedido
+  // repetido pela rede dava 409 "ainda a ser processado".
+  r.post(P, idempotency(store, { required: true }), async (req, res) => {
     try {
       const out = await uc.create(req.auth!.orgId, { userId: req.auth!.sub, email: req.auth!.email || req.auth!.sub, isAdmin: !!req.access?.isAdmin });
       res.status(201).json({ exists: true, name: out.demo.name, summary: out.summary });

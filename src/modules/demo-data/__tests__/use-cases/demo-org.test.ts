@@ -25,7 +25,7 @@ function setup() {
 describe("Organização de demonstração (ADR-0034)", () => {
   test("cria a organização ligada à real, o cenário e as marcações até agora; audita na real", async () => {
     const { repo, seeder, support, live, scenario, uc } = setup();
-    expect(await uc.status(REAL)).toEqual({ exists: false, name: null });
+    expect(await uc.status(REAL)).toMatchObject({ exists: false, name: null, refresh: { running: false, lastAt: null } });
     const out = await uc.create(REAL, admin);
     expect(out.demo.name).toBe("Mezza — Demonstração");
     expect(repo.orgs.get(out.demo.id)).toMatchObject({ isDemo: true, demoOf: "org-real", nif: "DEMO-ORG-REAL" });
