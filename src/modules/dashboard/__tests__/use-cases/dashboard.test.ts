@@ -176,3 +176,31 @@ describe("Dashboard — drill-down, aniversários e layout", () => {
     expect((await uc.resetLayout(ORG_A, "u1")).custom).toBe(false);
   });
 });
+
+describe("Dashboard — resiliência", () => {
+  test("pedidos ou cobertura a falhar não derrubam o snapshot: saem vazios e assinalados em `partial`", async () => {
+    const sources = new FakeSources();
+    sources.coverage = async () => {
+      throw new Error("horário em falta");
+    };
+    const errors: string[] = [];
+    const uc = new DashboardUseCases(sources, new FakeLayouts(), new MemoryDashboardCache(), (src) => errors.push(src));
+    const viewer = new FakeViewer("u1", PEOPLE);
+    viewer.requests = async () => {
+      throw new Error("caixa indisponível");
+    };
+    const s = await uc.snapshot(ORG_A, viewer, null);
+    expect(s.team.total).toBe(5);
+    expect(s.partial.sort()).toEqual(["coverage", "requests"]);
+    expect(s.coverage.uncoveredTotal).toBe(0);
+    expect(errors.sort()).toEqual(["coverage", "requests"]);
+  });
+
+  test("cobertura lenta: passa o tempo máximo e o snapshot sai sem ela", async () => {
+    const sources = new FakeSources();
+    sources.coverage = () => new Promise(() => {});
+    const uc = new DashboardUseCases(sources, new FakeLayouts(), new MemoryDashboardCache(), () => {}, 20);
+    const s = await uc.snapshot(ORG_A, new FakeViewer("u1", PEOPLE), null);
+    expect(s.partial).toEqual(["coverage"]);
+  });
+});

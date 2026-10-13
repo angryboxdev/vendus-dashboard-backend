@@ -1,4 +1,5 @@
 import type { Request, Router } from "express";
+import { log } from "../../infra/http/correlation.js";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import { createDashboardRouter } from "./adapters/in/dashboard.controller.js";
 import { MemoryDashboardCache } from "./adapters/out/memory-dashboard-cache.js";
@@ -17,6 +18,8 @@ export function createDashboardModule(deps: { sources: DashboardSourcesPort; vie
   cache: DashboardCachePort;
 } {
   const cache = new MemoryDashboardCache();
-  const dashboard = new DashboardUseCases(deps.sources, new SupabaseDashboardLayoutRepository(createScopedQuery), cache);
+  const dashboard = new DashboardUseCases(deps.sources, new SupabaseDashboardLayoutRepository(createScopedQuery), cache, (source, error) =>
+    log("error", "dashboard.source_failed", { source, message: error instanceof Error ? error.message : String(error) }),
+  );
   return { router: createDashboardRouter(dashboard, deps.viewerOf), dashboard, cache };
 }
