@@ -113,8 +113,8 @@ export const WIDGET_SPECS: WidgetSpec[] = [
   { id: "REQUESTS", defaultOrder: 4, defaultSpan: 7, allowedSpans: [6, 7, 12] },
   { id: "GOOGLE_REVIEWS", defaultOrder: 5, defaultSpan: 6, allowedSpans: [4, 6, 12] },
   { id: "BIRTHDAYS", defaultOrder: 6, defaultSpan: 6, allowedSpans: [4, 6, 12] },
-  { id: "HOLIDAYS", defaultOrder: 7, defaultSpan: 4, allowedSpans: [4, 6, 12] },
-  { id: "REPORTS", defaultOrder: 8, defaultSpan: 4, allowedSpans: [4, 6, 12] },
+  { id: "HOLIDAYS", defaultOrder: 7, defaultSpan: 6, allowedSpans: [4, 6, 12] },
+  { id: "REPORTS", defaultOrder: 8, defaultSpan: 6, allowedSpans: [4, 6, 12] },
   { id: "VACANCIES", defaultOrder: 9, defaultSpan: 4, allowedSpans: [4, 6] },
   { id: "ARTICLES", defaultOrder: 10, defaultSpan: 4, allowedSpans: [4, 6, 12] },
 ];
