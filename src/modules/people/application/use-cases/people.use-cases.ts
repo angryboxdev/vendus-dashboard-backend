@@ -13,7 +13,7 @@ import {
 } from "../../domain/entities/employee.js";
 import { PeopleConflictError, PeopleForbiddenError, PeopleNotFoundError, PeopleValidationError } from "../../domain/errors.js";
 import type { EmployeeView, ImportResult, Viewer } from "../../domain/ports/in/people.ports.js";
-import type { PeopleAccountPort, PeopleAuditPort, PeopleClockPort, PeopleRepositoryPort } from "../../domain/ports/out/people.ports.js";
+import type { PeopleAccountPort, PeopleAuditPort, PeopleClockPort, PeoplePhotoPort, PeopleRepositoryPort } from "../../domain/ports/out/people.ports.js";
 import { parseCsv, toCsv } from "../../domain/services/csv.js";
 
 /** Colunas exportáveis (RE-3): só saem as que quem exporta pode ver. */
@@ -75,18 +75,28 @@ export class PeopleUseCases {
     private readonly accounts: PeopleAccountPort,
     private readonly audit: PeopleAuditPort,
     private readonly clock: PeopleClockPort,
+    /** Sem adapter de fotos, `photoUrl` sai sempre null. */
+    private readonly photos: PeoplePhotoPort | null = null,
   ) {}
 
-  view(viewer: Viewer, e: Employee): EmployeeView {
+  view(viewer: Viewer, e: Employee, photoUrl: string | null = null): EmployeeView {
     const hidden: string[] = [];
-    const out: Record<string, unknown> = { ...e };
+    const { photoPath: _path, ...rest } = e;
+    const out: Record<string, unknown> = { ...rest, photoUrl };
     for (const f of EDITABLE_FIELDS) {
       if (!canView(viewer, f)) {
         out[f] = null;
         hidden.push(f);
       }
     }
-    return { ...(out as unknown as Employee), hidden, missing: missingMandatory(e) };
+    return { ...(out as unknown as Omit<EmployeeView, "hidden" | "missing">), hidden, missing: missingMandatory(e) };
+  }
+
+  /** URLs das fotos de uma vez (um pedido ao armazenamento por lista). */
+  private async photoUrls(org: OrganizationId, rows: Employee[]): Promise<Map<string, string>> {
+    const paths = [...new Set(rows.map((e) => e.photoPath).filter((p): p is string => !!p))];
+    if (!this.photos || paths.length === 0) return new Map();
+    return this.photos.urls(org, paths);
   }
 
   private async visible(org: OrganizationId, viewer: Viewer, e: Employee | null): Promise<Employee> {
@@ -97,13 +107,16 @@ export class PeopleUseCases {
   async list(org: OrganizationId, viewer: Viewer, filter: { status?: "active" | "inactive" | "all"; q?: string; locationId?: string }): Promise<EmployeeView[]> {
     const today = await this.clock.today(org);
     const rows = await this.repo.list(org, { status: filter.status ?? "active", ...(filter.q && { q: filter.q }), ...(filter.locationId && { locationId: filter.locationId }) });
-    const out: EmployeeView[] = [];
-    for (const e of rows) if (await viewer.canSee(e.id, today)) out.push(this.view(viewer, e));
-    return out;
+    const seen: Employee[] = [];
+    for (const e of rows) if (await viewer.canSee(e.id, today)) seen.push(e);
+    const urls = await this.photoUrls(org, seen);
+    return seen.map((e) => this.view(viewer, e, (e.photoPath && urls.get(e.photoPath)) ?? null));
   }
 
   async get(org: OrganizationId, viewer: Viewer, id: string): Promise<EmployeeView> {
-    return this.view(viewer, await this.visible(org, viewer, await this.repo.get(org, id)));
+    const e = await this.visible(org, viewer, await this.repo.get(org, id));
+    const urls = await this.photoUrls(org, [e]);
+    return this.view(viewer, e, (e.photoPath && urls.get(e.photoPath)) ?? null);
   }
 
   private assertEditable(viewer: Viewer, input: EmployeeInput): void {

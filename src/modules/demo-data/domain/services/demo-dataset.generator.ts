@@ -41,6 +41,16 @@ const FIRST_NAMES = [
   "André", "Bruno", "Carlos", "Daniel", "Eduardo", "Fábio", "Gonçalo", "Hugo", "Ivo", "João",
   "Luís", "Miguel", "Nuno", "Pedro", "Rui", "Tiago", "Javier", "Pablo", "Sergio", "Álvaro",
 ];
+/** Os primeiros 20 nomes são femininos; os outros, masculinos (para escolher a foto). */
+const FEMALE_NAMES = new Set(FIRST_NAMES.slice(0, 20));
+/** Fotos fictícias por grupo (`public/demo-avatars/{f|m}-NN.svg` no frontend). */
+export const DEMO_AVATARS_PER_GROUP = 12;
+/** Foto da n-ésima pessoa do grupo (cíclica; não consome o gerador aleatório). */
+export function demoAvatarPath(firstName: string, n: number): string {
+  const group = FEMALE_NAMES.has(firstName) ? "f" : "m";
+  return `demo-avatars/${group}-${pad((n % DEMO_AVATARS_PER_GROUP) + 1, 2)}.svg`;
+}
+
 const LAST_NAMES = [
   "Almeida", "Barros", "Cardoso", "Dias", "Esteves", "Faria", "Gomes", "Henriques", "Lopes", "Matos",
   "Neves", "Pires", "Queirós", "Ramos", "Santos", "Teixeira", "Vaz", "García", "Martín", "Ruiz",
@@ -82,6 +92,7 @@ export function generateDemoDataset(options: DemoDatasetOptions): DemoDataset {
   );
 
   const employees: DemoEmployee[] = [];
+  const avatarCount = { f: 0, m: 0 };
   for (const center of CENTERS) {
     for (let i = 1; i <= options.employeesPerCenter; i++) {
       const firstName = pick(rnd, FIRST_NAMES);
@@ -99,6 +110,7 @@ export function generateDemoDataset(options: DemoDatasetOptions): DemoDataset {
         lastName,
         email: `${ascii(firstName)}.${ascii(lastName.split(" ")[0]!)}.${key}@demo.invalid`,
         hireDate: hire.toISODate()!,
+        photoPath: demoAvatarPath(firstName, avatarCount[FEMALE_NAMES.has(firstName) ? "f" : "m"]++),
         synthetic: true,
       });
     }

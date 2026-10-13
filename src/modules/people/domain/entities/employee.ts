@@ -35,6 +35,8 @@ export interface Employee {
   deactivatedAt: string | null;
   deactivationReason: string | null;
   userId: string | null;
+  /** Caminho da foto no armazenamento (não editável aqui; sai como `photoUrl` assinado). */
+  photoPath: string | null;
   version: number;
 }
 

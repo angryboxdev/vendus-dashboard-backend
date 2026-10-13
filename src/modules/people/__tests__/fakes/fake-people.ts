@@ -33,6 +33,7 @@ const BLANK: Omit<Employee, "id" | "fullName" | "version"> = {
   deactivatedAt: null,
   deactivationReason: null,
   userId: null,
+  photoPath: null,
 };
 
 /** Repositório em memória (dados fictícios — RGPD). */

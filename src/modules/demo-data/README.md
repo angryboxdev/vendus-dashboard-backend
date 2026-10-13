@@ -64,7 +64,7 @@ pedidos `/api/novo-rh/*` de um Admin da organização real passam a agir nela.
 - `DemoOrgRepositoryPort` — ler a organização, encontrar/criar a demo ligada.
 - `DemoSeedPort` — gravar o conjunto na demo (recusa se a organização não for `is_demo`).
 - `DemoOrgSupportPort` — data de hoje no fuso da organização e auditoria.
-- `DemoLivePort` — colaboradores, ids das marcações existentes, ausências, inserir marcações, garantir o tipo "Férias (demo)" (`SupabaseDemoLive`, recusa organizações não demo).
+- `DemoLivePort` — colaboradores, ids das marcações existentes, ausências, inserir marcações, garantir o tipo "Férias (demo)", pôr as fotos fictícias em quem não tem (`SupabaseDemoLive`, recusa organizações não demo).
 - `DemoScenarioPort` — escalas e ausências pelos casos de uso dos módulos rosters e absences (ligado no `server.ts`; as mesmas regras do uso real).
 
 ## Adapters
@@ -85,6 +85,7 @@ pedidos `/api/novo-rh/*` de um Admin da organização real passam a agir nela.
 - O período por defeito atravessa a mudança de hora de 25/10/2026 (TK-12).
 - Organização de demonstração na mesma base de dados, sem membros, só visível no Novo RH em modo Demonstração; crons excluem-na — ADR-0034 (substitui, neste ponto, o ADR-0021).
 - Um horário por modelo (os dois "tenants" do gerador partilham os modelos); um calendário de feriados PT atribuído aos centros PT.
+- Fotos fictícias: ilustrações CC0 (DiceBear "Notionists") servidas pelo frontend em `public/demo-avatars/` (`f-NN`/`m-NN` pelo nome); o gerador grava `photo_storage_path = demo-avatars/…` e o refresh completa demos antigas. Sem fotos de pessoas reais (RGPD).
 
 ## How to test
 

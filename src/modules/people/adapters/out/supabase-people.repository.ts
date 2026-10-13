@@ -11,7 +11,7 @@ function check<T>(res: Res): T {
 }
 
 const EMP_COLS =
-  "id, first_name, last_name, full_name, nif, email, phone, personal_email, address, postal_code, city, country, birth_date, gender, nationality, social_security_number, id_card_number, iban, hired_at, primary_location_id, position_id, status, currency, pay_period, base_salary, hourly_rate, deactivated_at, deactivation_reason, user_id, record_version";
+  "id, first_name, last_name, full_name, nif, email, phone, personal_email, address, postal_code, city, country, birth_date, gender, nationality, social_security_number, id_card_number, iban, hired_at, primary_location_id, position_id, status, currency, pay_period, base_salary, hourly_rate, deactivated_at, deactivation_reason, user_id, photo_storage_path, record_version";
 
 type EmpRow = Record<string, unknown> & { id: string; full_name: string; status: string; record_version: number };
 
@@ -49,6 +49,7 @@ function toEmployee(r: EmpRow): Employee {
     deactivatedAt: str(r.deactivated_at),
     deactivationReason: str(r.deactivation_reason),
     userId: str(r.user_id),
+    photoPath: str(r.photo_storage_path),
     version: Number(r.record_version ?? 1),
   };
 }

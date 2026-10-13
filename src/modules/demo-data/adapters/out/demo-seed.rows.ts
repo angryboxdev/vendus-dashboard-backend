@@ -76,6 +76,7 @@ export function buildSeedPlan(
       primary_location_id: locId.get(e.centerKey),
       position_id: posId.get(e.positionKey) ?? null,
       role_or_notes: "Colaborador fictício (demonstração)",
+      photo_storage_path: e.photoPath,
     });
     contracts.push({ id: newId(), employee_id: id, contract_type: "permanent", start_date: e.hireDate, weekly_hours: 40, status: "active", created_by: actor });
     assignments.push({ id: newId(), resource_type: "schedule", resource_id: schedId.get(e.scheduleKey), target_type: "employee", target_id: id, valid_from: `${opts.year - 1}-01-01`, created_by: actor });

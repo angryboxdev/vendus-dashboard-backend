@@ -19,7 +19,9 @@ export interface Viewer {
 }
 
 /** Ficha vista por alguém: campos sem permissão vêm a null e listados em `hidden`. */
-export interface EmployeeView extends Employee {
+export interface EmployeeView extends Omit<Employee, "photoPath"> {
+  /** Foto: URL assinado de curta duração (ou null). */
+  photoUrl: string | null;
   hidden: string[];
   /** Obrigatórios em falta (fichas antigas "a completar"). */
   missing: string[];
