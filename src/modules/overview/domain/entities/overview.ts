@@ -24,6 +24,8 @@ export interface OverviewDay {
 export interface OverviewAbsence {
   employeeId: string;
   typeName: string;
+  /** Categoria do tipo (ex.: "vacation"); null se mascarada. */
+  category?: string | null;
   startDate: string;
   endDate: string;
 }
@@ -52,6 +54,8 @@ export interface PersonDayView {
 }
 
 export interface PersonOverview extends PersonDayView {
+  /** Categoria da ausência do dia (ex.: "vacation"), quando visível. */
+  absenceCategory?: string | null;
   employeeId: string;
   name: string;
   locationId: string | null;

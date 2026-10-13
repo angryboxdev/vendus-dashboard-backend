@@ -69,6 +69,8 @@ RE-6) com ausências aprovadas, pendentes e feriados.
 
 ## Design decisions (ADR summary)
 
+- Cada pessoa traz também `absenceCategory` (ex.: `vacation`) quando a ausência é visível — o Dashboard executivo usa-a para separar Férias de Ausentes (ADR-0036).
+
 - Cache de 30 s por organização/dia no servidor: o apuramento custa vários pedidos por pessoa; 6 pessoas em paralelo.
 - Ausências privadas aparecem com o nome genérico para quem não tem `hr.absences_private`.
 - Sem aniversários: data de nascimento é dado pessoal e não é necessária para a gestão do dia (minimização, RGPD).

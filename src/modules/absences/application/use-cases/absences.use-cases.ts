@@ -35,6 +35,8 @@ export interface RequestInput {
 export interface RequestView extends AbsenceRequest {
   typeName: string;
   typeColor: string | null;
+  /** Categoria do tipo (ex.: "vacation"); null quando a ausência está mascarada. */
+  typeCategory: string | null;
   private: boolean;
 }
 
@@ -374,7 +376,7 @@ export class AbsencesUseCases {
       // O próprio colaborador vê sempre as suas; sem a permissão, as privadas ficam mascaradas.
       const own = viewerUserId !== null && (viewerUserId === r.requestedByUserId || viewerUserId === (await this.ctx.userOfEmployee(org, r.employeeId)));
       const mask = isPrivate && !canPrivate && !own;
-      out.push({ ...r, comment: mask ? null : r.comment, typeName: mask ? "Ausência" : (t?.name ?? "—"), typeColor: mask ? null : (t?.color ?? null), private: isPrivate });
+      out.push({ ...r, comment: mask ? null : r.comment, typeName: mask ? "Ausência" : (t?.name ?? "—"), typeColor: mask ? null : (t?.color ?? null), typeCategory: mask ? null : (t?.category ?? null), private: isPrivate });
     }
     return out;
   }
