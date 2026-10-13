@@ -3,7 +3,7 @@ import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import { sameState, stateOf, validateSegments, validateTemplate, type Roster, type RosterShift, type Segment, type ShiftState, type ShiftTemplateInput } from "../../domain/entities/roster.js";
 import { RosterBlockedError, RosterConflictError, RosterForbiddenError, RosterNotFoundError, RosterValidationError } from "../../domain/errors.js";
 import type { PeriodGuardPort, RosterPublishedPort, RostersAuditPort, RostersContextPort, RostersNotifierPort, RostersRepositoryPort } from "../../domain/ports/out/rosters.ports.js";
-import { evaluate, type Violation } from "../../domain/services/constraints.js";
+import { evaluate, overlaps, type Violation } from "../../domain/services/constraints.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_VIEW_DAYS = 62;
@@ -87,6 +87,24 @@ export class RostersUseCases {
     return r;
   }
 
+  /**
+   * Visão "macro": cada escala ativa com quem tem turnos no período, quantas
+   * alterações estão por publicar e a última publicação.
+   */
+  async summary(org: OrganizationId, from: string, to: string) {
+    if (!DATE.test(from) || !DATE.test(to) || to < from || span(from, to) > 93) throw new RosterValidationError("Período inválido (máx. 93 dias).", "from");
+    const rosters = (await this.repo.listRosters(org)).filter((r) => !r.archived);
+    const shifts = await this.repo.listShifts(org, { from, to, includeDeleted: true });
+    return Promise.all(
+      rosters.map(async (r) => {
+        const own = shifts.filter((s) => s.rosterId === r.id);
+        const employeeIds = [...new Set(own.filter((s) => !s.deleted).map((s) => s.employeeId))];
+        const lastPublication = (await this.repo.listPublications(org, r.id)).reduce<string | null>((max, p) => (!max || p.createdAt > max ? p.createdAt : max), null);
+        return { roster: r, employeeIds, shifts: own.filter((s) => !s.deleted).length, pending: own.filter((s) => s.dirty).length, lastPublishedAt: lastPublication };
+      }),
+    );
+  }
+
   async listShifts(org: OrganizationId, rosterId: string, from: string, to: string) {
     if (!DATE.test(from) || !DATE.test(to) || to < from || span(from, to) > MAX_VIEW_DAYS) throw new RosterValidationError(`Período inválido (máx. ${MAX_VIEW_DAYS} dias).`, "from");
     const r = await this.roster(org, rosterId);
@@ -130,11 +148,32 @@ export class RostersUseCases {
     return evaluate(states, await this.ctx.rules(org, touched[0]!.employeeId, touched[0]!.workDate), absences, focus);
   }
 
+  /**
+   * Sobreposição bloqueia sempre — também em rascunho (não se planeia o mesmo
+   * colaborador duas vezes à mesma hora, em nenhuma escala). Compara com o
+   * estado planeado de cada turno (rascunho ou publicado) e entre os novos.
+   */
+  private async assertNoOverlap(org: OrganizationId, candidates: (ShiftState & { ignoreId?: string })[]): Promise<void> {
+    const live = candidates.filter((c) => c.kind === "shift");
+    if (!live.length) return;
+    const dates = live.map((c) => c.workDate).sort();
+    const existing = await this.repo.listShifts(org, { employeeIds: [...new Set(live.map((c) => c.employeeId))], from: plusDays(dates[0]!, -1), to: plusDays(dates.at(-1)!, 1) });
+    const ignore = new Set(live.map((c) => c.ignoreId).filter((x): x is string => !!x));
+    const pool: ShiftState[] = existing.filter((s) => !s.deleted && !ignore.has(s.id)).map(stateOf);
+    const violations: Violation[] = [];
+    for (const c of live) {
+      if (overlaps(c, pool)) violations.push({ rule: "overlap", severity: "block", employeeId: c.employeeId, workDate: c.workDate, message: `Já há um turno planeado a essa hora em ${c.workDate} (turnos não se podem sobrepor).` });
+      pool.push(c);
+    }
+    if (violations.length) throw new RosterBlockedError(violations);
+  }
+
   async addShift(org: OrganizationId, actor: Actor, rosterId: string, input: ShiftInput) {
     await this.roster(org, rosterId);
     if (!DATE.test(input.workDate)) throw new RosterValidationError("Data inválida.", "workDate");
     if (!input.employeeId) throw new RosterValidationError("Indique o colaborador.", "employeeId");
     const seg = await this.segmentsFor(org, input);
+    await this.assertNoOverlap(org, [{ employeeId: input.employeeId, workDate: input.workDate, kind: input.kind, segments: seg.segments, templateId: input.templateId, onCall: seg.onCall }]);
     const [s] = await this.repo.insertShifts(org, [{ rosterId, employeeId: input.employeeId, workDate: input.workDate, kind: input.kind, segments: seg.segments, templateId: input.templateId, onCall: seg.onCall }], actor.email);
     return { shift: s!, warnings: await this.violationsFor(org, new Set([s!.id])) };
   }
@@ -150,6 +189,7 @@ export class RostersUseCases {
     for (let d = input.from; d <= input.to; d = plusDays(d, 1)) if (!input.weekdays.length || input.weekdays.includes(String(DateTime.fromISO(d, { zone: "utc" }).weekday))) dates.push(d);
     const rows = input.employeeIds.flatMap((employeeId) => dates.map((workDate) => ({ rosterId, employeeId, workDate, kind: input.kind, segments: seg.segments, templateId: input.templateId, onCall: seg.onCall })));
     if (rows.length > MAX_BULK) throw new RosterValidationError(`No máximo ${MAX_BULK} turnos de uma vez.`, "employeeIds");
+    await this.assertNoOverlap(org, rows);
     const created = await this.repo.insertShifts(org, rows, actor.email);
     await this.log(org, actor.email, "rosters.shift.bulk", "roster", rosterId, null, { count: created.length, ...input });
     return { created: created.length, warnings: await this.violationsFor(org, new Set(created.map((c) => c.id)), created) };
@@ -173,6 +213,7 @@ export class RostersUseCases {
     };
     const seg = input.kind || input.templateId !== undefined || input.segments ? await this.segmentsFor(org, merged) : { segments: cur.segments, onCall: cur.onCall };
     const draft: RosterShift = { ...cur, employeeId: merged.employeeId, kind: merged.kind, templateId: merged.templateId, segments: seg.segments, onCall: seg.onCall, deleted: false, dirty: true };
+    await this.assertNoOverlap(org, [{ ...stateOf(draft), ignoreId: cur.id }]);
     if (cur.published) return this.publishNow(org, actor, cur, draft, opts.reason!.trim(), opts.confirm);
     const saved = await this.repo.updateShift(org, id, { employeeId: draft.employeeId, kind: draft.kind, templateId: draft.templateId, segments: draft.segments, onCall: draft.onCall, deleted: false, dirty: true }, actor.email);
     return { shift: saved, warnings: await this.violationsFor(org, new Set([id])), publication: null };

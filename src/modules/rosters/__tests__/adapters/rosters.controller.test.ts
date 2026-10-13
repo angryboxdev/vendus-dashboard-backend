@@ -64,6 +64,17 @@ describe("API /api/novo-rh/rosters", () => {
     const history = await (await fetch(`${base}/${roster.id}/history`)).json();
     expect(history.map((h: { version: number }) => h.version)).toEqual([2, 1]);
   });
+
+  test("turno sobreposto em rascunho é 422 com a violação; GET /summary dá a visão macro", async () => {
+    const roster = await (await send("POST", "", { name: "Loja", targetType: "location", targetId: "11111111-1111-4111-8111-111111111111" })).json();
+    expect((await send("POST", `/${roster.id}/shifts`, { employeeId: "e1", workDate: "2026-10-19", segments: [{ start: "10:00", end: "20:00" }] })).status).toBe(201);
+    const dup = await send("POST", `/${roster.id}/shifts`, { employeeId: "e1", workDate: "2026-10-19", segments: [{ start: "10:00", end: "20:00" }] });
+    expect(dup.status).toBe(422);
+    expect((await dup.json()).violations[0]).toMatchObject({ rule: "overlap", employeeId: "e1", workDate: "2026-10-19" });
+    const summary = await (await fetch(`${base}/summary?from=2026-10-19&to=2026-10-25`)).json();
+    expect(summary).toEqual([expect.objectContaining({ roster: expect.objectContaining({ id: roster.id }), employeeIds: ["e1"], pending: 1 })]);
+    expect((await fetch(`${base}/summary?from=x&to=y`)).status).toBe(400);
+  });
 });
 
 describe("Parâmetros → regras das escalas", () => {

@@ -49,7 +49,7 @@ time-base (`plannedDays`) e pede o recálculo da assiduidade a cada publicação
 
 ### Input
 
-- `createRostersRouter` → `/api/novo-rh/rosters/*` (`hr.schedules`, Idempotency-Key obrigatório) e `/api/me/roster*` (os meus turnos publicados, trocas).
+- `createRostersRouter` → `/api/novo-rh/rosters/*` (inclui `GET /summary?from&to`: visão macro — escalas ativas com pessoas no período, por publicar e última publicação) (`hr.schedules`, Idempotency-Key obrigatório) e `/api/me/roster*` (os meus turnos publicados, trocas).
 
 ### Output
 
@@ -57,7 +57,7 @@ time-base (`plannedDays`) e pede o recálculo da assiduidade a cada publicação
 
 ## Design decisions (ADR summary)
 
-- ADR-0030: versões publicadas; alteração pós-publicação com motivo e publicação imediata; restrições com valores Legal (D6) e severidade aviso por omissão; sobreposição bloqueia; trocas com aceitação do colega e aprovação da gestão; turnos dos colegas não visíveis no Portal.
+- ADR-0030: versões publicadas; alteração pós-publicação com motivo e publicação imediata; restrições com valores Legal (D6) e severidade aviso por omissão; sobreposição bloqueia (também já em rascunho: criar, alterar e atribuição em massa recusam com 422 se o colaborador já tem turno planeado à mesma hora, em qualquer escala); trocas com aceitação do colega e aprovação da gestão; turnos dos colegas não visíveis no Portal.
 
 ## How to test
 

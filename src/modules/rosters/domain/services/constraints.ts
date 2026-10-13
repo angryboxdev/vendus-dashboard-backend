@@ -42,6 +42,16 @@ export function intervals(s: ShiftState): Interval[] {
   });
 }
 
+/** O turno sobrepõe-se a algum dos outros (do mesmo colaborador)? Folgas nunca se sobrepõem. */
+export function overlaps(candidate: ShiftState, others: ShiftState[]): boolean {
+  const mine = intervals(candidate);
+  if (!mine.length) return false;
+  return others
+    .filter((o) => o.employeeId === candidate.employeeId)
+    .flatMap(intervals)
+    .some((o) => mine.some((m) => m.start < o.end && o.start < m.end));
+}
+
 const fmtH = (min: number) => `${Math.floor(min / 60)}h${String(min % 60).padStart(2, "0")}`;
 const isoWeek = (d: string) => {
   const dt = DateTime.fromISO(d, { zone: "utc" });
