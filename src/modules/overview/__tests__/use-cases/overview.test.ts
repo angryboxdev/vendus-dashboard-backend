@@ -21,6 +21,18 @@ function setup() {
 }
 
 describe("Painel do Novo RH", () => {
+  test("só hoje: depois de 30 s devolve logo o último resultado e recalcula em segundo plano; invalidar recalcula", async () => {
+    const { uc, sources, advance } = setup();
+    await uc.today(ORG, all);
+    const first = sources.daysCalls;
+    advance(60_000);
+    await uc.today(ORG, all);
+    expect(sources.daysCalls).toBe(first * 2);
+    uc.invalidateToday(ORG);
+    await uc.today(ORG, all);
+    expect(sources.daysCalls).toBe(first * 3);
+  });
+
   test("só hoje (Dashboard): mesmos estados, apuramento de um só dia por pessoa, com âmbito", async () => {
     const { uc, sources } = setup();
     const o = await uc.today(ORG, { canSee: async (id) => id !== "e-joao", canPrivate: false });

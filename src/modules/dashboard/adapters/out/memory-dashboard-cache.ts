@@ -4,6 +4,8 @@ import type { DashboardCachePort, DashboardMetric } from "../../domain/ports/out
 /** Versão do formato dos agregados (mudar invalida tudo o que estava em cache). */
 const SCHEMA_VERSION = 1;
 const MAX_ENTRIES = 2000;
+/** Depois do TTL, o último valor ainda serve até isto (e atualiza em segundo plano). */
+const STALE_MAX_MS = 10 * 60_000;
 
 /**
  * Cache em memória do processo (não há Redis no projeto). Chave:
@@ -12,7 +14,7 @@ const MAX_ENTRIES = 2000;
  * Pedidos simultâneos para a mesma chave partilham a mesma carga.
  */
 export class MemoryDashboardCache implements DashboardCachePort {
-  private readonly entries = new Map<string, { at: number; ttl: number; value: Promise<unknown> }>();
+  private readonly entries = new Map<string, { at: number; ttl: number; value: Promise<unknown>; settled?: boolean; refreshing?: boolean }>();
 
   constructor(private readonly now: () => number = () => Date.now()) {}
 
@@ -23,13 +25,31 @@ export class MemoryDashboardCache implements DashboardCachePort {
   async getOrLoad<T>(key: { org: OrganizationId; metric: DashboardMetric; date: string; viewer: string; context: string }, ttlMs: number, load: () => Promise<T>): Promise<{ value: T; hit: boolean }> {
     const k = MemoryDashboardCache.keyOf(key);
     const cur = this.entries.get(k);
-    if (cur && this.now() - cur.at < cur.ttl) return { value: (await cur.value) as T, hit: true };
+    const age = cur ? this.now() - cur.at : Infinity;
+    if (cur && age < cur.ttl) return { value: (await cur.value) as T, hit: true };
+    // Stale-while-revalidate: só para apresentação (nunca base de escrita); invalidações apagam a entrada.
+    if (cur && cur.settled && age < STALE_MAX_MS) {
+      if (!cur.refreshing) {
+        cur.refreshing = true;
+        const next = this.start(k, ttlMs, load, false);
+        next.value.then(() => this.entries.set(k, next)).catch(() => void (cur.refreshing = false));
+      }
+      return { value: (await cur.value) as T, hit: true };
+    }
     if (this.entries.size >= MAX_ENTRIES) this.evict();
-    const value = load();
-    this.entries.set(k, { at: this.now(), ttl: ttlMs, value });
+    const entry = this.start(k, ttlMs, load, true);
+    return { value: (await entry.value) as T, hit: false };
+  }
+
+  private start(k: string, ttl: number, load: () => Promise<unknown>, register: boolean) {
+    const entry: { at: number; ttl: number; value: Promise<unknown>; settled?: boolean; refreshing?: boolean } = { at: this.now(), ttl, value: load() };
+    if (register) this.entries.set(k, entry);
     // Falhas não ficam em cache.
-    value.catch(() => this.entries.delete(k));
-    return { value: await value, hit: false };
+    entry.value.then(
+      () => (entry.settled = true),
+      () => (this.entries.get(k) === entry ? this.entries.delete(k) : undefined),
+    );
+    return entry;
   }
 
   /** Invalidação seletiva: só as métricas afetadas desta organização. */

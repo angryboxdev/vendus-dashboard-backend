@@ -16,6 +16,10 @@ const WEEK_DAYS = 7;
 /** Cache curta por organização/dia: o painel é aberto muitas vezes e o apuramento custa vários pedidos por pessoa. */
 const CACHE_MS = 30_000;
 const CONCURRENCY = 6;
+/** "Só hoje" (Dashboard): um dia por pessoa, mais pessoas em paralelo. */
+const TODAY_CONCURRENCY = 16;
+/** Último resultado de "hoje" ainda servível (atualiza em segundo plano) — o painel abre logo. */
+const TODAY_STALE_MS = 10 * 60_000;
 const PLAN_MAX_DAYS = 14;
 
 export interface OverviewViewer {
@@ -41,7 +45,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
 }
 
 export class OverviewUseCases {
-  private readonly cache = new Map<string, { at: number; value: Promise<Omit<Overview, "kpis" | "locations" | "week">> }>();
+  private readonly cache = new Map<string, { at: number; value: Promise<Omit<Overview, "kpis" | "locations" | "week">>; settled?: boolean; refreshing?: boolean }>();
 
   constructor(
     private readonly sources: OverviewSourcesPort,
@@ -99,11 +103,24 @@ export class OverviewUseCases {
   async today(org: OrganizationId, viewer: OverviewViewer): Promise<Pick<Overview, "date" | "today" | "generatedAt" | "people" | "holidays">> {
     const today = await this.sources.today(org);
     const key = `${org}|${today}|${viewer.canPrivate ? 1 : 0}|day`;
+    const load = () => {
+      const entry: { at: number; value: Promise<Omit<Overview, "kpis" | "locations" | "week">>; settled?: boolean; refreshing?: boolean } = { at: this.now(), value: this.build(org, today, today, viewer.canPrivate, 1, TODAY_CONCURRENCY) };
+      entry.value.then(
+        () => (entry.settled = true),
+        () => (this.cache.get(key) === entry ? this.cache.delete(key) : undefined),
+      );
+      return entry;
+    };
     let hit = this.cache.get(key);
-    if (!hit || this.now() - hit.at >= CACHE_MS) {
-      hit = { at: this.now(), value: this.build(org, today, today, viewer.canPrivate, 1) };
+    const age = hit ? this.now() - hit.at : Infinity;
+    if (!hit || age >= TODAY_STALE_MS || (age >= CACHE_MS && !hit.settled)) {
+      hit = load();
       this.cache.set(key, hit);
-      hit.value.catch(() => this.cache.delete(key));
+    } else if (age >= CACHE_MS && !hit.refreshing) {
+      // Stale-while-revalidate: devolve o último resultado já e recalcula em segundo plano.
+      hit.refreshing = true;
+      const next = load();
+      next.value.then(() => this.cache.set(key, next)).catch(() => void (hit!.refreshing = false));
     }
     const base = await hit.value;
     const visible: PersonOverview[] = [];
@@ -111,7 +128,12 @@ export class OverviewUseCases {
     return { date: base.date, today: base.today, generatedAt: base.generatedAt, people: visible, holidays: base.holidays };
   }
 
-  private async build(org: OrganizationId, day: string, today: string, canPrivate: boolean, span: number = WEEK_DAYS) {
+  /** Esquece o "hoje" de uma organização (houve marcações/ausências): o próximo pedido recalcula. */
+  invalidateToday(org: OrganizationId): void {
+    for (const k of [...this.cache.keys()]) if (k.startsWith(`${org}|`) && k.endsWith("|day")) this.cache.delete(k);
+  }
+
+  private async build(org: OrganizationId, day: string, today: string, canPrivate: boolean, span: number = WEEK_DAYS, concurrency: number = CONCURRENCY) {
     const from = plus(day, -(span - 1));
     const [employees, locations, absences, pending, holidays] = await Promise.all([
       this.sources.employees(org),
@@ -122,7 +144,7 @@ export class OverviewUseCases {
     ]);
     const locName = new Map(locations.map((l) => [l.id, l.name]));
     let timeZone = "Europe/Lisbon";
-    const people = await mapLimit(employees, CONCURRENCY, async (e): Promise<PersonOverview> => {
+    const people = await mapLimit(employees, concurrency, async (e): Promise<PersonOverview> => {
       const res = await this.sources.days(org, e.id, from, day);
       timeZone = res.timeZone;
       const days = res.days;
