@@ -405,12 +405,14 @@ const demoOrgModule = createDemoOrgModule({
     },
     // Enriquecimento para apresentações (só o que falta), pelos casos de uso dos módulos donos.
     enrich: async (org, actor, plan) => {
-      const out = { periodClosed: false, rules: 0, pending: 0, alerts: 0 };
+      const out = { periodClosed: false, rules: 0, pending: 0, alerts: 0, errors: [] as string[] };
       const step = async (name: string, fn: () => Promise<void>) => {
         try {
           await fn();
         } catch (e) {
-          console.error(`[demo] enriquecimento (${name}) falhou:`, e instanceof Error ? e.message : e);
+          const msg = e instanceof Error ? e.message : String(e);
+          out.errors.push(`${name}: ${msg}`);
+          console.error(`[demo] enriquecimento (${name}) falhou:`, msg);
         }
       };
       await step("pedidos", async () => {

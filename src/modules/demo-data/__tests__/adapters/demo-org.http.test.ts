@@ -75,6 +75,16 @@ describe("Modo Demonstração — /api/novo-rh/demo e cabeçalho X-Novo-RH-Mode"
     expect(await r.json()).toMatchObject({ skipped: false });
   });
 
+  test("refresh repetido pela rede (mesma Idempotency-Key) nunca dá 409; o estado mostra a última atualização", async () => {
+    expect((await create()).status).toBe(201);
+    const send = () => fetch(`${base}/novo-rh/demo/refresh`, { method: "POST", headers: { ...demo, "Idempotency-Key": "k-repetida" } });
+    const [a, b] = await Promise.all([send(), send()]);
+    expect([a.status, b.status].every((x) => x === 200)).toBe(true);
+    const st = await (await fetch(`${base}/novo-rh/demo`)).json();
+    expect(st.refresh.lastAt).not.toBeNull();
+    expect(st.refresh.error).toBeNull();
+  });
+
   test("não-Admin: não cria e não entra em modo Demonstração", async () => {
     isAdmin = false;
     expect((await create()).status).toBe(403);

@@ -46,5 +46,5 @@ export interface DemoScenarioPort {
    * período nessas datas, cria as regras de alerta se não houver nenhuma e
    * avalia-as, e acrescenta pedidos pendentes até haver pelo menos cinco.
    */
-  enrich(demoOrg: OrganizationId, actor: { userId: string; email: string }, plan: EnrichmentPlan): Promise<{ periodClosed: boolean; rules: number; pending: number; alerts: number }>;
+  enrich(demoOrg: OrganizationId, actor: { userId: string; email: string }, plan: EnrichmentPlan): Promise<{ periodClosed: boolean; rules: number; pending: number; alerts: number; errors?: string[] }>;
 }
