@@ -1,10 +1,10 @@
 # Matriz de autorização (perfil × endpoint)
 
-> Gerado por `npm run authz:matrix` em 2026-10-12. Não editar à mão.
+> Gerado por `npm run authz:matrix` em 2026-10-13. Não editar à mão.
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 729 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 736 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -432,6 +432,12 @@ Endpoints: 729 · pré-autenticação: 23 · não classificados: 0
 | POST | `/api/novo-rh/catalog/custom-fields/:id/archive` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/catalog/locations` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
 | GET | `/api/novo-rh/catalog/positions` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
+| GET | `/api/novo-rh/dashboard/birthdays` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| DELETE | `/api/novo-rh/dashboard/layout` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
+| GET | `/api/novo-rh/dashboard/layout` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
+| PUT | `/api/novo-rh/dashboard/layout` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
+| GET | `/api/novo-rh/dashboard/snapshot` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/dashboard/team` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/demo` | permission:governance.settings:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/demo` | permission:governance.settings:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/demo/refresh` | permission:governance.settings:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
@@ -511,6 +517,7 @@ Endpoints: 729 · pré-autenticação: 23 · não classificados: 0
 | POST | `/api/novo-rh/rosters/:id/shifts/bulk` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | PATCH | `/api/novo-rh/rosters/shifts/:id` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters/shifts/:id/delete` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/rosters/summary` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/rosters/swaps` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters/swaps/:id/decide` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/rosters/templates` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |

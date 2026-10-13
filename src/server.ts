@@ -65,6 +65,8 @@ import { createAttendanceModule } from "./modules/attendance/attendance.module.j
 import { createAbsencesModule } from "./modules/absences/absences.module.js";
 import { createTimeBankModule } from "./modules/time-bank/time-bank.module.js";
 import { createRostersModule } from "./modules/rosters/rosters.module.js";
+import { createDashboardModule } from "./modules/dashboard/dashboard.module.js";
+import type { DashboardCachePort, DashboardMetric } from "./modules/dashboard/domain/ports/out/dashboard.ports.js";
 import { createPeriodsModule } from "./modules/periods/periods.module.js";
 import { createDemoOrgModule } from "./modules/demo-data/demo-data.module.js";
 import { createOverviewModule } from "./modules/overview/overview.module.js";
@@ -111,6 +113,22 @@ app.use(cors(corsOptions));
 app.use(express.json());
 // ID de correlação em todos os pedidos (ADR-0022) — devolvido em X-Correlation-Id.
 app.use(correlationId);
+
+// Dashboard executivo: invalidação por evento — uma escrita bem-sucedida numa
+// fonte limpa só as métricas afetadas dessa organização (o resto vive do TTL).
+let dashboardCache: DashboardCachePort | null = null;
+const DASHBOARD_INVALIDATION: [RegExp, DashboardMetric[]][] = [
+  [/^\/api\/(me\/clock|novo-rh\/attendance)(\/|$)/, ["PEOPLE"]],
+  [/^\/api\/novo-rh\/(absences|inbox\/decide)(\/|$)/, ["PEOPLE", "REQUESTS", "COVERAGE"]],
+  [/^\/api\/novo-rh\/rosters(\/|$)/, ["COVERAGE", "REQUESTS"]],
+  [/^\/api\/novo-rh\/workspace(\/|$)/, ["REQUESTS"]],
+];
+app.use((req, res, next) => {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return next();
+  const metrics = DASHBOARD_INVALIDATION.find(([re]) => re.test(req.path))?.[1];
+  if (metrics) res.on("finish", () => res.statusCode < 400 && req.auth?.orgId && dashboardCache?.invalidate(req.auth.orgId, metrics));
+  next();
+});
 
 // `commit` (fornecido pelo Render) confirma qual versão está no ar depois de um deploy.
 app.get("/api/health", (_req, res) => res.json({ ok: true, commit: (process.env.RENDER_GIT_COMMIT ?? "").slice(0, 7) || null }));
@@ -999,7 +1017,7 @@ const overviewModule = createOverviewModule({
       return { timeZone: b.timeZone, days: b.days };
     },
     absences: async (org, from, to, canPrivate) =>
-      (await absencesModule.absences.listRequests(org, { status: "approved", from, to }, canPrivate, "sistema")).map((r) => ({ employeeId: r.employeeId, typeName: r.typeName, startDate: r.startDate, endDate: r.endDate })),
+      (await absencesModule.absences.listRequests(org, { status: "approved", from, to }, canPrivate, "sistema")).map((r) => ({ employeeId: r.employeeId, typeName: r.typeName, category: r.typeCategory, startDate: r.startDate, endDate: r.endDate })),
     pending: async (org) => {
       const today = todayUtc();
       const [absences, corrections, incidents, requests, alerts] = await Promise.all([
@@ -1028,6 +1046,12 @@ app.use("/api", overviewModule.router);
 // num só sítio; cada decisão passa pela regra do módulo dono (RE-22/23, período fechado).
 const isOwn = async (org: OrganizationId, userId: string, employeeId: string) => (await absencesDirectory.userOfEmployee(org, employeeId)) === userId;
 const hm = (iso: string) => new Date(iso).toISOString().slice(11, 16);
+const inboxViewerOf = (req: Parameters<Parameters<typeof createInboxModule>[0]["viewerOf"]>[0]) => ({
+  actor: { userId: req.auth!.sub, email: req.auth!.email || req.auth!.sub },
+  can: (permission: Parameters<typeof can>[1], level: Parameters<typeof can>[2]) => !!req.access && can(req.access, permission, level),
+  canSee: (employeeId: string) => canSeeEmployee(req, employeeId, todayUtc()),
+  canPrivate: !!req.access && can(req.access, "hr.absences_private", "MANAGE"),
+});
 const inboxModule = createInboxModule({
   directory: {
     people: async (org) => {
@@ -1161,14 +1185,63 @@ const inboxModule = createInboxModule({
       decide: async (org, actor, item, decision, comment) => void (await workspaceModule.workspace.decide(org, actor, item.id, decision, comment)),
     },
   ],
-  viewerOf: (req) => ({
-    actor: { userId: req.auth!.sub, email: req.auth!.email || req.auth!.sub },
-    can: (permission, level) => !!req.access && can(req.access, permission, level),
-    canSee: (employeeId) => canSeeEmployee(req, employeeId, todayUtc()),
-    canPrivate: !!req.access && can(req.access, "hr.absences_private", "MANAGE"),
-  }),
+  viewerOf: (req) => inboxViewerOf(req),
 });
 app.use("/api", inboxModule.router);
+
+// Novo RH → Dashboard executivo: agrega painel + caixa de pedidos + escalas
+// num só pedido (OperationalSnapshot); listas só a pedido; layout pessoal.
+const dashboardModule = createDashboardModule({
+  sources: {
+    tomorrowOf: (today) => new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10),
+    coverage: async (org, employees, from, to) => {
+      const rostered = new Set((await rostersModule.rosters.listRosters(org)).filter((r) => !r.archived && r.targetType === "location").map((r) => r.targetId));
+      const inRoster = employees.filter((e) => e.locationId && rostered.has(e.locationId));
+      if (!inRoster.length) return [];
+      const absences = await absencesModule.absences.listRequests(org, { status: "approved", from, to }, false, "sistema");
+      const absent = (id: string, d: string) => absences.some((a) => a.employeeId === id && a.startDate <= d && a.endDate >= d);
+      const gaps: { employeeId: string; name: string; locationId: string | null; date: string }[] = [];
+      for (let i = 0; i < inRoster.length; i += 6) {
+        await Promise.all(
+          inRoster.slice(i, i + 6).map(async (e) => {
+            const [{ days }, planned] = await Promise.all([timeBaseModule.time.theoretical(org, e.id, from, to), rostersModule.rosters.plannedFor(org, e.id, from, to)]);
+            for (const d of days) if (d.minutes > 0 && (d.reason === "schedule" || d.reason === "contract") && !planned.has(d.date) && !absent(e.id, d.date)) gaps.push({ employeeId: e.id, name: e.name, locationId: e.locationId, date: d.date });
+          }),
+        );
+      }
+      return gaps;
+    },
+    birthDates: async (org) => {
+      const [people, locations] = await Promise.all([peopleRepo.list(org, { status: "active" }), peopleRepo.listLocations(org)]);
+      const loc = new Map(locations.map((l) => [l.id, l.name]));
+      return people.map((p) => ({ employeeId: p.id, name: p.fullName, locationName: p.primaryLocationId ? (loc.get(p.primaryLocationId) ?? null) : null, birthDate: p.birthDate }));
+    },
+  },
+  viewerOf: async (req) => {
+    const org = req.auth!.orgId;
+    const access = req.access!;
+    const who = { userId: req.auth!.sub, isAdmin: access.isAdmin, profileId: access.profile.id };
+    const [canSee, field] = await Promise.all([accessModule.governance.scopeChecker(org, who), accessModule.governance.fieldAccessFor(org, who.profileId, who.isAdmin)]);
+    const canPrivate = can(access, "hr.absences_private", "MANAGE");
+    return {
+      userId: req.auth!.sub,
+      canSee,
+      canSeeBirthdays: field("personal.birth_date").view,
+      people: async () => {
+        const o = await overviewModule.overview.get(org, { canSee, canPrivate }, null);
+        return {
+          today: o.date,
+          holidays: o.holidays,
+          people: o.people.map((p) => ({ employeeId: p.employeeId, name: p.name, locationId: p.locationId, locationName: p.locationName, status: p.status, lateMinutes: p.lateMinutes, plannedStart: p.plannedStart, plannedEnd: p.plannedEnd, firstInAt: p.firstInAt, absenceType: p.absenceType, absenceCategory: p.absenceCategory ?? null })),
+        };
+      },
+      requests: async () =>
+        (await inboxModule.inbox.list(org, inboxViewerOf(req), { type: null, segment: "all" })).items.map((r) => ({ key: r.key, type: r.type, employeeId: r.employeeId, employeeName: r.employeeName, locationName: r.locationName, title: r.title, requestedAt: r.requestedAt, canDecide: r.canDecide })),
+    };
+  },
+});
+dashboardCache = dashboardModule.cache;
+app.use("/api", dashboardModule.router);
 
 // Novo RH → Avisos automáticos (FE-111): regras em Configurações → Notificações; cron de 10 em 10 min.
 const remindersModule = createRemindersModule({

@@ -275,6 +275,7 @@ export const TABLE_REGISTRY = {
   // Novo RH FE-054: convites e pedidos de adesão.
   invitations: { organizationColumn: "org_id", locationBearing: false },
   join_requests: { organizationColumn: "org_id", locationBearing: false },
+  dashboard_layouts: { organizationColumn: "org_id", locationBearing: false },
   alert_rules: { organizationColumn: "org_id", locationBearing: false },
   alerts: { organizationColumn: "org_id", locationBearing: false },
   custom_request_forms: { organizationColumn: "org_id", locationBearing: false },

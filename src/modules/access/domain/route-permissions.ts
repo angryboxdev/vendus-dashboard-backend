@@ -120,6 +120,9 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/reports(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/alerts(\/|$)/, target: p("hr.overview") },
   { pattern: /^\/api\/novo-rh\/overview(\/plan)?$/, target: p("hr.overview") },
+  // Dashboard executivo: o layout é uma preferência pessoal (só metadados visuais; não concede acesso).
+  { pattern: /^\/api\/novo-rh\/dashboard\/layout$/, target: { kind: "base" } },
+  { pattern: /^\/api\/novo-rh\/dashboard\/(snapshot|team|birthdays)$/, target: p("hr.overview", "READ") },
   // Caixa de pedidos: área de gestão; cada tipo exige a sua permissão dentro do módulo (READ ver, MANAGE decidir).
   { pattern: /^\/api\/novo-rh\/inbox(\/decide)?$/, target: { kind: "base" } },
 

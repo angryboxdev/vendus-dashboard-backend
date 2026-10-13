@@ -110,7 +110,8 @@ export class OverviewUseCases {
       const week = days.map((d) => dayView(d, absenceOn(absences, e.id, d.workDate), today));
       const current = week.find((d) => d.date === day) ?? dayView({ workDate: day, workedSeconds: 0, theoreticalSeconds: 0, plannedStart: null, plannedEnd: null, excused: false, firstInAt: null, lateMinutes: 0, startPassed: false, openType: null, segments: [] }, null, today);
       const segments = days.find((d) => d.workDate === day)?.segments ?? [];
-      return { ...current, employeeId: e.id, name: e.name, locationId: e.locationId, locationName: e.locationId ? (locName.get(e.locationId) ?? null) : null, week, segments };
+      const absenceCategory = absences.find((a) => a.employeeId === e.id && a.startDate <= day && a.endDate >= day)?.category ?? null;
+      return { ...current, absenceCategory, employeeId: e.id, name: e.name, locationId: e.locationId, locationName: e.locationId ? (locName.get(e.locationId) ?? null) : null, week, segments };
     });
     return { date: day, today, timeZone, generatedAt: new Date(this.now()).toISOString(), people: sortPeople(people), pending, holidays };
   }
