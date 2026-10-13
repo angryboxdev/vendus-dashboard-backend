@@ -13,28 +13,26 @@ const TTL_SECONDS = 60 * 60;
  */
 export const DEMO_AVATAR_PREFIX = "demo-avatars/";
 
-type Signer = (path: string, ttlSeconds: number, org: OrganizationId) => Promise<string>;
+type BatchSigner = (paths: string[], ttlSeconds: number, org: OrganizationId) => Promise<Map<string, string>>;
 
-/** Fotos das fichas no bucket privado `hr-photos` (URLs assinados). */
+/** Fotos das fichas no bucket privado `hr-photos` (URLs assinados, um pedido em lote). */
 export class SupabasePeoplePhotoAdapter implements PeoplePhotoPort {
-  constructor(private readonly sign: Signer = (path, ttl, org) => objectStorage.createSignedUrl("hr-photos", path, ttl, org)) {}
+  constructor(private readonly sign: BatchSigner = (paths, ttl, org) => objectStorage.createSignedUrls("hr-photos", paths, ttl, org)) {}
 
   async urls(org: OrganizationId, paths: string[]): Promise<Map<string, string>> {
     const out = new Map<string, string>();
-    await Promise.all(
-      paths.map(async (path) => {
-        if (path.startsWith(DEMO_AVATAR_PREFIX)) {
-          out.set(path, `/${path}`);
-          return;
-        }
-        // Uma foto em falta no armazenamento não deve partir a lista: fica sem foto.
-        try {
-          out.set(path, await this.sign(path, TTL_SECONDS, org));
-        } catch {
-          /* sem foto */
-        }
-      }),
-    );
+    const stored: string[] = [];
+    for (const path of paths) {
+      if (path.startsWith(DEMO_AVATAR_PREFIX)) out.set(path, `/${path}`);
+      else stored.push(path);
+    }
+    if (stored.length === 0) return out;
+    // Uma falha do armazenamento não deve partir a lista: ficam sem foto.
+    try {
+      for (const [path, url] of await this.sign(stored, TTL_SECONDS, org)) out.set(path, url);
+    } catch {
+      /* sem fotos */
+    }
     return out;
   }
 }

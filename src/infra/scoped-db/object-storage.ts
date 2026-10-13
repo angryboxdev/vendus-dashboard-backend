@@ -85,6 +85,21 @@ export const objectStorage = {
     if (error) throw new Error(`Document delete failed: ${error.message}`);
   },
 
+  /** Several signed URLs in one request; paths that fail to sign are left out of the map. */
+  async createSignedUrls(
+    bucket: StorageBucketName,
+    paths: string[],
+    expiresInSeconds: number,
+    _organizationId: OrganizationId,
+  ): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    if (paths.length === 0) return out;
+    const { data, error } = await client().storage.from(bucket).createSignedUrls(paths, expiresInSeconds);
+    if (error) throw new Error(`Signed URLs failed: ${error.message}`);
+    for (const r of data ?? []) if (r.path && r.signedUrl && !r.error) out.set(r.path, r.signedUrl);
+    return out;
+  },
+
   /** Time-limited signed URL, for buckets that aren't public (e.g. HR documents). */
   async createSignedUrl(
     bucket: StorageBucketName,
