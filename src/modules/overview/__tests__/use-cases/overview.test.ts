@@ -21,6 +21,16 @@ function setup() {
 }
 
 describe("Painel do Novo RH", () => {
+  test("só hoje (Dashboard): mesmos estados, apuramento de um só dia por pessoa, com âmbito", async () => {
+    const { uc, sources } = setup();
+    const o = await uc.today(ORG, { canSee: async (id) => id !== "e-joao", canPrivate: false });
+    expect(sources.ranges.every((r) => r === "2026-10-12..2026-10-12")).toBe(true);
+    const by = Object.fromEntries(o.people.map((p) => [p.name, p]));
+    expect(by["Ana Demo"]).toMatchObject({ status: "working", lateMinutes: 20 });
+    expect(by["Eva Demo"]!.status).toBe("absent");
+    expect(o.people.some((p) => p.employeeId === "e-joao")).toBe(false);
+  });
+
   test("estados do dia: a trabalhar com atraso, falta, ausência, ainda não começou", async () => {
     const { uc } = setup();
     const o = await uc.get(ORG, all, null);

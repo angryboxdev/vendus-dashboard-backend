@@ -44,8 +44,10 @@ export class FakeOverviewSources implements OverviewSourcesPort {
       { id: "loc-braga", name: "Braga" },
     ];
   }
+  ranges: string[] = [];
   async days(_o: OrganizationId, employeeId: string, from: string, to: string) {
     this.daysCalls++;
+    this.ranges.push(`${from}..${to}`);
     const out: OverviewDay[] = [];
     for (let d = new Date(`${from}T00:00:00Z`); d.toISOString().slice(0, 10) <= to; d.setUTCDate(d.getUTCDate() + 1)) {
       const date = d.toISOString().slice(0, 10);

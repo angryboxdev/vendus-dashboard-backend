@@ -92,8 +92,27 @@ export class OverviewUseCases {
     return { from, to, people: people.sort((a, b) => Number(b.unplanned) - Number(a.unplanned) || a.name.localeCompare(b.name, "pt")) };
   }
 
-  private async build(org: OrganizationId, day: string, today: string, canPrivate: boolean) {
-    const from = plus(day, -(WEEK_DAYS - 1));
+  /**
+   * Só o dia de hoje (sem a semana): o mesmo apuramento e as mesmas regras,
+   * com ~7× menos trabalho por pessoa. Usado pelo Dashboard executivo.
+   */
+  async today(org: OrganizationId, viewer: OverviewViewer): Promise<Pick<Overview, "date" | "today" | "generatedAt" | "people" | "holidays">> {
+    const today = await this.sources.today(org);
+    const key = `${org}|${today}|${viewer.canPrivate ? 1 : 0}|day`;
+    let hit = this.cache.get(key);
+    if (!hit || this.now() - hit.at >= CACHE_MS) {
+      hit = { at: this.now(), value: this.build(org, today, today, viewer.canPrivate, 1) };
+      this.cache.set(key, hit);
+      hit.value.catch(() => this.cache.delete(key));
+    }
+    const base = await hit.value;
+    const visible: PersonOverview[] = [];
+    for (const p of base.people) if (await viewer.canSee(p.employeeId, today)) visible.push(p);
+    return { date: base.date, today: base.today, generatedAt: base.generatedAt, people: visible, holidays: base.holidays };
+  }
+
+  private async build(org: OrganizationId, day: string, today: string, canPrivate: boolean, span: number = WEEK_DAYS) {
+    const from = plus(day, -(span - 1));
     const [employees, locations, absences, pending, holidays] = await Promise.all([
       this.sources.employees(org),
       this.sources.locations(org),

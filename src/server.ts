@@ -1233,7 +1233,8 @@ const dashboardModule = createDashboardModule({
       canSee,
       canSeeBirthdays: field("personal.birth_date").view,
       people: async () => {
-        const o = await overviewModule.overview.get(org, { canSee, canPrivate }, null);
+        // Só hoje (sem a semana do painel): muito menos apuramento por pessoa.
+        const o = await overviewModule.overview.today(org, { canSee, canPrivate });
         return {
           today: o.date,
           holidays: o.holidays,
