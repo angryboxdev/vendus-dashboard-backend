@@ -53,18 +53,22 @@ export class DashboardUseCases {
     return this.cache.getOrLoad({ org, metric: "PEOPLE", date: "today", viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () => viewer.people());
   }
 
-  async snapshot(org: OrganizationId, viewer: DashboardViewer, locationId: string | null): Promise<OperationalSnapshot & { cacheHits: number }> {
+  async snapshot(org: OrganizationId, viewer: DashboardViewer, locationId: string | null): Promise<OperationalSnapshot & { cacheHits: number; timings: Record<string, number> }> {
     const partial: OperationalSnapshot["partial"] = [];
+    const timings: Record<string, number> = {};
+    const timed = <T>(name: string, p: Promise<T>): Promise<T> => {
+      const t0 = Date.now();
+      return p.finally(() => (timings[name] = Date.now() - t0));
+    };
     // Só as pessoas são indispensáveis; pedidos e cobertura degradam com aviso.
     const [peopleRes, requestsRes] = await Promise.all([
-      this.people(org, viewer),
-      this.cache
-        .getOrLoad({ org, metric: "REQUESTS", date: "today", viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () => viewer.requests())
+      timed("people", this.people(org, viewer)),
+      timed("requests", this.cache.getOrLoad({ org, metric: "REQUESTS", date: "today", viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () => withBudget(viewer.requests(), this.coverageBudgetMs)))
         .catch((e): { value: DashboardRequest[]; hit: boolean } => (this.onSourceError("requests", e), partial.push("requests"), { value: [], hit: false })),
     ]);
     const { today, people: all, holidays } = peopleRes.value;
     const tomorrow = this.sources.tomorrowOf(today);
-    const coverageRes = await this.cache
+    const coverageRes = await timed("coverage", this.cache
       .getOrLoad({ org, metric: "COVERAGE", date: today, viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () =>
         withBudget(
           this.sources.coverage(
@@ -76,7 +80,7 @@ export class DashboardUseCases {
           this.coverageBudgetMs,
         ),
       )
-      .catch((e): { value: CoverageGap[]; hit: boolean } => (this.onSourceError("coverage", e), partial.push("coverage"), { value: [], hit: false }));
+      .catch((e): { value: CoverageGap[]; hit: boolean } => (this.onSourceError("coverage", e), partial.push("coverage"), { value: [], hit: false })));
     const known = new Map(all.filter((p) => p.locationId).map((p) => [p.locationId!, p.locationName ?? "—"]));
     if (locationId && !known.has(locationId)) throw new DashboardValidationError("Local fora do seu âmbito.");
     const inCtx = <T extends { locationId?: string | null }>(xs: T[]) => (locationId ? xs.filter((x) => x.locationId === locationId) : xs);
@@ -101,6 +105,7 @@ export class DashboardUseCases {
       locations,
       holidays,
       partial,
+      timings,
       cacheHits: [peopleRes, requestsRes, coverageRes].filter((r) => r.hit).length,
     };
   }

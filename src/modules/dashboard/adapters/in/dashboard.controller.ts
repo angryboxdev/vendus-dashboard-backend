@@ -29,10 +29,11 @@ export function createDashboardRouter(uc: DashboardUseCases, viewerOf: (req: Req
     const started = Date.now();
     const out = await run(async () => uc.snapshot(req.auth!.orgId, await viewerOf(req), q(req, "locationId") || null));
     const ms = Date.now() - started;
-    const { cacheHits, ...snapshot } = out;
+    const { cacheHits, timings, ...snapshot } = out;
     res.setHeader("Cache-Control", "no-store");
-    res.setHeader("Server-Timing", `snapshot;dur=${ms}, cache;desc="hits ${cacheHits}/3"`);
-    log("info", "dashboard.snapshot", { ms, cacheHits, context: snapshot.context.type, units: snapshot.locations.length });
+    // Tempo total e por fonte (visível no separador Rede do browser e no log).
+    res.setHeader("Server-Timing", [`snapshot;dur=${ms}`, ...Object.entries(timings).map(([k, v]) => `${k};dur=${v}`), `cache;desc="hits ${cacheHits}/3"`].join(", "));
+    log("info", "dashboard.snapshot", { ms, ...timings, cacheHits, context: snapshot.context.type, units: snapshot.locations.length, people: snapshot.team.total, partial: snapshot.partial });
     res.json(snapshot);
   });
   r.get("/novo-rh/dashboard/team", async (req, res) => {
