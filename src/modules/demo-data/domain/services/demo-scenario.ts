@@ -88,3 +88,63 @@ export function planScenario(employees: ScenarioEmployee[], schedules: Pick<Demo
 
 /** Chave do gerador a partir do e-mail fictício (`nome.apelido.<chave>@demo.invalid`). */
 export const keyFromEmail = (email: string | null) => (email?.endsWith("@demo.invalid") ? (email.split("@")[0]!.split(".").at(-1) ?? null) : null);
+
+/**
+ * Enriquecimento da demonstração (pedido do utilizador, 2026-10-13, para
+ * apresentações): o mês anterior fechado (fecho, assiduidade), regras de
+ * alerta, mais pedidos pendentes e aniversários fictícios (alguns já nas
+ * próximas semanas). Puro e idempotente do lado de quem aplica (só cria o que
+ * falta).
+ */
+export interface EnrichmentPlan {
+  /** Mês anterior completo, a fechar se ainda não houver período nessas datas. */
+  closePeriod: { startDate: string; endDate: string };
+  alertRules: { kind: "pending_absence" | "pending_correction" | "pending_custom_request" | "pending_swap"; thresholdDays: number; slaHours: number }[];
+  /** Mais pedidos de férias à espera (feitos "pelo colaborador"), no futuro. */
+  extraPending: { employeeId: string; startDate: string; endDate: string }[];
+  /** Data de nascimento fictícia (o ano é inventado; só dia/mês aparecem no Dashboard). */
+  birthDates: { employeeId: string; birthDate: string }[];
+}
+
+const hash = (s: string) => {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return h >>> 0;
+};
+
+export function planEnrichment(employees: ScenarioEmployee[], today: string): EnrichmentPlan {
+  const t = DateTime.fromISO(today, { zone: "utc" });
+  const prev = t.minus({ months: 1 });
+  const closePeriod = { startDate: prev.startOf("month").toISODate()!, endDate: prev.endOf("month").toISODate()! };
+  const sorted = [...employees].sort((a, b) => a.key.localeCompare(b.key));
+  // Pedidos extra a partir de daqui a 3 semanas (não colidem com os do cenário base).
+  const extraPending = sorted
+    .filter((_, i) => i % 4 === 3)
+    .slice(0, 5)
+    .map((e, i) => {
+      const start = weekday(plus(today, 21 + i * 4));
+      return { employeeId: e.id, startDate: start, endDate: plus(start, i % 2 ? 4 : 1) };
+    });
+  // Aniversários: os primeiros seis nas próximas semanas; os outros espalhados pelo ano.
+  const soon = [0, 2, 5, 9, 14, 21];
+  const birthDates = sorted.map((e, i) => {
+    const h = hash(e.key);
+    const year = 1975 + (h % 26);
+    const md = i < soon.length ? t.plus({ days: soon[i]! }) : t.startOf("year").plus({ days: h % 365 });
+    const mm = md.toFormat("MM");
+    // 29/02 só em ano bissexto: num ano comum passa a 28/02.
+    const dd = mm === "02" && md.toFormat("dd") === "29" && year % 4 !== 0 ? "28" : md.toFormat("dd");
+    return { employeeId: e.id, birthDate: `${year}-${mm}-${dd}` };
+  });
+  return {
+    closePeriod,
+    alertRules: [
+      { kind: "pending_absence", thresholdDays: 0, slaHours: 48 },
+      { kind: "pending_correction", thresholdDays: 0, slaHours: 24 },
+      { kind: "pending_custom_request", thresholdDays: 0, slaHours: 72 },
+      { kind: "pending_swap", thresholdDays: 0, slaHours: 24 },
+    ],
+    extraPending,
+    birthDates,
+  };
+}
