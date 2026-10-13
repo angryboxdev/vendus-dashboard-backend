@@ -3,11 +3,11 @@ import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import { DemoOrgError, type DemoOrg } from "../../domain/entities/demo-org.js";
 import type { DemoLivePort, DemoOrgRepositoryPort, DemoOrgSupportPort, DemoScenarioPort, DemoSeedPort } from "../../domain/ports/out/demo-org.ports.js";
 import { generateDemoDataset, generatePunches, PUNCH_SEGMENT } from "../../domain/services/demo-dataset.generator.js";
-import { keyFromEmail, planScenario } from "../../domain/services/demo-scenario.js";
+import { keyFromEmail, planEnrichment, planScenario } from "../../domain/services/demo-scenario.js";
 
 const SEED = 20261012;
 const EMPLOYEES_PER_CENTER = 5;
-/** Marcações mantidas em dia: últimos 30 dias até agora. */
+/** Marcações mantidas em dia: últimos 30 dias (e sempre o mês anterior inteiro, para o fecho) até agora. */
 const WINDOW_DAYS = 30;
 /** Cache curto da ligação real → demo (lida em cada pedido em modo Demonstração). */
 const CACHE_MS = 60_000;
@@ -105,18 +105,21 @@ export class DemoOrgUseCases {
     if (noPhoto.length) await this.live.setPhotos(demo, noPhoto);
 
     let scenario = false;
+    const people = dataset.employees
+      .map((e) => ({ e, row: byKey.get(e.key) }))
+      .filter((x) => x.row)
+      .map(({ e, row }) => ({ id: row!.id, key: e.key, locationId: row!.locationId, scheduleName: scheduleName.get(e.scheduleKey)! }));
     if (!(await this.scenario.hasScenario(demo))) {
       await this.live.ensureVacationType(demo, actor.email);
-      const people = dataset.employees
-        .map((e) => ({ e, row: byKey.get(e.key) }))
-        .filter((x) => x.row)
-        .map(({ e, row }) => ({ id: row!.id, key: e.key, locationId: row!.locationId, scheduleName: scheduleName.get(e.scheduleKey)! }));
       const schedules = dataset.schedules.filter((s, i, a) => a.findIndex((x) => x.name === s.name) === i);
       await this.scenario.build(demo, actor, planScenario(people, schedules, today));
       scenario = true;
     }
 
-    const from = DateTime.fromISO(today, { zone: "utc" }).minus({ days: WINDOW_DAYS }).toISODate()!;
+    const t = DateTime.fromISO(today, { zone: "utc" });
+    const window = t.minus({ days: WINDOW_DAYS });
+    const prevMonth = t.minus({ months: 1 }).startOf("month");
+    const from = (prevMonth < window ? prevMonth : window).toISODate()!;
     const nowUtc = new Date(this.now()).toISOString();
     const punches = generatePunches({ seed: SEED, employees: dataset.employees, schedules: dataset.schedules, from, to: today, nowUtc });
     const [existing, absences] = await Promise.all([this.live.existingEventIds(demo, `${DateTime.fromISO(from, { zone: "utc" }).minus({ days: 1 }).toISODate()}T00:00:00.000Z`), this.live.absenceDays(demo, from, today)]);
@@ -128,6 +131,12 @@ export class DemoOrgUseCases {
       toInsert.push({ employeeId: row.id, occurredAt: p.atUtc, segmentType: PUNCH_SEGMENT[p.kind], clientEventId: p.clientEventId, locationId: row.locationId });
     }
     const inserted = toInsert.length ? await this.live.insertPunches(demo, toInsert) : 0;
-    return { punches: inserted, scenario };
+
+    // Enriquecimento para apresentações (só o que falta): aniversários, alertas, mais pedidos, mês anterior fechado.
+    const plan = planEnrichment(people, today);
+    const noBirth = plan.birthDates.filter((b) => !rows.find((r) => r.id === b.employeeId)?.birthDate);
+    if (noBirth.length) await this.live.setBirthDates(demo, noBirth.map((b) => ({ id: b.employeeId, birthDate: b.birthDate })));
+    const enriched = await this.scenario.enrich(demo, actor, plan);
+    return { punches: inserted, scenario, enriched };
   }
 }

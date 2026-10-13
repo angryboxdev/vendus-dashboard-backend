@@ -3,7 +3,7 @@ import type { DemoDataset } from "../../domain/entities/demo-dataset.js";
 import type { DemoOrg } from "../../domain/entities/demo-org.js";
 import type { DemoLivePort, DemoOrgRepositoryPort, DemoOrgSupportPort, DemoScenarioPort, DemoSeedPort } from "../../domain/ports/out/demo-org.ports.js";
 import { generateDemoDataset } from "../../domain/services/demo-dataset.generator.js";
-import type { ScenarioPlan } from "../../domain/services/demo-scenario.js";
+import type { ScenarioPlan , EnrichmentPlan } from "../../domain/services/demo-scenario.js";
 
 export class FakeDemoOrgRepository implements DemoOrgRepositoryPort {
   orgs = new Map<string, { name: string; isDemo: boolean; demoOf: string | null; nif: string }>([["org-real", { name: "Mezza", isDemo: false, demoOf: null, nif: "500000000" }]]);
@@ -49,9 +49,13 @@ export class FakeDemoLive implements DemoLivePort {
   absences: { employeeId: string; startDate: string; endDate: string }[] = [];
   vacationEnsured = 0;
   photos = new Map<string, string>();
+  births = new Map<string, string>();
   async employees() {
     const ds = generateDemoDataset({ seed: 20261012, employeesPerCenter: 5, from: "2026-10-12", to: "2026-10-12" });
-    return ds.employees.map((e) => ({ id: `db-${e.key}`, email: e.email, locationId: `loc-${e.centerKey}`, photoPath: this.photos.get(`db-${e.key}`) ?? null }));
+    return ds.employees.map((e) => ({ id: `db-${e.key}`, email: e.email, locationId: `loc-${e.centerKey}`, photoPath: this.photos.get(`db-${e.key}`) ?? null, birthDate: this.births.get(`db-${e.key}`) ?? null }));
+  }
+  async setBirthDates(_o: OrganizationId, rows: { id: string; birthDate: string }[]) {
+    for (const r of rows) if (!this.births.has(r.id)) this.births.set(r.id, r.birthDate);
   }
   async setPhotos(_o: OrganizationId, rows: { id: string; photoPath: string }[]) {
     for (const r of rows) if (!this.photos.has(r.id)) this.photos.set(r.id, r.photoPath);
@@ -73,6 +77,12 @@ export class FakeDemoLive implements DemoLivePort {
 
 export class FakeDemoScenario implements DemoScenarioPort {
   plans: ScenarioPlan[] = [];
+  enrichments: EnrichmentPlan[] = [];
+  async enrich(_o: OrganizationId, _a: unknown, plan: EnrichmentPlan) {
+    const first = this.enrichments.length === 0;
+    this.enrichments.push(plan);
+    return { periodClosed: first, rules: first ? plan.alertRules.length : 0, pending: first ? plan.extraPending.length : 0, alerts: 0 };
+  }
   constructor(private readonly live: FakeDemoLive) {}
   async hasScenario() {
     return this.plans.length > 0;

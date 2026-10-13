@@ -146,8 +146,8 @@ function hashSeed(text: string): number {
 /**
  * Marcações de um período, reprodutíveis por colaborador e dia (para se
  * poderem acrescentar mais tarde sem duplicar — o `clientEventId` é fixo).
- * A maioria entra a horas (até 10 min antes); ~12% chega 6–40 min tarde;
- * ~5% falta; ~3% esquece a saída; turnos de 6 h+ fazem muitas vezes uma
+ * A maioria entra a horas (até 10 min antes); ~22% chega 6–40 min tarde;
+ * ~10% falta (mais exceções para apresentações — 2026-10-13); ~3% esquece a saída; turnos de 6 h+ fazem muitas vezes uma
  * pausa de 20–40 min a meio. Com `nowUtc`, nada depois desse instante.
  */
 export function generatePunches(input: { seed: number; employees: DemoEmployee[]; schedules: DemoSchedule[]; from: string; to: string; nowUtc?: string }): DemoPunch[] {
@@ -163,11 +163,11 @@ export function generatePunches(input: { seed: number; employees: DemoEmployee[]
       if (!s.weekdays.includes(d.weekday)) continue;
       const workDate = d.toISODate()!;
       const rnd = createRandom(hashSeed(`${input.seed}|${e.key}|${workDate}`));
-      if (rnd() < 0.05) continue; // falta — aparece no Painel e na Assiduidade
+      if (rnd() < 0.1) continue; // falta — aparece no Painel e na Assiduidade
       const start = DateTime.fromISO(`${workDate}T${s.start}`, { zone });
       let end = DateTime.fromISO(`${workDate}T${s.end}`, { zone });
       if (s.endsNextDay) end = end.plus({ days: 1 });
-      const late = rnd() < 0.12;
+      const late = rnd() < 0.22;
       const inAt = late ? start.plus({ minutes: 6 + Math.floor(rnd() * 35) }) : start.minus({ minutes: Math.floor(rnd() * 11) });
       const outAt = end.plus({ minutes: Math.floor(rnd() * 26) - 5 });
       const forgotOut = rnd() < 0.03;

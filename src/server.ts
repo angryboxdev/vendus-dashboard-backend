@@ -403,6 +403,47 @@ const demoOrgModule = createDemoOrgModule({
       }
       return { rosters: plan.rosters.length, approved, pending };
     },
+    // Enriquecimento para apresentações (só o que falta), pelos casos de uso dos módulos donos.
+    enrich: async (org, actor, plan) => {
+      const out = { periodClosed: false, rules: 0, pending: 0, alerts: 0 };
+      const step = async (name: string, fn: () => Promise<void>) => {
+        try {
+          await fn();
+        } catch (e) {
+          console.error(`[demo] enriquecimento (${name}) falhou:`, e instanceof Error ? e.message : e);
+        }
+      };
+      await step("pedidos", async () => {
+        const vacation = (await absencesModule.absences.listTypes(org)).find((t) => t.category === "vacation" && !t.archived);
+        if (!vacation) return;
+        const pendingNow = (await absencesModule.absences.listRequests(org, { status: "pending" }, false, "sistema")).length;
+        for (const p of plan.extraPending.slice(0, Math.max(0, 5 - pendingNow))) {
+          try {
+            await absencesModule.absences.createRequest(org, { userId: `demo-colaborador:${p.employeeId}`, email: "colaborador@demo.invalid" }, { ...p, typeId: vacation.id, startTime: null, endTime: null, halfDay: false, comment: "Pedido de férias (demonstração)", attachmentDocumentId: null }, "self");
+            out.pending++;
+          } catch {
+            /* datas recusadas pelas regras: segue */
+          }
+        }
+      });
+      await step("alertas", async () => {
+        if (!(await alertsModule.alerts.listRules(org)).length)
+          for (const r of plan.alertRules) {
+            await alertsModule.alerts.createRule(org, actor, { kind: r.kind, thresholdDays: r.thresholdDays, owner: "admins", slaHours: r.slaHours, escalateTo: null, enabled: true });
+            out.rules++;
+          }
+        out.alerts = (await alertsModule.alerts.evaluate(org)).opened;
+      });
+      await step("fecho", async () => {
+        const exists = (await periodsModule.periods.listPeriods(org)).some((p) => p.scopeType === "organization" && p.startDate <= plan.closePeriod.endDate && p.endDate >= plan.closePeriod.startDate);
+        if (exists) return;
+        const p = await periodsModule.periods.createPeriod(org, actor, { scopeType: "organization", scopeId: null, ...plan.closePeriod });
+        const { pending } = await periodsModule.periods.precheck(org, p.id);
+        await periodsModule.periods.close(org, actor, p.id, pending.length ? "Fecho de demonstração com exceções (dados fictícios)." : null);
+        out.periodClosed = true;
+      });
+      return out;
+    },
   },
   onError: (e) => console.error("[demo] atualização da demonstração falhou:", e instanceof Error ? e.message : e),
 });

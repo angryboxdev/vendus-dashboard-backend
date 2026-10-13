@@ -73,9 +73,18 @@ export class SupabaseDemoLive implements DemoLivePort {
   }
 
   async employees(demoOrg: OrganizationId) {
-    const { data, error } = (await this.scoped(demoOrg).table("hr_employees").select("id, email, primary_location_id, photo_storage_path").eq("status", "active")) as { data: Row[] | null; error: { message: string } | null };
+    const { data, error } = (await this.scoped(demoOrg).table("hr_employees").select("id, email, primary_location_id, photo_storage_path, birth_date").eq("status", "active")) as { data: Row[] | null; error: { message: string } | null };
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => ({ id: String(r.id), email: r.email ? String(r.email) : null, locationId: r.primary_location_id ? String(r.primary_location_id) : null, photoPath: r.photo_storage_path ? String(r.photo_storage_path) : null }));
+    return (data ?? []).map((r) => ({ id: String(r.id), email: r.email ? String(r.email) : null, locationId: r.primary_location_id ? String(r.primary_location_id) : null, photoPath: r.photo_storage_path ? String(r.photo_storage_path) : null, birthDate: r.birth_date ? String(r.birth_date).slice(0, 10) : null }));
+  }
+
+  async setBirthDates(demoOrg: OrganizationId, rows: { id: string; birthDate: string }[]) {
+    await this.guard(demoOrg);
+    const q = this.scoped(demoOrg);
+    for (const r of rows) {
+      const { error } = (await q.table("hr_employees").update({ birth_date: r.birthDate }).eq("id", r.id).is("birth_date", null)) as { error: { message: string } | null };
+      if (error) throw new Error(`Aniversários de demonstração: ${error.message}`);
+    }
   }
 
   async setPhotos(demoOrg: OrganizationId, rows: { id: string; photoPath: string }[]) {

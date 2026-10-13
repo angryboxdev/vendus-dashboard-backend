@@ -3,7 +3,7 @@ import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { buildSeedPlan } from "../../adapters/out/demo-seed.rows.js";
 import { DemoOrgUseCases } from "../../application/use-cases/demo-org.use-cases.js";
 import { generateDemoDataset, generatePunches } from "../../domain/services/demo-dataset.generator.js";
-import { keyFromEmail, planScenario } from "../../domain/services/demo-scenario.js";
+import { keyFromEmail, planEnrichment, planScenario } from "../../domain/services/demo-scenario.js";
 import { FakeDemoLive, FakeDemoOrgRepository, FakeDemoScenario, FakeDemoSeeder, FakeDemoSupport } from "../fakes/fake-demo-org.js";
 
 const REAL = mintOrganizationId("org-real");
@@ -148,5 +148,32 @@ describe("Plano de linhas da organização demo", () => {
   test("horário noturno marcado como night, faixas por dia ISO", () => {
     expect(plan.scheduleVersions.some((v) => v.night === true)).toBe(true);
     for (const v of plan.scheduleVersions) for (const k of Object.keys(v.days as object)) expect(["1", "2", "3", "4", "5", "6", "7"]).toContain(k);
+  });
+});
+
+describe("Demonstração mais rica (apresentações)", () => {
+  test("plano: mês anterior a fechar, regras de alerta, pedidos extra no futuro e aniversários (seis nas próximas 3 semanas)", () => {
+    const people = Array.from({ length: 20 }, (_, i) => ({ id: `e${i}`, key: `t1-c1-e${String(i).padStart(3, "0")}`, locationId: "l1", scheduleName: "Manhã" }));
+    const p = planEnrichment(people, "2026-10-13");
+    expect(p.closePeriod).toEqual({ startDate: "2026-09-01", endDate: "2026-09-30" });
+    expect(p.alertRules.map((r) => r.kind)).toContain("pending_absence");
+    expect(p.extraPending.length).toBeGreaterThan(0);
+    expect(p.extraPending.every((x) => x.startDate > "2026-11-02")).toBe(true);
+    const soon = p.birthDates.filter((b) => {
+      const md = b.birthDate.slice(5);
+      return md >= "10-13" && md <= "11-03";
+    });
+    expect(soon.length).toBeGreaterThanOrEqual(6);
+    expect(p.birthDates.every((b) => /^\d{4}-\d{2}-\d{2}$/.test(b.birthDate) && Number(b.birthDate.slice(0, 4)) < 2005)).toBe(true);
+    expect(p.birthDates.some((b) => b.birthDate.endsWith("-02-29") && Number(b.birthDate.slice(0, 4)) % 4 !== 0)).toBe(false);
+  });
+
+  test("refresh: marca aniversários a quem não tem e pede o enriquecimento (só cria o que falta do lado de quem aplica)", async () => {
+    const { repo, live, scenario, uc } = setup();
+    repo.orgs.set("demo-x", { name: "Demo — Demonstração", isDemo: true, demoOf: "org-real", nif: "DEMO-Y" });
+    await uc.refresh(REAL, admin, { force: true });
+    expect(live.births.size).toBe((await live.employees()).length);
+    expect(scenario.enrichments).toHaveLength(1);
+    expect(scenario.enrichments[0]!.closePeriod.startDate).toBe("2026-09-01");
   });
 });

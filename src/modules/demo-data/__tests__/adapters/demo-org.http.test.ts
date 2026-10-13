@@ -68,6 +68,13 @@ describe("Modo Demonstração — /api/novo-rh/demo e cabeçalho X-Novo-RH-Mode"
     expect((await create()).status).toBe(409);
   });
 
+  test("atualizar dados fictícios: um pedido com Idempotency-Key responde 200 (não 409 'ainda a ser processado')", async () => {
+    expect((await create()).status).toBe(201);
+    const r = await fetch(`${base}/novo-rh/demo/refresh`, { method: "POST", headers: { ...demo, "Idempotency-Key": `k-${++n}` } });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ skipped: false });
+  });
+
   test("não-Admin: não cria e não entra em modo Demonstração", async () => {
     isAdmin = false;
     expect((await create()).status).toBe(403);
