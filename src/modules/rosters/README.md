@@ -49,7 +49,7 @@ time-base (`plannedDays`) e pede o recálculo da assiduidade a cada publicação
 
 ### Input
 
-- `createRostersRouter` → `/api/novo-rh/rosters/*` (inclui `GET /summary?from&to`: visão macro — escalas ativas com pessoas no período, por publicar e última publicação) (`hr.schedules`, Idempotency-Key obrigatório) e `/api/me/roster*` (os meus turnos publicados, trocas).
+- `createRostersRouter` → `/api/novo-rh/rosters/*` (inclui `GET /summary?from&to`: visão macro — escalas ativas com pessoas no período, por publicar e última publicação); `POST /:id/clear-pending` (limpar numa só instrução os turnos nunca publicados de um colaborador no período; devolve os retirados) e `POST /:id/shifts/restore` (repor turnos pendentes retirados — o "desfazer" do ecrã; com a regra de sobreposição) (`hr.schedules`, Idempotency-Key obrigatório) e `/api/me/roster*` (os meus turnos publicados, trocas).
 
 ### Output
 

@@ -219,3 +219,39 @@ describe("Escalas — sobreposição bloqueia já no rascunho", () => {
     await expect(uc.summary(ORG, "2026-10-25", "2026-10-19")).rejects.toBeInstanceOf(RosterValidationError);
   });
 });
+
+describe("Escalas — limpar pendentes da semana e repor (desfazer)", () => {
+  test("limpa só os pendentes do colaborador, desta escala e período; publicados ficam; repor devolve-os", async () => {
+    const { uc, repo } = setup();
+    const { roster, manha, tarde } = await rosterWithTemplates(uc);
+    const other = await uc.createRoster(ORG, BOSS, { name: "Loja Braga", targetType: "location", targetId: "22222222-2222-4222-8222-222222222222" });
+    const published = await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-19", manha.id));
+    await uc.publish(ORG, BOSS, roster.id, { reason: null, confirm: true });
+    const a = await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-20", manha.id));
+    const b = await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-21", tarde.id));
+    const nextWeek = await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-27", manha.id));
+    const otherEmployee = await uc.addShift(ORG, BOSS, roster.id, shift("e2", "2026-10-20", manha.id));
+    const otherRoster = await uc.addShift(ORG, BOSS, other.id, shift("e1", "2026-10-22", manha.id));
+
+    const { removed } = await uc.clearPending(ORG, BOSS, roster.id, { employeeId: "e1", from: "2026-10-19", to: "2026-10-25" });
+    expect(removed.map((s) => s.id).sort()).toEqual([a.shift.id, b.shift.id].sort());
+    const alive = (id: string) => !repo.shifts.find((s) => s.id === id)!.deleted;
+    expect([published.shift.id, nextWeek.shift.id, otherEmployee.shift.id, otherRoster.shift.id].every(alive)).toBe(true);
+
+    const { restored } = await uc.restoreShifts(ORG, BOSS, roster.id, removed.map((s) => s.id));
+    expect(restored).toHaveLength(2);
+    expect([a.shift.id, b.shift.id].every(alive)).toBe(true);
+    // Refazer só com os mesmos ids.
+    expect((await uc.clearPending(ORG, BOSS, roster.id, { employeeId: "e1", from: "2026-10-19", to: "2026-10-25", shiftIds: [a.shift.id] })).removed.map((s) => s.id)).toEqual([a.shift.id]);
+  });
+
+  test("repor um turno que agora se sobrepõe a outro é recusado; período inválido é 400", async () => {
+    const { uc } = setup();
+    const { roster, manha } = await rosterWithTemplates(uc);
+    const a = await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-20", manha.id));
+    await uc.deleteShift(ORG, BOSS, a.shift.id, { reason: null, confirm: false });
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-20", manha.id));
+    await expect(uc.restoreShifts(ORG, BOSS, roster.id, [a.shift.id])).rejects.toBeInstanceOf(RosterBlockedError);
+    await expect(uc.clearPending(ORG, BOSS, roster.id, { employeeId: "e1", from: "2026-10-25", to: "2026-10-19" })).rejects.toBeInstanceOf(RosterValidationError);
+  });
+});

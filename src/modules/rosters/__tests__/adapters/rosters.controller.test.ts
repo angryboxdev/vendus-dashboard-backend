@@ -75,6 +75,18 @@ describe("API /api/novo-rh/rosters", () => {
     expect(summary).toEqual([expect.objectContaining({ roster: expect.objectContaining({ id: roster.id }), employeeIds: ["e1"], pending: 1 })]);
     expect((await fetch(`${base}/summary?from=x&to=y`)).status).toBe(400);
   });
+
+  test("POST /:id/clear-pending retira os pendentes numa só chamada; POST /:id/shifts/restore repõe-os", async () => {
+    const roster = await (await send("POST", "", { name: "Loja", targetType: "location", targetId: "11111111-1111-4111-8111-111111111111" })).json();
+    await send("POST", `/${roster.id}/shifts`, { employeeId: "e1", workDate: "2026-10-19", segments: [{ start: "10:00", end: "14:00" }] });
+    await send("POST", `/${roster.id}/shifts`, { employeeId: "e1", workDate: "2026-10-20", segments: [{ start: "10:00", end: "14:00" }] });
+    const cleared = await send("POST", `/${roster.id}/clear-pending`, { employeeId: "e1", from: "2026-10-19", to: "2026-10-25" });
+    expect(cleared.status).toBe(200);
+    const { removed } = await cleared.json();
+    expect(removed).toHaveLength(2);
+    const restored = await send("POST", `/${roster.id}/shifts/restore`, { shiftIds: removed.map((r: { id: string }) => r.id) });
+    expect((await restored.json()).restored).toHaveLength(2);
+  });
 });
 
 describe("Parâmetros → regras das escalas", () => {

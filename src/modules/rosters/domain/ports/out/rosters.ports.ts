@@ -18,6 +18,15 @@ export interface RostersRepositoryPort {
   insertShifts(org: OrganizationId, rows: (ShiftState & { rosterId: string })[], by: string): Promise<RosterShift[]>;
   updateShift(org: OrganizationId, id: string, patch: Partial<Pick<RosterShift, "kind" | "segments" | "templateId" | "onCall" | "deleted" | "dirty" | "published" | "publishedVersion" | "employeeId">>, by: string): Promise<RosterShift>;
 
+  /**
+   * Retira de uma vez (uma só instrução) os turnos nunca publicados de um
+   * colaborador nesta escala e período (opcionalmente só estes ids).
+   * Devolve os retirados.
+   */
+  clearPending(org: OrganizationId, f: { rosterId: string; employeeId: string; from: string; to: string; ids?: string[] }, by: string): Promise<RosterShift[]>;
+  /** Repõe turnos nunca publicados que tinham sido retirados (desfazer). Devolve os repostos. */
+  restoreShifts(org: OrganizationId, rosterId: string, ids: string[], by: string): Promise<RosterShift[]>;
+
   insertPublication(org: OrganizationId, p: Omit<Publication, "id" | "createdAt">): Promise<Publication>;
   listPublications(org: OrganizationId, rosterId: string): Promise<Publication[]>;
 
