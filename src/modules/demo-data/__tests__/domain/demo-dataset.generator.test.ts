@@ -9,6 +9,15 @@ describe("gerador de dados de demonstração", () => {
     expect(generateDemoDataset({ ...OPTS, seed: 8 }).employees[0]).not.toEqual(generateDemoDataset(OPTS).employees[0]);
   });
 
+  test("foto fictícia por pessoa: ilustração do grupo do nome, a rodar pelo conjunto", () => {
+    const ds = generateDemoDataset(OPTS);
+    const ana = ds.employees.find((e) => e.firstName === "Ana");
+    const rui = ds.employees.find((e) => e.firstName === "Rui");
+    if (ana) expect(ana.photoPath).toMatch(/^demo-avatars\/f-\d{2}\.svg$/);
+    if (rui) expect(rui.photoPath).toMatch(/^demo-avatars\/m-\d{2}\.svg$/);
+    expect(new Set(ds.employees.map((e) => e.photoPath)).size).toBeGreaterThan(12);
+  });
+
   test("2 organizações, centros em PT e ES com fusos diferentes", () => {
     const ds = generateDemoDataset(OPTS);
     expect(ds.tenants).toHaveLength(2);

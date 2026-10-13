@@ -66,6 +66,11 @@ export interface PeopleAuditPort {
   ): Promise<void>;
 }
 
+/** Fotos das fichas: URLs de leitura (assinados, curta duração) por caminho guardado. */
+export interface PeoplePhotoPort {
+  urls(org: OrganizationId, paths: string[]): Promise<Map<string, string>>;
+}
+
 /** "Hoje" no fuso da organização. */
 export interface PeopleClockPort {
   today(org: OrganizationId): Promise<string>;

@@ -52,6 +52,8 @@ export interface DemoEmployee {
   lastName: string;
   email: string;
   hireDate: string;
+  /** Foto fictícia (ilustração CC0 servida pelo frontend em `public/`). */
+  photoPath: string;
   synthetic: true;
 }
 

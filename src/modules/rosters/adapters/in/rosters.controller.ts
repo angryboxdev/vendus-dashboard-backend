@@ -58,6 +58,7 @@ export function createRostersRouter(uc: RostersUseCases, store: IdempotencyStore
   });
 
   r.get(R, async (req, res) => res.json(await uc.listRosters(org(req))));
+  r.get(`${R}/summary`, async (req, res) => res.json(await run(() => uc.summary(org(req), s(req.query.from), s(req.query.to)))));
   r.post(R, async (req, res) => {
     const b = body(req);
     res.status(201).json(await run(() => uc.createRoster(org(req), actorOf(req), { name: s(b.name), targetType: s(b.targetType) as "location" | "group", targetId: s(b.targetId) })));

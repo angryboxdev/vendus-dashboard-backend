@@ -50,6 +50,7 @@ chegam num `Viewer` montado pelo `server.ts` a partir do módulo access.
 ### Output (domain dependencies)
 
 - `PeopleRepositoryPort`, `PeopleAccountPort` (desativar conta ligada), `PeopleAuditPort`, `PeopleClockPort`.
+- `PeoplePhotoPort` — URLs de leitura das fotos (`photo_storage_path`), um pedido por lista; opcional (sem ele, `photoUrl` é null).
 
 ## Adapters
 
@@ -60,12 +61,14 @@ chegam num `Viewer` montado pelo `server.ts` a partir do módulo access.
 ### Output
 
 - `SupabasePeopleRepository`.
+- `SupabasePeoplePhotoAdapter` — URLs assinados (1 h) no bucket privado `hr-photos`; caminhos `demo-avatars/…` (só a organização de demonstração) apontam para ficheiros estáticos do frontend.
 
 ## Design decisions (ADR summary)
 
 - Uma só ficha (`hr_employees`), tabelas novas à volta — ADR-0025.
 - NIF obrigatório só nas escritas do Novo RH (não parte o RH atual); índice único parcial na BD.
 - Contratos: sobreposição recusada na aplicação (409) e por trigger na BD.
+- Foto: a lista e a ficha devolvem `photoUrl` (assinado, curta duração), nunca o caminho guardado; uma foto que falhe a assinar fica só sem foto (a lista não parte). O carregamento da foto continua no RH atual.
 
 ## How to test
 

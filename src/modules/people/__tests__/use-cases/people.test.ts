@@ -121,6 +121,32 @@ describe("Ficha do colaborador (Novo RH, Fase 2)", () => {
   });
 });
 
+describe("Foto da ficha", () => {
+  test("lista e ficha trazem photoUrl assinado (um pedido por lista) e nunca o caminho guardado", async () => {
+    const repo = new FakePeopleRepo();
+    const calls: string[][] = [];
+    const photos = { urls: async (_o: unknown, paths: string[]) => (calls.push(paths), new Map(paths.map((p) => [p, `https://signed/${p}`]))) };
+    const people = new PeopleUseCases(repo, { disableLinkedUser: async () => undefined }, { record: async () => undefined }, { today: async () => "2026-10-11" }, photos);
+    repo.seed({ id: "e1", firstName: "Ana", lastName: "Demo", nif: "123456789", hireDate: "2026-01-05", primaryLocationId: "loc-porto", photoPath: "org/a.jpg" });
+    repo.seed({ id: "e2", firstName: "Rui", lastName: "Demo" });
+    const list = await people.list(ORG, ADMIN, {});
+    expect(list.map((e) => e.photoUrl)).toEqual(["https://signed/org/a.jpg", null]);
+    expect(list[0]).not.toHaveProperty("photoPath");
+    expect(calls).toEqual([["org/a.jpg"]]);
+    expect((await people.get(ORG, ADMIN, "e1")).photoUrl).toBe("https://signed/org/a.jpg");
+    // As respostas de alterar/desativar também trazem a foto (o ecrã guarda-as em cache).
+    const updated = await people.update(ORG, ADMIN, "e1", { phone: "910000000" }, 1, null);
+    expect(updated.photoUrl).toBe("https://signed/org/a.jpg");
+    expect((await people.deactivate(ORG, ADMIN, "e1", "Saída", updated.version)).photoUrl).toBe("https://signed/org/a.jpg");
+  });
+
+  test("sem adapter de fotos, photoUrl é null", async () => {
+    const { repo, people } = setup();
+    repo.seed({ id: "e1", firstName: "Ana", lastName: "Demo", photoPath: "org/a.jpg" });
+    expect((await people.list(ORG, ADMIN, {}))[0]!.photoUrl).toBeNull();
+  });
+});
+
 describe("Contratos, responsáveis, remuneração e campos personalizados", () => {
   const C = { contractType: "permanent" as const, code: null, startDate: "2026-01-01", endDate: null, seniorityDate: null, probationEnd: null, weeklyHours: 40, fte: 1, agreementId: null, remote: false, comment: null };
 

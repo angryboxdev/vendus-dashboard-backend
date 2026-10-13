@@ -13,7 +13,7 @@ import {
 } from "../../domain/entities/employee.js";
 import { PeopleConflictError, PeopleForbiddenError, PeopleNotFoundError, PeopleValidationError } from "../../domain/errors.js";
 import type { EmployeeView, ImportResult, Viewer } from "../../domain/ports/in/people.ports.js";
-import type { PeopleAccountPort, PeopleAuditPort, PeopleClockPort, PeopleRepositoryPort } from "../../domain/ports/out/people.ports.js";
+import type { PeopleAccountPort, PeopleAuditPort, PeopleClockPort, PeoplePhotoPort, PeopleRepositoryPort } from "../../domain/ports/out/people.ports.js";
 import { parseCsv, toCsv } from "../../domain/services/csv.js";
 
 /** Colunas exportáveis (RE-3): só saem as que quem exporta pode ver. */
@@ -75,18 +75,28 @@ export class PeopleUseCases {
     private readonly accounts: PeopleAccountPort,
     private readonly audit: PeopleAuditPort,
     private readonly clock: PeopleClockPort,
+    /** Sem adapter de fotos, `photoUrl` sai sempre null. */
+    private readonly photos: PeoplePhotoPort | null = null,
   ) {}
 
-  view(viewer: Viewer, e: Employee): EmployeeView {
+  view(viewer: Viewer, e: Employee, photoUrl: string | null = null): EmployeeView {
     const hidden: string[] = [];
-    const out: Record<string, unknown> = { ...e };
+    const { photoPath: _path, ...rest } = e;
+    const out: Record<string, unknown> = { ...rest, photoUrl };
     for (const f of EDITABLE_FIELDS) {
       if (!canView(viewer, f)) {
         out[f] = null;
         hidden.push(f);
       }
     }
-    return { ...(out as unknown as Employee), hidden, missing: missingMandatory(e) };
+    return { ...(out as unknown as Omit<EmployeeView, "hidden" | "missing">), hidden, missing: missingMandatory(e) };
+  }
+
+  /** URLs das fotos de uma vez (um pedido em lote ao armazenamento por lista). */
+  private async photoUrls(org: OrganizationId, rows: Employee[]): Promise<Map<string, string>> {
+    const paths = [...new Set(rows.map((e) => e.photoPath).filter((p): p is string => !!p))];
+    if (!this.photos || paths.length === 0) return new Map();
+    return this.photos.urls(org, paths);
   }
 
   private async visible(org: OrganizationId, viewer: Viewer, e: Employee | null): Promise<Employee> {
@@ -97,13 +107,20 @@ export class PeopleUseCases {
   async list(org: OrganizationId, viewer: Viewer, filter: { status?: "active" | "inactive" | "all"; q?: string; locationId?: string }): Promise<EmployeeView[]> {
     const today = await this.clock.today(org);
     const rows = await this.repo.list(org, { status: filter.status ?? "active", ...(filter.q && { q: filter.q }), ...(filter.locationId && { locationId: filter.locationId }) });
-    const out: EmployeeView[] = [];
-    for (const e of rows) if (await viewer.canSee(e.id, today)) out.push(this.view(viewer, e));
-    return out;
+    const seen: Employee[] = [];
+    for (const e of rows) if (await viewer.canSee(e.id, today)) seen.push(e);
+    const urls = await this.photoUrls(org, seen);
+    return seen.map((e) => this.view(viewer, e, (e.photoPath && urls.get(e.photoPath)) ?? null));
+  }
+
+  /** Vista de uma ficha com a foto (também nas respostas de criar/alterar/desativar, para a cache do ecrã não a perder). */
+  private async withPhoto(org: OrganizationId, viewer: Viewer, e: Employee): Promise<EmployeeView> {
+    const urls = await this.photoUrls(org, [e]);
+    return this.view(viewer, e, (e.photoPath && urls.get(e.photoPath)) ?? null);
   }
 
   async get(org: OrganizationId, viewer: Viewer, id: string): Promise<EmployeeView> {
-    return this.view(viewer, await this.visible(org, viewer, await this.repo.get(org, id)));
+    return this.withPhoto(org, viewer, await this.visible(org, viewer, await this.repo.get(org, id)));
   }
 
   private assertEditable(viewer: Viewer, input: EmployeeInput): void {
@@ -134,7 +151,7 @@ export class PeopleUseCases {
     await this.resolveLocation(org, input);
     const created = await this.repo.create(org, { ...input, fullName: fullNameOf(input.firstName, input.lastName, "") });
     await this.audit.record(org, { actor: viewer.actor, action: "people.employee.create", resourceType: "employee", resourceId: created.id, before: null, after: auditSafe(created), reason: null });
-    return this.view(viewer, created);
+    return this.withPhoto(org, viewer, created);
   }
 
   async update(org: OrganizationId, viewer: Viewer, id: string, raw: Record<string, unknown>, expectedVersion: number, reason: string | null): Promise<EmployeeView> {
@@ -164,29 +181,29 @@ export class PeopleUseCases {
       after: auditSafe(Object.fromEntries(changed.map((f) => [f, updated[f]]))),
       reason: reason?.trim() || null,
     });
-    return this.view(viewer, updated);
+    return this.withPhoto(org, viewer, updated);
   }
 
   /** RE-4: desativar mantém os dados, tira o acesso e revoga as sessões da conta ligada. */
   async deactivate(org: OrganizationId, viewer: Viewer, id: string, reason: string, expectedVersion: number): Promise<EmployeeView> {
     const current = await this.visible(org, viewer, await this.repo.get(org, id));
     if (!reason.trim()) throw new PeopleValidationError("O motivo é obrigatório.", "reason");
-    if (current.status === "inactive") return this.view(viewer, current);
+    if (current.status === "inactive") return this.withPhoto(org, viewer, current);
     const updated = await this.repo.setStatus(org, id, { status: "inactive", deactivatedAt: new Date().toISOString(), reason: reason.trim() }, expectedVersion);
     if (!updated) throw new PeopleConflictError("A ficha foi alterada entretanto. Recarregue e tente de novo.", "version_conflict");
     if (current.userId) await this.accounts.disableLinkedUser(org, current.userId, viewer.actor);
     await this.audit.record(org, { actor: viewer.actor, action: "people.employee.deactivate", resourceType: "employee", resourceId: id, before: { status: "active" }, after: { status: "inactive" }, reason: reason.trim() });
-    return this.view(viewer, updated);
+    return this.withPhoto(org, viewer, updated);
   }
 
   async reactivate(org: OrganizationId, viewer: Viewer, id: string, reason: string, expectedVersion: number): Promise<EmployeeView> {
     const current = await this.visible(org, viewer, await this.repo.get(org, id));
     if (!reason.trim()) throw new PeopleValidationError("O motivo é obrigatório.", "reason");
-    if (current.status === "active") return this.view(viewer, current);
+    if (current.status === "active") return this.withPhoto(org, viewer, current);
     const updated = await this.repo.setStatus(org, id, { status: "active", deactivatedAt: null, reason: null }, expectedVersion);
     if (!updated) throw new PeopleConflictError("A ficha foi alterada entretanto. Recarregue e tente de novo.", "version_conflict");
     await this.audit.record(org, { actor: viewer.actor, action: "people.employee.reactivate", resourceType: "employee", resourceId: id, before: { status: "inactive" }, after: { status: "active" }, reason: reason.trim() });
-    return this.view(viewer, updated);
+    return this.withPhoto(org, viewer, updated);
   }
 
   /** RE-3 + RE-34: só colunas que quem exporta pode ver e só colaboradores no seu âmbito. */

@@ -173,3 +173,49 @@ describe("Escalas — casos de uso", () => {
     await expect(repo.bumpVersion(ORG, stale.id, stale.version)).resolves.toBe(false);
   });
 });
+
+describe("Escalas — sobreposição bloqueia já no rascunho", () => {
+  test("o mesmo colaborador não fica com dois turnos à mesma hora (nem noutra escala); turnos seguidos e folgas passam", async () => {
+    const { uc } = setup();
+    const { roster, tarde, manha, noite } = await rosterWithTemplates(uc);
+    const other = await uc.createRoster(ORG, BOSS, { name: "Loja Braga", targetType: "location", targetId: "22222222-2222-4222-8222-222222222222" });
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-19", manha.id));
+    const err = await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-19", manha.id)).catch((e) => e);
+    expect(err).toBeInstanceOf(RosterBlockedError);
+    expect(err.violations[0]).toMatchObject({ rule: "overlap", severity: "block", employeeId: "e1", workDate: "2026-10-19" });
+    await expect(uc.addShift(ORG, BOSS, other.id, shift("e1", "2026-10-19", manha.id))).rejects.toBeInstanceOf(RosterBlockedError);
+    // 08–16 seguido de 16–22 não se sobrepõe; noturno de véspera (22–04) também não toca nas 08h.
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-19", tarde.id));
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-18", noite.id));
+    await uc.addShift(ORG, BOSS, roster.id, { employeeId: "e1", workDate: "2026-10-19", kind: "day_off", templateId: null, segments: [] });
+    // Outro colaborador à mesma hora: sem problema.
+    await uc.addShift(ORG, BOSS, roster.id, shift("e2", "2026-10-19", manha.id));
+  });
+
+  test("alterar para um horário sobreposto é recusado; a si próprio não conta", async () => {
+    const { uc } = setup();
+    const { roster, tarde, manha } = await rosterWithTemplates(uc);
+    const a = await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-20", manha.id));
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-20", tarde.id));
+    await uc.updateShift(ORG, BOSS, a.shift.id, { templateId: manha.id }, { reason: null, confirm: false });
+    await expect(uc.updateShift(ORG, BOSS, a.shift.id, { templateId: tarde.id }, { reason: null, confirm: false })).rejects.toBeInstanceOf(RosterBlockedError);
+  });
+
+  test("atribuição em massa recusa se sobrepõe ao que já existe", async () => {
+    const { uc } = setup();
+    const { roster, manha } = await rosterWithTemplates(uc);
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-21", manha.id));
+    await expect(uc.assignBulk(ORG, BOSS, roster.id, { employeeIds: ["e1"], from: "2026-10-20", to: "2026-10-22", weekdays: [], kind: "shift", templateId: manha.id })).rejects.toBeInstanceOf(RosterBlockedError);
+  });
+
+  test("resumo (visão macro): pessoas no período, por publicar e última publicação", async () => {
+    const { uc } = setup();
+    const { roster, manha } = await rosterWithTemplates(uc);
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-19", manha.id));
+    await uc.addShift(ORG, BOSS, roster.id, shift("e2", "2026-10-19", manha.id));
+    const [row] = await uc.summary(ORG, "2026-10-19", "2026-10-25");
+    expect(row).toMatchObject({ roster: { id: roster.id }, shifts: 2, pending: 2, lastPublishedAt: null });
+    expect(row!.employeeIds.sort()).toEqual(["e1", "e2"]);
+    await expect(uc.summary(ORG, "2026-10-25", "2026-10-19")).rejects.toBeInstanceOf(RosterValidationError);
+  });
+});

@@ -23,7 +23,9 @@ export interface DemoOrgSupportPort {
 /** Dados vivos da organização demo (só leitura + marcações novas). */
 export interface DemoLivePort {
   /** Colaboradores da demo (o e-mail fictício traz a chave do gerador). */
-  employees(demoOrg: OrganizationId): Promise<{ id: string; email: string | null; locationId: string | null }[]>;
+  employees(demoOrg: OrganizationId): Promise<{ id: string; email: string | null; locationId: string | null; photoPath: string | null }[]>;
+  /** Põe a foto fictícia em quem ainda não tem (demos criadas antes das fotos). */
+  setPhotos(demoOrg: OrganizationId, rows: { id: string; photoPath: string }[]): Promise<void>;
   /** `client_event_id` das marcações desde o instante (UTC). */
   existingEventIds(demoOrg: OrganizationId, sinceUtc: string): Promise<Set<string>>;
   /** Ausências aprovadas ou pendentes que tocam o período (não se marca ponto nesses dias). */

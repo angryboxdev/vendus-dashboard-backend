@@ -98,6 +98,12 @@ export class DemoOrgUseCases {
     const byKey = new Map(rows.map((r) => [keyFromEmail(r.email), r]));
     const scheduleName = new Map(dataset.schedules.map((s) => [s.key, s.name]));
 
+    const noPhoto = dataset.employees.flatMap((e) => {
+      const row = byKey.get(e.key);
+      return row && !row.photoPath ? [{ id: row.id, photoPath: e.photoPath }] : [];
+    });
+    if (noPhoto.length) await this.live.setPhotos(demo, noPhoto);
+
     let scenario = false;
     if (!(await this.scenario.hasScenario(demo))) {
       await this.live.ensureVacationType(demo, actor.email);

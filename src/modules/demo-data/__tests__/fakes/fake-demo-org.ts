@@ -48,9 +48,13 @@ export class FakeDemoLive implements DemoLivePort {
   punches: { employeeId: string; occurredAt: string; segmentType: string; clientEventId: string; locationId: string | null }[] = [];
   absences: { employeeId: string; startDate: string; endDate: string }[] = [];
   vacationEnsured = 0;
+  photos = new Map<string, string>();
   async employees() {
     const ds = generateDemoDataset({ seed: 20261012, employeesPerCenter: 5, from: "2026-10-12", to: "2026-10-12" });
-    return ds.employees.map((e) => ({ id: `db-${e.key}`, email: e.email, locationId: `loc-${e.centerKey}` }));
+    return ds.employees.map((e) => ({ id: `db-${e.key}`, email: e.email, locationId: `loc-${e.centerKey}`, photoPath: this.photos.get(`db-${e.key}`) ?? null }));
+  }
+  async setPhotos(_o: OrganizationId, rows: { id: string; photoPath: string }[]) {
+    for (const r of rows) if (!this.photos.has(r.id)) this.photos.set(r.id, r.photoPath);
   }
   async existingEventIds() {
     return new Set(this.punches.map((p) => p.clientEventId));

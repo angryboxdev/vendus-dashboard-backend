@@ -69,6 +69,9 @@ describe("Organização de demonstração (ADR-0034)", () => {
     expect(r).toMatchObject({ skipped: false, scenario: true });
     expect(live.vacationEnsured).toBe(1);
     expect(scenario.plans).toHaveLength(1);
+    // Demos antigas ganham as fotos fictícias; quem já tem foto não muda.
+    expect(live.photos.size).toBe((await live.employees()).length);
+    expect([...live.photos.values()].every((p) => /^demo-avatars\/[fm]-\d{2}\.svg$/.test(p))).toBe(true);
   });
 
   test("só Admin; não cria duas; não cria a partir de uma organização demo", async () => {
