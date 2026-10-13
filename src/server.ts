@@ -117,6 +117,7 @@ app.use(correlationId);
 // Dashboard executivo: invalidação por evento — uma escrita bem-sucedida numa
 // fonte limpa só as métricas afetadas dessa organização (o resto vive do TTL).
 let dashboardCache: DashboardCachePort | null = null;
+let invalidateOverviewToday: ((org: OrganizationId) => void) | null = null;
 const DASHBOARD_INVALIDATION: [RegExp, DashboardMetric[]][] = [
   [/^\/api\/(me\/clock|novo-rh\/attendance)(\/|$)/, ["PEOPLE"]],
   [/^\/api\/novo-rh\/(absences|inbox\/decide)(\/|$)/, ["PEOPLE", "REQUESTS", "COVERAGE"]],
@@ -126,7 +127,12 @@ const DASHBOARD_INVALIDATION: [RegExp, DashboardMetric[]][] = [
 app.use((req, res, next) => {
   if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return next();
   const metrics = DASHBOARD_INVALIDATION.find(([re]) => re.test(req.path))?.[1];
-  if (metrics) res.on("finish", () => res.statusCode < 400 && req.auth?.orgId && dashboardCache?.invalidate(req.auth.orgId, metrics));
+  if (metrics)
+    res.on("finish", () => {
+      if (res.statusCode >= 400 || !req.auth?.orgId) return;
+      dashboardCache?.invalidate(req.auth.orgId, metrics);
+      if (metrics.includes("PEOPLE")) invalidateOverviewToday?.(req.auth.orgId);
+    });
   next();
 });
 
@@ -1247,6 +1253,7 @@ const dashboardModule = createDashboardModule({
   },
 });
 dashboardCache = dashboardModule.cache;
+invalidateOverviewToday = (org) => overviewModule.overview.invalidateToday(org);
 app.use("/api", dashboardModule.router);
 
 // Novo RH → Avisos automáticos (FE-111): regras em Configurações → Notificações; cron de 10 em 10 min.

@@ -204,3 +204,35 @@ describe("Dashboard — resiliência", () => {
     expect(s.partial).toEqual(["coverage"]);
   });
 });
+
+describe("Dashboard — rapidez", () => {
+  test("pessoas a demorar: responde 'a preparar' (sem pendurar) e o pedido seguinte aproveita o cálculo em curso", async () => {
+    const { DashboardWarmingError } = await import("../../application/use-cases/dashboard.use-cases.js");
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const viewer = new FakeViewer("u1", PEOPLE);
+    const real = viewer.people.bind(viewer);
+    viewer.people = async () => (await gate, real());
+    const uc = new DashboardUseCases(new FakeSources(), new FakeLayouts(), new MemoryDashboardCache(), () => {}, 8000, 20);
+    await expect(uc.snapshot(ORG_A, viewer, null)).rejects.toBeInstanceOf(DashboardWarmingError);
+    release();
+    await new Promise((r) => setTimeout(r, 5));
+    expect((await uc.snapshot(ORG_A, viewer, null)).team.total).toBe(5);
+    expect(viewer.peopleCalls).toBe(1);
+  });
+
+  test("depois do TTL serve o último valor já e atualiza em segundo plano; invalidação obriga a recalcular", async () => {
+    let t = 0;
+    const cache = new MemoryDashboardCache(() => t);
+    const key = { org: ORG_A, metric: "PEOPLE" as const, date: "d", viewer: "u", context: "organization" };
+    let n = 0;
+    const load = async () => ++n;
+    expect((await cache.getOrLoad(key, 1000, load)).value).toBe(1);
+    t += 2000;
+    expect((await cache.getOrLoad(key, 1000, load)).value).toBe(1);
+    await new Promise((r) => setTimeout(r, 0));
+    expect((await cache.getOrLoad(key, 1000, load)).value).toBe(2);
+    cache.invalidate(ORG_A, ["PEOPLE"]);
+    expect((await cache.getOrLoad(key, 1000, load)).value).toBe(3);
+  });
+});

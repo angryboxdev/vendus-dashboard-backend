@@ -1,7 +1,7 @@
 import { Router, type Request } from "express";
 import { log } from "../../../../infra/http/correlation.js";
 import { problem } from "../../../../infra/http/problem-details.js";
-import { DashboardForbiddenError, DashboardValidationError, type DashboardUseCases } from "../../application/use-cases/dashboard.use-cases.js";
+import { DashboardForbiddenError, DashboardValidationError, DashboardWarmingError, type DashboardUseCases } from "../../application/use-cases/dashboard.use-cases.js";
 import type { DashboardViewer } from "../../domain/ports/out/dashboard.ports.js";
 
 const q = (req: Request, k: string) => (typeof req.query[k] === "string" ? (req.query[k] as string) : "");
@@ -12,6 +12,7 @@ async function run<T>(fn: () => Promise<T>): Promise<T> {
   } catch (e) {
     if (e instanceof DashboardValidationError) throw problem(400, "validation_error", e.message);
     if (e instanceof DashboardForbiddenError) throw problem(403, "forbidden", e.message);
+    if (e instanceof DashboardWarmingError) throw problem(503, "warming", e.message);
     throw e;
   }
 }

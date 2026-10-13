@@ -10,6 +10,13 @@ export class DashboardForbiddenError extends Error {
     this.name = "DashboardForbiddenError";
   }
 }
+/** Os dados de hoje ainda estão a ser calculados (continuam em segundo plano): tentar de novo daqui a pouco. */
+export class DashboardWarmingError extends Error {
+  constructor() {
+    super("A preparar os dados de hoje. Tente de novo dentro de alguns segundos.");
+    this.name = "DashboardWarmingError";
+  }
+}
 export class DashboardValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -22,6 +29,8 @@ export const LIVE_TTL_MS = 45_000;
 const TEAM_PAGE = 50;
 /** Tempo máximo para a cobertura (muitas pessoas): passado isto, o snapshot sai sem ela. */
 export const COVERAGE_BUDGET_MS = 8_000;
+/** Tempo máximo à espera das pessoas num pedido; o cálculo continua e o próximo pedido aproveita-o. */
+export const PEOPLE_BUDGET_MS = 20_000;
 
 const withBudget = <T>(p: Promise<T>, ms: number): Promise<T> =>
   new Promise<T>((resolve, reject) => {
@@ -46,6 +55,7 @@ export class DashboardUseCases {
     private readonly cache: DashboardCachePort,
     private readonly onSourceError: (source: string, error: unknown) => void = () => {},
     private readonly coverageBudgetMs: number = COVERAGE_BUDGET_MS,
+    private readonly peopleBudgetMs: number = PEOPLE_BUDGET_MS,
   ) {}
 
   private async people(org: OrganizationId, viewer: DashboardViewer) {
@@ -62,7 +72,12 @@ export class DashboardUseCases {
     };
     // Só as pessoas são indispensáveis; pedidos e cobertura degradam com aviso.
     const [peopleRes, requestsRes] = await Promise.all([
-      timed("people", this.people(org, viewer)),
+      timed(
+        "people",
+        withBudget(this.people(org, viewer), this.peopleBudgetMs).catch((e: unknown) => {
+          throw e instanceof Error && e.message.startsWith("timeout") ? new DashboardWarmingError() : e;
+        }),
+      ),
       timed("requests", this.cache.getOrLoad({ org, metric: "REQUESTS", date: "today", viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () => withBudget(viewer.requests(), this.coverageBudgetMs)))
         .catch((e): { value: DashboardRequest[]; hit: boolean } => (this.onSourceError("requests", e), partial.push("requests"), { value: [], hit: false })),
     ]);
