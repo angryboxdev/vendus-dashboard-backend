@@ -1204,8 +1204,13 @@ const dashboardModule = createDashboardModule({
       for (let i = 0; i < inRoster.length; i += 6) {
         await Promise.all(
           inRoster.slice(i, i + 6).map(async (e) => {
-            const [{ days }, planned] = await Promise.all([timeBaseModule.time.theoretical(org, e.id, from, to), rostersModule.rosters.plannedFor(org, e.id, from, to)]);
-            for (const d of days) if (d.minutes > 0 && (d.reason === "schedule" || d.reason === "contract") && !planned.has(d.date) && !absent(e.id, d.date)) gaps.push({ employeeId: e.id, name: e.name, locationId: e.locationId, date: d.date });
+            // Uma pessoa com dados incompletos (ex.: sem horário) não falha a cobertura das outras.
+            try {
+              const [{ days }, planned] = await Promise.all([timeBaseModule.time.theoretical(org, e.id, from, to), rostersModule.rosters.plannedFor(org, e.id, from, to)]);
+              for (const d of days) if (d.minutes > 0 && (d.reason === "schedule" || d.reason === "contract") && !planned.has(d.date) && !absent(e.id, d.date)) gaps.push({ employeeId: e.id, name: e.name, locationId: e.locationId, date: d.date });
+            } catch {
+              /* sem dados para esta pessoa: fica fora da cobertura */
+            }
           }),
         );
       }

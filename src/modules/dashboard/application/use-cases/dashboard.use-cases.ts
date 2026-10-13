@@ -1,6 +1,7 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import { TEAM_CATEGORIES, type DashboardLayout, type DashboardPerson, type OperationalSnapshot, type TeamCategory } from "../../domain/entities/dashboard.js";
 import type { DashboardCachePort, DashboardLayoutRepositoryPort, DashboardSourcesPort, DashboardViewer } from "../../domain/ports/out/dashboard.ports.js";
+import type { CoverageGap, DashboardRequest } from "../../domain/entities/dashboard.js";
 import { attentionItems, mergeLayout, teamCategory, teamCounts, unitRows, validateLayout } from "../../domain/services/snapshot.service.js";
 
 export class DashboardForbiddenError extends Error {
@@ -19,6 +20,17 @@ export class DashboardValidationError extends Error {
 /** TTL da operação ao vivo (presenças, pedidos, cobertura). */
 export const LIVE_TTL_MS = 45_000;
 const TEAM_PAGE = 50;
+/** Tempo máximo para a cobertura (muitas pessoas): passado isto, o snapshot sai sem ela. */
+export const COVERAGE_BUDGET_MS = 8_000;
+
+const withBudget = <T>(p: Promise<T>, ms: number): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`timeout ${ms} ms`)), ms);
+    p.then(
+      (v) => (clearTimeout(t), resolve(v)),
+      (e) => (clearTimeout(t), reject(e)),
+    );
+  });
 const BIRTHDAY_DAYS = 30;
 export const DASHBOARD_KEY = "novo-rh.home";
 
@@ -32,6 +44,8 @@ export class DashboardUseCases {
     private readonly sources: DashboardSourcesPort,
     private readonly layouts: DashboardLayoutRepositoryPort,
     private readonly cache: DashboardCachePort,
+    private readonly onSourceError: (source: string, error: unknown) => void = () => {},
+    private readonly coverageBudgetMs: number = COVERAGE_BUDGET_MS,
   ) {}
 
   private async people(org: OrganizationId, viewer: DashboardViewer) {
@@ -40,20 +54,29 @@ export class DashboardUseCases {
   }
 
   async snapshot(org: OrganizationId, viewer: DashboardViewer, locationId: string | null): Promise<OperationalSnapshot & { cacheHits: number }> {
+    const partial: OperationalSnapshot["partial"] = [];
+    // Só as pessoas são indispensáveis; pedidos e cobertura degradam com aviso.
     const [peopleRes, requestsRes] = await Promise.all([
       this.people(org, viewer),
-      this.cache.getOrLoad({ org, metric: "REQUESTS", date: "today", viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () => viewer.requests()),
+      this.cache
+        .getOrLoad({ org, metric: "REQUESTS", date: "today", viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () => viewer.requests())
+        .catch((e): { value: DashboardRequest[]; hit: boolean } => (this.onSourceError("requests", e), partial.push("requests"), { value: [], hit: false })),
     ]);
     const { today, people: all, holidays } = peopleRes.value;
     const tomorrow = this.sources.tomorrowOf(today);
-    const coverageRes = await this.cache.getOrLoad({ org, metric: "COVERAGE", date: today, viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () =>
-      this.sources.coverage(
-        org,
-        all.map((p) => ({ id: p.employeeId, name: p.name, locationId: p.locationId })),
-        today,
-        tomorrow,
-      ),
-    );
+    const coverageRes = await this.cache
+      .getOrLoad({ org, metric: "COVERAGE", date: today, viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () =>
+        withBudget(
+          this.sources.coverage(
+            org,
+            all.map((p) => ({ id: p.employeeId, name: p.name, locationId: p.locationId })),
+            today,
+            tomorrow,
+          ),
+          this.coverageBudgetMs,
+        ),
+      )
+      .catch((e): { value: CoverageGap[]; hit: boolean } => (this.onSourceError("coverage", e), partial.push("coverage"), { value: [], hit: false }));
     const known = new Map(all.filter((p) => p.locationId).map((p) => [p.locationId!, p.locationName ?? "—"]));
     if (locationId && !known.has(locationId)) throw new DashboardValidationError("Local fora do seu âmbito.");
     const inCtx = <T extends { locationId?: string | null }>(xs: T[]) => (locationId ? xs.filter((x) => x.locationId === locationId) : xs);
@@ -77,6 +100,7 @@ export class DashboardUseCases {
       attention: attentionItems(team, uncoveredToday, requests),
       locations,
       holidays,
+      partial,
       cacheHits: [peopleRes, requestsRes, coverageRes].filter((r) => r.hit).length,
     };
   }

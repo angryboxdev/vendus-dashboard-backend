@@ -90,6 +90,8 @@ export interface OperationalSnapshot {
   /** Resumo por centro (uma só agregação no servidor). */
   locations: UnitRow[];
   holidays: { date: string; name: string }[];
+  /** Fontes que falharam ou demoraram (os widgets delas mostram aviso; o resto funciona). */
+  partial: ("requests" | "coverage")[];
 }
 
 /** Layout pessoal: só metadados visuais. */
