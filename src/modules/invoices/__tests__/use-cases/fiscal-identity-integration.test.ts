@@ -1,3 +1,4 @@
+import { FakeInvoiceAudit } from "../fakes/fake-invoice-audit.js";
 import { FakeInvoiceAmountsWrite } from "../fakes/fake-invoice-amounts-write.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { ConfirmImportedInvoiceUseCase } from "../../application/use-cases/confirm-imported-invoice.use-case.js";
@@ -50,7 +51,7 @@ function deps() {
 describe("Faturas × identidade fiscal partilhada (F1)", () => {
   test("confirmar: documento já no Financeiro → 409 com o original e o rascunho NÃO é finalizado nem gera conta a pagar", async () => {
     const d = deps();
-    const uc = new ConfirmImportedInvoiceUseCase(d.invoiceRepo, d.lineRepo, d.payableWrite, new FakeSupplierCreatePort(), new FakeSupplierHintPort(), notify, d.fiscal, d.suppliers, new FakeInvoiceAmountsWrite());
+    const uc = new ConfirmImportedInvoiceUseCase(d.invoiceRepo, d.lineRepo, d.payableWrite, new FakeSupplierCreatePort(), new FakeSupplierHintPort(), notify, d.fiscal, d.suppliers, new FakeInvoiceAmountsWrite(), new FakeInvoiceAudit());
     const inv = draft();
     await d.invoiceRepo.save(ORG, inv);
     d.fiscal.next = { kind: "existing_finance", identityId: "fid-1", existingInvoiceId: "inv-original" };
@@ -64,7 +65,7 @@ describe("Faturas × identidade fiscal partilhada (F1)", () => {
   test("confirmar: identidade incompleta fica em rascunho; o NIF do fornecedor ligado é usado quando a fatura não o tem", async () => {
     const d = deps();
     d.suppliers.seed([{ id: "sup-1", name: "Fornecedor Teste", nif: "503504564", defaultCostCenterGroupId: null, defaultCostCenterCategoryId: null, defaultFinancialType: null }]);
-    const uc = new ConfirmImportedInvoiceUseCase(d.invoiceRepo, d.lineRepo, d.payableWrite, new FakeSupplierCreatePort(), new FakeSupplierHintPort(), notify, d.fiscal, d.suppliers, new FakeInvoiceAmountsWrite());
+    const uc = new ConfirmImportedInvoiceUseCase(d.invoiceRepo, d.lineRepo, d.payableWrite, new FakeSupplierCreatePort(), new FakeSupplierHintPort(), notify, d.fiscal, d.suppliers, new FakeInvoiceAmountsWrite(), new FakeInvoiceAudit());
     const inv = draft({ supplierNifSnapshot: null });
     await d.invoiceRepo.save(ORG, inv);
     await uc.execute({ organizationId: ORG, id: inv.id, supplierId: "sup-1" });
@@ -78,7 +79,7 @@ describe("Faturas × identidade fiscal partilhada (F1)", () => {
 
   test("completar documento importado no Stock: liga ao mesmo documento e NÃO cria nova revisão de stock (sem duplicar quantidades)", async () => {
     const d = deps();
-    const uc = new ConfirmImportedInvoiceUseCase(d.invoiceRepo, d.lineRepo, d.payableWrite, new FakeSupplierCreatePort(), new FakeSupplierHintPort(), notify, d.fiscal, d.suppliers, new FakeInvoiceAmountsWrite());
+    const uc = new ConfirmImportedInvoiceUseCase(d.invoiceRepo, d.lineRepo, d.payableWrite, new FakeSupplierCreatePort(), new FakeSupplierHintPort(), notify, d.fiscal, d.suppliers, new FakeInvoiceAmountsWrite(), new FakeInvoiceAudit());
     const inv = draft();
     await d.invoiceRepo.save(ORG, inv);
     d.fiscal.next = { kind: "ok", identityId: "fid-stock", linkedToStock: true };
@@ -89,7 +90,7 @@ describe("Faturas × identidade fiscal partilhada (F1)", () => {
 
   test("criar manualmente: conflito de identidade retira a fatura acabada de criar (nada fica finalizado)", async () => {
     const d = deps();
-    const uc = new CreateInvoiceUseCase(d.invoiceRepo, d.lineRepo, d.payableWrite, notify, d.fiscal, d.suppliers, new FakeInvoiceAmountsWrite());
+    const uc = new CreateInvoiceUseCase(d.invoiceRepo, d.lineRepo, d.payableWrite, notify, d.fiscal, d.suppliers, new FakeInvoiceAmountsWrite(), new FakeInvoiceAudit());
     d.fiscal.next = { kind: "possible_duplicate", candidates: [{ invoiceId: "inv-x", seriesNumber: "FT 2026/064311" }] };
     await expect(
       uc.execute({ organizationId: ORG, supplierName: "Fornecedor Teste", invoiceNumber: "FT 2026/64311", invoiceDate: "2026-10-01", dueDate: "2026-10-31", subtotalWithoutVat: 100, totalVat: 23, totalWithVat: 123 }),
@@ -100,7 +101,7 @@ describe("Faturas × identidade fiscal partilhada (F1)", () => {
 
   test("corrigir número de fatura finalizada revalida a identidade; rascunho não; mudar o tipo passa a ter efeito", async () => {
     const d = deps();
-    const uc = new UpdateInvoiceUseCase(d.invoiceRepo, d.lineRepo, d.payableWrite, new FakeInvoiceReconciliationCleanup(), new FakeInvoiceStockReviewStatusRead(), new FakeInvoiceStockReviewDraftDelete(), d.fiscal, d.suppliers);
+    const uc = new UpdateInvoiceUseCase(d.invoiceRepo, d.lineRepo, d.payableWrite, new FakeInvoiceReconciliationCleanup(), new FakeInvoiceStockReviewStatusRead(), new FakeInvoiceStockReviewDraftDelete(), d.fiscal, d.suppliers, new FakeInvoiceAudit());
     const rascunho = draft();
     await d.invoiceRepo.save(ORG, rascunho);
     await uc.execute({ organizationId: ORG, id: rascunho.id, invoiceNumber: "FT 2026/1" });
@@ -116,7 +117,7 @@ describe("Faturas × identidade fiscal partilhada (F1)", () => {
 
   test("apagar liberta a chave fiscal", async () => {
     const d = deps();
-    const uc = new DeleteInvoiceUseCase(d.invoiceRepo, d.lineRepo, new FakeDocumentStoragePort(), d.payableWrite, new FakeInvoiceReconciliationCleanup(), new FakeInvoiceStockReviewStatusRead(), new FakeInvoiceStockReviewDraftDelete(), d.fiscal);
+    const uc = new DeleteInvoiceUseCase(d.invoiceRepo, d.lineRepo, new FakeDocumentStoragePort(), d.payableWrite, new FakeInvoiceReconciliationCleanup(), new FakeInvoiceStockReviewStatusRead(), new FakeInvoiceStockReviewDraftDelete(), d.fiscal, new FakeInvoiceAudit());
     const inv = draft();
     await d.invoiceRepo.save(ORG, inv);
     await uc.execute({ organizationId: ORG, id: inv.id });

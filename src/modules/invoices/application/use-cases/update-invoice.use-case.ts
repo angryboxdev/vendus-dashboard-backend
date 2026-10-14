@@ -9,7 +9,9 @@ import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry
 import type { InvoiceReconciliationCleanupPort } from "../../domain/ports/out/invoice-reconciliation-cleanup.port.js";
 import type { InvoiceStockReviewStatusReadPort } from "../../domain/ports/out/invoice-stock-review-status-read.port.js";
 import type { InvoiceStockReviewDraftDeletePort } from "../../domain/ports/out/invoice-stock-review-draft-delete.port.js";
-import { InvoiceNotFoundError, DuplicateInvoiceError, InvoicePayableSettledError } from "../../domain/errors.js";
+import { InvoiceNotFoundError, DuplicateInvoiceError, InvoicePayableSettledError, InvoiceVersionConflictError } from "../../domain/errors.js";
+import type { InvoiceAuditPort } from "../../domain/ports/out/invoice-audit.port.js";
+import { auditSnapshot } from "./shared-audit.js";
 import type { UpdateInvoiceData } from "../../domain/entities/invoice.js";
 import { toInvoiceDTO } from "./shared.js";
 import { guardAgainstBlockingStockReview } from "./shared-stock-review-guard.js";
@@ -27,11 +29,15 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     private readonly stockReviewDraftDelete: InvoiceStockReviewDraftDeletePort,
     private readonly fiscal: FiscalIdentityPort,
     private readonly supplierLookup: SupplierLookupPort,
+    private readonly audit: InvoiceAuditPort,
   ) {}
 
   async execute(command: UpdateInvoiceCommand): Promise<InvoiceDTO> {
     const existing = await this.invoiceRepo.findById(command.organizationId, command.id);
     if (!existing) throw new InvoiceNotFoundError(command.id);
+    if (command.expectedVersion !== undefined && command.expectedVersion !== existing.version) {
+      throw new InvoiceVersionConflictError(existing.id, existing.version);
+    }
 
     // Validar duplicado se o número da fatura for alterado
     if (command.invoiceNumber !== undefined && command.invoiceNumber !== existing.invoiceNumber) {
@@ -110,7 +116,12 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
       syncPayable = state === "open";
     }
 
+    // Bloqueio otimista atómico: só uma escrita concorrente passa.
+    const version = await this.invoiceRepo.claimVersion(command.organizationId, existing.id, command.expectedVersion ?? null);
+    if (version === null) throw new InvoiceVersionConflictError(existing.id, null);
+    updated = updated.withVersion(version);
     await this.invoiceRepo.update(command.organizationId, updated);
+    await this.audit.record(command.organizationId, { invoiceId: existing.id, action: "update", actor: command.actor ?? "sistema", origin: "manual", reason: command.reason?.trim() || null, before: auditSnapshot(existing), after: auditSnapshot(updated) });
     if (syncPayable) await this.payableWrite.syncOpenForInvoice(command.organizationId, updated.id, { amount: updated.totalWithVat, dueDate: updated.dueDate });
 
     // Propagar costCenterCategoryId às linhas sempre que o campo for explicitamente enviado

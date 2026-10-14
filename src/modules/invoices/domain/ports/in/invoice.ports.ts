@@ -87,6 +87,8 @@ export interface InvoiceDTO {
   stockReviewOverrideReason: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Versão atual — enviar como `expectedVersion` ao editar/confirmar (409 `version_conflict` se mudou). */
+  version: number;
   lines?: InvoiceLineDTO[];
   /** Presente apenas quando lineDetailMode === "detailed" e as linhas foram carregadas. */
   linesSummary?: {
@@ -250,6 +252,10 @@ export interface CreateInvoiceCommand {
 export interface UpdateInvoiceCommand {
   organizationId: OrganizationId;
   id: string;
+  /** Bloqueio otimista: versão que o cliente leu. */
+  expectedVersion?: number;
+  /** Motivo da alteração (fica na auditoria). */
+  reason?: string;
   supplierId?: string | null;
   supplierName?: string;
   supplierNifSnapshot?: string | null;
@@ -370,6 +376,8 @@ export interface NewSupplierCommand {
 export interface ConfirmImportedInvoiceCommand {
   organizationId: OrganizationId;
   id: string;
+  /** Bloqueio otimista: versão que o cliente leu. */
+  expectedVersion?: number;
   supplierId?: string | null;
   /** Criar novo fornecedor com os dados da fatura — se presente, supplierId é ignorado */
   newSupplier?: NewSupplierCommand;
@@ -467,6 +475,8 @@ export interface GetInvoicePort {
 export interface DeleteInvoiceCommand {
   organizationId: OrganizationId;
   id: string;
+  /** Motivo (fica na auditoria). */
+  reason?: string;
   confirmRemoveStockReview?: boolean;
   actor?: string;
 }

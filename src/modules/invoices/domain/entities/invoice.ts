@@ -92,6 +92,8 @@ interface InvoiceProps {
   stockReviewOverrideReason: string | null;
   createdAt: Date;
   updatedAt: Date;
+  /** Versão para bloqueio otimista (F1 §1.4) — incrementada pelo repositório a cada escrita. */
+  version?: number;
 }
 
 export interface UpdateInvoiceData {
@@ -185,6 +187,7 @@ export class Invoice {
   readonly stockReviewOverrideReason: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+  readonly version: number;
 
   private constructor(props: InvoiceProps) {
     this.id = props.id;
@@ -225,6 +228,7 @@ export class Invoice {
     this.stockReviewOverrideReason = props.stockReviewOverrideReason;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
+    this.version = props.version ?? 1;
   }
 
   // ── Factories ──────────────────────────────────────────────────────────────
@@ -522,6 +526,11 @@ export class Invoice {
       stockReviewOverrideReason: this.stockReviewOverrideReason,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
+      version: this.version,
     };
+  }
+
+  withVersion(version: number): Invoice {
+    return new Invoice({ ...this.toProps(), version });
   }
 }

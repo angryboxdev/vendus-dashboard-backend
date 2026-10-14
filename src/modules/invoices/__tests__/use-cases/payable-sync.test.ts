@@ -1,3 +1,4 @@
+import { FakeInvoiceAudit } from "../fakes/fake-invoice-audit.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { UpdateInvoiceUseCase } from "../../application/use-cases/update-invoice.use-case.js";
 import { Invoice } from "../../domain/entities/invoice.js";
@@ -18,7 +19,7 @@ const base = () =>
 function setup() {
   const repo = new FakeInvoiceRepository();
   const payables = new FakePayableEntryWrite();
-  const uc = new UpdateInvoiceUseCase(repo, new FakeInvoiceLineRepository(), payables, new FakeInvoiceReconciliationCleanup(), new FakeInvoiceStockReviewStatusRead(), new FakeInvoiceStockReviewDraftDelete(), new FakeFiscalIdentityPort(), new FakeSupplierLookupPort());
+  const uc = new UpdateInvoiceUseCase(repo, new FakeInvoiceLineRepository(), payables, new FakeInvoiceReconciliationCleanup(), new FakeInvoiceStockReviewStatusRead(), new FakeInvoiceStockReviewDraftDelete(), new FakeFiscalIdentityPort(), new FakeSupplierLookupPort(), new FakeInvoiceAudit());
   return { repo, payables, uc };
 }
 

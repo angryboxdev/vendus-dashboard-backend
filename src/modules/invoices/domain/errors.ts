@@ -141,3 +141,11 @@ export class InvoiceAmountsNotReconciledError extends Error {
     this.name = "InvoiceAmountsNotReconciledError";
   }
 }
+
+/** Outra pessoa alterou a fatura entretanto (bloqueio otimista, F1 §1.4). */
+export class InvoiceVersionConflictError extends Error {
+  constructor(id: string, readonly currentVersion: number | null) {
+    super(`A fatura ${id} foi alterada entretanto por outra pessoa. Recarregue e volte a aplicar a alteração.`);
+    this.name = "InvoiceVersionConflictError";
+  }
+}

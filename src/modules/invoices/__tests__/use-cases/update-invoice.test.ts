@@ -1,3 +1,4 @@
+import { FakeInvoiceAudit } from "../fakes/fake-invoice-audit.js";
 import { UpdateInvoiceUseCase } from "../../application/use-cases/update-invoice.use-case.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
@@ -47,7 +48,7 @@ describe("UpdateInvoiceUseCase", () => {
     stockReviewStatusRead = new FakeInvoiceStockReviewStatusRead();
     stockReviewDraftDelete = new FakeInvoiceStockReviewDraftDelete();
     fiscal = new FakeFiscalIdentityPort();
-    useCase = new UpdateInvoiceUseCase(repo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, new FakeSupplierLookupPort());
+    useCase = new UpdateInvoiceUseCase(repo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, new FakeSupplierLookupPort(), new FakeInvoiceAudit());
   });
 
   it("actualiza o nome do fornecedor", async () => {

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
+import { idempotency, type IdempotencyStore } from "../../../../infra/http/idempotency.js";
 import type {
   CreateInvoicePort,
   UpdateInvoicePort,
@@ -29,6 +30,7 @@ import {
   DuplicateInvoiceError,
   FiscalIdentityConflictError,
   InvoicePayableSettledError,
+  InvoiceVersionConflictError,
   InvoiceAmountsNotReconciledError,
   LineDetailModeError,
   LinesTotalMismatchError,
@@ -73,6 +75,10 @@ function handleError(res: import("express").Response, err: unknown): void {
     res.status(422).json({ error: err.message, code: "amounts_not_reconciled", ...err.details });
     return;
   }
+  if (err instanceof InvoiceVersionConflictError) {
+    res.status(409).json({ error: err.message, code: "version_conflict", currentVersion: err.currentVersion });
+    return;
+  }
   if (err instanceof InvoicePayableSettledError) {
     res.status(409).json({ error: err.message, code: "payable_settled" });
     return;
@@ -109,8 +115,14 @@ const upload = multer({
   },
 });
 
-export function createInvoiceRouter(ports: InvoicePorts): Router {
+export function createInvoiceRouter(ports: InvoicePorts, idempotencyStore: IdempotencyStore): Router {
   const router = Router();
+  // Idempotency-Key opcional nas escritas que criam/finalizam documentos (F1 §1.4): o mesmo pedido
+  // repetido (duplo clique, retry de rede) devolve a resposta guardada e não volta a executar.
+  const idem = idempotency(idempotencyStore);
+  router.post("/invoices", idem);
+  router.post("/invoices/import", idem);
+  router.post("/invoices/:id/confirm", idem);
 
   // GET /invoices/lines — all invoice lines (for CC analytics)
   router.get("/invoices/lines", async (req, res) => {
@@ -239,6 +251,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
         id: req.params.id,
         confirmRemoveStockReview,
         actor: req.auth!.email,
+        ...(typeof req.query.reason === "string" && { reason: req.query.reason }),
       });
       res.status(204).send();
     } catch (err) {

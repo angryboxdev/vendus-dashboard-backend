@@ -1,3 +1,4 @@
+import { FakeInvoiceAudit } from "../fakes/fake-invoice-audit.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { ConfirmImportedInvoiceUseCase } from "../../application/use-cases/confirm-imported-invoice.use-case.js";
 import { CreateInvoiceUseCase } from "../../application/use-cases/create-invoice.use-case.js";
@@ -37,8 +38,8 @@ function setup() {
   const lineRepo = new FakeInvoiceLineRepository();
   const payableWrite = new FakePayableEntryWrite();
   const amountsWrite = new FakeInvoiceAmountsWrite();
-  const confirm = new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, new FakeSupplierCreatePort(), new FakeSupplierHintPort(), notify, new FakeFiscalIdentityPort(), new FakeSupplierLookupPort(), amountsWrite);
-  const create = new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, notify, new FakeFiscalIdentityPort(), new FakeSupplierLookupPort(), amountsWrite);
+  const confirm = new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, new FakeSupplierCreatePort(), new FakeSupplierHintPort(), notify, new FakeFiscalIdentityPort(), new FakeSupplierLookupPort(), amountsWrite, new FakeInvoiceAudit());
+  const create = new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, notify, new FakeFiscalIdentityPort(), new FakeSupplierLookupPort(), amountsWrite, new FakeInvoiceAudit());
   return { invoiceRepo, lineRepo, payableWrite, amountsWrite, confirm, create };
 }
 

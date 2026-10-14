@@ -121,6 +121,7 @@ export function toInvoiceDTO(
     stockReviewOverrideReason: invoice.stockReviewOverrideReason,
     createdAt: invoice.createdAt.toISOString(),
     updatedAt: invoice.updatedAt.toISOString(),
+    version: invoice.version,
     classificationSummary: computeClassificationSummary(invoice, lines ?? [], categoryMap),
   };
   if (lines !== undefined) {

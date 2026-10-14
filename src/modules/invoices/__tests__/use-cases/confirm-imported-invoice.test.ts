@@ -1,3 +1,4 @@
+import { FakeInvoiceAudit } from "../fakes/fake-invoice-audit.js";
 import { FakeInvoiceAmountsWrite } from "../fakes/fake-invoice-amounts-write.js";
 import { ConfirmImportedInvoiceUseCase } from "../../application/use-cases/confirm-imported-invoice.use-case.js";
 import { Invoice } from "../../domain/entities/invoice.js";
@@ -48,7 +49,7 @@ describe("ConfirmImportedInvoiceUseCase", () => {
     supplierCreate = new FakeSupplierCreatePort();
     supplierHint = new FakeSupplierHintPort();
     fiscal = new FakeFiscalIdentityPort();
-    useCase = new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, { notifyInvoiceFinalized: async () => {} }, fiscal, new FakeSupplierLookupPort(), new FakeInvoiceAmountsWrite());
+    useCase = new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, { notifyInvoiceFinalized: async () => {} }, fiscal, new FakeSupplierLookupPort(), new FakeInvoiceAmountsWrite(), new FakeInvoiceAudit());
   });
 
   it("transitions draft_ai to pending", async () => {

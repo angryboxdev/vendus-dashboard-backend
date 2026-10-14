@@ -11,6 +11,8 @@ import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry
 import type { StockDecisionNotifyPort } from "../../domain/ports/out/stock-decision-notify.port.js";
 import { toInvoiceDTO } from "./shared.js";
 import { DuplicateInvoiceError } from "../../domain/errors.js";
+import type { InvoiceAuditPort } from "../../domain/ports/out/invoice-audit.port.js";
+import { auditSnapshot } from "./shared-audit.js";
 import { claimFiscalIdentity } from "./shared-fiscal-identity.js";
 import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.port.js";
 import type { SupplierLookupPort } from "../../domain/ports/out/supplier-lookup.port.js";
@@ -26,6 +28,7 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     private readonly fiscal: FiscalIdentityPort,
     private readonly supplierLookup: SupplierLookupPort,
     private readonly amountsWrite: InvoiceAmountsWritePort,
+    private readonly audit: InvoiceAuditPort,
   ) {}
 
   async execute(command: CreateInvoiceCommand): Promise<InvoiceDTO> {
@@ -140,6 +143,8 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     } catch (e) {
       console.error("[invoices] falha ao notificar stock-purchase-review (ignorada, sweep fará retry):", e);
     }
+
+    await this.audit.record(command.organizationId, { invoiceId: invoice.id, action: "create", actor: command.actor ?? "sistema", origin: "manual", reason: null, before: null, after: auditSnapshot(invoice) });
 
     return toInvoiceDTO(invoice, lines);
   }

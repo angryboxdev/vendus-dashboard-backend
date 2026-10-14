@@ -1,3 +1,5 @@
+import type { InvoiceAuditPort } from "../../domain/ports/out/invoice-audit.port.js";
+import { auditSnapshot } from "./shared-audit.js";
 import type { DeleteInvoiceCommand, DeleteInvoicePort } from "../../domain/ports/in/invoice.ports.js";
 import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
 import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
@@ -20,6 +22,7 @@ export class DeleteInvoiceUseCase implements DeleteInvoicePort {
     private readonly stockReviewStatusRead: InvoiceStockReviewStatusReadPort,
     private readonly stockReviewDraftDelete: InvoiceStockReviewDraftDeletePort,
     private readonly fiscal: FiscalIdentityPort,
+    private readonly audit: InvoiceAuditPort,
   ) {}
 
   async execute(command: DeleteInvoiceCommand): Promise<void> {
@@ -51,6 +54,7 @@ export class DeleteInvoiceUseCase implements DeleteInvoicePort {
     // Liberta a chave fiscal (só se o documento nunca chegou ao Stock) antes de a FK a desligar.
     await this.fiscal.release(organizationId, command.actor ?? "sistema", id);
     await this.invoiceRepo.delete(organizationId, id);
+    await this.audit.record(organizationId, { invoiceId: id, action: "delete", actor: command.actor ?? "sistema", origin: "manual", reason: command.reason?.trim() || null, before: auditSnapshot(existing), after: null });
 
     if (attachmentUrl) {
       await this.storage.delete(attachmentUrl);

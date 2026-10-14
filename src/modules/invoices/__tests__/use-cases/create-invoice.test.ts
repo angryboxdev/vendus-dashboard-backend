@@ -1,3 +1,4 @@
+import { FakeInvoiceAudit } from "../fakes/fake-invoice-audit.js";
 import { FakeInvoiceAmountsWrite } from "../fakes/fake-invoice-amounts-write.js";
 import { CreateInvoiceUseCase } from "../../application/use-cases/create-invoice.use-case.js";
 import { DuplicateInvoiceError } from "../../domain/errors.js";
@@ -22,7 +23,7 @@ describe("CreateInvoiceUseCase", () => {
     lineRepo = new FakeInvoiceLineRepository();
     payableWrite = new FakePayableEntryWrite();
     fiscal = new FakeFiscalIdentityPort();
-    useCase = new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, { notifyInvoiceFinalized: async () => {} }, fiscal, new FakeSupplierLookupPort(), new FakeInvoiceAmountsWrite());
+    useCase = new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, { notifyInvoiceFinalized: async () => {} }, fiscal, new FakeSupplierLookupPort(), new FakeInvoiceAmountsWrite(), new FakeInvoiceAudit());
   });
 
   it("creates and persists invoice with pending status", async () => {

@@ -1,3 +1,4 @@
+import { FakeInvoiceAudit } from "../fakes/fake-invoice-audit.js";
 import { DeleteInvoiceUseCase } from "../../application/use-cases/delete-invoice.use-case.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
@@ -58,6 +59,7 @@ describe("DeleteInvoiceUseCase", () => {
       stockReviewStatusRead,
       stockReviewDraftDelete,
       fiscal,
+      new FakeInvoiceAudit(),
     );
   });
 

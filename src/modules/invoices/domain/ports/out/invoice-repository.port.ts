@@ -38,4 +38,10 @@ export interface InvoiceRepositoryPort {
   /** Documento (não cancelado) importado a partir do mesmo ficheiro (SHA-256). */
   findByFileHash(organizationId: OrganizationId, sha256: string): Promise<Invoice | null>;
   setFileHash(organizationId: OrganizationId, invoiceId: string, sha256: string): Promise<void>;
+  /**
+   * Bloqueio otimista (F1 §1.4): incrementa a versão de forma atómica. Com
+   * `expectedVersion`, só incrementa se ainda for essa; devolve a nova versão
+   * ou null quando outra escrita passou à frente.
+   */
+  claimVersion(organizationId: OrganizationId, invoiceId: string, expectedVersion: number | null): Promise<number | null>;
 }

@@ -11,7 +11,9 @@ import type { SupplierCreatePort } from "../../domain/ports/out/supplier-create.
 import type { SupplierHintPort } from "../../domain/ports/out/supplier-hint.port.js";
 import type { StockDecisionNotifyPort } from "../../domain/ports/out/stock-decision-notify.port.js";
 import { normalizeSupplierName } from "../../domain/utils/supplier-name.js";
-import { InvoiceNotFoundError, DuplicateInvoiceError } from "../../domain/errors.js";
+import { InvoiceNotFoundError, DuplicateInvoiceError, InvoiceVersionConflictError } from "../../domain/errors.js";
+import type { InvoiceAuditPort } from "../../domain/ports/out/invoice-audit.port.js";
+import { auditSnapshot } from "./shared-audit.js";
 import { toInvoiceDTO } from "./shared.js";
 import { claimFiscalIdentity } from "./shared-fiscal-identity.js";
 import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.port.js";
@@ -30,11 +32,15 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     private readonly fiscal: FiscalIdentityPort,
     private readonly supplierLookup: SupplierLookupPort,
     private readonly amountsWrite: InvoiceAmountsWritePort,
+    private readonly audit: InvoiceAuditPort,
   ) {}
 
   async execute(command: ConfirmImportedInvoiceCommand): Promise<InvoiceDTO> {
     const existing = await this.invoiceRepo.findById(command.organizationId, command.id);
     if (!existing) throw new InvoiceNotFoundError(command.id);
+    if (command.expectedVersion !== undefined && command.expectedVersion !== existing.version) {
+      throw new InvoiceVersionConflictError(existing.id, existing.version);
+    }
 
     if (existing.status !== "draft_ai" && existing.status !== "pending_review") {
       throw new Error(
@@ -138,6 +144,10 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       confirmed = confirmed.update({ stockReviewOverride: "force_skip", stockReviewOverrideReason: "Documento já movimentado no Stock (importação feita no Stock) — sem nova revisão." });
     }
 
+    // Bloqueio otimista atómico: dois cliques/sessões a confirmar o mesmo rascunho → só um passa.
+    const version = await this.invoiceRepo.claimVersion(command.organizationId, existing.id, command.expectedVersion ?? existing.version);
+    if (version === null) throw new InvoiceVersionConflictError(existing.id, null);
+    confirmed = confirmed.withVersion(version);
     await this.invoiceRepo.update(command.organizationId, confirmed);
 
     // Guardar hint nome→fornecedor para importações futuras.
@@ -212,6 +222,8 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     } catch (e) {
       console.error("[invoices] falha ao notificar stock-purchase-review (ignorada, sweep fará retry):", e);
     }
+
+    await this.audit.record(command.organizationId, { invoiceId: finalInvoice.id, action: "confirm", actor: command.actor ?? "sistema", origin: "import", reason: null, before: auditSnapshot(existing), after: auditSnapshot(finalInvoice) });
 
     return toInvoiceDTO(finalInvoice, lines);
   }
