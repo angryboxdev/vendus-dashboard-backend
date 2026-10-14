@@ -82,6 +82,7 @@ class Session {
   readonly labels: string[] = [];
   confirmation: { token: string; summary: string } | null = null;
   publishFlow = false;
+  templatesChanged = false;
 
   constructor(
     private readonly uc: AssistantUseCases,
@@ -292,7 +293,10 @@ class Session {
         const c = await this.s.conflicts(this.org, this.ctx.rosterId);
         const names = await this.names();
         const line = (v: Violation) => `${names.get(v.employeeId) ?? "colaborador"} (${dayLabel(v.workDate)}): ${privateSafe(v)}`;
-        return { pending: c.pending, blocks: c.violations.filter((v) => v.severity === "block").slice(0, 20).map(line), warnings: c.violations.filter((v) => v.severity === "warning").slice(0, 20).map(line) };
+        const blocks = c.violations.filter((v) => v.severity === "block");
+        const warnings = c.violations.filter((v) => v.severity === "warning");
+        const summary = blocks.length || warnings.length ? `${blocks.length} bloqueio(s) e ${warnings.length} aviso(s) nos turnos por publicar.` : "Sem conflitos nos turnos por publicar.";
+        return { summary, turnosPorPublicar: c.pending, blocks: blocks.slice(0, 20).map(line), warnings: warnings.slice(0, 20).map(line) };
       }
       case "START_PUBLISH": {
         const c = await this.s.conflicts(this.org, this.ctx.rosterId);
@@ -378,6 +382,7 @@ class Session {
         const abbreviation = typeof a.abbreviation === "string" && a.abbreviation.trim() ? a.abbreviation.trim().slice(0, 4) : name.replace(/[^\p{L}]/gu, "").slice(0, 3);
         const t = await this.s.createTemplate(this.org, this.viewer, { name, abbreviation, segments: segs });
         this.templates_ = null;
+        this.templatesChanged = true;
         this.facts.push(`Modelo "${t.name}" criado (${hoursLabel(t.segments)}).`);
         await this.uc.audit.record(this.org, { actor: this.viewer.email, command: "CREATE_SHIFT_MODEL", structured: { name, segments: segs }, affectedIds: [t.id], result: "done", message: null });
         return { created: true, model: t.name, hours: hoursLabel(t.segments) };
@@ -604,6 +609,6 @@ export class AssistantUseCases {
     let pending = session.ctx.pending;
     if (applied) pending = (await session.shifts(session.ctx.from, session.ctx.to)).filter((s) => s.pendingOnly).length;
     const body = text ?? (session.facts.length ? `✓ ${session.facts.join("\n")}` : NO_DATA);
-    return { status, text: body, facts: session.facts, applied, confirmation: session.confirmation, context: { rosterName: session.ctx.rosterName, from: session.ctx.from, to: session.ctx.to, pending } };
+    return { status, text: body, facts: session.facts, applied, templatesChanged: session.templatesChanged, confirmation: session.confirmation, context: { rosterName: session.ctx.rosterName, from: session.ctx.from, to: session.ctx.to, pending } };
   }
 }

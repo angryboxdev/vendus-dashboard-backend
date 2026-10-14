@@ -103,6 +103,8 @@ export interface AssistantReply {
   /** Linhas determinísticas do que o servidor fez (não dependem da IA). */
   facts: string[];
   applied: AppliedBatch | null;
+  /** Foi criado um modelo de turno (o ecrã atualiza a lista). */
+  templatesChanged: boolean;
   confirmation: { token: string; summary: string } | null;
   context: Pick<AssistantContext, "rosterName" | "from" | "to" | "pending">;
 }

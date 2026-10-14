@@ -172,8 +172,17 @@ describe("Assistente Mezza — conversa", () => {
     const r = await uc.chat(ORG, viewer(), SCREEN, [], "Cria um modelo das 9 às 17.");
     expect(r.text).toBe('Já existe um modelo equivalente chamado "Manhã". Quer utilizar esse modelo ou criar outro?');
     expect(s.templates_).toHaveLength(1);
-    await uc.chat(ORG, viewer(), SCREEN, [], "Cria outro.");
+    expect(r.templatesChanged).toBe(false);
+    const r2 = await uc.chat(ORG, viewer(), SCREEN, [], "Cria outro.");
+    expect(r2.templatesChanged).toBe(true);
     expect(s.templates_.map((t) => t.name)).toEqual(["Manhã", "Manhã B"]);
+  });
+
+  test("conflitos: resumo determinístico (pendentes não são conflitos)", async () => {
+    const { s, uc, llm } = setup([() => ({ tools: [["QUERY_CONFLICTS", {}]] }), () => ({ text: "Sem conflitos." })]);
+    s.shift("Maria Santos", "2026-10-13", "15:00", "23:00");
+    await uc.chat(ORG, viewer(), SCREEN, [], "Existem conflitos?");
+    expect(ScriptedLlm.lastTool(llm.calls[1]!)).toEqual({ summary: "Sem conflitos nos turnos por publicar.", turnosPorPublicar: 1, blocks: [], warnings: [] });
   });
 
   test("15: publicar nunca é silencioso — só abre o fluxo existente", async () => {
