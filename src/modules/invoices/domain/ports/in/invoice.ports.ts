@@ -67,6 +67,8 @@ export interface InvoiceDTO {
   financialMode: FinancialModeName;
   /** Modo «Por valores»: repartições financeiras (não são artigos). */
   allocations?: InvoiceAllocationDTO[];
+  /** Valores gravados (detalhe): descontos, textos originais, ajustes — reabrir rascunho sem perder nada. */
+  storedAmounts?: import("../out/invoice-amounts-write.port.js").StoredAmountsView | null;
   paymentBankAccountId: string | null;
   paymentMethod: string | null;
   paymentNotes: string | null;

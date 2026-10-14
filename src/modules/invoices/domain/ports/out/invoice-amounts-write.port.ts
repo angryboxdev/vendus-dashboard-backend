@@ -36,4 +36,17 @@ export interface InvoiceAmountsRecord {
  */
 export interface InvoiceAmountsWritePort {
   save(organizationId: OrganizationId, invoiceId: string, record: InvoiceAmountsRecord): Promise<void>;
+  /** Valores gravados (descontos, textos originais, ajustes) — para reabrir um rascunho sem perder nada. */
+  read(organizationId: OrganizationId, invoiceId: string): Promise<StoredAmountsView | null>;
+}
+
+export interface StoredAmountsView {
+  globalDiscountKind: "pct" | "amount" | null;
+  globalDiscountValue: number | null;
+  footerDiscountCents: number | null;
+  adjustmentsCents: number;
+  roundingAdjustmentCents: number;
+  roundingAdjustmentReason: string | null;
+  differenceCents: number | null;
+  lines: { lineId: string; quantityText: string | null; unitPriceText: string | null; discountKind: "pct" | "amount" | null; discountValue: number | null }[];
 }

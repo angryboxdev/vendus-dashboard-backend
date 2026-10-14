@@ -117,7 +117,7 @@ export function createInvoicesModule(
   const processDirectDebits = new ProcessDirectDebitsUseCase(invoiceRepo, payableWrite);
   const listInvoices = new ListInvoicesUseCase(invoiceRepo, categoryReader, allocationRepo);
   const listInvoiceLines = new ListInvoiceLinesUseCase(lineRepo, invoiceRepo);
-  const getInvoice = new GetInvoiceUseCase(invoiceRepo, lineRepo, categoryReader, allocationRepo);
+  const getInvoice = new GetInvoiceUseCase(invoiceRepo, lineRepo, categoryReader, allocationRepo, amountsWrite);
 
   const router = createInvoiceRouter({
     listPayableDuplicates: new ListPayableDuplicatesUseCase(payableWrite),

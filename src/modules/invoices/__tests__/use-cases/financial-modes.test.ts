@@ -167,3 +167,20 @@ describe("Modos financeiros «Única | Por artigo | Por valores» (F2 §2.2)", (
     expect(new Set(allocFeed.map((x) => x.invoiceId))).toEqual(new Set([a.id]));
   });
 });
+
+describe("Reabrir rascunho guardado (F2 §2.2)", () => {
+  test("o detalhe devolve linhas, repartições e descontos gravados", async () => {
+    const { GetInvoiceUseCase } = await import("../../application/use-cases/get-invoice.use-case.js");
+    const s = setup();
+    const inv = draft();
+    await s.invoiceRepo.save(ORG, inv);
+    const withDiscount = [{ ...line("Mozzarella", 620), quantity: 20, discount: { kind: "pct" as const, value: 10 }, unitPriceText: "6,20" }];
+    await s.saveDraft.execute({ organizationId: ORG, id: inv.id, financialMode: "by_values", lines: withDiscount, allocations: [{ description: "Ingredientes", costCenterCategoryId: "cat-ingred", netCents: 11160 }], amounts: { footerDiscountCents: 1240 } });
+    const get = new GetInvoiceUseCase(s.invoiceRepo, s.lineRepo, new FakeCostCenterCategoryReader(), s.allocationRepo, s.amountsWrite);
+    const dto = await get.execute(ORG, inv.id);
+    expect(dto.financialMode).toBe("by_values");
+    expect(dto.lines).toHaveLength(1);
+    expect(dto.allocations).toHaveLength(1);
+    expect(dto.storedAmounts).toMatchObject({ footerDiscountCents: 1240, lines: [{ discountKind: "pct", discountValue: 10, unitPriceText: "6,20" }] });
+  });
+});

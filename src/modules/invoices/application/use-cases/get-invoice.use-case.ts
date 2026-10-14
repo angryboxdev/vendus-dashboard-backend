@@ -1,3 +1,4 @@
+import type { InvoiceAmountsWritePort } from "../../domain/ports/out/invoice-amounts-write.port.js";
 import type { InvoiceAllocationRepositoryPort } from "../../domain/ports/out/invoice-allocation-repository.port.js";
 import type { GetInvoicePort, InvoiceDTO } from "../../domain/ports/in/invoice.ports.js";
 import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
@@ -13,6 +14,7 @@ export class GetInvoiceUseCase implements GetInvoicePort {
     private readonly lineRepo: InvoiceLineRepositoryPort,
     private readonly categoryReader: CostCenterCategoryReaderPort,
     private readonly allocationRepo: InvoiceAllocationRepositoryPort,
+    private readonly amountsRead?: Pick<InvoiceAmountsWritePort, "read">,
   ) {}
 
   async execute(organizationId: OrganizationId, id: string): Promise<InvoiceDTO> {
@@ -34,6 +36,8 @@ export class GetInvoiceUseCase implements GetInvoicePort {
     const categoryLookups = await this.categoryReader.findManyByIds(organizationId, uniqueIds);
     const categoryMap = new Map(categoryLookups.map((c) => [c.id, c]));
 
-    return toInvoiceDTO(invoice, lines, categoryMap, false, allocations);
+    const dto = toInvoiceDTO(invoice, lines, categoryMap, false, allocations);
+    if (this.amountsRead) dto.storedAmounts = await this.amountsRead.read(organizationId, id);
+    return dto;
   }
 }
