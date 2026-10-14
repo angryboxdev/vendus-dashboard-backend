@@ -1,3 +1,4 @@
+import { FakeInvoiceAmountsWrite } from "../fakes/fake-invoice-amounts-write.js";
 import { ConfirmImportedInvoiceUseCase } from "../../application/use-cases/confirm-imported-invoice.use-case.js";
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
@@ -47,7 +48,7 @@ describe("ConfirmImportedInvoiceUseCase", () => {
     supplierCreate = new FakeSupplierCreatePort();
     supplierHint = new FakeSupplierHintPort();
     fiscal = new FakeFiscalIdentityPort();
-    useCase = new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, { notifyInvoiceFinalized: async () => {} }, fiscal, new FakeSupplierLookupPort());
+    useCase = new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, { notifyInvoiceFinalized: async () => {} }, fiscal, new FakeSupplierLookupPort(), new FakeInvoiceAmountsWrite());
   });
 
   it("transitions draft_ai to pending", async () => {
@@ -118,7 +119,7 @@ describe("ConfirmImportedInvoiceUseCase", () => {
   });
 
   it("saves optional lines provided during confirmation", async () => {
-    const draft = makeDraftInvoice();
+    const draft = makeDraftInvoice({ subtotalWithoutVat: 80000, totalVat: 4800, totalWithVat: 84800 });
     await invoiceRepo.save(ORG_ID, draft);
 
     await useCase.execute({
@@ -253,7 +254,7 @@ describe("ConfirmImportedInvoiceUseCase", () => {
   // ── Feature: costCenterCategoryId ao nível da fatura ─────────────────────
 
   it("propaga costCenterCategoryId às linhas existentes ao confirmar", async () => {
-    const draft = makeDraftInvoice();
+    const draft = makeDraftInvoice({ subtotalWithoutVat: 1000, totalVat: 230, totalWithVat: 1230 });
     await invoiceRepo.save(ORG_ID, draft);
 
     // Pré-criar uma linha na fatura
@@ -279,7 +280,7 @@ describe("ConfirmImportedInvoiceUseCase", () => {
   });
 
   it("não propaga CC às linhas quando costCenterCategoryId é null (linha mantém o seu)", async () => {
-    const draft = makeDraftInvoice();
+    const draft = makeDraftInvoice({ subtotalWithoutVat: 1000, totalVat: 230, totalWithVat: 1230 });
     await invoiceRepo.save(ORG_ID, draft);
 
     const line = InvoiceLine.create({
@@ -381,7 +382,7 @@ describe("ConfirmImportedInvoiceUseCase", () => {
   // ── Feature: lineDetailMode automático ───────────────────────────────────
 
   it("define lineDetailMode como 'detailed' quando são fornecidas linhas na confirmação", async () => {
-    const draft = makeDraftInvoice();
+    const draft = makeDraftInvoice({ subtotalWithoutVat: 80000, totalVat: 4800, totalWithVat: 84800 });
     await invoiceRepo.save(ORG_ID, draft);
 
     const result = await useCase.execute({
@@ -412,7 +413,7 @@ describe("ConfirmImportedInvoiceUseCase", () => {
   });
 
   it("persiste lineDetailMode 'detailed' no repositório quando há linhas", async () => {
-    const draft = makeDraftInvoice();
+    const draft = makeDraftInvoice({ subtotalWithoutVat: 5000, totalVat: 1150, totalWithVat: 6150 });
     await invoiceRepo.save(ORG_ID, draft);
 
     await useCase.execute({

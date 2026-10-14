@@ -29,6 +29,7 @@ import {
   DuplicateInvoiceError,
   FiscalIdentityConflictError,
   InvoicePayableSettledError,
+  InvoiceAmountsNotReconciledError,
   LineDetailModeError,
   LinesTotalMismatchError,
   InvoiceLinesLockedByAppliedStockReviewError,
@@ -66,6 +67,10 @@ function handleError(res: import("express").Response, err: unknown): void {
   }
   if (err instanceof InvoiceAlreadyCancelledError || err instanceof DuplicateInvoiceError || err instanceof InvoiceLinesLockedByAppliedStockReviewError) {
     res.status(409).json({ error: (err as Error).message });
+    return;
+  }
+  if (err instanceof InvoiceAmountsNotReconciledError) {
+    res.status(422).json({ error: err.message, code: "amounts_not_reconciled", ...err.details });
     return;
   }
   if (err instanceof InvoicePayableSettledError) {

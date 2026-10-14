@@ -20,6 +20,11 @@ Fields to extract:
 - confidence (number 0.0–1.0) — your confidence in the overall extraction accuracy
 - documentType ("invoice" or "credit_note") — determine whether this document is a regular invoice or a CREDIT NOTE. Look for terms such as "Nota de Crédito", "Nota Crédito", "NC", "Credit Note" (in the title/header or near the document number). Default to "invoice" when unsure.
 - lines (array of objects with: description, quantity, unitPriceWithoutVat, vatRate, vatAmount, totalWithoutVat, totalWithVat — all optional integers in cents except vatRate and quantity which are decimals)
+  Each line may also have: quantityText and unitPriceText (the quantity and unit price EXACTLY as printed, e.g. "20.000", "1,235" — do not reinterpret), grossWithoutDiscount (line amount before discount, cents), discountPct (line discount in %, e.g. 10) or discountAmount (line discount in cents). unitPriceWithoutVat is the price BEFORE discount. Use null when not printed; never invent a discount.
+  vatRate: the rate printed for the line (e.g. 6, 13, 23). If no rate is printed, use null — NEVER assume 0.
+- globalDiscountPct / globalDiscountAmount (cents) — an additional discount applied to the whole document, only if clearly present; null otherwise
+- footerDiscountAmount (cents) — the discount total printed in the footer/summary, if any (it may just summarise the line discounts)
+- vatSummary (array of { rate, baseCents, vatCents }) — the VAT table by rate as printed in the document; null if absent
 - validationIssues (array of strings for any issues you detected, e.g. "values_unclear", "partial_document", "multiple_pages")
 
 Return JSON only. Example structure:
@@ -63,9 +68,20 @@ interface RawExtractionJson {
     vatAmount?: number | null;
     totalWithoutVat?: number | null;
     totalWithVat?: number | null;
+    quantityText?: string | number | null;
+    unitPriceText?: string | number | null;
+    grossWithoutDiscount?: number | null;
+    discountPct?: number | null;
+    discountAmount?: number | null;
   }>;
+  globalDiscountPct?: number | null;
+  globalDiscountAmount?: number | null;
+  footerDiscountAmount?: number | null;
+  vatSummary?: Array<{ rate?: number | null; baseCents?: number | null; vatCents?: number | null }> | null;
   validationIssues?: string[];
 }
+
+const numOrNull = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
 
 export class OpenAiExtractionAdapter implements AiExtractionPort {
   private readonly openai: OpenAI;
@@ -143,7 +159,15 @@ export class OpenAiExtractionAdapter implements AiExtractionPort {
       vatAmount: l.vatAmount ?? null,
       totalWithoutVat: l.totalWithoutVat ?? null,
       totalWithVat: l.totalWithVat ?? null,
+      quantityText: l.quantityText == null ? null : String(l.quantityText),
+      unitPriceText: l.unitPriceText == null ? null : String(l.unitPriceText),
+      grossWithoutDiscount: numOrNull(l.grossWithoutDiscount),
+      discountPct: numOrNull(l.discountPct),
+      discountAmount: numOrNull(l.discountAmount),
     }));
+    const vatSummary = (raw.vatSummary ?? [])
+      .filter((v) => typeof v.rate === "number" && typeof v.baseCents === "number" && typeof v.vatCents === "number")
+      .map((v) => ({ rate: v.rate!, baseCents: Math.round(v.baseCents!), vatCents: Math.round(v.vatCents!) }));
 
     return {
       supplierName: raw.supplierName ?? null,
@@ -160,6 +184,12 @@ export class OpenAiExtractionAdapter implements AiExtractionPort {
       confidence: typeof raw.confidence === "number" ? Math.max(0, Math.min(1, raw.confidence)) : 0.5,
       documentType: raw.documentType === "credit_note" ? "credit_note" : raw.documentType === "invoice" ? "invoice" : null,
       lines,
+      amounts: {
+        globalDiscountPct: numOrNull(raw.globalDiscountPct),
+        globalDiscountAmount: numOrNull(raw.globalDiscountAmount),
+        footerDiscountAmount: numOrNull(raw.footerDiscountAmount),
+        vatSummary: vatSummary.length ? vatSummary : null,
+      },
       validationIssues: raw.validationIssues ?? [],
     };
   }

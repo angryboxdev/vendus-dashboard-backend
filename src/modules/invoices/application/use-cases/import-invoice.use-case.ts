@@ -221,7 +221,13 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
         vatAmount: l.vatAmount,
         totalWithoutVat: l.totalWithoutVat,
         totalWithVat: l.totalWithVat,
+        quantityText: l.quantityText ?? null,
+        unitPriceText: l.unitPriceText ?? null,
+        grossWithoutDiscount: l.grossWithoutDiscount ?? null,
+        discountPct: l.discountPct ?? null,
+        discountAmount: l.discountAmount ?? null,
       })),
+      ...(extraction.amounts && { extractedAmounts: extraction.amounts }),
       fiscal: {
         kind: fiscalCheck.kind,
         ...(fiscalCheck.kind === "existing_stock_only" && { identityId: fiscalCheck.identityId }),

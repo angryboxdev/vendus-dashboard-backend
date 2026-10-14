@@ -36,6 +36,7 @@ import { ProcessDirectDebitsUseCase } from "./application/use-cases/process-dire
 import { SetLineDetailModeUseCase } from "./application/use-cases/set-line-detail-mode.use-case.js";
 import { ListPayableDuplicatesUseCase } from "./application/use-cases/list-payable-duplicates.use-case.js";
 import { createInvoiceRouter } from "./adapters/in/invoice.controller.js";
+import { SupabaseInvoiceAmountsWriteAdapter } from "./adapters/out/supabase-invoice-amounts-write.adapter.js";
 import { FiscalDocumentsIdentityAdapter } from "./adapters/out/fiscal-documents-identity.adapter.js";
 import type { FiscalDocumentsPort } from "../fiscal-documents/domain/ports/in/fiscal-documents.ports.js";
 import type { CreateSupplierPort } from "../financial-base/domain/ports/in/supplier.ports.js";
@@ -96,6 +97,7 @@ export function createInvoicesModule(
   const stockReviewDraftDelete = new StockPurchaseReviewDraftDeleteAdapter(deleteDraftStockPurchaseReview);
   const aiExtraction = new OpenAiExtractionAdapter(openaiApiKey);
   const fiscal = new FiscalDocumentsIdentityAdapter(fiscalDocuments);
+  const amountsWrite = new SupabaseInvoiceAmountsWriteAdapter(createScopedQuery);
 
   const processDirectDebits = new ProcessDirectDebitsUseCase(invoiceRepo, payableWrite);
   const listInvoices = new ListInvoicesUseCase(invoiceRepo, categoryReader);
@@ -104,7 +106,7 @@ export function createInvoicesModule(
 
   const router = createInvoiceRouter({
     listPayableDuplicates: new ListPayableDuplicatesUseCase(payableWrite),
-    createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, stockDecisionNotify, fiscal, supplierLookup),
+    createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, stockDecisionNotify, fiscal, supplierLookup, amountsWrite),
     updateInvoice: new UpdateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, supplierLookup),
     markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite, occurrenceSync),
     setInvoiceStatus: new SetInvoiceStatusUseCase(invoiceRepo, payableWrite),
@@ -120,7 +122,7 @@ export function createInvoicesModule(
     deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),
     importInvoice: new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint, organizationIdentityRead, fiscal),
-    confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify, fiscal, supplierLookup),
+    confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify, fiscal, supplierLookup, amountsWrite),
     getInvoiceAlerts: new GetInvoiceAlertsUseCase(invoiceRepo),
     processDirectDebits,
   });

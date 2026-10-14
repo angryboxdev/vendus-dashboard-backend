@@ -16,6 +16,8 @@ import { toInvoiceDTO } from "./shared.js";
 import { claimFiscalIdentity } from "./shared-fiscal-identity.js";
 import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.port.js";
 import type { SupplierLookupPort } from "../../domain/ports/out/supplier-lookup.port.js";
+import type { InvoiceAmountsWritePort } from "../../domain/ports/out/invoice-amounts-write.port.js";
+import { reconcileForFinalize } from "./shared-amounts.js";
 
 export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort {
   constructor(
@@ -27,6 +29,7 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     private readonly stockDecisionNotify: StockDecisionNotifyPort,
     private readonly fiscal: FiscalIdentityPort,
     private readonly supplierLookup: SupplierLookupPort,
+    private readonly amountsWrite: InvoiceAmountsWritePort,
   ) {}
 
   async execute(command: ConfirmImportedInvoiceCommand): Promise<InvoiceDTO> {
@@ -79,6 +82,40 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       confirmed = confirmed.markPaid(paidAt);
     }
 
+    // Linhas confirmadas (novas) + as que o rascunho já tinha.
+    const lineCommands = command.lines ?? [];
+    const newLines: InvoiceLine[] = lineCommands.map((lc) => {
+      const lineProps: Parameters<typeof InvoiceLine.create>[0] = {
+        invoiceId: confirmed.id,
+        description: lc.description,
+        quantity: lc.quantity,
+        unitCostWithoutVat: lc.unitCostWithoutVat,
+        vatRate: lc.vatRate,
+        vatAmount: lc.vatAmount,
+        totalWithVat: lc.totalWithVat,
+      };
+      if (lc.type !== undefined) lineProps.type = lc.type;
+      if (lc.costCenterCategoryId !== undefined) lineProps.costCenterCategoryId = lc.costCenterCategoryId;
+      if (lc.unit !== undefined) lineProps.unit = lc.unit;
+      if (lc.affectsDre !== undefined) lineProps.affectsDre = lc.affectsDre;
+      if (lc.affectsCashflow !== undefined) lineProps.affectsCashflow = lc.affectsCashflow;
+      if (lc.affectsProfitability !== undefined) lineProps.affectsProfitability = lc.affectsProfitability;
+      if (lc.locationId !== undefined) lineProps.locationId = lc.locationId;
+      return InvoiceLine.create(lineProps);
+    });
+    const storedLines = await this.lineRepo.findByInvoiceId(command.organizationId, confirmed.id);
+
+    // Motor único de valores (task v1.2 §1.3): o servidor recalcula; não reconcilia ao cêntimo → não
+    // finaliza (o rascunho fica como estava, nada foi gravado ainda).
+    const amounts = reconcileForFinalize(
+      confirmed,
+      [...storedLines.map((line) => ({ line })), ...newLines.map((line, i) => ({ line, cmd: lineCommands[i] }))],
+      command.amounts,
+    );
+    confirmed = amounts.invoice;
+    const reconciledStored = amounts.lines.slice(0, storedLines.length);
+    const lines = amounts.lines.slice(storedLines.length);
+
     // Duplicate check — hard block, exclude this invoice itself. Prefer the
     // resolved supplierId (reliable regardless of NIF extraction); fall back
     // to the supplier NIF snapshot when no supplier is linked yet.
@@ -113,30 +150,12 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       }
     }
 
-    // Save optional lines
-    const lines: InvoiceLine[] = (command.lines ?? []).map((lc) => {
-      const lineProps: Parameters<typeof InvoiceLine.create>[0] = {
-        invoiceId: confirmed.id,
-        description: lc.description,
-        quantity: lc.quantity,
-        unitCostWithoutVat: lc.unitCostWithoutVat,
-        vatRate: lc.vatRate,
-        vatAmount: lc.vatAmount,
-        totalWithVat: lc.totalWithVat,
-      };
-      if (lc.type !== undefined) lineProps.type = lc.type;
-      if (lc.costCenterCategoryId !== undefined) lineProps.costCenterCategoryId = lc.costCenterCategoryId;
-      if (lc.unit !== undefined) lineProps.unit = lc.unit;
-      if (lc.affectsDre !== undefined) lineProps.affectsDre = lc.affectsDre;
-      if (lc.affectsCashflow !== undefined) lineProps.affectsCashflow = lc.affectsCashflow;
-      if (lc.affectsProfitability !== undefined) lineProps.affectsProfitability = lc.affectsProfitability;
-      if (lc.locationId !== undefined) lineProps.locationId = lc.locationId;
-      return InvoiceLine.create(lineProps);
-    });
-
+    // Save optional lines (valores já recalculados pelo motor)
     if (lines.length > 0) {
       await this.lineRepo.saveAll(command.organizationId, lines);
     }
+    for (const l of reconciledStored) await this.lineRepo.updateLine(command.organizationId, l);
+    await this.amountsWrite.save(command.organizationId, confirmed.id, amounts.record);
 
     // Derivar lineDetailMode automaticamente: se há linhas confirmadas → detailed, caso contrário manter simple
     let finalInvoice = confirmed;

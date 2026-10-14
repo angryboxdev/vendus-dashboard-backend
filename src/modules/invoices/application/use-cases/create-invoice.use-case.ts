@@ -14,6 +14,8 @@ import { DuplicateInvoiceError } from "../../domain/errors.js";
 import { claimFiscalIdentity } from "./shared-fiscal-identity.js";
 import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.port.js";
 import type { SupplierLookupPort } from "../../domain/ports/out/supplier-lookup.port.js";
+import type { InvoiceAmountsWritePort } from "../../domain/ports/out/invoice-amounts-write.port.js";
+import { reconcileForFinalize } from "./shared-amounts.js";
 
 export class CreateInvoiceUseCase implements CreateInvoicePort {
   constructor(
@@ -23,6 +25,7 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     private readonly stockDecisionNotify: StockDecisionNotifyPort,
     private readonly fiscal: FiscalIdentityPort,
     private readonly supplierLookup: SupplierLookupPort,
+    private readonly amountsWrite: InvoiceAmountsWritePort,
   ) {}
 
   async execute(command: CreateInvoiceCommand): Promise<InvoiceDTO> {
@@ -36,6 +39,7 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
       totalWithVat: command.totalWithVat,
     };
     if (command.supplierId !== undefined) invoiceProps.supplierId = command.supplierId;
+    if (command.documentType !== undefined) invoiceProps.documentType = command.documentType;
     if (command.notes !== undefined) invoiceProps.notes = command.notes;
     if (command.attachmentUrl !== undefined) invoiceProps.attachmentUrl = command.attachmentUrl;
     if (command.costCenterGroupId !== undefined) invoiceProps.costCenterGroupId = command.costCenterGroupId;
@@ -53,7 +57,8 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
       if (existing) throw new DuplicateInvoiceError(invoice.invoiceNumber, invoice.supplierName);
     }
 
-    const lines = (command.lines ?? []).map((lc) => {
+    const lineCommands = command.lines ?? [];
+    const draftLines = lineCommands.map((lc) => {
       const lineProps: Parameters<typeof InvoiceLine.create>[0] = {
         invoiceId: invoice.id,
         description: lc.description,
@@ -70,6 +75,12 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
       if (lc.locationId !== undefined) lineProps.locationId = lc.locationId;
       return InvoiceLine.create(lineProps);
     });
+
+    // Motor único de valores (task v1.2 §1.3): recalculado no servidor antes de gravar; sem reconciliar
+    // ao cêntimo a fatura não é criada (finalizada).
+    const amounts = reconcileForFinalize(invoice, draftLines.map((line, i) => ({ line, cmd: lineCommands[i] })), command.amounts);
+    invoice = amounts.invoice;
+    const lines = amounts.lines;
 
     await this.invoiceRepo.save(command.organizationId, invoice);
     // Identidade fiscal partilhada: aponta para a fatura (FK), por isso reserva-se logo a seguir a gravar;
@@ -90,9 +101,10 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     if (lines.length > 0) {
       await this.lineRepo.saveAll(command.organizationId, lines);
     }
+    await this.amountsWrite.save(command.organizationId, invoice.id, amounts.record);
 
     // Auto-criar conta a pagar quando a fatura tem data de vencimento
-    if (invoice.dueDate) {
+    if (invoice.dueDate && invoice.documentType !== "credit_note") {
       await this.payableWrite.createForInvoice(command.organizationId, {
         invoiceId: invoice.id,
         supplierId: invoice.supplierId,

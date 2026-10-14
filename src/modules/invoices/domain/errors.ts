@@ -130,3 +130,14 @@ export class InvoicePayableSettledError extends Error {
     this.name = "InvoicePayableSettledError";
   }
 }
+
+/** Valores não reconciliados ao cêntimo (task v1.2 §1.3): a fatura fica em rascunho, não finaliza. */
+export class InvoiceAmountsNotReconciledError extends Error {
+  constructor(
+    readonly description: string,
+    readonly details: { differenceCents: number | null; issues: { code: string }[]; computed: { netCents: number; vatCents: number; totalCents: number } },
+  ) {
+    super(`Os valores não batem com a fatura: ${description}. Pode guardar como rascunho e corrigir.`);
+    this.name = "InvoiceAmountsNotReconciledError";
+  }
+}
