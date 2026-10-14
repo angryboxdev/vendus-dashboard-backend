@@ -16,6 +16,7 @@ import { createCashClosingsModule } from "./modules/cash-closings/cash-closings.
 import { createKdsModule } from "./modules/kds/kds.module.js";
 import { createFinancialBaseModule } from "./modules/financial-base/financial-base.module.js";
 import { createInvoicesModule } from "./modules/invoices/invoices.module.js";
+import { createFiscalDocumentsModule } from "./modules/fiscal-documents/fiscal-documents.module.js";
 import { createPayableEntriesModule } from "./modules/payable-entries/payable-entries.module.js";
 import { createPayableRecurrencesModule } from "./modules/payable-recurrences/payable-recurrences.module.js";
 import { createBankAccountsModule } from "./modules/bank-accounts/bank-accounts.module.js";
@@ -27,6 +28,7 @@ import { SupabaseAirMenuCredentialsRepository } from "./modules/air-menu/adapter
 import { SupabaseAirMenuLocationConfigRepository } from "./modules/air-menu/adapters/out/supabase-air-menu-location-config.repository.js";
 import { createCrmModule } from "./modules/crm/crm.module.js";
 import { supplierInvoiceImportRoutes } from "./routes/supplierInvoiceImportRoutes.js";
+import { setStockImportFiscalDocuments } from "./services/supplierInvoiceImportService.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { crmRoutes } from "./routes/crmRoutes.js";
 import { runDailyVendusConsumptionJob } from "./services/dailyVendusConsumptionJobService.js";
@@ -267,12 +269,47 @@ const deleteDraftStockPurchaseReviewRef: { current: DeleteDraftStockPurchaseRevi
 const deleteDraftStockPurchaseReviewProxy: DeleteDraftStockPurchaseReviewPort = {
   execute: (command) => deleteDraftStockPurchaseReviewRef.current.execute(command),
 };
+// Identidade fiscal partilhada Financeiro/Stock (task v1.2 · F1): um documento real = uma identidade.
+const fiscalDocumentsModule = createFiscalDocumentsModule();
 const invoicesModule = createInvoicesModule(
   financialBaseModule.createSupplier,
   recordInvoiceFinalizedForStockProxy,
   getStockPurchaseReviewStatusProxy,
   deleteDraftStockPurchaseReviewProxy,
+  fiscalDocumentsModule.fiscalDocuments,
 );
+setStockImportFiscalDocuments(fiscalDocumentsModule.fiscalDocuments);
+// Migração do histórico com simulação (POST /api/fiscal-documents/backfill, dryRun por omissão).
+const fiscalDocumentsRouter = fiscalDocumentsModule.routerWith({
+    list: async (org) => {
+      const q = createScopedQuery(org);
+      const [inv, sup, imp] = await Promise.all([
+        q.table("invoices").select("id, supplier_id, supplier_nif_snapshot, document_type, invoice_number, invoice_date, supplier_name, status, created_at").not("status", "in", "(draft_ai,pending_review,cancelled)"),
+        q.table("suppliers").select("id, nif"),
+        q.table("supplier_invoice_imports").select("id, supplier_name, invoice_number, invoice_date, supplier_nif, created_at").not("confirmed_at", "is", null),
+      ]);
+      for (const r of [inv, sup, imp]) if (r.error) throw new Error(r.error.message);
+      const nifOf = new Map(((sup.data ?? []) as unknown as { id: string; nif: string | null }[]).map((s) => [s.id, s.nif]));
+      type InvRow = { id: string; supplier_id: string | null; supplier_nif_snapshot: string | null; document_type: "invoice" | "credit_note"; invoice_number: string; invoice_date: string; supplier_name: string; created_at: string };
+      type ImpRow = { id: string; supplier_name: string | null; invoice_number: string | null; invoice_date: string | null; supplier_nif: string | null; created_at: string };
+      return [
+        ...((inv.data ?? []) as unknown as InvRow[]).map((r) => ({
+          origin: "finance" as const,
+          id: r.id,
+          createdAt: r.created_at,
+          label: `${r.supplier_name} — ${r.invoice_number} (${r.invoice_date})`,
+          input: { buyerLegalEntityId: null, issuerTaxId: r.supplier_nif_snapshot || (r.supplier_id ? (nifOf.get(r.supplier_id) ?? null) : null), issuerCountry: null, documentType: r.document_type, seriesNumber: r.invoice_number || null, atcud: null },
+        })),
+        ...((imp.data ?? []) as unknown as ImpRow[]).map((r) => ({
+          origin: "stock" as const,
+          id: r.id,
+          createdAt: r.created_at,
+          label: `Stock: ${r.supplier_name ?? "?"} — ${r.invoice_number ?? "?"} (${r.invoice_date ?? "?"})`,
+          input: { buyerLegalEntityId: null, issuerTaxId: r.supplier_nif, issuerCountry: null, documentType: "invoice" as const, seriesNumber: r.invoice_number, atcud: null },
+        })),
+      ];
+    },
+  });
 const stockPurchaseReviewModule = createStockPurchaseReviewModule(
   invoicesModule.getInvoice,
   invoicesModule.listInvoices,
@@ -1467,6 +1504,7 @@ app.use("/api", financialBaseModule.router);
 
 // Invoices module (hexagonal) — instantiated above, before requireAuth
 app.use("/api", invoicesModule.router);
+app.use("/api", fiscalDocumentsRouter);
 
 // Accounting module (hexagonal) — Fase 1 (Documentos agregados, despesas de
 // sócio/plataforma, Controlo de IVA em acompanhamento). Cross-module reads

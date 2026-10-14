@@ -8,6 +8,8 @@ import { FakePayableEntryWrite } from "../fakes/fake-payable-entry-write.js";
 import { FakeSupplierCreatePort } from "../fakes/fake-supplier-create.port.js";
 import { FakeSupplierHintPort } from "../fakes/fake-supplier-hint.port.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+import { FakeFiscalIdentityPort } from "../fakes/fake-fiscal-identity.port.js";
+import { FakeSupplierLookupPort } from "../fakes/fake-supplier-lookup.port.js";
 
 const ORG_ID = mintOrganizationId("org-test");
 
@@ -35,6 +37,7 @@ describe("ConfirmImportedInvoiceUseCase", () => {
   let payableWrite: FakePayableEntryWrite;
   let supplierCreate: FakeSupplierCreatePort;
   let supplierHint: FakeSupplierHintPort;
+  let fiscal: FakeFiscalIdentityPort;
   let useCase: ConfirmImportedInvoiceUseCase;
 
   beforeEach(() => {
@@ -43,7 +46,8 @@ describe("ConfirmImportedInvoiceUseCase", () => {
     payableWrite = new FakePayableEntryWrite();
     supplierCreate = new FakeSupplierCreatePort();
     supplierHint = new FakeSupplierHintPort();
-    useCase = new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint);
+    fiscal = new FakeFiscalIdentityPort();
+    useCase = new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, { notifyInvoiceFinalized: async () => {} }, fiscal, new FakeSupplierLookupPort());
   });
 
   it("transitions draft_ai to pending", async () => {

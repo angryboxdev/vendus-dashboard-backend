@@ -67,6 +67,8 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/financial-base\/suppliers(\/|$)/, target: p("finance.suppliers") },
   { pattern: /^\/api\/financial-base(\/|$)/, target: p("finance.cost_centers") },
   { pattern: /^\/api\/invoices(\/|$)/, target: p("finance.invoices") },
+  // Identidade fiscal partilhada: migração do histórico (simulação/execução) — gestão de faturas.
+  { pattern: /^\/api\/fiscal-documents\/backfill$/, target: p("finance.invoices", "MANAGE") },
   { pattern: /^\/api\/payable-entries(\/|$)/, target: p("finance.payables") },
   { pattern: /^\/api\/payable-recurrences(\/|$)/, target: p("finance.recurrences") },
   { pattern: /^\/api\/bank-(accounts|statements)(\/|$)/, target: p("finance.banking") },

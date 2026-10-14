@@ -102,15 +102,17 @@ supplierInvoiceImportRoutes.post(
         res.status(400).json({ error: "id obrigatório" });
         return;
       }
-      const body = (req.body ?? {}) as ConfirmSupplierInvoiceImportBody;
+      // Quem confirma vem da sessão, nunca do corpo do pedido.
+      const body = { ...((req.body ?? {}) as ConfirmSupplierInvoiceImportBody), actor: req.auth!.email || req.auth!.sub };
       const result = await confirmSupplierInvoiceImport(req.auth!.orgId, id, body);
       res.json(result);
     } catch (e: unknown) {
       const message =
         e instanceof Error ? e.message : "Erro ao confirmar importação";
-      const isDup = message.startsWith("DUPLICATE:");
+      const isDup = /^(DUPLICATE|DUPLICATE_FINANCE|POSSIBLE_DUPLICATE):/.test(message);
+      const isIdentity = message.startsWith("IDENTITY_INCOMPLETE:");
       const isState = /não está pronta|estado/i.test(message);
-      const status = isDup ? 409 : isState ? 400 : 500;
+      const status = isDup ? 409 : isIdentity ? 422 : isState ? 400 : 500;
       res.status(status).json({ error: message });
     }
   }

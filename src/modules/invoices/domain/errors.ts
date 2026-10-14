@@ -106,3 +106,19 @@ export class StockReviewRemovalConfirmationRequiredError extends Error {
     this.name = "StockReviewRemovalConfirmationRequiredError";
   }
 }
+
+/**
+ * Identidade fiscal (task v1.2 §1.2): o documento já existe, só no Stock, é
+ * um possível duplicado ou não tem identidade completa. O ecrã usa `code`
+ * para oferecer a ação certa (abrir original, completar, comparar, corrigir).
+ */
+export class FiscalIdentityConflictError extends Error {
+  constructor(
+    readonly code: "existing_finance" | "existing_stock_only" | "possible_duplicate" | "identity_incomplete",
+    message: string,
+    readonly details: { existingInvoiceId?: string | null; identityId?: string; candidates?: { invoiceId: string | null; seriesNumber: string }[]; missing?: string[] } = {},
+  ) {
+    super(message);
+    this.name = "FiscalIdentityConflictError";
+  }
+}

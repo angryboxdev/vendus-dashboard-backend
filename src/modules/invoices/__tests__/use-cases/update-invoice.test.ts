@@ -14,6 +14,8 @@ import {
   StockReviewRemovalConfirmationRequiredError,
 } from "../../domain/errors.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+import { FakeFiscalIdentityPort } from "../fakes/fake-fiscal-identity.port.js";
+import { FakeSupplierLookupPort } from "../fakes/fake-supplier-lookup.port.js";
 
 const ORG_ID = mintOrganizationId("org-test");
 
@@ -34,6 +36,7 @@ describe("UpdateInvoiceUseCase", () => {
   let reconciliationCleanup: FakeInvoiceReconciliationCleanup;
   let stockReviewStatusRead: FakeInvoiceStockReviewStatusRead;
   let stockReviewDraftDelete: FakeInvoiceStockReviewDraftDelete;
+  let fiscal: FakeFiscalIdentityPort;
   let useCase: UpdateInvoiceUseCase;
 
   beforeEach(() => {
@@ -43,7 +46,8 @@ describe("UpdateInvoiceUseCase", () => {
     reconciliationCleanup = new FakeInvoiceReconciliationCleanup();
     stockReviewStatusRead = new FakeInvoiceStockReviewStatusRead();
     stockReviewDraftDelete = new FakeInvoiceStockReviewDraftDelete();
-    useCase = new UpdateInvoiceUseCase(repo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete);
+    fiscal = new FakeFiscalIdentityPort();
+    useCase = new UpdateInvoiceUseCase(repo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, new FakeSupplierLookupPort());
   });
 
   it("actualiza o nome do fornecedor", async () => {

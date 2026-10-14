@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 748 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 749 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -156,6 +156,7 @@ Endpoints: 748 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/financial-base/suppliers/:id/statement-pdf` | permission:finance.suppliers:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/financial-base/suppliers/:id/status` | permission:finance.suppliers:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/financial-base/suppliers/kpis` | permission:finance.suppliers:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
+| POST | `/api/fiscal-documents/backfill` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/hr/attendance/closure` | permission:hr.closure:READ | ✔ | ✖ | ✔ | ✖ | ✖ |
 | POST | `/api/hr/attendance/closure/close` | permission:hr.closure:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | POST | `/api/hr/attendance/closure/reopen` | permission:hr.reopen_month:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |

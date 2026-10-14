@@ -11,6 +11,9 @@ import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry
 import type { StockDecisionNotifyPort } from "../../domain/ports/out/stock-decision-notify.port.js";
 import { toInvoiceDTO } from "./shared.js";
 import { DuplicateInvoiceError } from "../../domain/errors.js";
+import { claimFiscalIdentity } from "./shared-fiscal-identity.js";
+import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.port.js";
+import type { SupplierLookupPort } from "../../domain/ports/out/supplier-lookup.port.js";
 
 export class CreateInvoiceUseCase implements CreateInvoicePort {
   constructor(
@@ -18,6 +21,8 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     private readonly lineRepo: InvoiceLineRepositoryPort,
     private readonly payableWrite: PayableEntryWritePort,
     private readonly stockDecisionNotify: StockDecisionNotifyPort,
+    private readonly fiscal: FiscalIdentityPort,
+    private readonly supplierLookup: SupplierLookupPort,
   ) {}
 
   async execute(command: CreateInvoiceCommand): Promise<InvoiceDTO> {
@@ -40,7 +45,7 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     if (command.directDebitDate !== undefined) invoiceProps.directDebitDate = command.directDebitDate ? new Date(command.directDebitDate) : null;
     if (command.stockReviewOverride !== undefined) invoiceProps.stockReviewOverride = command.stockReviewOverride;
     if (command.stockReviewOverrideReason !== undefined) invoiceProps.stockReviewOverrideReason = command.stockReviewOverrideReason;
-    const invoice = Invoice.create(invoiceProps);
+    let invoice = Invoice.create(invoiceProps);
 
     // Duplicate check — only when supplier is known
     if (invoice.supplierId) {
@@ -67,6 +72,21 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     });
 
     await this.invoiceRepo.save(command.organizationId, invoice);
+    // Identidade fiscal partilhada: aponta para a fatura (FK), por isso reserva-se logo a seguir a gravar;
+    // se o documento já existir, a fatura acabada de criar é retirada e nada fica finalizado.
+    try {
+      const fiscal = await claimFiscalIdentity(this.fiscal, this.supplierLookup, command.organizationId, command.actor ?? "sistema", invoice, {
+        notADuplicate: command.notADuplicate === true,
+        ...(command.completeStockIdentityId && { completeStockIdentityId: command.completeStockIdentityId }),
+      });
+      if (fiscal.linkedToStock && invoice.stockReviewOverride !== "force_skip") {
+        invoice = invoice.update({ stockReviewOverride: "force_skip", stockReviewOverrideReason: "Documento já movimentado no Stock (importação feita no Stock) — sem nova revisão." });
+        await this.invoiceRepo.update(command.organizationId, invoice);
+      }
+    } catch (e) {
+      await this.invoiceRepo.delete(command.organizationId, invoice.id);
+      throw e;
+    }
     if (lines.length > 0) {
       await this.lineRepo.saveAll(command.organizationId, lines);
     }

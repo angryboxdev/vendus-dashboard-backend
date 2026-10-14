@@ -13,6 +13,9 @@ import { InvoiceNotFoundError, DuplicateInvoiceError } from "../../domain/errors
 import type { UpdateInvoiceData } from "../../domain/entities/invoice.js";
 import { toInvoiceDTO } from "./shared.js";
 import { guardAgainstBlockingStockReview } from "./shared-stock-review-guard.js";
+import { claimFiscalIdentity } from "./shared-fiscal-identity.js";
+import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.port.js";
+import type { SupplierLookupPort } from "../../domain/ports/out/supplier-lookup.port.js";
 
 export class UpdateInvoiceUseCase implements UpdateInvoicePort {
   constructor(
@@ -22,6 +25,8 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     private readonly reconciliationCleanup: InvoiceReconciliationCleanupPort,
     private readonly stockReviewStatusRead: InvoiceStockReviewStatusReadPort,
     private readonly stockReviewDraftDelete: InvoiceStockReviewDraftDeletePort,
+    private readonly fiscal: FiscalIdentityPort,
+    private readonly supplierLookup: SupplierLookupPort,
   ) {}
 
   async execute(command: UpdateInvoiceCommand): Promise<InvoiceDTO> {
@@ -67,6 +72,8 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     if (command.subtotalWithoutVat !== undefined) data.subtotalWithoutVat = command.subtotalWithoutVat;
     if (command.totalVat !== undefined) data.totalVat = command.totalVat;
     if (command.totalWithVat !== undefined) data.totalWithVat = command.totalWithVat;
+    // Bug corrigido: o tipo de documento chegava no comando mas nunca era aplicado.
+    if (command.documentType !== undefined) data.documentType = command.documentType;
     if (command.notes !== undefined) data.notes = command.notes;
     if (command.attachmentUrl !== undefined) data.attachmentUrl = command.attachmentUrl;
     if (command.costCenterGroupId !== undefined) data.costCenterGroupId = command.costCenterGroupId;
@@ -82,7 +89,16 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     if (command.stockReviewOverride !== undefined) data.stockReviewOverride = command.stockReviewOverride;
     if (command.stockReviewOverrideReason !== undefined) data.stockReviewOverrideReason = command.stockReviewOverrideReason;
 
-    const updated = existing.update(data);
+    let updated = existing.update(data);
+    // Corrigir a identidade (número, NIF, fornecedor, tipo) de uma fatura já finalizada passa pela identidade
+    // fiscal partilhada: a nova chave não pode pertencer a outro documento (task v1.2 §1.2).
+    const finalized = existing.status !== "draft_ai" && existing.status !== "pending_review";
+    const identityChanged =
+      updated.invoiceNumber !== existing.invoiceNumber || updated.supplierNifSnapshot !== existing.supplierNifSnapshot || updated.supplierId !== existing.supplierId || updated.documentType !== existing.documentType;
+    if (finalized && identityChanged) {
+      const fiscal = await claimFiscalIdentity(this.fiscal, this.supplierLookup, command.organizationId, command.actor ?? "sistema", updated, { notADuplicate: command.notADuplicate === true });
+      if (fiscal.linkedToStock && updated.stockReviewOverride !== "force_skip") updated = updated.update({ stockReviewOverride: "force_skip", stockReviewOverrideReason: "Documento já movimentado no Stock (importação feita no Stock) — sem nova revisão." });
+    }
     await this.invoiceRepo.update(command.organizationId, updated);
 
     // Propagar costCenterCategoryId às linhas sempre que o campo for explicitamente enviado

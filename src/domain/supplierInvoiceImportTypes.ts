@@ -50,6 +50,8 @@ export type SupplierInvoiceImportSummaryDto = {
   file_sha256: string;
   file_size: number;
   supplier_name: string | null;
+  /** NIF do emitente (identidade fiscal partilhada com o Financeiro, task v1.2 · F1). */
+  supplier_nif: string | null;
   invoice_number: string | null;
   invoice_date: string | null;
   currency: string;
@@ -68,6 +70,7 @@ export type SupplierInvoiceImportSummaryDto = {
 
 export type UpdateSupplierInvoiceImportBody = {
   supplier_name?: string | null;
+  supplier_nif?: string | null;
   invoice_number?: string | null;
   /** Formato YYYY-MM-DD. */
   invoice_date?: string | null;
@@ -79,7 +82,12 @@ export type UpdateSupplierInvoiceImportBody = {
 
 export type ConfirmSupplierInvoiceImportBody = {
   /** Se true, substitui movimentos de import(s) anterior(es) com a mesma chave de negócio. */
+  /** Já não substitui importações confirmadas (F1): enviado como true é recusado. */
   override_duplicate?: boolean;
+  /** A pessoa comparou com o documento parecido e confirmou que é outro. */
+  not_a_duplicate?: boolean;
+  /** Quem confirma (definido pelo servidor). */
+  actor?: string;
   /**
    * Data dos movimentos de stock gerados (YYYY-MM-DD ou ISO 8601).
    * Se omitido, usa a data de hoje (dia em que se confirma a fatura).

@@ -13,6 +13,9 @@ import type { StockDecisionNotifyPort } from "../../domain/ports/out/stock-decis
 import { normalizeSupplierName } from "../../domain/utils/supplier-name.js";
 import { InvoiceNotFoundError, DuplicateInvoiceError } from "../../domain/errors.js";
 import { toInvoiceDTO } from "./shared.js";
+import { claimFiscalIdentity } from "./shared-fiscal-identity.js";
+import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.port.js";
+import type { SupplierLookupPort } from "../../domain/ports/out/supplier-lookup.port.js";
 
 export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort {
   constructor(
@@ -22,6 +25,8 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     private readonly supplierCreate: SupplierCreatePort,
     private readonly supplierHint: SupplierHintPort,
     private readonly stockDecisionNotify: StockDecisionNotifyPort,
+    private readonly fiscal: FiscalIdentityPort,
+    private readonly supplierLookup: SupplierLookupPort,
   ) {}
 
   async execute(command: ConfirmImportedInvoiceCommand): Promise<InvoiceDTO> {
@@ -84,6 +89,16 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
           ? await this.invoiceRepo.findDuplicateByNif(command.organizationId, confirmed.invoiceNumber, confirmed.supplierNifSnapshot, confirmed.id)
           : null;
       if (duplicate) throw new DuplicateInvoiceError(confirmed.invoiceNumber, confirmed.supplierName);
+    }
+
+    // Identidade fiscal partilhada (task v1.2 §1.2): reserva antes de finalizar.
+    // Já movimentado no Stock → completa o mesmo documento sem nova revisão de stock.
+    const fiscal = await claimFiscalIdentity(this.fiscal, this.supplierLookup, command.organizationId, command.actor ?? "sistema", confirmed, {
+      notADuplicate: command.notADuplicate === true,
+      ...(command.completeStockIdentityId && { completeStockIdentityId: command.completeStockIdentityId }),
+    });
+    if (fiscal.linkedToStock && confirmed.stockReviewOverride !== "force_skip") {
+      confirmed = confirmed.update({ stockReviewOverride: "force_skip", stockReviewOverrideReason: "Documento já movimentado no Stock (importação feita no Stock) — sem nova revisão." });
     }
 
     await this.invoiceRepo.update(command.organizationId, confirmed);

@@ -11,6 +11,7 @@ export interface SupplierSummary {
 
 export interface SupplierLookupPort {
   findByNif(organizationId: OrganizationId, nif: string): Promise<SupplierSummary | null>;
+  findById(organizationId: OrganizationId, id: string): Promise<SupplierSummary | null>;
   findByName(organizationId: OrganizationId, query: string): Promise<SupplierSummary[]>;
   /** Devolve todos os fornecedores — usado para fuzzy matching em memória. */
   findAll(organizationId: OrganizationId): Promise<SupplierSummary[]>;

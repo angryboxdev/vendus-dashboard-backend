@@ -8,6 +8,7 @@ import type { InvoiceStockReviewStatusReadPort } from "../../domain/ports/out/in
 import type { InvoiceStockReviewDraftDeletePort } from "../../domain/ports/out/invoice-stock-review-draft-delete.port.js";
 import { InvoiceNotFoundError } from "../../domain/errors.js";
 import { guardAgainstBlockingStockReview } from "./shared-stock-review-guard.js";
+import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.port.js";
 
 export class DeleteInvoiceUseCase implements DeleteInvoicePort {
   constructor(
@@ -18,6 +19,7 @@ export class DeleteInvoiceUseCase implements DeleteInvoicePort {
     private readonly reconciliationCleanup: InvoiceReconciliationCleanupPort,
     private readonly stockReviewStatusRead: InvoiceStockReviewStatusReadPort,
     private readonly stockReviewDraftDelete: InvoiceStockReviewDraftDeletePort,
+    private readonly fiscal: FiscalIdentityPort,
   ) {}
 
   async execute(command: DeleteInvoiceCommand): Promise<void> {
@@ -46,6 +48,8 @@ export class DeleteInvoiceUseCase implements DeleteInvoicePort {
     await this.reconciliationCleanup.removeLinksForInvoice(organizationId, id);
     await this.payableWrite.cancelByInvoiceId(organizationId, id);
 
+    // Liberta a chave fiscal (só se o documento nunca chegou ao Stock) antes de a FK a desligar.
+    await this.fiscal.release(organizationId, command.actor ?? "sistema", id);
     await this.invoiceRepo.delete(organizationId, id);
 
     if (attachmentUrl) {

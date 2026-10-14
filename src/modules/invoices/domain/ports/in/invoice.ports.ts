@@ -199,6 +199,12 @@ export interface CreateInvoiceCommand {
   stockReviewOverride?: StockReviewOverride;
   stockReviewOverrideReason?: string | null;
   lines?: CreateInvoiceLineCommand[];
+  /** Quem faz o pedido (definido pelo servidor a partir da sessão). */
+  actor?: string;
+  /** A pessoa comparou com os documentos parecidos e confirmou que é outro documento. */
+  notADuplicate?: boolean;
+  /** Completar o documento que já existe só no Stock (identidade fiscal indicada). */
+  completeStockIdentityId?: string;
 }
 
 export interface UpdateInvoiceCommand {
@@ -237,6 +243,8 @@ export interface UpdateInvoiceCommand {
    * necessária) em vez de descartar a revisão silenciosamente.
    */
   confirmRemoveStockReview?: boolean;
+  /** A pessoa comparou com os documentos parecidos e confirmou que é outro documento. */
+  notADuplicate?: boolean;
 }
 
 export interface MarkInvoicePaidCommand {
@@ -350,6 +358,12 @@ export interface ConfirmImportedInvoiceCommand {
   markAsPaid?: boolean;
   paidAt?: string; // YYYY-MM-DD — used when markAsPaid is true; defaults to invoiceDate
   lines?: CreateInvoiceLineCommand[];
+  /** Quem faz o pedido (definido pelo servidor a partir da sessão). */
+  actor?: string;
+  /** A pessoa comparou com os documentos parecidos e confirmou que é outro documento. */
+  notADuplicate?: boolean;
+  /** Completar o documento que já existe só no Stock (identidade fiscal indicada). */
+  completeStockIdentityId?: string;
 }
 
 export interface AddInvoiceLineCommand {

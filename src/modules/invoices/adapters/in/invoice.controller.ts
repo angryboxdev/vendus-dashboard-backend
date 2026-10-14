@@ -27,6 +27,7 @@ import {
   InvoiceLineNotFoundError,
   InvoiceAlreadyCancelledError,
   DuplicateInvoiceError,
+  FiscalIdentityConflictError,
   LineDetailModeError,
   LinesTotalMismatchError,
   InvoiceLinesLockedByAppliedStockReviewError,
@@ -62,6 +63,10 @@ function handleError(res: import("express").Response, err: unknown): void {
   }
   if (err instanceof InvoiceAlreadyCancelledError || err instanceof DuplicateInvoiceError || err instanceof InvoiceLinesLockedByAppliedStockReviewError) {
     res.status(409).json({ error: (err as Error).message });
+    return;
+  }
+  if (err instanceof FiscalIdentityConflictError) {
+    res.status(409).json({ error: err.message, code: err.code, ...err.details });
     return;
   }
   if (err instanceof StockReviewRemovalConfirmationRequiredError) {
@@ -142,6 +147,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
       const invoice = await ports.createInvoice.execute({
         ...(req.body as object),
         organizationId: req.auth!.orgId,
+        actor: req.auth!.email || req.auth!.sub,
       } as Parameters<CreateInvoicePort["execute"]>[0]);
       res.status(201).json(invoice);
     } catch (err) {
@@ -390,6 +396,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
         ...(req.body as object),
         organizationId: req.auth!.orgId,
         id: req.params.id,
+        actor: req.auth!.email || req.auth!.sub,
       });
       res.json(invoice);
     } catch (err) {
