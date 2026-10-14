@@ -40,6 +40,8 @@ import { StockPurchaseReviewRoutingAdapter } from "./adapters/out/stock-purchase
 import type { SuggestStockRoutingPort } from "../stock-purchase-review/domain/ports/in/suggest-stock-routing.port.js";
 import { SupabaseInvoiceAuditAdapter } from "./adapters/out/supabase-invoice-audit.adapter.js";
 import { SupabaseIdempotencyStore } from "../../infra/http/supabase-idempotency.store.js";
+import { GetPayablesSummaryUseCase } from "./application/use-cases/get-payables-summary.use-case.js";
+import { SupabasePayablesLedgerReadAdapter } from "./adapters/out/supabase-payables-ledger-read.adapter.js";
 import { ListInvoiceAllocationsUseCase } from "./application/use-cases/list-invoice-allocations.use-case.js";
 import { SaveInvoiceDraftUseCase } from "./application/use-cases/save-invoice-draft.use-case.js";
 import { ReplaceInvoiceAllocationsUseCase } from "./application/use-cases/replace-invoice-allocations.use-case.js";
@@ -120,6 +122,7 @@ export function createInvoicesModule(
   const router = createInvoiceRouter({
     listPayableDuplicates: new ListPayableDuplicatesUseCase(payableWrite),
     listInvoiceAllocations: new ListInvoiceAllocationsUseCase(allocationRepo, invoiceRepo),
+    getPayablesSummary: new GetPayablesSummaryUseCase(invoiceRepo, lineRepo, allocationRepo, new SupabasePayablesLedgerReadAdapter(createScopedQuery), organizationIdentityRead),
     saveInvoiceDraft: new SaveInvoiceDraftUseCase(invoiceRepo, lineRepo, amountsWrite, categoryReader, allocationRepo, audit),
     replaceInvoiceAllocations: new ReplaceInvoiceAllocationsUseCase(invoiceRepo, categoryReader, allocationRepo, audit),
     suggestStockRouting: stockRouting,
