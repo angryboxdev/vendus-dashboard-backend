@@ -149,3 +149,14 @@ export class InvoiceVersionConflictError extends Error {
     this.name = "InvoiceVersionConflictError";
   }
 }
+
+/** «Enviar para Stock» precisa de decisão explícita (política «Decidir») ou de motivo (contraria a predefinição). */
+export class StockDecisionRequiredError extends Error {
+  constructor(
+    readonly code: "decision_required" | "reason_required",
+    message: string,
+  ) {
+    super(message);
+    this.name = "StockDecisionRequiredError";
+  }
+}

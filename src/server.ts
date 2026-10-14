@@ -47,6 +47,7 @@ import { createLocationCredentialsModule } from "./modules/location-credentials/
 import { createSalesSummaryModule } from "./modules/sales-summary/sales-summary.module.js";
 import { createHrModule } from "./modules/hr/hr.module.js";
 import { createAccountingModule } from "./modules/accounting/accounting.module.js";
+import type { SuggestStockRoutingPort } from "./modules/stock-purchase-review/domain/ports/in/suggest-stock-routing.port.js";
 import { createStockPurchaseReviewModule } from "./modules/stock-purchase-review/stock-purchase-review.module.js";
 import type {
   RecordInvoiceFinalizedForStockPort,
@@ -269,6 +270,12 @@ const deleteDraftStockPurchaseReviewRef: { current: DeleteDraftStockPurchaseRevi
 const deleteDraftStockPurchaseReviewProxy: DeleteDraftStockPurchaseReviewPort = {
   execute: (command) => deleteDraftStockPurchaseReviewRef.current.execute(command),
 };
+const suggestStockRoutingRef: { current: SuggestStockRoutingPort } = {
+  current: { execute: async () => ({ send: null, source: "none", reason: "Sem predefinição", requiresDecision: false }) },
+};
+const suggestStockRoutingProxy: SuggestStockRoutingPort = {
+  execute: (command) => suggestStockRoutingRef.current.execute(command),
+};
 // Identidade fiscal partilhada Financeiro/Stock (task v1.2 · F1): um documento real = uma identidade.
 const fiscalDocumentsModule = createFiscalDocumentsModule();
 const invoicesModule = createInvoicesModule(
@@ -277,6 +284,7 @@ const invoicesModule = createInvoicesModule(
   getStockPurchaseReviewStatusProxy,
   deleteDraftStockPurchaseReviewProxy,
   fiscalDocumentsModule.fiscalDocuments,
+  suggestStockRoutingProxy,
 );
 setStockImportFiscalDocuments(fiscalDocumentsModule.fiscalDocuments);
 // Migração do histórico com simulação (POST /api/fiscal-documents/backfill, dryRun por omissão).
@@ -316,7 +324,9 @@ const stockPurchaseReviewModule = createStockPurchaseReviewModule(
   financialBaseModule.listCostCenterCategories,
   financialBaseModule.getSupplier,
   locationsModule.listLocations,
+  financialBaseModule.supplierLocationRules,
 );
+suggestStockRoutingRef.current = stockPurchaseReviewModule.suggestStockRouting;
 recordInvoiceFinalizedForStockRef.current = stockPurchaseReviewModule.recordInvoiceFinalizedForStock;
 getStockPurchaseReviewStatusRef.current = stockPurchaseReviewModule.getStockPurchaseReviewStatus;
 deleteDraftStockPurchaseReviewRef.current = stockPurchaseReviewModule.deleteDraftStockPurchaseReview;

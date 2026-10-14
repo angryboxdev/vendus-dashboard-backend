@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 753 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 754 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -305,6 +305,7 @@ Endpoints: 753 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/invoices/integrity/payable-duplicates` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/lines` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/invoices/process-direct-debits` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
+| POST | `/api/invoices/stock-routing-suggestion` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/suggest-classification/:supplierId` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/kds/air-menu-deliveries/:id/status` | pré-auth | — | — | — | — | — |
 | GET | `/api/kds/deliveries` | pré-auth | — | — | — | — | — |

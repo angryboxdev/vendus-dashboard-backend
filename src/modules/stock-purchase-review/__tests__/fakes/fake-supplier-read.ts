@@ -4,6 +4,11 @@ import type { SupplierReadPort } from "../../domain/ports/out/supplier-read.port
 
 export class FakeSupplierRead implements SupplierReadPort {
   policies = new Map<string, DefaultStockPolicy>();
+  locationPolicies = new Map<string, DefaultStockPolicy>();
+
+  async getLocationStockPolicy(_organizationId: OrganizationId, supplierId: string, locationId: string): Promise<DefaultStockPolicy | null> {
+    return this.locationPolicies.get(`${supplierId}:${locationId}`) ?? null;
+  }
 
   async getDefaultStockPolicy(_organizationId: OrganizationId, supplierId: string): Promise<DefaultStockPolicy | null> {
     return this.policies.get(supplierId) ?? null;

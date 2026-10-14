@@ -1,3 +1,4 @@
+import { FakeStockRoutingPort } from "../fakes/fake-stock-routing.port.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { ConfirmImportedInvoiceUseCase } from "../../application/use-cases/confirm-imported-invoice.use-case.js";
 import { CreateInvoiceUseCase } from "../../application/use-cases/create-invoice.use-case.js";
@@ -45,8 +46,8 @@ function setup() {
   const fiscal = new FakeFiscalIdentityPort();
   const suppliers = new FakeSupplierLookupPort();
   const update = new UpdateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, new FakeInvoiceReconciliationCleanup(), new FakeInvoiceStockReviewStatusRead(), new FakeInvoiceStockReviewDraftDelete(), fiscal, suppliers, audit);
-  const confirm = new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, new FakeSupplierCreatePort(), new FakeSupplierHintPort(), notify, fiscal, suppliers, new FakeInvoiceAmountsWrite(), audit);
-  const create = new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, notify, fiscal, suppliers, new FakeInvoiceAmountsWrite(), audit);
+  const confirm = new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, new FakeSupplierCreatePort(), new FakeSupplierHintPort(), notify, fiscal, suppliers, new FakeInvoiceAmountsWrite(), audit, new FakeStockRoutingPort());
+  const create = new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, notify, fiscal, suppliers, new FakeInvoiceAmountsWrite(), audit, new FakeStockRoutingPort());
   const del = new DeleteInvoiceUseCase(invoiceRepo, lineRepo, new FakeDocumentStoragePort(), payableWrite, new FakeInvoiceReconciliationCleanup(), new FakeInvoiceStockReviewStatusRead(), new FakeInvoiceStockReviewDraftDelete(), fiscal, audit);
   return { invoiceRepo, audit, update, confirm, create, del };
 }

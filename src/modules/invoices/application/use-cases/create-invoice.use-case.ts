@@ -18,6 +18,8 @@ import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.
 import type { SupplierLookupPort } from "../../domain/ports/out/supplier-lookup.port.js";
 import type { InvoiceAmountsWritePort } from "../../domain/ports/out/invoice-amounts-write.port.js";
 import { reconcileForFinalize } from "./shared-amounts.js";
+import type { StockRoutingPort } from "../../domain/ports/out/stock-routing.port.js";
+import { resolveStockRouting } from "./shared-stock-routing.js";
 
 export class CreateInvoiceUseCase implements CreateInvoicePort {
   constructor(
@@ -29,6 +31,7 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     private readonly supplierLookup: SupplierLookupPort,
     private readonly amountsWrite: InvoiceAmountsWritePort,
     private readonly audit: InvoiceAuditPort,
+    private readonly stockRouting: StockRoutingPort,
   ) {}
 
   async execute(command: CreateInvoiceCommand): Promise<InvoiceDTO> {
@@ -84,6 +87,8 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     const amounts = reconcileForFinalize(invoice, draftLines.map((line, i) => ({ line, cmd: lineCommands[i] })), command.amounts);
     invoice = amounts.invoice;
     const lines = amounts.lines;
+    // «Enviar para Stock» (F2 §2.1): decisão explícita ou predefinição aplicada; «Decidir» sem escolha → recusa.
+    invoice = (await resolveStockRouting(this.stockRouting, this.supplierLookup, command.organizationId, invoice, lines)).invoice;
 
     await this.invoiceRepo.save(command.organizationId, invoice);
     // Identidade fiscal partilhada: aponta para a fatura (FK), por isso reserva-se logo a seguir a gravar;

@@ -36,6 +36,8 @@ import { ProcessDirectDebitsUseCase } from "./application/use-cases/process-dire
 import { SetLineDetailModeUseCase } from "./application/use-cases/set-line-detail-mode.use-case.js";
 import { ListPayableDuplicatesUseCase } from "./application/use-cases/list-payable-duplicates.use-case.js";
 import { createInvoiceRouter } from "./adapters/in/invoice.controller.js";
+import { StockPurchaseReviewRoutingAdapter } from "./adapters/out/stock-purchase-review-routing.adapter.js";
+import type { SuggestStockRoutingPort } from "../stock-purchase-review/domain/ports/in/suggest-stock-routing.port.js";
 import { SupabaseInvoiceAuditAdapter } from "./adapters/out/supabase-invoice-audit.adapter.js";
 import { SupabaseIdempotencyStore } from "../../infra/http/supabase-idempotency.store.js";
 import { SupabaseInvoiceAmountsWriteAdapter } from "./adapters/out/supabase-invoice-amounts-write.adapter.js";
@@ -78,6 +80,7 @@ export function createInvoicesModule(
   getStockPurchaseReviewStatus: GetStockPurchaseReviewStatusPort,
   deleteDraftStockPurchaseReview: DeleteDraftStockPurchaseReviewPort,
   fiscalDocuments: FiscalDocumentsPort,
+  suggestStockRouting: SuggestStockRoutingPort,
 ): InvoicesModule {
   const openaiApiKey = process.env.OPENAI_API_KEY;
   if (!openaiApiKey) throw new Error("OPENAI_API_KEY não configurado");
@@ -101,6 +104,7 @@ export function createInvoicesModule(
   const fiscal = new FiscalDocumentsIdentityAdapter(fiscalDocuments);
   const amountsWrite = new SupabaseInvoiceAmountsWriteAdapter(createScopedQuery);
   const audit = new SupabaseInvoiceAuditAdapter(createScopedQuery);
+  const stockRouting = new StockPurchaseReviewRoutingAdapter(suggestStockRouting);
   const idempotencyStore = new SupabaseIdempotencyStore(createScopedQuery);
 
   const processDirectDebits = new ProcessDirectDebitsUseCase(invoiceRepo, payableWrite);
@@ -110,7 +114,8 @@ export function createInvoicesModule(
 
   const router = createInvoiceRouter({
     listPayableDuplicates: new ListPayableDuplicatesUseCase(payableWrite),
-    createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit),
+    suggestStockRouting: stockRouting,
+    createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit, stockRouting),
     updateInvoice: new UpdateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, supplierLookup, audit),
     markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite, occurrenceSync),
     setInvoiceStatus: new SetInvoiceStatusUseCase(invoiceRepo, payableWrite),
@@ -126,7 +131,7 @@ export function createInvoicesModule(
     deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, audit),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),
     importInvoice: new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint, organizationIdentityRead, fiscal),
-    confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit),
+    confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit, stockRouting),
     getInvoiceAlerts: new GetInvoiceAlertsUseCase(invoiceRepo),
     processDirectDebits,
   }, idempotencyStore);
