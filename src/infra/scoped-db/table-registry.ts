@@ -276,6 +276,7 @@ export const TABLE_REGISTRY = {
   invitations: { organizationColumn: "org_id", locationBearing: false },
   join_requests: { organizationColumn: "org_id", locationBearing: false },
   dashboard_layouts: { organizationColumn: "org_id", locationBearing: false },
+  location_google_places: { organizationColumn: "org_id", locationBearing: false },
   alert_rules: { organizationColumn: "org_id", locationBearing: false },
   alerts: { organizationColumn: "org_id", locationBearing: false },
   custom_request_forms: { organizationColumn: "org_id", locationBearing: false },

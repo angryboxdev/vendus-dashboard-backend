@@ -25,8 +25,8 @@ const PEOPLE = [
 ];
 
 describe("Dashboard — regras puras", () => {
-  test("estado da equipa mapeia estados reais (férias = ausência de categoria vacation); atrasos e faltas são sinais", () => {
-    expect(teamCounts(PEOPLE)).toEqual({ total: 5, working: 1, remote: 1, break: 1, vacation: 1, absent: 1, late: 1, missing: 1 });
+  test("estado da equipa mapeia estados reais (férias = ausência vacation; falta conta em ausentes; já saiu e por entrar contam)", () => {
+    expect(teamCounts(PEOPLE)).toEqual({ total: 7, working: 1, remote: 1, break: 1, finished: 1, not_started: 0, vacation: 1, absent: 2, late: 1, missing: 1 });
   });
 
   test("requer atenção: só linhas com contagem, do crítico ao menos grave", () => {
@@ -82,7 +82,7 @@ describe("Dashboard — snapshot", () => {
     const viewer = new FakeViewer("u1", PEOPLE, [request({ key: "leave:1", employeeId: "e1" })]);
     const s = await uc.snapshot(ORG_A, viewer, null);
     expect(s.context).toEqual({ type: "organization", locationId: null, name: null });
-    expect(s.team.total).toBe(5);
+    expect(s.team.total).toBe(7);
     expect(s.coverage).toEqual({ uncoveredToday: 1, uncoveredTomorrow: 1, uncoveredTotal: 2 });
     expect(s.requests).toEqual({ pending: 1, decidable: 1 });
     expect(s.units).toEqual({ operational: 2, requiringAttention: 2 });
@@ -95,8 +95,9 @@ describe("Dashboard — snapshot", () => {
     const s = await uc.snapshot(ORG_A, viewer, "loc-b");
     expect(s.context.name).toBe("Loja B");
     expect(s.locations.map((l) => l.locationId)).toEqual(["loc-b"]);
-    expect(s.team.total).toBe(0);
+    expect(s.team.total).toBe(2);
     expect(s.team.missing).toBe(1);
+    expect(s.team.finished).toBe(1);
     await expect(uc.snapshot(ORG_A, viewer, "loc-zzz")).rejects.toBeInstanceOf(DashboardValidationError);
   });
 
@@ -190,7 +191,7 @@ describe("Dashboard — resiliência", () => {
       throw new Error("caixa indisponível");
     };
     const s = await uc.snapshot(ORG_A, viewer, null);
-    expect(s.team.total).toBe(5);
+    expect(s.team.total).toBe(7);
     expect(s.partial.sort()).toEqual(["coverage", "requests"]);
     expect(s.coverage.uncoveredTotal).toBe(0);
     expect(errors.sort()).toEqual(["coverage", "requests"]);
@@ -217,7 +218,7 @@ describe("Dashboard — rapidez", () => {
     await expect(uc.snapshot(ORG_A, viewer, null)).rejects.toBeInstanceOf(DashboardWarmingError);
     release();
     await new Promise((r) => setTimeout(r, 5));
-    expect((await uc.snapshot(ORG_A, viewer, null)).team.total).toBe(5);
+    expect((await uc.snapshot(ORG_A, viewer, null)).team.total).toBe(7);
     expect(viewer.peopleCalls).toBe(1);
   });
 

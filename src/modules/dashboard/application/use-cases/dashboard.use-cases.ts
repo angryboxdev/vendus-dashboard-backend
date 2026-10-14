@@ -29,6 +29,8 @@ export const LIVE_TTL_MS = 45_000;
 const TEAM_PAGE = 50;
 /** Tempo máximo para a cobertura (muitas pessoas): passado isto, o snapshot sai sem ela. */
 export const COVERAGE_BUDGET_MS = 8_000;
+/** A Caixa de pedidos passa por vários módulos: um pouco mais de tempo do que a cobertura. */
+const REQUESTS_BUDGET_MS = 15_000;
 /** Tempo máximo à espera das pessoas num pedido; o cálculo continua e o próximo pedido aproveita-o. */
 export const PEOPLE_BUDGET_MS = 20_000;
 
@@ -78,7 +80,7 @@ export class DashboardUseCases {
           throw e instanceof Error && e.message.startsWith("timeout") ? new DashboardWarmingError() : e;
         }),
       ),
-      timed("requests", this.cache.getOrLoad({ org, metric: "REQUESTS", date: "today", viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () => withBudget(viewer.requests(), this.coverageBudgetMs)))
+      timed("requests", this.cache.getOrLoad({ org, metric: "REQUESTS", date: "today", viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () => withBudget(viewer.requests(), Math.max(this.coverageBudgetMs, Math.min(REQUESTS_BUDGET_MS, this.peopleBudgetMs)))))
         .catch((e): { value: DashboardRequest[]; hit: boolean } => (this.onSourceError("requests", e), partial.push("requests"), { value: [], hit: false })),
     ]);
     const { today, people: all, holidays } = peopleRes.value;
