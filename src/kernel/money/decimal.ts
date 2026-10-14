@@ -23,7 +23,7 @@ export const dec = (text: string): Dec => {
  * Devolve null quando o texto não é um número válido nesse formato.
  */
 export function parseDecimal(text: string, decimalSep: "," | "."): Dec | null {
-  const s = text.trim().replace(/[\s ]/g, "");
+  const s = text.trim().replace(/[\s\u00a0]/g, "");
   if (!s) return null;
   const thousands = decimalSep === "," ? "." : ",";
   const neg = s.startsWith("-");
