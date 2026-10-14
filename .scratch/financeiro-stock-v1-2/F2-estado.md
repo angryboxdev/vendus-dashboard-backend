@@ -15,6 +15,22 @@ Ramo `financeiro` (backend e frontend), commits locais, não enviados.
   `POST /api/invoices/stock-routing-suggestion`, `resolveStockRouting` em criar/confirmar
   (Decidir sem escolha → 422 `stock_decision_required`; desmarcar contra predefinição sem motivo → 422 `stock_reason_required`).
 
+## Backend F2 concluído (commits 3bb4abf, 76967d6, +teste, 2731d0b, e1ff5d2)
+- 2.2: migração 20261031110000 (by_values + invoice_allocations); «Por valores» valida soma = base líquida (422 allocations_not_reconciled);
+  linhas reais em todos os modos; trocar de modo não apaga linhas; feed /invoices/lines só «Por artigo»; GET /invoices/allocations;
+  POST /invoices/:id/draft («Guardar rascunho»); PUT /invoices/:id/allocations; editar base de «Por valores» exige rever repartição.
+- 2.3: GET /invoices/payables-summary?search&from&to&supplierId&locationId&currency → {totalOpenCents, overdueCents, missingDueDate, multiLocationDocuments, suspectedDuplicates, unappliedCreditCents, otherCurrencies, today}.
+- Migrações F2 validadas em PGlite (cadeia completa + dados + reexecução + rollback/reaplicação): scratchpad pgcheck/f2chain.mjs.
+- Unit 3136+ a passar, lint:deps limpo, authz 758/0.
+
+## Frontend F2 (por fazer, ramo financeiro do frontend)
+1. SupplierDrawer: modo financeiro preferido, destino habitual (LocationSelect), política com «Decidir no documento», exceções por loja.
+2. Revisão: seletor «Única | Por artigo | Por valores»; editor de repartições com «Por distribuir» e «Propor a partir das linhas»;
+   linhas enviadas sempre (ocultas fora de «Por artigo»); sem seletor «Tipo»; «Enviar para Stock» (sugestão + motivo); «Guardar rascunho».
+3. InvoicesView: «Total a pagar | Em atraso» na barra de filtros (sem cards); reabrir rascunho com linhas/repartições guardadas; texto do modal de modo.
+4. CostCentersView: incluir repartições «Por valores».
+5. Testes, typecheck (tsc -p tsconfig.app.json), build, READMEs, relatório F2.
+
 ## Decisões de modelo (F2 §2.2), ainda por implementar
 - Linhas reais guardadas nos três modos; `invoices.line_detail_mode` ganha `by_values` (simple=Única, detailed=Por artigo).
 - `ListInvoiceLinesUseCase` (feed de análise: IVA da Contabilidade + Centros de Custo) passa a devolver só linhas de faturas `detailed`
