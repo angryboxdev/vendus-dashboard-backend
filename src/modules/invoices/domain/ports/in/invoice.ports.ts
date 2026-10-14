@@ -87,6 +87,8 @@ export interface InvoiceDTO {
   stockReviewOverrideReason: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Versão atual — enviar como `expectedVersion` ao editar/confirmar (409 `version_conflict` se mudou). */
+  version: number;
   lines?: InvoiceLineDTO[];
   /** Presente apenas quando lineDetailMode === "detailed" e as linhas foram carregadas. */
   linesSummary?: {
@@ -132,6 +134,14 @@ export interface AiExtractedLineDTO {
   vatAmount: number | null;
   totalWithoutVat: number | null;
   totalWithVat: number | null;
+  /** Texto tal como impresso (ex.: "20.000", "1,235") — o motor resolve a leitura que reconcilia. */
+  quantityText?: string | null;
+  unitPriceText?: string | null;
+  /** Bruto da linha antes de descontos (cêntimos), quando impresso. */
+  grossWithoutDiscount?: number | null;
+  /** Desconto comercial da linha: % (10 = 10%) ou valor em cêntimos. */
+  discountPct?: number | null;
+  discountAmount?: number | null;
 }
 
 export interface InvoiceImportResultDTO {
@@ -140,6 +150,12 @@ export interface InvoiceImportResultDTO {
   validationIssues: string[];
   supplierMatch: SupplierMatchDTO | null;
   extractedLines: AiExtractedLineDTO[];
+  /** Descontos globais/rodapé e quadro de IVA extraídos (para o editor de valores). */
+  extractedAmounts?: { globalDiscountPct: number | null; globalDiscountAmount: number | null; footerDiscountAmount: number | null; vatSummary: { rate: number; baseCents: number; vatCents: number }[] | null };
+  /** O documento já existia (mesmo ficheiro ou mesma identidade fiscal): é devolvido o existente, sem criar cópia. */
+  reused?: "same_file" | "same_fiscal_identity";
+  /** Identidade fiscal do documento extraído (avisos na revisão). */
+  fiscal?: { kind: string; existingInvoiceId?: string | null; identityId?: string; candidates?: { invoiceId: string | null; seriesNumber: string }[]; missing?: string[] };
 }
 
 export interface InvoiceAlertsDTO {
@@ -172,6 +188,31 @@ export interface CreateInvoiceLineCommand {
   affectsProfitability?: boolean;
   /** Loja a que este custo é alocado (spec B2 D4) — opcional; ausente/null = custo da organização. */
   locationId?: string | null;
+  /** Texto original da quantidade/preço no documento (ex.: "20.000", "1,235") — o servidor recalcula com ele. */
+  quantityText?: string | null;
+  unitPriceText?: string | null;
+  /** Bruto impresso na linha (cêntimos), para resolver quantidades ambíguas. */
+  grossCentsPrinted?: number | null;
+  /** Desconto comercial da linha: % (value = 10 → 10%) ou € (value em cêntimos). */
+  discount?: AmountDiscountCommand | null;
+}
+
+export interface AmountDiscountCommand {
+  kind: "pct" | "amount";
+  value: number;
+}
+
+/** Valores do documento (task v1.2 §1.3) — o servidor recalcula tudo com o motor único ao finalizar. */
+export interface DocumentAmountsCommand {
+  globalDiscount?: AmountDiscountCommand | null;
+  /** Desconto impresso no rodapé (cêntimos): pode ser só o resumo dos descontos das linhas. */
+  footerDiscountCents?: number | null;
+  /** Ajustes documentados (portes, ecovalor…) em cêntimos. */
+  adjustmentsCents?: number;
+  /** Quadro de IVA por taxa tal como no documento. */
+  vatSummary?: { rate: number; baseCents: number; vatCents: number }[] | null;
+  /** Ajuste de arredondamento: no máximo 1 cêntimo por taxa de IVA e com motivo. */
+  roundingAdjustment?: { cents: number; reason: string } | null;
 }
 
 export interface CreateInvoiceCommand {
@@ -199,11 +240,22 @@ export interface CreateInvoiceCommand {
   stockReviewOverride?: StockReviewOverride;
   stockReviewOverrideReason?: string | null;
   lines?: CreateInvoiceLineCommand[];
+  /** Quem faz o pedido (definido pelo servidor a partir da sessão). */
+  actor?: string;
+  /** A pessoa comparou com os documentos parecidos e confirmou que é outro documento. */
+  notADuplicate?: boolean;
+  /** Completar o documento que já existe só no Stock (identidade fiscal indicada). */
+  completeStockIdentityId?: string;
+  amounts?: DocumentAmountsCommand;
 }
 
 export interface UpdateInvoiceCommand {
   organizationId: OrganizationId;
   id: string;
+  /** Bloqueio otimista: versão que o cliente leu. */
+  expectedVersion?: number;
+  /** Motivo da alteração (fica na auditoria). */
+  reason?: string;
   supplierId?: string | null;
   supplierName?: string;
   supplierNifSnapshot?: string | null;
@@ -237,6 +289,8 @@ export interface UpdateInvoiceCommand {
    * necessária) em vez de descartar a revisão silenciosamente.
    */
   confirmRemoveStockReview?: boolean;
+  /** A pessoa comparou com os documentos parecidos e confirmou que é outro documento. */
+  notADuplicate?: boolean;
 }
 
 export interface MarkInvoicePaidCommand {
@@ -322,6 +376,8 @@ export interface NewSupplierCommand {
 export interface ConfirmImportedInvoiceCommand {
   organizationId: OrganizationId;
   id: string;
+  /** Bloqueio otimista: versão que o cliente leu. */
+  expectedVersion?: number;
   supplierId?: string | null;
   /** Criar novo fornecedor com os dados da fatura — se presente, supplierId é ignorado */
   newSupplier?: NewSupplierCommand;
@@ -350,6 +406,13 @@ export interface ConfirmImportedInvoiceCommand {
   markAsPaid?: boolean;
   paidAt?: string; // YYYY-MM-DD — used when markAsPaid is true; defaults to invoiceDate
   lines?: CreateInvoiceLineCommand[];
+  /** Quem faz o pedido (definido pelo servidor a partir da sessão). */
+  actor?: string;
+  /** A pessoa comparou com os documentos parecidos e confirmou que é outro documento. */
+  notADuplicate?: boolean;
+  /** Completar o documento que já existe só no Stock (identidade fiscal indicada). */
+  completeStockIdentityId?: string;
+  amounts?: DocumentAmountsCommand;
 }
 
 export interface AddInvoiceLineCommand {
@@ -412,6 +475,8 @@ export interface GetInvoicePort {
 export interface DeleteInvoiceCommand {
   organizationId: OrganizationId;
   id: string;
+  /** Motivo (fica na auditoria). */
+  reason?: string;
   confirmRemoveStockReview?: boolean;
   actor?: string;
 }

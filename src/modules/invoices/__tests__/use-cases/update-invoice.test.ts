@@ -1,3 +1,4 @@
+import { FakeInvoiceAudit } from "../fakes/fake-invoice-audit.js";
 import { UpdateInvoiceUseCase } from "../../application/use-cases/update-invoice.use-case.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
@@ -14,6 +15,8 @@ import {
   StockReviewRemovalConfirmationRequiredError,
 } from "../../domain/errors.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+import { FakeFiscalIdentityPort } from "../fakes/fake-fiscal-identity.port.js";
+import { FakeSupplierLookupPort } from "../fakes/fake-supplier-lookup.port.js";
 
 const ORG_ID = mintOrganizationId("org-test");
 
@@ -34,6 +37,7 @@ describe("UpdateInvoiceUseCase", () => {
   let reconciliationCleanup: FakeInvoiceReconciliationCleanup;
   let stockReviewStatusRead: FakeInvoiceStockReviewStatusRead;
   let stockReviewDraftDelete: FakeInvoiceStockReviewDraftDelete;
+  let fiscal: FakeFiscalIdentityPort;
   let useCase: UpdateInvoiceUseCase;
 
   beforeEach(() => {
@@ -43,7 +47,8 @@ describe("UpdateInvoiceUseCase", () => {
     reconciliationCleanup = new FakeInvoiceReconciliationCleanup();
     stockReviewStatusRead = new FakeInvoiceStockReviewStatusRead();
     stockReviewDraftDelete = new FakeInvoiceStockReviewDraftDelete();
-    useCase = new UpdateInvoiceUseCase(repo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete);
+    fiscal = new FakeFiscalIdentityPort();
+    useCase = new UpdateInvoiceUseCase(repo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, new FakeSupplierLookupPort(), new FakeInvoiceAudit());
   });
 
   it("actualiza o nome do fornecedor", async () => {

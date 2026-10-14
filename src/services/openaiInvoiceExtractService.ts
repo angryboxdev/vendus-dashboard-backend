@@ -72,6 +72,7 @@ const LineSchema = z
 
 const ExtractSchema = z.object({
   supplier_name: z.string().nullable().optional(),
+  supplier_nif: z.string().nullable().optional(),
   invoice_number: z.string().nullable().optional(),
   invoice_date: z.string().nullable().optional(),
   currency: z.string().optional().default("EUR"),
@@ -271,7 +272,7 @@ const SYSTEM_PROMPT = `És um assistente que extrai dados estruturados de fatura
 Responde APENAS com um único objeto JSON válido, sem markdown.
 
 Estrutura OBRIGATÓRIA do JSON:
-1) Na raiz do objeto: supplier_name, invoice_number, invoice_date (YYYY-MM-DD), currency (EUR), subtotal, tax_total, total (números ou null).
+1) Na raiz do objeto: supplier_name, supplier_nif (NIF/NIPC do EMITENTE da fatura — nunca o do cliente; null se não estiver legível), invoice_number, invoice_date (YYYY-MM-DD), currency (EUR), subtotal, tax_total, total (números ou null).
 2) Chave "lines": array com TODAS as linhas de artigos/serviços da tabela da fatura. Se existir tabela de produtos, "lines" NÃO pode ser vazio.
 
 Cada elemento de "lines" deve ter:
@@ -308,6 +309,7 @@ export function coerceOpenAiInvoiceShape(raw: unknown): unknown {
     const n = nested as Record<string, unknown>;
     for (const k of [
       "supplier_name",
+      "supplier_nif",
       "invoice_number",
       "invoice_date",
       "currency",
@@ -396,6 +398,7 @@ OBRIGATÓRIO: pelo menos uma linha se a fatura tiver tabela de produtos. Número
     .parse(parsed);
   const wrap: InvoiceExtractResult = {
     supplier_name: null,
+    supplier_nif: null,
     invoice_number: null,
     invoice_date: null,
     currency: "EUR",

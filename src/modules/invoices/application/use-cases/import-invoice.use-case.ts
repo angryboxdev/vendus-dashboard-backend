@@ -13,6 +13,8 @@ import type { OrganizationIdentityReadPort } from "../../domain/ports/out/organi
 import { normalizeNif } from "../../domain/utils/nif.js";
 import { normalizeSupplierName, supplierNameSimilarity, FUZZY_MATCH_THRESHOLD } from "../../domain/utils/supplier-name.js";
 import { toInvoiceDTO } from "./shared.js";
+import { createHash } from "node:crypto";
+import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.port.js";
 
 const AI_CONFIDENCE_REVIEW_THRESHOLD = 0.7;
 const VALUE_DISCREPANCY_MARGIN_CENTS = 2;
@@ -25,9 +27,17 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     private readonly supplierLookup: SupplierLookupPort,
     private readonly supplierHint: SupplierHintPort,
     private readonly organizationIdentityRead: OrganizationIdentityReadPort,
+    private readonly fiscal: FiscalIdentityPort,
   ) {}
 
   async execute(command: ImportInvoiceCommand): Promise<InvoiceImportResultDTO> {
+    // 0. Mesmo ficheiro já importado → devolve o mesmo documento (sem nova extração paga nem cópia).
+    const sha256 = createHash("sha256").update(command.fileBuffer).digest("hex");
+    const sameFile = await this.invoiceRepo.findByFileHash(command.organizationId, sha256);
+    if (sameFile) {
+      return { invoice: toInvoiceDTO(sameFile), aiConfidence: sameFile.aiConfidence ?? 0, validationIssues: ["duplicate_invoice"], supplierMatch: null, extractedLines: [], reused: "same_file" };
+    }
+
     // 1. Persist the original file
     const fileUrl = await this.storage.store(
       command.fileBuffer,
@@ -136,6 +146,26 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       }
     }
 
+    // Identidade fiscal partilhada (task v1.2 §1.2): o mesmo documento já lançado no Financeiro não gera
+    // novo rascunho — devolve-se o original; só no Stock → o rascunho oferece completar o existente.
+    const fiscalCheck = await this.fiscal.check(command.organizationId, {
+      legalEntityId: null,
+      supplierNif: supplierNif ?? supplierMatch?.nif ?? null,
+      documentType: command.documentType ?? extraction.documentType ?? "invoice",
+      invoiceNumber: extraction.invoiceNumber ?? null,
+      atcud: null,
+    });
+    if (fiscalCheck.kind === "existing_finance" && fiscalCheck.existingInvoiceId) {
+      const original = await this.invoiceRepo.findById(command.organizationId, fiscalCheck.existingInvoiceId);
+      if (original) {
+        await this.storage.delete(fileUrl).catch(() => undefined);
+        return { invoice: toInvoiceDTO(original), aiConfidence: extraction.confidence, validationIssues: ["duplicate_invoice"], supplierMatch: null, extractedLines: [], reused: "same_fiscal_identity", fiscal: { kind: fiscalCheck.kind, existingInvoiceId: original.id, identityId: fiscalCheck.identityId } };
+      }
+    }
+    if (fiscalCheck.kind === "existing_stock_only") validationIssues.push("exists_in_stock");
+    if (fiscalCheck.kind === "possible_duplicate") validationIssues.push("possible_duplicate");
+    if (fiscalCheck.kind === "incomplete") validationIssues.push("fiscal_identity_incomplete");
+
     const requiresReview = validationIssues.length > 0;
 
     // 5. Apply supplier defaults if found
@@ -167,6 +197,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     });
 
     await this.invoiceRepo.save(command.organizationId, finalInvoice);
+    await this.invoiceRepo.setFileHash(command.organizationId, finalInvoice.id, sha256);
 
     return {
       invoice: toInvoiceDTO(finalInvoice),
@@ -190,7 +221,19 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
         vatAmount: l.vatAmount,
         totalWithoutVat: l.totalWithoutVat,
         totalWithVat: l.totalWithVat,
+        quantityText: l.quantityText ?? null,
+        unitPriceText: l.unitPriceText ?? null,
+        grossWithoutDiscount: l.grossWithoutDiscount ?? null,
+        discountPct: l.discountPct ?? null,
+        discountAmount: l.discountAmount ?? null,
       })),
+      ...(extraction.amounts && { extractedAmounts: extraction.amounts }),
+      fiscal: {
+        kind: fiscalCheck.kind,
+        ...(fiscalCheck.kind === "existing_stock_only" && { identityId: fiscalCheck.identityId }),
+        ...(fiscalCheck.kind === "possible_duplicate" && { candidates: fiscalCheck.candidates }),
+        ...(fiscalCheck.kind === "incomplete" && { missing: fiscalCheck.missing }),
+      },
     };
   }
 }

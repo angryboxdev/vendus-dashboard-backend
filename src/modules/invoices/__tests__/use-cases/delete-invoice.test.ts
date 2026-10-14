@@ -1,3 +1,4 @@
+import { FakeInvoiceAudit } from "../fakes/fake-invoice-audit.js";
 import { DeleteInvoiceUseCase } from "../../application/use-cases/delete-invoice.use-case.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
@@ -14,6 +15,8 @@ import {
   StockReviewRemovalConfirmationRequiredError,
 } from "../../domain/errors.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+import { FakeFiscalIdentityPort } from "../fakes/fake-fiscal-identity.port.js";
+import { FakeSupplierLookupPort } from "../fakes/fake-supplier-lookup.port.js";
 
 const ORG_ID = mintOrganizationId("org-test");
 
@@ -35,6 +38,7 @@ describe("DeleteInvoiceUseCase", () => {
   let reconciliationCleanup: FakeInvoiceReconciliationCleanup;
   let stockReviewStatusRead: FakeInvoiceStockReviewStatusRead;
   let stockReviewDraftDelete: FakeInvoiceStockReviewDraftDelete;
+  let fiscal: FakeFiscalIdentityPort;
   let useCase: DeleteInvoiceUseCase;
 
   beforeEach(() => {
@@ -45,6 +49,7 @@ describe("DeleteInvoiceUseCase", () => {
     reconciliationCleanup = new FakeInvoiceReconciliationCleanup();
     stockReviewStatusRead = new FakeInvoiceStockReviewStatusRead();
     stockReviewDraftDelete = new FakeInvoiceStockReviewDraftDelete();
+    fiscal = new FakeFiscalIdentityPort();
     useCase = new DeleteInvoiceUseCase(
       invoiceRepo,
       lineRepo,
@@ -53,6 +58,8 @@ describe("DeleteInvoiceUseCase", () => {
       reconciliationCleanup,
       stockReviewStatusRead,
       stockReviewDraftDelete,
+      fiscal,
+      new FakeInvoiceAudit(),
     );
   });
 

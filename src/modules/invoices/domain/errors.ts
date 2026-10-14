@@ -106,3 +106,46 @@ export class StockReviewRemovalConfirmationRequiredError extends Error {
     this.name = "StockReviewRemovalConfirmationRequiredError";
   }
 }
+
+/**
+ * Identidade fiscal (task v1.2 §1.2): o documento já existe, só no Stock, é
+ * um possível duplicado ou não tem identidade completa. O ecrã usa `code`
+ * para oferecer a ação certa (abrir original, completar, comparar, corrigir).
+ */
+export class FiscalIdentityConflictError extends Error {
+  constructor(
+    readonly code: "existing_finance" | "existing_stock_only" | "possible_duplicate" | "identity_incomplete",
+    message: string,
+    readonly details: { existingInvoiceId?: string | null; identityId?: string; candidates?: { invoiceId: string | null; seriesNumber: string }[]; missing?: string[] } = {},
+  ) {
+    super(message);
+    this.name = "FiscalIdentityConflictError";
+  }
+}
+
+/** A conta a pagar já tem pagamento: total/vencimento não mudam em silêncio (corrigir por NC/ajuste). */
+export class InvoicePayableSettledError extends Error {
+  constructor(id: string) {
+    super(`A conta a pagar da fatura ${id} já foi paga. Corrija o valor por nota de crédito ou ajuste, não alterando o total.`);
+    this.name = "InvoicePayableSettledError";
+  }
+}
+
+/** Valores não reconciliados ao cêntimo (task v1.2 §1.3): a fatura fica em rascunho, não finaliza. */
+export class InvoiceAmountsNotReconciledError extends Error {
+  constructor(
+    readonly description: string,
+    readonly details: { differenceCents: number | null; issues: { code: string }[]; computed: { netCents: number; vatCents: number; totalCents: number } },
+  ) {
+    super(`Os valores não batem com a fatura: ${description}. Pode guardar como rascunho e corrigir.`);
+    this.name = "InvoiceAmountsNotReconciledError";
+  }
+}
+
+/** Outra pessoa alterou a fatura entretanto (bloqueio otimista, F1 §1.4). */
+export class InvoiceVersionConflictError extends Error {
+  constructor(id: string, readonly currentVersion: number | null) {
+    super(`A fatura ${id} foi alterada entretanto por outra pessoa. Recarregue e volte a aplicar a alteração.`);
+    this.name = "InvoiceVersionConflictError";
+  }
+}

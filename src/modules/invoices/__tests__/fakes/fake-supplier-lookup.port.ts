@@ -12,6 +12,10 @@ export class FakeSupplierLookupPort implements SupplierLookupPort {
     return this.suppliers.find((s) => s.nif === nif) ?? null;
   }
 
+  async findById(_organizationId: OrganizationId, id: string): Promise<SupplierSummary | null> {
+    return this.suppliers.find((s) => s.id === id) ?? null;
+  }
+
   async findByName(_organizationId: OrganizationId, query: string): Promise<SupplierSummary[]> {
     const q = query.toLowerCase();
     return this.suppliers.filter((s) => s.name.toLowerCase().includes(q));

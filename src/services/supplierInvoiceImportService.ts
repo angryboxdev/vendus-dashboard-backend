@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "crypto";
+import type { FiscalDocumentsPort } from "../modules/fiscal-documents/domain/ports/in/fiscal-documents.ports.js";
 import type {
   ConfirmSupplierInvoiceImportBody,
   ConfirmSupplierInvoiceImportResult,
@@ -82,6 +83,7 @@ function mapImportRow(
     file_sha256: String(row.file_sha256),
     file_size: Number(row.file_size),
     supplier_name: row.supplier_name != null ? String(row.supplier_name) : null,
+    supplier_nif: row.supplier_nif != null ? String(row.supplier_nif) : null,
     invoice_number: row.invoice_number != null ? String(row.invoice_number) : null,
     invoice_date: row.invoice_date != null ? String(row.invoice_date) : null,
     currency: String(row.currency ?? "EUR"),
@@ -207,6 +209,12 @@ async function upsertSupplierArticleMappings(
 /**
  * Upload + parse OpenAI + linhas em BD.
  */
+/** Identidade fiscal partilhada (task v1.2 · F1) — injetada pelo composition root (server.ts). */
+let stockImportFiscalDocuments: FiscalDocumentsPort | null = null;
+export function setStockImportFiscalDocuments(port: FiscalDocumentsPort): void {
+  stockImportFiscalDocuments = port;
+}
+
 export async function createSupplierInvoiceImport(
   organizationId: OrganizationId,
   options: {
@@ -344,6 +352,7 @@ export async function createSupplierInvoiceImport(
       .update({
         status: "ready_for_review",
         supplier_name: supplierName,
+        supplier_nif: extracted.supplier_nif ?? null,
         supplier_normalized: supplierName ? normalizeKeyPart(supplierName) : null,
         invoice_number: invoiceNumber,
         invoice_date: invoiceDate,
@@ -430,6 +439,7 @@ export async function updateSupplierInvoiceImport(
     updates.supplier_normalized = v ? normalizeKeyPart(v) : null;
   }
   if ("invoice_number" in body) updates.invoice_number = body.invoice_number ?? null;
+  if ("supplier_nif" in body) updates.supplier_nif = body.supplier_nif ? String(body.supplier_nif).trim() || null : null;
   if ("invoice_date" in body) {
     const d = body.invoice_date ?? null;
     if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
@@ -489,10 +499,31 @@ export async function confirmSupplierInvoiceImport(
     );
   }
 
-  if (imp.duplicate_warning && !body.override_duplicate) {
-    throw new Error(
-      "DUPLICATE: já existe uma importação confirmada com o mesmo fornecedor/número/data. Define override_duplicate=true para substituir."
+  // Task v1.2 · F1: substituir uma importação confirmada apagava os movimentos de stock dela — deixou de ser
+  // possível. Uma correção depois de movimentar faz-se por ajuste/estorno auditável.
+  if (body.override_duplicate) {
+    throw new Error("DUPLICATE: não é possível substituir uma importação já confirmada (os movimentos não são apagados). Corrija por ajuste de stock.");
+  }
+  if (imp.duplicate_warning) {
+    throw new Error("DUPLICATE: já existe uma importação confirmada com o mesmo fornecedor/número/data.");
+  }
+
+  // Identidade fiscal partilhada com o Financeiro: o mesmo documento não entra duas vezes no stock.
+  if (stockImportFiscalDocuments) {
+    const claim = await stockImportFiscalDocuments.claimForStockImport(
+      organizationId,
+      body.actor ?? "stock-import",
+      { buyerLegalEntityId: null, issuerTaxId: imp.supplier_nif ?? null, issuerCountry: null, documentType: "invoice", seriesNumber: imp.invoice_number ?? null, atcud: null },
+      importId,
+      { notADuplicate: body.not_a_duplicate === true },
     );
+    if (!claim.ok) {
+      const r = claim.resolution;
+      if (r.kind === "incomplete") throw new Error("IDENTITY_INCOMPLETE: indique o NIF do fornecedor e o número da fatura antes de confirmar (nada foi movimentado).");
+      if (r.kind === "existing_finance") throw new Error("DUPLICATE_FINANCE: este documento já está lançado no Financeiro — abra-o lá e encaminhe para o Stock (nada foi movimentado).");
+      if (r.kind === "existing_stock_only") throw new Error("DUPLICATE: este documento já foi importado no Stock (nada foi movimentado).");
+      throw new Error("POSSIBLE_DUPLICATE: há um documento parecido do mesmo fornecedor. Compare antes de confirmar (not_a_duplicate=true depois de comparar).");
+    }
   }
 
   // D4: the caller supplies the location explicitly — stock_movements is
@@ -616,26 +647,7 @@ export async function confirmSupplierInvoiceImport(
   const bk = fresh.business_key;
   const replacedIds: string[] = [];
 
-  if (body.override_duplicate && bk) {
-    const { data: others } = await createScopedQuery(organizationId)
-      .table("supplier_invoice_imports")
-      .select("id")
-      .eq("business_key", bk)
-      .eq("status", "confirmed")
-      .neq("id", importId);
-    for (const row of others ?? []) {
-      const oid = (row as unknown as { id: string }).id;
-      await deleteMovementsForImport(organizationId, oid);
-      replacedIds.push(oid);
-      await createScopedQuery(organizationId)
-        .table("supplier_invoice_imports")
-        .update({
-          status: "cancelled",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", oid);
-    }
-  }
+  // (Substituir importações confirmadas foi desativado na F1: os movimentos de outra importação nunca são apagados.)
 
   await deleteMovementsForImport(organizationId, importId);
 

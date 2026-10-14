@@ -33,6 +33,16 @@ export class SupabaseSupplierLookupAdapter implements SupplierLookupPort {
     return toSummary(data as unknown as Record<string, unknown>);
   }
 
+  async findById(organizationId: OrganizationId, id: string): Promise<SupplierSummary | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("suppliers")
+      .select("id, name, nif, default_cost_center_group_id, default_cost_center_category_id, default_financial_type")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data ? toSummary(data as unknown as Record<string, unknown>) : null;
+  }
+
   async findByName(organizationId: OrganizationId, query: string): Promise<SupplierSummary[]> {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("suppliers")

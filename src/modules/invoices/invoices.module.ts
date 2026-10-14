@@ -34,7 +34,13 @@ import { ConfirmImportedInvoiceUseCase } from "./application/use-cases/confirm-i
 import { GetInvoiceAlertsUseCase } from "./application/use-cases/get-invoice-alerts.use-case.js";
 import { ProcessDirectDebitsUseCase } from "./application/use-cases/process-direct-debits.use-case.js";
 import { SetLineDetailModeUseCase } from "./application/use-cases/set-line-detail-mode.use-case.js";
+import { ListPayableDuplicatesUseCase } from "./application/use-cases/list-payable-duplicates.use-case.js";
 import { createInvoiceRouter } from "./adapters/in/invoice.controller.js";
+import { SupabaseInvoiceAuditAdapter } from "./adapters/out/supabase-invoice-audit.adapter.js";
+import { SupabaseIdempotencyStore } from "../../infra/http/supabase-idempotency.store.js";
+import { SupabaseInvoiceAmountsWriteAdapter } from "./adapters/out/supabase-invoice-amounts-write.adapter.js";
+import { FiscalDocumentsIdentityAdapter } from "./adapters/out/fiscal-documents-identity.adapter.js";
+import type { FiscalDocumentsPort } from "../fiscal-documents/domain/ports/in/fiscal-documents.ports.js";
 import type { CreateSupplierPort } from "../financial-base/domain/ports/in/supplier.ports.js";
 import type {
   RecordInvoiceFinalizedForStockPort,
@@ -71,6 +77,7 @@ export function createInvoicesModule(
   recordInvoiceFinalizedForStock: RecordInvoiceFinalizedForStockPort,
   getStockPurchaseReviewStatus: GetStockPurchaseReviewStatusPort,
   deleteDraftStockPurchaseReview: DeleteDraftStockPurchaseReviewPort,
+  fiscalDocuments: FiscalDocumentsPort,
 ): InvoicesModule {
   const openaiApiKey = process.env.OPENAI_API_KEY;
   if (!openaiApiKey) throw new Error("OPENAI_API_KEY não configurado");
@@ -91,6 +98,10 @@ export function createInvoicesModule(
   const stockReviewStatusRead = new StockPurchaseReviewStatusReadAdapter(getStockPurchaseReviewStatus);
   const stockReviewDraftDelete = new StockPurchaseReviewDraftDeleteAdapter(deleteDraftStockPurchaseReview);
   const aiExtraction = new OpenAiExtractionAdapter(openaiApiKey);
+  const fiscal = new FiscalDocumentsIdentityAdapter(fiscalDocuments);
+  const amountsWrite = new SupabaseInvoiceAmountsWriteAdapter(createScopedQuery);
+  const audit = new SupabaseInvoiceAuditAdapter(createScopedQuery);
+  const idempotencyStore = new SupabaseIdempotencyStore(createScopedQuery);
 
   const processDirectDebits = new ProcessDirectDebitsUseCase(invoiceRepo, payableWrite);
   const listInvoices = new ListInvoicesUseCase(invoiceRepo, categoryReader);
@@ -98,8 +109,9 @@ export function createInvoicesModule(
   const getInvoice = new GetInvoiceUseCase(invoiceRepo, lineRepo, categoryReader);
 
   const router = createInvoiceRouter({
-    createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, stockDecisionNotify),
-    updateInvoice: new UpdateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete),
+    listPayableDuplicates: new ListPayableDuplicatesUseCase(payableWrite),
+    createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit),
+    updateInvoice: new UpdateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, supplierLookup, audit),
     markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite, occurrenceSync),
     setInvoiceStatus: new SetInvoiceStatusUseCase(invoiceRepo, payableWrite),
     setLineDetailMode: new SetLineDetailModeUseCase(invoiceRepo, lineRepo, stockReviewStatusRead, stockReviewDraftDelete),
@@ -111,13 +123,13 @@ export function createInvoicesModule(
     listInvoices,
     listInvoiceLines,
     getInvoice,
-    deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete),
+    deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, audit),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),
-    importInvoice: new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint, organizationIdentityRead),
-    confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify),
+    importInvoice: new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint, organizationIdentityRead, fiscal),
+    confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit),
     getInvoiceAlerts: new GetInvoiceAlertsUseCase(invoiceRepo),
     processDirectDebits,
-  });
+  }, idempotencyStore);
 
   return { router, processDirectDebits, listInvoices, listInvoiceLines, getInvoice };
 }

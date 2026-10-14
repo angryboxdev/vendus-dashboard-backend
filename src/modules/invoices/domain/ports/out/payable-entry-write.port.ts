@@ -35,4 +35,16 @@ export interface PayableEntryWritePort {
    * Apenas actualiza entradas não canceladas.
    */
   renumberByInvoiceId(organizationId: OrganizationId, invoiceId: string, newInvoiceNumber: string): Promise<void>;
+
+  /**
+   * Estado da obrigação ativa desta fatura: nenhuma, em aberto (pending/overdue)
+   * ou já liquidada (paid) — usado antes de alterar total/vencimento.
+   */
+  activeStatusOf(organizationId: OrganizationId, invoiceId: string): Promise<"none" | "open" | "settled">;
+
+  /** Acompanha total/vencimento da fatura na obrigação em aberto (nunca toca em pagas/canceladas). */
+  syncOpenForInvoice(organizationId: OrganizationId, invoiceId: string, data: { amount: number; dueDate: Date | null }): Promise<void>;
+
+  /** Faturas com mais de uma obrigação ativa (relatório de integridade; nunca corrige sozinho). */
+  listDuplicateActive(organizationId: OrganizationId): Promise<{ invoiceId: string; payableIds: string[]; statuses: string[] }[]>;
 }

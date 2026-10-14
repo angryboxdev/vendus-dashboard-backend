@@ -6,6 +6,18 @@ export class FakePayableEntryWrite implements PayableEntryWritePort {
   markedPaid: Array<{ invoiceId: string; paidAt: Date }> = [];
   cancelled: string[] = [];
   renumbered: Array<{ invoiceId: string; newInvoiceNumber: string }> = [];
+  synced: Array<{ invoiceId: string; amount: number; dueDate: Date | null }> = [];
+  statusByInvoice = new Map<string, "none" | "open" | "settled">();
+
+  async activeStatusOf(_o: unknown, invoiceId: string) {
+    return this.statusByInvoice.get(invoiceId) ?? (this.created.some((c) => c.invoiceId === invoiceId) ? "open" : "none");
+  }
+  async syncOpenForInvoice(_o: unknown, invoiceId: string, data: { amount: number; dueDate: Date | null }) {
+    this.synced.push({ invoiceId, ...data });
+  }
+  async listDuplicateActive() {
+    return [];
+  }
 
   async createForInvoice(
     _organizationId: OrganizationId,

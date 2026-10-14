@@ -1,9 +1,13 @@
+import { FakeInvoiceAudit } from "../fakes/fake-invoice-audit.js";
+import { FakeInvoiceAmountsWrite } from "../fakes/fake-invoice-amounts-write.js";
 import { CreateInvoiceUseCase } from "../../application/use-cases/create-invoice.use-case.js";
 import { DuplicateInvoiceError } from "../../domain/errors.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
 import { FakePayableEntryWrite } from "../fakes/fake-payable-entry-write.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+import { FakeFiscalIdentityPort } from "../fakes/fake-fiscal-identity.port.js";
+import { FakeSupplierLookupPort } from "../fakes/fake-supplier-lookup.port.js";
 
 const ORG_ID = mintOrganizationId("org-test");
 
@@ -11,13 +15,15 @@ describe("CreateInvoiceUseCase", () => {
   let invoiceRepo: FakeInvoiceRepository;
   let lineRepo: FakeInvoiceLineRepository;
   let payableWrite: FakePayableEntryWrite;
+  let fiscal: FakeFiscalIdentityPort;
   let useCase: CreateInvoiceUseCase;
 
   beforeEach(() => {
     invoiceRepo = new FakeInvoiceRepository();
     lineRepo = new FakeInvoiceLineRepository();
     payableWrite = new FakePayableEntryWrite();
-    useCase = new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite);
+    fiscal = new FakeFiscalIdentityPort();
+    useCase = new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, { notifyInvoiceFinalized: async () => {} }, fiscal, new FakeSupplierLookupPort(), new FakeInvoiceAmountsWrite(), new FakeInvoiceAudit());
   });
 
   it("creates and persists invoice with pending status", async () => {

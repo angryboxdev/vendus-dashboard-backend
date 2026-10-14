@@ -1,5 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
+import { idempotency, type IdempotencyStore } from "../../../../infra/http/idempotency.js";
 import type {
   CreateInvoicePort,
   UpdateInvoicePort,
@@ -27,6 +28,10 @@ import {
   InvoiceLineNotFoundError,
   InvoiceAlreadyCancelledError,
   DuplicateInvoiceError,
+  FiscalIdentityConflictError,
+  InvoicePayableSettledError,
+  InvoiceVersionConflictError,
+  InvoiceAmountsNotReconciledError,
   LineDetailModeError,
   LinesTotalMismatchError,
   InvoiceLinesLockedByAppliedStockReviewError,
@@ -34,6 +39,8 @@ import {
 } from "../../domain/errors.js";
 
 interface InvoicePorts {
+  /** Relatório de integridade: faturas com mais de uma conta a pagar ativa. */
+  listPayableDuplicates: { execute(org: import("../../../../kernel/organization-id.js").OrganizationId): Promise<unknown> };
   createInvoice: CreateInvoicePort;
   updateInvoice: UpdateInvoicePort;
   markInvoicePaid: MarkInvoicePaidPort;
@@ -64,6 +71,22 @@ function handleError(res: import("express").Response, err: unknown): void {
     res.status(409).json({ error: (err as Error).message });
     return;
   }
+  if (err instanceof InvoiceAmountsNotReconciledError) {
+    res.status(422).json({ error: err.message, code: "amounts_not_reconciled", ...err.details });
+    return;
+  }
+  if (err instanceof InvoiceVersionConflictError) {
+    res.status(409).json({ error: err.message, code: "version_conflict", currentVersion: err.currentVersion });
+    return;
+  }
+  if (err instanceof InvoicePayableSettledError) {
+    res.status(409).json({ error: err.message, code: "payable_settled" });
+    return;
+  }
+  if (err instanceof FiscalIdentityConflictError) {
+    res.status(409).json({ error: err.message, code: err.code, ...err.details });
+    return;
+  }
   if (err instanceof StockReviewRemovalConfirmationRequiredError) {
     res.status(409).json({ error: err.message, requiresConfirmation: true });
     return;
@@ -92,8 +115,14 @@ const upload = multer({
   },
 });
 
-export function createInvoiceRouter(ports: InvoicePorts): Router {
+export function createInvoiceRouter(ports: InvoicePorts, idempotencyStore: IdempotencyStore): Router {
   const router = Router();
+  // Idempotency-Key opcional nas escritas que criam/finalizam documentos (F1 §1.4): o mesmo pedido
+  // repetido (duplo clique, retry de rede) devolve a resposta guardada e não volta a executar.
+  const idem = idempotency(idempotencyStore);
+  router.post("/invoices", idem);
+  router.post("/invoices/import", idem);
+  router.post("/invoices/:id/confirm", idem);
 
   // GET /invoices/lines — all invoice lines (for CC analytics)
   router.get("/invoices/lines", async (req, res) => {
@@ -142,6 +171,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
       const invoice = await ports.createInvoice.execute({
         ...(req.body as object),
         organizationId: req.auth!.orgId,
+        actor: req.auth!.email || req.auth!.sub,
       } as Parameters<CreateInvoicePort["execute"]>[0]);
       res.status(201).json(invoice);
     } catch (err) {
@@ -221,6 +251,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
         id: req.params.id,
         confirmRemoveStockReview,
         actor: req.auth!.email,
+        ...(typeof req.query.reason === "string" && { reason: req.query.reason }),
       });
       res.status(204).send();
     } catch (err) {
@@ -352,6 +383,14 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   });
 
   // GET /invoices/alerts
+  router.get("/invoices/integrity/payable-duplicates", async (req, res) => {
+    try {
+      res.json(await ports.listPayableDuplicates.execute(req.auth!.orgId));
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   router.get("/invoices/alerts", async (req, res) => {
     try {
       const alerts = await ports.getInvoiceAlerts.execute(req.auth!.orgId);
@@ -390,6 +429,7 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
         ...(req.body as object),
         organizationId: req.auth!.orgId,
         id: req.params.id,
+        actor: req.auth!.email || req.auth!.sub,
       });
       res.json(invoice);
     } catch (err) {

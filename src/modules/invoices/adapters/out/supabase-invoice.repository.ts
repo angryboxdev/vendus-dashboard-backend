@@ -53,6 +53,7 @@ function toEntity(row: Record<string, unknown>): Invoice {
     stockReviewOverrideReason: (row.stock_review_override_reason as string | null) ?? null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
+    version: (row.version as number | null) ?? 1,
   });
 }
 
@@ -213,6 +214,46 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) return null;
     return toEntity(data[0] as unknown as Record<string, unknown>);
+  }
+
+  async findByFileHash(organizationId: OrganizationId, sha256: string): Promise<Invoice | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("invoices")
+      .select("*")
+      .eq("file_sha256", sha256)
+      .neq("status", "cancelled")
+      .order("created_at", { ascending: true })
+      .limit(1);
+    if (error) throw new Error(error.message);
+    const row = ((data ?? []) as unknown as Record<string, unknown>[])[0];
+    return row ? toEntity(row) : null;
+  }
+
+  async setFileHash(organizationId: OrganizationId, invoiceId: string, sha256: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("invoices").update({ file_sha256: sha256 }).eq("id", invoiceId);
+    if (error) throw new Error(error.message);
+  }
+
+  async claimVersion(organizationId: OrganizationId, invoiceId: string, expectedVersion: number | null): Promise<number | null> {
+    // Sem versão esperada: lê a atual e incrementa condicionalmente (repete se outra escrita passar à frente).
+    for (let attempt = 0; attempt < (expectedVersion === null ? 3 : 1); attempt++) {
+      let current = expectedVersion;
+      if (current === null) {
+        const { data, error } = await this.scopedQuery(organizationId).table("invoices").select("version").eq("id", invoiceId).maybeSingle();
+        if (error) throw new Error(error.message);
+        if (!data) return null;
+        current = ((data as unknown as { version: number | null }).version) ?? 1;
+      }
+      const { data, error } = await this.scopedQuery(organizationId)
+        .table("invoices")
+        .update({ version: current + 1 })
+        .eq("id", invoiceId)
+        .eq("version", current)
+        .select("version");
+      if (error) throw new Error(error.message);
+      if ((data ?? []).length) return current + 1;
+    }
+    return null;
   }
 
   async findPendingDirectDebits(organizationId: OrganizationId): Promise<Invoice[]> {

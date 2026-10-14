@@ -9,10 +9,15 @@ import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry
 import type { InvoiceReconciliationCleanupPort } from "../../domain/ports/out/invoice-reconciliation-cleanup.port.js";
 import type { InvoiceStockReviewStatusReadPort } from "../../domain/ports/out/invoice-stock-review-status-read.port.js";
 import type { InvoiceStockReviewDraftDeletePort } from "../../domain/ports/out/invoice-stock-review-draft-delete.port.js";
-import { InvoiceNotFoundError, DuplicateInvoiceError } from "../../domain/errors.js";
+import { InvoiceNotFoundError, DuplicateInvoiceError, InvoicePayableSettledError, InvoiceVersionConflictError } from "../../domain/errors.js";
+import type { InvoiceAuditPort } from "../../domain/ports/out/invoice-audit.port.js";
+import { auditSnapshot } from "./shared-audit.js";
 import type { UpdateInvoiceData } from "../../domain/entities/invoice.js";
 import { toInvoiceDTO } from "./shared.js";
 import { guardAgainstBlockingStockReview } from "./shared-stock-review-guard.js";
+import { claimFiscalIdentity } from "./shared-fiscal-identity.js";
+import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.port.js";
+import type { SupplierLookupPort } from "../../domain/ports/out/supplier-lookup.port.js";
 
 export class UpdateInvoiceUseCase implements UpdateInvoicePort {
   constructor(
@@ -22,11 +27,17 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     private readonly reconciliationCleanup: InvoiceReconciliationCleanupPort,
     private readonly stockReviewStatusRead: InvoiceStockReviewStatusReadPort,
     private readonly stockReviewDraftDelete: InvoiceStockReviewDraftDeletePort,
+    private readonly fiscal: FiscalIdentityPort,
+    private readonly supplierLookup: SupplierLookupPort,
+    private readonly audit: InvoiceAuditPort,
   ) {}
 
   async execute(command: UpdateInvoiceCommand): Promise<InvoiceDTO> {
     const existing = await this.invoiceRepo.findById(command.organizationId, command.id);
     if (!existing) throw new InvoiceNotFoundError(command.id);
+    if (command.expectedVersion !== undefined && command.expectedVersion !== existing.version) {
+      throw new InvoiceVersionConflictError(existing.id, existing.version);
+    }
 
     // Validar duplicado se o número da fatura for alterado
     if (command.invoiceNumber !== undefined && command.invoiceNumber !== existing.invoiceNumber) {
@@ -67,6 +78,8 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     if (command.subtotalWithoutVat !== undefined) data.subtotalWithoutVat = command.subtotalWithoutVat;
     if (command.totalVat !== undefined) data.totalVat = command.totalVat;
     if (command.totalWithVat !== undefined) data.totalWithVat = command.totalWithVat;
+    // Bug corrigido: o tipo de documento chegava no comando mas nunca era aplicado.
+    if (command.documentType !== undefined) data.documentType = command.documentType;
     if (command.notes !== undefined) data.notes = command.notes;
     if (command.attachmentUrl !== undefined) data.attachmentUrl = command.attachmentUrl;
     if (command.costCenterGroupId !== undefined) data.costCenterGroupId = command.costCenterGroupId;
@@ -82,8 +95,34 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     if (command.stockReviewOverride !== undefined) data.stockReviewOverride = command.stockReviewOverride;
     if (command.stockReviewOverrideReason !== undefined) data.stockReviewOverrideReason = command.stockReviewOverrideReason;
 
-    const updated = existing.update(data);
+    let updated = existing.update(data);
+    // Corrigir a identidade (número, NIF, fornecedor, tipo) de uma fatura já finalizada passa pela identidade
+    // fiscal partilhada: a nova chave não pode pertencer a outro documento (task v1.2 §1.2).
+    const finalized = existing.status !== "draft_ai" && existing.status !== "pending_review";
+    const identityChanged =
+      updated.invoiceNumber !== existing.invoiceNumber || updated.supplierNifSnapshot !== existing.supplierNifSnapshot || updated.supplierId !== existing.supplierId || updated.documentType !== existing.documentType;
+    if (finalized && identityChanged) {
+      const fiscal = await claimFiscalIdentity(this.fiscal, this.supplierLookup, command.organizationId, command.actor ?? "sistema", updated, { notADuplicate: command.notADuplicate === true });
+      if (fiscal.linkedToStock && updated.stockReviewOverride !== "force_skip") updated = updated.update({ stockReviewOverride: "force_skip", stockReviewOverrideReason: "Documento já movimentado no Stock (importação feita no Stock) — sem nova revisão." });
+    }
+    // Uma obrigação por documento (task v1.2 §1.2): total/vencimento acompanham a conta a pagar em aberto;
+    // já paga → recusa (corrigir por NC/ajuste), para não ficar dívida desalinhada em silêncio.
+    const amountChanged = updated.totalWithVat !== existing.totalWithVat;
+    const dueChanged = (updated.dueDate?.getTime() ?? null) !== (existing.dueDate?.getTime() ?? null);
+    let syncPayable = false;
+    if (finalized && (amountChanged || dueChanged)) {
+      const state = await this.payableWrite.activeStatusOf(command.organizationId, existing.id);
+      if (state === "settled" && amountChanged) throw new InvoicePayableSettledError(existing.id);
+      syncPayable = state === "open";
+    }
+
+    // Bloqueio otimista atómico: só uma escrita concorrente passa.
+    const version = await this.invoiceRepo.claimVersion(command.organizationId, existing.id, command.expectedVersion ?? null);
+    if (version === null) throw new InvoiceVersionConflictError(existing.id, null);
+    updated = updated.withVersion(version);
     await this.invoiceRepo.update(command.organizationId, updated);
+    await this.audit.record(command.organizationId, { invoiceId: existing.id, action: "update", actor: command.actor ?? "sistema", origin: "manual", reason: command.reason?.trim() || null, before: auditSnapshot(existing), after: auditSnapshot(updated) });
+    if (syncPayable) await this.payableWrite.syncOpenForInvoice(command.organizationId, updated.id, { amount: updated.totalWithVat, dueDate: updated.dueDate });
 
     // Propagar costCenterCategoryId às linhas sempre que o campo for explicitamente enviado
     if (command.costCenterCategoryId !== undefined) {

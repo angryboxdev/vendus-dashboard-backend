@@ -11,8 +11,15 @@ import type { SupplierCreatePort } from "../../domain/ports/out/supplier-create.
 import type { SupplierHintPort } from "../../domain/ports/out/supplier-hint.port.js";
 import type { StockDecisionNotifyPort } from "../../domain/ports/out/stock-decision-notify.port.js";
 import { normalizeSupplierName } from "../../domain/utils/supplier-name.js";
-import { InvoiceNotFoundError, DuplicateInvoiceError } from "../../domain/errors.js";
+import { InvoiceNotFoundError, DuplicateInvoiceError, InvoiceVersionConflictError } from "../../domain/errors.js";
+import type { InvoiceAuditPort } from "../../domain/ports/out/invoice-audit.port.js";
+import { auditSnapshot } from "./shared-audit.js";
 import { toInvoiceDTO } from "./shared.js";
+import { claimFiscalIdentity } from "./shared-fiscal-identity.js";
+import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.port.js";
+import type { SupplierLookupPort } from "../../domain/ports/out/supplier-lookup.port.js";
+import type { InvoiceAmountsWritePort } from "../../domain/ports/out/invoice-amounts-write.port.js";
+import { reconcileForFinalize } from "./shared-amounts.js";
 
 export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort {
   constructor(
@@ -22,11 +29,18 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     private readonly supplierCreate: SupplierCreatePort,
     private readonly supplierHint: SupplierHintPort,
     private readonly stockDecisionNotify: StockDecisionNotifyPort,
+    private readonly fiscal: FiscalIdentityPort,
+    private readonly supplierLookup: SupplierLookupPort,
+    private readonly amountsWrite: InvoiceAmountsWritePort,
+    private readonly audit: InvoiceAuditPort,
   ) {}
 
   async execute(command: ConfirmImportedInvoiceCommand): Promise<InvoiceDTO> {
     const existing = await this.invoiceRepo.findById(command.organizationId, command.id);
     if (!existing) throw new InvoiceNotFoundError(command.id);
+    if (command.expectedVersion !== undefined && command.expectedVersion !== existing.version) {
+      throw new InvoiceVersionConflictError(existing.id, existing.version);
+    }
 
     if (existing.status !== "draft_ai" && existing.status !== "pending_review") {
       throw new Error(
@@ -74,32 +88,9 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       confirmed = confirmed.markPaid(paidAt);
     }
 
-    // Duplicate check — hard block, exclude this invoice itself. Prefer the
-    // resolved supplierId (reliable regardless of NIF extraction); fall back
-    // to the supplier NIF snapshot when no supplier is linked yet.
-    if (confirmed.invoiceNumber) {
-      const duplicate = confirmed.supplierId
-        ? await this.invoiceRepo.findDuplicate(command.organizationId, confirmed.invoiceNumber, confirmed.supplierId, confirmed.id)
-        : confirmed.supplierNifSnapshot
-          ? await this.invoiceRepo.findDuplicateByNif(command.organizationId, confirmed.invoiceNumber, confirmed.supplierNifSnapshot, confirmed.id)
-          : null;
-      if (duplicate) throw new DuplicateInvoiceError(confirmed.invoiceNumber, confirmed.supplierName);
-    }
-
-    await this.invoiceRepo.update(command.organizationId, confirmed);
-
-    // Guardar hint nome→fornecedor para importações futuras.
-    // Usa o nome extraído pela IA (pre-confirm) para que nomes ligeiramente
-    // diferentes do mesmo fornecedor sejam reconhecidos automaticamente.
-    if (resolvedSupplierId && existing.supplierName) {
-      const normalizedName = normalizeSupplierName(existing.supplierName);
-      if (normalizedName.length > 0) {
-        await this.supplierHint.save(command.organizationId, normalizedName, resolvedSupplierId);
-      }
-    }
-
-    // Save optional lines
-    const lines: InvoiceLine[] = (command.lines ?? []).map((lc) => {
+    // Linhas confirmadas (novas) + as que o rascunho já tinha.
+    const lineCommands = command.lines ?? [];
+    const newLines: InvoiceLine[] = lineCommands.map((lc) => {
       const lineProps: Parameters<typeof InvoiceLine.create>[0] = {
         invoiceId: confirmed.id,
         description: lc.description,
@@ -118,10 +109,63 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       if (lc.locationId !== undefined) lineProps.locationId = lc.locationId;
       return InvoiceLine.create(lineProps);
     });
+    const storedLines = await this.lineRepo.findByInvoiceId(command.organizationId, confirmed.id);
 
+    // Motor único de valores (task v1.2 §1.3): o servidor recalcula; não reconcilia ao cêntimo → não
+    // finaliza (o rascunho fica como estava, nada foi gravado ainda).
+    const amounts = reconcileForFinalize(
+      confirmed,
+      [...storedLines.map((line) => ({ line })), ...newLines.map((line, i) => ({ line, cmd: lineCommands[i] }))],
+      command.amounts,
+    );
+    confirmed = amounts.invoice;
+    const reconciledStored = amounts.lines.slice(0, storedLines.length);
+    const lines = amounts.lines.slice(storedLines.length);
+
+    // Duplicate check — hard block, exclude this invoice itself. Prefer the
+    // resolved supplierId (reliable regardless of NIF extraction); fall back
+    // to the supplier NIF snapshot when no supplier is linked yet.
+    if (confirmed.invoiceNumber) {
+      const duplicate = confirmed.supplierId
+        ? await this.invoiceRepo.findDuplicate(command.organizationId, confirmed.invoiceNumber, confirmed.supplierId, confirmed.id)
+        : confirmed.supplierNifSnapshot
+          ? await this.invoiceRepo.findDuplicateByNif(command.organizationId, confirmed.invoiceNumber, confirmed.supplierNifSnapshot, confirmed.id)
+          : null;
+      if (duplicate) throw new DuplicateInvoiceError(confirmed.invoiceNumber, confirmed.supplierName);
+    }
+
+    // Identidade fiscal partilhada (task v1.2 §1.2): reserva antes de finalizar.
+    // Já movimentado no Stock → completa o mesmo documento sem nova revisão de stock.
+    const fiscal = await claimFiscalIdentity(this.fiscal, this.supplierLookup, command.organizationId, command.actor ?? "sistema", confirmed, {
+      notADuplicate: command.notADuplicate === true,
+      ...(command.completeStockIdentityId && { completeStockIdentityId: command.completeStockIdentityId }),
+    });
+    if (fiscal.linkedToStock && confirmed.stockReviewOverride !== "force_skip") {
+      confirmed = confirmed.update({ stockReviewOverride: "force_skip", stockReviewOverrideReason: "Documento já movimentado no Stock (importação feita no Stock) — sem nova revisão." });
+    }
+
+    // Bloqueio otimista atómico: dois cliques/sessões a confirmar o mesmo rascunho → só um passa.
+    const version = await this.invoiceRepo.claimVersion(command.organizationId, existing.id, command.expectedVersion ?? existing.version);
+    if (version === null) throw new InvoiceVersionConflictError(existing.id, null);
+    confirmed = confirmed.withVersion(version);
+    await this.invoiceRepo.update(command.organizationId, confirmed);
+
+    // Guardar hint nome→fornecedor para importações futuras.
+    // Usa o nome extraído pela IA (pre-confirm) para que nomes ligeiramente
+    // diferentes do mesmo fornecedor sejam reconhecidos automaticamente.
+    if (resolvedSupplierId && existing.supplierName) {
+      const normalizedName = normalizeSupplierName(existing.supplierName);
+      if (normalizedName.length > 0) {
+        await this.supplierHint.save(command.organizationId, normalizedName, resolvedSupplierId);
+      }
+    }
+
+    // Save optional lines (valores já recalculados pelo motor)
     if (lines.length > 0) {
       await this.lineRepo.saveAll(command.organizationId, lines);
     }
+    for (const l of reconciledStored) await this.lineRepo.updateLine(command.organizationId, l);
+    await this.amountsWrite.save(command.organizationId, confirmed.id, amounts.record);
 
     // Derivar lineDetailMode automaticamente: se há linhas confirmadas → detailed, caso contrário manter simple
     let finalInvoice = confirmed;
@@ -178,6 +222,8 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     } catch (e) {
       console.error("[invoices] falha ao notificar stock-purchase-review (ignorada, sweep fará retry):", e);
     }
+
+    await this.audit.record(command.organizationId, { invoiceId: finalInvoice.id, action: "confirm", actor: command.actor ?? "sistema", origin: "import", reason: null, before: auditSnapshot(existing), after: auditSnapshot(finalInvoice) });
 
     return toInvoiceDTO(finalInvoice, lines);
   }
