@@ -28,6 +28,7 @@ import {
   InvoiceAlreadyCancelledError,
   DuplicateInvoiceError,
   FiscalIdentityConflictError,
+  InvoicePayableSettledError,
   LineDetailModeError,
   LinesTotalMismatchError,
   InvoiceLinesLockedByAppliedStockReviewError,
@@ -35,6 +36,8 @@ import {
 } from "../../domain/errors.js";
 
 interface InvoicePorts {
+  /** Relatório de integridade: faturas com mais de uma conta a pagar ativa. */
+  listPayableDuplicates: { execute(org: import("../../../../kernel/organization-id.js").OrganizationId): Promise<unknown> };
   createInvoice: CreateInvoicePort;
   updateInvoice: UpdateInvoicePort;
   markInvoicePaid: MarkInvoicePaidPort;
@@ -63,6 +66,10 @@ function handleError(res: import("express").Response, err: unknown): void {
   }
   if (err instanceof InvoiceAlreadyCancelledError || err instanceof DuplicateInvoiceError || err instanceof InvoiceLinesLockedByAppliedStockReviewError) {
     res.status(409).json({ error: (err as Error).message });
+    return;
+  }
+  if (err instanceof InvoicePayableSettledError) {
+    res.status(409).json({ error: err.message, code: "payable_settled" });
     return;
   }
   if (err instanceof FiscalIdentityConflictError) {
@@ -358,6 +365,14 @@ export function createInvoiceRouter(ports: InvoicePorts): Router {
   });
 
   // GET /invoices/alerts
+  router.get("/invoices/integrity/payable-duplicates", async (req, res) => {
+    try {
+      res.json(await ports.listPayableDuplicates.execute(req.auth!.orgId));
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   router.get("/invoices/alerts", async (req, res) => {
     try {
       const alerts = await ports.getInvoiceAlerts.execute(req.auth!.orgId);

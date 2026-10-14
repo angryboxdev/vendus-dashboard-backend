@@ -34,6 +34,7 @@ import { ConfirmImportedInvoiceUseCase } from "./application/use-cases/confirm-i
 import { GetInvoiceAlertsUseCase } from "./application/use-cases/get-invoice-alerts.use-case.js";
 import { ProcessDirectDebitsUseCase } from "./application/use-cases/process-direct-debits.use-case.js";
 import { SetLineDetailModeUseCase } from "./application/use-cases/set-line-detail-mode.use-case.js";
+import { ListPayableDuplicatesUseCase } from "./application/use-cases/list-payable-duplicates.use-case.js";
 import { createInvoiceRouter } from "./adapters/in/invoice.controller.js";
 import { FiscalDocumentsIdentityAdapter } from "./adapters/out/fiscal-documents-identity.adapter.js";
 import type { FiscalDocumentsPort } from "../fiscal-documents/domain/ports/in/fiscal-documents.ports.js";
@@ -102,6 +103,7 @@ export function createInvoicesModule(
   const getInvoice = new GetInvoiceUseCase(invoiceRepo, lineRepo, categoryReader);
 
   const router = createInvoiceRouter({
+    listPayableDuplicates: new ListPayableDuplicatesUseCase(payableWrite),
     createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, stockDecisionNotify, fiscal, supplierLookup),
     updateInvoice: new UpdateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, supplierLookup),
     markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite, occurrenceSync),

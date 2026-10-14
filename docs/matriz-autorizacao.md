@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 749 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 750 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -299,6 +299,7 @@ Endpoints: 749 · pré-autenticação: 23 · não classificados: 0
 | PATCH | `/api/invoices/:invoiceId/lines/:lineId/deductibility` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/alerts` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/invoices/import` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
+| GET | `/api/invoices/integrity/payable-duplicates` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/lines` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/invoices/process-direct-debits` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/suggest-classification/:supplierId` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |

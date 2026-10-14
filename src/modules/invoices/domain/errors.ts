@@ -122,3 +122,11 @@ export class FiscalIdentityConflictError extends Error {
     this.name = "FiscalIdentityConflictError";
   }
 }
+
+/** A conta a pagar já tem pagamento: total/vencimento não mudam em silêncio (corrigir por NC/ajuste). */
+export class InvoicePayableSettledError extends Error {
+  constructor(id: string) {
+    super(`A conta a pagar da fatura ${id} já foi paga. Corrija o valor por nota de crédito ou ajuste, não alterando o total.`);
+    this.name = "InvoicePayableSettledError";
+  }
+}

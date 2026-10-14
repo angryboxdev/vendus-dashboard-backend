@@ -9,7 +9,7 @@ import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry
 import type { InvoiceReconciliationCleanupPort } from "../../domain/ports/out/invoice-reconciliation-cleanup.port.js";
 import type { InvoiceStockReviewStatusReadPort } from "../../domain/ports/out/invoice-stock-review-status-read.port.js";
 import type { InvoiceStockReviewDraftDeletePort } from "../../domain/ports/out/invoice-stock-review-draft-delete.port.js";
-import { InvoiceNotFoundError, DuplicateInvoiceError } from "../../domain/errors.js";
+import { InvoiceNotFoundError, DuplicateInvoiceError, InvoicePayableSettledError } from "../../domain/errors.js";
 import type { UpdateInvoiceData } from "../../domain/entities/invoice.js";
 import { toInvoiceDTO } from "./shared.js";
 import { guardAgainstBlockingStockReview } from "./shared-stock-review-guard.js";
@@ -99,7 +99,19 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
       const fiscal = await claimFiscalIdentity(this.fiscal, this.supplierLookup, command.organizationId, command.actor ?? "sistema", updated, { notADuplicate: command.notADuplicate === true });
       if (fiscal.linkedToStock && updated.stockReviewOverride !== "force_skip") updated = updated.update({ stockReviewOverride: "force_skip", stockReviewOverrideReason: "Documento já movimentado no Stock (importação feita no Stock) — sem nova revisão." });
     }
+    // Uma obrigação por documento (task v1.2 §1.2): total/vencimento acompanham a conta a pagar em aberto;
+    // já paga → recusa (corrigir por NC/ajuste), para não ficar dívida desalinhada em silêncio.
+    const amountChanged = updated.totalWithVat !== existing.totalWithVat;
+    const dueChanged = (updated.dueDate?.getTime() ?? null) !== (existing.dueDate?.getTime() ?? null);
+    let syncPayable = false;
+    if (finalized && (amountChanged || dueChanged)) {
+      const state = await this.payableWrite.activeStatusOf(command.organizationId, existing.id);
+      if (state === "settled" && amountChanged) throw new InvoicePayableSettledError(existing.id);
+      syncPayable = state === "open";
+    }
+
     await this.invoiceRepo.update(command.organizationId, updated);
+    if (syncPayable) await this.payableWrite.syncOpenForInvoice(command.organizationId, updated.id, { amount: updated.totalWithVat, dueDate: updated.dueDate });
 
     // Propagar costCenterCategoryId às linhas sempre que o campo for explicitamente enviado
     if (command.costCenterCategoryId !== undefined) {
