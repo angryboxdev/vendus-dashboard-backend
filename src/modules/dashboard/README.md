@@ -37,9 +37,11 @@ assiduidade, ausências, pedidos ou escalas — lê-as dos módulos donos.
 
 - `OperationalSnapshot` — agregado do dia (equipa, cobertura, pedidos,
   atenção, unidades, feriados). DTO, nunca tabela.
-- Categorias do "Estado da equipa": `working`, `remote`, `break`, `vacation`
-  (ausência de categoria `vacation`), `absent` — mapeiam estados reais do
-  painel. Atrasos e faltas sem marcação são sinais, não categorias.
+- Categorias do "Estado da equipa": `working`, `remote`, `break`, `finished`
+  (terminou o dia), `not_started` (por entrar), `vacation`
+  (ausência de categoria `vacation`), `absent` (ausência ou falta sem
+  marcação) — mapeiam estados reais do
+  painel. Atrasos são sinais, não categorias. Pedidos têm orçamento de 15 s.
 - Estado de uma unidade (`critical`/`attention`/`normal`) — derivado das
   métricas, nunca guardado.
 - Layout (`DashboardLayout`) — só metadados visuais por utilizador.

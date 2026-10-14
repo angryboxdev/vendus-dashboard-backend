@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 736 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 743 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -450,6 +450,11 @@ Endpoints: 736 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/novo-rh/document-distributions/:id/report` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/document-distributions/audience-preview` | permission:hr.documents:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/document-distributions/by-employee/:employeeId` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/google-reviews` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| DELETE | `/api/novo-rh/google-reviews/locations/:id` | permission:company.locations:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| PUT | `/api/novo-rh/google-reviews/locations/:id` | permission:company.locations:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/google-reviews/locations/:id/reviews` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/google-reviews/search` | permission:company.locations:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/inbox` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
 | POST | `/api/novo-rh/inbox/decide` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
 | GET | `/api/novo-rh/invitations` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
@@ -510,11 +515,13 @@ Endpoints: 736 · pré-autenticação: 23 · não classificados: 0
 | POST | `/api/novo-rh/rosters` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters/:id/archive` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/rosters/:id/check` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/rosters/:id/clear-pending` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/rosters/:id/history` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters/:id/publish` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/rosters/:id/shifts` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters/:id/shifts` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters/:id/shifts/bulk` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| POST | `/api/novo-rh/rosters/:id/shifts/restore` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | PATCH | `/api/novo-rh/rosters/shifts/:id` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters/shifts/:id/delete` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/rosters/summary` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |

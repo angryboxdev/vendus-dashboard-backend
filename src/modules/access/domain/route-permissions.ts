@@ -120,6 +120,11 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/reports(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/alerts(\/|$)/, target: p("hr.overview") },
   { pattern: /^\/api\/novo-rh\/overview(\/plan)?$/, target: p("hr.overview") },
+  // Avaliações Google: ver (painel) vs. ligar locais ao Google (quem gere os locais).
+  { pattern: /^\/api\/novo-rh\/google-reviews\/search$/, target: p("company.locations", "MANAGE") },
+  { pattern: /^\/api\/novo-rh\/google-reviews\/locations\/[^/]+\/reviews$/, target: p("hr.overview", "READ") },
+  { pattern: /^\/api\/novo-rh\/google-reviews\/locations\/[^/]+$/, target: p("company.locations", "MANAGE") },
+  { pattern: /^\/api\/novo-rh\/google-reviews$/, target: p("hr.overview", "READ") },
   // Dashboard executivo: o layout é uma preferência pessoal (só metadados visuais; não concede acesso).
   { pattern: /^\/api\/novo-rh\/dashboard\/layout$/, target: { kind: "base" } },
   { pattern: /^\/api\/novo-rh\/dashboard\/(snapshot|team|birthdays)$/, target: p("hr.overview", "READ") },

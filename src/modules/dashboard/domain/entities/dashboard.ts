@@ -3,9 +3,13 @@
  * fontes) e o layout pessoal — nada disto é fonte de verdade.
  */
 
-/** Categorias do "Estado da equipa" (mapeiam estados reais do apuramento). */
-export type TeamCategory = "working" | "remote" | "break" | "vacation" | "absent";
-export const TEAM_CATEGORIES: TeamCategory[] = ["working", "remote", "break", "vacation", "absent"];
+/**
+ * Categorias do "Estado da equipa" (mapeiam estados reais do apuramento):
+ * a trabalhar, remoto, em pausa, já saiu, ainda por entrar, férias e
+ * ausentes (ausência aprovada ou falta sem marcação). Só a folga fica de fora.
+ */
+export type TeamCategory = "working" | "remote" | "break" | "finished" | "not_started" | "vacation" | "absent";
+export const TEAM_CATEGORIES: TeamCategory[] = ["working", "remote", "break", "finished", "not_started", "vacation", "absent"];
 
 /** Estado do dia de uma pessoa, como o painel (Overview) o devolve. */
 export interface DashboardPerson {
@@ -47,6 +51,8 @@ export interface TeamCounts {
   working: number;
   remote: number;
   break: number;
+  finished: number;
+  not_started: number;
   vacation: number;
   absent: number;
   /** Sinais (não categorias do donut). */

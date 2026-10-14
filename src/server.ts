@@ -66,6 +66,7 @@ import { createAbsencesModule } from "./modules/absences/absences.module.js";
 import { createTimeBankModule } from "./modules/time-bank/time-bank.module.js";
 import { createRostersModule } from "./modules/rosters/rosters.module.js";
 import { createDashboardModule } from "./modules/dashboard/dashboard.module.js";
+import { createGoogleReviewsModule } from "./modules/google-reviews/google-reviews.module.js";
 import type { DashboardCachePort, DashboardMetric } from "./modules/dashboard/domain/ports/out/dashboard.ports.js";
 import { createPeriodsModule } from "./modules/periods/periods.module.js";
 import { createDemoOrgModule } from "./modules/demo-data/demo-data.module.js";
@@ -1298,6 +1299,17 @@ const dashboardModule = createDashboardModule({
 dashboardCache = dashboardModule.cache;
 invalidateOverviewToday = (org) => overviewModule.overview.invalidateToday(org);
 app.use("/api", dashboardModule.router);
+
+// Novo RH → Avaliações Google (Places API New): nota por local no Dashboard. A chave
+// (GOOGLE_PLACES_API_KEY) só existe no servidor; sem ela, "não configurado".
+const googleReviewsModule = createGoogleReviewsModule({
+  apiKey: process.env.GOOGLE_PLACES_API_KEY,
+  locations: { locations: async (org) => (await peopleRepo.listLocations(org)).map((l) => ({ id: l.id, name: l.name })) },
+  audit: {
+    record: (org, e) => auditModule.recorder.record(org, { actor: e.actor, action: e.action, resourceType: "location", resourceId: e.resourceId, before: e.before, after: e.after, reason: null }),
+  },
+});
+app.use("/api", googleReviewsModule.router);
 
 // Novo RH → Avisos automáticos (FE-111): regras em Configurações → Notificações; cron de 10 em 10 min.
 const remindersModule = createRemindersModule({
