@@ -53,3 +53,13 @@ paralela, e que nunca bloqueia as Escalas se a IA falhar.
 - Cada pedido faz até 6 chamadas ao modelo (custo por pedido limitado).
 - O texto da IA pode errar no tom, mas os factos ("✓ … criado") vêm do
   servidor; o ecrã mostra-os.
+
+## Adenda (2026-10-14) — Gemini
+
+A pedido do utilizador, o assistente também funciona com Google Gemini
+(`GeminiLlmAdapter`, HTTP direto, sem dependências novas). O fornecedor é
+escolhido por variáveis de ambiente (`ASSISTANT_PROVIDER`, `GEMINI_API_KEY`,
+`GEMINI_MODEL`); o domínio e os casos de uso não mudam. A transcrição de voz
+usa o mesmo modelo (áudio em linha, não guardado). Recomendação RGPD: usar uma
+chave de um projeto Google Cloud com faturação ativa — verificar nos termos
+do Gemini API que, nesse regime, o conteúdo não é usado para melhorar produtos.

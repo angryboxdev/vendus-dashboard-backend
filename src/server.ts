@@ -1342,9 +1342,12 @@ const toSchedulingError = (e: unknown): never => {
   throw e;
 };
 const assistantModule = createAssistantModule({
-  apiKey: ENV.OPENAI_API_KEY,
-  model: process.env.ASSISTANT_MODEL || ENV.OPENAI_MODEL_TEXT,
-  transcribeModel: process.env.ASSISTANT_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe",
+  // Fornecedor: ASSISTANT_PROVIDER=gemini|openai (vazio = Gemini se houver GEMINI_API_KEY, senão OpenAI).
+  providers: {
+    provider: process.env.ASSISTANT_PROVIDER,
+    gemini: { apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL || "gemini-2.5-flash" },
+    openai: { apiKey: ENV.OPENAI_API_KEY, model: process.env.ASSISTANT_MODEL || ENV.OPENAI_MODEL_TEXT, transcribeModel: process.env.ASSISTANT_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe" },
+  },
   idempotencyStore: new SupabaseIdempotencyStore(createScopedQuery),
   viewerOf: (req) => ({
     userId: req.auth!.sub,
@@ -1429,6 +1432,7 @@ const assistantModule = createAssistantModule({
   },
 });
 app.use("/api", assistantModule.router);
+console.log(`[assistant] fornecedor: ${assistantModule.provider ?? "nenhum (sem chave)"}`);
 
 // Novo RH → Avisos automáticos (FE-111): regras em Configurações → Notificações; cron de 10 em 10 min.
 const remindersModule = createRemindersModule({

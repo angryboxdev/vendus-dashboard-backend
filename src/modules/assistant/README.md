@@ -74,6 +74,7 @@ permissões ou Desfazer. O assistente nunca publica.
 ### Output
 
 - `OpenAiLlmAdapter` / `OpenAiTranscriberAdapter` → OpenAI (dependência e `OPENAI_API_KEY` já existentes; modelos `ASSISTANT_MODEL` — por omissão `OPENAI_MODEL_TEXT` — e `ASSISTANT_TRANSCRIBE_MODEL`, por omissão `gpt-4o-mini-transcribe`).
+- `GeminiLlmAdapter` / `GeminiTranscriberAdapter` → Google Gemini (`generateContent` por HTTP, sem SDK; chave no cabeçalho `x-goog-api-key`; esquema das ferramentas reduzido ao subconjunto aceite). Escolha: `ASSISTANT_PROVIDER=gemini|openai`; vazio = Gemini se houver `GEMINI_API_KEY`, senão OpenAI. Modelo: `GEMINI_MODEL` (por omissão `gemini-2.5-flash`).
 - `SchedulingPort` implementada em `server.ts` com `rosters.addShifts` (lote), `rosters.availability`, `clearPending`/`restoreShifts`, `check`, `createTemplate`, `time-base.theoretical` + `plannedFor` (cobertura).
 
 ## Design decisions (ADR summary)
