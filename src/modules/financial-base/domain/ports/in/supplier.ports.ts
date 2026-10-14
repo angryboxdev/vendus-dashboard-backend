@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { DefaultStockPolicy, SupplierStatus, UpdateSupplierData } from "../../entities/supplier.js";
+import type { DefaultStockPolicy, FinancialMode, SupplierStatus, UpdateSupplierData } from "../../entities/supplier.js";
 
 // ---- Shared DTO ----
 export interface SupplierDTO {
@@ -16,6 +16,9 @@ export interface SupplierDTO {
   notes: string | null;
   status: SupplierStatus;
   defaultStockPolicy: DefaultStockPolicy;
+  defaultFinancialType: string | null;
+  defaultFinancialMode: FinancialMode | null;
+  defaultLocationId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,6 +37,9 @@ export interface CreateSupplierCommand {
   paymentTermsDays?: number | null;
   notes?: string | null;
   defaultStockPolicy?: DefaultStockPolicy;
+  defaultFinancialType?: string | null;
+  defaultFinancialMode?: FinancialMode | null;
+  defaultLocationId?: string | null;
 }
 
 export interface CreateSupplierPort {

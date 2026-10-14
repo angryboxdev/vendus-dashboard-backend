@@ -1,3 +1,5 @@
+import { FakeCostCenterCategoryRepository } from "../fakes/fake-cost-center-category-repository.js";
+import { FakeLocationRead } from "../fakes/fake-location-read.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateSupplierUseCase } from "../../application/use-cases/create-supplier.use-case.js";
 import { ToggleSupplierStatusUseCase } from "../../application/use-cases/toggle-supplier-status.use-case.js";
@@ -13,7 +15,7 @@ describe("ToggleSupplierStatusUseCase", () => {
 
   beforeEach(() => {
     repo = new FakeSupplierRepository();
-    create = new CreateSupplierUseCase(repo);
+    create = new CreateSupplierUseCase(repo, new FakeCostCenterCategoryRepository(), new FakeLocationRead());
     toggle = new ToggleSupplierStatusUseCase(repo);
   });
 

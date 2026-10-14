@@ -41,6 +41,14 @@ import type {
   ListSupplierDeliverySchedulesPort,
   UpsertSupplierDeliverySchedulePort,
 } from "../../domain/ports/in/supplier-delivery-schedule.ports.js";
+import type { SupplierLocationRulesPort } from "../../domain/ports/in/supplier-location-rules.ports.js";
+import type { FinancialMode } from "../../domain/entities/supplier.js";
+import { InvalidDefaultStockPolicyError, InvalidFinancialModeError, InvalidSupplierDefaultsError } from "../../domain/errors.js";
+
+/** Dados de fornecedor inválidos (política, modo, predefinições incoerentes) → 400. */
+const isSupplierInputError = (e: unknown) =>
+  e instanceof InvalidDefaultStockPolicyError || e instanceof InvalidFinancialModeError || e instanceof InvalidSupplierDefaultsError;
+
 
 // ── Helpers de formatação ─────────────────────────────────────────────────────
 
@@ -351,6 +359,7 @@ export class FinancialBaseController {
     private readonly getOrganizationIdentity: GetOrganizationIdentityPort,
     private readonly listSupplierDeliverySchedules: ListSupplierDeliverySchedulesPort,
     private readonly upsertSupplierDeliverySchedule: UpsertSupplierDeliverySchedulePort,
+    private readonly supplierLocationRules: SupplierLocationRulesPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -880,9 +889,16 @@ export class FinancialBaseController {
             body.paymentTermsDays != null ? Number(body.paymentTermsDays) : null,
           notes: (body.notes as string | null | undefined) ?? null,
           ...(body.defaultStockPolicy !== undefined && { defaultStockPolicy: body.defaultStockPolicy as DefaultStockPolicy }),
+          defaultFinancialType: (body.defaultFinancialType as string | null | undefined) ?? null,
+          defaultFinancialMode: (body.defaultFinancialMode as FinancialMode | null | undefined) ?? null,
+          defaultLocationId: (body.defaultLocationId as string | null | undefined) ?? null,
         });
         res.status(201).json(result);
       } catch (e) {
+        if (isSupplierInputError(e)) {
+          res.status(400).json({ error: (e as Error).message });
+          return;
+        }
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
       }
     });
@@ -913,6 +929,9 @@ export class FinancialBaseController {
         if ("notes" in body) data.notes = (body.notes as string | null) ?? null;
         if (body.defaultStockPolicy !== undefined)
           data.defaultStockPolicy = body.defaultStockPolicy as DefaultStockPolicy;
+        if ("defaultFinancialType" in body) data.defaultFinancialType = (body.defaultFinancialType as string | null) ?? null;
+        if ("defaultFinancialMode" in body) data.defaultFinancialMode = (body.defaultFinancialMode as FinancialMode | null) ?? null;
+        if ("defaultLocationId" in body) data.defaultLocationId = (body.defaultLocationId as string | null) ?? null;
         const result = await this.updateSupplier.execute({
           organizationId: req.auth!.orgId,
           id: req.params["id"] as string,
@@ -924,6 +943,52 @@ export class FinancialBaseController {
           res.status(404).json({ error: e.message });
           return;
         }
+        if (isSupplierInputError(e)) {
+          res.status(400).json({ error: (e as Error).message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    // ── Exceções por loja (F2 v1.2 §2.1) ─────────────────────────────────────
+    this.router.get("/financial-base/suppliers/:id/location-rules", async (req, res) => {
+      try {
+        res.json(await this.supplierLocationRules.list(req.auth!.orgId, req.params["id"] as string));
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+    this.router.put("/financial-base/suppliers/:id/location-rules/:locationId", async (req, res) => {
+      try {
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const rule = await this.supplierLocationRules.upsert({
+          organizationId: req.auth!.orgId,
+          supplierId: req.params["id"] as string,
+          locationId: req.params["locationId"] as string,
+          stockPolicy: (body.stockPolicy as DefaultStockPolicy | null | undefined) ?? null,
+          costCenterGroupId: (body.costCenterGroupId as string | null | undefined) ?? null,
+          costCenterCategoryId: (body.costCenterCategoryId as string | null | undefined) ?? null,
+          actor: req.auth!.email || req.auth!.sub,
+        });
+        res.json(rule);
+      } catch (e) {
+        if (e instanceof SupplierNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        if (isSupplierInputError(e)) {
+          res.status(400).json({ error: (e as Error).message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+    this.router.delete("/financial-base/suppliers/:id/location-rules/:locationId", async (req, res) => {
+      try {
+        await this.supplierLocationRules.remove(req.auth!.orgId, req.params["id"] as string, req.params["locationId"] as string);
+        res.status(204).send();
+      } catch (e) {
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
       }
     });

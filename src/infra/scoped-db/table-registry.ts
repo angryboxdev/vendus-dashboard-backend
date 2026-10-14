@@ -279,6 +279,7 @@ export const TABLE_REGISTRY = {
   location_google_places: { organizationColumn: "org_id", locationBearing: false },
   fiscal_document_identities: { organizationColumn: "org_id", locationBearing: false },
   fiscal_document_audit_logs: { organizationColumn: "org_id", locationBearing: false },
+  supplier_location_rules: { organizationColumn: "org_id", locationBearing: false },
   invoice_audit_logs: { organizationColumn: "org_id", locationBearing: false },
   alert_rules: { organizationColumn: "org_id", locationBearing: false },
   alerts: { organizationColumn: "org_id", locationBearing: false },

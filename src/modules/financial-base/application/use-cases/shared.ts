@@ -54,6 +54,9 @@ export function toSupplierDTO(s: Supplier): SupplierDTO {
     notes: s.notes,
     status: s.status,
     defaultStockPolicy: s.defaultStockPolicy,
+    defaultFinancialType: s.defaultFinancialType,
+    defaultFinancialMode: s.defaultFinancialMode,
+    defaultLocationId: s.defaultLocationId,
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,
   };

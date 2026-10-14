@@ -1,6 +1,6 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
-import { Supplier, type DefaultStockPolicy, type SupplierStatus } from "../../domain/entities/supplier.js";
+import { Supplier, type DefaultStockPolicy, type FinancialMode, type SupplierStatus } from "../../domain/entities/supplier.js";
 import type {
   SupplierFilter,
   SupplierRepositoryPort,
@@ -21,6 +21,9 @@ function toEntity(row: Record<string, unknown>): Supplier {
     notes: (row.notes as string | null) ?? null,
     status: row.status as SupplierStatus,
     defaultStockPolicy: (row.default_stock_policy as DefaultStockPolicy | undefined) ?? "inherit",
+    defaultFinancialType: (row.default_financial_type as string | null) ?? null,
+    defaultFinancialMode: (row.default_financial_mode as FinancialMode | null) ?? null,
+    defaultLocationId: (row.default_location_id as string | null) ?? null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   });
@@ -49,6 +52,9 @@ export class SupabaseSupplierRepository implements SupplierRepositoryPort {
       notes: supplier.notes,
       status: supplier.status,
       default_stock_policy: supplier.defaultStockPolicy,
+      default_financial_type: supplier.defaultFinancialType,
+      default_financial_mode: supplier.defaultFinancialMode,
+      default_location_id: supplier.defaultLocationId,
       created_at: supplier.createdAt.toISOString(),
       updated_at: supplier.updatedAt.toISOString(),
     });
@@ -96,6 +102,9 @@ export class SupabaseSupplierRepository implements SupplierRepositoryPort {
         notes: supplier.notes,
         status: supplier.status,
         default_stock_policy: supplier.defaultStockPolicy,
+      default_financial_type: supplier.defaultFinancialType,
+      default_financial_mode: supplier.defaultFinancialMode,
+      default_location_id: supplier.defaultLocationId,
         updated_at: supplier.updatedAt.toISOString(),
       })
       .eq("id", supplier.id);

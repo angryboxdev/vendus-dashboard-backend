@@ -1,4 +1,4 @@
-import { InvalidDefaultStockPolicyError } from "../errors.js";
+import { InvalidDefaultStockPolicyError, InvalidFinancialModeError } from "../errors.js";
 
 export type SupplierStatus = "active" | "inactive";
 
@@ -7,13 +7,22 @@ export type SupplierStatus = "active" | "inactive";
  * pode ignorar uma classificação financeira explícita (`CREATE_REVIEW`/
  * `NO_STOCK_EFFECT` na categoria) que determine impacto em stock.
  */
-export type DefaultStockPolicy = "inherit" | "usually_creates_review" | "usually_skips_review";
+//
+// F2 v1.2 §2.1 — rótulos: inherit = «Seguir a categoria», usually_creates_review = «Enviar por
+// defeito», usually_skips_review = «Não enviar», decide_per_document = «Decidir no documento»
+// (exige escolha explícita no lançamento; ausência de decisão não equivale a «Não enviar»).
+export type DefaultStockPolicy = "inherit" | "usually_creates_review" | "usually_skips_review" | "decide_per_document";
 
 export const DEFAULT_STOCK_POLICIES: DefaultStockPolicy[] = [
   "inherit",
   "usually_creates_review",
   "usually_skips_review",
+  "decide_per_document",
 ];
+
+/** Modo de classificação financeira (F2 §2.2): «Única» | «Por artigo» | «Por valores». */
+export type FinancialMode = "single" | "by_item" | "by_values";
+export const FINANCIAL_MODES: FinancialMode[] = ["single", "by_item", "by_values"];
 
 interface SupplierProps {
   id: string;
@@ -29,6 +38,12 @@ interface SupplierProps {
   notes: string | null;
   status: SupplierStatus;
   defaultStockPolicy: DefaultStockPolicy;
+  /** Tipo financeiro habitual (já existia na BD; passa a ser editável). */
+  defaultFinancialType?: string | null;
+  /** Modo financeiro preferido (fornecedor misto pode preferir «Por valores»). */
+  defaultFinancialMode?: FinancialMode | null;
+  /** Destino habitual — uma loja concreta, nunca «todas». */
+  defaultLocationId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -45,6 +60,9 @@ export interface UpdateSupplierData {
   paymentTermsDays?: number | null;
   notes?: string | null;
   defaultStockPolicy?: DefaultStockPolicy;
+  defaultFinancialType?: string | null;
+  defaultFinancialMode?: FinancialMode | null;
+  defaultLocationId?: string | null;
 }
 
 export class Supplier {
@@ -61,6 +79,9 @@ export class Supplier {
   readonly notes: string | null;
   readonly status: SupplierStatus;
   readonly defaultStockPolicy: DefaultStockPolicy;
+  readonly defaultFinancialType: string | null;
+  readonly defaultFinancialMode: FinancialMode | null;
+  readonly defaultLocationId: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 
@@ -78,6 +99,9 @@ export class Supplier {
     this.notes = props.notes;
     this.status = props.status;
     this.defaultStockPolicy = props.defaultStockPolicy;
+    this.defaultFinancialType = props.defaultFinancialType ?? null;
+    this.defaultFinancialMode = props.defaultFinancialMode ?? null;
+    this.defaultLocationId = props.defaultLocationId ?? null;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
   }
@@ -94,10 +118,14 @@ export class Supplier {
     paymentTermsDays?: number | null;
     notes?: string | null;
     defaultStockPolicy?: string;
+    defaultFinancialType?: string | null;
+    defaultFinancialMode?: string | null;
+    defaultLocationId?: string | null;
   }): Supplier {
     if (props.defaultStockPolicy !== undefined && !DEFAULT_STOCK_POLICIES.includes(props.defaultStockPolicy as DefaultStockPolicy)) {
       throw new InvalidDefaultStockPolicyError(props.defaultStockPolicy);
     }
+    assertFinancialMode(props.defaultFinancialMode);
     const now = new Date();
     return new Supplier({
       id: crypto.randomUUID(),
@@ -113,6 +141,9 @@ export class Supplier {
       notes: props.notes ?? null,
       status: "active",
       defaultStockPolicy: (props.defaultStockPolicy as DefaultStockPolicy) ?? "inherit",
+      defaultFinancialType: props.defaultFinancialType ?? null,
+      defaultFinancialMode: (props.defaultFinancialMode as FinancialMode | null | undefined) ?? null,
+      defaultLocationId: props.defaultLocationId ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -126,6 +157,7 @@ export class Supplier {
     if (data.defaultStockPolicy !== undefined && !DEFAULT_STOCK_POLICIES.includes(data.defaultStockPolicy)) {
       throw new InvalidDefaultStockPolicyError(data.defaultStockPolicy);
     }
+    assertFinancialMode(data.defaultFinancialMode);
     return new Supplier({
       id: this.id,
       name: data.name !== undefined ? data.name.trim() : this.name,
@@ -147,6 +179,9 @@ export class Supplier {
       notes: data.notes !== undefined ? data.notes : this.notes,
       status: this.status,
       defaultStockPolicy: data.defaultStockPolicy ?? this.defaultStockPolicy,
+      defaultFinancialType: data.defaultFinancialType !== undefined ? data.defaultFinancialType : this.defaultFinancialType,
+      defaultFinancialMode: data.defaultFinancialMode !== undefined ? data.defaultFinancialMode : this.defaultFinancialMode,
+      defaultLocationId: data.defaultLocationId !== undefined ? data.defaultLocationId : this.defaultLocationId,
       createdAt: this.createdAt,
       updatedAt: new Date(),
     });
@@ -175,8 +210,15 @@ export class Supplier {
       notes: this.notes,
       status: this.status,
       defaultStockPolicy: this.defaultStockPolicy,
+      defaultFinancialType: this.defaultFinancialType,
+      defaultFinancialMode: this.defaultFinancialMode,
+      defaultLocationId: this.defaultLocationId,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };
   }
+}
+
+function assertFinancialMode(mode: string | null | undefined): void {
+  if (mode != null && !FINANCIAL_MODES.includes(mode as FinancialMode)) throw new InvalidFinancialModeError(mode);
 }

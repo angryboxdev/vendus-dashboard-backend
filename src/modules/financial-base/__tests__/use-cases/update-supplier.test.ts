@@ -1,3 +1,5 @@
+import { FakeCostCenterCategoryRepository } from "../fakes/fake-cost-center-category-repository.js";
+import { FakeLocationRead } from "../fakes/fake-location-read.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateSupplierUseCase } from "../../application/use-cases/create-supplier.use-case.js";
 import { UpdateSupplierUseCase } from "../../application/use-cases/update-supplier.use-case.js";
@@ -13,8 +15,8 @@ describe("UpdateSupplierUseCase", () => {
 
   beforeEach(() => {
     repo = new FakeSupplierRepository();
-    create = new CreateSupplierUseCase(repo);
-    update = new UpdateSupplierUseCase(repo);
+    create = new CreateSupplierUseCase(repo, new FakeCostCenterCategoryRepository(), new FakeLocationRead());
+    update = new UpdateSupplierUseCase(repo, new FakeCostCenterCategoryRepository(), new FakeLocationRead());
   });
 
   it("actualiza o nome do fornecedor", async () => {

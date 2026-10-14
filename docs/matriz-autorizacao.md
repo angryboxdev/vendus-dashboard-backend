@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 750 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 753 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -153,6 +153,9 @@ Endpoints: 750 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/financial-base/suppliers/:id/delivery-schedule` | permission:finance.suppliers:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PUT | `/api/financial-base/suppliers/:id/delivery-schedule` | permission:finance.suppliers:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/financial-base/suppliers/:id/detail` | permission:finance.suppliers:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
+| GET | `/api/financial-base/suppliers/:id/location-rules` | permission:finance.suppliers:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
+| DELETE | `/api/financial-base/suppliers/:id/location-rules/:locationId` | permission:finance.suppliers:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
+| PUT | `/api/financial-base/suppliers/:id/location-rules/:locationId` | permission:finance.suppliers:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/financial-base/suppliers/:id/statement-pdf` | permission:finance.suppliers:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/financial-base/suppliers/:id/status` | permission:finance.suppliers:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/financial-base/suppliers/kpis` | permission:finance.suppliers:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
