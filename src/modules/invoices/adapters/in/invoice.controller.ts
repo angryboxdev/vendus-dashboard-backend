@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { idempotency, type IdempotencyStore } from "../../../../infra/http/idempotency.js";
 import type {
+  AllocationCommand,
   CreateInvoicePort,
   UpdateInvoicePort,
   MarkInvoicePaidPort,
@@ -32,6 +33,8 @@ import {
   InvoicePayableSettledError,
   InvoiceVersionConflictError,
   StockDecisionRequiredError,
+  AllocationsNotReconciledError,
+  InvoiceNotDraftError,
   InvoiceAmountsNotReconciledError,
   LineDetailModeError,
   LinesTotalMismatchError,
@@ -44,6 +47,10 @@ interface InvoicePorts {
   listPayableDuplicates: { execute(org: import("../../../../kernel/organization-id.js").OrganizationId): Promise<unknown> };
   /** «Enviar para Stock» sugerido (F2 §2.1). */
   suggestStockRouting: import("../../domain/ports/out/stock-routing.port.js").StockRoutingPort;
+  /** F2 §2.2: feed «Por valores», guardar rascunho, repartição de fatura lançada. */
+  listInvoiceAllocations: { execute(org: import("../../../../kernel/organization-id.js").OrganizationId): Promise<unknown> };
+  saveInvoiceDraft: { execute(c: Parameters<ConfirmImportedInvoicePort["execute"]>[0]): Promise<unknown> };
+  replaceInvoiceAllocations: { execute(c: { organizationId: import("../../../../kernel/organization-id.js").OrganizationId; id: string; allocations: AllocationCommand[]; expectedVersion?: number; actor?: string; reason?: string }): Promise<unknown> };
   createInvoice: CreateInvoicePort;
   updateInvoice: UpdateInvoicePort;
   markInvoicePaid: MarkInvoicePaidPort;
@@ -76,6 +83,14 @@ function handleError(res: import("express").Response, err: unknown): void {
   }
   if (err instanceof InvoiceAmountsNotReconciledError) {
     res.status(422).json({ error: err.message, code: "amounts_not_reconciled", ...err.details });
+    return;
+  }
+  if (err instanceof AllocationsNotReconciledError) {
+    res.status(422).json({ error: err.message, code: "allocations_not_reconciled", ...err.details });
+    return;
+  }
+  if (err instanceof InvoiceNotDraftError) {
+    res.status(409).json({ error: err.message, code: "not_draft" });
     return;
   }
   if (err instanceof StockDecisionRequiredError) {
@@ -130,6 +145,43 @@ export function createInvoiceRouter(ports: InvoicePorts, idempotencyStore: Idemp
   router.post("/invoices", idem);
   router.post("/invoices/import", idem);
   router.post("/invoices/:id/confirm", idem);
+
+  // GET /invoices/allocations — repartições «Por valores» (análise por CC, montantes líquidos).
+  router.get("/invoices/allocations", async (req, res) => {
+    try {
+      res.json(await ports.listInvoiceAllocations.execute(req.auth!.orgId));
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // POST /invoices/:id/draft — «Guardar rascunho»: grava sem lançar (sem obrigação nem revisão de Stock).
+  router.post("/invoices/:id/draft", async (req, res) => {
+    try {
+      res.json(await ports.saveInvoiceDraft.execute({ ...(req.body as object), organizationId: req.auth!.orgId, id: req.params.id, actor: req.auth!.email || req.auth!.sub }));
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // PUT /invoices/:id/allocations — repartição «Por valores» de uma fatura lançada (soma = base líquida).
+  router.put("/invoices/:id/allocations", async (req, res) => {
+    try {
+      const b = (req.body ?? {}) as { allocations?: AllocationCommand[]; expectedVersion?: number; reason?: string };
+      res.json(
+        await ports.replaceInvoiceAllocations.execute({
+          organizationId: req.auth!.orgId,
+          id: req.params.id,
+          allocations: Array.isArray(b.allocations) ? b.allocations : [],
+          ...(typeof b.expectedVersion === "number" && { expectedVersion: b.expectedVersion }),
+          ...(typeof b.reason === "string" && { reason: b.reason }),
+          actor: req.auth!.email || req.auth!.sub,
+        }),
+      );
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
 
   // POST /invoices/stock-routing-suggestion — «Enviar para Stock» sugerido + motivo (F2 §2.1).
   router.post("/invoices/stock-routing-suggestion", async (req, res) => {

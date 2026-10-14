@@ -1,3 +1,4 @@
+import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { ListInvoiceLinesUseCase } from "../../application/use-cases/list-invoice-lines.use-case.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
@@ -11,7 +12,7 @@ describe("ListInvoiceLinesUseCase", () => {
 
   beforeEach(() => {
     lineRepo = new FakeInvoiceLineRepository();
-    useCase = new ListInvoiceLinesUseCase(lineRepo);
+    useCase = new ListInvoiceLinesUseCase(lineRepo, new FakeInvoiceRepository());
   });
 
   it("returns empty array when no lines exist", async () => {

@@ -63,6 +63,10 @@ export interface InvoiceDTO {
   status: InvoiceStatus;
   reconciliationStatus: ReconciliationStatus;
   lineDetailMode: LineDetailMode;
+  /** F2 §2.2: «Única» | «Por artigo» | «Por valores» (derivado de lineDetailMode). */
+  financialMode: FinancialModeName;
+  /** Modo «Por valores»: repartições financeiras (não são artigos). */
+  allocations?: InvoiceAllocationDTO[];
   paymentBankAccountId: string | null;
   paymentMethod: string | null;
   paymentNotes: string | null;
@@ -106,6 +110,8 @@ export interface InvoiceDTO {
    */
   classificationSummary: {
     mode: "unique" | "mixed" | "none";
+    /** "net" = montantes líquidos sem IVA (modo «Por valores»); omitido = com IVA. */
+    basis?: "net";
     entries: Array<{
       costCenterCategoryId: string;
       code: string;
@@ -197,6 +203,28 @@ export interface CreateInvoiceLineCommand {
   discount?: AmountDiscountCommand | null;
 }
 
+export type FinancialModeName = "single" | "by_item" | "by_values";
+
+/** Repartição «Por valores»: descrição + subcategoria (+ loja) + montante líquido em cêntimos. */
+export interface AllocationCommand {
+  description: string;
+  costCenterGroupId?: string | null;
+  costCenterCategoryId: string;
+  locationId?: string | null;
+  netCents: number;
+}
+
+export interface InvoiceAllocationDTO {
+  id: string;
+  invoiceId: string;
+  position: number;
+  description: string;
+  costCenterGroupId: string | null;
+  costCenterCategoryId: string;
+  locationId: string | null;
+  netCents: number;
+}
+
 export interface AmountDiscountCommand {
   kind: "pct" | "amount";
   value: number;
@@ -247,6 +275,10 @@ export interface CreateInvoiceCommand {
   /** Completar o documento que já existe só no Stock (identidade fiscal indicada). */
   completeStockIdentityId?: string;
   amounts?: DocumentAmountsCommand;
+  /** F2 §2.2: modo financeiro; omitido = «Por artigo» se houver linhas, senão «Única». */
+  financialMode?: FinancialModeName;
+  /** Obrigatório em «Por valores»: soma = base líquida. */
+  allocations?: AllocationCommand[];
 }
 
 export interface UpdateInvoiceCommand {
@@ -413,6 +445,10 @@ export interface ConfirmImportedInvoiceCommand {
   /** Completar o documento que já existe só no Stock (identidade fiscal indicada). */
   completeStockIdentityId?: string;
   amounts?: DocumentAmountsCommand;
+  /** F2 §2.2: modo financeiro; omitido = «Por artigo» se houver linhas, senão «Única». */
+  financialMode?: FinancialModeName;
+  /** Obrigatório em «Por valores»: soma = base líquida. */
+  allocations?: AllocationCommand[];
 }
 
 export interface AddInvoiceLineCommand {

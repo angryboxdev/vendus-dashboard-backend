@@ -1,3 +1,4 @@
+import type { InvoiceAllocationRepositoryPort } from "../../domain/ports/out/invoice-allocation-repository.port.js";
 import type { GetInvoicePort, InvoiceDTO } from "../../domain/ports/in/invoice.ports.js";
 import type { InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
 import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
@@ -11,6 +12,7 @@ export class GetInvoiceUseCase implements GetInvoicePort {
     private readonly invoiceRepo: InvoiceRepositoryPort,
     private readonly lineRepo: InvoiceLineRepositoryPort,
     private readonly categoryReader: CostCenterCategoryReaderPort,
+    private readonly allocationRepo: InvoiceAllocationRepositoryPort,
   ) {}
 
   async execute(organizationId: OrganizationId, id: string): Promise<InvoiceDTO> {
@@ -18,6 +20,7 @@ export class GetInvoiceUseCase implements GetInvoicePort {
     if (!invoice) throw new InvoiceNotFoundError(id);
 
     const lines = await this.lineRepo.findByInvoiceId(organizationId, id);
+    const allocations = invoice.lineDetailMode === "by_values" ? await this.allocationRepo.findByInvoiceId(organizationId, id) : [];
 
     const categoryIds = [...new Set(
       lines
@@ -25,11 +28,12 @@ export class GetInvoiceUseCase implements GetInvoicePort {
         .filter((c): c is string => c !== null),
     )];
     if (invoice.costCenterCategoryId) categoryIds.push(invoice.costCenterCategoryId);
+    for (const a of allocations) categoryIds.push(a.costCenterCategoryId);
     const uniqueIds = [...new Set(categoryIds)];
 
     const categoryLookups = await this.categoryReader.findManyByIds(organizationId, uniqueIds);
     const categoryMap = new Map(categoryLookups.map((c) => [c.id, c]));
 
-    return toInvoiceDTO(invoice, lines, categoryMap);
+    return toInvoiceDTO(invoice, lines, categoryMap, false, allocations);
   }
 }

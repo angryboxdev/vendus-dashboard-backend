@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 754 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 757 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -291,7 +291,9 @@ Endpoints: 754 · pré-autenticação: 23 · não classificados: 0
 | DELETE | `/api/invoices/:id` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/:id` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/invoices/:id` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
+| PUT | `/api/invoices/:id/allocations` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/invoices/:id/confirm` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
+| POST | `/api/invoices/:id/draft` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/invoices/:id/line-detail-mode` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/invoices/:id/paid` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/invoices/:id/status` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
@@ -301,6 +303,7 @@ Endpoints: 754 · pré-autenticação: 23 · não classificados: 0
 | PATCH | `/api/invoices/:invoiceId/lines/:lineId/classify` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/invoices/:invoiceId/lines/:lineId/deductibility` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/alerts` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
+| GET | `/api/invoices/allocations` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/invoices/import` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/integrity/payable-duplicates` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/lines` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |

@@ -1,3 +1,5 @@
+import { FakeCostCenterCategoryReader } from "../fakes/fake-cost-center-category-reader.js";
+import { FakeInvoiceAllocationRepository } from "../fakes/fake-invoice-allocation-repository.js";
 import { FakeStockRoutingPort } from "../fakes/fake-stock-routing.port.js";
 import { FakeInvoiceAudit } from "../fakes/fake-invoice-audit.js";
 import { FakeInvoiceAmountsWrite } from "../fakes/fake-invoice-amounts-write.js";
@@ -50,7 +52,7 @@ describe("ConfirmImportedInvoiceUseCase", () => {
     supplierCreate = new FakeSupplierCreatePort();
     supplierHint = new FakeSupplierHintPort();
     fiscal = new FakeFiscalIdentityPort();
-    useCase = new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, { notifyInvoiceFinalized: async () => {} }, fiscal, new FakeSupplierLookupPort(), new FakeInvoiceAmountsWrite(), new FakeInvoiceAudit(), new FakeStockRoutingPort());
+    useCase = new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, { notifyInvoiceFinalized: async () => {} }, fiscal, new FakeSupplierLookupPort(), new FakeInvoiceAmountsWrite(), new FakeInvoiceAudit(), new FakeStockRoutingPort(), new FakeCostCenterCategoryReader(), new FakeInvoiceAllocationRepository());
   });
 
   it("transitions draft_ai to pending", async () => {

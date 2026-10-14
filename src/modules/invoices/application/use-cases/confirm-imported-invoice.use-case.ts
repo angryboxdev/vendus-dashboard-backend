@@ -22,6 +22,10 @@ import type { InvoiceAmountsWritePort } from "../../domain/ports/out/invoice-amo
 import { reconcileForFinalize } from "./shared-amounts.js";
 import type { StockRoutingPort } from "../../domain/ports/out/stock-routing.port.js";
 import { resolveStockRouting } from "./shared-stock-routing.js";
+import type { CostCenterCategoryReaderPort } from "../../domain/ports/out/cost-center-category-reader.port.js";
+import type { InvoiceAllocationRepositoryPort } from "../../domain/ports/out/invoice-allocation-repository.port.js";
+import type { InvoiceAllocation } from "../../domain/entities/invoice-allocation.js";
+import { buildAllocations, toLineDetailMode } from "./shared-financial-mode.js";
 
 export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort {
   constructor(
@@ -36,6 +40,8 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     private readonly amountsWrite: InvoiceAmountsWritePort,
     private readonly audit: InvoiceAuditPort,
     private readonly stockRouting: StockRoutingPort,
+    private readonly categoryReader: CostCenterCategoryReaderPort,
+    private readonly allocationRepo: InvoiceAllocationRepositoryPort,
   ) {}
 
   async execute(command: ConfirmImportedInvoiceCommand): Promise<InvoiceDTO> {
@@ -112,7 +118,10 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       if (lc.locationId !== undefined) lineProps.locationId = lc.locationId;
       return InvoiceLine.create(lineProps);
     });
-    const storedLines = await this.lineRepo.findByInvoiceId(command.organizationId, confirmed.id);
+    // Linhas do rascunho («Guardar rascunho», F2): as enviadas no pedido substituem-nas; sem `lines` mantêm-se.
+    const draftLines = await this.lineRepo.findByInvoiceId(command.organizationId, confirmed.id);
+    const replaceStored = command.lines !== undefined && draftLines.length > 0;
+    const storedLines = command.lines !== undefined ? [] : draftLines;
 
     // Motor único de valores (task v1.2 §1.3): o servidor recalcula; não reconcilia ao cêntimo → não
     // finaliza (o rascunho fica como estava, nada foi gravado ainda).
@@ -124,6 +133,16 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     confirmed = amounts.invoice;
     const reconciledStored = amounts.lines.slice(0, storedLines.length);
     const lines = amounts.lines.slice(storedLines.length);
+
+    // Modo financeiro (F2 §2.2). As linhas reais ficam guardadas em qualquer modo; «Por valores» exige
+    // repartições que somem a base líquida ao cêntimo (não são artigos; o IVA fica no quadro por taxa).
+    const mode = toLineDetailMode(command.financialMode) ?? (lineCommands.length > 0 ? "detailed" : existing.lineDetailMode);
+    let allocations: InvoiceAllocation[] = [];
+    if (mode === "by_values") {
+      allocations = (await buildAllocations(this.categoryReader, command.organizationId, confirmed.id, command.allocations ?? [], Math.abs(confirmed.subtotalWithoutVat), true)).allocations;
+      confirmed = confirmed.update({ costCenterGroupId: null, costCenterCategoryId: null });
+    }
+    confirmed = confirmed.setLineDetailMode(mode);
 
     // Duplicate check — hard block, exclude this invoice itself. Prefer the
     // resolved supplierId (reliable regardless of NIF extraction); fall back
@@ -166,19 +185,18 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       }
     }
 
-    // Save optional lines (valores já recalculados pelo motor)
+    // Linhas (valores já recalculados pelo motor) e repartições «Por valores».
+    if (replaceStored) await this.lineRepo.deleteByInvoiceId(command.organizationId, confirmed.id);
     if (lines.length > 0) {
       await this.lineRepo.saveAll(command.organizationId, lines);
     }
     for (const l of reconciledStored) await this.lineRepo.updateLine(command.organizationId, l);
     await this.amountsWrite.save(command.organizationId, confirmed.id, amounts.record);
-
-    // Derivar lineDetailMode automaticamente: se há linhas confirmadas → detailed, caso contrário manter simple
-    let finalInvoice = confirmed;
-    if (lines.length > 0) {
-      finalInvoice = confirmed.setLineDetailMode("detailed");
-      await this.invoiceRepo.update(command.organizationId, finalInvoice);
+    if (mode === "by_values" || command.allocations !== undefined) {
+      await this.allocationRepo.replaceForInvoice(command.organizationId, confirmed.id, allocations);
     }
+    const finalInvoice = confirmed;
+    const allLines = [...reconciledStored, ...lines];
 
     // Propagar costCenterCategoryId da fatura para todas as linhas existentes
     if (finalInvoice.costCenterCategoryId !== null) {
@@ -213,14 +231,15 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
         supplierNif: finalInvoice.supplierNifSnapshot,
         override: finalInvoice.stockReviewOverride,
         overrideReason: finalInvoice.stockReviewOverrideReason,
-        lines: lines.map((l) => ({
+        // Todas as linhas reais seguem para o Stock, em qualquer modo financeiro (F2 §2.2).
+        lines: allLines.map((l) => ({
           id: l.id,
           description: l.description,
           quantity: l.quantity,
           unit: l.unit,
           unitCostWithoutVat: l.unitCostWithoutVat,
           totalWithVat: l.totalWithVat,
-          costCenterCategoryId: l.costCenterCategoryId,
+          costCenterCategoryId: l.costCenterCategoryId ?? finalInvoice.costCenterCategoryId,
           locationId: l.locationId,
         })),
         actor: null,
@@ -231,6 +250,6 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
 
     await this.audit.record(command.organizationId, { invoiceId: finalInvoice.id, action: "confirm", actor: command.actor ?? "sistema", origin: "import", reason: null, before: auditSnapshot(existing), after: auditSnapshot(finalInvoice) });
 
-    return toInvoiceDTO(finalInvoice, lines);
+    return toInvoiceDTO(finalInvoice, allLines, undefined, false, allocations);
   }
 }

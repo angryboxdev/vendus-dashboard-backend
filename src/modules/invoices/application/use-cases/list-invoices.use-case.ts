@@ -1,3 +1,5 @@
+import type { InvoiceAllocation } from "../../domain/entities/invoice-allocation.js";
+import type { InvoiceAllocationRepositoryPort } from "../../domain/ports/out/invoice-allocation-repository.port.js";
 import type {
   ListInvoicesPort,
   ListInvoicesFilter,
@@ -19,6 +21,7 @@ export class ListInvoicesUseCase implements ListInvoicesPort {
   constructor(
     private readonly invoiceRepo: InvoiceRepositoryPort,
     private readonly categoryReader: CostCenterCategoryReaderPort,
+    private readonly allocationRepo?: Pick<InvoiceAllocationRepositoryPort, "findAll">,
   ) {}
 
   async execute(organizationId: OrganizationId, filter?: ListInvoicesFilter): Promise<InvoiceDTO[]> {
@@ -53,9 +56,17 @@ export class ListInvoicesUseCase implements ListInvoicesPort {
       );
     }
 
-    const categoryIds = [...new Set(
-      invoices.map((inv) => inv.costCenterCategoryId).filter((id): id is string => id != null),
-    )];
+    // «Por valores» (F2): a classificação vem das repartições.
+    const allocationsByInvoice = new Map<string, InvoiceAllocation[]>();
+    if (this.allocationRepo && invoices.some((inv) => inv.lineDetailMode === "by_values")) {
+      for (const a of await this.allocationRepo.findAll(organizationId)) {
+        allocationsByInvoice.set(a.invoiceId, [...(allocationsByInvoice.get(a.invoiceId) ?? []), a]);
+      }
+    }
+    const categoryIds = [...new Set([
+      ...invoices.map((inv) => inv.costCenterCategoryId).filter((id): id is string => id != null),
+      ...[...allocationsByInvoice.values()].flat().map((a) => a.costCenterCategoryId),
+    ])];
     const lookups: CategoryLookup[] = categoryIds.length > 0
       ? await this.categoryReader.findManyByIds(organizationId, categoryIds)
       : [];
@@ -66,6 +77,8 @@ export class ListInvoicesUseCase implements ListInvoicesPort {
     // só deteta duplicados dentro do subconjunto filtrado.
     const duplicateIds = findDuplicateInvoiceIds(invoices);
 
-    return invoices.map((inv) => toInvoiceDTO(inv, undefined, categoryMap, duplicateIds.has(inv.id)));
+    return invoices.map((inv) =>
+      toInvoiceDTO(inv, undefined, categoryMap, duplicateIds.has(inv.id), inv.lineDetailMode === "by_values" ? (allocationsByInvoice.get(inv.id) ?? []) : undefined),
+    );
   }
 }

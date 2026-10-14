@@ -35,7 +35,7 @@ export class SupabaseCostCenterCategoryReaderAdapter implements CostCenterCatego
     if (ids.length === 0) return [];
     const { data, error } = await this.scopedQuery(organizationId)
       .table("cost_center_categories")
-      .select("id, code, name, financial_type")
+      .select("id, code, name, financial_type, group_id, is_active")
       .in("id", ids);
     if (error) throw new Error(error.message);
     return ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => ({
@@ -43,6 +43,8 @@ export class SupabaseCostCenterCategoryReaderAdapter implements CostCenterCatego
       code: row.code as string,
       name: row.name as string,
       financialType: (row.financial_type as string | null) ?? null,
+      groupId: row.group_id as string,
+      isActive: row.is_active !== false,
     }));
   }
 }

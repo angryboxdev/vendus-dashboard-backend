@@ -9,7 +9,8 @@ import type { PayableEntryWritePort } from "../../domain/ports/out/payable-entry
 import type { InvoiceReconciliationCleanupPort } from "../../domain/ports/out/invoice-reconciliation-cleanup.port.js";
 import type { InvoiceStockReviewStatusReadPort } from "../../domain/ports/out/invoice-stock-review-status-read.port.js";
 import type { InvoiceStockReviewDraftDeletePort } from "../../domain/ports/out/invoice-stock-review-draft-delete.port.js";
-import { InvoiceNotFoundError, DuplicateInvoiceError, InvoicePayableSettledError, InvoiceVersionConflictError } from "../../domain/errors.js";
+import { InvoiceNotFoundError, DuplicateInvoiceError, InvoicePayableSettledError, InvoiceVersionConflictError, AllocationsNotReconciledError } from "../../domain/errors.js";
+import type { InvoiceAllocationRepositoryPort } from "../../domain/ports/out/invoice-allocation-repository.port.js";
 import type { InvoiceAuditPort } from "../../domain/ports/out/invoice-audit.port.js";
 import { auditSnapshot } from "./shared-audit.js";
 import type { UpdateInvoiceData } from "../../domain/entities/invoice.js";
@@ -30,6 +31,7 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     private readonly fiscal: FiscalIdentityPort,
     private readonly supplierLookup: SupplierLookupPort,
     private readonly audit: InvoiceAuditPort,
+    private readonly allocationRepo: InvoiceAllocationRepositoryPort,
   ) {}
 
   async execute(command: UpdateInvoiceCommand): Promise<InvoiceDTO> {
@@ -96,6 +98,13 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     if (command.stockReviewOverrideReason !== undefined) data.stockReviewOverrideReason = command.stockReviewOverrideReason;
 
     let updated = existing.update(data);
+    if (existing.lineDetailMode === "by_values" && updated.subtotalWithoutVat !== existing.subtotalWithoutVat) {
+      const allocated = (await this.allocationRepo.findByInvoiceId(command.organizationId, existing.id)).reduce((s, a) => s + a.netCents, 0);
+      const remainingCents = Math.abs(updated.subtotalWithoutVat) - allocated;
+      if (remainingCents !== 0) {
+        throw new AllocationsNotReconciledError("a base líquida mudou — reveja a repartição «Por valores» antes de gravar", { remainingCents, issues: [{ code: "not_distributed" }] });
+      }
+    }
     // Corrigir a identidade (número, NIF, fornecedor, tipo) de uma fatura já finalizada passa pela identidade
     // fiscal partilhada: a nova chave não pode pertencer a outro documento (task v1.2 §1.2).
     const finalized = existing.status !== "draft_ai" && existing.status !== "pending_review";

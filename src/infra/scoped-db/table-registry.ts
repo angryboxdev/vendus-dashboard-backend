@@ -280,6 +280,7 @@ export const TABLE_REGISTRY = {
   fiscal_document_identities: { organizationColumn: "org_id", locationBearing: false },
   fiscal_document_audit_logs: { organizationColumn: "org_id", locationBearing: false },
   supplier_location_rules: { organizationColumn: "org_id", locationBearing: false },
+  invoice_allocations: { organizationColumn: "org_id", locationBearing: true },
   invoice_audit_logs: { organizationColumn: "org_id", locationBearing: false },
   alert_rules: { organizationColumn: "org_id", locationBearing: false },
   alerts: { organizationColumn: "org_id", locationBearing: false },

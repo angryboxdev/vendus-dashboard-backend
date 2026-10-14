@@ -1,3 +1,5 @@
+import { FakeCostCenterCategoryReader } from "../fakes/fake-cost-center-category-reader.js";
+import { FakeInvoiceAllocationRepository } from "../fakes/fake-invoice-allocation-repository.js";
 import { FakeInvoiceAudit } from "../fakes/fake-invoice-audit.js";
 import { UpdateInvoiceUseCase } from "../../application/use-cases/update-invoice.use-case.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
@@ -48,7 +50,7 @@ describe("UpdateInvoiceUseCase", () => {
     stockReviewStatusRead = new FakeInvoiceStockReviewStatusRead();
     stockReviewDraftDelete = new FakeInvoiceStockReviewDraftDelete();
     fiscal = new FakeFiscalIdentityPort();
-    useCase = new UpdateInvoiceUseCase(repo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, new FakeSupplierLookupPort(), new FakeInvoiceAudit());
+    useCase = new UpdateInvoiceUseCase(repo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, new FakeSupplierLookupPort(), new FakeInvoiceAudit(), new FakeInvoiceAllocationRepository());
   });
 
   it("actualiza o nome do fornecedor", async () => {

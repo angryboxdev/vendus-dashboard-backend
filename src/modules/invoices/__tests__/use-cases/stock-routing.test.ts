@@ -1,3 +1,5 @@
+import { FakeCostCenterCategoryReader } from "../fakes/fake-cost-center-category-reader.js";
+import { FakeInvoiceAllocationRepository } from "../fakes/fake-invoice-allocation-repository.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { ConfirmImportedInvoiceUseCase } from "../../application/use-cases/confirm-imported-invoice.use-case.js";
 import { CreateInvoiceUseCase } from "../../application/use-cases/create-invoice.use-case.js";
@@ -40,8 +42,8 @@ function setup() {
   const routing = new FakeStockRoutingPort();
   const suppliers = new FakeSupplierLookupPort();
   suppliers.seed([{ id: "sup-makro", name: "Makro", nif: "503504564", defaultCostCenterGroupId: null, defaultCostCenterCategoryId: null, defaultFinancialType: null, defaultLocationId: "loc-default" }]);
-  const confirm = new ConfirmImportedInvoiceUseCase(invoiceRepo, new FakeInvoiceLineRepository(), new FakePayableEntryWrite(), new FakeSupplierCreatePort(), new FakeSupplierHintPort(), notify, new FakeFiscalIdentityPort(), suppliers, new FakeInvoiceAmountsWrite(), new FakeInvoiceAudit(), routing);
-  const create = new CreateInvoiceUseCase(invoiceRepo, new FakeInvoiceLineRepository(), new FakePayableEntryWrite(), notify, new FakeFiscalIdentityPort(), suppliers, new FakeInvoiceAmountsWrite(), new FakeInvoiceAudit(), routing);
+  const confirm = new ConfirmImportedInvoiceUseCase(invoiceRepo, new FakeInvoiceLineRepository(), new FakePayableEntryWrite(), new FakeSupplierCreatePort(), new FakeSupplierHintPort(), notify, new FakeFiscalIdentityPort(), suppliers, new FakeInvoiceAmountsWrite(), new FakeInvoiceAudit(), routing, new FakeCostCenterCategoryReader(), new FakeInvoiceAllocationRepository());
+  const create = new CreateInvoiceUseCase(invoiceRepo, new FakeInvoiceLineRepository(), new FakePayableEntryWrite(), notify, new FakeFiscalIdentityPort(), suppliers, new FakeInvoiceAmountsWrite(), new FakeInvoiceAudit(), routing, new FakeCostCenterCategoryReader(), new FakeInvoiceAllocationRepository());
   return { invoiceRepo, routing, confirm, create };
 }
 
