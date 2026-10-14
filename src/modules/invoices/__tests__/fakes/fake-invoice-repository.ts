@@ -49,6 +49,18 @@ export class FakeInvoiceRepository implements InvoiceRepositoryPort {
     this.store.set(invoice.id, invoice);
   }
 
+  hashes = new Map<string, string>();
+  async findByFileHash(_organizationId: OrganizationId, sha256: string): Promise<Invoice | null> {
+    for (const [id, h] of this.hashes) if (h === sha256) {
+      const inv = await this.findById(_organizationId, id);
+      if (inv && inv.status !== "cancelled") return inv;
+    }
+    return null;
+  }
+  async setFileHash(_organizationId: OrganizationId, invoiceId: string, sha256: string): Promise<void> {
+    this.hashes.set(invoiceId, sha256);
+  }
+
   async delete(_organizationId: OrganizationId, id: string): Promise<void> {
     this.store.delete(id);
   }

@@ -35,4 +35,7 @@ export interface InvoiceRepositoryPort {
   ): Promise<Invoice | null>;
   /** Returns invoices that are direct debit, have directDebitDate ≤ today, and are not yet paid or cancelled. */
   findPendingDirectDebits(organizationId: OrganizationId): Promise<Invoice[]>;
+  /** Documento (não cancelado) importado a partir do mesmo ficheiro (SHA-256). */
+  findByFileHash(organizationId: OrganizationId, sha256: string): Promise<Invoice | null>;
+  setFileHash(organizationId: OrganizationId, invoiceId: string, sha256: string): Promise<void>;
 }

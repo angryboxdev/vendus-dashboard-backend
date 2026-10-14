@@ -140,6 +140,10 @@ export interface InvoiceImportResultDTO {
   validationIssues: string[];
   supplierMatch: SupplierMatchDTO | null;
   extractedLines: AiExtractedLineDTO[];
+  /** O documento já existia (mesmo ficheiro ou mesma identidade fiscal): é devolvido o existente, sem criar cópia. */
+  reused?: "same_file" | "same_fiscal_identity";
+  /** Identidade fiscal do documento extraído (avisos na revisão). */
+  fiscal?: { kind: string; existingInvoiceId?: string | null; identityId?: string; candidates?: { invoiceId: string | null; seriesNumber: string }[]; missing?: string[] };
 }
 
 export interface InvoiceAlertsDTO {

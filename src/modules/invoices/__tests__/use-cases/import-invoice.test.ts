@@ -6,6 +6,8 @@ import { FakeSupplierLookupPort } from "../fakes/fake-supplier-lookup.port.js";
 import { FakeSupplierHintPort } from "../fakes/fake-supplier-hint.port.js";
 import { FakeOrganizationIdentityRead } from "../fakes/fake-organization-identity-read.port.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+import { FakeFiscalIdentityPort } from "../fakes/fake-fiscal-identity.port.js";
+import { Invoice } from "../../domain/entities/invoice.js";
 
 const ORG_ID = mintOrganizationId("org-test");
 
@@ -20,6 +22,7 @@ describe("ImportInvoiceUseCase", () => {
   let supplierLookup: FakeSupplierLookupPort;
   let supplierHint: FakeSupplierHintPort;
   let organizationIdentityRead: FakeOrganizationIdentityRead;
+  let fiscal: FakeFiscalIdentityPort;
   let useCase: ImportInvoiceUseCase;
 
   beforeEach(() => {
@@ -29,7 +32,8 @@ describe("ImportInvoiceUseCase", () => {
     supplierLookup = new FakeSupplierLookupPort();
     supplierHint = new FakeSupplierHintPort();
     organizationIdentityRead = new FakeOrganizationIdentityRead();
-    useCase = new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint, organizationIdentityRead);
+    fiscal = new FakeFiscalIdentityPort();
+    useCase = new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint, organizationIdentityRead, fiscal);
   });
 
   it("stores the file and creates a draft_ai invoice", async () => {
@@ -477,6 +481,36 @@ describe("ImportInvoiceUseCase", () => {
 
       expect(result.invoice.documentType).toBe("invoice");
       expect(result.validationIssues).not.toContain("credit_note_detected");
+    });
+  });
+
+  describe("duplicados (F1 · task v1.2 §1.2)", () => {
+    it("reimportar o mesmo ficheiro devolve o mesmo documento, sem nova extração nem cópia", async () => {
+      const first = await useCase.execute({ organizationId: ORG_ID, fileBuffer: makeBuffer(), filename: "a.pdf", mimeType: "application/pdf" });
+      const calls = storage.storedFiles.length;
+      const again = await useCase.execute({ organizationId: ORG_ID, fileBuffer: makeBuffer(), filename: "a-copia.pdf", mimeType: "application/pdf" });
+      expect(again.reused).toBe("same_file");
+      expect(again.invoice.id).toBe(first.invoice.id);
+      expect(storage.storedFiles.length).toBe(calls);
+      expect(await invoiceRepo.findAll(ORG_ID)).toHaveLength(1);
+    });
+
+    it("mesma identidade fiscal já no Financeiro: devolve o original e não cria rascunho; o ficheiro novo é descartado", async () => {
+      const original = Invoice.createFromImport({ supplierName: "X", supplierNifSnapshot: "503504564", invoiceNumber: "FT 1/1", invoiceDate: new Date("2026-10-01"), dueDate: null, subtotalWithoutVat: 1, totalVat: 0, totalWithVat: 1, source: "pdf_import", attachmentUrl: null, aiConfidence: 1, requiresReview: false }).confirmImport({});
+      await invoiceRepo.save(ORG_ID, original);
+      fiscal.nextCheck = { kind: "existing_finance", identityId: "fid-1", existingInvoiceId: original.id };
+      const r = await useCase.execute({ organizationId: ORG_ID, fileBuffer: Buffer.from("outro-ficheiro"), filename: "b.pdf", mimeType: "application/pdf" });
+      expect(r).toMatchObject({ reused: "same_fiscal_identity", invoice: { id: original.id }, fiscal: { kind: "existing_finance", existingInvoiceId: original.id } });
+      expect(await invoiceRepo.findAll(ORG_ID)).toHaveLength(1);
+      expect(storage.deletedUrls ?? []).toHaveLength(1);
+    });
+
+    it("só no Stock / possível duplicado / incompleto: cria o rascunho com o aviso para a revisão", async () => {
+      fiscal.nextCheck = { kind: "existing_stock_only", identityId: "fid-s" };
+      const r = await useCase.execute({ organizationId: ORG_ID, fileBuffer: Buffer.from("c"), filename: "c.pdf", mimeType: "application/pdf" });
+      expect(r.validationIssues).toContain("exists_in_stock");
+      expect(r.fiscal).toEqual({ kind: "existing_stock_only", identityId: "fid-s" });
+      expect(r.invoice.status).toBe("draft_ai");
     });
   });
 });

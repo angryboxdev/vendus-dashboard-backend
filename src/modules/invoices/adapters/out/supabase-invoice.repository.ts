@@ -215,6 +215,24 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
     return toEntity(data[0] as unknown as Record<string, unknown>);
   }
 
+  async findByFileHash(organizationId: OrganizationId, sha256: string): Promise<Invoice | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("invoices")
+      .select("*")
+      .eq("file_sha256", sha256)
+      .neq("status", "cancelled")
+      .order("created_at", { ascending: true })
+      .limit(1);
+    if (error) throw new Error(error.message);
+    const row = ((data ?? []) as unknown as Record<string, unknown>[])[0];
+    return row ? toEntity(row) : null;
+  }
+
+  async setFileHash(organizationId: OrganizationId, invoiceId: string, sha256: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("invoices").update({ file_sha256: sha256 }).eq("id", invoiceId);
+    if (error) throw new Error(error.message);
+  }
+
   async findPendingDirectDebits(organizationId: OrganizationId): Promise<Invoice[]> {
     const today = new Date().toISOString().slice(0, 10);
     const { data, error } = await this.scopedQuery(organizationId)
