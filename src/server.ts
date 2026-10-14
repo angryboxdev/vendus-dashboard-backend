@@ -65,6 +65,11 @@ import { createAttendanceModule } from "./modules/attendance/attendance.module.j
 import { createAbsencesModule } from "./modules/absences/absences.module.js";
 import { createTimeBankModule } from "./modules/time-bank/time-bank.module.js";
 import { createRostersModule } from "./modules/rosters/rosters.module.js";
+import { RosterBlockedError, RosterConflictError, RosterNotFoundError, RosterValidationError } from "./modules/rosters/domain/errors.js";
+import { createAssistantModule } from "./modules/assistant/assistant.module.js";
+import { AssistantError } from "./modules/assistant/domain/entities/assistant.js";
+import { SchedulingBlockedError } from "./modules/assistant/domain/ports/out/assistant.ports.js";
+import { SupabaseIdempotencyStore } from "./infra/http/supabase-idempotency.store.js";
 import { createDashboardModule } from "./modules/dashboard/dashboard.module.js";
 import { createGoogleReviewsModule } from "./modules/google-reviews/google-reviews.module.js";
 import type { DashboardCachePort, DashboardMetric } from "./modules/dashboard/domain/ports/out/dashboard.ports.js";
@@ -1317,6 +1322,113 @@ const googleReviewsModule = createGoogleReviewsModule({
   },
 });
 app.use("/api", googleReviewsModule.router);
+
+// Novo RH → Escalas → Assistente Mezza: a IA interpreta; tudo é validado e executado pelos
+// serviços canónicos das Escalas (sem segundo motor). Sem OPENAI_API_KEY: "indisponível".
+const assistantShiftView = (s: { id: string; employeeId: string; workDate: string; kind: "shift" | "day_off"; segments: { start: string; end: string }[]; templateId: string | null; deleted: boolean; published: { segments: { start: string; end: string }[] } | null }) => ({
+  id: s.id,
+  employeeId: s.employeeId,
+  workDate: s.workDate,
+  kind: s.kind,
+  segments: s.deleted && s.published ? s.published.segments : s.segments,
+  templateId: s.templateId,
+  pendingOnly: s.published === null && !s.deleted,
+  published: s.published !== null,
+});
+const toSchedulingError = (e: unknown): never => {
+  if (e instanceof RosterBlockedError) throw new SchedulingBlockedError(e.message, e.violations);
+  if (e instanceof RosterValidationError || e instanceof RosterConflictError) throw new AssistantError(e.message, "validation");
+  if (e instanceof RosterNotFoundError) throw new AssistantError(e.message, "not_found");
+  throw e;
+};
+const assistantModule = createAssistantModule({
+  apiKey: ENV.OPENAI_API_KEY,
+  model: process.env.ASSISTANT_MODEL || ENV.OPENAI_MODEL_TEXT,
+  transcribeModel: process.env.ASSISTANT_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe",
+  idempotencyStore: new SupabaseIdempotencyStore(createScopedQuery),
+  viewerOf: (req) => ({
+    userId: req.auth!.sub,
+    email: req.auth!.email || req.auth!.sub,
+    canRead: !!req.access && can(req.access, "hr.schedules", "READ"),
+    canWrite: !!req.access && can(req.access, "hr.schedules", "MANAGE"),
+    canPrivate: !!req.access && can(req.access, "hr.absences_private", "MANAGE"),
+    canSee: (employeeId, date) => canSeeEmployee(req, employeeId, date),
+  }),
+  scheduling: {
+    roster: async (org, rosterId) => {
+      const r = (await rostersModule.rosters.listRosters(org)).find((x) => x.id === rosterId && !x.archived);
+      return r ? { id: r.id, name: r.name, version: r.version, targetType: r.targetType, targetId: r.targetId } : null;
+    },
+    timeZone: async (org) => {
+      const res = await createScopedQuery(org).table("organizations").select("timezone").maybeSingle();
+      return ((res.data as { timezone?: string | null } | null)?.timezone || "Europe/Lisbon") as string;
+    },
+    today: (org) => new OrganizationTimezoneClock(createScopedQuery).today(org),
+    employees: async (org, rosterId) => {
+      const today = await new OrganizationTimezoneClock(createScopedQuery).today(org);
+      const plus = (n: number) => new Date(Date.parse(`${today}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+      const [people, positions, roster, recent] = await Promise.all([
+        activeEmployees(org),
+        peopleRepo.listPositions(org),
+        rostersModule.rosters.listRosters(org).then((l) => l.find((x) => x.id === rosterId) ?? null),
+        rostersModule.rosters.listShifts(org, rosterId, plus(-30), plus(31)).catch(() => ({ shifts: [] as { employeeId: string }[] })),
+      ]);
+      const pos = new Map(positions.map((p) => [p.id, p.name]));
+      const inRoster = new Set(recent.shifts.map((s) => s.employeeId));
+      return people.map((e) => ({ id: e.id, name: e.fullName, positionName: e.positionId ? (pos.get(e.positionId) ?? null) : null, member: inRoster.has(e.id) || (roster?.targetType === "location" && e.primaryLocationId === roster.targetId) }));
+    },
+    shifts: async (org, rosterId, from, to) => (await rostersModule.rosters.listShifts(org, rosterId, from, to)).shifts.map(assistantShiftView),
+    templates: async (org) => (await rostersModule.rosters.listTemplates(org)).filter((t) => !t.archived).map((t) => ({ id: t.id, name: t.name, abbreviation: t.abbreviation, segments: t.segments })),
+    availability: (org, rosterId, input) => rostersModule.rosters.availability(org, rosterId, input).catch(toSchedulingError),
+    coverage: async (org, _rosterId, employees, from, to) => {
+      const absences = await absencesModule.absences.listRequests(org, { status: "approved", from, to }, false, "sistema");
+      const absent = (id: string, d: string) => absences.some((a) => a.employeeId === id && a.startDate <= d && a.endDate >= d);
+      const perPerson = await mapLimit(employees, 6, async (e) => {
+        try {
+          const [{ days }, planned] = await Promise.all([timeBaseModule.time.theoretical(org, e.id, from, to), rostersModule.rosters.plannedFor(org, e.id, from, to)]);
+          return days.filter((d) => d.minutes > 0 && (d.reason === "schedule" || d.reason === "contract") && !planned.has(d.date) && !absent(e.id, d.date)).map((d) => ({ employeeId: e.id, date: d.date, segments: d.plannedRanges }));
+        } catch {
+          return []; // sem horário/dados: esta pessoa fica fora da cobertura (como no Dashboard)
+        }
+      });
+      return perPerson.flat().sort((a, b) => a.date.localeCompare(b.date));
+    },
+    conflicts: (org, rosterId) => rostersModule.rosters.check(org, rosterId),
+    addShifts: async (org, actor, rosterId, shifts) => {
+      const r = await rostersModule.rosters.addShifts(org, actor, rosterId, shifts.map((s) => ({ employeeId: s.employeeId, workDate: s.workDate, kind: "shift" as const, templateId: s.templateId, segments: s.segments })), "AI_AGENT").catch(toSchedulingError);
+      return { created: r.created.map(assistantShiftView), warnings: r.warnings };
+    },
+    removePending: async (org, actor, rosterId, shifts) => {
+      const byEmployee = new Map<string, typeof shifts>();
+      for (const s of shifts) byEmployee.set(s.employeeId, [...(byEmployee.get(s.employeeId) ?? []), s]);
+      const removed = [];
+      for (const [employeeId, list] of byEmployee) {
+        const dates = list.map((s) => s.workDate).sort();
+        const r = await rostersModule.rosters.clearPending(org, actor, rosterId, { employeeId, from: dates[0]!, to: dates.at(-1)!, shiftIds: list.map((s) => s.id) }).catch(toSchedulingError);
+        removed.push(...r.removed.map(assistantShiftView));
+      }
+      return removed;
+    },
+    restore: async (org, actor, rosterId, ids) => void (await rostersModule.rosters.restoreShifts(org, actor, rosterId, ids).catch(toSchedulingError)),
+    createTemplate: async (org, actor, input) => {
+      const t = await rostersModule.rosters.createTemplate(org, actor, { name: input.name, abbreviation: input.abbreviation, color: null, onCall: false, segments: input.segments }).catch(toSchedulingError);
+      return { id: t.id, name: t.name, abbreviation: t.abbreviation, segments: t.segments };
+    },
+  },
+  audit: {
+    record: (org, e) =>
+      auditModule.recorder.record(org, {
+        actor: e.actor,
+        action: `assistant.${e.command.toLowerCase()}`,
+        resourceType: "roster",
+        resourceId: null,
+        before: null,
+        after: { source: "AI_AGENT", command: e.command, structured: e.structured, affectedIds: e.affectedIds, result: e.result },
+        reason: e.message,
+      }),
+  },
+});
+app.use("/api", assistantModule.router);
 
 // Novo RH → Avisos automáticos (FE-111): regras em Configurações → Notificações; cron de 10 em 10 min.
 const remindersModule = createRemindersModule({

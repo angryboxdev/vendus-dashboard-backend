@@ -125,6 +125,8 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/google-reviews\/locations\/[^/]+\/reviews$/, target: p("hr.overview", "READ") },
   { pattern: /^\/api\/novo-rh\/google-reviews\/locations\/[^/]+$/, target: p("company.locations", "MANAGE") },
   { pattern: /^\/api\/novo-rh\/google-reviews$/, target: p("hr.overview", "READ") },
+  // Assistente Mezza: conversar exige ler Escalas; cada alteração exige MANAGE (verificado no caso de uso).
+  { pattern: /^\/api\/novo-rh\/assistant\/(status|chat|confirm|cancel|transcribe)$/, target: p("hr.schedules", "READ") },
   // Dashboard executivo: o layout é uma preferência pessoal (só metadados visuais; não concede acesso).
   { pattern: /^\/api\/novo-rh\/dashboard\/layout$/, target: { kind: "base" } },
   { pattern: /^\/api\/novo-rh\/dashboard\/(snapshot|team|birthdays)$/, target: p("hr.overview", "READ") },

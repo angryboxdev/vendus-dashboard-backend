@@ -179,6 +179,55 @@ export class RostersUseCases {
   }
 
   /**
+   * Vários turnos de uma vez (cada um com o seu horário ou modelo), numa só
+   * operação: as mesmas validações de `addShift` (sobreposição bloqueia,
+   * avisos de restrições), um só registo de auditoria. Usado pelo Assistente
+   * Mezza para pedidos em massa.
+   */
+  async addShifts(org: OrganizationId, actor: Actor, rosterId: string, inputs: ShiftInput[], source: string | null = null) {
+    await this.roster(org, rosterId);
+    if (!inputs.length) return { created: [] as RosterShift[], warnings: [] as Violation[] };
+    if (inputs.length > MAX_BULK) throw new RosterValidationError(`No máximo ${MAX_BULK} turnos de uma vez.`, "shifts");
+    const rows = [];
+    for (const input of inputs) {
+      if (!DATE.test(input.workDate)) throw new RosterValidationError("Data inválida.", "workDate");
+      if (!input.employeeId) throw new RosterValidationError("Indique o colaborador.", "employeeId");
+      const seg = await this.segmentsFor(org, input);
+      rows.push({ rosterId, employeeId: input.employeeId, workDate: input.workDate, kind: input.kind, segments: seg.segments, templateId: input.templateId, onCall: seg.onCall });
+    }
+    await this.assertNoOverlap(org, rows);
+    const created = await this.repo.insertShifts(org, rows, actor.email);
+    await this.log(org, actor.email, "rosters.shift.batch", "roster", rosterId, null, { count: created.length, shiftIds: created.map((c) => c.id), ...(source && { source }) });
+    return { created, warnings: await this.violationsFor(org, new Set(created.map((c) => c.id)), created) };
+  }
+
+  /**
+   * Disponibilidade para um turno hipotético (não grava nada): para cada
+   * colaborador, o que as regras do rascunho diriam se lhe atribuíssemos
+   * `segments` em `workDate` — sobreposição (bloqueia), descanso, ausência e
+   * limites, com a severidade configurada. Conta o planeado atual (rascunho
+   * ou publicado).
+   */
+  async availability(org: OrganizationId, rosterId: string, input: { workDate: string; segments: Segment[]; employeeIds: string[] }) {
+    await this.roster(org, rosterId);
+    if (!DATE.test(input.workDate)) throw new RosterValidationError("Data inválida.", "workDate");
+    validateSegments(input.segments);
+    if (input.employeeIds.length > 500) throw new RosterValidationError("No máximo 500 colaboradores de uma vez.", "employeeIds");
+    if (!input.employeeIds.length) return [];
+    const year = input.workDate.slice(0, 4);
+    const existing = await this.repo.listShifts(org, { employeeIds: input.employeeIds, from: `${year}-01-01`, to: `${year}-12-31` });
+    const planned = existing.filter((s) => !s.deleted).map(stateOf);
+    const out: { employeeId: string; status: "available" | "warning" | "blocked"; reasons: Violation[] }[] = [];
+    for (const employeeId of input.employeeIds) {
+      const candidate: ShiftState = { employeeId, workDate: input.workDate, kind: "shift", segments: input.segments, templateId: null, onCall: false };
+      const absences = new Map([[employeeId, new Set(await this.ctx.approvedAbsenceDates(org, employeeId, input.workDate, input.workDate))]]);
+      const reasons = evaluate([...planned.filter((s) => s.employeeId === employeeId), candidate], await this.ctx.rules(org, employeeId, input.workDate), absences, new Set([`${employeeId}|${input.workDate}`]));
+      out.push({ employeeId, status: reasons.some((v) => v.severity === "block") ? "blocked" : reasons.length ? "warning" : "available", reasons });
+    }
+    return out;
+  }
+
+  /**
    * Limpar os turnos pendentes (nunca publicados) de um colaborador na semana
    * visível desta escala, numa só operação. Publicados, outras semanas e
    * outras escalas não mexem. Devolve os retirados (para "desfazer").

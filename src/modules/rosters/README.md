@@ -39,6 +39,7 @@ time-base (`plannedDays`) e pede o recálculo da assiduidade a cada publicação
 ### Input (use cases)
 
 - `RostersUseCases` — modelos, escalas, turnos (adicionar, em massa, alterar, retirar), verificar, publicar, histórico, planeado, o meu horário, trocas.
+- `addShifts` (vários turnos com horários diferentes numa operação) e `availability` (restrições para um turno hipotético, sem gravar) — usados pelo Assistente Mezza (ADR-0038).
 
 ### Output (domain dependencies)
 

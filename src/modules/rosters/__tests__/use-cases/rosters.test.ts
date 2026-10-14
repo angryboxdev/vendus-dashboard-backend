@@ -255,3 +255,32 @@ describe("Escalas — limpar pendentes da semana e repor (desfazer)", () => {
     await expect(uc.clearPending(ORG, BOSS, roster.id, { employeeId: "e1", from: "2026-10-25", to: "2026-10-19" })).rejects.toBeInstanceOf(RosterValidationError);
   });
 });
+
+describe("Escalas — lote e disponibilidade (Assistente Mezza)", () => {
+  test("addShifts: vários horários numa operação; sobreposição recusa o lote inteiro; um registo de auditoria", async () => {
+    const { uc, repo, audit } = setup();
+    const { roster, manha } = await rosterWithTemplates(uc);
+    const r = await uc.addShifts(ORG, BOSS, roster.id, [shift("e1", "2026-10-19", manha.id), { employeeId: "e2", workDate: "2026-10-19", kind: "shift", templateId: null, segments: [{ start: "12:00", end: "20:00" }] }], "AI_AGENT");
+    expect(r.created.map((s) => [s.employeeId, s.segments[0]!.start])).toEqual([["e1", "08:00"], ["e2", "12:00"]]);
+    expect(audit.actions.filter((e) => e.action === "rosters.shift.batch")).toHaveLength(1);
+    const before = repo.shifts.length;
+    await expect(uc.addShifts(ORG, BOSS, roster.id, [shift("e3", "2026-10-20", manha.id), { employeeId: "e1", workDate: "2026-10-19", kind: "shift", templateId: null, segments: [{ start: "10:00", end: "12:00" }] }])).rejects.toBeInstanceOf(RosterBlockedError);
+    expect(repo.shifts.length).toBe(before);
+  });
+
+  test("availability: sobreposição bloqueia; ausência e descanso conforme as regras; não grava nada", async () => {
+    const { uc, repo, ctx } = setup();
+    const { roster, manha } = await rosterWithTemplates(uc);
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-19", manha.id));
+    ctx.absences.set("e2", ["2026-10-19"]);
+    const before = repo.shifts.length;
+    const a = await uc.availability(ORG, roster.id, { workDate: "2026-10-19", segments: [{ start: "14:00", end: "20:00" }], employeeIds: ["e1", "e2", "e3"] });
+    expect(a.map((x) => [x.employeeId, x.status])).toEqual([
+      ["e1", "blocked"],
+      ["e2", "warning"],
+      ["e3", "available"],
+    ]);
+    expect(a[0]!.reasons[0]!.rule).toBe("overlap");
+    expect(repo.shifts.length).toBe(before);
+  });
+});
