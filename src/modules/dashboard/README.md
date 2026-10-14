@@ -76,6 +76,7 @@ assiduidade, ausências, pedidos ou escalas — lê-as dos módulos donos.
 ## Design decisions (ADR summary)
 
 - ADR-0036: snapshot único, cache em memória com invalidação por evento, cobertura = horário sem turno publicado, layout em BD só com metadados.
+- ADR-0037: memo de leituras por pedido GET (infra) e "Excedente de horas" da Caixa em paralelo — snapshot frio 15,1 s → 3,8 s (medido com Supabase falso, 25 ms/ida).
 
 ## How to test
 

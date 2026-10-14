@@ -91,6 +91,8 @@ import { portugueseNationalHolidays } from "./modules/calendar/domain/services/p
 import { OrganizationTimezoneClock } from "./modules/settings/adapters/out/supabase-settings.adapters.js";
 import { can } from "./modules/access/domain/services/effective-access.service.js";
 import { problemHandler } from "./infra/http/problem-details.js";
+import { runWithRequestMemo } from "./infra/scoped-db/request-memo.js";
+import { mapLimit } from "./utils/mapLimit.js";
 
 const app = express();
 // Render põe um proxy à frente: req.ip passa a ser o IP real do cliente (auditoria, ADR-0022).
@@ -112,6 +114,8 @@ const corsOptions: cors.CorsOptions = {
 };
 app.use(cors(corsOptions));
 app.use(express.json());
+// GET: leituras idênticas à base dentro do mesmo pedido vão uma vez (request-memo.ts).
+app.use((req, _res, next) => (req.method === "GET" ? runWithRequestMemo(next) : next()));
 // ID de correlação em todos os pedidos (ADR-0022) — devolvido em X-Correlation-Id.
 app.use(correlationId);
 
@@ -1094,6 +1098,8 @@ app.use("/api", overviewModule.router);
 
 // Novo RH → Caixa de pedidos (FE-050): ausências, correções, excedente, trocas e solicitações
 // num só sítio; cada decisão passa pela regra do módulo dono (RE-22/23, período fechado).
+/** Pessoas em paralelo na fonte "Excedente de horas" da Caixa de pedidos. */
+const INBOX_OVERTIME_CONCURRENCY = 8;
 const isOwn = async (org: OrganizationId, userId: string, employeeId: string) => (await absencesDirectory.userOfEmployee(org, employeeId)) === userId;
 const hm = (iso: string) => new Date(iso).toISOString().slice(11, 16);
 const inboxViewerOf = (req: Parameters<Parameters<typeof createInboxModule>[0]["viewerOf"]>[0]) => ({
@@ -1161,14 +1167,15 @@ const inboxModule = createInboxModule({
     {
       type: "overtime",
       permission: "hr.attendance",
+      // Uma pessoa de cada vez somava as latências de toda a equipa (Visão geral > 15 s);
+      // em paralelo limitado, com a mesma ordem e as mesmas regras.
       list: async (org, actor, { employeeIds }) => {
-        const out = [];
-        for (const employeeId of employeeIds) {
-          const own = await isOwn(org, actor.userId, employeeId);
-          for (const v of await timeBankModule.timeBank.pendingValidations(org, employeeId)) {
+        const perEmployee = await mapLimit(employeeIds, INBOX_OVERTIME_CONCURRENCY, async (employeeId) => {
+          const [own, pending] = await Promise.all([isOwn(org, actor.userId, employeeId), timeBankModule.timeBank.pendingValidations(org, employeeId)]);
+          return pending.map((v) => {
             const h = Math.floor(v.excessSeconds / 3600);
             const m = Math.floor((v.excessSeconds % 3600) / 60);
-            out.push({
+            return {
               type: "overtime" as const,
               id: `${employeeId}|${v.workDate}`,
               employeeId,
@@ -1178,10 +1185,10 @@ const inboxModule = createInboxModule({
               meta: [],
               blockedReason: own ? ("own" as const) : null,
               level: null,
-            });
-          }
-        }
-        return out;
+            };
+          });
+        });
+        return perEmployee.flat();
       },
       decide: async (org, actor, item, decision, comment) => void (await timeBankModule.timeBank.decideValidation(org, actor, item.employeeId, item.id.split("|")[1]!, decision, comment)),
     },

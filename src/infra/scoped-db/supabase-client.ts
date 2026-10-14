@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { ENV } from "../../config/env.js";
+import { memoizingFetch } from "./request-memo.js";
 
 /**
  * The raw Supabase client factory. Moved here from `src/infra/supabaseClient.ts`
@@ -17,7 +18,7 @@ export function getSupabase(): SupabaseClient | null {
     return null;
   }
   if (!client) {
-    client = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_ANON_KEY);
+    client = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_ANON_KEY, { global: { fetch: memoizingFetch() } });
   }
   return client;
 }
@@ -34,6 +35,8 @@ export function getSupabaseServiceRole(): SupabaseClient | null {
   if (!serviceRoleClient) {
     serviceRoleClient = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
+      // Leituras repetidas dentro de um GET vão uma vez à base (request-memo.ts).
+      global: { fetch: memoizingFetch() },
     });
   }
   return serviceRoleClient;
