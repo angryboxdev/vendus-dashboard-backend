@@ -191,6 +191,7 @@ export const BASE_CONFIG: AttendanceConfig = {
   },
   policy: { ipAllowlist: [], blockBeforeStartMinutes: null, requireCoordinates: false, blockOutsideGeofence: false },
   refusal: { enabled: false, hours: 48 },
+  portal: { usesNovoRh: false },
 };
 
 export class FakeContext implements AttendanceContextPort {

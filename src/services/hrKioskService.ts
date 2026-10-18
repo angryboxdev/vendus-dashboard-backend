@@ -41,6 +41,15 @@ export function getTodayKioskToken(): { token: string; date: string } {
  * funcionário pelo PIN (`findActiveEmployeeByPinHash`), que antes desta
  * ficha era global entre organizações.
  */
+/**
+ * Portal ligado ao Novo RH (Fase 2): com a regra ligada para o colaborador, o
+ * quiosque antigo recusa (nunca dois registos de ponto). Ligado em server.ts.
+ */
+let movedToNovoRh: (organizationId: OrganizationId, employeeId: string) => Promise<boolean> = async () => false;
+export function setKioskNovoRhGuard(fn: typeof movedToNovoRh): void {
+  movedToNovoRh = fn;
+}
+
 export async function kioskScan(
   organizationId: OrganizationId,
   locationId: string,
@@ -64,6 +73,9 @@ export async function kioskScan(
   const employee = await findActiveEmployeeByPinHash(organizationId, pinHash);
   if (!employee) {
     throw new KioskError("PIN incorrecto", 401);
+  }
+  if (await movedToNovoRh(organizationId, employee.id)) {
+    throw new KioskError("O ponto passou para o novo sistema — use o Portal do Colaborador.", 409);
   }
 
   // 4. Hora actual em Lisboa

@@ -202,11 +202,16 @@ export class RegisterPunchUseCase implements RegisterPunchPort {
     private readonly locations: LocationRepositoryPort,
     private readonly auditLog: HrAuditLogPort,
     private readonly clock: ServerClock = lisbonClock,
+    /** Portal ligado ao Novo RH: o ponto deste colaborador já é no Novo RH (nunca dois registos). */
+    private readonly movedToNovoRh: (organizationId: OrganizationId, employeeId: string) => Promise<boolean> = async () => false,
   ) {}
 
   async execute(command: RegisterPunchCommand): Promise<PunchResultDTO> {
     const { organizationId } = command;
     const employeeId = await resolvePortalEmployeeId(this.accounts, command);
+    if (await this.movedToNovoRh(organizationId, employeeId)) {
+      throw new PunchRefusedError("MOVED_TO_NOVO_RH", "O ponto passou para o novo sistema. Atualize a página do Portal para picar.");
+    }
 
     const replay = await this.punches.findEventByIdempotencyKey(organizationId, command.idempotencyKey);
     if (replay) return this.replayOf(replay, employeeId);

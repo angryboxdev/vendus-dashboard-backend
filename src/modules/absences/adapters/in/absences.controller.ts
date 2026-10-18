@@ -109,6 +109,7 @@ export function createAbsencesAdminRouter(uc: AbsencesUseCases, store: Idempoten
   };
 
   r.get(`${A}/types`, async (req, res) => res.json(await uc.listTypes(org(req))));
+  r.post(`${A}/types/portal-defaults`, async (req, res) => res.json(await run(() => uc.ensurePortalTypes(org(req), actorOf(req)))));
   r.post(`${A}/types`, async (req, res) => res.status(201).json(await run(() => uc.createType(org(req), actorOf(req), typeInput(body(req))))));
   r.put(`${A}/types/:id`, async (req, res) => res.json(await run(() => uc.updateType(org(req), actorOf(req), id(req), typeInput(body(req))))));
   r.post(`${A}/types/:id/archive`, async (req, res) => {
@@ -196,6 +197,7 @@ export function createAbsencesMeRouter(uc: AbsencesUseCases, store: IdempotencyS
 
   r.get("/me/absences", async (req, res) => res.json(await run(() => uc.myRequests(org(req), actorOf(req)))));
   r.get("/me/absences/types", async (req, res) => res.json(await uc.myTypes(org(req))));
+  r.get("/me/absences/portal-types", async (req, res) => res.json(await uc.portalTypes(org(req))));
   r.get("/me/absences/balances", async (req, res) => {
     const employeeId = await run(() => uc.myEmployeeId(org(req), actorOf(req)));
     const all = await run(() => uc.balances(org(req), employeeId, optS(req.query.date), true));

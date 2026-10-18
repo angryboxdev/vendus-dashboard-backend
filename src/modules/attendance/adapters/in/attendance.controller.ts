@@ -52,6 +52,8 @@ export function createAttendanceMeRouter(uc: AttendanceUseCases, store: Idempote
   const M = "/me/clock";
   r.use(M, idempotency(store));
 
+  // Portal ligado ao Novo RH (Fase 2): de onde o Portal lê ponto, escala e ausências.
+  r.get("/me/portal-mode", async (req, res) => res.json(await run(() => uc.myPortalMode(org(req), actorOf(req)))));
   r.get(M, async (req, res) => res.json(await run(() => uc.myStatus(org(req), actorOf(req)))));
   r.post(M, async (req, res) => {
     const b = body(req);

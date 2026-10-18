@@ -392,6 +392,20 @@ export class AttendanceUseCases {
     };
   }
 
+  // ── Portal ligado ao Novo RH (Fase 2) ───────────────────────────────
+  /** O Portal deste colaborador usa o Novo RH hoje? (regra por organização ou local). */
+  async portalUsesNovoRh(org: OrganizationId, employeeId: string): Promise<boolean> {
+    const tz = await this.ctx.timeZone(org);
+    const today = localDate(this.clock.now(), tz);
+    return (await this.ctx.config(org, employeeId, today, tz)).portal.usesNovoRh;
+  }
+
+  /** Para o Portal escolher a fonte (ponto, escala, ausências): "novo_rh" ou "legacy". */
+  async myPortalMode(org: OrganizationId, actor: Actor): Promise<{ source: "novo_rh" | "legacy" }> {
+    const employeeId = await this.employeeOf(org, actor.userId);
+    return { source: (await this.portalUsesNovoRh(org, employeeId)) ? "novo_rh" : "legacy" };
+  }
+
   /** Painel da gestão: planeado vs. real por dia, da mesma fonte que as vistas (RE-6), sem gravar. */
   async board(org: OrganizationId, employeeId: string, from: string, to: string) {
     this.range(from, to);

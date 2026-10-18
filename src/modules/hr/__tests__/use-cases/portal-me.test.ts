@@ -20,7 +20,7 @@ const TODAY = "2026-10-07";
 const SHOP = { latitude: 41.1, longitude: -8.6 };
 const metersNorth = (m: number) => SHOP.latitude + m / 111_195;
 
-function setup(policy: "off" | "warn" | "block" = "off") {
+function setup(policy: "off" | "warn" | "block" = "off", movedToNovoRh?: () => Promise<boolean>) {
   const accounts = new FakePortalAccount();
   const employees = new FakeEmployeeRepository();
   const workShifts = new FakeWorkShiftRepository();
@@ -50,7 +50,7 @@ function setup(policy: "off" | "warn" | "block" = "off") {
   workShifts.seed(ORG, shift);
 
   const home = new GetPortalHomeUseCase(accounts, employees, workShifts, punches, rules, locations, clock);
-  const punch = new RegisterPunchUseCase(accounts, workShifts, punches, rules, locations, auditLog, clock);
+  const punch = new RegisterPunchUseCase(accounts, workShifts, punches, rules, locations, auditLog, clock, movedToNovoRh);
   const who = { organizationId: ORG, userId: "user-carla", actor: "carla@example.com" };
   const reading = (m: number, accuracyM = 10): ClientLocation => ({ kind: "reading", latitude: metersNorth(m), longitude: SHOP.longitude, accuracyM });
 
@@ -162,5 +162,15 @@ describe("Portal — picagem", () => {
       code: "INVALID_KEY",
     });
     expect(punches.events).toHaveLength(1);
+  });
+});
+
+describe("Portal — corte para o Novo RH", () => {
+  it("com o Portal já no Novo RH, o ponto antigo recusa (MOVED_TO_NOVO_RH) e não grava nada", async () => {
+    const { punch, who, punches } = setup("off", async () => true);
+    await expect(punch.execute({ ...who, kind: "in", idempotencyKey: randomUUID(), location: null })).rejects.toMatchObject({
+      code: "MOVED_TO_NOVO_RH",
+    });
+    expect(punches.events).toHaveLength(0);
   });
 });
