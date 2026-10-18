@@ -1,5 +1,5 @@
 import { DateTime } from "luxon";
-import { DAILY_KINDS, type HourCategory, type NewEntry, type TimeBankEntry } from "../entities/time-bank.js";
+import { adjustmentSyncKey, DAILY_KINDS, type HourCategory, type NewEntry, type TimeBankEntry } from "../entities/time-bank.js";
 
 /** Dia apurado pela assiduidade (o único motor de totais — RE-6). */
 export interface BankDay {
@@ -81,8 +81,10 @@ export function postingsFor(workDate: string, target: DayTarget, posted: TimeBan
     if (target.holiday) out.push(entry("holiday", target.holiday, "Feriado trabalhado"));
     return out;
   }
-  const diff = targetTotal(target) - forDay.reduce((s, e) => s + e.seconds, 0);
-  return diff === 0 ? [] : [entry("adjustment", diff, `Correção do dia ${workDate}`, today)];
+  const sum = forDay.reduce((s, e) => s + e.seconds, 0);
+  const diff = targetTotal(target) - sum;
+  // Chave = estado que originou o ajuste: uma 2.ª sincronização simultânea com a mesma visão não duplica.
+  return diff === 0 ? [] : [{ ...entry("adjustment", diff, `Correção do dia ${workDate}`, today), syncKey: adjustmentSyncKey(workDate, forDay.length, sum) }];
 }
 
 /** Último dia que entra no banco (D11): fim do mês anterior ou ontem. */

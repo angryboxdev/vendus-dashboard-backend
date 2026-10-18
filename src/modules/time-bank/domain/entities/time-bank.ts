@@ -20,7 +20,19 @@ export interface TimeBankEntry {
   createdAt: string;
 }
 
-export type NewEntry = Omit<TimeBankEntry, "id" | "createdAt">;
+export type NewEntry = Omit<TimeBankEntry, "id" | "createdAt"> & {
+  /**
+   * Chave de idempotência dos movimentos calculados pela sincronização
+   * (ajustes e expirações): duas sincronizações com a mesma visão geram a
+   * mesma chave e só uma grava. Movimentos manuais não têm chave.
+   */
+  syncKey?: string | null;
+};
+
+/** Ajuste de correção: chave = o estado do dia que o originou (nº de movimentos e soma). */
+export const adjustmentSyncKey = (workDate: string, entriesOfDay: number, sumOfDay: number) => `adj:${workDate}:${entriesOfDay}:${sumOfDay}`;
+/** Expiração: no máximo uma por dia lançada pela sincronização. */
+export const expirySyncKey = (today: string) => `exp:${today}`;
 
 /** Horas categorizadas (C4.6): janelas por dia da semana; fator > 1 = multiplicador. */
 export interface HourWindow {

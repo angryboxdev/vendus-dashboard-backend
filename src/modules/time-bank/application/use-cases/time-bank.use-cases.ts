@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
-import { validateCategory, type BankSettings, type HourCategoryInput, type NewEntry } from "../../domain/entities/time-bank.js";
+import { expirySyncKey, validateCategory, type BankSettings, type HourCategoryInput, type NewEntry } from "../../domain/entities/time-bank.js";
 import { TimeBankConflictError, TimeBankForbiddenError, TimeBankNotFoundError, TimeBankRuleError, TimeBankValidationError } from "../../domain/errors.js";
 import type { PeriodGuardPort, TimeBankAuditPort, TimeBankContextPort, TimeBankRepositoryPort } from "../../domain/ports/out/time-bank.ports.js";
 import { cutoff, dayTarget, postingsFor, running, secondsInCategory, summary, toExpire, type BankDay } from "../../domain/services/posting.js";
@@ -95,7 +95,7 @@ export class TimeBankUseCases {
     // Expiração (as mais antigas primeiro; negativas nunca expiram).
     const all = [...entries, ...inserted];
     const expire = toExpire(all, today, nowSettings.expiryDays);
-    if (expire > 0) inserted.push(...(await this.repo.insertEntries(org, [{ employeeId, kind: "expiry", seconds: -expire, workDate: today, postedOn: today, paymentMonth: null, reason: `Horas com mais de ${nowSettings.expiryDays} dias`, createdBy: by }])));
+    if (expire > 0) inserted.push(...(await this.repo.insertEntries(org, [{ employeeId, kind: "expiry", seconds: -expire, workDate: today, postedOn: today, paymentMonth: null, reason: `Horas com mais de ${nowSettings.expiryDays} dias`, createdBy: by, syncKey: expirySyncKey(today) }])));
     return { posted: inserted.length, cutoff: cut };
   }
 
