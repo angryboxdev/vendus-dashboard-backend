@@ -4,7 +4,7 @@ import { FiscalIdentityConflictError } from "../../domain/errors.js";
 import type { FiscalIdentityPort, InvoiceFiscalInput } from "../../domain/ports/out/fiscal-identity.port.js";
 import type { SupplierLookupPort } from "../../domain/ports/out/supplier-lookup.port.js";
 
-const MISSING_LABEL: Record<string, string> = { series_number: "número da fatura", issuer_country: "país do NIF do fornecedor", issuer_tax_id: "NIF do fornecedor" };
+const MISSING_LABEL: Record<string, string> = { series_number: "número da fatura", issuer_country: "país do NIF do fornecedor", issuer_tax_id: "NIF do fornecedor", issuer_tax_id_invalid: "NIF do fornecedor inválido — confirme os dígitos com o documento" };
 
 /** NIF do emitente: o da fatura, ou o do fornecedor ligado (nunca inventado). */
 export async function fiscalInputOf(org: OrganizationId, invoice: Invoice, suppliers: SupplierLookupPort): Promise<InvoiceFiscalInput> {

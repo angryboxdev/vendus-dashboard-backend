@@ -41,7 +41,7 @@ identidade). Migração do histórico com simulação e relatório.
 - **Possível duplicado** — mesmo emitente/tipo e mesmos grupos numéricos
   com formatação diferente → comparação manual, nunca fusão.
 - **Resolução** — `new`, `existing_finance`, `existing_stock_only`,
-  `possible_duplicate`, `incomplete` (NIF/país/número em falta → fica em revisão).
+  `possible_duplicate`, `incomplete` (NIF/país/número em falta, ou NIF português com dígito de controlo errado → `issuer_tax_id_invalid`, para não pedir um «país» quando o problema é um dígito mal lido → fica em revisão).
 
 ## Ports
 

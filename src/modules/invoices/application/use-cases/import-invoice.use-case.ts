@@ -164,7 +164,10 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     }
     if (fiscalCheck.kind === "existing_stock_only") validationIssues.push("exists_in_stock");
     if (fiscalCheck.kind === "possible_duplicate") validationIssues.push("possible_duplicate");
-    if (fiscalCheck.kind === "incomplete") validationIssues.push("fiscal_identity_incomplete");
+    if (fiscalCheck.kind === "incomplete") {
+      // NIF lido com dígito de controlo errado: dizê-lo (não é falta de NIF nem de país).
+      validationIssues.push(fiscalCheck.missing.includes("issuer_tax_id_invalid") ? "supplier_nif_invalid" : "fiscal_identity_incomplete");
+    }
 
     const requiresReview = validationIssues.length > 0;
 
