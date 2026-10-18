@@ -183,6 +183,10 @@ export class SupabasePeopleRepository implements PeopleRepositoryPort {
     const r = check<EmpRow | null>(await this.scoped(org).table("hr_employees").select(EMP_COLS).eq("id", id).maybeSingle());
     return r ? toEmployee(r) : null;
   }
+  async findByUserId(org: OrganizationId, userId: string) {
+    const r = check<EmpRow | null>(await this.scoped(org).table("hr_employees").select(EMP_COLS).eq("user_id", userId).maybeSingle());
+    return r ? toEmployee(r) : null;
+  }
   async findIdByNif(org: OrganizationId, nif: string) {
     const target = normalizeDocument(nif);
     const rows = check<{ id: string; nif: string | null }[]>(await this.scoped(org).table("hr_employees").select("id, nif").not("nif", "is", null));

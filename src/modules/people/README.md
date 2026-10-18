@@ -65,6 +65,8 @@ chegam num `Viewer` montado pelo `server.ts` a partir do módulo access.
 
 ## Design decisions (ADR summary)
 
+- **O meu perfil** (2026-10-18, Portal): `GET /api/me/profile` devolve só identificação (nome, foto assinada, cargo, local, admissão, estado) da ficha ligada à conta (`findByUserId`); nunca campos sensíveis — esses ficam na ficha com privacidade por campo.
+
 - Uma só ficha (`hr_employees`), tabelas novas à volta — ADR-0025.
 - NIF obrigatório só nas escritas do Novo RH (não parte o RH atual); índice único parcial na BD.
 - Contratos: sobreposição recusada na aplicação (409) e por trigger na BD.

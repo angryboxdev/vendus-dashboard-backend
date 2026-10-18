@@ -1,10 +1,10 @@
 # Matriz de autorização (perfil × endpoint)
 
-> Gerado por `npm run authz:matrix` em 2026-10-14. Não editar à mão.
+> Gerado por `npm run authz:matrix` em 2026-10-18. Não editar à mão.
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 758 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 760 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -364,11 +364,13 @@ Endpoints: 758 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/me/ops-tasks` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/ops-tasks/:id/complete` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/ops-tasks/:id/items/:itemId` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/profile` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/punches` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/requests` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/requests` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/requests/:id/cancel` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/roster` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/roster/shifts/:id/coworkers` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/roster/swaps` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/roster/swaps` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/roster/swaps/:id/respond` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |

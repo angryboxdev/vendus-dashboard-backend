@@ -115,6 +115,27 @@ export class PeopleUseCases {
     return seen.map((e) => ({ ...this.view(viewer, e, (e.photoPath && urls.get(e.photoPath)) ?? null), weeklyHours: hours.get(e.id) ?? null }));
   }
 
+  /**
+   * Portal: o meu perfil — só identificação para a página inicial (nome, foto,
+   * cargo, local, admissão). Nunca campos sensíveis (NIF, NISS, IBAN, salário,
+   * morada): esses ficam na ficha, com privacidade por campo.
+   */
+  async myProfile(org: OrganizationId, userId: string) {
+    const e = await this.repo.findByUserId(org, userId);
+    if (!e) throw new PeopleNotFoundError();
+    const [urls, locations, positions] = await Promise.all([this.photoUrls(org, [e]), this.repo.listLocations(org), this.repo.listPositions(org)]);
+    return {
+      employeeId: e.id,
+      firstName: e.firstName,
+      fullName: e.fullName,
+      photoUrl: (e.photoPath && urls.get(e.photoPath)) ?? null,
+      positionName: e.positionId ? (positions.find((p) => p.id === e.positionId)?.name ?? null) : null,
+      locationName: e.primaryLocationId ? (locations.find((l) => l.id === e.primaryLocationId)?.name ?? null) : null,
+      hireDate: e.hireDate,
+      status: e.status,
+    };
+  }
+
   /** Vista de uma ficha com a foto (também nas respostas de criar/alterar/desativar, para a cache do ecrã não a perder). */
   private async withPhoto(org: OrganizationId, viewer: Viewer, e: Employee): Promise<EmployeeView> {
     const urls = await this.photoUrls(org, [e]);

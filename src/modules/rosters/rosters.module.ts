@@ -35,6 +35,9 @@ export function createRostersModule(deps: {
   audit: RostersAuditPort;
   canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean>;
   periods?: PeriodGuardPort;
+  /** Parâmetros de segurança efetivos (visibilidade no Portal); sem eles, colegas nunca visíveis. */
+  securitySettings?: (org: OrganizationId, employeeId: string, date: string) => Promise<{ key: string; value: unknown }[]>;
+  peopleBrief?: (org: OrganizationId, employeeIds: string[]) => Promise<{ id: string; fullName: string; positionName: string | null; active: boolean }[]>;
 }): { router: Router; rosters: RostersUseCases } {
   const rosters = new RostersUseCases(
     new SupabaseRostersRepository(createScopedQuery),
@@ -43,6 +46,9 @@ export function createRostersModule(deps: {
       approvedAbsenceDates: deps.approvedAbsenceDates,
       employeeForUser: deps.employeeForUser,
       userOfEmployee: deps.userOfEmployee,
+      coworkersVisible: async (org, employeeId, date) =>
+        deps.securitySettings ? (await deps.securitySettings(org, employeeId, date)).find((v) => v.key === "security.visibility.coworkers_shifts")?.value === true : false,
+      peopleBrief: async (org, ids) => (deps.peopleBrief && ids.length ? deps.peopleBrief(org, ids) : []),
     },
     deps.notifier,
     deps.published,

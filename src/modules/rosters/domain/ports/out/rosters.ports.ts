@@ -42,6 +42,10 @@ export interface RostersContextPort {
   approvedAbsenceDates(org: OrganizationId, employeeId: string, from: string, to: string): Promise<string[]>;
   employeeForUser(org: OrganizationId, userId: string): Promise<string | null>;
   userOfEmployee(org: OrganizationId, employeeId: string): Promise<string | null>;
+  /** «Mostrar os turnos dos colegas» (`security.visibility.coworkers_shifts`, desligado por omissão — ADR-0030). */
+  coworkersVisible(org: OrganizationId, employeeId: string, date: string): Promise<boolean>;
+  /** Só o necessário para mostrar um colega: nome, cargo e se está ativo (nunca contactos). */
+  peopleBrief(org: OrganizationId, employeeIds: string[]): Promise<{ id: string; fullName: string; positionName: string | null; active: boolean }[]>;
 }
 
 export interface RostersNotifierPort {

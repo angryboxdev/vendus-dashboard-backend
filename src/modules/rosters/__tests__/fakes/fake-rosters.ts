@@ -117,6 +117,15 @@ export class FakeRostersContext implements RostersContextPort {
   async userOfEmployee(_o: OrganizationId, employeeId: string) {
     return this.users.get(employeeId) ?? null;
   }
+  /** «Mostrar os turnos dos colegas» (desligado por omissão, como no catálogo). */
+  coworkersOn = false;
+  people: { id: string; fullName: string; positionName: string | null; active: boolean }[] = [];
+  async coworkersVisible() {
+    return this.coworkersOn;
+  }
+  async peopleBrief(_o: OrganizationId, ids: string[]) {
+    return this.people.filter((p) => ids.includes(p.id));
+  }
 }
 
 export class FakeRostersNotifier {

@@ -15,6 +15,8 @@ export type EmployeeWrite = EmployeeInput & { fullName?: string };
 export interface PeopleRepositoryPort {
   list(org: OrganizationId, filter: { status: "active" | "inactive" | "all"; q?: string; locationId?: string }): Promise<Employee[]>;
   get(org: OrganizationId, id: string): Promise<Employee | null>;
+  /** Ficha ligada a uma conta (Portal: «o meu perfil»). */
+  findByUserId(org: OrganizationId, userId: string): Promise<Employee | null>;
   /** Outra ficha com este NIF normalizado (RE-2). */
   findIdByNif(org: OrganizationId, nif: string): Promise<string | null>;
   create(org: OrganizationId, data: EmployeeWrite & { fullName: string }): Promise<Employee>;
