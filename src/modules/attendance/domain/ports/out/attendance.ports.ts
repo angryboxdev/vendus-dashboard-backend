@@ -23,16 +23,6 @@ export interface AttendanceRepositoryPort {
   findEventByClientId(org: OrganizationId, employeeId: string, clientEventId: string): Promise<ClockEvent | null>;
   getEvent(org: OrganizationId, id: string): Promise<ClockEvent | null>;
   listEvents(org: OrganizationId, employeeId: string, fromUtc: string, toUtc: string): Promise<ClockEvent[]>;
-  /**
-   * Em lote (Visão geral): as mesmas linhas de `listEvents` para vários
-   * colaboradores numa leitura (por grupos e páginas — nunca truncado),
-   * ordenadas por `occurredAt`.
-   */
-  listEventsMany(org: OrganizationId, employeeIds: string[], fromUtc: string, toUtc: string): Promise<ClockEvent[]>;
-  /** Em lote: as mesmas linhas de `listRevisions` para vários colaboradores, ordenadas por `createdAt`. */
-  listRevisionsMany(org: OrganizationId, employeeIds: string[], fromUtc: string, toUtc: string): Promise<ClockRevision[]>;
-  /** Em lote: incidentes de vários colaboradores num período (nunca truncado). */
-  listIncidentsMany(org: OrganizationId, employeeIds: string[], from: string, to: string): Promise<Incident[]>;
   /** Marcações de toda a organização desde um instante ("Quem está"). */
   listEventsSince(org: OrganizationId, sinceUtc: string): Promise<ClockEvent[]>;
 

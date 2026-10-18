@@ -67,9 +67,8 @@ export class OverviewUseCases {
       hit.value.catch(() => this.cache.delete(key));
     }
     const base = await hit.value;
-    // Âmbito de quem vê: em paralelo (antes uma pessoa de cada vez); a ordem mantém-se.
-    const seen = await mapLimit(base.people, CONCURRENCY, (p) => viewer.canSee(p.employeeId, day));
-    const visible: PersonOverview[] = base.people.filter((_, i) => seen[i]);
+    const visible: PersonOverview[] = [];
+    for (const p of base.people) if (await viewer.canSee(p.employeeId, day)) visible.push(p);
     const dates = Array.from({ length: WEEK_DAYS }, (_, i) => plus(day, i - WEEK_DAYS + 1));
     return { ...base, people: visible, kpis: kpis(visible), locations: byLocation(visible), week: weekTrend(visible, dates) };
   }
@@ -83,13 +82,11 @@ export class OverviewUseCases {
     if (to < from) throw new OverviewValidationError("O fim tem de ser depois do início.");
     if (DateTime.fromISO(to).diff(DateTime.fromISO(from), "days").days + 1 > PLAN_MAX_DAYS) throw new OverviewValidationError(`No máximo ${PLAN_MAX_DAYS} dias.`);
     const [employees, locations, absences] = await Promise.all([this.sources.employees(org), this.sources.locations(org), this.sources.absences(org, from, to, viewer.canPrivate)]);
-    // Âmbito de quem vê: verificado em paralelo (antes era uma pessoa de cada vez).
-    const seen = await mapLimit(employees, CONCURRENCY, (e) => viewer.canSee(e.id, from));
-    const visible = employees.filter((_, i) => seen[i]);
+    const visible = [];
+    for (const e of employees) if (await viewer.canSee(e.id, from)) visible.push(e);
     const locName = new Map(locations.map((l) => [l.id, l.name]));
-    const many = this.sources.daysMany ? await this.sources.daysMany(org, visible.map((e) => e.id), from, to, CONCURRENCY) : null;
     const people = await mapLimit(visible, CONCURRENCY, async (e) => {
-      const { days } = many?.get(e.id) ?? (await this.sources.days(org, e.id, from, to));
+      const { days } = await this.sources.days(org, e.id, from, to);
       const cells: PlanCell[] = days.map((d) => {
         const absenceType = absenceOn(absences, e.id, d.workDate);
         return { date: d.workDate, plannedStart: d.plannedStart, plannedEnd: d.plannedEnd, theoreticalSeconds: d.theoreticalSeconds, absenceType, holiday: d.excused && !absenceType };
@@ -126,9 +123,8 @@ export class OverviewUseCases {
       next.value.then(() => this.cache.set(key, next)).catch(() => void (hit!.refreshing = false));
     }
     const base = await hit.value;
-    // Âmbito de quem vê: em paralelo (antes uma pessoa de cada vez); a ordem mantém-se.
-    const seen = await mapLimit(base.people, CONCURRENCY, (p) => viewer.canSee(p.employeeId, today));
-    const visible: PersonOverview[] = base.people.filter((_, i) => seen[i]);
+    const visible: PersonOverview[] = [];
+    for (const p of base.people) if (await viewer.canSee(p.employeeId, today)) visible.push(p);
     return { date: base.date, today: base.today, generatedAt: base.generatedAt, people: visible, holidays: base.holidays };
   }
 
@@ -148,10 +144,8 @@ export class OverviewUseCases {
     ]);
     const locName = new Map(locations.map((l) => [l.id, l.name]));
     let timeZone = "Europe/Lisbon";
-    // Em lote quando a fonte o permite (marcações/revisões/incidentes numa leitura, não três por pessoa).
-    const many = this.sources.daysMany ? await this.sources.daysMany(org, employees.map((e) => e.id), from, day, concurrency) : null;
     const people = await mapLimit(employees, concurrency, async (e): Promise<PersonOverview> => {
-      const res = many?.get(e.id) ?? (await this.sources.days(org, e.id, from, day));
+      const res = await this.sources.days(org, e.id, from, day);
       timeZone = res.timeZone;
       const days = res.days;
       const week = days.map((d) => dayView(d, absenceOn(absences, e.id, d.workDate), today));

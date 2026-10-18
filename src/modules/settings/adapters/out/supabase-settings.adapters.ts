@@ -139,15 +139,13 @@ export class SupabaseEmployeeSegments implements EmployeeSegmentsPort {
 
   async segmentsOf(orgId: OrganizationId, employeeId: string, date: string): Promise<EmployeeSegments> {
     const q = this.scoped(orgId);
-    // As três leituras são independentes: em paralelo (antes as unidades esperavam pela ficha).
-    const [emp, extra, units] = await Promise.all([
+    const [emp, extra] = await Promise.all([
       q.table("hr_employees").select("id, primary_location_id").eq("id", employeeId).maybeSingle(),
       q.table("hr_employee_locations").select("location_id").eq("employee_id", employeeId),
-      this.units.unitsOf(orgId, employeeId, date),
     ]);
     const e = check(emp) as unknown as { primary_location_id: string | null } | null;
     const locs = (check(extra) as unknown as { location_id: string }[]).map((r) => r.location_id);
-    const { departmentIds, groupIds, locationIds: dated } = units;
+    const { departmentIds, groupIds, locationIds: dated } = await this.units.unitsOf(orgId, employeeId, date);
     // Com histórico de centros (transferências) vale o centro dessa data; senão o principal atual.
     const main = dated ?? (e?.primary_location_id ? [e.primary_location_id] : []);
     const locationIds = [...new Set([...main, ...locs])];
