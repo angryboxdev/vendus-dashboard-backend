@@ -57,11 +57,25 @@ export function buyerKeyOf(legalEntityId: string | null): string {
   return legalEntityId ?? "org";
 }
 
+/**
+ * Porque é que o NIF não serve: em falta; 9 dígitos portugueses com dígito
+ * de controlo errado (tipicamente erro de leitura — dizê-lo, em vez de pedir
+ * um país que não é o problema); ou sem país identificável.
+ */
+function taxIdProblem(raw: string | null, country: string | null): MissingField {
+  if (!raw?.trim()) return "issuer_tax_id";
+  const compact = raw.toUpperCase().replace(/[\s.\-/]/g, "");
+  const digits = compact.startsWith("PT") ? compact.slice(2) : compact;
+  const cc = country?.trim().toUpperCase() || null;
+  if ((!cc || cc === "PT") && /^\d{9}$/.test(digits)) return "issuer_tax_id_invalid";
+  return "issuer_country";
+}
+
 /** Chave forte, ou o que falta para a ter. */
 export function fiscalKeyOf(input: FiscalIdentityInput): { key: FiscalKey } | { missing: MissingField[] } {
   const missing: MissingField[] = [];
   const tax = normalizeTaxId(input.issuerTaxId, input.issuerCountry);
-  if (!tax) missing.push(input.issuerTaxId ? "issuer_country" : "issuer_tax_id");
+  if (!tax) missing.push(taxIdProblem(input.issuerTaxId, input.issuerCountry));
   const series = normalizeSeriesNumber(input.seriesNumber);
   if (!series) missing.push("series_number");
   if (!tax || !series) return { missing };

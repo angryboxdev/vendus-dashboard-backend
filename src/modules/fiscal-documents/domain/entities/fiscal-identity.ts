@@ -45,7 +45,8 @@ export interface FiscalIdentity extends FiscalKey {
   createdAt: string;
 }
 
-export type MissingField = "issuer_tax_id" | "issuer_country" | "series_number";
+/** `issuer_tax_id_invalid`: NIF português com dígito de controlo errado (ex.: dígitos trocados na leitura). */
+export type MissingField = "issuer_tax_id" | "issuer_tax_id_invalid" | "issuer_country" | "series_number";
 
 export type IdentityResolution =
   | { kind: "incomplete"; missing: MissingField[] }

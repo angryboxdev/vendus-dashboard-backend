@@ -71,6 +71,18 @@ describe("Identidade fiscal — Financeiro e Stock", () => {
     expect(repo.rows).toHaveLength(0);
   });
 
+  test("NIF português com dígito de controlo errado diz «inválido», não «falta o país»", async () => {
+    const { uc, repo } = setup();
+    // 502030712 é válido; 502037012 (dígitos trocados na leitura) não é.
+    for (const issuerTaxId of ["502037012", "PT 502 037 012"]) {
+      expect(await uc.claimForInvoice(ORG, "u", doc({ issuerTaxId, issuerCountry: null }), "inv-1"))
+        .toEqual({ ok: false, resolution: { kind: "incomplete", missing: ["issuer_tax_id_invalid"] } });
+    }
+    expect(await uc.claimForInvoice(ORG, "u", doc({ issuerTaxId: "", issuerCountry: null }), "inv-1"))
+      .toEqual({ ok: false, resolution: { kind: "incomplete", missing: ["issuer_tax_id"] } });
+    expect(repo.rows).toHaveLength(0);
+  });
+
   test("já existe só no Stock: Financeiro recusa por omissão e completa o lançamento existente quando escolhido", async () => {
     const { uc, audit } = setup();
     const s = await uc.claimForStockImport(ORG, "u", doc(), "imp-1");
