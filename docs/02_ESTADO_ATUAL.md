@@ -19,18 +19,19 @@ Task completa: `.scratch/financeiro-stock-v1-2/task-mestre-v1.2.md` (F1–F4, um
 
 **Frontend — ramo `financeiro`** (detalhe e onde continuar: [04_FRONTEND.md](04_FRONTEND.md)):
 - Commitado e enviado (`59a5213`): tipos/clientes HTTP da F2; `SupplierDrawer` + `SupplierLocationRulesPanel`; `allocations-draft.ts`.
-- Feito, **por commitar** (2026-10-18): revisão de fatura — passo 1 de 04_FRONTEND (3 modos, `AllocationsEditor`, linhas sempre enviadas, sem seletor «Tipo», `SendToStockField`, «Guardar rascunho», edição «Por valores»). Typecheck, 609 testes e build a passar.
-- Por fazer: passos 2–4 de 04_FRONTEND (`InvoicesView`, `CostCentersView`, README de `financial-base`).
+- Commitado (`bb400e7`, não enviado): passo 1 — revisão de fatura (3 modos, `AllocationsEditor`, linhas sempre enviadas, sem seletor «Tipo», `SendToStockField`, «Guardar rascunho», edição «Por valores»).
+- Feito, **por commitar** (2026-10-18): passo 2 — `InvoicesView` (reabrir rascunho com linhas/repartições/`storedAmounts`, `PayablesSummaryBar` «Total a pagar | Em atraso», detalhe sem apagar linhas ao mudar para «Única» e repartições «Por valores» no separador Linhas). Typecheck, 619 testes e build a passar.
+- Por fazer: passos 3–4 de 04_FRONTEND (`CostCentersView`, README de `financial-base`, relatório da F2).
 
 ## Última tarefa concluída
-Frontend F2 · passo 1 — revisão de fatura (`ReviewImportedInvoiceDrawer` + peças novas), 2026-10-18, por commitar.
+Frontend F2 · passo 2 — `InvoicesView` (2026-10-18), por commitar.
 
 ## Próxima tarefa
-Frontend F2 · passo 2 (`InvoicesView`: reabrir rascunho com linhas/repartições/`storedAmounts`, «Total a pagar | Em atraso», texto do modal de modo) → passos 3–4 → relatório da F2 → aguardar autorização para push/PR/merge/deploy, aplicação das migrações F2 e início da F3.
+Frontend F2 · passo 3 (`CostCentersView` → `Tab3Aplicacao` soma `listInvoiceAllocations()` às linhas) → passo 4 → relatório da F2 → aguardar autorização para push/PR/merge/deploy, aplicação das migrações F2 e início da F3.
 
 ## Alterações por guardar (2026-10-18) — não descartar
-- Frontend `financeiro`: passo 1 da revisão por commitar (`ReviewImportedInvoiceDrawer.tsx`, README de `invoices`, e novos `AllocationsEditor`, `SendToStockField`, `CostCenterCascadeSelect`, `stock-decision.ts` + testes). Só existe nesta máquina.
-- Backend `financeiro`: esta atualização de `docs/` por commitar.
+- Frontend `financeiro`: passo 2 por commitar; `bb400e7` (passo 1) commitado mas não enviado. Só existe nesta máquina.
+- Backend `financeiro`: `fb0ce97` (docs) não enviado; esta atualização de `docs/` por commitar.
 
 ## Pendências operacionais (produção)
 - Correr `POST /api/fiscal-documents/backfill` com `{ "dryRun": true }` e rever (precisa de sessão de gestor).
