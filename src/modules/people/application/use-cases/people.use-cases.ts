@@ -15,6 +15,7 @@ import { PeopleConflictError, PeopleForbiddenError, PeopleNotFoundError, PeopleV
 import type { EmployeeView, ImportResult, Viewer } from "../../domain/ports/in/people.ports.js";
 import type { PeopleAccountPort, PeopleAuditPort, PeopleClockPort, PeoplePhotoPort, PeopleRepositoryPort } from "../../domain/ports/out/people.ports.js";
 import { parseCsv, toCsv } from "../../domain/services/csv.js";
+import { weeklyHoursOn } from "../../domain/entities/employment.js";
 
 /** Colunas exportáveis (RE-3): só saem as que quem exporta pode ver. */
 export const EXPORT_COLUMNS: { key: EditableField | "fullName" | "status"; label: string }[] = [
@@ -109,8 +110,9 @@ export class PeopleUseCases {
     const rows = await this.repo.list(org, { status: filter.status ?? "active", ...(filter.q && { q: filter.q }), ...(filter.locationId && { locationId: filter.locationId }) });
     const seen: Employee[] = [];
     for (const e of rows) if (await viewer.canSee(e.id, today)) seen.push(e);
-    const urls = await this.photoUrls(org, seen);
-    return seen.map((e) => this.view(viewer, e, (e.photoPath && urls.get(e.photoPath)) ?? null));
+    // Fotos e horas semanais do contrato vigente: uma leitura em lote cada (sem pedido por linha).
+    const [urls, hours] = await Promise.all([this.photoUrls(org, seen), this.repo.listContractsStartedBy(org, today).then((c) => weeklyHoursOn(c, today))]);
+    return seen.map((e) => ({ ...this.view(viewer, e, (e.photoPath && urls.get(e.photoPath)) ?? null), weeklyHours: hours.get(e.id) ?? null }));
   }
 
   /** Vista de uma ficha com a foto (também nas respostas de criar/alterar/desativar, para a cache do ecrã não a perder). */

@@ -28,6 +28,8 @@ export interface PeopleRepositoryPort {
   listPositions(org: OrganizationId): Promise<{ id: string; name: string }[]>;
 
   listContracts(org: OrganizationId, employeeId: string): Promise<Contract[]>;
+  /** Contratos ativos já iniciados em `date` (todos os colaboradores, uma leitura) — a vigência fina é `weeklyHoursOn`. */
+  listContractsStartedBy(org: OrganizationId, date: string): Promise<Contract[]>;
   createContract(org: OrganizationId, employeeId: string, input: ContractInput, createdBy: string): Promise<Contract>;
   updateContract(org: OrganizationId, id: string, input: ContractInput, expectedVersion: number): Promise<Contract | null>;
   cancelContract(org: OrganizationId, id: string, expectedVersion: number): Promise<Contract | null>;

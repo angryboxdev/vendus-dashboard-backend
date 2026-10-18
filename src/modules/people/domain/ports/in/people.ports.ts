@@ -25,6 +25,8 @@ export interface EmployeeView extends Omit<Employee, "photoPath"> {
   hidden: string[];
   /** Obrigatórios em falta (fichas antigas "a completar"). */
   missing: string[];
+  /** Só na lista: horas semanais do contrato vigente hoje (null = sem contrato ou sem horas). */
+  weeklyHours?: number | null;
 }
 
 export interface ImportRowResult {
