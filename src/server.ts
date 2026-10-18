@@ -101,6 +101,7 @@ import { can } from "./modules/access/domain/services/effective-access.service.j
 import { problemHandler } from "./infra/http/problem-details.js";
 import { runWithRequestMemo } from "./infra/scoped-db/request-memo.js";
 import { mapLimit } from "./utils/mapLimit.js";
+import { setKioskNovoRhGuard } from "./services/hrKioskService.js";
 
 const app = express();
 // Render põe um proxy à frente: req.ip passa a ser o IP real do cliente (auditoria, ADR-0022).
@@ -348,7 +349,9 @@ const stockPlanningModule = createStockPlanningModule(
 // RH (hexagonal) — construído aqui, antes do cron interno, para expor a
 // geração diária das automatizações de turnos (RH 2.0). As rotas continuam
 // montadas mais abaixo, depois do requireAuth.
-const hrModule = createHrModule();
+// Portal ligado ao Novo RH (Fase 2): com a regra ligada, a picagem antiga recusa (nunca dois registos de ponto).
+const hrModule = createHrModule({ movedToNovoRh: (org, employeeId) => attendanceModule.attendance.portalUsesNovoRh(org, employeeId) });
+setKioskNovoRhGuard((org, employeeId) => attendanceModule.attendance.portalUsesNovoRh(org, employeeId));
 
 // Internal cron routes: authenticated via requireCronSecret (Bearer
 // CRON_SECRET), not user sessions — must be mounted before the global

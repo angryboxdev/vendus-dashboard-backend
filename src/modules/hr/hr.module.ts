@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../kernel/organization-id.js";
 import { Router } from "express";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import { SupabaseEmployeeRepository } from "./adapters/out/supabase-employee.repository.js";
@@ -161,7 +162,10 @@ import { HrAttendanceController } from "./adapters/in/hr-attendance.controller.j
  * colaboradores+documentos; nada aqui apaga ou substitui o legacy
  * automaticamente.
  */
-export function createHrModule(): { router: Router; meRouter: Router; generateAllAutomations: GenerateAllAutomationsPort } {
+export function createHrModule(deps: {
+  /** Portal ligado ao Novo RH: o ponto deste colaborador já é no Novo RH — a picagem antiga recusa. */
+  movedToNovoRh?: (organizationId: OrganizationId, employeeId: string) => Promise<boolean>;
+} = {}): { router: Router; meRouter: Router; generateAllAutomations: GenerateAllAutomationsPort } {
   const employeeRepository = new SupabaseEmployeeRepository(createScopedQuery);
   const employeeDocumentRepository = new SupabaseDocumentRepository(createScopedQuery);
   const documentCategoryRepository = new SupabaseDocumentCategoryRepository(createScopedQuery);
@@ -467,7 +471,7 @@ export function createHrModule(): { router: Router; meRouter: Router; generateAl
   // Rotas do Portal (/me) num router próprio: montado no server.ts ANTES das rotas de gestão com requireMinRole no mount.
   const meRouter = new HrMeController(
       new GetPortalHomeUseCase(portalAccounts, employeeRepository, workShiftRepository, punchRepository, attendanceRulesRepository, locationRepository),
-      new RegisterPunchUseCase(portalAccounts, workShiftRepository, punchRepository, attendanceRulesRepository, locationRepository, auditLog),
+      new RegisterPunchUseCase(portalAccounts, workShiftRepository, punchRepository, attendanceRulesRepository, locationRepository, auditLog, undefined, deps.movedToNovoRh),
       {
         listMyShifts: new ListMyShiftsUseCase(portalAccounts, workShiftRepository, locationRepository),
         listMyCoworkers: new ListMyCoworkersUseCase(portalAccounts, workShiftRepository, employeeRepository, positionRepository),

@@ -355,3 +355,17 @@ describe("Tipo «Folga» do Portal (ticket 05)", () => {
     expect(r.levels[0]!.approvers).toEqual(["u-boss"]);
   });
 });
+
+describe("Tipos do Portal ligado ao Novo RH (Fase 2)", () => {
+  test("ensurePortalTypes cria Folga e Falta justificada (privada, anexo opcional) uma vez; portalTypes devolve os ids", async () => {
+    const { uc, repo } = setup();
+    expect(await uc.portalTypes(ORG)).toEqual({ dayOffTypeId: null, justifiedTypeId: null });
+    const first = await uc.ensurePortalTypes(ORG, ADMIN);
+    expect(first.created).toEqual(["FOLGA", "FALTA_JUST"]);
+    expect(first.justified).toMatchObject({ name: "Falta justificada", code: "FALTA_JUST", private: true, attachment: "optional", requiresApproval: true });
+    const again = await uc.ensurePortalTypes(ORG, ADMIN);
+    expect(again.created).toEqual([]);
+    expect((await repo.listTypes(ORG)).filter((t) => t.code === "FALTA_JUST")).toHaveLength(1);
+    expect(await uc.portalTypes(ORG)).toEqual({ dayOffTypeId: first.dayOff.id, justifiedTypeId: first.justified.id });
+  });
+});

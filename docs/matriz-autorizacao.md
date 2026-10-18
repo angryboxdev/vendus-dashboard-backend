@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 764 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 767 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -333,6 +333,7 @@ Endpoints: 764 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/me/absences/:id/attachment-url` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/absences/:id/cancel` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/absences/balances` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/absences/portal-types` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/absences/types` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/access` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/announcements` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
@@ -367,6 +368,7 @@ Endpoints: 764 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/me/ops-tasks` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/ops-tasks/:id/complete` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/ops-tasks/:id/items/:itemId` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/portal-mode` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/profile` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/punches` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/requests` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
@@ -399,6 +401,7 @@ Endpoints: 764 · pré-autenticação: 23 · não classificados: 0
 | POST | `/api/novo-rh/absences/types` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | PUT | `/api/novo-rh/absences/types/:id` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/absences/types/:id/archive` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/absences/types/portal-defaults` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/alerts` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/alerts/:id/close` | permission:hr.overview:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/alerts/:id/take` | permission:hr.overview:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |

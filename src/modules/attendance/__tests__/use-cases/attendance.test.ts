@@ -427,3 +427,13 @@ describe("Tipos de registo (FE-105)", () => {
     expect(d.workedSeconds).toBe((6 * 60 + 30) * 60);
   });
 });
+
+describe("Portal ligado ao Novo RH (Fase 2)", () => {
+  test("myPortalMode segue time_tracking.portal.uses_novo_rh do colaborador", async () => {
+    const { uc, ctx } = setup();
+    expect(await uc.myPortalMode(ORG, EMP)).toEqual({ source: "legacy" });
+    ctx.config_.portal = { usesNovoRh: true };
+    expect(await uc.myPortalMode(ORG, EMP)).toEqual({ source: "novo_rh" });
+    expect(await uc.portalUsesNovoRh(ORG, "e1")).toBe(true);
+  });
+});

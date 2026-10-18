@@ -26,4 +26,4 @@ Tickets em `issues/`:
 - 05 Tipo «Folga» (configuração / predefinição).
 
 ## Fora da Fase 1
-Interruptor por organização (Fase 2), saldos de abertura (Fase 3), piloto (Fase 4), quiosque no Novo RH e Caixa de pedidos → aprovações (Fase 5).
+Fase 2 feita (2026-10-18: interruptor, guardas do ponto antigo e do quiosque, tipos do Portal, adapter Novo RH no frontend). Saldos de abertura (Fase 3), piloto (Fase 4), quiosque no Novo RH e Caixa de pedidos → aprovações (Fase 5).

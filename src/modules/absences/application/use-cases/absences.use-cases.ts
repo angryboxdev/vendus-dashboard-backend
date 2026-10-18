@@ -13,6 +13,8 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Tipo «Folga» do Portal (ticket 05). */
 const DAY_OFF_CODE = "FOLGA";
+/** Tipo «Falta justificada» do Portal (justificar falta). */
+const JUSTIFIED_CODE = "FALTA_JUST";
 /** Valores seguros de um tipo novo (ADR-0028): pede aprovação, sem limite, sem valores legais. */
 const SAFE_TYPE: AbsenceTypeInput = {
   name: "",
@@ -190,12 +192,43 @@ export class AbsencesUseCases {
   async ensureDayOffType(org: OrganizationId, actor: Actor): Promise<{ type: AbsenceType; created: boolean }> {
     const existing = (await this.repo.listTypes(org)).find((t) => !t.archived && t.code?.toUpperCase() === DAY_OFF_CODE);
     if (existing) return { type: existing, created: false };
+    return this.createDayOffType(org, actor);
+  }
+
+  private async createDayOffType(org: OrganizationId, actor: Actor): Promise<{ type: AbsenceType; created: boolean }> {
     const flows = await this.repo.listFlows(org);
     const managerFlow =
       flows.find((f) => !f.archived && f.scope === "absences" && f.levels.length === 1 && f.levels[0]!.people.length === 0 && f.levels[0]!.roles.length === 1 && f.levels[0]!.roles[0] === "managers") ??
       (await this.createFlow(org, actor, { name: "Chefia direta", scope: "absences", isDefault: false, levels: [{ people: [], roles: ["managers"] }], fallbackUserIds: [] }));
     const type = await this.createType(org, actor, { ...SAFE_TYPE, name: "Folga", code: DAY_OFF_CODE, flowId: managerFlow.id });
     return { type, created: true };
+  }
+
+  /**
+   * Portal ligado ao Novo RH (Fase 2): os dois tipos que o Portal usa —
+   * «Folga» (pedir folga à chefia) e «Falta justificada» (código FALTA_JUST:
+   * privada — os motivos incluem doença/consulta, dados de saúde —, anexo
+   * opcional, aprovada pelo RH = administradores, como a Caixa de pedidos).
+   * Idempotente (por código).
+   */
+  async ensurePortalTypes(org: OrganizationId, actor: Actor): Promise<{ dayOff: AbsenceType; justified: AbsenceType; created: string[] }> {
+    const created: string[] = [];
+    const dayOff = await this.ensureDayOffType(org, actor);
+    if (dayOff.created) created.push(DAY_OFF_CODE);
+    const types = await this.repo.listTypes(org);
+    let justified = types.find((t) => !t.archived && t.code?.toUpperCase() === JUSTIFIED_CODE);
+    if (!justified) {
+      justified = await this.createType(org, actor, { ...SAFE_TYPE, name: "Falta justificada", code: JUSTIFIED_CODE, private: true, attachment: "optional" });
+      created.push(JUSTIFIED_CODE);
+    }
+    return { dayOff: dayOff.type, justified, created };
+  }
+
+  /** Portal: que tipos usar para «Pedir folga» e «Justificar falta» (null = ainda não criados pela gestão). */
+  async portalTypes(org: OrganizationId): Promise<{ dayOffTypeId: string | null; justifiedTypeId: string | null }> {
+    const types = (await this.repo.listTypes(org)).filter((t) => !t.archived);
+    const byCode = (code: string) => types.find((t) => t.code?.toUpperCase() === code)?.id ?? null;
+    return { dayOffTypeId: byCode(DAY_OFF_CODE), justifiedTypeId: byCode(JUSTIFIED_CODE) };
   }
 
   async createFlow(org: OrganizationId, actor: Actor, input: ApprovalFlowInput) {
