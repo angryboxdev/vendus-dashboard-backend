@@ -4,6 +4,7 @@ import { sameState, stateOf, validateSegments, validateTemplate, type Roster, ty
 import { RosterBlockedError, RosterConflictError, RosterForbiddenError, RosterNotFoundError, RosterValidationError } from "../../domain/errors.js";
 import type { PeriodGuardPort, RosterPublishedPort, RostersAuditPort, RostersContextPort, RostersNotifierPort, RostersRepositoryPort } from "../../domain/ports/out/rosters.ports.js";
 import { evaluate, overlaps, type Violation } from "../../domain/services/constraints.js";
+import { coworkerShortName, hoursLabel, shiftsOverlap } from "../../domain/services/coworkers.service.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_VIEW_DAYS = 62;
@@ -429,6 +430,33 @@ export class RostersUseCases {
     if (!employeeId) throw new RosterNotFoundError("Esta conta não está ligada a uma ficha de colaborador.");
     const shifts = await this.repo.listShifts(org, { employeeIds: [employeeId], from, to, includeDeleted: true });
     return { employeeId, shifts: shifts.filter((s) => s.published?.employeeId === employeeId).map((s) => ({ id: s.id, rosterId: s.rosterId, ...s.published! })) };
+  }
+
+  /**
+   * Colegas do meu turno (Portal): turnos publicados da mesma escala com
+   * horário sobreposto (inclui noturnos de dias vizinhos). Só nome curto, cargo
+   * e horário — nunca contactos nem ids. Desligado por omissão (ADR-0030):
+   * com a regra desligada, o servidor recusa (a UI só esconde).
+   */
+  async myShiftCoworkers(org: OrganizationId, actor: Actor, shiftId: string) {
+    const me = await this.ctx.employeeForUser(org, actor.userId);
+    if (!me) throw new RosterNotFoundError("Esta conta não está ligada a uma ficha de colaborador.");
+    const mine = await this.repo.getShift(org, shiftId);
+    const p = mine?.published;
+    if (!mine || mine.deleted || !p || p.employeeId !== me || p.kind !== "shift") throw new RosterNotFoundError("Turno não encontrado.");
+    if (!(await this.ctx.coworkersVisible(org, me, p.workDate))) throw new RosterForbiddenError("Os turnos dos colegas não estão visíveis nesta empresa.");
+    const nearby = await this.repo.listShifts(org, { rosterId: mine.rosterId, from: plusDays(p.workDate, -1), to: plusDays(p.workDate, 1) });
+    const overlapping = nearby.filter((s) => !s.deleted && s.published && s.published.kind === "shift" && s.published.employeeId !== me && shiftsOverlap(p, s.published));
+    if (!overlapping.length) return { coworkers: [] };
+    const people = new Map((await this.ctx.peopleBrief(org, [...new Set(overlapping.map((s) => s.published!.employeeId))])).map((x) => [x.id, x]));
+    const coworkers = overlapping
+      .flatMap((s) => {
+        const who = people.get(s.published!.employeeId);
+        return who?.active ? [{ shortName: coworkerShortName(who.fullName), positionName: who.positionName, hours: hoursLabel(s.published!.segments), sort: `${s.published!.workDate}${s.published!.segments[0]?.start ?? ""}` }] : [];
+      })
+      .sort((a, b) => a.sort.localeCompare(b.sort) || a.shortName.localeCompare(b.shortName, "pt"))
+      .map(({ sort: _s, ...c }) => c);
+    return { coworkers };
   }
 
   // ── Trocas (colega aceita, gestão aprova) ───────────────────────────

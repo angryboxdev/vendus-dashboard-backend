@@ -661,6 +661,13 @@ const rostersModule = createRostersModule({
   },
   employeeForUser: (org, userId) => absencesDirectory.employeeForUser(org, userId),
   userOfEmployee: (org, employeeId) => absencesDirectory.userOfEmployee(org, employeeId),
+  // Portal: «Mostrar os turnos dos colegas» (segurança) e só nome/cargo dos colegas.
+  securitySettings: (org, employeeId, date) => settingsModule.settings.effectiveFor(org, employeeId, date, "security"),
+  peopleBrief: async (org, ids) => {
+    const [people, positions] = await Promise.all([Promise.all(ids.map((id) => peopleRepo.get(org, id))), peopleRepo.listPositions(org)]);
+    const pos = new Map(positions.map((p) => [p.id, p.name]));
+    return people.flatMap((e) => (e ? [{ id: e.id, fullName: e.fullName, positionName: e.positionId ? (pos.get(e.positionId) ?? null) : null, active: e.status === "active" }] : []));
+  },
   notifier: {
     notify: async (org, userIds, n) => {
       if (!userIds.length) return;
@@ -1121,6 +1128,11 @@ const overviewModule = createOverviewModule({
     days: async (org, employeeId, from, to) => {
       const b = await attendanceModule.attendance.board(org, employeeId, from, to);
       return { timeZone: b.timeZone, days: b.days };
+    },
+    // Em lote: marcações, revisões e incidentes de todos numa leitura (perf da Visão geral).
+    daysMany: async (org, employeeIds, from, to, concurrency) => {
+      const all = await attendanceModule.attendance.boardMany(org, employeeIds, from, to, concurrency);
+      return new Map([...all].map(([id, b]) => [id, { timeZone: b.timeZone, days: b.days }]));
     },
     absences: async (org, from, to, canPrivate) =>
       (await absencesModule.absences.listRequests(org, { status: "approved", from, to }, canPrivate, "sistema")).map((r) => ({ employeeId: r.employeeId, typeName: r.typeName, category: r.typeCategory, startDate: r.startDate, endDate: r.endDate })),

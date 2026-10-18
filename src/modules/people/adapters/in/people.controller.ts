@@ -66,6 +66,9 @@ export class PeopleController {
     const org = (req: Request) => req.auth!.orgId;
     const id = (req: Request) => req.params.id as string;
 
+    // ── Portal: o meu perfil (só identificação, nunca campos sensíveis) ──
+    r.get("/me/profile", async (req, res) => res.json(await run(() => people.myProfile(org(req), req.auth!.sub))));
+
     // ── Lista, exportação, importação ────────────────────────────────
     r.get(P, async (req, res) => {
       const status = s(req.query.status);

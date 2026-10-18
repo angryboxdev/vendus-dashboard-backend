@@ -66,6 +66,10 @@ export class FakePeopleRepo implements PeopleRepositoryPort {
     const e = this.employees.find((x) => x.id === id);
     return e ? { ...e } : null;
   }
+  async findByUserId(_o: OrganizationId, userId: string) {
+    const e = this.employees.find((x) => x.userId === userId);
+    return e ? { ...e } : null;
+  }
   async findIdByNif(_o: OrganizationId, nif: string) {
     return this.employees.find((e) => e.nif && normalizeDocument(e.nif) === normalizeDocument(nif))?.id ?? null;
   }

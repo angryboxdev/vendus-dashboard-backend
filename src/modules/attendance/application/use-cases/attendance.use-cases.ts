@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
-import { effectiveEvents, SEGMENT_TYPES, type ClockEvent, type RevisionOperation, type SegmentType } from "../../domain/entities/clock.js";
+import { effectiveEvents, SEGMENT_TYPES, type ClockEvent, type ClockRevision, type RevisionOperation, type SegmentType } from "../../domain/entities/clock.js";
 import type { CorrectionRequest, DayVersion, Incident, IncidentStatus } from "../../domain/entities/records.js";
 import { AttendanceConflictError, AttendanceForbiddenError, AttendanceNotFoundError, AttendanceValidationError, PunchRefusedError } from "../../domain/errors.js";
 import type { AttendanceAuditPort, AttendanceClockPort, AttendanceContextPort, AttendanceRepositoryPort, BackgroundPort, PeriodGuardPort } from "../../domain/ports/out/attendance.ports.js";
@@ -60,6 +60,19 @@ export interface ChangeInput {
 
 /** Marcação como aparece nas vistas: sem IP nem coordenadas (minimização — RGPD). */
 export type EventView = Pick<ClockEvent, "id" | "employeeId" | "occurredAt" | "segmentType" | "source" | "locationId">;
+/** Leituras em lote de `boardMany` (todas as pessoas, mesma janela que `load`). */
+interface Preloaded {
+  events: ClockEvent[];
+  revisions: ClockRevision[];
+  incidents: Incident[];
+}
+/** As linhas de uma pessoa, como `load` as teria lido (ordem preservada). */
+function fromPreloaded(pre: Preloaded, employeeId: string) {
+  const events = pre.events.filter((e) => e.employeeId === employeeId);
+  const revisions = pre.revisions.filter((r) => r.employeeId === employeeId);
+  return { events, revisions, effective: effectiveEvents(events, revisions) };
+}
+
 const view = (e: ClockEvent): EventView => ({ id: e.id, employeeId: e.employeeId, occurredAt: e.occurredAt, segmentType: e.segmentType, source: e.source, locationId: e.locationId });
 
 export interface DayView extends DayResult {
@@ -109,15 +122,19 @@ export class AttendanceUseCases {
     return { events, revisions, effective: effectiveEvents(events, revisions) };
   }
 
-  /** Apuramento (sem gravar) — a única fonte dos totais, para todas as vistas (RE-6). */
-  private async compute(org: OrganizationId, employeeId: string, from: string, to: string) {
+  /**
+   * Apuramento (sem gravar) — a única fonte dos totais, para todas as vistas (RE-6).
+   * `pre`: marcações, revisões e incidentes já lidos em lote (`boardMany`) —
+   * as mesmas linhas que as leituras por pessoa devolveriam.
+   */
+  private async compute(org: OrganizationId, employeeId: string, from: string, to: string, pre?: Preloaded) {
     const tz = await this.ctx.timeZone(org);
     const now = this.clock.now();
     const [loaded, plans, cfg, incidents, breakTypes, clockTypes] = await Promise.all([
-      this.load(org, employeeId, from, to, tz),
+      pre ? Promise.resolve(fromPreloaded(pre, employeeId)) : this.load(org, employeeId, from, to, tz),
       this.ctx.plans(org, employeeId, plusDays(from, -1), plusDays(to, 1)),
       this.ctx.config(org, employeeId, to, tz),
-      this.repo.listIncidents(org, { employeeId, from, to }),
+      pre ? Promise.resolve(pre.incidents.filter((i) => i.employeeId === employeeId)) : this.repo.listIncidents(org, { employeeId, from, to }),
       this.repo.listBreakTypes(org),
       this.repo.listClockTypes(org),
     ]);
@@ -380,6 +397,37 @@ export class AttendanceUseCases {
     this.range(from, to);
     const c = await this.compute(org, employeeId, from, to);
     return { timeZone: c.tz, today: c.today, days: c.days.map((d) => dayBoard(d, c.plans.get(d.workDate), c.cfg.rules, c.now)) };
+  }
+
+  /**
+   * `board` de vários colaboradores (Visão geral, Dashboard): marcações,
+   * revisões e incidentes numa leitura em lote em vez de três por pessoa; o
+   * resto do apuramento é o mesmo, por pessoa (`concurrency` em paralelo).
+   * Resultado igual a chamar `board` para cada um.
+   */
+  async boardMany(org: OrganizationId, employeeIds: string[], from: string, to: string, concurrency = 16) {
+    this.range(from, to);
+    const out = new Map<string, Awaited<ReturnType<AttendanceUseCases["board"]>>>();
+    if (!employeeIds.length) return out;
+    const tz = await this.ctx.timeZone(org);
+    const fromUtc = DateTime.fromISO(from, { zone: tz }).minus({ days: 2 }).toUTC().toISO()!;
+    const toUtc = DateTime.fromISO(to, { zone: tz }).plus({ days: 2 }).toUTC().toISO()!;
+    const [events, revisions, incidents] = await Promise.all([
+      this.repo.listEventsMany(org, employeeIds, fromUtc, toUtc),
+      this.repo.listRevisionsMany(org, employeeIds, fromUtc, toUtc),
+      this.repo.listIncidentsMany(org, employeeIds, from, to),
+    ]);
+    const pre: Preloaded = { events, revisions, incidents };
+    let next = 0;
+    const worker = async () => {
+      while (next < employeeIds.length) {
+        const id = employeeIds[next++]!;
+        const c = await this.compute(org, id, from, to, pre);
+        out.set(id, { timeZone: c.tz, today: c.today, days: c.days.map((d) => dayBoard(d, c.plans.get(d.workDate), c.cfg.rules, c.now)) });
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, employeeIds.length) }, worker));
+    return out;
   }
 
   // ── Catálogo de pausas (FE-103) ─────────────────────────────────────

@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import multer from "multer";
 import { idempotency, type IdempotencyStore } from "../../../../infra/http/idempotency.js";
 import { problem } from "../../../../infra/http/problem-details.js";
 import type { AbsencesUseCases, Actor, RequestInput } from "../../application/use-cases/absences.use-cases.js";
@@ -6,6 +7,10 @@ import type { AbsenceTypeInput } from "../../domain/entities/absence-type.js";
 import type { ApprovalFlowInput } from "../../domain/entities/approval-flow.js";
 import type { RequestStatus } from "../../domain/entities/request.js";
 import { AbsenceConflictError, AbsenceForbiddenError, AbsenceNotFoundError, AbsenceRuleError, AbsenceValidationError } from "../../domain/errors.js";
+import { ATTACHMENT_MAX_BYTES } from "../../domain/services/attachment.service.js";
+
+// Anexos dos pedidos em memória (o caso de uso valida tipo e tamanho; o limite aqui corta uploads abusivos).
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: ATTACHMENT_MAX_BYTES + 1, files: 1 } });
 
 const s = (v: unknown): string => (typeof v === "string" ? v : "");
 const optS = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
@@ -73,7 +78,15 @@ function requestInput(b: Record<string, unknown>, employeeId: string): RequestIn
     halfDay: b.halfDay === true,
     comment: optS(b.comment),
     attachmentDocumentId: optS(b.attachmentDocumentId),
+    attachment: attachmentOf(b.attachment),
   };
+}
+
+/** Anexo devolvido por `POST /me/absence-attachments` (o caso de uso valida que é da pasta do colaborador). */
+function attachmentOf(v: unknown): NonNullable<RequestInput["attachment"]> | null {
+  if (!v || typeof v !== "object") return null;
+  const a = v as Record<string, unknown>;
+  return typeof a.path === "string" && a.path ? { path: a.path, name: s(a.name) || "anexo", mime: s(a.mime) || "application/octet-stream" } : null;
 }
 
 export interface AbsencesAccess {
@@ -134,6 +147,13 @@ export function createAbsencesAdminRouter(uc: AbsencesUseCases, store: Idempoten
     await scope(req, detail.employeeId, detail.startDate);
     res.json(detail);
   });
+  // Anexo (link temporário): no âmbito de quem vê; ausência privada só com permissão de privadas (RGPD — pode ser uma baixa médica).
+  r.get(`${A}/requests/:id/attachment-url`, async (req, res) => {
+    const detail = await run(() => uc.requestDetail(org(req), id(req), access.canPrivate(req), req.auth!.sub));
+    await scope(req, detail.employeeId, detail.startDate);
+    if (detail.private && !access.canPrivate(req)) throw problem(403, "forbidden", "Sem permissão para ver anexos de ausências privadas.");
+    res.json(await run(() => uc.attachmentUrl(org(req), actorOf(req), id(req), "manager")));
+  });
   r.post(`${A}/requests`, async (req, res) => {
     const b = body(req);
     await scope(req, s(b.employeeId), s(b.startDate));
@@ -187,6 +207,14 @@ export function createAbsencesMeRouter(uc: AbsencesUseCases, store: IdempotencyS
     res.status(201).json(await run(() => uc.createRequest(org(req), actorOf(req), requestInput(body(req), employeeId), "self")));
   });
   r.post("/me/absences/:id/cancel", async (req, res) => res.json(await run(() => uc.cancel(org(req), actorOf(req), id(req), optS(body(req).reason), false))));
+  // Anexo do próprio (ex.: justificar falta): carregar → caminho para o pedido; ver por link temporário.
+  r.post("/me/absence-attachments", upload.single("file"), async (req, res) => {
+    const f = req.file;
+    if (!f) throw problem(400, "validation_error", "Escolha um ficheiro.", { field: "file" });
+    res.status(201).json(await run(() => uc.uploadMyAttachment(org(req), actorOf(req), { name: f.originalname, mime: f.mimetype, bytes: f.buffer })));
+  });
+  r.get("/me/absences/:id/attachment-url", async (req, res) => res.json(await run(() => uc.attachmentUrl(org(req), actorOf(req), id(req), "owner"))));
+  r.get("/me/approvals/:id/attachment-url", async (req, res) => res.json(await run(() => uc.attachmentUrl(org(req), actorOf(req), id(req), "approver"))));
 
   r.get("/me/approvals", async (req, res) => res.json(await uc.myApprovals(org(req), actorOf(req), access.canPrivate(req))));
   const decide = (d: "approve" | "reject") => async (req: Request, res: Response) => res.json(await run(() => uc.decide(org(req), actorOf(req), id(req), d, optS(body(req).comment))));

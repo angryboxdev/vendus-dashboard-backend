@@ -227,3 +227,14 @@ describe("Contratos, responsáveis, remuneração e campos personalizados", () =
     await expect(employment.setCustomValues(ORG, rh, "e1", { [saude.id]: "x" })).rejects.toBeInstanceOf(PeopleForbiddenError);
   });
 });
+
+describe("Portal — o meu perfil", () => {
+  test("só identificação (nome, foto, cargo, local, admissão); nunca campos sensíveis; conta sem ficha → não encontrado", async () => {
+    const { people, repo } = setup();
+    repo.seed({ id: "e1", firstName: "Ana", lastName: "Castro", nif: "123456789", iban: "PT50000000000000000000000", baseSalary: 1000, hireDate: "2026-01-05", primaryLocationId: "loc-porto", positionId: "pos-op", userId: "u-ana" });
+    const me = await people.myProfile(ORG, "u-ana");
+    expect(me).toMatchObject({ employeeId: "e1", firstName: "Ana", fullName: "Ana Castro", positionName: "Operador", hireDate: "2026-01-05", status: "active", photoUrl: null });
+    expect(JSON.stringify(me)).not.toMatch(/123456789|PT50|1000/);
+    await expect(people.myProfile(ORG, "u-sem-ficha")).rejects.toBeInstanceOf(PeopleNotFoundError);
+  });
+});

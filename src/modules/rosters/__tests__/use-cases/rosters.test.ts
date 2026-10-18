@@ -284,3 +284,37 @@ describe("Escalas — lote e disponibilidade (Assistente Mezza)", () => {
     expect(repo.shifts.length).toBe(before);
   });
 });
+
+describe("Portal — colegas do turno (Novo RH)", () => {
+  test("só com a regra ligada; mesma escala, horário sobreposto (inclui noturno do dia vizinho); só nome curto, cargo e horário", async () => {
+    const { uc, ctx, repo } = setup();
+    const { roster, tarde, noite, manha } = await rosterWithTemplates(uc);
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-19", noite.id)); // 22:00–04:00
+    await uc.addShift(ORG, BOSS, roster.id, shift("e2", "2026-10-19", tarde.id)); // 16:00–22:00: encosta, não sobrepõe
+    await uc.addShift(ORG, BOSS, roster.id, { employeeId: "e3", workDate: "2026-10-20", kind: "shift", templateId: null, segments: [{ start: "02:00", end: "06:00" }] }); // dia seguinte, sobrepõe
+    await uc.addShift(ORG, BOSS, roster.id, shift("e4", "2026-10-19", noite.id)); // mesmo turno
+    await uc.addShift(ORG, BOSS, roster.id, shift("e5", "2026-10-20", manha.id)); // 08:00–16:00: não sobrepõe
+    await uc.addShift(ORG, BOSS, roster.id, shift("e6", "2026-10-19", noite.id)); // inativo → não aparece
+    await uc.publish(ORG, BOSS, roster.id, { reason: null, confirm: true });
+    ctx.people = [
+      { id: "e2", fullName: "Rui Faria", positionName: "Cozinha", active: true },
+      { id: "e3", fullName: "ana delgado castro", positionName: "Sala", active: true },
+      { id: "e4", fullName: "Eva Sousa", positionName: null, active: true },
+      { id: "e5", fullName: "João Lima", positionName: "Sala", active: true },
+      { id: "e6", fullName: "Ex Colega", positionName: null, active: false },
+    ];
+    const mine = (await repo.listShifts(ORG, { employeeIds: ["e1"], from: "2026-10-19", to: "2026-10-19" }))[0]!;
+    // Desligado por omissão (ADR-0030): o servidor recusa.
+    await expect(uc.myShiftCoworkers(ORG, E1, mine.id)).rejects.toBeInstanceOf(RosterForbiddenError);
+    ctx.coworkersOn = true;
+    const { coworkers } = await uc.myShiftCoworkers(ORG, E1, mine.id);
+    expect(coworkers).toEqual([
+      { shortName: "Eva Sousa", positionName: null, hours: "22:00–04:00" },
+      { shortName: "Ana Castro", positionName: "Sala", hours: "02:00–06:00" },
+    ]);
+    expect(JSON.stringify(coworkers)).not.toMatch(/e3|e4/);
+    // O turno de outra pessoa não se abre por aqui.
+    const other = (await repo.listShifts(ORG, { employeeIds: ["e2"], from: "2026-10-19", to: "2026-10-19" }))[0]!;
+    await expect(uc.myShiftCoworkers(ORG, E1, other.id)).rejects.toThrow("Turno não encontrado");
+  });
+});

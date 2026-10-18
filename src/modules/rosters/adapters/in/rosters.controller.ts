@@ -112,6 +112,7 @@ export function createRostersRouter(uc: RostersUseCases, store: IdempotencyStore
 
   r.get("/me/roster", async (req, res) => res.json(await run(() => uc.myRoster(org(req), actorOf(req), s(req.query.from), s(req.query.to)))));
   r.get("/me/roster/swaps", async (req, res) => res.json(await run(() => uc.mySwaps(org(req), actorOf(req)))));
+  r.get("/me/roster/shifts/:id/coworkers", async (req, res) => res.json(await run(() => uc.myShiftCoworkers(org(req), actorOf(req), id(req)))));
   r.post("/me/roster/swaps", async (req, res) => {
     const b = body(req);
     res.status(201).json(await run(() => uc.requestSwap(org(req), actorOf(req), { shiftId: s(b.shiftId), targetEmployeeId: s(b.targetEmployeeId), counterShiftId: optS(b.counterShiftId), comment: optS(b.comment) })));
