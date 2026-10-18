@@ -1,3 +1,5 @@
+import type { InvoiceAllocation } from "../../domain/entities/invoice-allocation.js";
+import { toFinancialMode } from "./shared-financial-mode.js";
 import type { Invoice } from "../../domain/entities/invoice.js";
 import type { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import type { InvoiceDTO, InvoiceLineDTO } from "../../domain/ports/in/invoice.ports.js";
@@ -12,7 +14,23 @@ function computeClassificationSummary(
   invoice: Invoice,
   lines: InvoiceLine[],
   categoryMap: Map<string, CategoryLookup>,
+  allocations?: InvoiceAllocation[],
 ): InvoiceDTO["classificationSummary"] {
+  // «Por valores»: classificação pelas repartições (montantes líquidos, sem IVA — o IVA fica no quadro fiscal).
+  if (invoice.lineDetailMode === "by_values") {
+    const byCat = new Map<string, number>();
+    for (const a of allocations ?? []) byCat.set(a.costCenterCategoryId, (byCat.get(a.costCenterCategoryId) ?? 0) + a.netCents);
+    if (byCat.size === 0) return { mode: "none", entries: [] };
+    const sign = invoice.totalWithVat < 0 ? -1 : 1;
+    return {
+      mode: byCat.size === 1 ? "unique" : "mixed",
+      basis: "net",
+      entries: [...byCat].map(([catId, net]) => {
+        const cat = categoryMap.get(catId);
+        return { costCenterCategoryId: catId, code: cat?.code ?? "", name: cat?.name ?? "", financialType: cat?.financialType ?? null, totalWithVat: sign * net };
+      }),
+    };
+  }
   if (invoice.lineDetailMode === "simple") {
     const catId = invoice.costCenterCategoryId;
     if (!catId) return { mode: "none", entries: [] };
@@ -80,6 +98,7 @@ export function toInvoiceDTO(
   lines?: InvoiceLine[],
   categoryMap: Map<string, CategoryLookup> = new Map(),
   isDuplicate = false,
+  allocations?: InvoiceAllocation[],
 ): InvoiceDTO {
   const dto: InvoiceDTO = {
     id: invoice.id,
@@ -99,6 +118,7 @@ export function toInvoiceDTO(
     status: invoice.status,
     reconciliationStatus: invoice.reconciliationStatus,
     lineDetailMode: invoice.lineDetailMode,
+    financialMode: toFinancialMode(invoice.lineDetailMode),
     paymentBankAccountId: invoice.paymentBankAccountId,
     paymentMethod: invoice.paymentMethod,
     paymentNotes: invoice.paymentNotes,
@@ -122,8 +142,11 @@ export function toInvoiceDTO(
     createdAt: invoice.createdAt.toISOString(),
     updatedAt: invoice.updatedAt.toISOString(),
     version: invoice.version,
-    classificationSummary: computeClassificationSummary(invoice, lines ?? [], categoryMap),
+    classificationSummary: computeClassificationSummary(invoice, lines ?? [], categoryMap, allocations),
   };
+  if (allocations !== undefined && invoice.lineDetailMode === "by_values") {
+    dto.allocations = allocations.map((a) => ({ ...a }));
+  }
   if (lines !== undefined) {
     dto.lines = lines.map(toInvoiceLineDTO);
 

@@ -256,6 +256,13 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
     return null;
   }
 
+  async findIdsByLineDetailMode(organizationId: OrganizationId, modes: LineDetailMode[]): Promise<Set<string>> {
+    if (modes.length === 0) return new Set();
+    const { data, error } = await this.scopedQuery(organizationId).table("invoices").select("id").in("line_detail_mode", modes);
+    if (error) throw new Error(error.message);
+    return new Set(((data ?? []) as unknown as { id: string }[]).map((r) => r.id));
+  }
+
   async findPendingDirectDebits(organizationId: OrganizationId): Promise<Invoice[]> {
     const today = new Date().toISOString().slice(0, 10);
     const { data, error } = await this.scopedQuery(organizationId)

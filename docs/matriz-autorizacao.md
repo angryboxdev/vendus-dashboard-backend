@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 750 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 758 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -153,6 +153,9 @@ Endpoints: 750 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/financial-base/suppliers/:id/delivery-schedule` | permission:finance.suppliers:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PUT | `/api/financial-base/suppliers/:id/delivery-schedule` | permission:finance.suppliers:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/financial-base/suppliers/:id/detail` | permission:finance.suppliers:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
+| GET | `/api/financial-base/suppliers/:id/location-rules` | permission:finance.suppliers:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
+| DELETE | `/api/financial-base/suppliers/:id/location-rules/:locationId` | permission:finance.suppliers:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
+| PUT | `/api/financial-base/suppliers/:id/location-rules/:locationId` | permission:finance.suppliers:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/financial-base/suppliers/:id/statement-pdf` | permission:finance.suppliers:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/financial-base/suppliers/:id/status` | permission:finance.suppliers:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/financial-base/suppliers/kpis` | permission:finance.suppliers:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
@@ -288,7 +291,9 @@ Endpoints: 750 · pré-autenticação: 23 · não classificados: 0
 | DELETE | `/api/invoices/:id` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/:id` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/invoices/:id` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
+| PUT | `/api/invoices/:id/allocations` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/invoices/:id/confirm` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
+| POST | `/api/invoices/:id/draft` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/invoices/:id/line-detail-mode` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/invoices/:id/paid` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/invoices/:id/status` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
@@ -298,10 +303,13 @@ Endpoints: 750 · pré-autenticação: 23 · não classificados: 0
 | PATCH | `/api/invoices/:invoiceId/lines/:lineId/classify` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/invoices/:invoiceId/lines/:lineId/deductibility` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/alerts` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
+| GET | `/api/invoices/allocations` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/invoices/import` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/integrity/payable-duplicates` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/lines` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
+| GET | `/api/invoices/payables-summary` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/invoices/process-direct-debits` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
+| POST | `/api/invoices/stock-routing-suggestion` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/suggest-classification/:supplierId` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/kds/air-menu-deliveries/:id/status` | pré-auth | — | — | — | — | — |
 | GET | `/api/kds/deliveries` | pré-auth | — | — | — | — | — |

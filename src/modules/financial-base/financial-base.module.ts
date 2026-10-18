@@ -4,6 +4,10 @@ import type { CreateSupplierPort, GetSupplierPort, ListSuppliersPort } from "./d
 import type { ListCostCenterCategoriesPort } from "./domain/ports/in/cost-center-category.ports.js";
 
 import { SupabaseCostCenterGroupRepository } from "./adapters/out/supabase-cost-center-group.repository.js";
+import { SupabaseLocationReadAdapter } from "./adapters/out/supabase-location-read.adapter.js";
+import { SupabaseSupplierLocationRuleRepository } from "./adapters/out/supabase-supplier-location-rule.repository.js";
+import { SupplierLocationRulesUseCases } from "./application/use-cases/supplier-location-rules.use-cases.js";
+import type { SupplierLocationRulesPort } from "./domain/ports/in/supplier-location-rules.ports.js";
 import { SupabaseCostCenterCategoryRepository } from "./adapters/out/supabase-cost-center-category.repository.js";
 import { SupabaseSupplierRepository } from "./adapters/out/supabase-supplier.repository.js";
 import { SupabaseSupplierInvoiceStatsAdapter } from "./adapters/out/supabase-supplier-invoice-stats.adapter.js";
@@ -67,6 +71,8 @@ export function createFinancialBaseModule(): {
   listSupplierDeliverySchedules: ListSupplierDeliverySchedulesPort;
   /** Módulo bank-statements (D10): identificar fornecedor por nome na liquidação agrupada. */
   listSuppliers: ListSuppliersPort;
+  /** F2 v1.2: exceções por loja (sugestão de envio para Stock e centro de custo). */
+  supplierLocationRules: SupplierLocationRulesPort;
 } {
   // Adapters de saída
   const groupRepository = new SupabaseCostCenterGroupRepository(createScopedQuery);
@@ -77,6 +83,8 @@ export function createFinancialBaseModule(): {
   const channelRepository = new SupabaseChannelRepository(createScopedQuery);
   const organizationIdentityRepository = new SupabaseOrganizationIdentityRepository(createScopedQuery);
   const supplierDeliveryScheduleRepository = new SupabaseSupplierDeliveryScheduleRepository(createScopedQuery);
+  const locationRead = new SupabaseLocationReadAdapter(createScopedQuery);
+  const supplierLocationRuleRepository = new SupabaseSupplierLocationRuleRepository(createScopedQuery);
 
   // Use cases — grupos de centros de custo
   const listCostCenterGroups = new ListCostCenterGroupsUseCase(groupRepository);
@@ -112,8 +120,9 @@ export function createFinancialBaseModule(): {
   const upsertSupplierDeliverySchedule = new UpsertSupplierDeliveryScheduleUseCase(supplierDeliveryScheduleRepository);
 
   // Use cases — fornecedores
-  const createSupplier = new CreateSupplierUseCase(supplierRepository);
-  const updateSupplier = new UpdateSupplierUseCase(supplierRepository);
+  const createSupplier = new CreateSupplierUseCase(supplierRepository, categoryRepository, locationRead);
+  const updateSupplier = new UpdateSupplierUseCase(supplierRepository, categoryRepository, locationRead);
+  const supplierLocationRules = new SupplierLocationRulesUseCases(supplierRepository, supplierLocationRuleRepository, categoryRepository, locationRead);
   const toggleSupplierStatus = new ToggleSupplierStatusUseCase(supplierRepository);
   const listSuppliers = new ListSuppliersUseCase(supplierRepository);
   const getSupplier = new GetSupplierUseCase(supplierRepository);
@@ -155,6 +164,7 @@ export function createFinancialBaseModule(): {
     getOrganizationIdentity,
     listSupplierDeliverySchedules,
     upsertSupplierDeliverySchedule,
+    supplierLocationRules,
   );
 
   return {
@@ -164,5 +174,6 @@ export function createFinancialBaseModule(): {
     getSupplier,
     listSupplierDeliverySchedules,
     listSuppliers,
+    supplierLocationRules,
   };
 }

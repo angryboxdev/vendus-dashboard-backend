@@ -47,6 +47,21 @@ export class InvalidDefaultStockPolicyError extends Error {
   }
 }
 
+export class InvalidFinancialModeError extends Error {
+  constructor(value: string) {
+    super(`Modo financeiro inválido: "${value}" (use single, by_item ou by_values)`);
+    this.name = "InvalidFinancialModeError";
+  }
+}
+
+/** Predefinição incoerente (subcategoria fora do grupo, loja inexistente/inativa…). */
+export class InvalidSupplierDefaultsError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidSupplierDefaultsError";
+  }
+}
+
 export class SupplierNotFoundError extends Error {
   constructor(id: string) {
     super(`Fornecedor "${id}" não encontrado`);

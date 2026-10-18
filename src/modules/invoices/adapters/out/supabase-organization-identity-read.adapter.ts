@@ -20,4 +20,10 @@ export class SupabaseOrganizationIdentityReadAdapter implements OrganizationIden
     if (error) throw new Error(error.message);
     return (data as { nif: string | null } | null)?.nif ?? null;
   }
+
+  async getTimezone(organizationId: OrganizationId): Promise<string> {
+    const { data, error } = await this.scopedQuery(organizationId).table("organizations").select("timezone").maybeSingle();
+    if (error) throw new Error(error.message);
+    return (data as { timezone: string | null } | null)?.timezone || "Europe/Lisbon";
+  }
 }

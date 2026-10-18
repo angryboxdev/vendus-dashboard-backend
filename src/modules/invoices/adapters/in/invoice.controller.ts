@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { idempotency, type IdempotencyStore } from "../../../../infra/http/idempotency.js";
 import type {
+  AllocationCommand,
   CreateInvoicePort,
   UpdateInvoicePort,
   MarkInvoicePaidPort,
@@ -31,6 +32,9 @@ import {
   FiscalIdentityConflictError,
   InvoicePayableSettledError,
   InvoiceVersionConflictError,
+  StockDecisionRequiredError,
+  AllocationsNotReconciledError,
+  InvoiceNotDraftError,
   InvoiceAmountsNotReconciledError,
   LineDetailModeError,
   LinesTotalMismatchError,
@@ -41,6 +45,14 @@ import {
 interface InvoicePorts {
   /** Relatório de integridade: faturas com mais de uma conta a pagar ativa. */
   listPayableDuplicates: { execute(org: import("../../../../kernel/organization-id.js").OrganizationId): Promise<unknown> };
+  /** «Enviar para Stock» sugerido (F2 §2.1). */
+  suggestStockRouting: import("../../domain/ports/out/stock-routing.port.js").StockRoutingPort;
+  /** F2 §2.2: feed «Por valores», guardar rascunho, repartição de fatura lançada. */
+  listInvoiceAllocations: { execute(org: import("../../../../kernel/organization-id.js").OrganizationId): Promise<unknown> };
+  saveInvoiceDraft: { execute(c: Parameters<ConfirmImportedInvoicePort["execute"]>[0]): Promise<unknown> };
+  replaceInvoiceAllocations: { execute(c: { organizationId: import("../../../../kernel/organization-id.js").OrganizationId; id: string; allocations: AllocationCommand[]; expectedVersion?: number; actor?: string; reason?: string }): Promise<unknown> };
+  /** F2 §2.3: «Total a pagar | Em atraso» (saldo aberto do razão). */
+  getPayablesSummary: { execute(org: import("../../../../kernel/organization-id.js").OrganizationId, filter: { search?: string; from?: string; to?: string; supplierId?: string; locationId?: string; currency?: string }): Promise<unknown> };
   createInvoice: CreateInvoicePort;
   updateInvoice: UpdateInvoicePort;
   markInvoicePaid: MarkInvoicePaidPort;
@@ -73,6 +85,18 @@ function handleError(res: import("express").Response, err: unknown): void {
   }
   if (err instanceof InvoiceAmountsNotReconciledError) {
     res.status(422).json({ error: err.message, code: "amounts_not_reconciled", ...err.details });
+    return;
+  }
+  if (err instanceof AllocationsNotReconciledError) {
+    res.status(422).json({ error: err.message, code: "allocations_not_reconciled", ...err.details });
+    return;
+  }
+  if (err instanceof InvoiceNotDraftError) {
+    res.status(409).json({ error: err.message, code: "not_draft" });
+    return;
+  }
+  if (err instanceof StockDecisionRequiredError) {
+    res.status(422).json({ error: err.message, code: `stock_${err.code}` });
     return;
   }
   if (err instanceof InvoiceVersionConflictError) {
@@ -123,6 +147,70 @@ export function createInvoiceRouter(ports: InvoicePorts, idempotencyStore: Idemp
   router.post("/invoices", idem);
   router.post("/invoices/import", idem);
   router.post("/invoices/:id/confirm", idem);
+
+  // GET /invoices/payables-summary — Total a pagar | Em atraso (respeita pesquisa, período, fornecedor, loja, moeda).
+  router.get("/invoices/payables-summary", async (req, res) => {
+    try {
+      const q = req.query as Record<string, string | undefined>;
+      const pick = (k: string) => (typeof q[k] === "string" && q[k]!.trim() ? q[k]!.trim() : undefined);
+      const filter: { search?: string; from?: string; to?: string; supplierId?: string; locationId?: string; currency?: string } = {};
+      for (const k of ["search", "from", "to", "supplierId", "locationId", "currency"] as const) {
+        const v = pick(k);
+        if (v !== undefined) filter[k] = v;
+      }
+      res.json(await ports.getPayablesSummary.execute(req.auth!.orgId, filter));
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // GET /invoices/allocations — repartições «Por valores» (análise por CC, montantes líquidos).
+  router.get("/invoices/allocations", async (req, res) => {
+    try {
+      res.json(await ports.listInvoiceAllocations.execute(req.auth!.orgId));
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // POST /invoices/:id/draft — «Guardar rascunho»: grava sem lançar (sem obrigação nem revisão de Stock).
+  router.post("/invoices/:id/draft", async (req, res) => {
+    try {
+      res.json(await ports.saveInvoiceDraft.execute({ ...(req.body as object), organizationId: req.auth!.orgId, id: req.params.id, actor: req.auth!.email || req.auth!.sub }));
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // PUT /invoices/:id/allocations — repartição «Por valores» de uma fatura lançada (soma = base líquida).
+  router.put("/invoices/:id/allocations", async (req, res) => {
+    try {
+      const b = (req.body ?? {}) as { allocations?: AllocationCommand[]; expectedVersion?: number; reason?: string };
+      res.json(
+        await ports.replaceInvoiceAllocations.execute({
+          organizationId: req.auth!.orgId,
+          id: req.params.id,
+          allocations: Array.isArray(b.allocations) ? b.allocations : [],
+          ...(typeof b.expectedVersion === "number" && { expectedVersion: b.expectedVersion }),
+          ...(typeof b.reason === "string" && { reason: b.reason }),
+          actor: req.auth!.email || req.auth!.sub,
+        }),
+      );
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // POST /invoices/stock-routing-suggestion — «Enviar para Stock» sugerido + motivo (F2 §2.1).
+  router.post("/invoices/stock-routing-suggestion", async (req, res) => {
+    try {
+      const b = (req.body ?? {}) as { supplierId?: string | null; locationId?: string | null; categoryIds?: unknown };
+      const categoryIds = Array.isArray(b.categoryIds) ? b.categoryIds.filter((c): c is string => typeof c === "string") : [];
+      res.json(await ports.suggestStockRouting.suggest(req.auth!.orgId, { supplierId: b.supplierId ?? null, locationId: b.locationId ?? null, categoryIds }));
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
 
   // GET /invoices/lines — all invoice lines (for CC analytics)
   router.get("/invoices/lines", async (req, res) => {

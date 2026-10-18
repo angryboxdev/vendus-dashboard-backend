@@ -10,6 +10,8 @@ function toSummary(row: Record<string, unknown>): SupplierSummary {
     defaultCostCenterGroupId: (row.default_cost_center_group_id as string | null) ?? null,
     defaultCostCenterCategoryId: (row.default_cost_center_category_id as string | null) ?? null,
     defaultFinancialType: (row.default_financial_type as string | null) ?? null,
+    defaultLocationId: (row.default_location_id as string | null) ?? null,
+    defaultFinancialMode: (row.default_financial_mode as SupplierSummary["defaultFinancialMode"]) ?? null,
   };
 }
 
@@ -24,7 +26,7 @@ export class SupabaseSupplierLookupAdapter implements SupplierLookupPort {
   async findByNif(organizationId: OrganizationId, nif: string): Promise<SupplierSummary | null> {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("suppliers")
-      .select("id, name, nif, default_cost_center_group_id, default_cost_center_category_id, default_financial_type")
+      .select("id, name, nif, default_cost_center_group_id, default_cost_center_category_id, default_financial_type, default_location_id, default_financial_mode")
       .eq("nif", nif)
       .maybeSingle();
 
@@ -36,7 +38,7 @@ export class SupabaseSupplierLookupAdapter implements SupplierLookupPort {
   async findById(organizationId: OrganizationId, id: string): Promise<SupplierSummary | null> {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("suppliers")
-      .select("id, name, nif, default_cost_center_group_id, default_cost_center_category_id, default_financial_type")
+      .select("id, name, nif, default_cost_center_group_id, default_cost_center_category_id, default_financial_type, default_location_id, default_financial_mode")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -46,7 +48,7 @@ export class SupabaseSupplierLookupAdapter implements SupplierLookupPort {
   async findByName(organizationId: OrganizationId, query: string): Promise<SupplierSummary[]> {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("suppliers")
-      .select("id, name, nif, default_cost_center_group_id, default_cost_center_category_id, default_financial_type")
+      .select("id, name, nif, default_cost_center_group_id, default_cost_center_category_id, default_financial_type, default_location_id, default_financial_mode")
       .ilike("name", `%${query}%`)
       .limit(10);
 
@@ -57,7 +59,7 @@ export class SupabaseSupplierLookupAdapter implements SupplierLookupPort {
   async findAll(organizationId: OrganizationId): Promise<SupplierSummary[]> {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("suppliers")
-      .select("id, name, nif, default_cost_center_group_id, default_cost_center_category_id, default_financial_type");
+      .select("id, name, nif, default_cost_center_group_id, default_cost_center_category_id, default_financial_type, default_location_id, default_financial_mode");
 
     if (error) throw new Error(error.message);
     return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toSummary(r));

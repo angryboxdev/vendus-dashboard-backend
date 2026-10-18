@@ -18,6 +18,12 @@ import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.
 import type { SupplierLookupPort } from "../../domain/ports/out/supplier-lookup.port.js";
 import type { InvoiceAmountsWritePort } from "../../domain/ports/out/invoice-amounts-write.port.js";
 import { reconcileForFinalize } from "./shared-amounts.js";
+import type { StockRoutingPort } from "../../domain/ports/out/stock-routing.port.js";
+import { resolveStockRouting } from "./shared-stock-routing.js";
+import type { CostCenterCategoryReaderPort } from "../../domain/ports/out/cost-center-category-reader.port.js";
+import type { InvoiceAllocationRepositoryPort } from "../../domain/ports/out/invoice-allocation-repository.port.js";
+import type { InvoiceAllocation } from "../../domain/entities/invoice-allocation.js";
+import { buildAllocations, toLineDetailMode } from "./shared-financial-mode.js";
 
 export class CreateInvoiceUseCase implements CreateInvoicePort {
   constructor(
@@ -29,6 +35,9 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     private readonly supplierLookup: SupplierLookupPort,
     private readonly amountsWrite: InvoiceAmountsWritePort,
     private readonly audit: InvoiceAuditPort,
+    private readonly stockRouting: StockRoutingPort,
+    private readonly categoryReader: CostCenterCategoryReaderPort,
+    private readonly allocationRepo: InvoiceAllocationRepositoryPort,
   ) {}
 
   async execute(command: CreateInvoiceCommand): Promise<InvoiceDTO> {
@@ -84,6 +93,16 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
     const amounts = reconcileForFinalize(invoice, draftLines.map((line, i) => ({ line, cmd: lineCommands[i] })), command.amounts);
     invoice = amounts.invoice;
     const lines = amounts.lines;
+    // Modo financeiro (F2 §2.2): «Por valores» exige repartições que somem a base líquida ao cêntimo.
+    const mode = toLineDetailMode(command.financialMode) ?? (lines.length > 0 ? "detailed" : "simple");
+    let allocations: InvoiceAllocation[] = [];
+    if (mode === "by_values") {
+      allocations = (await buildAllocations(this.categoryReader, command.organizationId, invoice.id, command.allocations ?? [], Math.abs(invoice.subtotalWithoutVat), true)).allocations;
+      invoice = invoice.update({ costCenterGroupId: null, costCenterCategoryId: null });
+    }
+    invoice = invoice.setLineDetailMode(mode);
+    // «Enviar para Stock» (F2 §2.1): decisão explícita ou predefinição aplicada; «Decidir» sem escolha → recusa.
+    invoice = (await resolveStockRouting(this.stockRouting, this.supplierLookup, command.organizationId, invoice, lines)).invoice;
 
     await this.invoiceRepo.save(command.organizationId, invoice);
     // Identidade fiscal partilhada: aponta para a fatura (FK), por isso reserva-se logo a seguir a gravar;
@@ -105,6 +124,7 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
       await this.lineRepo.saveAll(command.organizationId, lines);
     }
     await this.amountsWrite.save(command.organizationId, invoice.id, amounts.record);
+    if (allocations.length > 0) await this.allocationRepo.replaceForInvoice(command.organizationId, invoice.id, allocations);
 
     // Auto-criar conta a pagar quando a fatura tem data de vencimento
     if (invoice.dueDate && invoice.documentType !== "credit_note") {
@@ -135,7 +155,7 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
           unit: l.unit,
           unitCostWithoutVat: l.unitCostWithoutVat,
           totalWithVat: l.totalWithVat,
-          costCenterCategoryId: l.costCenterCategoryId,
+          costCenterCategoryId: l.costCenterCategoryId ?? invoice.costCenterCategoryId,
           locationId: l.locationId,
         })),
         actor: null,
@@ -146,6 +166,6 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
 
     await this.audit.record(command.organizationId, { invoiceId: invoice.id, action: "create", actor: command.actor ?? "sistema", origin: "manual", reason: null, before: null, after: auditSnapshot(invoice) });
 
-    return toInvoiceDTO(invoice, lines);
+    return toInvoiceDTO(invoice, lines, undefined, false, allocations);
   }
 }

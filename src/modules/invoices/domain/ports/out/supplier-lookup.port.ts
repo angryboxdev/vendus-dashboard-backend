@@ -7,6 +7,9 @@ export interface SupplierSummary {
   defaultCostCenterGroupId: string | null;
   defaultCostCenterCategoryId: string | null;
   defaultFinancialType: string | null;
+  /** F2 v1.2: destino habitual (loja concreta) e modo financeiro preferido. */
+  defaultLocationId?: string | null;
+  defaultFinancialMode?: "single" | "by_item" | "by_values" | null;
 }
 
 export interface SupplierLookupPort {

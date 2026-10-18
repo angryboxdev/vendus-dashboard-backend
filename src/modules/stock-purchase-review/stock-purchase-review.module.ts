@@ -3,6 +3,9 @@ import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import type { GetInvoicePort, ListInvoicesPort } from "../invoices/domain/ports/in/invoice.ports.js";
 import type { ListCostCenterCategoriesPort } from "../financial-base/domain/ports/in/cost-center-category.ports.js";
 import type { GetSupplierPort } from "../financial-base/domain/ports/in/supplier.ports.js";
+import type { SupplierLocationRulesPort } from "../financial-base/domain/ports/in/supplier-location-rules.ports.js";
+import type { SuggestStockRoutingPort } from "./domain/ports/in/suggest-stock-routing.port.js";
+import { SuggestStockRoutingUseCase } from "./application/use-cases/suggest-stock-routing.use-case.js";
 import type { ListLocationsPort } from "../locations/domain/ports/in/list-locations.port.js";
 
 import { SupabaseStockPurchaseReviewRepository } from "./adapters/out/supabase-stock-purchase-review.repository.js";
@@ -43,6 +46,8 @@ export interface StockPurchaseReviewModule {
   /** Módulo `invoices` (D10) — guard de edição contra revisão de stock bloqueante/pendente. */
   getStockPurchaseReviewStatus: GetStockPurchaseReviewStatusPort;
   deleteDraftStockPurchaseReview: DeleteDraftStockPurchaseReviewPort;
+  /** F2 v1.2 §2.1: sugestão de «Enviar para Stock» para o Financeiro. */
+  suggestStockRouting: SuggestStockRoutingPort;
 }
 
 /**
@@ -60,6 +65,7 @@ export function createStockPurchaseReviewModule(
   listCostCenterCategoriesPort: ListCostCenterCategoriesPort,
   getSupplierPort: GetSupplierPort,
   listLocationsPort: ListLocationsPort,
+  supplierLocationRules: Pick<SupplierLocationRulesPort, "list">,
 ): StockPurchaseReviewModule {
   const reviewRepository = new SupabaseStockPurchaseReviewRepository(createScopedQuery);
   const learnedMapping = new SupabaseStockReviewLearnedMappingRepository(createScopedQuery);
@@ -68,7 +74,7 @@ export function createStockPurchaseReviewModule(
   const stockMovementWrite = new SupabaseStockMovementWriteAdapter(createScopedQuery);
   const invoiceRead = new InvoicesGetInvoiceReadAdapter(getInvoicePort, listInvoicesPort);
   const categoryRead = new FinancialBaseCostCenterCategoryReadAdapter(listCostCenterCategoriesPort);
-  const supplierRead = new FinancialBaseSupplierReadAdapter(getSupplierPort);
+  const supplierRead = new FinancialBaseSupplierReadAdapter(getSupplierPort, supplierLocationRules);
   const locationRead = new LocationsReadAdapter(listLocationsPort);
 
   const recordInvoiceFinalizedForStock = new RecordInvoiceFinalizedForStockUseCase(stockMovementWrite, categoryRead, supplierRead);
@@ -93,5 +99,6 @@ export function createStockPurchaseReviewModule(
     reprocessMissingStockReviews,
     getStockPurchaseReviewStatus,
     deleteDraftStockPurchaseReview,
+    suggestStockRouting: new SuggestStockRoutingUseCase(categoryRead, supplierRead),
   };
 }

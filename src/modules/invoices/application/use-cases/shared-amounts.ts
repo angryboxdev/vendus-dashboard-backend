@@ -11,42 +11,49 @@ export interface ReconciledAmounts {
   record: InvoiceAmountsRecord;
 }
 
+export interface ComputedAmounts extends ReconciledAmounts {
+  /** null = reconcilia ao cêntimo; caso contrário o erro que bloqueia a finalização. */
+  blocking: InvoiceAmountsNotReconciledError | null;
+}
+
 /**
- * Recalcula os valores no servidor com o motor único antes de finalizar (task
- * v1.2 §1.3). Nunca confia nos totais/IVA enviados: com linhas, base e IVA
- * passam a ser os do motor (IVA por taxa, repartido pelas linhas); sem linhas,
- * base + IVA + ajustes tem de dar o total. Não reconcilia ao cêntimo → erro
- * (a fatura não finaliza; o rascunho mantém-se).
+ * Valores da fatura com o motor único (task v1.2 §1.3). Nunca confia nos
+ * totais/IVA enviados: com linhas, base e IVA passam a ser os do motor (IVA
+ * por taxa, repartido pelas linhas); sem linhas, base + IVA + ajustes tem de
+ * dar o total. Quando não reconcilia, devolve a fatura e as linhas tal como
+ * vieram, o registo de valores sem `validatedAt` e o erro em `blocking` —
+ * serve o «Guardar rascunho» (F2), que grava sem finalizar.
  *
  * Notas de crédito guardam totais negativos: o cálculo é feito em valor
  * absoluto e o sinal é reposto.
  */
-export function reconcileForFinalize(
+export function computeAmountsForInvoice(
   invoice: Invoice,
   lines: { line: InvoiceLine; cmd?: CreateInvoiceLineCommand | undefined }[],
   amounts: DocumentAmountsCommand | undefined,
   now: Date = new Date(),
-): ReconciledAmounts {
+): ComputedAmounts {
   const abs = Math.abs;
   const adjustmentsCents = amounts?.adjustmentsCents ?? 0;
   const rounding = amounts?.roundingAdjustment ?? null;
 
   if (lines.length === 0) {
     const r = computeHeaderOnlyDifference({ subtotalWithoutVat: abs(invoice.subtotalWithoutVat), totalVat: abs(invoice.totalVat), totalWithVat: abs(invoice.totalWithVat), adjustmentsCents, roundingAdjustment: rounding });
-    if (!r.canFinalize) {
-      throw new InvoiceAmountsNotReconciledError(describeIssues([{ code: "difference", cents: r.finalDifferenceCents }]), {
-        differenceCents: r.finalDifferenceCents,
-        issues: [{ code: "difference" }],
-        computed: { netCents: abs(invoice.subtotalWithoutVat), vatCents: abs(invoice.totalVat), totalCents: abs(invoice.subtotalWithoutVat) + abs(invoice.totalVat) + adjustmentsCents },
-      });
-    }
+    const blocking = r.canFinalize
+      ? null
+      : new InvoiceAmountsNotReconciledError(describeIssues([{ code: "difference", cents: r.finalDifferenceCents }]), {
+          differenceCents: r.finalDifferenceCents,
+          issues: [{ code: "difference" }],
+          computed: { netCents: abs(invoice.subtotalWithoutVat), vatCents: abs(invoice.totalVat), totalCents: abs(invoice.subtotalWithoutVat) + abs(invoice.totalVat) + adjustmentsCents },
+        });
     return {
+      blocking,
       invoice,
       lines: [],
       record: {
         grossCents: null, discountCents: null, globalDiscountKind: null, globalDiscountValue: null, footerDiscountCents: null,
         adjustmentsCents, roundingAdjustmentCents: r.roundingAdjustmentCents, roundingAdjustmentReason: r.roundingAdjustmentCents ? rounding!.reason.trim() : null,
-        vatSummary: null, differenceCents: r.differenceCents, validatedAt: now, lines: [],
+        vatSummary: null, differenceCents: r.differenceCents, validatedAt: blocking ? null : now, lines: [],
       },
     };
   }
@@ -71,51 +78,61 @@ export function reconcileForFinalize(
       vatRate: line.vatRate,
     })),
   );
-  if (!r.canFinalize) {
-    throw new InvoiceAmountsNotReconciledError(describeIssues(r.blocking), {
-      differenceCents: r.finalDifferenceCents,
-      issues: r.blocking,
-      computed: { netCents: r.netCents, vatCents: r.vatCents, totalCents: r.totalCents },
-    });
-  }
+  const blocking = r.canFinalize
+    ? null
+    : new InvoiceAmountsNotReconciledError(describeIssues(r.blocking), {
+        differenceCents: r.finalDifferenceCents,
+        issues: r.blocking,
+        computed: { netCents: r.netCents, vatCents: r.vatCents, totalCents: r.totalCents },
+      });
 
   const byId = new Map(r.lines.map((l) => [l.id, l]));
+  const record: InvoiceAmountsRecord = {
+    grossCents: r.grossCents,
+    discountCents: r.discountCents,
+    globalDiscountKind: amounts?.globalDiscount?.kind ?? null,
+    globalDiscountValue: amounts?.globalDiscount?.value ?? null,
+    footerDiscountCents: amounts?.footerDiscountCents ?? null,
+    adjustmentsCents,
+    roundingAdjustmentCents: r.roundingAdjustmentCents,
+    roundingAdjustmentReason: r.roundingAdjustmentCents ? rounding!.reason.trim() : null,
+    vatSummary: r.vatByRate,
+    differenceCents: r.differenceCents,
+    validatedAt: blocking ? null : now,
+    lines: lines.map(({ line, cmd }) => {
+      const l = byId.get(line.id)!;
+      return {
+        lineId: line.id,
+        quantityText: cmd?.quantityText ?? null,
+        unitPriceText: cmd?.unitPriceText ?? null,
+        grossCents: l.grossCents,
+        discountKind: cmd?.discount?.kind ?? null,
+        discountValue: cmd?.discount?.value ?? null,
+        discountCents: l.lineDiscountCents,
+        globalDiscountCents: l.globalDiscountCents,
+        netCents: l.netCents,
+      };
+    }),
+  };
+  if (blocking) return { blocking, invoice, lines: lines.map(({ line }) => line), record };
+
   const updatedLines = lines.map(({ line }) => {
     const sign = line.totalWithVat < 0 ? -1 : 1;
     const net = byId.get(line.id)!.netCents;
     const vat = r.lineVatCents.get(line.id) ?? 0;
     return line.updateValues({ vatAmount: sign * vat, totalWithVat: sign * (net + vat) });
   });
-  const updatedInvoice = invoice.update({ subtotalWithoutVat: r.netCents, totalVat: r.vatCents });
-  return {
-    invoice: updatedInvoice,
-    lines: updatedLines,
-    record: {
-      grossCents: r.grossCents,
-      discountCents: r.discountCents,
-      globalDiscountKind: amounts?.globalDiscount?.kind ?? null,
-      globalDiscountValue: amounts?.globalDiscount?.value ?? null,
-      footerDiscountCents: amounts?.footerDiscountCents ?? null,
-      adjustmentsCents,
-      roundingAdjustmentCents: r.roundingAdjustmentCents,
-      roundingAdjustmentReason: r.roundingAdjustmentCents ? rounding!.reason.trim() : null,
-      vatSummary: r.vatByRate,
-      differenceCents: r.differenceCents,
-      validatedAt: now,
-      lines: lines.map(({ line, cmd }) => {
-        const l = byId.get(line.id)!;
-        return {
-          lineId: line.id,
-          quantityText: cmd?.quantityText ?? null,
-          unitPriceText: cmd?.unitPriceText ?? null,
-          grossCents: l.grossCents,
-          discountKind: cmd?.discount?.kind ?? null,
-          discountValue: cmd?.discount?.value ?? null,
-          discountCents: l.lineDiscountCents,
-          globalDiscountCents: l.globalDiscountCents,
-          netCents: l.netCents,
-        };
-      }),
-    },
-  };
+  return { blocking: null, invoice: invoice.update({ subtotalWithoutVat: r.netCents, totalVat: r.vatCents }), lines: updatedLines, record };
+}
+
+/** Antes de finalizar: não reconcilia ao cêntimo → erro (a fatura não finaliza; o rascunho mantém-se). */
+export function reconcileForFinalize(
+  invoice: Invoice,
+  lines: { line: InvoiceLine; cmd?: CreateInvoiceLineCommand | undefined }[],
+  amounts: DocumentAmountsCommand | undefined,
+  now: Date = new Date(),
+): ReconciledAmounts {
+  const { blocking, ...result } = computeAmountsForInvoice(invoice, lines, amounts, now);
+  if (blocking) throw blocking;
+  return result;
 }

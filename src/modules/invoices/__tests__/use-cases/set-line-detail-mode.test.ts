@@ -1,15 +1,9 @@
 import { SetLineDetailModeUseCase } from "../../application/use-cases/set-line-detail-mode.use-case.js";
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
-import { FakeInvoiceStockReviewStatusRead } from "../fakes/fake-invoice-stock-review-status-read.js";
-import { FakeInvoiceStockReviewDraftDelete } from "../fakes/fake-invoice-stock-review-draft-delete.js";
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
-import {
-  InvoiceNotFoundError,
-  InvoiceLinesLockedByAppliedStockReviewError,
-  StockReviewRemovalConfirmationRequiredError,
-} from "../../domain/errors.js";
+import { InvoiceNotFoundError } from "../../domain/errors.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 
 const ORG_ID = mintOrganizationId("org-test");
@@ -24,150 +18,40 @@ const makeInvoice = () =>
     totalWithVat: 123000,
   });
 
-const makeLine = (invoiceId: string, totalWithVat: number, vatAmount: number) =>
-  InvoiceLine.create({
-    invoiceId,
-    description: "Linha teste",
-    quantity: 1,
-    unitCostWithoutVat: totalWithVat - vatAmount,
-    vatRate: 23,
-    vatAmount,
-    totalWithVat,
-  });
+const makeLine = (invoiceId: string) =>
+  InvoiceLine.create({ invoiceId, description: "Linha teste", quantity: 1, unitCostWithoutVat: 100000, vatRate: 23, vatAmount: 23000, totalWithVat: 123000 });
 
-describe("SetLineDetailModeUseCase", () => {
+describe("SetLineDetailModeUseCase (F2 §2.2: trocar de modo preserva as linhas)", () => {
   let invoiceRepo: FakeInvoiceRepository;
   let lineRepo: FakeInvoiceLineRepository;
-  let stockReviewStatusRead: FakeInvoiceStockReviewStatusRead;
-  let stockReviewDraftDelete: FakeInvoiceStockReviewDraftDelete;
   let useCase: SetLineDetailModeUseCase;
 
   beforeEach(() => {
     invoiceRepo = new FakeInvoiceRepository();
     lineRepo = new FakeInvoiceLineRepository();
-    stockReviewStatusRead = new FakeInvoiceStockReviewStatusRead();
-    stockReviewDraftDelete = new FakeInvoiceStockReviewDraftDelete();
-    useCase = new SetLineDetailModeUseCase(invoiceRepo, lineRepo, stockReviewStatusRead, stockReviewDraftDelete);
+    useCase = new SetLineDetailModeUseCase(invoiceRepo);
   });
 
-  it("switches invoice from simple to detailed mode", async () => {
+  it("troca entre «Única», «Por artigo» e «Por valores»", async () => {
     const inv = makeInvoice();
     await invoiceRepo.save(ORG_ID, inv);
-
-    const dto = await useCase.execute({ organizationId: ORG_ID, id: inv.id, mode: "detailed" });
-    expect(dto.lineDetailMode).toBe("detailed");
+    expect((await useCase.execute({ organizationId: ORG_ID, id: inv.id, mode: "detailed" })).lineDetailMode).toBe("detailed");
+    expect((await useCase.execute({ organizationId: ORG_ID, id: inv.id, mode: "by_values" })).financialMode).toBe("by_values");
+    expect((await useCase.execute({ organizationId: ORG_ID, id: inv.id, mode: "simple" })).financialMode).toBe("single");
   });
 
-  it("switches detailed back to simple even when there are no lines", async () => {
+  it("voltar a «Única» já não apaga as linhas reais do documento", async () => {
     const inv = makeInvoice().setLineDetailMode("detailed");
     await invoiceRepo.save(ORG_ID, inv);
-
-    const dto = await useCase.execute({ organizationId: ORG_ID, id: inv.id, mode: "simple" });
-    expect(dto.lineDetailMode).toBe("simple");
-  });
-
-  it("deletes detailed lines when switching back to simple (lines do not match)", async () => {
-    const inv = makeInvoice().setLineDetailMode("detailed");
-    await invoiceRepo.save(ORG_ID, inv);
-    await lineRepo.saveAll(ORG_ID, [makeLine(inv.id, 50000, 10000)]); // soma diferente do total da fatura
-
-    const dto = await useCase.execute({ organizationId: ORG_ID, id: inv.id, mode: "simple" });
-    expect(dto.lineDetailMode).toBe("simple");
-
-    const remaining = await lineRepo.findByInvoiceId(ORG_ID, inv.id);
-    expect(remaining).toHaveLength(0);
-  });
-
-  it("deletes detailed lines when switching back to simple (lines match)", async () => {
-    const inv = makeInvoice().setLineDetailMode("detailed");
-    await invoiceRepo.save(ORG_ID, inv);
-    await lineRepo.saveAll(ORG_ID, [makeLine(inv.id, 123000, 23000)]);
-
+    await lineRepo.saveAll(ORG_ID, [makeLine(inv.id)]);
     await useCase.execute({ organizationId: ORG_ID, id: inv.id, mode: "simple" });
-
-    const remaining = await lineRepo.findByInvoiceId(ORG_ID, inv.id);
-    expect(remaining).toHaveLength(0);
+    expect(await lineRepo.findByInvoiceId(ORG_ID, inv.id)).toHaveLength(1);
   });
 
-  it("does not delete lines when switching from simple to detailed", async () => {
-    // linhas de outra fatura não devem ser tocadas
+  it("recusa modo inválido e fatura inexistente", async () => {
     const inv = makeInvoice();
-    const other = makeInvoice().setLineDetailMode("detailed");
     await invoiceRepo.save(ORG_ID, inv);
-    await invoiceRepo.save(ORG_ID, other);
-    await lineRepo.saveAll(ORG_ID, [makeLine(other.id, 123000, 23000)]);
-
-    await useCase.execute({ organizationId: ORG_ID, id: inv.id, mode: "detailed" });
-
-    const otherLines = await lineRepo.findByInvoiceId(ORG_ID, other.id);
-    expect(otherLines).toHaveLength(1);
-  });
-
-  it("throws InvoiceNotFoundError when invoice does not exist", async () => {
-    await expect(useCase.execute({ organizationId: ORG_ID, id: "nonexistent", mode: "detailed" })).rejects.toThrow(InvoiceNotFoundError);
-  });
-
-  // ── Guard: descartar linhas detalhadas contra uma revisão de stock associada ──
-
-  describe("guarda contra revisão de stock ao voltar para simple", () => {
-    it("não verifica a revisão quando não há linhas a descartar (simple → detailed)", async () => {
-      const inv = makeInvoice();
-      await invoiceRepo.save(ORG_ID, inv);
-      stockReviewStatusRead.seed(inv.id, { reviewId: "rev-1", status: "applied" });
-
-      await expect(useCase.execute({ organizationId: ORG_ID, id: inv.id, mode: "detailed" })).resolves.toBeDefined();
-    });
-
-    it("prossegue sem pedir nada quando não há revisão associada", async () => {
-      const inv = makeInvoice().setLineDetailMode("detailed");
-      await invoiceRepo.save(ORG_ID, inv);
-      await lineRepo.saveAll(ORG_ID, [makeLine(inv.id, 123000, 23000)]);
-
-      const dto = await useCase.execute({ organizationId: ORG_ID, id: inv.id, mode: "simple" });
-      expect(dto.lineDetailMode).toBe("simple");
-      expect(stockReviewDraftDelete.calls).toHaveLength(0);
-    });
-
-    it("lança StockReviewRemovalConfirmationRequiredError quando há revisão pendente e não há confirmação — linhas não são apagadas", async () => {
-      const inv = makeInvoice().setLineDetailMode("detailed");
-      await invoiceRepo.save(ORG_ID, inv);
-      await lineRepo.saveAll(ORG_ID, [makeLine(inv.id, 123000, 23000)]);
-      stockReviewStatusRead.seed(inv.id, { reviewId: "rev-1", status: "pending" });
-
-      await expect(
-        useCase.execute({ organizationId: ORG_ID, id: inv.id, mode: "simple" }),
-      ).rejects.toThrow(StockReviewRemovalConfirmationRequiredError);
-
-      const remaining = await lineRepo.findByInvoiceId(ORG_ID, inv.id);
-      expect(remaining).toHaveLength(1);
-    });
-
-    it("com confirmação, apaga o rascunho e descarta as linhas", async () => {
-      const inv = makeInvoice().setLineDetailMode("detailed");
-      await invoiceRepo.save(ORG_ID, inv);
-      await lineRepo.saveAll(ORG_ID, [makeLine(inv.id, 123000, 23000)]);
-      stockReviewStatusRead.seed(inv.id, { reviewId: "rev-1", status: "ready" });
-
-      const dto = await useCase.execute({ organizationId: ORG_ID, id: inv.id, mode: "simple", confirmRemoveStockReview: true });
-
-      expect(dto.lineDetailMode).toBe("simple");
-      expect(stockReviewDraftDelete.calls).toHaveLength(1);
-      const remaining = await lineRepo.findByInvoiceId(ORG_ID, inv.id);
-      expect(remaining).toHaveLength(0);
-    });
-
-    it("bloqueia sempre com InvoiceLinesLockedByAppliedStockReviewError quando a revisão já foi aplicada, mesmo com confirmação", async () => {
-      const inv = makeInvoice().setLineDetailMode("detailed");
-      await invoiceRepo.save(ORG_ID, inv);
-      await lineRepo.saveAll(ORG_ID, [makeLine(inv.id, 123000, 23000)]);
-      stockReviewStatusRead.seed(inv.id, { reviewId: "rev-1", status: "applied" });
-
-      await expect(
-        useCase.execute({ organizationId: ORG_ID, id: inv.id, mode: "simple", confirmRemoveStockReview: true }),
-      ).rejects.toThrow(InvoiceLinesLockedByAppliedStockReviewError);
-
-      const remaining = await lineRepo.findByInvoiceId(ORG_ID, inv.id);
-      expect(remaining).toHaveLength(1);
-    });
+    await expect(useCase.execute({ organizationId: ORG_ID, id: inv.id, mode: "mixed" as never })).rejects.toThrow(/Modo inválido/);
+    await expect(useCase.execute({ organizationId: ORG_ID, id: "nope", mode: "simple" })).rejects.toBeInstanceOf(InvoiceNotFoundError);
   });
 });

@@ -1,3 +1,4 @@
+import type { LineDetailMode } from "../../entities/invoice.js";
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { Invoice, InvoiceStatus, InvoiceDocumentType, ReconciliationStatus } from "../../entities/invoice.js";
 
@@ -44,4 +45,6 @@ export interface InvoiceRepositoryPort {
    * ou null quando outra escrita passou à frente.
    */
   claimVersion(organizationId: OrganizationId, invoiceId: string, expectedVersion: number | null): Promise<number | null>;
+  /** Ids das faturas nestes modos financeiros (F2 — filtrar feeds de análise). */
+  findIdsByLineDetailMode(organizationId: OrganizationId, modes: LineDetailMode[]): Promise<Set<string>>;
 }

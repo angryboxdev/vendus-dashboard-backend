@@ -6,9 +6,16 @@ import type {
   SupplierDTO,
 } from "../../domain/ports/in/supplier.ports.js";
 import { toSupplierDTO } from "./shared.js";
+import { assertSupplierDefaults } from "./shared-supplier-defaults.js";
+import type { CostCenterCategoryRepositoryPort } from "../../domain/ports/out/cost-center-category-repository.port.js";
+import type { LocationReadPort } from "../../domain/ports/out/location-read.port.js";
 
 export class CreateSupplierUseCase implements CreateSupplierPort {
-  constructor(private readonly repository: SupplierRepositoryPort) {}
+  constructor(
+    private readonly repository: SupplierRepositoryPort,
+    private readonly categories: CostCenterCategoryRepositoryPort,
+    private readonly locations: LocationReadPort,
+  ) {}
 
   async execute(command: CreateSupplierCommand): Promise<SupplierDTO> {
     const supplier = Supplier.create({
@@ -23,6 +30,14 @@ export class CreateSupplierUseCase implements CreateSupplierPort {
       paymentTermsDays: command.paymentTermsDays ?? null,
       notes: command.notes ?? null,
       ...(command.defaultStockPolicy !== undefined && { defaultStockPolicy: command.defaultStockPolicy }),
+      defaultFinancialType: command.defaultFinancialType ?? null,
+      defaultFinancialMode: command.defaultFinancialMode ?? null,
+      defaultLocationId: command.defaultLocationId ?? null,
+    });
+    await assertSupplierDefaults(this.categories, this.locations, command.organizationId, {
+      costCenterGroupId: supplier.defaultCostCenterGroupId,
+      costCenterCategoryId: supplier.defaultCostCenterCategoryId,
+      locationId: supplier.defaultLocationId,
     });
 
     await this.repository.save(command.organizationId, supplier);

@@ -9,7 +9,9 @@ export type InvoiceStatus =
 
 export type ReconciliationStatus = "none" | "pending_reconciliation" | "partially_reconciled" | "reconciled";
 
-export type LineDetailMode = "simple" | "detailed";
+/** Modo de classificação financeira (F2 §2.2): simple = «Única», detailed = «Por artigo», by_values = «Por valores». */
+export type LineDetailMode = "simple" | "detailed" | "by_values";
+export const LINE_DETAIL_MODES: LineDetailMode[] = ["simple", "detailed", "by_values"];
 
 export const RECONCILIATION_STATUSES: ReconciliationStatus[] = ["none", "pending_reconciliation", "partially_reconciled", "reconciled"];
 

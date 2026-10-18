@@ -6,6 +6,9 @@ export interface CategoryLookup {
   code: string;
   name: string;
   financialType: string | null;
+  /** F2: validar alocações «Por valores» (subcategoria ativa e do grupo indicado). */
+  groupId?: string;
+  isActive?: boolean;
 }
 
 export interface CostCenterCategoryReaderPort {

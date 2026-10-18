@@ -50,6 +50,9 @@ export class FakeInvoiceRepository implements InvoiceRepositoryPort {
   }
 
   hashes = new Map<string, string>();
+  async findIdsByLineDetailMode(_organizationId: OrganizationId, modes: import("../../domain/entities/invoice.js").LineDetailMode[]): Promise<Set<string>> {
+    return new Set([...this.store.values()].filter((i) => modes.includes(i.lineDetailMode)).map((i) => i.id));
+  }
   async claimVersion(_organizationId: OrganizationId, invoiceId: string, expectedVersion: number | null): Promise<number | null> {
     const inv = this.store.get(invoiceId);
     if (!inv) return null;

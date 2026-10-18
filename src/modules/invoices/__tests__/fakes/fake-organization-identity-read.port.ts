@@ -11,4 +11,9 @@ export class FakeOrganizationIdentityRead implements OrganizationIdentityReadPor
   async getNif(_organizationId: OrganizationId): Promise<string | null> {
     return this.nif;
   }
+
+  timezone = "Europe/Lisbon";
+  async getTimezone(_organizationId: OrganizationId): Promise<string> {
+    return this.timezone;
+  }
 }

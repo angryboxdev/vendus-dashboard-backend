@@ -1,3 +1,6 @@
+import { FakeCostCenterCategoryReader } from "../fakes/fake-cost-center-category-reader.js";
+import { FakeInvoiceAllocationRepository } from "../fakes/fake-invoice-allocation-repository.js";
+import { FakeStockRoutingPort } from "../fakes/fake-stock-routing.port.js";
 import { FakeInvoiceAudit } from "../fakes/fake-invoice-audit.js";
 import { FakeInvoiceAmountsWrite } from "../fakes/fake-invoice-amounts-write.js";
 import { CreateInvoiceUseCase } from "../../application/use-cases/create-invoice.use-case.js";
@@ -23,7 +26,7 @@ describe("CreateInvoiceUseCase", () => {
     lineRepo = new FakeInvoiceLineRepository();
     payableWrite = new FakePayableEntryWrite();
     fiscal = new FakeFiscalIdentityPort();
-    useCase = new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, { notifyInvoiceFinalized: async () => {} }, fiscal, new FakeSupplierLookupPort(), new FakeInvoiceAmountsWrite(), new FakeInvoiceAudit());
+    useCase = new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, { notifyInvoiceFinalized: async () => {} }, fiscal, new FakeSupplierLookupPort(), new FakeInvoiceAmountsWrite(), new FakeInvoiceAudit(), new FakeStockRoutingPort(), new FakeCostCenterCategoryReader(), new FakeInvoiceAllocationRepository());
   });
 
   it("creates and persists invoice with pending status", async () => {

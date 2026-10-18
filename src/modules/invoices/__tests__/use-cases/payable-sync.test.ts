@@ -1,3 +1,5 @@
+import { FakeCostCenterCategoryReader } from "../fakes/fake-cost-center-category-reader.js";
+import { FakeInvoiceAllocationRepository } from "../fakes/fake-invoice-allocation-repository.js";
 import { FakeInvoiceAudit } from "../fakes/fake-invoice-audit.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { UpdateInvoiceUseCase } from "../../application/use-cases/update-invoice.use-case.js";
@@ -19,7 +21,7 @@ const base = () =>
 function setup() {
   const repo = new FakeInvoiceRepository();
   const payables = new FakePayableEntryWrite();
-  const uc = new UpdateInvoiceUseCase(repo, new FakeInvoiceLineRepository(), payables, new FakeInvoiceReconciliationCleanup(), new FakeInvoiceStockReviewStatusRead(), new FakeInvoiceStockReviewDraftDelete(), new FakeFiscalIdentityPort(), new FakeSupplierLookupPort(), new FakeInvoiceAudit());
+  const uc = new UpdateInvoiceUseCase(repo, new FakeInvoiceLineRepository(), payables, new FakeInvoiceReconciliationCleanup(), new FakeInvoiceStockReviewStatusRead(), new FakeInvoiceStockReviewDraftDelete(), new FakeFiscalIdentityPort(), new FakeSupplierLookupPort(), new FakeInvoiceAudit(), new FakeInvoiceAllocationRepository());
   return { repo, payables, uc };
 }
 

@@ -149,3 +149,33 @@ export class InvoiceVersionConflictError extends Error {
     this.name = "InvoiceVersionConflictError";
   }
 }
+
+/** «Enviar para Stock» precisa de decisão explícita (política «Decidir») ou de motivo (contraria a predefinição). */
+export class StockDecisionRequiredError extends Error {
+  constructor(
+    readonly code: "decision_required" | "reason_required",
+    message: string,
+  ) {
+    super(message);
+    this.name = "StockDecisionRequiredError";
+  }
+}
+
+/** «Por valores»: alocações que não somam a base líquida ou com subcategoria inválida (F2 §2.2). */
+export class AllocationsNotReconciledError extends Error {
+  constructor(
+    readonly description: string,
+    readonly details: { remainingCents: number; issues: { code: string }[] },
+  ) {
+    super(`Repartição «Por valores» por conferir: ${description}.`);
+    this.name = "AllocationsNotReconciledError";
+  }
+}
+
+/** «Guardar rascunho» só se aplica a rascunhos (importados por rever). */
+export class InvoiceNotDraftError extends Error {
+  constructor(id: string) {
+    super(`A fatura ${id} já foi lançada — use a edição normal.`);
+    this.name = "InvoiceNotDraftError";
+  }
+}
