@@ -10,6 +10,11 @@ export interface OverviewSourcesPort {
   locations(org: OrganizationId): Promise<{ id: string; name: string }[]>;
   /** Dias apurados pela assiduidade (planeado vs. real), sem gravar, e o fuso em que se leem. */
   days(org: OrganizationId, employeeId: string, from: string, to: string): Promise<{ timeZone: string; days: OverviewDay[] }>;
+  /**
+   * Opcional: o mesmo que `days` para vários colaboradores de uma vez (leituras
+   * em lote; `concurrency` = apuramentos em paralelo). Sem ela, `days` por pessoa.
+   */
+  daysMany?(org: OrganizationId, employeeIds: string[], from: string, to: string, concurrency: number): Promise<Map<string, { timeZone: string; days: OverviewDay[] }>>;
   /** Ausências aprovadas que tocam o período (tipo privado → nome genérico se `canPrivate` = false). */
   absences(org: OrganizationId, from: string, to: string, canPrivate: boolean): Promise<OverviewAbsence[]>;
   pending(org: OrganizationId): Promise<PendingCounts>;

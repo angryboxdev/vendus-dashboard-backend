@@ -69,7 +69,24 @@ export class FakeAttendanceRepository implements AttendanceRepositoryPort {
     return this.events.find((e) => e.id === id) ?? null;
   }
   async listEvents(_org: OrganizationId, employeeId: string, fromUtc: string, toUtc: string) {
+    this.singleReads++;
     return this.events.filter((e) => e.employeeId === employeeId && e.occurredAt >= fromUtc && e.occurredAt < toUtc);
+  }
+  /** Leituras feitas (para provar que o lote não lê por pessoa). */
+  reads = { events: 0, revisions: 0, incidents: 0 };
+  /** Leituras de marcações por pessoa (`listEvents`). */
+  singleReads = 0;
+  async listEventsMany(_org: OrganizationId, ids: string[], fromUtc: string, toUtc: string) {
+    this.reads.events++;
+    return this.events.filter((e) => ids.includes(e.employeeId) && e.occurredAt >= fromUtc && e.occurredAt < toUtc).sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+  }
+  async listRevisionsMany(_org: OrganizationId, ids: string[], fromUtc: string, toUtc: string) {
+    this.reads.revisions++;
+    return this.revisions.filter((r) => ids.includes(r.employeeId) && r.anchorAt >= fromUtc && r.anchorAt < toUtc);
+  }
+  async listIncidentsMany(_org: OrganizationId, ids: string[], from: string, to: string) {
+    this.reads.incidents++;
+    return this.incidents.filter((i) => ids.includes(i.employeeId) && i.workDate >= from && i.workDate <= to);
   }
   async listEventsSince(_org: OrganizationId, sinceUtc: string) {
     return this.events.filter((e) => e.occurredAt >= sinceUtc);
