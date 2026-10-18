@@ -19,6 +19,8 @@ export interface AbsenceRequest {
   status: RequestStatus;
   comment: string | null;
   attachmentDocumentId: string | null;
+  /** Anexo carregado pelo próprio (Portal): ficheiro privado em `hr-documents`. */
+  attachment: { path: string; name: string; mime: string } | null;
   requestedBy: string;
   requestedByUserId: string | null;
   levels: LevelSnapshot[];

@@ -3,6 +3,9 @@ import type { Server } from "node:http";
 import { InMemoryIdempotencyStore } from "../../../../infra/http/idempotency.js";
 import { problemHandler } from "../../../../infra/http/problem-details.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
+// O Jest corre em CommonJS sem interop: expõe o multer real como `default`.
+jest.mock("multer", () => ({ __esModule: true, default: jest.requireActual("multer") }));
+
 import { createAbsencesAdminRouter, createAbsencesMeRouter } from "../../adapters/in/absences.controller.js";
 import { coverage } from "../../adapters/out/supabase-absences-directory.js";
 import { AbsencesUseCases } from "../../application/use-cases/absences.use-cases.js";

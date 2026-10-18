@@ -24,7 +24,7 @@ export class AbsenceRuleError extends Error {
       | "half_day_not_allowed"
       | "attachment_required"
       | "no_approver"
-      | "no_compensation_type",
+      | "no_compensation_type" | "attachments_unavailable",
   ) {
     super(message);
     this.name = "AbsenceRuleError";

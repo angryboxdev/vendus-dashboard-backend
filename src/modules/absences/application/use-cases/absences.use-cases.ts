@@ -4,10 +4,40 @@ import { rulesFor, validateType, type AbsenceType, type AbsenceTypeInput, type L
 import { snapshotLevels, validateFlow, type ApprovalFlow, type ApprovalFlowInput } from "../../domain/entities/approval-flow.js";
 import { overlaps, type AbsenceRequest, type RequestStatus } from "../../domain/entities/request.js";
 import { AbsenceConflictError, AbsenceForbiddenError, AbsenceNotFoundError, AbsenceRuleError, AbsenceValidationError } from "../../domain/errors.js";
-import type { AbsencesAuditPort, AbsencesClockPort, AbsencesContextPort, AbsencesNotifierPort, AbsencesRepositoryPort, PeriodGuardPort } from "../../domain/ports/out/absences.ports.js";
+import type { AbsenceAttachmentStoragePort, AbsencesAuditPort, AbsencesClockPort, AbsencesContextPort, AbsencesNotifierPort, AbsencesRepositoryPort, PeriodGuardPort } from "../../domain/ports/out/absences.ports.js";
+import { attachmentFolder, ownsAttachment, safeFileName, validateAttachmentFile, type AbsenceAttachment } from "../../domain/services/attachment.service.js";
+import { randomUUID } from "node:crypto";
 import { absenceEffect, accrualFor, periodStart, requestAmount, summarize, type DayEffect, type PlanDay } from "../../domain/services/absence-calc.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Tipo «Folga» do Portal (ticket 05). */
+const DAY_OFF_CODE = "FOLGA";
+/** Valores seguros de um tipo novo (ADR-0028): pede aprovação, sem limite, sem valores legais. */
+const SAFE_TYPE: AbsenceTypeInput = {
+  name: "",
+  code: null,
+  color: null,
+  category: "permission",
+  unit: "days",
+  counting: "working",
+  limitAmount: null,
+  renewal: "calendar_year",
+  allowNegative: false,
+  carryOver: false,
+  requiresApproval: true,
+  private: false,
+  hiddenFromEmployee: false,
+  attachment: "none",
+  timeImpact: "reduce_theoretical",
+  intersectSchedule: true,
+  halfDay: false,
+  minConsecutive: null,
+  maxConsecutive: null,
+  blockedDates: [],
+  paid: true,
+  flowId: null,
+};
 const TIME = /^\d{2}:\d{2}$/;
 const MAX_DAYS = 366;
 const PLAN_CHUNK = 62;
@@ -29,10 +59,14 @@ export interface RequestInput {
   halfDay: boolean;
   comment: string | null;
   attachmentDocumentId: string | null;
+  /** Anexo carregado pelo próprio (`uploadMyAttachment`); só aceite da pasta dele. */
+  attachment?: AbsenceAttachment | null;
 }
 
 /** Pedido como aparece nas vistas; ausências privadas ficam mascaradas (ADR-0028). */
-export interface RequestView extends AbsenceRequest {
+export interface RequestView extends Omit<AbsenceRequest, "attachment"> {
+  /** Só «tem anexo» (nome e tipo); nunca o caminho. Mascarado: nome genérico. Abre-se por `attachmentUrl`. */
+  attachment: { name: string; mime: string } | null;
   typeName: string;
   typeColor: string | null;
   /** Categoria do tipo (ex.: "vacation"); null quando a ausência está mascarada. */
@@ -48,7 +82,31 @@ export class AbsencesUseCases {
     private readonly audit: AbsencesAuditPort,
     private readonly clock: AbsencesClockPort,
     private readonly periods: PeriodGuardPort = { closedDates: async () => new Set<string>() },
+    private readonly attachments: AbsenceAttachmentStoragePort | null = null,
   ) {}
+
+  // ── Anexos carregados pelo próprio (Portal: justificar falta) ───────
+  /** Guarda o ficheiro na pasta do colaborador; o pedido usa depois o caminho devolvido. */
+  async uploadMyAttachment(org: OrganizationId, actor: Actor, file: { name: string; mime: string; bytes: Buffer }): Promise<AbsenceAttachment> {
+    if (!this.attachments) throw new AbsenceRuleError("Anexos indisponíveis.", "attachments_unavailable");
+    validateAttachmentFile({ name: file.name, mime: file.mime, size: file.bytes.length });
+    const employeeId = await this.myEmployeeId(org, actor);
+    const name = safeFileName(file.name);
+    const path = await this.attachments.upload(org, `${attachmentFolder(employeeId)}${randomUUID()}-${name}`, file.bytes, file.mime);
+    return { path, name, mime: file.mime };
+  }
+
+  /**
+   * Link temporário do anexo de um pedido: o próprio, quem aprova em algum
+   * nível do pedido, ou a gestão (o controller verifica o âmbito antes).
+   */
+  async attachmentUrl(org: OrganizationId, actor: Actor, requestId: string, as: "owner" | "approver" | "manager"): Promise<{ url: string; name: string; mime: string }> {
+    const r = await this.repo.getRequest(org, requestId);
+    if (!r?.attachment || !this.attachments) throw new AbsenceNotFoundError("Anexo não encontrado.");
+    if (as === "owner" && (await this.ctx.employeeForUser(org, actor.userId)) !== r.employeeId) throw new AbsenceNotFoundError("Anexo não encontrado.");
+    if (as === "approver" && !r.levels.some((l) => l.approvers.includes(actor.userId))) throw new AbsenceForbiddenError("Não é aprovador deste pedido.", "not_approver");
+    return { url: await this.attachments.signedUrl(org, r.attachment.path), name: r.attachment.name, mime: r.attachment.mime };
+  }
 
   /** TK-17: ausências com dias num período fechado não se criam, aprovam nem cancelam. */
   private async assertOpen(org: OrganizationId, employeeId: string, from: string, to: string) {
@@ -119,6 +177,25 @@ export class AbsencesUseCases {
         if (!holders.length) throw new AbsenceValidationError(`O nível ${i + 1} não tem aprovadores: o perfil escolhido não tem ninguém.`, "levels");
       }
     }
+  }
+
+  /**
+   * Portal ligado ao Novo RH (ticket 05): garante o tipo «Folga» (código
+   * FOLGA) — pedir folga à chefia, aprovado pelos responsáveis diretos (fluxo
+   * «Chefia direta», papel `managers`; sem chefia, segue para o recurso =
+   * administradores). Valores seguros dos tipos novos (ADR-0028: sem limite,
+   * sem valores legais); a empresa pode editá-lo. Idempotente: se já existir
+   * um tipo FOLGA ativo, não cria nada.
+   */
+  async ensureDayOffType(org: OrganizationId, actor: Actor): Promise<{ type: AbsenceType; created: boolean }> {
+    const existing = (await this.repo.listTypes(org)).find((t) => !t.archived && t.code?.toUpperCase() === DAY_OFF_CODE);
+    if (existing) return { type: existing, created: false };
+    const flows = await this.repo.listFlows(org);
+    const managerFlow =
+      flows.find((f) => !f.archived && f.scope === "absences" && f.levels.length === 1 && f.levels[0]!.people.length === 0 && f.levels[0]!.roles.length === 1 && f.levels[0]!.roles[0] === "managers") ??
+      (await this.createFlow(org, actor, { name: "Chefia direta", scope: "absences", isDefault: false, levels: [{ people: [], roles: ["managers"] }], fallbackUserIds: [] }));
+    const type = await this.createType(org, actor, { ...SAFE_TYPE, name: "Folga", code: DAY_OFF_CODE, flowId: managerFlow.id });
+    return { type, created: true };
   }
 
   async createFlow(org: OrganizationId, actor: Actor, input: ApprovalFlowInput) {
@@ -233,7 +310,11 @@ export class AbsencesUseCases {
     if (input.comment && input.comment.length > 1000) throw new AbsenceValidationError("Comentário demasiado longo.", "comment");
     const type = (await this.repo.listTypes(org)).find((t) => t.id === input.typeId && !t.archived);
     if (!type || (mode === "self" && type.hiddenFromEmployee)) throw new AbsenceNotFoundError("Tipo de ausência não encontrado.");
-    if (type.attachment === "required" && !input.attachmentDocumentId) throw new AbsenceRuleError("Este tipo de ausência exige um documento justificativo.", "attachment_required");
+    // Pedido do próprio: nunca um id de documento arbitrário (podia ser de outra pessoa) — só o anexo que ele carregou.
+    const documentId = mode === "self" ? null : input.attachmentDocumentId;
+    const attachment = input.attachment ?? null;
+    if (attachment && (type.attachment === "none" || !ownsAttachment(attachment.path, org, input.employeeId))) throw new AbsenceValidationError("Anexo inválido.", "attachment");
+    if (type.attachment === "required" && !documentId && !attachment) throw new AbsenceRuleError("Este tipo de ausência exige um documento justificativo.", "attachment_required");
 
     const coverage = await this.ctx.contractCoverage(org, input.employeeId, input.startDate, input.endDate);
     if (!coverage.covered) throw new AbsenceRuleError("O pedido está fora da vigência do contrato.", "outside_contract");
@@ -285,7 +366,8 @@ export class AbsencesUseCases {
       period,
       status: autoApprove ? "approved" : "pending",
       comment: input.comment?.trim() || null,
-      attachmentDocumentId: input.attachmentDocumentId,
+      attachmentDocumentId: documentId,
+      attachment,
       requestedBy: actor.email,
       requestedByUserId: actor.userId,
       levels,
@@ -376,7 +458,8 @@ export class AbsencesUseCases {
       // O próprio colaborador vê sempre as suas; sem a permissão, as privadas ficam mascaradas.
       const own = viewerUserId !== null && (viewerUserId === r.requestedByUserId || viewerUserId === (await this.ctx.userOfEmployee(org, r.employeeId)));
       const mask = isPrivate && !canPrivate && !own;
-      out.push({ ...r, comment: mask ? null : r.comment, typeName: mask ? "Ausência" : (t?.name ?? "—"), typeColor: mask ? null : (t?.color ?? null), typeCategory: mask ? null : (t?.category ?? null), private: isPrivate });
+      const attachment = r.attachment ? { name: mask ? "Anexo" : r.attachment.name, mime: r.attachment.mime } : null;
+      out.push({ ...r, attachment, comment: mask ? null : r.comment, typeName: mask ? "Ausência" : (t?.name ?? "—"), typeColor: mask ? null : (t?.color ?? null), typeCategory: mask ? null : (t?.category ?? null), private: isPrivate });
     }
     return out;
   }
@@ -490,7 +573,7 @@ export class AbsencesUseCases {
         if (!levels) throw new AbsenceRuleError("Não há ninguém que possa aprovar a compensação.", "no_approver");
         const r = await this.repo.insertRequest(org, {
           employeeId, typeId: type.id, kind: "holiday_compensation", startDate: d, endDate: d, startTime: null, endTime: null, halfDay: false,
-          amount: h.coefficient, unit: "days", period, status: "pending", comment: `Feriado trabalhado: ${h.name}`, attachmentDocumentId: null,
+          amount: h.coefficient, unit: "days", period, status: "pending", comment: `Feriado trabalhado: ${h.name}`, attachmentDocumentId: null, attachment: null,
           requestedBy: actor.email, requestedByUserId: null, levels, currentLevel: 0,
         });
         await this.notifyLevel(org, r, type.name);

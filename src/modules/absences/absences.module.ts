@@ -5,6 +5,7 @@ import type { OrganizationId } from "../../kernel/organization-id.js";
 import { createAbsencesAdminRouter, createAbsencesMeRouter } from "./adapters/in/absences.controller.js";
 import { coverage, SupabaseAbsencesDirectory } from "./adapters/out/supabase-absences-directory.js";
 import { SupabaseAbsencesRepository } from "./adapters/out/supabase-absences.repository.js";
+import { SupabaseAbsenceAttachmentStorage } from "./adapters/out/supabase-absence-attachments.adapter.js";
 import { AbsencesUseCases } from "./application/use-cases/absences.use-cases.js";
 import type { VacationRules } from "./domain/entities/absence-type.js";
 import type { AbsencesAuditPort, AbsencesNotifierPort, PeriodGuardPort } from "./domain/ports/out/absences.ports.js";
@@ -53,6 +54,7 @@ export function createAbsencesModule(deps: {
     deps.audit,
     { today: deps.today },
     deps.periods,
+    new SupabaseAbsenceAttachmentStorage(),
   );
   const store = new SupabaseIdempotencyStore(createScopedQuery);
   return {

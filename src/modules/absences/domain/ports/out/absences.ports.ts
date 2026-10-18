@@ -52,6 +52,14 @@ export interface AbsencesContextPort {
   workedSeconds(org: OrganizationId, employeeId: string, date: string): Promise<number>;
 }
 
+/** Ficheiros dos anexos (bucket privado `hr-documents`); o armazenamento acrescenta `{org}/` ao caminho. */
+export interface AbsenceAttachmentStoragePort {
+  /** Devolve o caminho real gravado (com o prefixo da organização). */
+  upload(org: OrganizationId, path: string, bytes: Buffer, mime: string): Promise<string>;
+  /** URL assinado de curta duração. */
+  signedUrl(org: OrganizationId, path: string): Promise<string>;
+}
+
 export interface AbsencesNotifierPort {
   notify(org: OrganizationId, userIds: string[], n: { title: string; body: string; link: string; dedupeKey: string }): Promise<void>;
 }

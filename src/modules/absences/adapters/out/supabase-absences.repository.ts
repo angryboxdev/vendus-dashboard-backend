@@ -20,7 +20,7 @@ const TYPE =
   "id, name, code, color, category, unit, counting, limit_amount, renewal, allow_negative, carry_over, requires_approval, private, hidden_from_employee, attachment, time_impact, intersect_schedule, half_day, min_consecutive, max_consecutive, blocked_dates, paid, flow_id, archived";
 const FLOW = "id, name, scope, is_default, levels, fallback_user_ids, archived";
 const REQ =
-  "id, employee_id, type_id, kind, start_date, end_date, start_time, end_time, half_day, amount, unit, period, status, comment, attachment_document_id, requested_by, requested_by_user_id, levels, current_level, decided_at, cancel_reason, created_at";
+  "id, employee_id, type_id, kind, start_date, end_date, start_time, end_time, half_day, amount, unit, period, status, comment, attachment_document_id, attachment_path, attachment_name, attachment_mime, requested_by, requested_by_user_id, levels, current_level, decided_at, cancel_reason, created_at";
 const DEC = "id, request_id, level, actor, actor_user_id, decision, comment, created_at";
 const ENT = "id, employee_id, type_id, period, kind, amount, unit, request_id, reference_date, reason, created_by, created_at";
 
@@ -100,6 +100,7 @@ const toReq = (r: Row): AbsenceRequest => ({
   status: r.status as RequestStatus,
   comment: str(r.comment),
   attachmentDocumentId: str(r.attachment_document_id),
+  attachment: r.attachment_path ? { path: String(r.attachment_path), name: str(r.attachment_name) ?? "anexo", mime: str(r.attachment_mime) ?? "application/octet-stream" } : null,
   requestedBy: String(r.requested_by),
   requestedByUserId: str(r.requested_by_user_id),
   levels: (Array.isArray(r.levels) ? r.levels : []) as AbsenceRequest["levels"],
@@ -183,6 +184,9 @@ export class SupabaseAbsencesRepository implements AbsencesRepositoryPort {
       status: r.status,
       comment: r.comment,
       attachment_document_id: r.attachmentDocumentId,
+      attachment_path: r.attachment?.path ?? null,
+      attachment_name: r.attachment?.name ?? null,
+      attachment_mime: r.attachment?.mime ?? null,
       requested_by: r.requestedBy,
       requested_by_user_id: r.requestedByUserId,
       levels: r.levels,

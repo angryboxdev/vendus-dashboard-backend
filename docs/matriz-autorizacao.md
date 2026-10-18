@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 760 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 764 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -327,8 +327,10 @@ Endpoints: 760 · pré-autenticação: 23 · não classificados: 0
 | PATCH | `/api/locations/:id/geofence` | permission:company.locations:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/locations/:id/history` | permission:company.locations:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/me` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| POST | `/api/me/absence-attachments` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/absences` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/absences` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/absences/:id/attachment-url` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/absences/:id/cancel` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/absences/balances` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/absences/types` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
@@ -338,6 +340,7 @@ Endpoints: 760 · pré-autenticação: 23 · não classificados: 0
 | POST | `/api/me/announcements/:id/read` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/approvals` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/approvals/:id/approve` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/approvals/:id/attachment-url` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/approvals/:id/reject` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/clock` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/clock` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
@@ -390,6 +393,7 @@ Endpoints: 760 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/novo-rh/absences/requests` | permission:hr.leave:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/absences/requests` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/absences/requests/:id` | permission:hr.leave:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/absences/requests/:id/attachment-url` | permission:hr.leave:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/absences/requests/:id/cancel` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/absences/types` | permission:hr.leave:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/absences/types` | permission:hr.leave:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |

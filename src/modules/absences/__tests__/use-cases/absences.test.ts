@@ -277,3 +277,81 @@ describe("Fluxo de correções de ponto (FE-113)", () => {
     expect(await uc.correctionLevels(ORG, "e1", "2026-10-10", ["u-emp", "u-boss", "u-admin"])).toBe("no_approver");
   });
 });
+
+describe("Anexo do próprio pedido (Portal — justificar falta)", () => {
+  class FakeStorage {
+    files = new Map<string, Buffer>();
+    async upload(org: string, path: string, bytes: Buffer) {
+      const real = `${org}/${path}`;
+      this.files.set(real, bytes);
+      return real;
+    }
+    async signedUrl(_o: string, path: string) {
+      return `https://signed/${path}`;
+    }
+  }
+  function withStorage() {
+    const repo = new FakeAbsencesRepository();
+    const ctx = new FakeAbsencesContext();
+    const storage = new FakeStorage();
+    const uc = new AbsencesUseCases(repo, ctx, new FakeNotifier(), new FakeAbsencesAudit(), { today: async () => "2026-10-12" }, undefined, storage);
+    return { repo, ctx, storage, uc };
+  }
+  const pdf = (bytes = 10) => ({ name: "Justificação médica (1).pdf", mime: "application/pdf", bytes: Buffer.alloc(bytes, 1) });
+
+  test("carregar: só PDF/imagem até 10 MB, guardado na pasta do colaborador com nome seguro", async () => {
+    const { uc, storage } = withStorage();
+    const a = await uc.uploadMyAttachment(ORG, EMP, pdf());
+    expect(a.path).toMatch(new RegExp(`^${ORG}/absence-attachments/e1/[0-9a-f-]{36}-Justificacao_medica_1_\.pdf$`));
+    expect(storage.files.has(a.path)).toBe(true);
+    await expect(uc.uploadMyAttachment(ORG, EMP, { ...pdf(), mime: "application/x-msdownload" })).rejects.toBeInstanceOf(AbsenceValidationError);
+    await expect(uc.uploadMyAttachment(ORG, EMP, pdf(10 * 1024 * 1024 + 1))).rejects.toThrow("10 MB");
+  });
+
+  test("pedido: aceita o anexo da própria pasta, recusa o de outra pessoa e ignora ids de documento arbitrários", async () => {
+    const { uc } = withStorage();
+    const t = await typeWith(uc, { attachment: "required" });
+    const mine = await uc.uploadMyAttachment(ORG, EMP, pdf());
+    // Sem anexo, o tipo exige; um id de documento qualquer não conta no pedido do próprio.
+    await expect(uc.createRequest(ORG, EMP, req(t.id, { attachmentDocumentId: "doc-de-outra-pessoa" }), "self")).rejects.toMatchObject({ code: "attachment_required" });
+    await expect(uc.createRequest(ORG, EMP, req(t.id, { attachment: { ...mine, path: `${ORG}/absence-attachments/e2/x.pdf` } }), "self")).rejects.toThrow("Anexo inválido");
+    await expect(uc.createRequest(ORG, EMP, req(t.id, { attachment: { ...mine, path: `${ORG}/absence-attachments/e1/../e2/x.pdf` } }), "self")).rejects.toThrow("Anexo inválido");
+    const r = await uc.createRequest(ORG, EMP, req(t.id, { attachment: mine }), "self");
+    expect(r.attachment).toEqual(mine);
+    expect(r.attachmentDocumentId).toBeNull();
+  });
+
+  test("ver: o próprio e quem aprova; outra pessoa não; a vista mostra só nome (mascarado em privadas)", async () => {
+    const { uc, ctx } = withStorage();
+    const t = await typeWith(uc, { attachment: "optional", private: true });
+    const mine = await uc.uploadMyAttachment(ORG, EMP, pdf());
+    const r = await uc.createRequest(ORG, EMP, req(t.id, { attachment: mine }), "self");
+    expect((await uc.attachmentUrl(ORG, EMP, r.id, "owner")).url).toBe(`https://signed/${mine.path}`);
+    const approver = { userId: r.levels[0]!.approvers[0]!, email: "aprovador@demo.invalid" };
+    expect((await uc.attachmentUrl(ORG, approver, r.id, "approver")).name).toBe(mine.name);
+    await expect(uc.attachmentUrl(ORG, RH, r.id, "approver")).rejects.toMatchObject({ code: "not_approver" });
+    ctx.users.set("e2", "u-rh");
+    await expect(uc.attachmentUrl(ORG, RH, r.id, "owner")).rejects.toThrow("Anexo não encontrado");
+    // Na lista de quem não pode ver privadas: só «Anexo», nunca o nome nem o caminho.
+    const v = (await uc.myApprovals(ORG, approver, false))[0]!;
+    expect(v.attachment).toEqual({ name: "Anexo", mime: "application/pdf" });
+    expect(JSON.stringify(v)).not.toContain("absence-attachments");
+  });
+});
+
+describe("Tipo «Folga» do Portal (ticket 05)", () => {
+  test("cria uma vez (tipo FOLGA + fluxo «Chefia direta»), não duplica, e o pedido vai para a chefia direta", async () => {
+    const { uc, repo } = setup();
+    const first = await uc.ensureDayOffType(ORG, ADMIN);
+    expect(first.created).toBe(true);
+    expect(first.type).toMatchObject({ name: "Folga", code: "FOLGA", requiresApproval: true, limitAmount: null, hiddenFromEmployee: false });
+    const again = await uc.ensureDayOffType(ORG, ADMIN);
+    expect(again).toMatchObject({ created: false, type: { id: first.type.id } });
+    expect((await repo.listTypes(ORG)).filter((t) => t.code === "FOLGA")).toHaveLength(1);
+    expect((await repo.listFlows(ORG)).filter((f) => f.name === "Chefia direta")).toHaveLength(1);
+    // e1 tem como chefia u-boss: é quem aprova.
+    const r = await uc.createRequest(ORG, EMP, req(first.type.id), "self");
+    expect(r.status).toBe("pending");
+    expect(r.levels[0]!.approvers).toEqual(["u-boss"]);
+  });
+});
