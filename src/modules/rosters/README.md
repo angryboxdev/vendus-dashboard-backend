@@ -62,6 +62,7 @@ time-base (`plannedDays`) e pede o recálculo da assiduidade a cada publicação
 
 - ADR-0030: versões publicadas; alteração pós-publicação com motivo e publicação imediata; restrições com valores Legal (D6) e severidade aviso por omissão; sobreposição bloqueia (também já em rascunho: criar, alterar e atribuição em massa recusam com 422 se o colaborador já tem turno planeado à mesma hora, em qualquer escala); trocas com aceitação do colega e aprovação da gestão; turnos dos colegas não visíveis no Portal.
 
+- Cor do modelo (2026-10-19): `PUT /api/novo-rh/rosters/templates/:id/color` muda só a cor (hex `#RRGGBB` ou null = automática), auditado; as faixas de um modelo não se editam depois de criado. O frontend usa a paleta da escala.
 ## How to test
 
 - `npx jest --config jest.config.cjs src/modules/rosters`.
