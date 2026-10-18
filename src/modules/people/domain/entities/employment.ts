@@ -44,6 +44,21 @@ export function validateContract(c: ContractInput): void {
 const periodsOverlap = (a: { startDate: string; endDate: string | null }, b: { startDate: string; endDate: string | null }) =>
   (a.endDate === null || b.startDate <= a.endDate) && (b.endDate === null || a.startDate <= b.endDate);
 
+/**
+ * Horas semanais do contrato vigente em `date`, por colaborador (lista de
+ * pessoas: «40h semana»). Só contratos ativos que cobrem o dia; havendo mais
+ * do que um (não devia — TK-9), vale o que começou mais tarde.
+ */
+export function weeklyHoursOn(contracts: Pick<Contract, "employeeId" | "startDate" | "endDate" | "weeklyHours" | "status">[], date: string): Map<string, number | null> {
+  const best = new Map<string, { startDate: string; weeklyHours: number | null }>();
+  for (const c of contracts) {
+    if (c.status !== "active" || c.startDate > date || (c.endDate !== null && c.endDate < date)) continue;
+    const prev = best.get(c.employeeId);
+    if (!prev || c.startDate > prev.startDate) best.set(c.employeeId, { startDate: c.startDate, weeklyHours: c.weeklyHours });
+  }
+  return new Map([...best].map(([id, v]) => [id, v.weeklyHours]));
+}
+
 /** TK-9: contratos ativos do mesmo colaborador não se sobrepõem. */
 export function contractOverlaps(existing: Contract[], next: { startDate: string; endDate: string | null }, ignoreId?: string): Contract | null {
   return existing.find((c) => c.status === "active" && c.id !== ignoreId && periodsOverlap(c, next)) ?? null;

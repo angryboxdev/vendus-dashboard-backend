@@ -49,7 +49,7 @@ chegam num `Viewer` montado pelo `server.ts` a partir do módulo access.
 
 ### Output (domain dependencies)
 
-- `PeopleRepositoryPort`, `PeopleAccountPort` (desativar conta ligada), `PeopleAuditPort`, `PeopleClockPort`.
+- `PeopleRepositoryPort` (inclui `listContractsStartedBy` — contratos ativos já iniciados, de todos, para as horas semanais da lista), `PeopleAccountPort` (desativar conta ligada), `PeopleAuditPort`, `PeopleClockPort`.
 - `PeoplePhotoPort` — URLs de leitura das fotos (`photo_storage_path`), um pedido por lista; opcional (sem ele, `photoUrl` é null).
 
 ## Adapters
@@ -69,6 +69,7 @@ chegam num `Viewer` montado pelo `server.ts` a partir do módulo access.
 - NIF obrigatório só nas escritas do Novo RH (não parte o RH atual); índice único parcial na BD.
 - Contratos: sobreposição recusada na aplicação (409) e por trigger na BD.
 - Foto: a lista e a ficha devolvem `photoUrl` (assinado, curta duração), nunca o caminho guardado; uma foto que falhe a assinar fica só sem foto (a lista não parte). O carregamento da foto continua no RH atual.
+- Lista com `weeklyHours` (2026-10-18): horas semanais do contrato vigente hoje, numa leitura (`listContractsStartedBy`) + escolha pura `weeklyHoursOn` (ativo, já iniciado, não terminado; o mais recente) — sem pedido por pessoa. Só na lista; os contratos não têm privacidade por campo (quem vê a pessoa vê o contrato). As horas de hoje e o horário do dia vêm de `GET /novo-rh/overview` (mesma fonte da Visão geral), não deste módulo.
 
 ## How to test
 

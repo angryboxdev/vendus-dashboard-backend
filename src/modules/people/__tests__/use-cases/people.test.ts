@@ -3,6 +3,7 @@ import { EmploymentUseCases } from "../../application/use-cases/employment.use-c
 import { PeopleUseCases } from "../../application/use-cases/people.use-cases.js";
 import { PeopleConflictError, PeopleForbiddenError, PeopleNotFoundError, PeopleRuleViolation, PeopleValidationError } from "../../domain/errors.js";
 import { parseCsv } from "../../domain/services/csv.js";
+import { weeklyHoursOn } from "../../domain/entities/employment.js";
 import { FakePeopleRepo, viewer } from "../fakes/fake-people.js";
 
 const ORG = mintOrganizationId("org-test");
@@ -162,6 +163,26 @@ describe("Contratos, responsáveis, remuneração e campos personalizados", () =
     await expect(employment.updateContract(ORG, ADMIN, "e1", c1.id, { ...C, endDate: "2026-05-31" }, 1, " ")).rejects.toThrow("motivo");
     await employment.cancelContract(ORG, ADMIN, "e1", c1.id, 1, "Erro de registo");
     await expect(employment.createContract(ORG, ADMIN, "e1", { ...C, startDate: "2026-02-01", endDate: "2026-06-30" })).resolves.toBeDefined();
+  });
+
+  test("lista traz as horas semanais do contrato vigente hoje (uma leitura para todos)", async () => {
+    const { employment, people, repo } = setup(); // hoje = 2026-10-11
+    repo.seed({ id: "e1", firstName: "Ana", lastName: "A" });
+    repo.seed({ id: "e2", firstName: "Bia", lastName: "B" });
+    repo.seed({ id: "e3", firstName: "Cid", lastName: "C" });
+    // e1: contrato antigo (20h) terminado e o atual (40h).
+    await employment.createContract(ORG, ADMIN, "e1", { ...C, weeklyHours: 20, endDate: "2026-06-30" });
+    await employment.createContract(ORG, ADMIN, "e1", { ...C, startDate: "2026-07-01", weeklyHours: 40 });
+    // e2: só um contrato futuro → sem horas hoje; e3: sem contrato.
+    await employment.createContract(ORG, ADMIN, "e2", { ...C, startDate: "2026-11-01", weeklyHours: 30 });
+    const list = await people.list(ORG, ADMIN, {});
+    expect(Object.fromEntries(list.map((e) => [e.id, e.weeklyHours]))).toEqual({ e1: 40, e2: null, e3: null });
+  });
+
+  test("weeklyHoursOn: ignora anulados e terminados; vale o mais recente", () => {
+    const c = (employeeId: string, startDate: string, endDate: string | null, weeklyHours: number | null, status: "active" | "cancelled" = "active") => ({ employeeId, startDate, endDate, weeklyHours, status });
+    const m = weeklyHoursOn([c("a", "2026-01-01", null, 40, "cancelled"), c("a", "2026-01-01", "2026-12-31", 35), c("b", "2026-01-01", "2026-10-10", 40), c("c", "2026-01-01", null, null)], "2026-10-11");
+    expect([...m]).toEqual([["a", 35], ["c", null]]);
   });
 
   test("CF_14_complemento_numa_moeda_diferente_e_recusado", async () => {
