@@ -22,6 +22,9 @@ const EV = "id, employee_id, occurred_at, segment_type, source, client_event_id,
 const CT = "id, name, color, remote, remuneration, hybrid_paid_minutes, max_minutes_per_day, blocked_weekdays, blocked_hours, archived, version";
 const BT = "id, name, color, remuneration, hybrid_paid_minutes, max_minutes, window_start, window_end, max_uses_per_day, weekdays, archived, version";
 const REV = "id, employee_id, operation, target_event_id, occurred_at, segment_type, anchor_at, reason, author, state, refusable_until, created_at";
+/** Em lote: ids por pedido (URL curto) e linhas por página (abaixo do max-rows do PostgREST). */
+const ID_CHUNK = 100;
+const PAGE = 1000;
 const COR = "id, employee_id, requested_by, operation, target_event_id, occurred_at, segment_type, reason, status, decided_by, decided_at, decision_comment, revision_id, created_at, levels, current_level";
 const DAY = "employee_id, work_date, version, worked_seconds, break_seconds, night_seconds, theoretical_seconds, excess_seconds, pending_seconds, config_hash, calculated_at";
 const ADJ = "id, employee_id, work_date, from_version, to_version, delta_excess_seconds, reason, created_at";
@@ -223,6 +226,37 @@ export class SupabaseAttendanceRepository implements AttendanceRepositoryPort {
   async listEvents(org: OrganizationId, employeeId: string, fromUtc: string, toUtc: string) {
     const q = this.scoped(org).table("clock_events").select(EV).eq("employee_id", employeeId).gte("occurred_at", fromUtc).lt("occurred_at", toUtc);
     return check<Row[]>(await q.order("occurred_at")).map(toEvent);
+  }
+
+  // ── Em lote (Visão geral) ─────────────────────────────────────────────
+  // Grupos de ids (URL curto) e páginas de PAGE linhas até esgotar: o PostgREST
+  // corta respostas grandes (max-rows) sem erro — nunca confiar numa só página.
+  private async manyPaged(employeeIds: string[], run: (ids: string[], fromRow: number, toRow: number) => PromiseLike<Res>): Promise<Row[]> {
+    const out: Row[] = [];
+    for (let i = 0; i < employeeIds.length; i += ID_CHUNK) {
+      const ids = employeeIds.slice(i, i + ID_CHUNK);
+      for (let page = 0; ; page++) {
+        const rows = check<Row[]>(await run(ids, page * PAGE, page * PAGE + PAGE - 1));
+        out.push(...rows);
+        if (rows.length < PAGE) break;
+      }
+    }
+    return out;
+  }
+  async listEventsMany(org: OrganizationId, employeeIds: string[], fromUtc: string, toUtc: string) {
+    if (!employeeIds.length) return [];
+    const rows = await this.manyPaged(employeeIds, (ids, a, b) => this.scoped(org).table("clock_events").select(EV).in("employee_id", ids).gte("occurred_at", fromUtc).lt("occurred_at", toUtc).order("occurred_at").order("id").range(a, b));
+    return rows.map(toEvent).sort((x, y) => x.occurredAt.localeCompare(y.occurredAt));
+  }
+  async listRevisionsMany(org: OrganizationId, employeeIds: string[], fromUtc: string, toUtc: string) {
+    if (!employeeIds.length) return [];
+    const rows = await this.manyPaged(employeeIds, (ids, a, b) => this.scoped(org).table("clock_revisions").select(REV).in("employee_id", ids).gte("anchor_at", fromUtc).lt("anchor_at", toUtc).order("created_at").order("id").range(a, b));
+    return rows.map(toRevision).sort((x, y) => x.createdAt.localeCompare(y.createdAt));
+  }
+  async listIncidentsMany(org: OrganizationId, employeeIds: string[], from: string, to: string) {
+    if (!employeeIds.length) return [];
+    const rows = await this.manyPaged(employeeIds, (ids, a, b) => this.scoped(org).table("attendance_incidents").select(INC).in("employee_id", ids).gte("work_date", from).lte("work_date", to).order("work_date").order("id").range(a, b));
+    return rows.map(toIncident);
   }
 
   async listEventsSince(org: OrganizationId, sinceUtc: string) {

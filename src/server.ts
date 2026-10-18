@@ -1122,6 +1122,11 @@ const overviewModule = createOverviewModule({
       const b = await attendanceModule.attendance.board(org, employeeId, from, to);
       return { timeZone: b.timeZone, days: b.days };
     },
+    // Em lote: marcações, revisões e incidentes de todos numa leitura (perf da Visão geral).
+    daysMany: async (org, employeeIds, from, to, concurrency) => {
+      const all = await attendanceModule.attendance.boardMany(org, employeeIds, from, to, concurrency);
+      return new Map([...all].map(([id, b]) => [id, { timeZone: b.timeZone, days: b.days }]));
+    },
     absences: async (org, from, to, canPrivate) =>
       (await absencesModule.absences.listRequests(org, { status: "approved", from, to }, canPrivate, "sistema")).map((r) => ({ employeeId: r.employeeId, typeName: r.typeName, category: r.typeCategory, startDate: r.startDate, endDate: r.endDate })),
     pending: async (org) => {

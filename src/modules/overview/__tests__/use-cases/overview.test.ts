@@ -114,3 +114,29 @@ describe("Painel do Novo RH", () => {
     await expect(uc.plan(ORG, all, "2026-10-14", "2026-10-13")).rejects.toThrow("depois do início");
   });
 });
+
+describe("Painel — leituras em lote (perf)", () => {
+  test("com daysMany usa o lote (uma chamada) e o resultado é igual ao de days por pessoa", async () => {
+    const a = setup();
+    const perPerson = await a.uc.today(ORG, all);
+    const b = setup();
+    let manyCalls = 0;
+    b.sources.daysMany = async (org, ids, from, to) => {
+      manyCalls++;
+      return new Map(await Promise.all(ids.map(async (id) => [id, await b.sources.days(org, id, from, to)] as const)));
+    };
+    const batched = await b.uc.today(ORG, all);
+    expect(manyCalls).toBe(1);
+    expect({ ...batched, generatedAt: null }).toEqual({ ...perPerson, generatedAt: null });
+  });
+
+  test("âmbito verificado em paralelo mantém a ordem e o filtro", async () => {
+    const { uc } = setup();
+    // canSee lento e fora de ordem: o resultado continua ordenado e sem quem não se vê.
+    const viewer = { canSee: (id: string) => new Promise<boolean>((r) => setTimeout(() => r(id !== "e-rui"), id === "e-ana" ? 20 : 1)), canPrivate: false };
+    const o = await uc.today(ORG, viewer);
+    const ref = await setup().uc.today(ORG, { canSee: async (id) => id !== "e-rui", canPrivate: false });
+    expect(o.people.map((p) => p.employeeId)).toEqual(ref.people.map((p) => p.employeeId));
+    expect(o.people.some((p) => p.employeeId === "e-rui")).toBe(false);
+  });
+});
