@@ -318,3 +318,16 @@ describe("Portal — colegas do turno (Novo RH)", () => {
     await expect(uc.myShiftCoworkers(ORG, E1, other.id)).rejects.toThrow("Turno não encontrado");
   });
 });
+
+describe("Cor do modelo de turno", () => {
+  test("muda só a cor (validada), fica na lista e vai para a auditoria; null = automática", async () => {
+    const { uc } = setup();
+    const { tarde } = await rosterWithTemplates(uc);
+    const out = await uc.setTemplateColor(ORG, BOSS, tarde.id, "#96BAE4");
+    expect(out).toMatchObject({ id: tarde.id, color: "#96BAE4", segments: tarde.segments });
+    expect((await uc.listTemplates(ORG)).find((t) => t.id === tarde.id)?.color).toBe("#96BAE4");
+    await expect(uc.setTemplateColor(ORG, BOSS, tarde.id, "azul")).rejects.toThrow("Cor inválida");
+    expect((await uc.setTemplateColor(ORG, BOSS, tarde.id, null)).color).toBeNull();
+    await expect(uc.setTemplateColor(ORG, BOSS, "nao-existe", "#96BAE4")).rejects.toThrow("Modelo não encontrado");
+  });
+});

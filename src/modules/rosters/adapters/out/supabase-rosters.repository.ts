@@ -73,6 +73,9 @@ export class SupabaseRostersRepository implements RostersRepositoryPort {
     const row = { name: t.name, abbreviation: t.abbreviation, color: t.color, on_call: t.onCall, segments: t.segments, created_by: by };
     return toTpl(check(await this.scoped(org).table("roster_shift_templates").insert(row).select(TPL).single()));
   }
+  async setTemplateColor(org: OrganizationId, id: string, color: string | null) {
+    return toTpl(check(await this.scoped(org).table("roster_shift_templates").update({ color }).eq("id", id).select(TPL).single()));
+  }
   async archiveTemplate(org: OrganizationId, id: string) {
     check(await this.scoped(org).table("roster_shift_templates").update({ archived: true }).eq("id", id));
   }

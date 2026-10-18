@@ -21,6 +21,11 @@ export class FakeRostersRepository implements RostersRepositoryPort {
     this.templates.push(row);
     return row;
   }
+  async setTemplateColor(_o: OrganizationId, id: string, color: string | null) {
+    const t = this.templates.find((x) => x.id === id)!;
+    t.color = color;
+    return { ...t };
+  }
   async archiveTemplate(_o: OrganizationId, id: string) {
     this.templates.find((t) => t.id === id)!.archived = true;
   }

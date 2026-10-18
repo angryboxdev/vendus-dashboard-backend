@@ -6,6 +6,8 @@ export interface RostersRepositoryPort {
   listTemplates(org: OrganizationId): Promise<ShiftTemplate[]>;
   createTemplate(org: OrganizationId, t: ShiftTemplateInput, by: string): Promise<ShiftTemplate>;
   archiveTemplate(org: OrganizationId, id: string): Promise<void>;
+  /** Só a cor (a mesma na escala); as faixas de um modelo não mudam depois de criado. */
+  setTemplateColor(org: OrganizationId, id: string, color: string | null): Promise<ShiftTemplate>;
 
   listRosters(org: OrganizationId): Promise<Roster[]>;
   createRoster(org: OrganizationId, r: Pick<Roster, "name" | "targetType" | "targetId">, by: string): Promise<Roster>;

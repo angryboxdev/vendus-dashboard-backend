@@ -52,6 +52,7 @@ export function createRostersRouter(uc: RostersUseCases, store: IdempotencyStore
     const b = body(req);
     res.status(201).json(await run(() => uc.createTemplate(org(req), actorOf(req), { name: s(b.name), abbreviation: s(b.abbreviation), color: optS(b.color), onCall: b.onCall === true, segments: segs(b.segments) })));
   });
+  r.put(`${R}/templates/:id/color`, async (req, res) => res.json(await run(() => uc.setTemplateColor(org(req), actorOf(req), id(req), optS(body(req).color)))));
   r.post(`${R}/templates/:id/archive`, async (req, res) => {
     await run(() => uc.archiveTemplate(org(req), actorOf(req), id(req)));
     res.status(204).end();

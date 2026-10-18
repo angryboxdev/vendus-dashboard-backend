@@ -56,6 +56,16 @@ export class RostersUseCases {
     return t;
   }
 
+  /** Muda só a cor do modelo (a escala pinta os turnos com ela); null = cor automática. */
+  async setTemplateColor(org: OrganizationId, actor: Actor, id: string, color: string | null) {
+    const before = (await this.repo.listTemplates(org)).find((t) => t.id === id && !t.archived);
+    if (!before) throw new RosterNotFoundError("Modelo não encontrado.");
+    validateTemplate({ ...before, color });
+    const after = await this.repo.setTemplateColor(org, id, color);
+    await this.log(org, actor.email, "rosters.template.color", "roster_shift_template", id, { color: before.color }, { color });
+    return after;
+  }
+
   async archiveTemplate(org: OrganizationId, actor: Actor, id: string) {
     if (!(await this.repo.listTemplates(org)).some((t) => t.id === id && !t.archived)) throw new RosterNotFoundError("Modelo não encontrado.");
     await this.repo.archiveTemplate(org, id);
