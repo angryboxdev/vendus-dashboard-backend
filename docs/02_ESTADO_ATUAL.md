@@ -20,18 +20,19 @@ Task completa: `.scratch/financeiro-stock-v1-2/task-mestre-v1.2.md` (F1–F4, um
 **Frontend — ramo `financeiro`** (detalhe e onde continuar: [04_FRONTEND.md](04_FRONTEND.md)):
 - Commitado e enviado (`59a5213`): tipos/clientes HTTP da F2; `SupplierDrawer` + `SupplierLocationRulesPanel`; `allocations-draft.ts`.
 - Commitado (`bb400e7`, não enviado): passo 1 — revisão de fatura (3 modos, `AllocationsEditor`, linhas sempre enviadas, sem seletor «Tipo», `SendToStockField`, «Guardar rascunho», edição «Por valores»).
-- Feito, **por commitar** (2026-10-18): passo 2 — `InvoicesView` (reabrir rascunho com linhas/repartições/`storedAmounts`, `PayablesSummaryBar` «Total a pagar | Em atraso», detalhe sem apagar linhas ao mudar para «Única» e repartições «Por valores» no separador Linhas). Typecheck, 619 testes e build a passar.
-- Por fazer: passos 3–4 de 04_FRONTEND (`CostCentersView`, README de `financial-base`, relatório da F2).
+- Commitado (`73e8f4d`, não enviado): passo 2 — `InvoicesView` (reabrir rascunho, «Total a pagar | Em atraso», detalhe «Por valores»).
+- Passos 3–4 (2026-10-18): Centros de Custo «Aplicação em Faturas» soma linhas «Por artigo» + repartições «Por valores» pelo **líquido** (antes: bruto antes de descontos); READMEs de `invoices` e `financial-base`. Typecheck, 622 testes e build a passar.
+- **Código da F2 concluído nos dois repositórios.** Falta: validação no browser (depende das migrações) e aprovação para push/PR/merge/deploy.
 
 ## Última tarefa concluída
-Frontend F2 · passo 2 — `InvoicesView` (2026-10-18), por commitar.
+F2 completa em código (frontend passos 1–4), 2026-10-18 — relatório da F2 entregue ao utilizador.
 
 ## Próxima tarefa
-Frontend F2 · passo 3 (`CostCentersView` → `Tab3Aplicacao` soma `listInvoiceAllocations()` às linhas) → passo 4 → relatório da F2 → aguardar autorização para push/PR/merge/deploy, aplicação das migrações F2 e início da F3.
+Aguardar autorização do utilizador, por esta ordem: (1) push dos ramos `financeiro` e PRs (backend + frontend); (2) merge do backend → Render aplica as migrações `20261031100000` e `20261031110000` → `GET /api/health`; (3) merge do frontend; (4) validação no browser (checklist do relatório da F2); (5) início da F3.
 
 ## Alterações por guardar (2026-10-18) — não descartar
-- Frontend `financeiro`: passo 2 por commitar; `bb400e7` (passo 1) commitado mas não enviado. Só existe nesta máquina.
-- Backend `financeiro`: `fb0ce97` (docs) não enviado; esta atualização de `docs/` por commitar.
+- Frontend `financeiro`: 3 commits da F2 não enviados (`bb400e7`, `73e8f4d`, `81469eb`). Só existem nesta máquina.
+- Backend `financeiro`: commits de docs não enviados.
 
 ## Pendências operacionais (produção)
 - Correr `POST /api/fiscal-documents/backfill` com `{ "dryRun": true }` e rever (precisa de sessão de gestor).
