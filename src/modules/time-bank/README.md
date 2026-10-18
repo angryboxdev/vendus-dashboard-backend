@@ -61,6 +61,7 @@ totais) e os parâmetros `time_tracking.bank.*` do settings.
 ## Design decisions (ADR summary)
 
 - ADR-0029 (D11): ledger append-only; ajustes datados de hoje; mês vencido por omissão; sem limites nem expiração por omissão; parâmetros por dia (CF-6).
+- Idempotência da sincronização (2026-10-18, migração `20261101100000_time_bank_sync_key`): abrir o banco de horas (`GET`) também sincroniza, por isso duas aberturas simultâneas podiam lançar a mesma correção ou expiração duas vezes. Os movimentos calculados pela sincronização levam `sync_key` determinística — ajuste: `adj:<dia>:<nº de movimentos do dia>:<soma>` (o estado que o originou); expiração: `exp:<hoje>` — com índice único parcial `time_bank_sync_key_uq`; a 2.ª gravação com a mesma chave é recusada (23505) e ignorada. Um estado novo gera chave nova. Movimentos manuais e anteriores ficam com `sync_key` nulo. No frontend, «Sincronizar» também fica desativado durante a abertura.
 - Ninguém compensa, ajusta ou valida o seu próprio banco.
 
 ## How to test

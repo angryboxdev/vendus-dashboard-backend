@@ -48,9 +48,9 @@ export class SupabaseTimeBankRepository implements TimeBankRepositoryPort {
 
   async insertEntries(org: OrganizationId, entries: NewEntry[]) {
     const out: TimeBankEntry[] = [];
-    // Um a um: um movimento diário repetido (corrida entre duas sincronizações) é ignorado.
+    // Um a um: um movimento diário ou com a mesma chave de sincronização (corrida entre duas sincronizações) é ignorado.
     for (const e of entries) {
-      const row = { employee_id: e.employeeId, kind: e.kind, seconds: e.seconds, work_date: e.workDate, posted_on: e.postedOn, payment_month: e.paymentMonth, reason: e.reason, created_by: e.createdBy };
+      const row = { employee_id: e.employeeId, kind: e.kind, seconds: e.seconds, work_date: e.workDate, posted_on: e.postedOn, payment_month: e.paymentMonth, reason: e.reason, created_by: e.createdBy, sync_key: e.syncKey ?? null };
       const res = (await this.scoped(org).table("time_bank_entries").insert(row).select(ENT).single()) as Res;
       if (res.error?.code === "23505") continue;
       out.push(toEntry(check(res)));

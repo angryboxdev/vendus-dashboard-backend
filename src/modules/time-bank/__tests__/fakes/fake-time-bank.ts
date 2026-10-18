@@ -11,6 +11,7 @@ export class FakeTimeBankRepository implements TimeBankRepositoryPort {
   entries: TimeBankEntry[] = [];
   validations: Validation[] = [];
   categories: HourCategory[] = [];
+  private readonly syncKeys = new Set<string>();
   private clock = 0;
 
   async listEntries(_o: OrganizationId, employeeId: string) {
@@ -20,6 +21,9 @@ export class FakeTimeBankRepository implements TimeBankRepositoryPort {
     const out: TimeBankEntry[] = [];
     for (const e of entries) {
       if (DAILY_KINDS.includes(e.kind) && this.entries.some((x) => x.employeeId === e.employeeId && x.workDate === e.workDate && x.kind === e.kind)) continue;
+      // Como o índice time_bank_sync_key_uq: a mesma chave de sincronização só grava uma vez.
+      if (e.syncKey && this.syncKeys.has(`${e.employeeId}|${e.syncKey}`)) continue;
+      if (e.syncKey) this.syncKeys.add(`${e.employeeId}|${e.syncKey}`);
       const row = { ...e, id: nextId(), createdAt: new Date(Date.UTC(2026, 0, 1) + ++this.clock * 1000).toISOString() };
       this.entries.push(row);
       out.push({ ...row });

@@ -99,6 +99,28 @@ describe("Banco de horas — casos de uso", () => {
     expect((await uc.sync(ORG, "e1", "sistema")).posted).toBe(0);
   });
 
+  test("duas sincronizações simultâneas não duplicam a correção nem a expiração (sync_key)", async () => {
+    const { uc, ctx, repo } = setup();
+    ctx.excess.set("2026-09-15", 3600);
+    await uc.sync(ORG, "e1", "sistema");
+    ctx.excess.set("2026-09-15", 1800); // marcação corrigida
+    // As duas leem o mesmo estado antes de qualquer uma gravar (corrida real: dois GET ao banco de horas).
+    const snapshot = repo.entries.map((e) => ({ ...e }));
+    const list = repo.listEntries.bind(repo);
+    repo.listEntries = async () => snapshot.map((e) => ({ ...e }));
+    const [a, b] = await Promise.all([uc.sync(ORG, "e1", "sistema"), uc.sync(ORG, "e1", "sistema")]);
+    repo.listEntries = list;
+    const adjustments = repo.entries.filter((e) => e.kind === "adjustment");
+    expect(adjustments).toHaveLength(1);
+    expect(adjustments[0]).toMatchObject({ seconds: -1800 });
+    expect(a.posted + b.posted).toBe(1);
+    // Saldo do dia continua a bater com o motor (1800), não 0.
+    expect(repo.entries.filter((e) => e.workDate === "2026-09-15").reduce((s, e) => s + e.seconds, 0)).toBe(1800);
+    // Uma correção seguinte (novo estado) gera nova chave e é lançada.
+    ctx.excess.set("2026-09-15", 900);
+    expect((await uc.sync(ORG, "e1", "sistema")).posted).toBe(1);
+  });
+
   test("CF_6_validacao_ligada_a_01_11_nao_altera_outubro", async () => {
     const { uc, ctx, repo } = setup();
     ctx.today_ = "2026-12-05";
