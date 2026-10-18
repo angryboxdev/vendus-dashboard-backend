@@ -450,8 +450,7 @@ export class AbsencesUseCases {
   // ── Efeito na assiduidade (CF-7) ────────────────────────────────────
   /** Por dia: minutos a tirar ao teórico, a somar ao trabalhado, e se o dia está justificado. */
   async dayEffects(org: OrganizationId, employeeId: string, from: string, to: string, theoretical: Map<string, number>): Promise<Map<string, DayEffect>> {
-    // Só os pedidos que tocam o período (antes lia o histórico todo da pessoa e filtrava aqui).
-    const [requests, types] = await Promise.all([this.repo.listRequests(org, { employeeId, status: "approved", from, to }), this.repo.listTypes(org)]);
+    const [requests, types] = await Promise.all([this.repo.listRequests(org, { employeeId, status: "approved" }), this.repo.listTypes(org)]);
     const out = new Map<string, DayEffect>();
     for (const r of requests) {
       if (r.kind !== "absence" || r.endDate < from || r.startDate > to) continue;

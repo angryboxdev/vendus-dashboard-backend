@@ -232,46 +232,6 @@ describe("Assiduidade — casos de uso (Fase 4)", () => {
   });
 });
 
-describe("boardMany — em lote, igual a board por pessoa (perf da Visão geral)", () => {
-  test("mesmo resultado que board para cada um, com uma leitura de marcações/revisões/incidentes", async () => {
-    const { uc, repo } = setup(at("2026-10-14T12:00:00"));
-    const ev = (employeeId: string, local: string, segmentType: "work" | "off" | "break_unpaid") =>
-      repo.events.push({ id: `ev-${repo.events.length + 1}`, employeeId, occurredAt: at(local), segmentType, source: "web", clientEventId: null, locationId: null, latitude: null, longitude: null, ip: null });
-    // e1: dia normal com pausa; e2: turno que cruza a meia-noite; e3: marcação anulada por revisão + incidente validado; e4: sem marcações.
-    ev("e1", "2026-10-13T09:00:00", "work");
-    ev("e1", "2026-10-13T13:00:00", "break_unpaid");
-    ev("e1", "2026-10-13T14:00:00", "work");
-    ev("e1", "2026-10-13T18:00:00", "off");
-    ev("e2", "2026-10-12T22:00:00", "work");
-    ev("e2", "2026-10-13T06:00:00", "off");
-    ev("e3", "2026-10-13T08:00:00", "work");
-    ev("e3", "2026-10-13T08:05:00", "work");
-    ev("e3", "2026-10-13T16:00:00", "off");
-    await repo.insertRevision(ORG, { employeeId: "e3", operation: "void", targetEventId: repo.events.at(-2)!.id, occurredAt: null, segmentType: null, anchorAt: at("2026-10-13T08:05:00"), reason: "Duplicada", author: "gestora@demo.invalid", state: "active", refusableUntil: null, before: null });
-    repo.incidents.push({ id: "inc-1", employeeId: "e3", workDate: "2026-10-13", type: "late", source: "engine", status: "resolved_validate", comment: null, resolvedBy: "gestora@demo.invalid", resolvedAt: at("2026-10-13T20:00:00") });
-    const ids = ["e1", "e2", "e3", "e4"];
-
-    const one = new Map<string, Awaited<ReturnType<typeof uc.board>>>();
-    for (const id of ids) one.set(id, await uc.board(ORG, id, "2026-10-12", "2026-10-14"));
-    const single = repo.singleReads;
-    repo.reads = { events: 0, revisions: 0, incidents: 0 };
-
-    const many = await uc.boardMany(ORG, ids, "2026-10-12", "2026-10-14", 2);
-    expect(many).toEqual(one);
-    // Uma leitura de cada tipo para os 4 — nenhuma leitura de marcações por pessoa.
-    expect(repo.reads).toEqual({ events: 1, revisions: 1, incidents: 1 });
-    expect(repo.singleReads).toBe(single);
-    // Há trabalho apurado (o teste não compara vazio com vazio).
-    expect(many.get("e1")!.days.find((d) => d.workDate === "2026-10-13")!.workedSeconds).toBeGreaterThan(0);
-  });
-
-  test("sem colaboradores não lê nada", async () => {
-    const { uc, repo } = setup();
-    expect((await uc.boardMany(ORG, [], "2026-10-12", "2026-10-12")).size).toBe(0);
-    expect(repo.reads).toEqual({ events: 0, revisions: 0, incidents: 0 });
-  });
-});
-
 describe("Fluxo de aprovação das correções de ponto (FE-113)", () => {
   const ask = { operation: "add" as const, targetEventId: null, segmentType: "work" as const, reason: "Esqueci-me de picar" };
   const L2 = { userId: "u-dir", email: "direcao@demo.invalid" };

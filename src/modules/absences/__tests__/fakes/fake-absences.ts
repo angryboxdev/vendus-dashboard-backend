@@ -59,8 +59,8 @@ export class FakeAbsencesRepository implements AbsencesRepositoryPort {
     const r = this.requests.find((x) => x.id === id);
     return r ? { ...r } : null;
   }
-  async listRequests(_o: OrganizationId, f: { status?: RequestStatus; employeeId?: string; from?: string; to?: string }) {
-    return this.requests.filter((r) => (!f.status || r.status === f.status) && (!f.employeeId || r.employeeId === f.employeeId) && (!f.from || r.endDate >= f.from) && (!f.to || r.startDate <= f.to)).map((r) => ({ ...r }));
+  async listRequests(_o: OrganizationId, f: { status?: RequestStatus; employeeId?: string }) {
+    return this.requests.filter((r) => (!f.status || r.status === f.status) && (!f.employeeId || r.employeeId === f.employeeId)).map((r) => ({ ...r }));
   }
   async updateRequest(_o: OrganizationId, id: string, expected: { status: RequestStatus; currentLevel: number }, patch: Partial<AbsenceRequest>) {
     const r = this.requests.find((x) => x.id === id);

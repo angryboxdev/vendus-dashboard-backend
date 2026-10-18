@@ -69,8 +69,6 @@ RE-6) com ausências aprovadas, pendentes e feriados.
 
 ## Design decisions (ADR summary)
 
-- **Leituras em lote** (2026-10-18): a fonte opcional `daysMany` (ligada a `attendance.boardMany` em `server.ts`) substitui `days` por pessoa em `build` (hoje/semana) e `plan`; sem ela, cai em `days`. A verificação de âmbito (`canSee`) corre em paralelo (`mapLimit`), mantendo a ordem — antes era uma pessoa de cada vez.
-
 - Cada pessoa traz também `absenceCategory` (ex.: `vacation`) quando a ausência é visível — o Dashboard executivo usa-a para separar Férias de Ausentes (ADR-0036).
 
 - Cache de 30 s por organização/dia no servidor: o apuramento custa vários pedidos por pessoa; 6 pessoas em paralelo.
