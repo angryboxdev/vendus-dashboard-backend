@@ -10,27 +10,27 @@ Atualizado: 2026-10-18 (verificado contra o repositório e os ramos). Detalhe po
 ## Em desenvolvimento — F2 da task Financeiro/Stock v1.2
 Task completa: `.scratch/financeiro-stock-v1-2/task-mestre-v1.2.md` (F1–F4, uma fase de cada vez). Nota de passagem: `.scratch/financeiro-stock-v1-2/F2-estado.md`.
 
-**Backend — ramo `financeiro`, 8 commits locais à frente de `origin/financeiro` (não enviados, não integrados):**
+**Backend — ramo `financeiro` (enviado para `origin/financeiro`; não integrado em `main`):**
 - §2.1 ficha do fornecedor (modo preferido, destino habitual, «Decidir no documento», exceções por loja) e sugestão/validação «Enviar para Stock».
 - §2.2 modos «Única | Por artigo | Por valores», repartições, «Guardar rascunho», reabrir rascunho com valores gravados.
 - §2.3 `GET /api/invoices/payables-summary` (Total a pagar | Em atraso).
 - Migrações novas (não aplicadas): `20261031100000_supplier_routing_preferences`, `20261031110000_invoice_financial_modes` — validadas em PGlite.
-- Testes unitários a passar (≈3140), `lint:deps` limpo, matriz 758 rotas / 0 não classificadas. `docs/matriz-autorizacao.md` tem uma alteração por commitar (regenerada).
+- Testes unitários a passar (≈3140), `lint:deps` limpo, matriz 758 rotas / 0 não classificadas.
 
-**Frontend — ramo `financeiro`, alterações por commitar** (lista exata, caminhos e linhas onde continuar: [04_FRONTEND.md](04_FRONTEND.md); o único commit «à frente» do upstream é o merge `4d83bbd`, já em `origin/main`):
-- Feito: tipos/clientes HTTP da F2; `SupplierDrawer` (novos campos) + `SupplierLocationRulesPanel`; serviço `allocations-draft.ts` (+6 testes).
-- Por fazer: revisão de fatura (seletor de 3 modos, editor «Por valores» com «Por distribuir»/«Propor a partir das linhas», linhas sempre enviadas, remover seletor «Tipo», checkbox «Enviar para Stock» com motivo, «Guardar rascunho»); reabrir rascunho em `InvoicesView` (`handleRowReview` usa `extractedLines: []`); barra «Total a pagar | Em atraso» na lista de Faturas; repartições na vista de Centros de Custo; testes, typecheck (`tsc -p tsconfig.app.json`), build, READMEs.
+**Frontend — ramo `financeiro`** (detalhe e onde continuar: [04_FRONTEND.md](04_FRONTEND.md)):
+- Commitado e enviado (`59a5213`): tipos/clientes HTTP da F2; `SupplierDrawer` + `SupplierLocationRulesPanel`; `allocations-draft.ts`.
+- Feito, **por commitar** (2026-10-18): revisão de fatura — passo 1 de 04_FRONTEND (3 modos, `AllocationsEditor`, linhas sempre enviadas, sem seletor «Tipo», `SendToStockField`, «Guardar rascunho», edição «Por valores»). Typecheck, 609 testes e build a passar.
+- Por fazer: passos 2–4 de 04_FRONTEND (`InvoicesView`, `CostCentersView`, README de `financial-base`).
 
 ## Última tarefa concluída
-Backend da F2 (commit `2c4bffc`, detalhe devolve `storedAmounts`).
+Frontend F2 · passo 1 — revisão de fatura (`ReviewImportedInvoiceDrawer` + peças novas), 2026-10-18, por commitar.
 
 ## Próxima tarefa
-Concluir o frontend da F2 → testar/validar → relatório da F2 → aguardar autorização do utilizador para push/PR/merge/deploy e para iniciar a F3.
+Frontend F2 · passo 2 (`InvoicesView`: reabrir rascunho com linhas/repartições/`storedAmounts`, «Total a pagar | Em atraso», texto do modal de modo) → passos 3–4 → relatório da F2 → aguardar autorização para push/PR/merge/deploy, aplicação das migrações F2 e início da F3.
 
 ## Alterações por guardar (2026-10-18) — não descartar
-- Backend `financeiro`: 8 commits locais não enviados; por commitar: `CLAUDE.md`, `docs/matriz-autorizacao.md` (regenerada), `docs/0*.md`, `docs/modulos/` (consolidação de contexto).
-- Frontend `financeiro`: 7 ficheiros modificados + 3 novos da F2 (ver 04_FRONTEND.md) + `docs/ESTADO_ATUAL.md` (ponteiro).
-- Nada disto está no GitHub: só existe nesta máquina. Trocar de ramo leva as alterações por commitar consigo (não as perde), mas `reset`/`checkout -- .`/`stash` sem cuidado ou outra máquina perdê-las-iam.
+- Frontend `financeiro`: passo 1 da revisão por commitar (`ReviewImportedInvoiceDrawer.tsx`, README de `invoices`, e novos `AllocationsEditor`, `SendToStockField`, `CostCenterCascadeSelect`, `stock-decision.ts` + testes). Só existe nesta máquina.
+- Backend `financeiro`: esta atualização de `docs/` por commitar.
 
 ## Pendências operacionais (produção)
 - Correr `POST /api/fiscal-documents/backfill` com `{ "dryRun": true }` e rever (precisa de sessão de gestor).

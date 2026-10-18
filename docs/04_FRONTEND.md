@@ -21,21 +21,18 @@ Repositório separado: `C:\Users\Bruno Fontes\vendus-dashboard-frontend` (React 
 | Compras por rever / contagens | `src/modules/stock-purchase-review/`, `src/modules/stock-count/` |
 | Lojas | `src/components/LocationSelect.tsx`, `src/modules/locations/adapters/in/use-locations.ts` |
 
-## F2 — estado exato no frontend (ramo `financeiro`, por commitar)
-**Feito (compila; testes a passar):**
+## F2 — estado exato no frontend (ramo `financeiro`)
+**Feito (compila; testes a passar; commit `59a5213`):**
 - Tipos e clientes HTTP: `supplier.ts`, `financial-base-api.port.ts`, `http-financial-base-api.adapter.ts`, `invoice.ts`, `invoices-api.port.ts`, `http-invoices-api.adapter.ts` (`getStockRoutingSuggestion`, `saveInvoiceDraft`, `replaceInvoiceAllocations`, `listInvoiceAllocations`, `getPayablesSummary`; tipos `FinancialModeName`, `AllocationPayload`, `PayablesSummaryDTO`, `SaveDraftResultDTO`, `StockRoutingSuggestion`).
 - `SupplierDrawer.tsx`: «Enviar para Stock» (4 políticas), modo financeiro preferido, destino habitual; `SupplierLocationRulesPanel.tsx` (exceções por loja, só com >1 loja ativa).
 - `src/modules/invoices/domain/services/allocations-draft.ts` (+ `.test.ts`, 6 testes): «Por distribuir», validação, payload, «Propor a partir das linhas», deteção de mistura.
 
+**Feito, por commitar (2026-10-18) — passo 1, revisão de fatura:**
+- `ReviewImportedInvoiceDrawer.tsx`: seletor «Única | Por artigo | Por valores» (modo gravado → preferência do fornecedor); linhas sempre enviadas + `financialMode` + `allocations`; pré-visualização com linhas em qualquer modo; seletor «Tipo» removido; «Guardar rascunho» (atualiza `version` local); edição «Por valores» (passagem por «Por artigo» → `updateInvoice` → linhas → «Por valores» → `replaceInvoiceAllocations`).
+- Novos: `AllocationsEditor.tsx`, `SendToStockField.tsx`, `CostCenterCascadeSelect.tsx` (extraído), `domain/services/stock-decision.ts`; testes `stock-decision.test.ts`, `AllocationsEditor.test.tsx`, `SendToStockField.test.tsx`. README de `invoices` atualizado.
+
 **Falta (por esta ordem):**
-1. `ReviewImportedInvoiceDrawer.tsx`:
-   - seletor «Única | Por artigo | Por valores» (substituir os 2 botões em «Modo de classificação»; `detailMode` ≈ linha 995 — preferência `defaultFinancialMode` do fornecedor);
-   - enviar sempre as linhas reais em `buildPayload` (≈ linha 1188) + `financialMode` + `allocations`; pré-visualização com linhas em qualquer modo;
-   - editor «Por valores» (usar `allocations-draft.ts`; bloquear confirmar se `remainingCents ≠ 0`);
-   - remover o seletor «Tipo» do editor de linha (≈ linha 664), mantendo o dado;
-   - trocar «Impacto no stock» (≈ linha 1490) por checkbox «Enviar para Stock» com sugestão (`getStockRoutingSuggestion`), motivo obrigatório quando contraria a predefinição e escolha obrigatória com `requiresDecision`;
-   - botão «Guardar rascunho» (`saveInvoiceDraft`; mostrar `blockingReason`/`remainingCents`);
-   - modo edição (`editMutation` ≈ linha 1121): em «Por valores» chamar `replaceInvoiceAllocations`.
+1. ~~`ReviewImportedInvoiceDrawer.tsx`~~ (feito, acima).
 2. `InvoicesView.tsx`: `handleRowReview` (≈ linha 3263) deve preencher linhas/repartições/`storedAmounts` do detalhe (hoje `extractedLines: []`); «Total a pagar | Em atraso» na barra de filtros (≈ linha 3554), sem cards, com `getPayablesSummary` (pesquisa, mês, fornecedor); texto do modal de troca de modo (já não apaga linhas).
 3. `CostCentersView.tsx` (`Tab3Aplicacao`): somar `listInvoiceAllocations()` às linhas.
 4. Testes de UI das peças novas, typecheck, build, README de `invoices` e `financial-base` do frontend.
