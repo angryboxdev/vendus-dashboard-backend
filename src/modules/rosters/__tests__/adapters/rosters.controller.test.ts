@@ -110,7 +110,7 @@ describe("API /api/novo-rh/rosters", () => {
     await send("POST", `/${roster.id}/shifts`, { employeeId: "e1", workDate: "2026-11-02", segments: [{ start: "09:00", end: "17:00" }] });
     const report = await (await fetch(`${base}/${roster.id}/coverage?from=2026-11-02&to=2026-11-02`)).json();
     expect(report).toMatchObject({ enabled: true, locationId: PORTO, days: [{ date: "2026-11-02", areaId: null, status: "ok", windows: [{ required: 1, planned: 1, published: 0 }] }] });
-    expect((await send("DELETE", `/coverage/rules/${rule.id}`, {})).status).toBe(204);
+    expect((await send("DELETE", `/coverage/rules/${rule.id}`, {})).status).toBe(200);
   });
 });
 

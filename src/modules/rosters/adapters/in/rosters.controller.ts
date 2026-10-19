@@ -112,7 +112,8 @@ export function createRostersRouter(
     });
     r.delete(`${R}/coverage/rules/:id`, async (req, res) => {
       await run(() => coverage.deleteRule(org(req), actorOf(req), id(req)));
-      res.status(204).end();
+      // 200 com corpo: o cliente do frontend lê sempre JSON.
+      res.json({ deleted: true });
     });
     r.get(`${R}/:id/coverage`, async (req, res) => res.json(await run(() => coverage.coverage(org(req), id(req), s(req.query.from), s(req.query.to)))));
   }
