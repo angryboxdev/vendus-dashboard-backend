@@ -120,7 +120,7 @@ export function planEnrichment(employees: ScenarioEmployee[], today: string): En
   // Pedidos extra a partir de daqui a 3 semanas (não colidem com os do cenário base).
   const extraPending = sorted
     .filter((_, i) => i % 4 === 3)
-    .slice(0, 5)
+    .slice(0, 8)
     .map((e, i) => {
       const start = weekday(plus(today, 21 + i * 4));
       return { employeeId: e.id, startDate: start, endDate: plus(start, i % 2 ? 4 : 1) };
@@ -146,5 +146,33 @@ export function planEnrichment(employees: ScenarioEmployee[], today: string): En
     ],
     extraPending,
     birthDates,
+  };
+}
+
+/**
+ * Manter a demonstração em dia (pedido do utilizador, 2026-10-19 — mais
+ * material para apresentações): ~6% de ausências aprovadas a decorrer hoje
+ * (escolha estável por pessoa e dia) e as semanas de escala atual (publicada)
+ * e seguinte (rascunho) para toda a gente. Puro.
+ */
+export interface CurrentPlan {
+  today: string;
+  absencesToday: { employeeId: string; startDate: string; endDate: string }[];
+  weeks: { current: { from: string; to: string }; next: { from: string; to: string } };
+  rosters: { locationId: string; groups: { templateName: string; employeeIds: string[]; weekdays: string[] }[] }[];
+}
+
+export function planCurrent(employees: ScenarioEmployee[], schedules: Pick<DemoSchedule, "name" | "start" | "end" | "weekdays">[], today: string): CurrentPlan {
+  const scenario = planScenario(employees, schedules, today);
+  const monday = plus(today, -(DateTime.fromISO(today, { zone: "utc" }).weekday - 1));
+  const absencesToday = [...employees]
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .filter((e) => hash(`${today}|${e.key}`) % 100 < 6)
+    .map((e) => ({ employeeId: e.id, startDate: today, endDate: plus(today, hash(`len|${today}|${e.key}`) % 3) }));
+  return {
+    today,
+    absencesToday,
+    weeks: { current: { from: monday, to: plus(monday, 6) }, next: { from: plus(monday, 7), to: plus(monday, 13) } },
+    rosters: scenario.rosters.map((r) => ({ locationId: r.locationId, groups: r.groups })),
   };
 }

@@ -3,10 +3,11 @@ import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import { DemoOrgError, type DemoOrg } from "../../domain/entities/demo-org.js";
 import type { DemoLivePort, DemoOrgRepositoryPort, DemoOrgSupportPort, DemoScenarioPort, DemoSeedPort } from "../../domain/ports/out/demo-org.ports.js";
 import { generateDemoDataset, generatePunches, PUNCH_SEGMENT } from "../../domain/services/demo-dataset.generator.js";
-import { keyFromEmail, planEnrichment, planScenario } from "../../domain/services/demo-scenario.js";
+import { keyFromEmail, planCurrent, planEnrichment, planScenario } from "../../domain/services/demo-scenario.js";
 
 const SEED = 20261012;
-const EMPLOYEES_PER_CENTER = 5;
+/** 4 centros × 28 = 112 colaboradores fictícios (pedido 2026-10-19: mais de 100 para apresentações). */
+const EMPLOYEES_PER_CENTER = 28;
 /** Marcações mantidas em dia: últimos 30 dias (e sempre o mês anterior inteiro, para o fecho) até agora. */
 const WINDOW_DAYS = 30;
 /** Cache curto da ligação real → demo (lida em cada pedido em modo Demonstração). */
@@ -104,7 +105,23 @@ export class DemoOrgUseCases {
 
   private async update(demo: OrganizationId, actor: DemoActor, today: string) {
     const dataset = generateDemoDataset({ seed: SEED, employeesPerCenter: EMPLOYEES_PER_CENTER, from: today, to: today });
-    const rows = await this.live.employees(demo);
+    let rows = await this.live.employees(demo);
+    // A demo cresceu (mais colaboradores no gerador): acrescenta só quem falta.
+    const known = new Set(rows.map((r) => keyFromEmail(r.email)));
+    const missing = dataset.employees.filter((e) => !known.has(e.key));
+    let added = 0;
+    if (missing.length) {
+      added = await this.live.addEmployees(
+        demo,
+        missing,
+        dataset.schedules.map((x) => ({ key: x.key, name: x.name })),
+        dataset.centers.map((c) => ({ key: c.key, name: c.name })),
+        dataset.positions.map((p) => ({ key: p.key, name: p.name })),
+        actor.email,
+        Number(today.slice(0, 4)),
+      );
+      rows = await this.live.employees(demo);
+    }
     const byKey = new Map(rows.map((r) => [keyFromEmail(r.email), r]));
     const scheduleName = new Map(dataset.schedules.map((s) => [s.key, s.name]));
 
@@ -125,6 +142,10 @@ export class DemoOrgUseCases {
       await this.scenario.build(demo, actor, planScenario(people, schedules, today));
       scenario = true;
     }
+
+    // Em dia com o calendário (antes das marcações: quem está de férias hoje não pica).
+    const schedulesByName = dataset.schedules.filter((x, i, a) => a.findIndex((y) => y.name === x.name) === i);
+    const current = await this.scenario.keepCurrent(demo, actor, planCurrent(people, schedulesByName, today));
 
     const t = DateTime.fromISO(today, { zone: "utc" });
     const window = t.minus({ days: WINDOW_DAYS });
@@ -147,6 +168,6 @@ export class DemoOrgUseCases {
     const noBirth = plan.birthDates.filter((b) => !rows.find((r) => r.id === b.employeeId)?.birthDate);
     if (noBirth.length) await this.live.setBirthDates(demo, noBirth.map((b) => ({ id: b.employeeId, birthDate: b.birthDate })));
     const enriched = await this.scenario.enrich(demo, actor, plan);
-    return { punches: inserted, scenario, enriched };
+    return { punches: inserted, scenario, enriched, added, current };
   }
 }

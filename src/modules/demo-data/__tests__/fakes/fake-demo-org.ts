@@ -1,9 +1,9 @@
 import { mintOrganizationId, type OrganizationId } from "../../../../kernel/organization-id.js";
-import type { DemoDataset } from "../../domain/entities/demo-dataset.js";
+import type { DemoDataset, DemoEmployee } from "../../domain/entities/demo-dataset.js";
 import type { DemoOrg } from "../../domain/entities/demo-org.js";
 import type { DemoLivePort, DemoOrgRepositoryPort, DemoOrgSupportPort, DemoScenarioPort, DemoSeedPort } from "../../domain/ports/out/demo-org.ports.js";
 import { generateDemoDataset } from "../../domain/services/demo-dataset.generator.js";
-import type { ScenarioPlan , EnrichmentPlan } from "../../domain/services/demo-scenario.js";
+import type { CurrentPlan, EnrichmentPlan, ScenarioPlan } from "../../domain/services/demo-scenario.js";
 
 export class FakeDemoOrgRepository implements DemoOrgRepositoryPort {
   orgs = new Map<string, { name: string; isDemo: boolean; demoOf: string | null; nif: string }>([["org-real", { name: "Mezza", isDemo: false, demoOf: null, nif: "500000000" }]]);
@@ -50,9 +50,12 @@ export class FakeDemoLive implements DemoLivePort {
   vacationEnsured = 0;
   photos = new Map<string, string>();
   births = new Map<string, string>();
+  /** Colaboradores acrescentados depois (a demo cresceu). */
+  added: DemoEmployee[] = [];
   async employees() {
+    // Uma demo criada com 5 por centro (como as de antes de 2026-10-19), mais os acrescentados.
     const ds = generateDemoDataset({ seed: 20261012, employeesPerCenter: 5, from: "2026-10-12", to: "2026-10-12" });
-    return ds.employees.map((e) => ({ id: `db-${e.key}`, email: e.email, locationId: `loc-${e.centerKey}`, photoPath: this.photos.get(`db-${e.key}`) ?? null, birthDate: this.births.get(`db-${e.key}`) ?? null }));
+    return [...ds.employees, ...this.added].map((e) => ({ id: `db-${e.key}`, email: e.email, locationId: `loc-${e.centerKey}`, photoPath: this.photos.get(`db-${e.key}`) ?? null, birthDate: this.births.get(`db-${e.key}`) ?? null }));
   }
   async setBirthDates(_o: OrganizationId, rows: { id: string; birthDate: string }[]) {
     for (const r of rows) if (!this.births.has(r.id)) this.births.set(r.id, r.birthDate);
@@ -73,6 +76,10 @@ export class FakeDemoLive implements DemoLivePort {
   async ensureVacationType() {
     this.vacationEnsured++;
   }
+  async addEmployees(_o: OrganizationId, employees: DemoEmployee[]) {
+    this.added.push(...employees);
+    return employees.length;
+  }
 }
 
 export class FakeDemoScenario implements DemoScenarioPort {
@@ -86,6 +93,13 @@ export class FakeDemoScenario implements DemoScenarioPort {
   constructor(private readonly live: FakeDemoLive) {}
   async hasScenario() {
     return this.plans.length > 0;
+  }
+  currents: CurrentPlan[] = [];
+  async keepCurrent(_o: OrganizationId, _a: { userId: string; email: string }, plan: CurrentPlan) {
+    this.currents.push(plan);
+    const fresh = plan.absencesToday.filter((a) => !this.live.absences.some((x) => x.employeeId === a.employeeId && x.startDate <= plan.today && x.endDate >= plan.today));
+    this.live.absences.push(...fresh);
+    return { absencesToday: fresh.length, shifts: 0 };
   }
   async build(_o: OrganizationId, _a: { userId: string; email: string }, plan: ScenarioPlan) {
     this.plans.push(plan);

@@ -3,7 +3,7 @@ import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { buildSeedPlan } from "../../adapters/out/demo-seed.rows.js";
 import { DemoOrgUseCases } from "../../application/use-cases/demo-org.use-cases.js";
 import { generateDemoDataset, generatePunches } from "../../domain/services/demo-dataset.generator.js";
-import { keyFromEmail, planEnrichment, planScenario } from "../../domain/services/demo-scenario.js";
+import { keyFromEmail, planCurrent, planEnrichment, planScenario } from "../../domain/services/demo-scenario.js";
 import { FakeDemoLive, FakeDemoOrgRepository, FakeDemoScenario, FakeDemoSeeder, FakeDemoSupport } from "../fakes/fake-demo-org.js";
 
 const REAL = mintOrganizationId("org-real");
@@ -29,7 +29,7 @@ describe("Organização de demonstração (ADR-0034)", () => {
     const out = await uc.create(REAL, admin);
     expect(out.demo.name).toBe("Mezza — Demonstração");
     expect(repo.orgs.get(out.demo.id)).toMatchObject({ isDemo: true, demoOf: "org-real", nif: "DEMO-ORG-REAL" });
-    expect(seeder.seeded[0]!.dataset.employees).toHaveLength(20);
+    expect(seeder.seeded[0]!.dataset.employees).toHaveLength(112); // 4 centros × 28
     expect(seeder.seeded[0]!.dataset.punches).toHaveLength(0);
     expect(scenario.plans).toHaveLength(1);
     expect(live.punches.length).toBeGreaterThan(400);
@@ -175,5 +175,61 @@ describe("Demonstração mais rica (apresentações)", () => {
     expect(live.births.size).toBe((await live.employees()).length);
     expect(scenario.enrichments).toHaveLength(1);
     expect(scenario.enrichments[0]!.closePeriod.startDate).toBe("2026-09-01");
+  });
+});
+
+describe("Demonstração maior e com mais movimento (2026-10-19)", () => {
+  test("mais de 100 colaboradores; os 20 de sempre ficam iguais (demos já criadas não mudam)", () => {
+    const old = generateDemoDataset({ seed: 20261012, employeesPerCenter: 5, from: "2026-10-12", to: "2026-10-12" }).employees;
+    const now = generateDemoDataset({ seed: 20261012, employeesPerCenter: 28, from: "2026-10-12", to: "2026-10-12" }).employees;
+    expect(now).toHaveLength(112);
+    expect(now.slice(0, 20)).toEqual(old);
+    expect(new Set(now.map((e) => e.key)).size).toBe(112);
+    expect(new Set(now.map((e) => e.email)).size).toBe(112);
+  });
+
+  test("uma demo antiga (20) cresce no refresh: só acrescenta quem falta, e o cenário fica em dia", async () => {
+    const { live, scenario, uc } = setup();
+    await uc.create(REAL, admin);
+    expect(live.added).toHaveLength(92); // 112 − 20 que a demo «antiga» já tinha
+    expect(live.added.every((e) => Number(e.key.slice(-3)) > 5)).toBe(true);
+    // Os acrescentados também picam ponto.
+    const addedIds = new Set(live.added.map((e) => `db-${e.key}`));
+    expect(live.punches.some((p) => addedIds.has(p.employeeId))).toBe(true);
+    await uc.refresh(REAL, admin, { force: true });
+    expect(live.added).toHaveLength(92); // não duplica
+    expect(scenario.currents.length).toBeGreaterThanOrEqual(2);
+    expect(scenario.currents[0]!.rosters.flatMap((r) => r.groups.flatMap((g) => g.employeeIds))).toHaveLength(112);
+  });
+
+  test("em dia: ~6% de ausências hoje (estáveis por pessoa e dia), semana atual e seguinte", () => {
+    const ds = generateDemoDataset({ seed: 20261012, employeesPerCenter: 28, from: "2026-10-19", to: "2026-10-19" });
+    const people = ds.employees.map((e) => ({ id: e.key, key: e.key, locationId: e.centerKey, scheduleName: ds.schedules.find((s) => s.key === e.scheduleKey)!.name }));
+    const plan = planCurrent(people, ds.schedules, "2026-10-21");
+    expect(plan.weeks).toEqual({ current: { from: "2026-10-19", to: "2026-10-25" }, next: { from: "2026-10-26", to: "2026-11-01" } });
+    expect(plan.absencesToday.length).toBeGreaterThan(2);
+    expect(plan.absencesToday.length).toBeLessThan(15);
+    expect(plan.absencesToday.every((a) => a.startDate === "2026-10-21" && a.endDate >= a.startDate)).toBe(true);
+    expect(planCurrent(people, ds.schedules, "2026-10-21")).toEqual(plan);
+  });
+
+  test("mais movimento: saídas e voltas curtas e saídas antecipadas, sempre dentro do turno e por ordem", () => {
+    const ds = generateDemoDataset({ seed: 20261012, employeesPerCenter: 28, from: "2026-10-01", to: "2026-10-01" });
+    const punches = generatePunches({ seed: 20261012, employees: ds.employees, schedules: ds.schedules, from: "2026-09-01", to: "2026-09-30" });
+    const ins = punches.filter((p) => p.kind === "in");
+    const steps = punches.filter((p) => p.kind === "step_out");
+    expect(steps.length / ins.length).toBeGreaterThan(0.2);
+    expect(steps.length / ins.length).toBeLessThan(0.45);
+    // Por pessoa e dia: entrada antes de tudo, saída depois de tudo, cada «volta» depois da sua saída.
+    const byDay = new Map<string, typeof punches>();
+    for (const p of punches) byDay.set(`${p.employeeKey}|${p.workDate}`, [...(byDay.get(`${p.employeeKey}|${p.workDate}`) ?? []), p]);
+    for (const list of byDay.values()) {
+      const at = (k: string) => list.find((p) => p.kind === k)?.atUtc;
+      const first = at("in")!;
+      for (const p of list) expect(p.atUtc >= first).toBe(true);
+      if (at("out")) for (const p of list) expect(p.atUtc <= at("out")!).toBe(true);
+      if (at("step_out")) expect(at("step_in")! > at("step_out")!).toBe(true);
+      if (at("step_in") && at("break")) expect(at("step_in")! < at("break")!).toBe(true);
+    }
   });
 });

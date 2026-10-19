@@ -78,6 +78,9 @@ const SCHEDULE_TEMPLATES: Omit<DemoSchedule, "key" | "tenantKey">[] = [
   { name: "Fecho com limpeza", start: "18:00", end: "00:45", endsNextDay: true, weekdays: [3, 4, 5, 6, 7] },
 ];
 
+/** Quantos por centro saem da sequência original (as demos criadas antes de 2026-10-19 tinham 5). */
+export const LEGACY_PER_CENTER = 5;
+
 const pick = <T>(rnd: () => number, list: readonly T[]): T => list[Math.floor(rnd() * list.length)]!;
 const pad = (n: number, w: number) => String(n).padStart(w, "0");
 const ascii = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -93,18 +96,24 @@ export function generateDemoDataset(options: DemoDatasetOptions): DemoDataset {
 
   const employees: DemoEmployee[] = [];
   const avatarCount = { f: 0, m: 0 };
-  for (const center of CENTERS) {
-    for (let i = 1; i <= options.employeesPerCenter; i++) {
-      const firstName = pick(rnd, FIRST_NAMES);
-      const lastName = `${pick(rnd, LAST_NAMES)} ${pick(rnd, LAST_NAMES)}`;
+  // Os primeiros `LEGACY_PER_CENTER` de cada centro saem da sequência de sempre (demos já
+  // criadas continuam iguais); os seguintes têm semente própria por pessoa, para se poder
+  // aumentar a equipa sem mudar ninguém que já existe.
+  const slots: { center: DemoCenter; i: number; r: () => number }[] = [];
+  for (const center of CENTERS) for (let i = 1; i <= Math.min(options.employeesPerCenter, LEGACY_PER_CENTER); i++) slots.push({ center, i, r: rnd });
+  for (const center of CENTERS) for (let i = LEGACY_PER_CENTER + 1; i <= options.employeesPerCenter; i++) slots.push({ center, i, r: createRandom(hashSeed(`${options.seed}|${center.key}-e${pad(i, 3)}`)) });
+  for (const { center, i, r } of slots) {
+    {
+      const firstName = pick(r, FIRST_NAMES);
+      const lastName = `${pick(r, LAST_NAMES)} ${pick(r, LAST_NAMES)}`;
       const key = `${center.key}-e${pad(i, 3)}`;
-      const hire = DateTime.fromISO("2019-01-01", { zone: "utc" }).plus({ days: Math.floor(rnd() * 2400) });
+      const hire = DateTime.fromISO("2019-01-01", { zone: "utc" }).plus({ days: Math.floor(r() * 2400) });
       employees.push({
         key,
         tenantKey: center.tenantKey,
         centerKey: center.key,
-        positionKey: `${center.tenantKey}-p${1 + Math.floor(rnd() * POSITION_NAMES.length)}`,
-        scheduleKey: `${center.tenantKey}-s${1 + Math.floor(rnd() * SCHEDULE_TEMPLATES.length)}`,
+        positionKey: `${center.tenantKey}-p${1 + Math.floor(r() * POSITION_NAMES.length)}`,
+        scheduleKey: `${center.tenantKey}-s${1 + Math.floor(r() * SCHEDULE_TEMPLATES.length)}`,
         employeeNumber: `DEMO-${center.key.toUpperCase()}-${pad(i, 4)}`,
         firstName,
         lastName,
@@ -131,7 +140,7 @@ export function generateDemoDataset(options: DemoDatasetOptions): DemoDataset {
 }
 
 /** Tipo de marcação no motor de ponto para cada marcação do gerador. */
-export const PUNCH_SEGMENT: Record<PunchKind, "work" | "break_unpaid" | "off"> = { in: "work", back: "work", break: "break_unpaid", out: "off" };
+export const PUNCH_SEGMENT: Record<PunchKind, "work" | "break_unpaid" | "off"> = { in: "work", back: "work", break: "break_unpaid", out: "off", step_out: "break_unpaid", step_in: "work" };
 
 /** Semente estável por texto (FNV-1a): o mesmo colaborador e dia dão sempre as mesmas marcações. */
 function hashSeed(text: string): number {
@@ -174,13 +183,24 @@ export function generatePunches(input: { seed: number; employees: DemoEmployee[]
       const withBreak = end.diff(start, "hours").hours >= 6 && rnd() < 0.7;
       const mid = start.plus({ milliseconds: end.diff(start).milliseconds / 2 }).plus({ minutes: Math.floor(rnd() * 31) - 15 });
       const breakEnd = mid.plus({ minutes: 20 + Math.floor(rnd() * 21) });
+      // Mais movimento (2026-10-19): ~35% sai e volta (10–15 min) na primeira parte do turno;
+      // ~8% sai mais cedo (30–90 min). Tiradas no fim para não mudar o que já foi gravado.
+      const stepOut = rnd() < 0.35;
+      const stepAt = inAt.plus({ minutes: 50 + Math.floor(rnd() * 40) });
+      const stepBack = stepAt.plus({ minutes: 10 + Math.floor(rnd() * 6) });
+      const leavesEarly = rnd() < 0.08;
+      const finalOut = leavesEarly ? end.minus({ minutes: 30 + Math.floor(rnd() * 61) }) : outAt;
       const push = (kind: PunchKind, at: DateTime) => out.push({ employeeKey: e.key, kind, atUtc: at.toUTC().toISO()!, timeZone: zone, workDate, clientEventId: `${e.key}-${workDate}-${kind}` });
       push("in", inAt);
-      if (withBreak) {
+      if (stepOut && stepBack < (withBreak ? mid : finalOut)) {
+        push("step_out", stepAt);
+        push("step_in", stepBack);
+      }
+      if (withBreak && breakEnd < finalOut) {
         push("break", mid);
         push("back", breakEnd);
       }
-      if (!forgotOut) push("out", outAt);
+      if (!forgotOut) push("out", finalOut);
     }
   }
   return input.nowUtc ? out.filter((p) => p.atUtc <= input.nowUtc!) : out;

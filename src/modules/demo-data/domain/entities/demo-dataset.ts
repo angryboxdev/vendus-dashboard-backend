@@ -58,7 +58,7 @@ export interface DemoEmployee {
 }
 
 /** in = entrada, break = início de pausa, back = regresso da pausa, out = saída. */
-export type PunchKind = "in" | "break" | "back" | "out";
+export type PunchKind = "in" | "break" | "back" | "out" | "step_out" | "step_in";
 
 /** Marcação de ponto: instante em UTC + fuso do centro (task RH §5). */
 export interface DemoPunch {
