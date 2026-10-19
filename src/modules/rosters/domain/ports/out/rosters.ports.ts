@@ -48,6 +48,8 @@ export interface RostersContextPort {
   coworkersVisible(org: OrganizationId, employeeId: string, date: string): Promise<boolean>;
   /** Só o necessário para mostrar um colega: nome, cargo e se está ativo (nunca contactos). */
   peopleBrief(org: OrganizationId, employeeIds: string[]): Promise<{ id: string; fullName: string; positionName: string | null; active: boolean }[]>;
+  /** Colaboradores ativos que pertencem ao alvo da escala numa data (centro: principal ou pertença; grupo: membros). */
+  targetMembers(org: OrganizationId, targetType: "location" | "group", targetId: string, date: string): Promise<string[]>;
 }
 
 export interface RostersNotifierPort {

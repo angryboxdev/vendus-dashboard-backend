@@ -76,6 +76,36 @@ const COLOR = /^#[0-9a-fA-F]{6}$/;
 export function validateSegments(segments: Segment[], field = "segments"): void {
   if (!Array.isArray(segments) || segments.length < 1 || segments.length > 4) throw new RosterValidationError("Indique de 1 a 4 faixas horárias.", field);
   for (const s of segments) if (!TIME.test(s.start) || !TIME.test(s.end) || s.start === s.end) throw new RosterValidationError("Faixa horária inválida.", field);
+  // As faixas de um turno repartido não se podem sobrepor (nem passar umas por cima das outras).
+  const r = segmentRanges(segments);
+  for (let i = 1; i < r.length; i++) if (r[i]!.start < r[i - 1]!.end) throw new RosterValidationError("As faixas do turno sobrepõem-se.", field);
+}
+
+/**
+ * Faixas de um turno em minutos desde as 00:00 do dia do turno, por ordem:
+ * uma faixa que acaba antes de começar passa a meia-noite; uma faixa que
+ * começa antes da anterior já é do dia seguinte (ex.: 18:00–23:00 e
+ * 00:30–02:00 → a segunda é madrugada do dia seguinte). Faixas encostadas
+ * (fim = início) não se sobrepõem.
+ */
+export function segmentRanges(segments: Segment[]): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  let offset = 0;
+  for (const seg of segments) {
+    let a = toMin(seg.start) + offset;
+    const prev = out.at(-1);
+    if (prev && a < prev.start) {
+      a += 1440;
+      offset += 1440;
+    }
+    let b = toMin(seg.end) + offset;
+    if (b <= a) {
+      b += 1440;
+      offset += 1440;
+    }
+    out.push({ start: a, end: b });
+  }
+  return out;
 }
 
 /** RE-15: guardar sem nome ou abreviatura → "Campo obrigatório". */

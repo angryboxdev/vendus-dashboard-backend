@@ -38,6 +38,8 @@ export function createRostersModule(deps: {
   /** Parâmetros de segurança efetivos (visibilidade no Portal); sem eles, colegas nunca visíveis. */
   securitySettings?: (org: OrganizationId, employeeId: string, date: string) => Promise<{ key: string; value: unknown }[]>;
   peopleBrief?: (org: OrganizationId, employeeIds: string[]) => Promise<{ id: string; fullName: string; positionName: string | null; active: boolean }[]>;
+  /** Quem pertence ao centro/grupo da escala (seletor de colaboradores); sem ele, ninguém é «do centro». */
+  targetMembers?: (org: OrganizationId, targetType: "location" | "group", targetId: string, date: string) => Promise<string[]>;
 }): { router: Router; rosters: RostersUseCases } {
   const rosters = new RostersUseCases(
     new SupabaseRostersRepository(createScopedQuery),
@@ -49,6 +51,7 @@ export function createRostersModule(deps: {
       coworkersVisible: async (org, employeeId, date) =>
         deps.securitySettings ? (await deps.securitySettings(org, employeeId, date)).find((v) => v.key === "security.visibility.coworkers_shifts")?.value === true : false,
       peopleBrief: async (org, ids) => (deps.peopleBrief && ids.length ? deps.peopleBrief(org, ids) : []),
+      targetMembers: async (org, targetType, targetId, date) => (deps.targetMembers ? deps.targetMembers(org, targetType, targetId, date) : []),
     },
     deps.notifier,
     deps.published,

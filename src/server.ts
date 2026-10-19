@@ -671,6 +671,14 @@ const rostersModule = createRostersModule({
     const pos = new Map(positions.map((p) => [p.id, p.name]));
     return people.flatMap((e) => (e ? [{ id: e.id, fullName: e.fullName, positionName: e.positionId ? (pos.get(e.positionId) ?? null) : null, active: e.status === "active" }] : []));
   },
+  // Seletor de colaboradores: centro = principal da ficha ∪ pertenças datadas; grupo = membros do grupo.
+  targetMembers: async (org, targetType, targetId, date) => {
+    const [assigned, primary] = await Promise.all([
+      orgStructureModule.structure.membersOf(org, targetType, [targetId], date),
+      targetType === "location" ? peopleRepo.list(org, { status: "active", locationId: targetId }).then((l) => l.map((e) => e.id)) : Promise.resolve([] as string[]),
+    ]);
+    return [...new Set([...assigned, ...primary])];
+  },
   notifier: {
     notify: async (org, userIds, n) => {
       if (!userIds.length) return;
