@@ -204,8 +204,9 @@ export class SettingsUseCases implements SettingsPorts {
   }
 
   async sessionPolicy(orgId: OrganizationId) {
-    const v = await this.companyValue(orgId, "security.session.inactivity_minutes");
-    return { inactivityMinutes: v === null ? 30 : Number(v) };
+    const [v, mfa] = await Promise.all([this.companyValue(orgId, "security.session.inactivity_minutes"), this.companyValue(orgId, "security.mfa.required")]);
+    // MFA: opcional por empresa (desligada por omissão); o ecrã só pede o código quando está ligada.
+    return { inactivityMinutes: v === null ? 30 : Number(v), mfaRequired: mfa === true };
   }
 
   async setCompanyValue(orgId: OrganizationId, key: string, value: SettingData, reason: string, actor: Actor) {

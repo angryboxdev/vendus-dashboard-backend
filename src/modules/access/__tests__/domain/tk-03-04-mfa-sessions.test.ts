@@ -70,6 +70,19 @@ describe("TK-3 — MFA obrigatória para perfis de gestão", () => {
   });
 });
 
+describe("MFA opcional por empresa (security.mfa.required)", () => {
+  test("desligada na empresa: gestão sem segundo fator passa; ligada: 403 mfa_required; o âmbito continua a vir de MFA_ENFORCEMENT", async () => {
+    let on = false;
+    const guards = createAccessGuards({} as ResolveAccessPort, { mfa: "novo-rh", orgRequiresMfa: async () => on });
+    const req = { auth: { sub: "u1", email: "a", orgId: ORG, orgRole: "admin" as const, aal: "aal1" }, access: ctx() };
+    expect((await run(guards.requireMfa, req)).passed).toBe(true);
+    on = true;
+    expect(await run(guards.requireMfa, req)).toMatchObject({ status: 403, passed: false, body: { code: "MFA_REQUIRED" } });
+    const off = createAccessGuards({} as ResolveAccessPort, { mfa: "off", orgRequiresMfa: async () => true });
+    expect((await run(off.requireMfa, req)).passed).toBe(true);
+  });
+});
+
 describe("TK-4 — sessões revogadas", () => {
   test("TK_4_token_emitido_antes_da_revogacao_deixa_de_valer", async () => {
     const revokedAt = "2026-10-11T12:00:00.000Z";

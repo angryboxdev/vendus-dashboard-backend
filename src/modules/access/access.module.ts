@@ -36,6 +36,8 @@ export interface AccessModule {
 /** Dependências do Novo RH (opcionais para os testes antigos). */
 export interface AccessModuleOptions {
   mfa: MfaEnforcement;
+  /** MFA opcional por empresa (`security.mfa.required`); sem isto, vale só `mfa`. */
+  orgRequiresMfa?: (org: OrganizationId) => Promise<boolean>;
   /** Departamentos/grupos de um colaborador (módulo org-structure). */
   orgUnits?: (org: OrganizationId, employeeId: string, date: string) => Promise<{ departmentIds: string[]; groupIds: string[]; locationIds?: string[] | null }>;
   /** Auditoria transversal encadeada (módulo audit): as alterações de papéis também lá ficam. */
@@ -73,7 +75,7 @@ export function createAccessModule(options: AccessModuleOptions = { mfa: "off" }
   );
   return {
     resolveAccess,
-    guards: createAccessGuards(resolveAccess, { mfa: options.mfa }),
+    guards: createAccessGuards(resolveAccess, { mfa: options.mfa, ...(options.orgRequiresMfa && { orgRequiresMfa: options.orgRequiresMfa }) }),
     meRouter: createAccessMeRouter(),
     adminRouter: createAccessAdminRouter(admin),
     governanceRouter: createAccessGovernanceRouter(governance, new SupabaseIdempotencyStore(createScopedQuery)),
