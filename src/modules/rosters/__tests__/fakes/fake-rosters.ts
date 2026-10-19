@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
-import type { Publication, Roster, RosterShift, ShiftState, ShiftTemplate, ShiftTemplateInput, Swap } from "../../domain/entities/roster.js";
+import type { Publication, Roster, RosterShift, ShiftState, ShiftTemplate, ShiftTemplateInput, Swap, WorkArea } from "../../domain/entities/roster.js";
 import type { RostersContextPort, RostersRepositoryPort } from "../../domain/ports/out/rosters.ports.js";
 import type { Rules } from "../../domain/services/constraints.js";
 
@@ -28,6 +28,20 @@ export class FakeRostersRepository implements RostersRepositoryPort {
   }
   async archiveTemplate(_o: OrganizationId, id: string) {
     this.templates.find((t) => t.id === id)!.archived = true;
+  }
+  areas: WorkArea[] = [];
+  async listAreas() {
+    return this.areas.map((a) => ({ ...a })).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  }
+  async createArea(_o: OrganizationId, a: { locationId: string; name: string; sortOrder: number }) {
+    const row: WorkArea = { ...a, id: nextId(), active: true };
+    this.areas.push(row);
+    return { ...row };
+  }
+  async updateArea(_o: OrganizationId, id: string, patch: Partial<Pick<WorkArea, "name" | "sortOrder" | "active">>) {
+    const a = this.areas.find((x) => x.id === id)!;
+    Object.assign(a, patch);
+    return { ...a };
   }
   async listRosters() {
     return this.rosters.map((r) => ({ ...r }));

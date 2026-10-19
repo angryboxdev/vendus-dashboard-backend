@@ -29,7 +29,7 @@ const body = (req: Request) => (req.body ?? {}) as Record<string, unknown>;
 const id = (req: Request) => req.params.id as string;
 
 function shiftInput(b: Record<string, unknown>): ShiftInput {
-  return { employeeId: s(b.employeeId), workDate: s(b.workDate), kind: s(b.kind) === "day_off" ? "day_off" : "shift", templateId: optS(b.templateId), segments: segs(b.segments) };
+  return { employeeId: s(b.employeeId), workDate: s(b.workDate), kind: s(b.kind) === "day_off" ? "day_off" : "shift", templateId: optS(b.templateId), segments: segs(b.segments), areaId: optS(b.areaId) };
 }
 
 /**
@@ -60,6 +60,25 @@ export function createRostersRouter(uc: RostersUseCases, store: IdempotencyStore
     res.status(204).end();
   });
 
+  // Áreas de trabalho por centro (antes das rotas `${R}/:id`).
+  r.get(`${R}/areas`, async (req, res) => res.json(await uc.listAreas(org(req), optS(req.query.locationId))));
+  r.post(`${R}/areas`, async (req, res) => {
+    const b = body(req);
+    res.status(201).json(await run(() => uc.createArea(org(req), actorOf(req), { locationId: s(b.locationId), name: s(b.name) })));
+  });
+  r.patch(`${R}/areas/:id`, async (req, res) => {
+    const b = body(req);
+    res.json(
+      await run(() =>
+        uc.updateArea(org(req), actorOf(req), id(req), {
+          ...(b.name !== undefined && { name: s(b.name) }),
+          ...(b.sortOrder !== undefined && { sortOrder: Number(b.sortOrder) }),
+          ...(b.active !== undefined && { active: b.active === true }),
+        }),
+      ),
+    );
+  });
+
   r.get(R, async (req, res) => res.json(await uc.listRosters(org(req))));
   r.get(`${R}/summary`, async (req, res) => res.json(await run(() => uc.summary(org(req), s(req.query.from), s(req.query.to)))));
   r.post(R, async (req, res) => {
@@ -80,7 +99,7 @@ export function createRostersRouter(uc: RostersUseCases, store: IdempotencyStore
     const b = body(req);
     const employeeIds = strArr(b.employeeIds);
     for (const e of employeeIds) await scope(req, e, s(b.from));
-    res.status(201).json(await run(() => uc.assignBulk(org(req), actorOf(req), id(req), { employeeIds, from: s(b.from), to: s(b.to), weekdays: strArr(b.weekdays), kind: s(b.kind) === "day_off" ? "day_off" : "shift", templateId: optS(b.templateId) })));
+    res.status(201).json(await run(() => uc.assignBulk(org(req), actorOf(req), id(req), { employeeIds, from: s(b.from), to: s(b.to), weekdays: strArr(b.weekdays), kind: s(b.kind) === "day_off" ? "day_off" : "shift", templateId: optS(b.templateId), areaId: optS(b.areaId) })));
   });
   r.post(`${R}/:id/clear-pending`, async (req, res) => {
     const b = body(req);
@@ -108,6 +127,7 @@ export function createRostersRouter(uc: RostersUseCases, store: IdempotencyStore
     if (b.kind !== undefined) patch.kind = s(b.kind) === "day_off" ? "day_off" : "shift";
     if (b.templateId !== undefined) patch.templateId = optS(b.templateId);
     if (b.segments !== undefined) patch.segments = segs(b.segments);
+    if (b.areaId !== undefined) patch.areaId = optS(b.areaId);
     if (patch.employeeId) await scope(req, patch.employeeId, "");
     res.json(await run(() => uc.updateShift(org(req), actorOf(req), id(req), patch, opts(b))));
   });

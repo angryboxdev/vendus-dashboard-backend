@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
-import { sameState, stateOf, validateSegments, validateTemplate, type Roster, type RosterShift, type Segment, type ShiftState, type ShiftTemplateInput } from "../../domain/entities/roster.js";
+import { sameState, stateOf, validateAreaName, validateSegments, validateTemplate, type Roster, type RosterShift, type Segment, type ShiftState, type ShiftTemplateInput } from "../../domain/entities/roster.js";
 import { RosterBlockedError, RosterConflictError, RosterForbiddenError, RosterNotFoundError, RosterValidationError } from "../../domain/errors.js";
 import type { PeriodGuardPort, RosterPublishedPort, RostersAuditPort, RostersContextPort, RostersNotifierPort, RostersRepositoryPort } from "../../domain/ports/out/rosters.ports.js";
 import { evaluate, findOverlap, shiftHours, type CountedShift, type Violation } from "../../domain/services/constraints.js";
@@ -23,6 +23,8 @@ export interface ShiftInput {
   kind: "shift" | "day_off";
   templateId: string | null;
   segments: Segment[];
+  /** Área de trabalho (opcional; numa folga nunca há área). */
+  areaId?: string | null;
 }
 
 /** Estado que conta de um turno, com o rascunho aplicado aos ids indicados (e a identidade, para localizar conflitos). */
@@ -71,6 +73,55 @@ export class RostersUseCases {
     const after = await this.repo.setTemplateColor(org, id, color);
     await this.log(org, actor.email, "rosters.template.color", "roster_shift_template", id, { color: before.color }, { color });
     return after;
+  }
+
+  // ── Áreas de trabalho (por centro; sempre disponíveis) ───────────────
+  /** Áreas (com `locationId`: só as desse centro). Inclui desativadas, para os turnos antigos. */
+  async listAreas(org: OrganizationId, locationId?: string | null) {
+    const all = await this.repo.listAreas(org);
+    return locationId ? all.filter((a) => a.locationId === locationId) : all;
+  }
+
+  async createArea(org: OrganizationId, actor: Actor, input: { locationId: string; name: string }) {
+    if (!input.locationId) throw new RosterValidationError("Escolha o centro.", "locationId");
+    const name = validateAreaName(input.name);
+    const same = (await this.repo.listAreas(org)).filter((a) => a.locationId === input.locationId);
+    if (same.some((a) => a.active && a.name.toLocaleLowerCase("pt") === name.toLocaleLowerCase("pt"))) throw new RosterConflictError("Já existe uma área com este nome neste centro.", "duplicate_name");
+    const area = await this.repo.createArea(org, { locationId: input.locationId, name, sortOrder: same.reduce((m, a) => Math.max(m, a.sortOrder), -1) + 1 }, actor.email);
+    await this.log(org, actor.email, "rosters.area.create", "work_area", area.id, null, area);
+    return area;
+  }
+
+  /** Mudar o nome, a ordem ou desativar/reativar. Desativar não mexe nos turnos (mantêm a área no histórico). */
+  async updateArea(org: OrganizationId, actor: Actor, id: string, patch: { name?: string; sortOrder?: number; active?: boolean }) {
+    const all = await this.repo.listAreas(org);
+    const before = all.find((a) => a.id === id);
+    if (!before) throw new RosterNotFoundError("Área não encontrada.");
+    const name = patch.name !== undefined ? validateAreaName(patch.name) : before.name;
+    const active = patch.active ?? before.active;
+    if (active && all.some((a) => a.id !== id && a.active && a.locationId === before.locationId && a.name.toLocaleLowerCase("pt") === name.toLocaleLowerCase("pt"))) {
+      throw new RosterConflictError("Já existe uma área ativa com este nome neste centro.", "duplicate_name");
+    }
+    if (patch.sortOrder !== undefined && (!Number.isInteger(patch.sortOrder) || patch.sortOrder < 0)) throw new RosterValidationError("Ordem inválida.", "sortOrder");
+    const after = await this.repo.updateArea(org, id, { ...(patch.name !== undefined && { name }), ...(patch.sortOrder !== undefined && { sortOrder: patch.sortOrder }), ...(patch.active !== undefined && { active }) });
+    await this.log(org, actor.email, "rosters.area.update", "work_area", id, before, after);
+    return after;
+  }
+
+  /**
+   * A área de um turno: tem de existir, estar ativa e ser do centro da
+   * escala (numa escala de grupo, de qualquer centro da empresa). Numa folga
+   * não há área. Manter a área que o turno já tinha é sempre permitido (mesmo
+   * desativada entretanto).
+   */
+  private async areaFor(org: OrganizationId, roster: Roster, input: { kind: "shift" | "day_off"; areaId?: string | null }, current: string | null = null): Promise<string | null> {
+    if (input.kind === "day_off" || !input.areaId) return null;
+    if (input.areaId === current) return current;
+    const area = (await this.repo.listAreas(org)).find((a) => a.id === input.areaId);
+    if (!area) throw new RosterValidationError("Área não encontrada.", "areaId");
+    if (!area.active) throw new RosterValidationError("Esta área está desativada.", "areaId");
+    if (roster.targetType === "location" && area.locationId !== roster.targetId) throw new RosterValidationError("A área não pertence ao centro desta escala.", "areaId");
+    return area.id;
   }
 
   async archiveTemplate(org: OrganizationId, actor: Actor, id: string) {
@@ -277,11 +328,12 @@ export class RostersUseCases {
   }
 
   async addShift(org: OrganizationId, actor: Actor, rosterId: string, input: ShiftInput) {
-    await this.roster(org, rosterId);
+    const roster = await this.roster(org, rosterId);
     if (!DATE.test(input.workDate)) throw new RosterValidationError("Data inválida.", "workDate");
     if (!input.employeeId) throw new RosterValidationError("Indique o colaborador.", "employeeId");
     const seg = await this.segmentsFor(org, input);
-    const row = { rosterId, employeeId: input.employeeId, workDate: input.workDate, kind: input.kind, segments: seg.segments, templateId: input.templateId, onCall: seg.onCall };
+    const areaId = await this.areaFor(org, roster, input);
+    const row = { rosterId, employeeId: input.employeeId, workDate: input.workDate, kind: input.kind, segments: seg.segments, templateId: input.templateId, onCall: seg.onCall, areaId };
     if (!(await this.withoutDuplicateDaysOff(org, [row])).length) {
       // A folga já existe nesta escala: devolve-a em vez de criar outra (repetir não duplica).
       const same = (await this.repo.listShifts(org, { rosterId, employeeIds: [input.employeeId], from: input.workDate, to: input.workDate })).find((x) => !x.deleted && x.kind === "day_off");
@@ -308,7 +360,7 @@ export class RostersUseCases {
       if (!DATE.test(input.workDate)) throw new RosterValidationError("Data inválida.", "workDate");
       if (!input.employeeId) throw new RosterValidationError("Indique o colaborador.", "employeeId");
       const seg = await this.segmentsFor(org, input);
-      rows.push({ rosterId, employeeId: input.employeeId, workDate: input.workDate, kind: input.kind, segments: seg.segments, templateId: input.templateId, onCall: seg.onCall });
+      rows.push({ rosterId, employeeId: input.employeeId, workDate: input.workDate, kind: input.kind, segments: seg.segments, templateId: input.templateId, onCall: seg.onCall, areaId: await this.areaFor(org, await this.roster(org, rosterId), input) });
     }
     const unique = await this.withoutDuplicateDaysOff(org, rows);
     await this.assertNoOverlap(org, unique);
@@ -373,7 +425,7 @@ export class RostersUseCases {
   }
 
   /** Atribuição em massa: colaboradores × dias (com filtro de dias da semana). */
-  async assignBulk(org: OrganizationId, actor: Actor, rosterId: string, input: { employeeIds: string[]; from: string; to: string; weekdays: string[]; kind: "shift" | "day_off"; templateId: string | null }) {
+  async assignBulk(org: OrganizationId, actor: Actor, rosterId: string, input: { employeeIds: string[]; from: string; to: string; weekdays: string[]; kind: "shift" | "day_off"; templateId: string | null; areaId?: string | null }) {
     await this.roster(org, rosterId);
     if (!DATE.test(input.from) || !DATE.test(input.to) || input.to < input.from || span(input.from, input.to) > MAX_VIEW_DAYS) throw new RosterValidationError(`Período inválido (máx. ${MAX_VIEW_DAYS} dias).`, "from");
     if (!input.employeeIds.length) throw new RosterValidationError("Escolha pelo menos um colaborador.", "employeeIds");
@@ -381,7 +433,8 @@ export class RostersUseCases {
     const seg = await this.segmentsFor(org, { employeeId: "", workDate: input.from, kind: input.kind, templateId: input.templateId, segments: [] });
     const dates: string[] = [];
     for (let d = input.from; d <= input.to; d = plusDays(d, 1)) if (!input.weekdays.length || input.weekdays.includes(String(DateTime.fromISO(d, { zone: "utc" }).weekday))) dates.push(d);
-    const rows = input.employeeIds.flatMap((employeeId) => dates.map((workDate) => ({ rosterId, employeeId, workDate, kind: input.kind, segments: seg.segments, templateId: input.templateId, onCall: seg.onCall })));
+    const areaId = await this.areaFor(org, await this.roster(org, rosterId), { kind: input.kind, areaId: input.areaId ?? null });
+    const rows = input.employeeIds.flatMap((employeeId) => dates.map((workDate) => ({ rosterId, employeeId, workDate, kind: input.kind, segments: seg.segments, templateId: input.templateId, onCall: seg.onCall, areaId })));
     if (rows.length > MAX_BULK) throw new RosterValidationError(`No máximo ${MAX_BULK} turnos de uma vez.`, "employeeIds");
     // Tudo ou nada: com sobreposições nada é gravado (a resposta lista-as para rever antes de repetir).
     const unique = await this.withoutDuplicateDaysOff(org, rows);
@@ -407,12 +460,15 @@ export class RostersUseCases {
       kind: input.kind ?? cur.kind,
       templateId: input.templateId !== undefined ? input.templateId : cur.templateId,
       segments: input.segments ?? cur.segments,
+      areaId: input.areaId !== undefined ? input.areaId : (cur.areaId ?? null),
     };
     const seg = input.kind || input.templateId !== undefined || input.segments ? await this.segmentsFor(org, merged) : { segments: cur.segments, onCall: cur.onCall };
-    const draft: RosterShift = { ...cur, employeeId: merged.employeeId, kind: merged.kind, templateId: merged.templateId, segments: seg.segments, onCall: seg.onCall, deleted: false, dirty: true };
+    // Mudar a área segue a regra das outras alterações (num turno publicado: motivo, versão nova e aviso).
+    const areaId = input.areaId !== undefined || input.kind ? await this.areaFor(org, await this.roster(org, cur.rosterId), merged, cur.areaId ?? null) : (cur.areaId ?? null);
+    const draft: RosterShift = { ...cur, employeeId: merged.employeeId, kind: merged.kind, templateId: merged.templateId, segments: seg.segments, onCall: seg.onCall, areaId, deleted: false, dirty: true };
     await this.assertNoOverlap(org, [{ ...stateOf(draft), ignoreId: cur.id, rosterId: cur.rosterId }]);
     if (cur.published) return this.publishNow(org, actor, cur, draft, opts.reason!.trim(), opts.confirm);
-    const saved = await this.repo.updateShift(org, id, { employeeId: draft.employeeId, kind: draft.kind, templateId: draft.templateId, segments: draft.segments, onCall: draft.onCall, deleted: false, dirty: true }, actor.email);
+    const saved = await this.repo.updateShift(org, id, { employeeId: draft.employeeId, kind: draft.kind, templateId: draft.templateId, segments: draft.segments, onCall: draft.onCall, areaId: draft.areaId ?? null, deleted: false, dirty: true }, actor.email);
     return { shift: saved, warnings: await this.violationsFor(org, new Set([id])), publication: null };
   }
 
@@ -436,7 +492,7 @@ export class RostersUseCases {
     const saved = await this.repo.updateShift(
       org,
       cur.id,
-      { employeeId: draft.employeeId, kind: draft.kind, templateId: draft.templateId, segments: draft.segments, onCall: draft.onCall, deleted: draft.deleted, dirty: false, published: after, publishedVersion: version },
+      { employeeId: draft.employeeId, kind: draft.kind, templateId: draft.templateId, segments: draft.segments, onCall: draft.onCall, areaId: draft.areaId ?? null, deleted: draft.deleted, dirty: false, published: after, publishedVersion: version },
       actor.email,
     );
     const publication = await this.repo.insertPublication(org, {
