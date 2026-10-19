@@ -1,6 +1,6 @@
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
-import type { Publication, Roster, RosterShift, ShiftState, ShiftTemplate, ShiftTemplateInput, Swap } from "../../domain/entities/roster.js";
+import type { Publication, Roster, RosterShift, ShiftState, ShiftTemplate, ShiftTemplateInput, Swap, WorkArea } from "../../domain/entities/roster.js";
 import type { RostersRepositoryPort } from "../../domain/ports/out/rosters.ports.js";
 
 type Row = Record<string, unknown>;
@@ -13,7 +13,9 @@ const str = (v: unknown) => (v === null || v === undefined ? null : String(v));
 
 const TPL = "id, name, abbreviation, color, on_call, segments, archived";
 const ROS = "id, name, target_type, target_id, version, archived";
-const SHF = "id, roster_id, employee_id, work_date, kind, segments, template_id, on_call, deleted, dirty, published, published_version";
+const SHF = "id, roster_id, employee_id, work_date, kind, segments, template_id, on_call, area_id, deleted, dirty, published, published_version";
+const ARE = "id, location_id, name, sort_order, active";
+const toArea = (r: Row): WorkArea => ({ id: String(r.id), locationId: String(r.location_id), name: String(r.name), sortOrder: Number(r.sort_order ?? 0), active: r.active !== false });
 const PUB = "id, roster_id, version, reason, confirmed_warnings, changes, published_by, created_at";
 const SWP = "id, shift_id, counter_shift_id, requester_employee_id, target_employee_id, status, comment, decided_by, created_at";
 
@@ -36,6 +38,7 @@ const toShf = (r: Row): RosterShift => ({
   segments: (Array.isArray(r.segments) ? r.segments : []) as RosterShift["segments"],
   templateId: str(r.template_id),
   onCall: r.on_call === true,
+  areaId: str(r.area_id),
   deleted: r.deleted === true,
   dirty: r.dirty === true,
   published: (r.published ?? null) as ShiftState | null,
@@ -78,6 +81,20 @@ export class SupabaseRostersRepository implements RostersRepositoryPort {
   }
   async archiveTemplate(org: OrganizationId, id: string) {
     check(await this.scoped(org).table("roster_shift_templates").update({ archived: true }).eq("id", id));
+  }
+
+  async listAreas(org: OrganizationId) {
+    return check<Row[]>(await this.scoped(org).table("work_areas").select(ARE).order("sort_order").order("name")).map(toArea);
+  }
+  async createArea(org: OrganizationId, a: { locationId: string; name: string; sortOrder: number }, by: string) {
+    return toArea(check(await this.scoped(org).table("work_areas").insert({ location_id: a.locationId, name: a.name, sort_order: a.sortOrder, created_by: by }).select(ARE).single()));
+  }
+  async updateArea(org: OrganizationId, id: string, patch: Partial<Pick<WorkArea, "name" | "sortOrder" | "active">>) {
+    const row: Row = { updated_at: new Date().toISOString() };
+    if (patch.name !== undefined) row.name = patch.name;
+    if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
+    if (patch.active !== undefined) row.active = patch.active;
+    return toArea(check(await this.scoped(org).table("work_areas").update(row).eq("id", id).select(ARE).single()));
   }
 
   async listRosters(org: OrganizationId) {
@@ -131,13 +148,13 @@ export class SupabaseRostersRepository implements RostersRepositoryPort {
   }
   async insertShifts(org: OrganizationId, rows: (ShiftState & { rosterId: string })[], by: string) {
     if (!rows.length) return [];
-    const data = rows.map((r) => ({ roster_id: r.rosterId, employee_id: r.employeeId, work_date: r.workDate, kind: r.kind, segments: r.segments, template_id: r.templateId, on_call: r.onCall, updated_by: by }));
+    const data = rows.map((r) => ({ roster_id: r.rosterId, employee_id: r.employeeId, work_date: r.workDate, kind: r.kind, segments: r.segments, template_id: r.templateId, on_call: r.onCall, area_id: r.areaId ?? null, updated_by: by }));
     return check<Row[]>(await this.scoped(org).table("roster_shifts").insert(data).select(SHF)).map(toShf);
   }
   async updateShift(
     org: OrganizationId,
     id: string,
-    patch: Partial<Pick<RosterShift, "kind" | "segments" | "templateId" | "onCall" | "deleted" | "dirty" | "published" | "publishedVersion" | "employeeId">>,
+    patch: Partial<Pick<RosterShift, "kind" | "segments" | "templateId" | "onCall" | "deleted" | "dirty" | "published" | "publishedVersion" | "employeeId" | "areaId">>,
     by: string,
   ) {
     const row: Row = { updated_by: by, updated_at: new Date().toISOString() };
@@ -150,6 +167,7 @@ export class SupabaseRostersRepository implements RostersRepositoryPort {
     if (patch.published !== undefined) row.published = patch.published;
     if (patch.publishedVersion !== undefined) row.published_version = patch.publishedVersion;
     if (patch.employeeId !== undefined) row.employee_id = patch.employeeId;
+    if (patch.areaId !== undefined) row.area_id = patch.areaId;
     return toShf(check(await this.scoped(org).table("roster_shifts").update(row).eq("id", id).select(SHF).single()));
   }
 

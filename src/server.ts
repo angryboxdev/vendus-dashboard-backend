@@ -754,6 +754,11 @@ const rostersModule = createRostersModule({
   audit: auditModule.recorder,
   canSeeEmployee,
   periods: periodGuard,
+  // Plano de Cobertura: funcionalidade opcional da empresa (desligada por omissão).
+  coverageEnabled: async (org) => (await settingsModule.settings.companyValue(org, "time_tracking.roster.coverage_enabled")) === true,
+  // Ligar/desligar nas Escalas grava o mesmo parâmetro (perfil geral, a partir de hoje, com motivo).
+  setCoverageEnabled: (org, userId, enabled) =>
+    settingsModule.settings.setCompanyValue(org, "time_tracking.roster.coverage_enabled", enabled, enabled ? "Plano de cobertura ligado nas Escalas" : "Plano de cobertura desligado nas Escalas", { userId, canRetroactive: false }),
 });
 app.use("/api", rostersModule.router);
 

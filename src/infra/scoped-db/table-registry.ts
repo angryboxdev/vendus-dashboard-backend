@@ -256,6 +256,10 @@ export const TABLE_REGISTRY = {
   roster_shifts: { organizationColumn: "org_id", locationBearing: false },
   roster_publications: { organizationColumn: "org_id", locationBearing: false },
   roster_swaps: { organizationColumn: "org_id", locationBearing: false },
+  // Escalas: áreas de trabalho por centro (a área de cada turno vive em roster_shifts.area_id).
+  work_areas: { organizationColumn: "org_id", locationBearing: true },
+  // Escalas: Plano de Cobertura (mínimos por centro/área; opcional por empresa).
+  coverage_rules: { organizationColumn: "org_id", locationBearing: true },
   // Novo RH Fase 8: períodos, fechos, reaberturas e exportações.
   pay_periods: { organizationColumn: "org_id", locationBearing: false },
   pay_period_closures: { organizationColumn: "org_id", locationBearing: false },

@@ -417,6 +417,19 @@ export const SETTING_CATALOG: SettingDefinition[] = [
     toValidate: true,
     activeFromPhase: 7,
   },
+  // ── Funcionalidades opcionais da empresa ──────────────────────────
+  {
+    key: "time_tracking.roster.coverage_enabled",
+    domain: "time_tracking",
+    type: "bool",
+    label: "Plano de cobertura",
+    description: "Mínimos de pessoas por centro, área e horário, com alertas de défice na escala. Só informa: nunca bloqueia a publicação. Vale para a empresa toda.",
+    defaultValue: false,
+    sensitive: false,
+    legal: false,
+    toValidate: false,
+    activeFromPhase: 7,
+  },
   // ── Banco de horas (C4.5, C6.5 — D11, ADR-0029) ────────────────────
   {
     key: "time_tracking.bank.period",
