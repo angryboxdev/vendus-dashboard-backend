@@ -36,6 +36,20 @@ export interface ShiftState {
   segments: Segment[];
   templateId: string | null;
   onCall: boolean;
+  /**
+   * Área de trabalho da atribuição (ex.: Sala, Caixa). Opcional: turnos e
+   * publicações antigos não a têm — ausente conta como «Sem área» (null).
+   */
+  areaId?: string | null;
+}
+
+/** Área de trabalho de um centro (Sala, Caixa, Cozinha…). Desativar nunca apaga turnos nem histórico. */
+export interface WorkArea {
+  id: string;
+  locationId: string;
+  name: string;
+  sortOrder: number;
+  active: boolean;
 }
 
 export interface RosterShift extends ShiftState {
@@ -130,5 +144,30 @@ export function shiftMinutes(s: Pick<ShiftState, "kind" | "segments">): number {
   }, 0);
 }
 
-export const sameState = (a: ShiftState | null, b: ShiftState | null) => JSON.stringify(a) === JSON.stringify(b);
-export const stateOf = (s: ShiftState): ShiftState => ({ employeeId: s.employeeId, workDate: s.workDate, kind: s.kind, segments: s.segments, templateId: s.templateId, onCall: s.onCall });
+/**
+ * O mesmo estado de turno? Campo a campo (o JSONB da base de dados reordena as
+ * chaves, por isso comparar o texto dava «mudou» a turnos iguais); área
+ * ausente = sem área.
+ */
+export function sameState(a: ShiftState | null, b: ShiftState | null): boolean {
+  if (!a || !b) return a === b;
+  const segs = (s: ShiftState) => s.segments.map((x) => `${x.start}-${x.end}`).join(",");
+  return (
+    a.employeeId === b.employeeId &&
+    a.workDate === b.workDate &&
+    a.kind === b.kind &&
+    (a.templateId ?? null) === (b.templateId ?? null) &&
+    !!a.onCall === !!b.onCall &&
+    (a.areaId ?? null) === (b.areaId ?? null) &&
+    segs(a) === segs(b)
+  );
+}
+export const stateOf = (s: ShiftState): ShiftState => ({ employeeId: s.employeeId, workDate: s.workDate, kind: s.kind, segments: s.segments, templateId: s.templateId, onCall: s.onCall, areaId: s.areaId ?? null });
+
+/** Nome de uma área: 1–60 caracteres. */
+export function validateAreaName(name: string): string {
+  const n = name?.trim() ?? "";
+  if (!n) throw new RosterValidationError("Campo obrigatório", "name");
+  if (n.length > 60) throw new RosterValidationError("Máximo de 60 caracteres.", "name");
+  return n;
+}

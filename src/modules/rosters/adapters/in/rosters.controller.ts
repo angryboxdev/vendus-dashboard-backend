@@ -1,6 +1,7 @@
 import { Router, type Request } from "express";
 import { idempotency, type IdempotencyStore } from "../../../../infra/http/idempotency.js";
 import { problem } from "../../../../infra/http/problem-details.js";
+import type { CoverageUseCases } from "../../application/use-cases/coverage.use-cases.js";
 import type { Actor, RostersUseCases, ShiftInput } from "../../application/use-cases/rosters.use-cases.js";
 import type { Segment } from "../../domain/entities/roster.js";
 import { RosterBlockedError, RosterConflictError, RosterForbiddenError, RosterNotFoundError, RosterValidationError } from "../../domain/errors.js";
@@ -29,7 +30,7 @@ const body = (req: Request) => (req.body ?? {}) as Record<string, unknown>;
 const id = (req: Request) => req.params.id as string;
 
 function shiftInput(b: Record<string, unknown>): ShiftInput {
-  return { employeeId: s(b.employeeId), workDate: s(b.workDate), kind: s(b.kind) === "day_off" ? "day_off" : "shift", templateId: optS(b.templateId), segments: segs(b.segments) };
+  return { employeeId: s(b.employeeId), workDate: s(b.workDate), kind: s(b.kind) === "day_off" ? "day_off" : "shift", templateId: optS(b.templateId), segments: segs(b.segments), areaId: optS(b.areaId) };
 }
 
 /**
@@ -37,7 +38,12 @@ function shiftInput(b: Record<string, unknown>): ShiftInput {
  * em rascunho, publicar (versões), histórico, restrições, trocas.
  * Portal: `/api/me/roster` (os meus turnos publicados) e trocas.
  */
-export function createRostersRouter(uc: RostersUseCases, store: IdempotencyStore, canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean>): Router {
+export function createRostersRouter(
+  uc: RostersUseCases,
+  store: IdempotencyStore,
+  canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean>,
+  coverage?: CoverageUseCases,
+): Router {
   const r = Router();
   const R = "/novo-rh/rosters";
   r.use(R, idempotency(store, { required: true }));
@@ -60,6 +66,59 @@ export function createRostersRouter(uc: RostersUseCases, store: IdempotencyStore
     res.status(204).end();
   });
 
+  // Áreas de trabalho por centro (antes das rotas `${R}/:id`).
+  r.get(`${R}/areas`, async (req, res) => res.json(await uc.listAreas(org(req), optS(req.query.locationId))));
+  r.post(`${R}/areas`, async (req, res) => {
+    const b = body(req);
+    res.status(201).json(await run(() => uc.createArea(org(req), actorOf(req), { locationId: s(b.locationId), name: s(b.name) })));
+  });
+  r.patch(`${R}/areas/:id`, async (req, res) => {
+    const b = body(req);
+    res.json(
+      await run(() =>
+        uc.updateArea(org(req), actorOf(req), id(req), {
+          ...(b.name !== undefined && { name: s(b.name) }),
+          ...(b.sortOrder !== undefined && { sortOrder: Number(b.sortOrder) }),
+          ...(b.active !== undefined && { active: b.active === true }),
+        }),
+      ),
+    );
+  });
+
+  // Plano de Cobertura (opcional por empresa; antes das rotas `${R}/:id`).
+  if (coverage) {
+    const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
+    r.get(`${R}/coverage/status`, async (req, res) => res.json(await coverage.status(org(req))));
+    r.put(`${R}/coverage/status`, async (req, res) => res.json(await run(() => coverage.setEnabled(org(req), actorOf(req), body(req).enabled === true))));
+    r.get(`${R}/coverage/rules`, async (req, res) => res.json(await coverage.listRules(org(req), optS(req.query.locationId))));
+    r.post(`${R}/coverage/rules`, async (req, res) => {
+      const b = body(req);
+      res.status(201).json(
+        await run(() =>
+          coverage.createRule(org(req), actorOf(req), { locationId: s(b.locationId), areaId: optS(b.areaId), weekday: num(b.weekday), date: optS(b.date), start: s(b.start), end: s(b.end), minPeople: Number(b.minPeople) }),
+        ),
+      );
+    });
+    r.patch(`${R}/coverage/rules/:id`, async (req, res) => {
+      const b = body(req);
+      res.json(
+        await run(() =>
+          coverage.updateRule(org(req), actorOf(req), id(req), {
+            ...(b.start !== undefined && { start: s(b.start) }),
+            ...(b.end !== undefined && { end: s(b.end) }),
+            ...(b.minPeople !== undefined && { minPeople: Number(b.minPeople) }),
+          }),
+        ),
+      );
+    });
+    r.delete(`${R}/coverage/rules/:id`, async (req, res) => {
+      await run(() => coverage.deleteRule(org(req), actorOf(req), id(req)));
+      // 200 com corpo: o cliente do frontend lê sempre JSON.
+      res.json({ deleted: true });
+    });
+    r.get(`${R}/:id/coverage`, async (req, res) => res.json(await run(() => coverage.coverage(org(req), id(req), s(req.query.from), s(req.query.to)))));
+  }
+
   r.get(R, async (req, res) => res.json(await uc.listRosters(org(req))));
   r.get(`${R}/summary`, async (req, res) => res.json(await run(() => uc.summary(org(req), s(req.query.from), s(req.query.to)))));
   r.post(R, async (req, res) => {
@@ -80,7 +139,7 @@ export function createRostersRouter(uc: RostersUseCases, store: IdempotencyStore
     const b = body(req);
     const employeeIds = strArr(b.employeeIds);
     for (const e of employeeIds) await scope(req, e, s(b.from));
-    res.status(201).json(await run(() => uc.assignBulk(org(req), actorOf(req), id(req), { employeeIds, from: s(b.from), to: s(b.to), weekdays: strArr(b.weekdays), kind: s(b.kind) === "day_off" ? "day_off" : "shift", templateId: optS(b.templateId) })));
+    res.status(201).json(await run(() => uc.assignBulk(org(req), actorOf(req), id(req), { employeeIds, from: s(b.from), to: s(b.to), weekdays: strArr(b.weekdays), kind: s(b.kind) === "day_off" ? "day_off" : "shift", templateId: optS(b.templateId), areaId: optS(b.areaId) })));
   });
   r.post(`${R}/:id/clear-pending`, async (req, res) => {
     const b = body(req);
@@ -108,6 +167,7 @@ export function createRostersRouter(uc: RostersUseCases, store: IdempotencyStore
     if (b.kind !== undefined) patch.kind = s(b.kind) === "day_off" ? "day_off" : "shift";
     if (b.templateId !== undefined) patch.templateId = optS(b.templateId);
     if (b.segments !== undefined) patch.segments = segs(b.segments);
+    if (b.areaId !== undefined) patch.areaId = optS(b.areaId);
     if (patch.employeeId) await scope(req, patch.employeeId, "");
     res.json(await run(() => uc.updateShift(org(req), actorOf(req), id(req), patch, opts(b))));
   });

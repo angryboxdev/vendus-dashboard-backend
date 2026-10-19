@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { Publication, Roster, RosterShift, ShiftState, ShiftTemplate, ShiftTemplateInput, Swap } from "../../entities/roster.js";
+import type { Publication, Roster, RosterShift, ShiftState, ShiftTemplate, ShiftTemplateInput, Swap, WorkArea } from "../../entities/roster.js";
 import type { Rules } from "../../services/constraints.js";
 
 export interface RostersRepositoryPort {
@@ -8,6 +8,11 @@ export interface RostersRepositoryPort {
   archiveTemplate(org: OrganizationId, id: string): Promise<void>;
   /** Só a cor (a mesma na escala); as faixas de um modelo não mudam depois de criado. */
   setTemplateColor(org: OrganizationId, id: string, color: string | null): Promise<ShiftTemplate>;
+
+  /** Áreas de trabalho (todas, incluindo desativadas — os turnos antigos mantêm o nome). */
+  listAreas(org: OrganizationId): Promise<WorkArea[]>;
+  createArea(org: OrganizationId, a: { locationId: string; name: string; sortOrder: number }, by: string): Promise<WorkArea>;
+  updateArea(org: OrganizationId, id: string, patch: Partial<Pick<WorkArea, "name" | "sortOrder" | "active">>): Promise<WorkArea>;
 
   listRosters(org: OrganizationId): Promise<Roster[]>;
   createRoster(org: OrganizationId, r: Pick<Roster, "name" | "targetType" | "targetId">, by: string): Promise<Roster>;
@@ -18,7 +23,7 @@ export interface RostersRepositoryPort {
   listShifts(org: OrganizationId, f: { rosterId?: string; employeeIds?: string[]; from: string; to: string; includeDeleted?: boolean }): Promise<RosterShift[]>;
   getShift(org: OrganizationId, id: string): Promise<RosterShift | null>;
   insertShifts(org: OrganizationId, rows: (ShiftState & { rosterId: string })[], by: string): Promise<RosterShift[]>;
-  updateShift(org: OrganizationId, id: string, patch: Partial<Pick<RosterShift, "kind" | "segments" | "templateId" | "onCall" | "deleted" | "dirty" | "published" | "publishedVersion" | "employeeId">>, by: string): Promise<RosterShift>;
+  updateShift(org: OrganizationId, id: string, patch: Partial<Pick<RosterShift, "kind" | "segments" | "templateId" | "onCall" | "deleted" | "dirty" | "published" | "publishedVersion" | "employeeId" | "areaId">>, by: string): Promise<RosterShift>;
 
   /**
    * Retira de uma vez (uma só instrução) os turnos nunca publicados de um

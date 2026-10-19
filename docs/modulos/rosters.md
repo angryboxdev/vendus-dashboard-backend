@@ -21,5 +21,10 @@ Ver «Decisões de design» no README do módulo.
 ## Problemas conhecidos
 Ver «Pontos de atenção» no README do módulo.
 
+## Áreas de Trabalho e Plano de Cobertura (no ramo `rh`; por publicar)
+- Áreas por centro e área de cada turno — migração `20261102100000_novo_rh_work_areas`.
+- Plano de Cobertura opcional por empresa (`time_tracking.roster.coverage_enabled`, desligado por omissão) — migração `20261103100000_novo_rh_coverage_rules` (aplicar depois da das áreas; rollback na ordem inversa).
+- Nenhuma das migrações foi aplicada em produção.
+
 ## Próximos trabalhos
-Nenhum registado.
+PR para `main` (backend primeiro, com as duas migrações) só com aprovação.

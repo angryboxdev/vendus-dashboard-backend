@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
-import type { SettingDefinition, SettingDomain } from "../../domain/entities/setting-definition.js";
+import type { SettingData, SettingDefinition, SettingDomain } from "../../domain/entities/setting-definition.js";
 import type { SettingProfile, SettingTarget, TargetType } from "../../domain/entities/setting-profile.js";
 import { RetroactiveNotAllowed, SettingNotFound, SettingValidationError } from "../../domain/errors.js";
 import type { Actor, HistoryEntry, ImpactPreview, ProfileDetail, SettingsPorts } from "../../domain/ports/in/settings.ports.js";
@@ -204,12 +204,26 @@ export class SettingsUseCases implements SettingsPorts {
   }
 
   async sessionPolicy(orgId: OrganizationId) {
-    const def = this.catalog.find((d) => d.key === "security.session.inactivity_minutes");
-    if (!def) return { inactivityMinutes: 30 };
+    const v = await this.companyValue(orgId, "security.session.inactivity_minutes");
+    return { inactivityMinutes: v === null ? 30 : Number(v) };
+  }
+
+  async setCompanyValue(orgId: OrganizationId, key: string, value: SettingData, reason: string, actor: Actor) {
+    const def = this.catalog.find((d) => d.key === key);
+    if (!def) throw new SettingNotFound("Parâmetro desconhecido.");
+    const snap = await this.repo.loadSnapshot(orgId);
+    const global =
+      snap.profiles.find((p) => p.kind === "global" && !p.archived && p.domain === def.domain) ??
+      (await this.createProfile(orgId, { domain: def.domain, name: "Geral", kind: "global" }, actor));
+    await this.setValue(orgId, global.id, { key, value, validFrom: await this.clock.today(orgId), reason }, actor);
+  }
+
+  /** Valor de hoje para a empresa (perfil global ou predefinição), sem exceções por pessoa ou centro. */
+  async companyValue(orgId: OrganizationId, key: string) {
+    const def = this.catalog.find((d) => d.key === key);
+    if (!def) return null;
     const [snap, today] = await Promise.all([this.repo.loadSnapshot(orgId), this.clock.today(orgId)]);
-    // Sem colaborador: vale a configuração da empresa (global) ou a predefinição.
-    const s = resolveSetting(def, { employeeId: "", locationIds: [], departmentIds: [], groupIds: [] }, today, snap);
-    return { inactivityMinutes: s.value === null ? 30 : Number(s.value) };
+    return resolveSetting(def, { employeeId: "", locationIds: [], departmentIds: [], groupIds: [] }, today, snap).value;
   }
 
   private findProfile(snap: SettingsSnapshot, profileId: string): SettingProfile {

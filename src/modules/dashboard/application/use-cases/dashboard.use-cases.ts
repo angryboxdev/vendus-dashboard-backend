@@ -11,6 +11,12 @@ export class DashboardForbiddenError extends Error {
   }
 }
 /** Os dados de hoje ainda estão a ser calculados (continuam em segundo plano): tentar de novo daqui a pouco. */
+/** Falha passageira (rede, tempo limite, sobrecarga da base) — não um erro de programação nem de dados. */
+export function isTransient(e: unknown): boolean {
+  const m = e instanceof Error ? `${e.name} ${e.message}` : String(e);
+  return /timeout|timed out|statement timeout|canceling statement|fetch failed|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|socket hang up|too many (connections|requests)|rate limit|502|503|504|bad gateway|service unavailable|gateway timeout/i.test(m);
+}
+
 export class DashboardWarmingError extends Error {
   constructor() {
     super("A preparar os dados de hoje. Tente de novo dentro de alguns segundos.");
@@ -77,7 +83,10 @@ export class DashboardUseCases {
       timed(
         "people",
         withBudget(this.people(org, viewer), this.peopleBudgetMs).catch((e: unknown) => {
-          throw e instanceof Error && e.message.startsWith("timeout") ? new DashboardWarmingError() : e;
+          if (e instanceof Error && e.message.startsWith("timeout")) throw new DashboardWarmingError();
+          // A causa fica sempre no log; falhas passageiras da base/rede → 503 (o ecrã tenta de novo sozinho).
+          this.onSourceError("people", e);
+          throw isTransient(e) ? new DashboardWarmingError() : e;
         }),
       ),
       timed("requests", this.cache.getOrLoad({ org, metric: "REQUESTS", date: "today", viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () => withBudget(viewer.requests(), Math.max(this.coverageBudgetMs, Math.min(REQUESTS_BUDGET_MS, this.peopleBudgetMs)))))

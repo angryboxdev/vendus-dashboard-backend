@@ -71,6 +71,18 @@ export function sendProblem(res: Response, p: Problem, instance?: string): void 
     });
 }
 
+/**
+ * Mensagem de um erro inesperado para o log (nunca para o cliente): curta e
+ * sem e-mails nem sequências longas de dígitos (NIF, telefone, IBAN…).
+ */
+export function logSafeMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  return raw
+    .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, "<email>")
+    .replace(/\d{6,}/g, "<n>")
+    .slice(0, 300);
+}
+
 /** Último middleware: `ProblemError` → corpo RFC 7807; o resto → 500 genérico (a causa só vai para o log). */
 export const problemHandler: ErrorRequestHandler = (err, req, res, next) => {
   if (res.headersSent) {
@@ -87,6 +99,6 @@ export const problemHandler: ErrorRequestHandler = (err, req, res, next) => {
     sendProblem(res, problem(400, "malformed_json", "O corpo do pedido não é JSON válido.").problem, instance);
     return;
   }
-  log("error", "unhandled_error", { error: err instanceof Error ? err.name : "unknown", method: req.method, path: instance });
+  log("error", "unhandled_error", { error: err instanceof Error ? err.name : "unknown", message: logSafeMessage(err), method: req.method, path: instance });
   sendProblem(res, problem(500, "internal_error").problem, instance);
 };

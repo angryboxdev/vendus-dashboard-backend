@@ -29,3 +29,12 @@ describe("logs estruturados sem dados pessoais", () => {
     expect(line).not.toContain("Pessoa Teste");
   });
 });
+
+describe("logSafeMessage", () => {
+  test("mensagem curta para o log, sem e-mails nem sequências longas de dígitos", async () => {
+    const { logSafeMessage } = await import("../problem-details.js");
+    expect(logSafeMessage(new Error("falhou para ana.teste@demo.invalid com NIF 123456789"))).toBe("falhou para <email> com NIF <n>");
+    expect(logSafeMessage(new Error("x".repeat(500)))).toHaveLength(300);
+    expect(logSafeMessage({})).toBe("");
+  });
+});
