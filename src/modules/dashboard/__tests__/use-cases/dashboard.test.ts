@@ -260,3 +260,24 @@ describe("Dashboard — rapidez", () => {
     expect((await cache.getOrLoad(key, 1000, load)).value).toBe(3);
   });
 });
+
+describe("Dashboard — falhas das pessoas", () => {
+  test("falha passageira da base → «a preparar» (503) e a causa no log; erro de dados continua a ser erro, também no log", async () => {
+    const { DashboardWarmingError, isTransient } = await import("../../application/use-cases/dashboard.use-cases.js");
+    const logged: string[] = [];
+    const uc = new DashboardUseCases(new FakeSources(), new FakeLayouts(), new MemoryDashboardCache(), (source, e) => logged.push(`${source}: ${(e as Error).message}`));
+    const flaky = new FakeViewer("u1", PEOPLE);
+    flaky.people = async () => {
+      throw new Error("canceling statement due to statement timeout");
+    };
+    await expect(uc.snapshot(ORG_A, flaky, null)).rejects.toBeInstanceOf(DashboardWarmingError);
+    const broken = new FakeViewer("u2", PEOPLE);
+    broken.people = async () => {
+      throw new Error("column roster_shifts.area_id does not exist");
+    };
+    await expect(uc.snapshot(ORG_A, broken, null)).rejects.toThrow("area_id does not exist");
+    expect(logged).toEqual(["people: canceling statement due to statement timeout", "people: column roster_shifts.area_id does not exist"]);
+    expect(isTransient(new Error("TypeError: fetch failed"))).toBe(true);
+    expect(isTransient(new Error("duplicate key value violates unique constraint"))).toBe(false);
+  });
+});
