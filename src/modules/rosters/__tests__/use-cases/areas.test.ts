@@ -90,6 +90,30 @@ describe("Áreas de trabalho — área da atribuição", () => {
   });
 });
 
+describe("Áreas de trabalho — demonstração", () => {
+  test("preenche só turnos sem área (rascunho e publicado), sem nova versão; ignora folgas e áreas de outro centro", async () => {
+    const { uc, repo } = setup();
+    const roster = await uc.createRoster(ORG, BOSS, { name: "Centro Porto", targetType: "location", targetId: PORTO });
+    const sala = await uc.createArea(ORG, BOSS, { locationId: PORTO, name: "Sala" });
+    const caixa = await uc.createArea(ORG, BOSS, { locationId: PORTO, name: "Caixa" });
+    const bar = await uc.createArea(ORG, BOSS, { locationId: BRAGA, name: "Bar" });
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-11-02"));
+    await uc.addShift(ORG, BOSS, roster.id, shift("e2", "2026-11-02", caixa.id));
+    await uc.addShift(ORG, BOSS, roster.id, { employeeId: "e3", workDate: "2026-11-02", kind: "day_off", templateId: null, segments: [], areaId: null });
+    await uc.addShift(ORG, BOSS, roster.id, shift("e4", "2026-11-03"));
+    await uc.publish(ORG, BOSS, roster.id, { reason: null, confirm: true });
+    const version = (await uc.listRosters(ORG)).find((r) => r.id === roster.id)!.version;
+    const out = await uc.fillMissingAreasForDemo(ORG, BOSS, roster.id, "2026-11-02", "2026-11-03", (e) => (e === "e4" ? bar.id : sala.id));
+    expect(out).toEqual({ filled: 1 });
+    const byEmp = (e: string) => repo.shifts.find((s) => s.employeeId === e)!;
+    expect(byEmp("e1")).toMatchObject({ areaId: sala.id, published: expect.objectContaining({ areaId: sala.id }), dirty: false });
+    expect(byEmp("e2").areaId).toBe(caixa.id);
+    expect(byEmp("e3").areaId).toBeNull();
+    expect(byEmp("e4").areaId ?? null).toBeNull(); // área de outro centro: recusada
+    expect((await uc.listRosters(ORG)).find((r) => r.id === roster.id)!.version).toBe(version);
+  });
+});
+
 describe("Estado do turno — comparação", () => {
   test("igual mesmo com as chaves noutra ordem (JSONB) e com área ausente = sem área", () => {
     const a: ShiftState = { employeeId: "e1", workDate: "2026-11-02", kind: "shift", segments: [{ start: "09:00", end: "17:00" }], templateId: "t1", onCall: false };

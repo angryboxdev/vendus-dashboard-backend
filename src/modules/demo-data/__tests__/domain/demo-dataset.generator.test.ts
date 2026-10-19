@@ -56,3 +56,29 @@ describe("gerador de dados de demonstração", () => {
     if (after) expect(DateTime.fromISO(after.atUtc).setZone("Europe/Lisbon").offset).toBe(0);
   });
 });
+
+describe("Áreas de trabalho na demonstração", () => {
+  test("sorteio estável: área principal por pessoa, ~20% dos dias noutra, todas as áreas usadas", async () => {
+    const { demoAreaIndex, DEMO_AREAS } = await import("../../domain/services/demo-scenario.js");
+    const n = DEMO_AREAS.length;
+    const ids = Array.from({ length: 112 }, (_, i) => `emp-${i}`);
+    const days = Array.from({ length: 14 }, (_, i) => `2026-11-${String(i + 2).padStart(2, "0")}`);
+    expect(demoAreaIndex("emp-1", "2026-11-02", n)).toBe(demoAreaIndex("emp-1", "2026-11-02", n));
+    const used = new Set(ids.map((e) => demoAreaIndex(e, "2026-11-02", n)));
+    expect(used.size).toBe(n);
+    const mains = new Map(ids.map((e) => [e, demoAreaIndex(e, "x-dia-base", n)]));
+    let other = 0;
+    let total = 0;
+    for (const e of ids)
+      for (const d of days) {
+        const i = demoAreaIndex(e, d, n);
+        expect(i).toBeGreaterThanOrEqual(0);
+        expect(i).toBeLessThan(n);
+        total++;
+        if (i !== mains.get(e)) other++;
+      }
+    expect(other / total).toBeGreaterThan(0.1);
+    expect(other / total).toBeLessThan(0.35);
+    expect(demoAreaIndex("emp-1", "2026-11-02", 0)).toBe(-1);
+  });
+});
