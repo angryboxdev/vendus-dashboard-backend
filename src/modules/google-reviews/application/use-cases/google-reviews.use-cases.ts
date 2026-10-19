@@ -1,6 +1,7 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { LocationRating, PlaceReview, PlaceSummary } from "../../domain/entities/google-reviews.js";
-import type { GooglePlacesGateway, GoogleReviewsAuditPort, LocationsSourcePort, PlaceLinkRepositoryPort } from "../../domain/ports/out/google-reviews.ports.js";
+import type { DemoOrgCheckPort, GooglePlacesGateway, GoogleReviewsAuditPort, LocationsSourcePort, PlaceLinkRepositoryPort } from "../../domain/ports/out/google-reviews.ports.js";
+import { demoRating, demoReviews } from "../../domain/services/demo-reviews.service.js";
 import { normalizeQuery, weightedAverage } from "../../domain/services/ratings.service.js";
 
 export class GoogleReviewsError extends Error {
@@ -31,6 +32,7 @@ export class GoogleReviewsUseCases {
     private readonly locations: LocationsSourcePort,
     private readonly audit: GoogleReviewsAuditPort,
     private readonly now: () => number = () => Date.now(),
+    private readonly demo: DemoOrgCheckPort = { isDemo: async () => false },
   ) {}
 
   get configured(): boolean {
@@ -53,6 +55,7 @@ export class GoogleReviewsUseCases {
 
   /** Resumo para o Dashboard: nota por local ligado e a média ponderada. */
   async overview(org: OrganizationId) {
+    if (await this.demo.isDemo(org)) return this.demoOverview(org);
     const [links, locs] = await Promise.all([this.links.list(org), this.locations.locations(org)]);
     const name = new Map(locs.map((l) => [l.id, l.name]));
     const rows: LocationRating[] = await Promise.all(
@@ -72,6 +75,22 @@ export class GoogleReviewsUseCases {
     rows.sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1) || a.locationName.localeCompare(b.locationName, "pt"));
     const unlinked = locs.filter((l) => !links.some((x) => x.locationId === l.id)).map((l) => ({ locationId: l.id, locationName: l.name }));
     return { configured: this.configured, average: weightedAverage(rows), locations: rows, unlinked };
+  }
+
+  /** Demonstração: todos os locais «ligados», com notas e avaliações fictícias (sem chamar o Google). */
+  private async demoOverview(org: OrganizationId) {
+    const now = this.now();
+    const rows: LocationRating[] = (await this.locations.locations(org)).map((l) => ({
+      locationId: l.id,
+      locationName: l.name,
+      placeId: `demo-${l.id}`,
+      placeName: l.name,
+      ...demoRating(l.id, now),
+      googleMapsUri: null,
+      unavailable: false,
+    }));
+    rows.sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1) || a.locationName.localeCompare(b.locationName, "pt"));
+    return { configured: true, average: weightedAverage(rows), locations: rows, unlinked: [] as { locationId: string; locationName: string }[] };
   }
 
   /** Procurar o lugar no Google (para ligar a um local). */
@@ -103,6 +122,11 @@ export class GoogleReviewsUseCases {
 
   /** Avaliações completas de um local (só a pedido). */
   async reviews(org: OrganizationId, locationId: string): Promise<{ placeName: string; googleMapsUri: string | null; reviews: PlaceReview[] }> {
+    if (await this.demo.isDemo(org)) {
+      const loc = (await this.locations.locations(org)).find((l) => l.id === locationId);
+      if (!loc) throw new GoogleReviewsError("Local não encontrado.", "not_found");
+      return { placeName: loc.name, googleMapsUri: null, reviews: demoReviews(locationId, this.now(), 5) };
+    }
     const g = this.requireGateway();
     const link = (await this.links.list(org)).find((l) => l.locationId === locationId);
     if (!link) throw new GoogleReviewsError("Este local ainda não está ligado ao Google.", "not_found");

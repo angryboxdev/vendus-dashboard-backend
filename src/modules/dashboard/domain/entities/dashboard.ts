@@ -5,11 +5,12 @@
 
 /**
  * Categorias do "Estado da equipa" (mapeiam estados reais do apuramento):
- * a trabalhar, remoto, em pausa, já saiu, ainda por entrar, férias e
- * ausentes (ausência aprovada ou falta sem marcação). Só a folga fica de fora.
+ * a trabalhar (inclui em pausa — 2026-10-19), remoto, já saiu, ainda por
+ * entrar, férias e ausentes (ausência aprovada ou falta sem marcação). Só a
+ * folga fica de fora.
  */
-export type TeamCategory = "working" | "remote" | "break" | "finished" | "not_started" | "vacation" | "absent";
-export const TEAM_CATEGORIES: TeamCategory[] = ["working", "remote", "break", "finished", "not_started", "vacation", "absent"];
+export type TeamCategory = "working" | "remote" | "finished" | "not_started" | "vacation" | "absent";
+export const TEAM_CATEGORIES: TeamCategory[] = ["working", "remote", "finished", "not_started", "vacation", "absent"];
 
 /** Estado do dia de uma pessoa, como o painel (Overview) o devolve. */
 export interface DashboardPerson {
@@ -50,7 +51,6 @@ export interface TeamCounts {
   total: number;
   working: number;
   remote: number;
-  break: number;
   finished: number;
   not_started: number;
   vacation: number;

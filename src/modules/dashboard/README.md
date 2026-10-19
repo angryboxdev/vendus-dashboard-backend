@@ -88,3 +88,5 @@ assiduidade, ausências, pedidos ou escalas — lê-as dos módulos donos.
 - Cache por processo (várias instâncias → caches separadas, limitadas pelo TTL).
 - O painel (Overview) tem a sua própria cache de 30 s por baixo.
 - Sem Google Reviews, vagas, artigos nem hierarquia região → locais (não existem fontes).
+
+- «Em pausa» deixou de ser categoria do Estado da equipa (2026-10-19, pedido do utilizador): `teamCategory` conta a pausa como «a trabalhar»; `TeamCounts` já não tem `break`.

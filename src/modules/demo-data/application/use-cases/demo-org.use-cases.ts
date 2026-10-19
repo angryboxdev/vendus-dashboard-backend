@@ -154,7 +154,7 @@ export class DemoOrgUseCases {
     const prevMonth = t.minus({ months: 1 }).startOf("month");
     const from = (prevMonth < window ? prevMonth : window).toISODate()!;
     const nowUtc = new Date(this.now()).toISOString();
-    const punches = generatePunches({ seed: SEED, employees: dataset.employees, schedules: dataset.schedules, from, to: today, nowUtc });
+    const punches = generatePunches({ seed: SEED, employees: dataset.employees, schedules: dataset.schedules, from, to: today, nowUtc, lateBoostDate: today });
     const [existing, absences] = await Promise.all([this.live.existingEventIds(demo, `${DateTime.fromISO(from, { zone: "utc" }).minus({ days: 1 }).toISODate()}T00:00:00.000Z`), this.live.absenceDays(demo, from, today)]);
     const absent = (employeeId: string, date: string) => absences.some((a) => a.employeeId === employeeId && a.startDate <= date && a.endDate >= date);
     const toInsert = [];

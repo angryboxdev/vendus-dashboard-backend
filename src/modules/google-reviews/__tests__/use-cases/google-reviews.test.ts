@@ -124,3 +124,53 @@ describe("HttpGooglePlacesGateway (Places API New)", () => {
     expect(err.message).not.toContain("SEGREDO");
   });
 });
+
+describe("Avaliações Google — demonstração (fictícias)", () => {
+  const NOW = Date.parse("2026-10-19T15:00:00Z");
+  const demoUc = (gateway: GooglePlacesGateway | null) => {
+    let t = NOW;
+    const uc = new GoogleReviewsUseCases(
+      gateway,
+      new FakeLinks(),
+      { locations: async () => [{ id: "l1", name: "Centro Demo Porto" }, { id: "l2", name: "Centro Demo Braga" }] },
+      { record: async () => {} },
+      () => t,
+      { isDemo: async (org) => org === ORG },
+    );
+    return { uc, advance: (ms: number) => (t += ms) };
+  };
+
+  test("todos os centros com nota e avaliações fictícias, sem chave e sem chamar o Google", async () => {
+    const { uc } = demoUc(null);
+    const o = await uc.overview(ORG);
+    expect(o.configured).toBe(true);
+    expect(o.unlinked).toEqual([]);
+    expect(o.locations).toHaveLength(2);
+    for (const l of o.locations) {
+      expect(l.rating).toBeGreaterThanOrEqual(4.2);
+      expect(l.rating).toBeLessThanOrEqual(4.8);
+      expect(l.userRatingCount).toBeGreaterThan(100);
+    }
+    expect(o.average.rating).not.toBeNull();
+  });
+
+  test("as 5 mais recentes de um centro, da mais nova para a mais antiga; vão chegando novas com o tempo", async () => {
+    const { uc, advance } = demoUc(null);
+    const first = await uc.reviews(ORG, "l1");
+    expect(first.reviews).toHaveLength(5);
+    const times = first.reviews.map((r) => r.publishTime!);
+    expect([...times].sort().reverse()).toEqual(times);
+    expect(first.reviews.every((r) => r.author && r.text && r.rating! >= 1 && r.rating! <= 5 && r.relativeTime!.startsWith("há "))).toBe(true);
+    // Mesmo instante → mesmo resultado; umas horas depois há avaliações novas no topo.
+    expect((await uc.reviews(ORG, "l1")).reviews).toEqual(first.reviews);
+    advance(6 * 3_600_000);
+    const later = await uc.reviews(ORG, "l1");
+    expect(later.reviews[0]!.publishTime! > first.reviews[0]!.publishTime!).toBe(true);
+    await expect(uc.reviews(ORG, "nao-existe")).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  test("a organização real continua no Google", async () => {
+    const { uc } = demoUc(null);
+    expect((await uc.overview(OTHER)).configured).toBe(false);
+  });
+});

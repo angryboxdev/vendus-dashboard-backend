@@ -82,3 +82,5 @@ local → `place_id`. A chave fica na variável de ambiente
 ## How to test
 
 - `npx jest --config jest.config.cjs src/modules/google-reviews` (fakes; gateway com `fetch` falso).
+
+- **Avaliações fictícias na Demonstração** (2026-10-19): numa organização demo (`isDemo`, com cache de 5 min) todos os locais aparecem «ligados» com nota (4,2–4,8) e número de avaliações fictícios, e `reviews` devolve as 5 mais recentes de `demo-reviews.service.ts` — determinísticas por local e hora, com avaliações novas a «chegar» ao longo do dia; nunca chama o Google. A organização real não muda.
