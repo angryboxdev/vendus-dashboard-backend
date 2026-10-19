@@ -10,7 +10,7 @@ Implementado (README: active). Sem trabalho em curso registado.
 
 ## Arquitetura
 - Código: `src/modules/demo-data/` (domain, application, adapters); composição: `demo-data.module.ts`; documentação detalhada: `src/modules/demo-data/README.md`.
-- Endpoints: 1 rotas (prefixo definido no controller) — lista e permissões em `docs/matriz-autorizacao.md`.
+- Endpoints: 3 rotas (estado, criar, atualizar) (prefixo definido no controller) — lista e permissões em `docs/matriz-autorizacao.md`.
 
 ## Dependências
 Sem dependências diretas de outros módulos (integrações via portas no composition root / `src/server.ts`).

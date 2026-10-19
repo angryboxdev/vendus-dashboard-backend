@@ -479,7 +479,8 @@ const demoOrgModule = createDemoOrgModule({
         const vacation = (await absencesModule.absences.listTypes(org)).find((t) => t.category === "vacation" && !t.archived);
         if (!vacation) return;
         const pendingNow = (await absencesModule.absences.listRequests(org, { status: "pending" }, false, "sistema")).length;
-        for (const p of plan.extraPending.slice(0, Math.max(0, 5 - pendingNow))) {
+        // Pelo menos 8 pedidos à espera (mais material na caixa de Pedidos — 2026-10-19).
+        for (const p of plan.extraPending.slice(0, Math.max(0, 8 - pendingNow))) {
           try {
             await absencesModule.absences.createRequest(org, { userId: `demo-colaborador:${p.employeeId}`, email: "colaborador@demo.invalid" }, { ...p, typeId: vacation.id, startTime: null, endTime: null, halfDay: false, comment: "Pedido de férias (demonstração)", attachmentDocumentId: null }, "self");
             out.pending++;
@@ -504,6 +505,60 @@ const demoOrgModule = createDemoOrgModule({
         await periodsModule.periods.close(org, actor, p.id, pending.length ? "Fecho de demonstração com exceções (dados fictícios)." : null);
         out.periodClosed = true;
       });
+      return out;
+    },
+    // Em dia com o calendário (só o que falta): ausências de hoje e escalas da semana atual/seguinte.
+    keepCurrent: async (org, actor, plan) => {
+      const out = { absencesToday: 0, shifts: 0, errors: [] as string[] };
+      const fail = (name: string, e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        out.errors.push(`${name}: ${msg}`);
+        console.error(`[demo] em dia (${name}) falhou:`, msg);
+      };
+      try {
+        const vacation = (await absencesModule.absences.listTypes(org)).find((t) => t.category === "vacation" && !t.archived);
+        if (vacation && plan.absencesToday.length) {
+          const today = await absencesModule.absences.listRequests(org, { from: plan.today, to: plan.today }, true, "sistema");
+          const busy = new Set(today.filter((r) => r.status === "approved" || r.status === "pending").map((r) => r.employeeId));
+          for (const a of plan.absencesToday) {
+            if (busy.has(a.employeeId)) continue;
+            try {
+              await absencesModule.absences.createRequest(org, actor, { ...a, typeId: vacation.id, startTime: null, endTime: null, halfDay: false, comment: "Ausência (demonstração)", attachmentDocumentId: null }, "assign");
+              out.absencesToday++;
+            } catch {
+              /* recusada pelas regras (ex.: período fechado): segue */
+            }
+          }
+        }
+      } catch (e) {
+        fail("ausências", e);
+      }
+      try {
+        const [rosters, templates] = await Promise.all([rostersModule.rosters.listRosters(org), rostersModule.rosters.listTemplates(org)]);
+        const tpl = new Map(templates.filter((t) => !t.archived).map((t) => [t.name, t.id]));
+        for (const r of plan.rosters) {
+          const roster = rosters.find((x) => !x.archived && x.targetType === "location" && x.targetId === r.locationId);
+          if (!roster) continue;
+          for (const [range, publishIt] of [[plan.weeks.current, true], [plan.weeks.next, false]] as const) {
+            const has = new Set((await rostersModule.rosters.listShifts(org, roster.id, range.from, range.to)).shifts.filter((s) => !s.deleted).map((s) => s.employeeId));
+            let created = 0;
+            for (const g of r.groups) {
+              const ids = g.employeeIds.filter((id) => !has.has(id));
+              const templateId = tpl.get(g.templateName);
+              if (!ids.length || !templateId) continue;
+              try {
+                created += (await rostersModule.rosters.assignBulk(org, actor, roster.id, { employeeIds: ids, from: range.from, to: range.to, weekdays: g.weekdays, kind: "shift", templateId })).created;
+              } catch (e) {
+                fail(`escala ${roster.name}`, e);
+              }
+            }
+            out.shifts += created;
+            if (publishIt && created) await rostersModule.rosters.publish(org, actor, roster.id, { reason: "Escala de demonstração (semana atual)", confirm: true, from: range.from, to: range.to });
+          }
+        }
+      } catch (e) {
+        fail("escalas", e);
+      }
       return out;
     },
   },

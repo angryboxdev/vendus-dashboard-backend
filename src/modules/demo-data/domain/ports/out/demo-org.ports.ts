@@ -1,7 +1,7 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { DemoDataset } from "../../entities/demo-dataset.js";
+import type { DemoDataset, DemoEmployee } from "../../entities/demo-dataset.js";
 import type { DemoOrg, DemoSeedSummary } from "../../entities/demo-org.js";
-import type { EnrichmentPlan, ScenarioPlan } from "../../services/demo-scenario.js";
+import type { CurrentPlan, EnrichmentPlan, ScenarioPlan } from "../../services/demo-scenario.js";
 
 export interface DemoOrgRepositoryPort {
   organization(org: OrganizationId): Promise<{ name: string; isDemo: boolean } | null>;
@@ -35,6 +35,11 @@ export interface DemoLivePort {
   insertPunches(demoOrg: OrganizationId, rows: { employeeId: string; occurredAt: string; segmentType: string; clientEventId: string; locationId: string | null }[]): Promise<number>;
   /** Garante o tipo "Férias (demo)" (organizações demo criadas antes de existir). */
   ensureVacationType(demoOrg: OrganizationId, actor: string): Promise<void>;
+  /**
+   * Acrescenta colaboradores fictícios que ainda não existem (a demo cresceu):
+   * ficha, contrato e horário, ligados ao centro, cargo e horário da demo pelo nome.
+   */
+  addEmployees(demoOrg: OrganizationId, employees: DemoEmployee[], schedules: { key: string; name: string }[], centers: { key: string; name: string }[], positions: { key: string; name: string }[], actor: string, year: number): Promise<number>;
 }
 
 /** Cenário (escalas e ausências) criado pelos casos de uso dos módulos donos — ligado no server.ts. */
@@ -47,4 +52,10 @@ export interface DemoScenarioPort {
    * avalia-as, e acrescenta pedidos pendentes até haver pelo menos cinco.
    */
   enrich(demoOrg: OrganizationId, actor: { userId: string; email: string }, plan: EnrichmentPlan): Promise<{ periodClosed: boolean; rules: number; pending: number; alerts: number; errors?: string[] }>;
+  /**
+   * A demonstração acompanha o calendário (só cria o que falta): ausências de
+   * hoje já aprovadas e escalas da semana atual (publicada) e da seguinte
+   * (rascunho) para quem ainda não tem turnos nessas semanas.
+   */
+  keepCurrent(demoOrg: OrganizationId, actor: { userId: string; email: string }, plan: CurrentPlan): Promise<{ absencesToday: number; shifts: number; errors?: string[] }>;
 }
