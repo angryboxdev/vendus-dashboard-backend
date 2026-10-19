@@ -46,6 +46,8 @@ export function createRostersRouter(uc: RostersUseCases, store: IdempotencyStore
     if (!employeeId || !(await canSeeEmployee(req, employeeId, /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : new Date().toISOString().slice(0, 10)))) throw problem(404, "not_found", "Colaborador não encontrado.");
   };
   const opts = (b: Record<string, unknown>) => ({ reason: optS(b.reason), confirm: b.confirm === true });
+  // Período opcional (ex.: a semana visível): valida e publica só os pendentes desse período.
+  const period = (from: unknown, to: unknown) => (optS(from) && optS(to) ? { from: optS(from)!, to: optS(to)! } : null);
 
   r.get(`${R}/templates`, async (req, res) => res.json(await uc.listTemplates(org(req))));
   r.post(`${R}/templates`, async (req, res) => {
@@ -89,8 +91,14 @@ export function createRostersRouter(uc: RostersUseCases, store: IdempotencyStore
     const b = body(req);
     res.json(await run(() => uc.restoreShifts(org(req), actorOf(req), id(req), strArr(b.shiftIds))));
   });
-  r.get(`${R}/:id/check`, async (req, res) => res.json(await run(() => uc.check(org(req), id(req)))));
-  r.post(`${R}/:id/publish`, async (req, res) => res.json(await run(() => uc.publish(org(req), actorOf(req), id(req), opts(body(req))))));
+  r.get(`${R}/:id/check`, async (req, res) => res.json(await run(() => uc.check(org(req), id(req), period(req.query.from, req.query.to)))));
+  r.post(`${R}/:id/publish`, async (req, res) => {
+    const b = body(req);
+    const p = period(b.from, b.to);
+    res.json(await run(() => uc.publish(org(req), actorOf(req), id(req), { ...opts(b), from: p?.from ?? null, to: p?.to ?? null })));
+  });
+  // Seletor «Adicionar colaboradores»: pertenças ao centro/grupo e turnos noutras escalas no período.
+  r.get(`${R}/:id/candidates`, async (req, res) => res.json(await run(() => uc.candidates(org(req), id(req), s(req.query.from), s(req.query.to)))));
   r.get(`${R}/:id/history`, async (req, res) => res.json(await run(() => uc.history(org(req), id(req)))));
 
   r.patch(`${R}/shifts/:id`, async (req, res) => {

@@ -131,6 +131,11 @@ export class FakeRostersContext implements RostersContextPort {
   async peopleBrief(_o: OrganizationId, ids: string[]) {
     return this.people.filter((p) => ids.includes(p.id));
   }
+  /** Pertenças por alvo (`location:<id>` / `group:<id>`). */
+  members = new Map<string, string[]>();
+  async targetMembers(_o: OrganizationId, targetType: "location" | "group", targetId: string) {
+    return this.members.get(`${targetType}:${targetId}`) ?? [];
+  }
 }
 
 export class FakeRostersNotifier {
