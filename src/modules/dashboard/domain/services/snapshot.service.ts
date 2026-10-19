@@ -5,6 +5,7 @@ import type {
   DashboardPerson,
   DashboardRequest,
   TeamCategory,
+  TeamChart,
   TeamCounts,
   UnitRow,
   WidgetPref,
@@ -105,19 +106,24 @@ export interface WidgetSpec {
 
 /** Widgets conhecidos pelo servidor (ids estáveis; o registo visual vive no frontend). */
 export const WIDGET_SPECS: WidgetSpec[] = [
-  { id: "ATTENTION", defaultOrder: 0, defaultSpan: 6, allowedSpans: [4, 6, 12] },
-  { id: "TEAM_STATUS", defaultOrder: 1, defaultSpan: 6, allowedSpans: [6, 12] },
-  { id: "LOCATIONS_STATUS", defaultOrder: 2, defaultSpan: 12, allowedSpans: [12] },
-  { id: "COVERAGE", defaultOrder: 3, defaultSpan: 5, allowedSpans: [4, 5, 6, 12] },
-  { id: "REQUESTS", defaultOrder: 4, defaultSpan: 7, allowedSpans: [6, 7, 12] },
-  { id: "GOOGLE_REVIEWS", defaultOrder: 5, defaultSpan: 6, allowedSpans: [4, 6, 12] },
-  { id: "BIRTHDAYS", defaultOrder: 6, defaultSpan: 6, allowedSpans: [4, 6, 12] },
-  { id: "HOLIDAYS", defaultOrder: 7, defaultSpan: 6, allowedSpans: [4, 6, 12] },
+  // DASH-UI-05: linha principal em três colunas (equipa, unidades, atenção); depois planeamento; depois complementares.
+  // A ordem padrão só vale para quem nunca guardou um layout (mergeLayout não reordena o que está guardado).
+  { id: "TEAM_STATUS", defaultOrder: 0, defaultSpan: 4, allowedSpans: [4, 6, 12] },
+  { id: "LOCATIONS_STATUS", defaultOrder: 1, defaultSpan: 4, allowedSpans: [4, 6, 12] },
+  { id: "ATTENTION", defaultOrder: 2, defaultSpan: 4, allowedSpans: [4, 6, 12] },
+  { id: "COVERAGE", defaultOrder: 3, defaultSpan: 6, allowedSpans: [4, 5, 6, 12] },
+  { id: "REQUESTS", defaultOrder: 4, defaultSpan: 6, allowedSpans: [6, 7, 12] },
+  { id: "GOOGLE_REVIEWS", defaultOrder: 5, defaultSpan: 4, allowedSpans: [4, 6, 12] },
+  { id: "BIRTHDAYS", defaultOrder: 6, defaultSpan: 4, allowedSpans: [4, 6, 12] },
+  { id: "HOLIDAYS", defaultOrder: 7, defaultSpan: 4, allowedSpans: [4, 6, 12] },
   { id: "REPORTS", defaultOrder: 8, defaultSpan: 6, allowedSpans: [4, 6, 12] },
   { id: "VACANCIES", defaultOrder: 9, defaultSpan: 4, allowedSpans: [4, 6] },
   { id: "ARTICLES", defaultOrder: 10, defaultSpan: 4, allowedSpans: [4, 6, 12] },
 ];
 export const LAYOUT_VERSION = 1;
+
+/** Formatos do gráfico «Estado da equipa» (preferência visual por utilizador; omisso = rosca). */
+export const TEAM_CHARTS: TeamChart[] = ["donut", "bar", "pie"];
 
 export class LayoutValidationError extends Error {
   constructor(message: string) {
@@ -138,7 +144,8 @@ export function validateLayout(input: unknown): DashboardLayout {
     seen.add(spec.id);
     const span = Number(x.span);
     if (!spec.allowedSpans.includes(span)) throw new LayoutValidationError(`Tamanho não permitido para ${spec.id}.`);
-    return { widgetId: spec.id, order: Number.isInteger(x.order) ? Number(x.order) : i, span, hidden: x.hidden === true };
+    const chart = spec.id === "TEAM_STATUS" && TEAM_CHARTS.includes(x.chart as TeamChart) ? (x.chart as TeamChart) : undefined;
+    return { widgetId: spec.id, order: Number.isInteger(x.order) ? Number(x.order) : i, span, hidden: x.hidden === true, ...(chart && { chart }) };
   });
   return { layoutVersion: LAYOUT_VERSION, widgets };
 }
