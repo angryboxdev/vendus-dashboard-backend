@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 772 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 778 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -541,6 +541,7 @@ Endpoints: 772 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/novo-rh/rosters/:id/candidates` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/rosters/:id/check` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters/:id/clear-pending` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/rosters/:id/coverage` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/rosters/:id/history` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters/:id/publish` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/rosters/:id/shifts` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
@@ -550,6 +551,11 @@ Endpoints: 772 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/novo-rh/rosters/areas` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters/areas` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | PATCH | `/api/novo-rh/rosters/areas/:id` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/rosters/coverage/rules` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/rosters/coverage/rules` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| DELETE | `/api/novo-rh/rosters/coverage/rules/:id` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| PATCH | `/api/novo-rh/rosters/coverage/rules/:id` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/rosters/coverage/status` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | PATCH | `/api/novo-rh/rosters/shifts/:id` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters/shifts/:id/delete` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/rosters/summary` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |

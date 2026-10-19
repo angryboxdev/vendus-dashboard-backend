@@ -4,9 +4,10 @@ import { InMemoryIdempotencyStore } from "../../../../infra/http/idempotency.js"
 import { problemHandler } from "../../../../infra/http/problem-details.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { createRostersRouter } from "../../adapters/in/rosters.controller.js";
+import { CoverageUseCases } from "../../application/use-cases/coverage.use-cases.js";
 import { RostersUseCases } from "../../application/use-cases/rosters.use-cases.js";
 import { rulesFromSettings } from "../../rosters.module.js";
-import { FakePublishedHook, FakeRostersAudit, FakeRostersContext, FakeRostersNotifier, FakeRostersRepository, NO_RULES } from "../fakes/fake-rosters.js";
+import { FakeCoverageContext, FakeCoverageRules, FakePublishedHook, FakeRostersAudit, FakeRostersContext, FakeRostersNotifier, FakeRostersRepository, NO_RULES } from "../fakes/fake-rosters.js";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const express = require("express") as typeof import("express");
@@ -16,17 +17,21 @@ describe("API /api/novo-rh/rosters", () => {
   let base: string;
   let n = 0;
   let ctx: FakeRostersContext;
+  let cov: FakeCoverageContext;
 
   beforeEach(async () => {
     ctx = new FakeRostersContext();
-    const uc = new RostersUseCases(new FakeRostersRepository(), ctx, new FakeRostersNotifier(), new FakePublishedHook(), new FakeRostersAudit());
+    cov = new FakeCoverageContext();
+    const repo = new FakeRostersRepository();
+    const uc = new RostersUseCases(repo, ctx, new FakeRostersNotifier(), new FakePublishedHook(), new FakeRostersAudit());
+    const coverage = new CoverageUseCases(new FakeCoverageRules(), repo, cov, new FakeRostersAudit());
     const app = express();
     app.use(express.json());
     app.use((req, _res, next) => {
       req.auth = { sub: "u-boss", email: "gestora@demo.invalid", orgId: mintOrganizationId("org-a"), orgRole: "admin" };
       next();
     });
-    app.use("/api", createRostersRouter(uc, new InMemoryIdempotencyStore(), async () => true));
+    app.use("/api", createRostersRouter(uc, new InMemoryIdempotencyStore(), async () => true, coverage));
     app.use(problemHandler);
     server = await new Promise<Server>((resolve) => {
       const s = app.listen(0, () => resolve(s));
@@ -86,6 +91,26 @@ describe("API /api/novo-rh/rosters", () => {
     expect(removed).toHaveLength(2);
     const restored = await send("POST", `/${roster.id}/shifts/restore`, { shiftIds: removed.map((r: { id: string }) => r.id) });
     expect((await restored.json()).restored).toHaveLength(2);
+  });
+
+  test("Plano de Cobertura: estado, regras (desligado → 409) e cobertura da escala", async () => {
+    const PORTO = "11111111-1111-4111-8111-111111111111";
+    cov.on = false;
+    expect(await (await fetch(`${base}/coverage/status`)).json()).toEqual({ enabled: false });
+    expect((await send("POST", "/coverage/rules", { locationId: PORTO, weekday: 1, start: "09:00", end: "17:00", minPeople: 2 })).status).toBe(409);
+    cov.on = true;
+    expect((await send("POST", "/coverage/rules", { locationId: PORTO, weekday: 1, start: "09:00", end: "09:00", minPeople: 2 })).status).toBe(400);
+    const created = await send("POST", "/coverage/rules", { locationId: PORTO, weekday: 1, start: "09:00", end: "17:00", minPeople: 2 });
+    expect(created.status).toBe(201);
+    const rule = await created.json();
+    expect(rule).toMatchObject({ areaId: null, weekday: 1, date: null, minPeople: 2 });
+    expect((await send("PATCH", `/coverage/rules/${rule.id}`, { minPeople: 1 })).status).toBe(200);
+    expect(await (await fetch(`${base}/coverage/rules?locationId=${PORTO}`)).json()).toEqual([{ ...rule, minPeople: 1 }]);
+    const roster = await (await send("POST", "", { name: "Loja", targetType: "location", targetId: PORTO })).json();
+    await send("POST", `/${roster.id}/shifts`, { employeeId: "e1", workDate: "2026-11-02", segments: [{ start: "09:00", end: "17:00" }] });
+    const report = await (await fetch(`${base}/${roster.id}/coverage?from=2026-11-02&to=2026-11-02`)).json();
+    expect(report).toMatchObject({ enabled: true, locationId: PORTO, days: [{ date: "2026-11-02", areaId: null, status: "ok", windows: [{ required: 1, planned: 1, published: 0 }] }] });
+    expect((await send("DELETE", `/coverage/rules/${rule.id}`, {})).status).toBe(204);
   });
 });
 

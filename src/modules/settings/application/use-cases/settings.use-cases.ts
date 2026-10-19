@@ -204,12 +204,16 @@ export class SettingsUseCases implements SettingsPorts {
   }
 
   async sessionPolicy(orgId: OrganizationId) {
-    const def = this.catalog.find((d) => d.key === "security.session.inactivity_minutes");
-    if (!def) return { inactivityMinutes: 30 };
+    const v = await this.companyValue(orgId, "security.session.inactivity_minutes");
+    return { inactivityMinutes: v === null ? 30 : Number(v) };
+  }
+
+  /** Valor de hoje para a empresa (perfil global ou predefinição), sem exceções por pessoa ou centro. */
+  async companyValue(orgId: OrganizationId, key: string) {
+    const def = this.catalog.find((d) => d.key === key);
+    if (!def) return null;
     const [snap, today] = await Promise.all([this.repo.loadSnapshot(orgId), this.clock.today(orgId)]);
-    // Sem colaborador: vale a configuração da empresa (global) ou a predefinição.
-    const s = resolveSetting(def, { employeeId: "", locationIds: [], departmentIds: [], groupIds: [] }, today, snap);
-    return { inactivityMinutes: s.value === null ? 30 : Number(s.value) };
+    return resolveSetting(def, { employeeId: "", locationIds: [], departmentIds: [], groupIds: [] }, today, snap).value;
   }
 
   private findProfile(snap: SettingsSnapshot, profileId: string): SettingProfile {

@@ -3,7 +3,9 @@ import { SupabaseIdempotencyStore } from "../../infra/http/supabase-idempotency.
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import type { OrganizationId } from "../../kernel/organization-id.js";
 import { createRostersRouter } from "./adapters/in/rosters.controller.js";
+import { SupabaseCoverageRulesRepository } from "./adapters/out/supabase-coverage-rules.repository.js";
 import { SupabaseRostersRepository } from "./adapters/out/supabase-rosters.repository.js";
+import { CoverageUseCases } from "./application/use-cases/coverage.use-cases.js";
 import { RostersUseCases } from "./application/use-cases/rosters.use-cases.js";
 import type { PeriodGuardPort, RosterPublishedPort, RostersAuditPort, RostersNotifierPort } from "./domain/ports/out/rosters.ports.js";
 import type { Rules, Severity } from "./domain/services/constraints.js";
@@ -40,9 +42,12 @@ export function createRostersModule(deps: {
   peopleBrief?: (org: OrganizationId, employeeIds: string[]) => Promise<{ id: string; fullName: string; positionName: string | null; active: boolean }[]>;
   /** Quem pertence ao centro/grupo da escala (seletor de colaboradores); sem ele, ninguém é «do centro». */
   targetMembers?: (org: OrganizationId, targetType: "location" | "group", targetId: string, date: string) => Promise<string[]>;
-}): { router: Router; rosters: RostersUseCases } {
+  /** Plano de Cobertura ligado na empresa (`time_tracking.roster.coverage_enabled`); sem ele, desligado. */
+  coverageEnabled?: (org: OrganizationId) => Promise<boolean>;
+}): { router: Router; rosters: RostersUseCases; coverage: CoverageUseCases } {
+  const repo = new SupabaseRostersRepository(createScopedQuery);
   const rosters = new RostersUseCases(
-    new SupabaseRostersRepository(createScopedQuery),
+    repo,
     {
       rules: async (org, employeeId, date) => rulesFromSettings(await deps.effectiveSettings(org, employeeId, date)),
       approvedAbsenceDates: deps.approvedAbsenceDates,
@@ -58,5 +63,11 @@ export function createRostersModule(deps: {
     deps.audit,
     deps.periods,
   );
-  return { router: createRostersRouter(rosters, new SupabaseIdempotencyStore(createScopedQuery), deps.canSeeEmployee), rosters };
+  const coverage = new CoverageUseCases(
+    new SupabaseCoverageRulesRepository(createScopedQuery),
+    repo,
+    { enabled: async (org) => (deps.coverageEnabled ? deps.coverageEnabled(org) : false), approvedAbsenceDates: deps.approvedAbsenceDates },
+    deps.audit,
+  );
+  return { router: createRostersRouter(rosters, new SupabaseIdempotencyStore(createScopedQuery), deps.canSeeEmployee, coverage), rosters, coverage };
 }

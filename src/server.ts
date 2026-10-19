@@ -754,6 +754,8 @@ const rostersModule = createRostersModule({
   audit: auditModule.recorder,
   canSeeEmployee,
   periods: periodGuard,
+  // Plano de Cobertura: funcionalidade opcional da empresa (desligada por omissão).
+  coverageEnabled: async (org) => (await settingsModule.settings.companyValue(org, "time_tracking.roster.coverage_enabled")) === true,
 });
 app.use("/api", rostersModule.router);
 

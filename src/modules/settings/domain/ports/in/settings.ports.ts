@@ -60,4 +60,6 @@ export interface SettingsPorts {
   history(orgId: OrganizationId, filter: { key?: string; profileId?: string }): Promise<HistoryEntry[]>;
   /** Política de sessão da organização hoje (configuração global ou predefinição) — para todos os utilizadores. */
   sessionPolicy(orgId: OrganizationId): Promise<{ inactivityMinutes: number }>;
+  /** Valor de hoje para a empresa (perfil global ou predefinição), sem exceções por pessoa ou centro. */
+  companyValue(orgId: OrganizationId, key: string): Promise<SettingData | null>;
 }

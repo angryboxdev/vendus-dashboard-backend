@@ -1,6 +1,7 @@
 import { Router, type Request } from "express";
 import { idempotency, type IdempotencyStore } from "../../../../infra/http/idempotency.js";
 import { problem } from "../../../../infra/http/problem-details.js";
+import type { CoverageUseCases } from "../../application/use-cases/coverage.use-cases.js";
 import type { Actor, RostersUseCases, ShiftInput } from "../../application/use-cases/rosters.use-cases.js";
 import type { Segment } from "../../domain/entities/roster.js";
 import { RosterBlockedError, RosterConflictError, RosterForbiddenError, RosterNotFoundError, RosterValidationError } from "../../domain/errors.js";
@@ -37,7 +38,12 @@ function shiftInput(b: Record<string, unknown>): ShiftInput {
  * em rascunho, publicar (versões), histórico, restrições, trocas.
  * Portal: `/api/me/roster` (os meus turnos publicados) e trocas.
  */
-export function createRostersRouter(uc: RostersUseCases, store: IdempotencyStore, canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean>): Router {
+export function createRostersRouter(
+  uc: RostersUseCases,
+  store: IdempotencyStore,
+  canSeeEmployee: (req: Request, employeeId: string, date: string) => Promise<boolean>,
+  coverage?: CoverageUseCases,
+): Router {
   const r = Router();
   const R = "/novo-rh/rosters";
   r.use(R, idempotency(store, { required: true }));
@@ -78,6 +84,38 @@ export function createRostersRouter(uc: RostersUseCases, store: IdempotencyStore
       ),
     );
   });
+
+  // Plano de Cobertura (opcional por empresa; antes das rotas `${R}/:id`).
+  if (coverage) {
+    const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
+    r.get(`${R}/coverage/status`, async (req, res) => res.json(await coverage.status(org(req))));
+    r.get(`${R}/coverage/rules`, async (req, res) => res.json(await coverage.listRules(org(req), optS(req.query.locationId))));
+    r.post(`${R}/coverage/rules`, async (req, res) => {
+      const b = body(req);
+      res.status(201).json(
+        await run(() =>
+          coverage.createRule(org(req), actorOf(req), { locationId: s(b.locationId), areaId: optS(b.areaId), weekday: num(b.weekday), date: optS(b.date), start: s(b.start), end: s(b.end), minPeople: Number(b.minPeople) }),
+        ),
+      );
+    });
+    r.patch(`${R}/coverage/rules/:id`, async (req, res) => {
+      const b = body(req);
+      res.json(
+        await run(() =>
+          coverage.updateRule(org(req), actorOf(req), id(req), {
+            ...(b.start !== undefined && { start: s(b.start) }),
+            ...(b.end !== undefined && { end: s(b.end) }),
+            ...(b.minPeople !== undefined && { minPeople: Number(b.minPeople) }),
+          }),
+        ),
+      );
+    });
+    r.delete(`${R}/coverage/rules/:id`, async (req, res) => {
+      await run(() => coverage.deleteRule(org(req), actorOf(req), id(req)));
+      res.status(204).end();
+    });
+    r.get(`${R}/:id/coverage`, async (req, res) => res.json(await run(() => coverage.coverage(org(req), id(req), s(req.query.from), s(req.query.to)))));
+  }
 
   r.get(R, async (req, res) => res.json(await uc.listRosters(org(req))));
   r.get(`${R}/summary`, async (req, res) => res.json(await run(() => uc.summary(org(req), s(req.query.from), s(req.query.to)))));

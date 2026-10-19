@@ -1,4 +1,5 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { CoverageRule, CoverageRuleInput } from "../../domain/services/coverage.js";
 import type { Publication, Roster, RosterShift, ShiftState, ShiftTemplate, ShiftTemplateInput, Swap, WorkArea } from "../../domain/entities/roster.js";
 import type { RostersContextPort, RostersRepositoryPort } from "../../domain/ports/out/rosters.ports.js";
 import type { Rules } from "../../domain/services/constraints.js";
@@ -170,5 +171,36 @@ export class FakeRostersAudit {
   actions: { action: string; reason: string | null }[] = [];
   async record(_o: OrganizationId, e: { action: string; reason: string | null }) {
     this.actions.push({ action: e.action, reason: e.reason });
+  }
+}
+
+export class FakeCoverageRules {
+  rules: CoverageRule[] = [];
+  async listCoverageRules(_o: OrganizationId, locationId?: string | null) {
+    return this.rules.filter((r) => !locationId || r.locationId === locationId).map((r) => ({ ...r }));
+  }
+  async createCoverageRule(_o: OrganizationId, r: CoverageRuleInput) {
+    const row = { ...r, id: `cov-${this.rules.length + 1}` };
+    this.rules.push(row);
+    return { ...row };
+  }
+  async updateCoverageRule(_o: OrganizationId, id: string, patch: Partial<Pick<CoverageRule, "start" | "end" | "minPeople">>) {
+    const r = this.rules.find((x) => x.id === id)!;
+    Object.assign(r, patch);
+    return { ...r };
+  }
+  async deleteCoverageRule(_o: OrganizationId, id: string) {
+    this.rules = this.rules.filter((r) => r.id !== id);
+  }
+}
+
+export class FakeCoverageContext {
+  on = true;
+  absences = new Map<string, string[]>();
+  async enabled() {
+    return this.on;
+  }
+  async approvedAbsenceDates(_o: OrganizationId, employeeId: string) {
+    return this.absences.get(employeeId) ?? [];
   }
 }
