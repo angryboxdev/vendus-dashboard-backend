@@ -54,6 +54,7 @@ assiduidade, ausências, pedidos ou escalas — lê-as dos módulos donos.
 - `DashboardUseCases.team` — lista de uma categoria (paginada, 50).
 - `DashboardUseCases.birthdays` — próximos 30 dias, só dia/mês, só com `personal.birth_date`.
 - `DashboardUseCases.layout | saveLayout | resetLayout` — layout pessoal.
+- Layout: cada widget guarda `order`, `span`, `hidden` e, só no `TEAM_STATUS`, `chart` opcional (`donut` | `bar` | `pie`; valores desconhecidos são descartados por `validateLayout`). A ordem padrão (`WIDGET_SPECS`, DASH-UI-05: equipa, unidades, atenção) só vale para quem nunca guardou layout — `mergeLayout` mantém a ordem guardada. Sem migração (os widgets já são JSON).
 
 ### Output (domain dependencies)
 

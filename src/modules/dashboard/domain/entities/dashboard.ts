@@ -106,7 +106,11 @@ export interface WidgetPref {
   order: number;
   span: number;
   hidden: boolean;
+  /** Só «Estado da equipa»: formato do gráfico (omisso = rosca). */
+  chart?: TeamChart;
 }
+
+export type TeamChart = "donut" | "bar" | "pie";
 
 export interface DashboardLayout {
   layoutVersion: number;

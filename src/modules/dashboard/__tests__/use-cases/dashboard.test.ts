@@ -65,6 +65,27 @@ describe("Dashboard — regras puras", () => {
     expect(merged.widgets.at(-1)!.widgetId).toBe("ARTICLES");
   });
 
+  test("layout: formato do gráfico só no Estado da equipa e só valores conhecidos; layouts antigos continuam válidos", () => {
+    const l = validateLayout({
+      widgets: [
+        { widgetId: "TEAM_STATUS", span: 6, chart: "bar" },
+        { widgetId: "ATTENTION", span: 6, chart: "pie" },
+        { widgetId: "LOCATIONS_STATUS", span: 12, chart: "x" },
+      ],
+    });
+    expect(l.widgets).toEqual([
+      { widgetId: "TEAM_STATUS", order: 0, span: 6, hidden: false, chart: "bar" },
+      { widgetId: "ATTENTION", order: 1, span: 6, hidden: false },
+      { widgetId: "LOCATIONS_STATUS", order: 2, span: 12, hidden: false },
+    ]);
+    expect(validateLayout({ widgets: [{ widgetId: "TEAM_STATUS", span: 6, chart: "radar" }] }).widgets[0]).not.toHaveProperty("chart");
+    // Sem layout guardado: linha principal equipa → unidades → atenção, em três colunas.
+    expect(mergeLayout(null).widgets.slice(0, 3).map((w) => [w.widgetId, w.span])).toEqual([["TEAM_STATUS", 4], ["LOCATIONS_STATUS", 4], ["ATTENTION", 4]]);
+    // Com layout guardado, a ordem de quem personalizou não muda.
+    const mine = mergeLayout({ layoutVersion: 1, widgets: WIDGET_SPECS.map((w, i) => ({ widgetId: w.id, order: WIDGET_SPECS.length - i, span: 12, hidden: false })) });
+    expect(mine.widgets[0]!.widgetId).toBe(WIDGET_SPECS.at(-1)!.id);
+  });
+
   test("aniversário seguinte (29/02 em ano comum → 28/02; já passou → próximo ano)", () => {
     expect(nextBirthday("1990-10-20", "2026-10-13")).toBe("2026-10-20");
     expect(nextBirthday("1990-01-05", "2026-10-13")).toBe("2027-01-05");
