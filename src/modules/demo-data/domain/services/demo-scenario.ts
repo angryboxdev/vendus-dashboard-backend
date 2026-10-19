@@ -155,6 +155,21 @@ export function planEnrichment(employees: ScenarioEmployee[], today: string): En
  * (escolha estável por pessoa e dia) e as semanas de escala atual (publicada)
  * e seguinte (rascunho) para toda a gente. Puro.
  */
+/** Áreas de trabalho fictícias criadas em cada centro da demonstração. */
+export const DEMO_AREAS = ["Sala", "Caixa", "Cozinha", "Bar"];
+
+/**
+ * Área (índice em `n`) de um colaborador fictício num dia: uma área principal
+ * sorteada por pessoa e, em ~20% dos dias, outra (a área é da atribuição).
+ * Determinístico: a mesma pessoa/dia dá sempre a mesma área.
+ */
+export function demoAreaIndex(employeeId: string, workDate: string, n: number): number {
+  if (n <= 0) return -1;
+  const main = hash(`area|${employeeId}`) % n;
+  if (n > 1 && hash(`area-day|${employeeId}|${workDate}`) % 100 < 20) return (main + 1 + (hash(`area-alt|${employeeId}|${workDate}`) % (n - 1))) % n;
+  return main;
+}
+
 export interface CurrentPlan {
   today: string;
   absencesToday: { employeeId: string; startDate: string; endDate: string }[];

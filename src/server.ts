@@ -78,6 +78,7 @@ import { createGoogleReviewsModule } from "./modules/google-reviews/google-revie
 import type { DashboardCachePort, DashboardMetric } from "./modules/dashboard/domain/ports/out/dashboard.ports.js";
 import { createPeriodsModule } from "./modules/periods/periods.module.js";
 import { createDemoOrgModule } from "./modules/demo-data/demo-data.module.js";
+import { DEMO_AREAS, demoAreaIndex } from "./modules/demo-data/domain/services/demo-scenario.js";
 import { createOverviewModule } from "./modules/overview/overview.module.js";
 import { createInboxModule } from "./modules/inbox/inbox.module.js";
 import { createRemindersModule } from "./modules/reminders/reminders.module.js";
@@ -569,6 +570,24 @@ const demoOrgModule = createDemoOrgModule({
         }
       } catch (e) {
         fail("escalas", e);
+      }
+      // Áreas fictícias por centro (Sala, Caixa, Cozinha, Bar) e área nos turnos da semana atual e seguinte que não a têm.
+      try {
+        const rosters = await rostersModule.rosters.listRosters(org);
+        for (const r of plan.rosters) {
+          const roster = rosters.find((x) => !x.archived && x.targetType === "location" && x.targetId === r.locationId);
+          if (!roster) continue;
+          const existing = await rostersModule.rosters.listAreas(org, r.locationId);
+          for (const name of DEMO_AREAS) {
+            if (!existing.some((a) => a.active && a.name.toLocaleLowerCase("pt") === name.toLocaleLowerCase("pt"))) await rostersModule.rosters.createArea(org, actor, { locationId: r.locationId, name });
+          }
+          const areas = (await rostersModule.rosters.listAreas(org, r.locationId)).filter((a) => a.active && DEMO_AREAS.includes(a.name)).sort((a, b) => DEMO_AREAS.indexOf(a.name) - DEMO_AREAS.indexOf(b.name));
+          if (!areas.length) continue;
+          const pick = (employeeId: string, workDate: string) => areas[demoAreaIndex(employeeId, workDate, areas.length)]?.id ?? null;
+          await rostersModule.rosters.fillMissingAreasForDemo(org, actor, roster.id, plan.weeks.current.from, plan.weeks.next.to, pick);
+        }
+      } catch (e) {
+        fail("áreas", e);
       }
       return out;
     },

@@ -109,6 +109,31 @@ export class RostersUseCases {
   }
 
   /**
+   * Só para a organização de demonstração (dados fictícios): dá área aos turnos
+   * (não folgas) de uma escala no período que ainda não a têm — no rascunho e
+   * no estado publicado, sem criar versão nem avisar ninguém. `pick` escolhe a
+   * área (ativa e do centro da escala) de cada colaborador/dia. Uma auditoria.
+   */
+  async fillMissingAreasForDemo(org: OrganizationId, actor: Actor, rosterId: string, from: string, to: string, pick: (employeeId: string, workDate: string) => string | null) {
+    const roster = await this.roster(org, rosterId);
+    const valid = new Set((await this.repo.listAreas(org)).filter((a) => a.active && (roster.targetType !== "location" || a.locationId === roster.targetId)).map((a) => a.id));
+    const todo = (await this.repo.listShifts(org, { rosterId, from, to })).filter((s) => !s.deleted && s.kind === "shift" && !s.areaId);
+    let filled = 0;
+    for (let i = 0; i < todo.length; i += 10) {
+      await Promise.all(
+        todo.slice(i, i + 10).map(async (s) => {
+          const areaId = pick(s.employeeId, s.workDate);
+          if (!areaId || !valid.has(areaId)) return;
+          await this.repo.updateShift(org, s.id, { areaId, ...(s.published && s.published.kind === "shift" && { published: { ...s.published, areaId } }) }, actor.email);
+          filled++;
+        }),
+      );
+    }
+    if (filled) await this.log(org, actor.email, "rosters.area.demo_fill", "roster", rosterId, null, { from, to, filled });
+    return { filled };
+  }
+
+  /**
    * A área de um turno: tem de existir, estar ativa e ser do centro da
    * escala (numa escala de grupo, de qualquer centro da empresa). Numa folga
    * não há área. Manter a área que o turno já tinha é sempre permitido (mesmo
