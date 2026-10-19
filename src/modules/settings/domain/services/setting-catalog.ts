@@ -8,6 +8,17 @@ import type { SettingDefinition } from "../entities/setting-definition.js";
  */
 export const SETTING_CATALOG: SettingDefinition[] = [
   {
+    key: "security.mfa.required",
+    domain: "security",
+    type: "bool",
+    label: "Autenticação de dois fatores na gestão",
+    description: "Ligado: quem gere (Admin e perfis com permissão de gerir) confirma a entrada com o código da app autenticadora. Desligado: só e-mail e palavra-passe. O Portal do Colaborador nunca pede.",
+    defaultValue: false,
+    sensitive: false,
+    legal: false,
+    toValidate: false,
+  },
+  {
     key: "security.session.inactivity_minutes",
     domain: "security",
     type: "duration",

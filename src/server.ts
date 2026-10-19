@@ -394,8 +394,19 @@ app.use(requireAuth);
 // os routers montam-se mais abaixo, depois da autenticação.
 const auditModule = createAuditModule();
 const orgStructureModule = createOrgStructureModule({ audit: auditModule.recorder });
+// MFA opcional por empresa (Configurações → Segurança): lido no máximo uma vez por minuto por organização.
+const mfaByOrg = new Map<string, { at: number; value: Promise<boolean> }>();
+const orgRequiresMfa = (org: OrganizationId): Promise<boolean> => {
+  const hit = mfaByOrg.get(org);
+  if (hit && Date.now() - hit.at < 60_000) return hit.value;
+  const value = settingsModule.settings.companyValue(org, "security.mfa.required").then((v) => v === true);
+  value.catch(() => mfaByOrg.delete(org));
+  mfaByOrg.set(org, { at: Date.now(), value });
+  return value;
+};
 const accessModule = createAccessModule({
   mfa: ENV.MFA_ENFORCEMENT,
+  orgRequiresMfa,
   orgUnits: (org, employeeId, date) => orgStructureModule.structure.unitsOf(org, employeeId, date),
   transversalAudit: auditModule.recorder,
 });

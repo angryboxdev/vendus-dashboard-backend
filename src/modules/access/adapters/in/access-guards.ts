@@ -1,3 +1,4 @@
+import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { RequestHandler } from "express";
 import type { AccessLevel } from "../../domain/catalog.js";
 import type { AccessContext, ResolveAccessPort } from "../../domain/ports/in/resolve-access.port.js";
@@ -34,7 +35,14 @@ export interface AccessGuards {
   requireMfa: RequestHandler;
 }
 
-export function createAccessGuards(resolveAccess: ResolveAccessPort, options: { mfa: MfaEnforcement } = { mfa: "off" }): AccessGuards {
+export function createAccessGuards(
+  resolveAccess: ResolveAccessPort,
+  options: {
+    mfa: MfaEnforcement;
+    /** A empresa ligou a MFA (`security.mfa.required`)? Sem isto, vale só `mfa` (comportamento antigo). */
+    orgRequiresMfa?: (org: OrganizationId) => Promise<boolean>;
+  } = { mfa: "off" },
+): AccessGuards {
   const loadAccess: RequestHandler = async (req, res, next) => {
     if (!req.auth) {
       next();
@@ -100,10 +108,20 @@ export function createAccessGuards(resolveAccess: ResolveAccessPort, options: { 
     });
   };
 
-  const requireMfa: RequestHandler = (req, res, next) => {
+  const requireMfa: RequestHandler = async (req, res, next) => {
     const path = req.originalUrl.split("?")[0] ?? "";
     if (!req.auth || !req.access || !mfaRequired(req.access, path, options.mfa) || req.auth.aal === "aal2") {
       next();
+      return;
+    }
+    // Opcional por empresa: desligada nas Configurações → não se exige.
+    try {
+      if (options.orgRequiresMfa && !(await options.orgRequiresMfa(req.auth.orgId))) {
+        next();
+        return;
+      }
+    } catch (e) {
+      next(e);
       return;
     }
     sendProblem(res, problem(403, "mfa_required", "Esta área exige autenticação de dois fatores.", { code: "MFA_REQUIRED" }).problem);
