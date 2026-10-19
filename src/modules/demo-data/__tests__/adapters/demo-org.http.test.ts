@@ -20,7 +20,8 @@ describe("Modo Demonstração — /api/novo-rh/demo e cabeçalho X-Novo-RH-Mode"
   beforeEach(async () => {
     isAdmin = true;
     const live = new FakeDemoLive();
-    const uc = new DemoOrgUseCases(new FakeDemoOrgRepository(), new FakeDemoSeeder(), new FakeDemoSupport(), live, new FakeDemoScenario(live));
+    // Demo pequena (5 por centro): aqui testa-se o protocolo HTTP, não o volume.
+    const uc = new DemoOrgUseCases(new FakeDemoOrgRepository(), new FakeDemoSeeder(), new FakeDemoSupport(), live, new FakeDemoScenario(live), undefined, 5);
     const app = express();
     app.use(express.json());
     app.use((req, _res, next) => {

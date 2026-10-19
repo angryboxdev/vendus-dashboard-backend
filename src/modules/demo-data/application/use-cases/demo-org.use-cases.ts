@@ -35,6 +35,8 @@ export class DemoOrgUseCases {
     private readonly live: DemoLivePort,
     private readonly scenario: DemoScenarioPort,
     private readonly now: () => number = () => Date.now(),
+    /** Colaboradores por centro (os testes de protocolo usam uma demo pequena). */
+    private readonly perCenter: number = EMPLOYEES_PER_CENTER,
   ) {}
 
   async status(realOrg: OrganizationId) {
@@ -68,7 +70,7 @@ export class DemoOrgUseCases {
     this.cache.delete(realOrg);
     const today = await this.support.today(realOrg);
     // As marcações entram no refresh, depois das ausências do cenário (ninguém pica de férias).
-    const dataset = { ...generateDemoDataset({ seed: SEED, employeesPerCenter: EMPLOYEES_PER_CENTER, from: today, to: today }), punches: [] };
+    const dataset = { ...generateDemoDataset({ seed: SEED, employeesPerCenter: this.perCenter, from: today, to: today }), punches: [] };
     const summary = await this.seeder.seed(demo.id, dataset, { actor: actor.email, year: Number(today.slice(0, 4)) });
     const live = await this.update(demo.id, actor, today);
     await this.support.audit(realOrg, { actor: actor.email, action: "demo.organization.create", resourceId: demo.id, after: { name: demo.name, ...summary, ...live } });
@@ -104,7 +106,7 @@ export class DemoOrgUseCases {
   }
 
   private async update(demo: OrganizationId, actor: DemoActor, today: string) {
-    const dataset = generateDemoDataset({ seed: SEED, employeesPerCenter: EMPLOYEES_PER_CENTER, from: today, to: today });
+    const dataset = generateDemoDataset({ seed: SEED, employeesPerCenter: this.perCenter, from: today, to: today });
     let rows = await this.live.employees(demo);
     // A demo cresceu (mais colaboradores no gerador): acrescenta só quem falta.
     const known = new Set(rows.map((r) => keyFromEmail(r.email)));

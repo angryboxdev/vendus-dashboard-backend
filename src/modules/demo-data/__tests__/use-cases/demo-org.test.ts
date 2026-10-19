@@ -38,7 +38,7 @@ describe("Organização de demonstração (ADR-0034)", () => {
     expect(live.punches.some((p) => p.occurredAt.startsWith("2026-10-12"))).toBe(true);
     expect(out.summary.clockEvents).toBe(live.punches.length);
     expect(support.audits).toEqual([{ org: "org-real", action: "demo.organization.create", resourceId: out.demo.id }]);
-  });
+  }, 30_000); // gera 112 colaboradores e ~30 dias de marcações
 
   test("ninguém pica nos dias de férias do cenário", async () => {
     const { live, scenario, uc } = setup();
@@ -200,7 +200,7 @@ describe("Demonstração maior e com mais movimento (2026-10-19)", () => {
     expect(live.added).toHaveLength(92); // não duplica
     expect(scenario.currents.length).toBeGreaterThanOrEqual(2);
     expect(scenario.currents[0]!.rosters.flatMap((r) => r.groups.flatMap((g) => g.employeeIds))).toHaveLength(112);
-  });
+  }, 30_000); // gera 112 colaboradores e ~30 dias de marcações
 
   test("em dia: ~6% de ausências hoje (estáveis por pessoa e dia), semana atual e seguinte", () => {
     const ds = generateDemoDataset({ seed: 20261012, employeesPerCenter: 28, from: "2026-10-19", to: "2026-10-19" });
