@@ -44,6 +44,8 @@ export function createRostersModule(deps: {
   targetMembers?: (org: OrganizationId, targetType: "location" | "group", targetId: string, date: string) => Promise<string[]>;
   /** Plano de Cobertura ligado na empresa (`time_tracking.roster.coverage_enabled`); sem ele, desligado. */
   coverageEnabled?: (org: OrganizationId) => Promise<boolean>;
+  /** Ligar/desligar o Plano de Cobertura a partir das Escalas. */
+  setCoverageEnabled?: (org: OrganizationId, userId: string, enabled: boolean) => Promise<void>;
 }): { router: Router; rosters: RostersUseCases; coverage: CoverageUseCases } {
   const repo = new SupabaseRostersRepository(createScopedQuery);
   const rosters = new RostersUseCases(
@@ -66,7 +68,14 @@ export function createRostersModule(deps: {
   const coverage = new CoverageUseCases(
     new SupabaseCoverageRulesRepository(createScopedQuery),
     repo,
-    { enabled: async (org) => (deps.coverageEnabled ? deps.coverageEnabled(org) : false), approvedAbsenceDates: deps.approvedAbsenceDates },
+    {
+      enabled: async (org) => (deps.coverageEnabled ? deps.coverageEnabled(org) : false),
+      setEnabled: async (org, userId, enabled) => {
+        if (!deps.setCoverageEnabled) throw new Error("Plano de Cobertura sem ligação às configurações.");
+        await deps.setCoverageEnabled(org, userId, enabled);
+      },
+      approvedAbsenceDates: deps.approvedAbsenceDates,
+    },
     deps.audit,
   );
   return { router: createRostersRouter(rosters, new SupabaseIdempotencyStore(createScopedQuery), deps.canSeeEmployee, coverage), rosters, coverage };

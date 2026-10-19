@@ -35,6 +35,16 @@ export class CoverageUseCases {
     return { enabled: await this.ctx.enabled(org) };
   }
 
+  /** Ligar/desligar nas Escalas (opcional por empresa). As regras ficam guardadas quando se desliga. */
+  async setEnabled(org: OrganizationId, actor: Actor, enabled: boolean) {
+    const before = await this.ctx.enabled(org);
+    if (before !== enabled) {
+      await this.ctx.setEnabled(org, actor.userId, enabled);
+      await this.audit.record(org, { actor: actor.email, action: "rosters.coverage.toggle", resourceType: "coverage_rule", resourceId: null, before: { enabled: before }, after: { enabled }, reason: null });
+    }
+    return { enabled };
+  }
+
   listRules(org: OrganizationId, locationId: string | null) {
     return this.rules.listCoverageRules(org, locationId);
   }

@@ -12,5 +12,7 @@ export interface CoverageRulesRepositoryPort {
 export interface CoverageContextPort {
   /** `time_tracking.roster.coverage_enabled` da empresa (desligado por omissão). */
   enabled(org: OrganizationId): Promise<boolean>;
+  /** Liga/desliga para a empresa a partir de hoje (o mesmo parâmetro de Configurações → Funcionalidades). */
+  setEnabled(org: OrganizationId, userId: string, enabled: boolean): Promise<void>;
   approvedAbsenceDates(org: OrganizationId, employeeId: string, from: string, to: string): Promise<string[]>;
 }

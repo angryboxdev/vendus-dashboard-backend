@@ -98,7 +98,8 @@ describe("API /api/novo-rh/rosters", () => {
     cov.on = false;
     expect(await (await fetch(`${base}/coverage/status`)).json()).toEqual({ enabled: false });
     expect((await send("POST", "/coverage/rules", { locationId: PORTO, weekday: 1, start: "09:00", end: "17:00", minPeople: 2 })).status).toBe(409);
-    cov.on = true;
+    expect(await (await send("PUT", "/coverage/status", { enabled: true })).json()).toEqual({ enabled: true });
+    expect(cov.on).toBe(true);
     expect((await send("POST", "/coverage/rules", { locationId: PORTO, weekday: 1, start: "09:00", end: "09:00", minPeople: 2 })).status).toBe(400);
     const created = await send("POST", "/coverage/rules", { locationId: PORTO, weekday: 1, start: "09:00", end: "17:00", minPeople: 2 });
     expect(created.status).toBe(201);

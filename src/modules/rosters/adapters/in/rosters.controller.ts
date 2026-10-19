@@ -89,6 +89,7 @@ export function createRostersRouter(
   if (coverage) {
     const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
     r.get(`${R}/coverage/status`, async (req, res) => res.json(await coverage.status(org(req))));
+    r.put(`${R}/coverage/status`, async (req, res) => res.json(await run(() => coverage.setEnabled(org(req), actorOf(req), body(req).enabled === true))));
     r.get(`${R}/coverage/rules`, async (req, res) => res.json(await coverage.listRules(org(req), optS(req.query.locationId))));
     r.post(`${R}/coverage/rules`, async (req, res) => {
       const b = body(req);

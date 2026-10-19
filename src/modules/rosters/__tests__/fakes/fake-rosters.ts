@@ -200,6 +200,9 @@ export class FakeCoverageContext {
   async enabled() {
     return this.on;
   }
+  async setEnabled(_o: OrganizationId, _u: string, enabled: boolean) {
+    this.on = enabled;
+  }
   async approvedAbsenceDates(_o: OrganizationId, employeeId: string) {
     return this.absences.get(employeeId) ?? [];
   }

@@ -257,3 +257,17 @@ describe("Configurações da Fase 4 (C6.1, C9)", () => {
     await expect(uc.setValue(ORG, g.id, { key: "time_tracking.geofence.block_outside", value: true, validFrom: "2026-10-11", reason: "x" }, ADMIN)).rejects.toMatchObject({ code: "rule_violation" });
   });
 });
+
+describe("Valor da empresa (funcionalidades opcionais)", () => {
+  test("setCompanyValue cria o perfil geral se faltar, grava a partir de hoje com motivo; o último do dia vale", async () => {
+    const { uc } = setup();
+    const KEY = "time_tracking.roster.coverage_enabled";
+    expect(await uc.companyValue(ORG, KEY)).toBe(false);
+    await uc.setCompanyValue(ORG, KEY, true, "Ligado nas Escalas", ADMIN);
+    expect(await uc.companyValue(ORG, KEY)).toBe(true);
+    await uc.setCompanyValue(ORG, KEY, false, "Desligado nas Escalas", ADMIN);
+    expect(await uc.companyValue(ORG, KEY)).toBe(false);
+    expect((await uc.listProfiles(ORG)).filter((p) => p.kind === "global" && p.domain === "time_tracking")).toHaveLength(1);
+    await expect(uc.setCompanyValue(ORG, "nao.existe", true, "x", ADMIN)).rejects.toThrow();
+  });
+});

@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 778 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 779 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -556,6 +556,7 @@ Endpoints: 778 · pré-autenticação: 23 · não classificados: 0
 | DELETE | `/api/novo-rh/rosters/coverage/rules/:id` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | PATCH | `/api/novo-rh/rosters/coverage/rules/:id` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/rosters/coverage/status` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| PUT | `/api/novo-rh/rosters/coverage/status` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | PATCH | `/api/novo-rh/rosters/shifts/:id` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/novo-rh/rosters/shifts/:id/delete` | permission:hr.schedules:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/rosters/summary` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |

@@ -118,6 +118,18 @@ describe("Cobertura — casos de uso", () => {
     expect(await cov.coverage(ORG, roster.id, MON, TUE)).toEqual({ enabled: false, locationId: null, days: [] });
   });
 
+  test("ligar/desligar nas Escalas: auditado só quando muda; as regras ficam guardadas", async () => {
+    const { cov, ctx, audit } = setup();
+    ctx.on = false;
+    expect(await cov.setEnabled(ORG, BOSS, true)).toEqual({ enabled: true });
+    const r = await cov.createRule(ORG, BOSS, rule({}));
+    await cov.setEnabled(ORG, BOSS, true);
+    await cov.setEnabled(ORG, BOSS, false);
+    expect(ctx.on).toBe(false);
+    expect(await cov.listRules(ORG, PORTO)).toEqual([expect.objectContaining({ id: r.id })]);
+    expect(audit.actions.filter((a) => a.action === "rosters.coverage.toggle")).toHaveLength(2);
+  });
+
   test("regras: área do centro, sem duplicados, alterar o mínimo e apagar (com auditoria)", async () => {
     const { cov, rosters, audit } = setup();
     const sala = await rosters.createArea(ORG, BOSS, { locationId: PORTO, name: "Sala" });
