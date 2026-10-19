@@ -26,7 +26,8 @@ const PEOPLE = [
 
 describe("Dashboard — regras puras", () => {
   test("estado da equipa mapeia estados reais (férias = ausência vacation; falta conta em ausentes; já saiu e por entrar contam)", () => {
-    expect(teamCounts(PEOPLE)).toEqual({ total: 7, working: 1, remote: 1, break: 1, finished: 1, not_started: 0, vacation: 1, absent: 2, late: 1, missing: 1 });
+    // Em pausa conta como a trabalhar (já não é categoria).
+    expect(teamCounts(PEOPLE)).toEqual({ total: 7, working: 2, remote: 1, finished: 1, not_started: 0, vacation: 1, absent: 2, late: 1, missing: 1 });
   });
 
   test("requer atenção: só linhas com contagem, do crítico ao menos grave", () => {
@@ -165,7 +166,8 @@ describe("Dashboard — drill-down, aniversários e layout", () => {
     const { uc } = setup();
     const v = new FakeViewer("u1", PEOPLE);
     const working = await uc.team(ORG_A, v, { category: "working", locationId: null, q: "", page: 1 });
-    expect(working.items.map((i) => i.employeeId)).toEqual(["e1"]);
+    // Quem está em pausa (e3) aparece em «a trabalhar».
+    expect(working.items.map((i) => i.employeeId).sort()).toEqual(["e1", "e3"]);
     expect(working.items[0]!.absenceType).toBeNull();
     const vacation = await uc.team(ORG_A, v, { category: "vacation", locationId: null, q: "", page: 1 });
     expect(vacation.items.map((i) => [i.employeeId, i.absenceType])).toEqual([["e4", "Férias"]]);

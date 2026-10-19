@@ -17,16 +17,21 @@ import type {
  * Dashboard não decide estados, só os agrega.
  */
 
-/** Categoria do donut de uma pessoa (null = folga: sem horário hoje). Falta sem marcação conta como ausente. */
+/**
+ * Categoria do donut de uma pessoa (null = folga: sem horário hoje). Falta sem
+ * marcação conta como ausente; em pausa conta como a trabalhar (pedido do
+ * utilizador, 2026-10-19 — a pausa faz parte do turno).
+ */
 export function teamCategory(p: DashboardPerson): TeamCategory | null {
-  if (p.status === "working" || p.status === "remote" || p.status === "break" || p.status === "finished" || p.status === "not_started") return p.status;
+  if (p.status === "break") return "working";
+  if (p.status === "working" || p.status === "remote" || p.status === "finished" || p.status === "not_started") return p.status;
   if (p.status === "absent") return p.absenceCategory === "vacation" ? "vacation" : "absent";
   if (p.status === "missing") return "absent";
   return null;
 }
 
 export function teamCounts(people: DashboardPerson[]): TeamCounts {
-  const c: TeamCounts = { total: 0, working: 0, remote: 0, break: 0, finished: 0, not_started: 0, vacation: 0, absent: 0, late: 0, missing: 0 };
+  const c: TeamCounts = { total: 0, working: 0, remote: 0, finished: 0, not_started: 0, vacation: 0, absent: 0, late: 0, missing: 0 };
   for (const p of people) {
     const cat = teamCategory(p);
     if (cat) {

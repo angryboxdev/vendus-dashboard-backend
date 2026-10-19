@@ -19,6 +19,11 @@ export interface LocationsSourcePort {
   locations(org: OrganizationId): Promise<{ id: string; name: string }[]>;
 }
 
+/** A organização é a de demonstração? (lá as avaliações são fictícias). */
+export interface DemoOrgCheckPort {
+  isDemo(org: OrganizationId): Promise<boolean>;
+}
+
 export interface GoogleReviewsAuditPort {
   record(org: OrganizationId, e: { actor: string; action: string; resourceId: string; before: unknown; after: unknown }): Promise<void>;
 }

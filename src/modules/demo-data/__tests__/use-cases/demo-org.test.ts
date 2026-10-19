@@ -233,3 +233,26 @@ describe("Demonstração maior e com mais movimento (2026-10-19)", () => {
     }
   });
 });
+
+describe("Demonstração — sempre com atrasos hoje", () => {
+  test("no dia de hoje há mais atrasos (~35%); os outros dias ficam iguais", () => {
+    const ds = generateDemoDataset({ seed: 20261012, employeesPerCenter: 28, from: "2026-10-19", to: "2026-10-19" });
+    const base = { seed: 20261012, employees: ds.employees, schedules: ds.schedules, from: "2026-10-12", to: "2026-10-19" };
+    const normal = generatePunches(base);
+    const boosted = generatePunches({ ...base, lateBoostDate: "2026-10-19" });
+    // Outros dias: exatamente iguais (o que já foi gravado não muda).
+    expect(boosted.filter((p) => p.workDate !== "2026-10-19")).toEqual(normal.filter((p) => p.workDate !== "2026-10-19"));
+    const lateShare = (list: typeof normal) => {
+      const ins = list.filter((p) => p.workDate === "2026-10-19" && p.kind === "in");
+      const lates = ins.filter((p) => {
+        const e = ds.employees.find((x) => x.key === p.employeeKey)!;
+        const s = ds.schedules.find((x) => x.key === e.scheduleKey)!;
+        const local = new Date(p.atUtc).toLocaleTimeString("pt-PT", { timeZone: p.timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+        return local > s.start;
+      });
+      return lates.length / ins.length;
+    };
+    expect(lateShare(boosted)).toBeGreaterThan(lateShare(normal));
+    expect(lateShare(boosted)).toBeGreaterThan(0.25);
+  });
+});

@@ -159,7 +159,7 @@ function hashSeed(text: string): number {
  * ~10% falta (mais exceções para apresentações — 2026-10-13); ~3% esquece a saída; turnos de 6 h+ fazem muitas vezes uma
  * pausa de 20–40 min a meio. Com `nowUtc`, nada depois desse instante.
  */
-export function generatePunches(input: { seed: number; employees: DemoEmployee[]; schedules: DemoSchedule[]; from: string; to: string; nowUtc?: string }): DemoPunch[] {
+export function generatePunches(input: { seed: number; employees: DemoEmployee[]; schedules: DemoSchedule[]; from: string; to: string; nowUtc?: string; lateBoostDate?: string }): DemoPunch[] {
   const centerByKey = new Map(CENTERS.map((c) => [c.key, c]));
   const scheduleByKey = new Map(input.schedules.map((s) => [s.key, s]));
   const out: DemoPunch[] = [];
@@ -176,7 +176,8 @@ export function generatePunches(input: { seed: number; employees: DemoEmployee[]
       const start = DateTime.fromISO(`${workDate}T${s.start}`, { zone });
       let end = DateTime.fromISO(`${workDate}T${s.end}`, { zone });
       if (s.endsNextDay) end = end.plus({ days: 1 });
-      const late = rnd() < 0.22;
+      // Hoje (`lateBoostDate`) há mais atrasos (~35%) para haver sempre o que mostrar; a mesma tirada.
+      const late = rnd() < (workDate === input.lateBoostDate ? 0.35 : 0.22);
       const inAt = late ? start.plus({ minutes: 6 + Math.floor(rnd() * 35) }) : start.minus({ minutes: Math.floor(rnd() * 11) });
       const outAt = end.plus({ minutes: Math.floor(rnd() * 26) - 5 });
       const forgotOut = rnd() < 0.03;
