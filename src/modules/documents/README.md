@@ -45,10 +45,10 @@ Gestor/Admin (Empresa & Estrutura → Documentos)     RH (Colaboradores → Docu
 Dono do domínio documental: entidade `Document` (versões, remoção lógica,
 validade), `DocumentCategoryDefinition` (âmbito), repositórios sobre
 `hr_employee_documents`/`hr_document_categories` (nomes históricos, spec
-D9), use cases dos documentos da Empresa e das categorias. **Não** expõe os
-documentos de colaborador — continuam no módulo `hr`
-(`/api/hr/people/:id/documents`), cujos use cases usam os ports e adapters
-daqui (mesmo padrão cross-module de `locations`).
+D9), use cases dos documentos da Empresa e das categorias e, desde a fase 1
+da ADR-0040 (2026-10-20), também os documentos de colaborador, a importação
+de recibos e os documentos do Portal — vindos do RH antigo (`hr`), com o
+mesmo comportamento e as mesmas respostas.
 
 ## Domain concepts
 
@@ -62,7 +62,7 @@ daqui (mesmo padrão cross-module de `locations`).
 - **`DocumentCategoryDefinition`** — `scope` (`employee`|`company`|`both`,
   por defeito `employee`); `scopeAllowsOwner`; `positionIds` (ticket 09 —
   "Cargos selecionados"; vazio = todos os colaboradores). A regra de
-  aplicabilidade a um colaborador vive no `hr` (`applicableCategoriesFor`). A
+  aplicabilidade a um colaborador é `applicableCategoriesFor` (`document-status.service.ts`). A
   antiga aplicabilidade por "Função" (`job_roles`) foi retirada do código
   (2026-10-05); a coluna fica na BD, vazia e já não lida. `requiresPeriod` (ticket 10 —
   ex: Recibo de vencimento): definido pela migração, só leitura na API.
@@ -84,6 +84,14 @@ daqui (mesmo padrão cross-module de `locations`).
   por categoria), `ReplaceCompanyDocumentPort`, `RemoveCompanyDocumentPort`
   (lógico), `GetCompanyDocumentDownloadUrlPort`,
   `GetCompanyDocumentHistoryPort`.
+- Colaborador (`employee-document.ports.ts`): listar, enviar, substituir,
+  remover (lógico), URL de download, histórico de versões, visão geral
+  (1 linha por colaborador ativo × requisito), validar/rejeitar envios do
+  Portal, envios por validar (`ListPendingDocumentsPort`, usado pela caixa
+  `/hr/requests` do RH antigo, ligado em `server.ts`).
+- Recibos (`payslip-import.ports.ts`): pré-visualizar e importar (2 passos).
+- Portal (`my-document.ports.ts`): os meus documentos, URL, substituir um
+  vencido/a vencer (fica «A validar»).
 
 ### Output (domain dependencies)
 
@@ -91,7 +99,13 @@ daqui (mesmo padrão cross-module de `locations`).
   `findVersionHistory`, `create`, `update` (sem delete).
 - `DocumentCategoryRepositoryPort`.
 - `DocumentFileStoragePort` — ficheiros da Empresa.
-- `DocumentAuditLogPort` — fire-and-forget, `document_audit_logs`.
+- `DocumentAuditLogPort` — fire-and-forget, `document_audit_logs`
+  (Empresa, categorias e `employee_document`).
+- `EmployeeDirectoryPort` — leitura mínima da ficha (`id`, nome, NIF,
+  cargo; colaborador ligado à conta do Portal). Substitui o
+  `EmployeeRepositoryPort` do RH antigo.
+- `EmployeeFileStoragePort` — ficheiros dos documentos de colaborador.
+- `PdfTextExtractorPort` — texto do PDF de um recibo (sem OCR).
 
 ## Adapters
 
@@ -104,6 +118,14 @@ daqui (mesmo padrão cross-module de `locations`).
 - `CompanyDocumentsController` → `/api/company-documents` (GET, POST
   multipart, `POST /:id/replace`, `DELETE /:id` lógico,
   `GET /:id/download-url`, `GET /:id/history`) — `manager`+.
+- `EmployeeDocumentsController` → `/api/novo-rh/people/:id/documents*`
+  e `/api/novo-rh/documents/overview` (`hr.documents`); os mesmos
+  handlers em `/api/hr/people/:id/documents*` e `/api/hr/document-overview`
+  até à fase 4 da ADR-0040. Escritas também com `requireMinRole("manager")`.
+- `PayslipsController` → `/api/novo-rh/payslips/import(/preview)` e
+  `/api/hr/payslips/*` (`hr.payslip_import`).
+- `MyDocumentsController` → `/api/me/documents*` (Portal; `meRouter`,
+  montado em `server.ts` junto das outras rotas `/me`).
 
 ### Output
 
@@ -113,6 +135,12 @@ daqui (mesmo padrão cross-module de `locations`).
 - `SupabaseDocumentFileStorageAdapter` → bucket `hr-documents`, pasta
   `company/` (prefixo `{org_id}/`).
 - `SupabaseDocumentAuditLogAdapter` → `document_audit_logs`.
+- `SupabaseEmployeeDirectoryAdapter` → `hr_employees` (só leitura,
+  paginado por 1000).
+- `SupabaseEmployeeFileStorageAdapter` → bucket `hr-documents`,
+  `{uuid}/{nome}` (o mesmo caminho do RH antigo; os ficheiros existentes
+  continuam a abrir).
+- `PdfParseTextExtractorAdapter` → `pdf-parse`.
 
 ## Design decisions (ADR summary)
 
@@ -122,10 +150,18 @@ daqui (mesmo padrão cross-module de `locations`).
   deploy. O dono "Empresa" não precisa de coluna nova: `employee_id NULL`
   + `org_id`. Uma leitura por `employee_id` (inclusive legacy) nunca devolve
   documentos da Empresa.
-- **Documentos de colaborador continuam no `hr`** — existência do
-  colaborador, histórico do colaborador (`hr_audit_logs`) e requisitos
-  ("Em falta") são conceitos do RH. `applicableCategoriesFor` (no `hr`)
-  exclui categorias `company`.
+- **Documentos de colaborador no `documents` (ADR-0040, fase 1,
+  2026-10-20)** — antes viviam no `hr` (RH antigo, em descontinuação). O
+  colaborador entra por uma porta estreita (`EmployeeDirectoryPort`) em vez
+  do repositório do RH antigo. As rotas do Novo RH e os aliases `/api/hr/*`
+  usam os mesmos handlers, por isso respondem igual.
+  `applicableCategoriesFor` exclui categorias `company`.
+- **Sem histórico antigo (decisão do utilizador)** — a auditoria dos
+  documentos de colaborador passa de `hr_audit_logs` para
+  `document_audit_logs` (`entity_type = employee_document`, migração
+  `20261104100000`). Nada do `hr_audit_logs` é lido nem migrado. O texto
+  da ação vai em `reason`; uma importação de recibos identifica o lote
+  (`(lote <id>)`), porque a tabela não tem `correlation_id`.
 - **"Apólice de seguro de acidentes de trabalho" com âmbito Ambos (D10)** —
   decisão do utilizador; continua opcional nos colaboradores.
 - **Auditoria própria (D3)** para documentos da Empresa.
@@ -136,14 +172,15 @@ daqui (mesmo padrão cross-module de `locations`).
   não índice único.
 - **Categorias periódicas sem módulo próprio (ticket 10)** — o recibo de
   vencimento é um documento como os outros com `period`; a importação em
-  massa vive no `hr` (identifica colaboradores).
+  massa identifica o colaborador pelo NIF/nome no texto do PDF.
 
 ## How to test
 
 - `npx jest src/modules/documents` (fakes, sem BD).
 - Testes críticos da task: tenant isolation e visibilidade
   (`company-documents.test.ts`); documento empresarial nunca "Em falta"
-  (`hr/__tests__/use-cases/get-document-overview.test.ts`).
+  (`__tests__/use-cases/get-document-overview.test.ts`); Novo RH e
+  aliases `/hr` respondem igual (`__tests__/adapters/employee-documents.controller.test.ts`).
 
 ## Known gaps / open debt
 

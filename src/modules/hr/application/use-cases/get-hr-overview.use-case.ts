@@ -16,7 +16,7 @@ import {
   computeMandatoryDocumentsSummary,
   DEFAULT_MANDATORY_REQUIREMENTS,
   DOCUMENT_CATEGORY_BASE_LABELS,
-} from "../../domain/services/document-status.service.js";
+} from "../../../documents/domain/services/document-status.service.js";
 import { computeProfileCompletionPercent } from "../../domain/services/profile-completeness.service.js";
 import {
   computeOperationDisplayState,

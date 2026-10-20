@@ -34,7 +34,6 @@ import {
 } from "./application/use-cases/positions.use-cases.js";
 import { SupabasePositionRepository } from "./adapters/out/supabase-position.repository.js";
 import { HrPositionsController } from "./adapters/in/hr-positions.controller.js";
-import { HrPayslipsController } from "./adapters/in/hr-payslips.controller.js";
 import { HrShiftTemplatesController } from "./adapters/in/hr-shift-templates.controller.js";
 import { HrShiftAutomationsController } from "./adapters/in/hr-shift-automations.controller.js";
 import {
@@ -59,18 +58,9 @@ import {
   SetShiftTemplateActiveUseCase,
   UpdateShiftTemplateUseCase,
 } from "./application/use-cases/shift-templates.use-cases.js";
-import { PdfParseTextExtractorAdapter } from "./adapters/out/pdf-parse-text-extractor.adapter.js";
-import { ImportPayslipsUseCase, PreviewPayslipImportUseCase } from "./application/use-cases/payslip-import.use-cases.js";
 import { SetEmployeeStatusUseCase } from "./application/use-cases/set-employee-status.use-case.js";
 import { UploadEmployeePhotoUseCase } from "./application/use-cases/upload-employee-photo.use-case.js";
 import { GetEmployeeHistoryUseCase } from "./application/use-cases/get-employee-history.use-case.js";
-import { ListEmployeeDocumentsUseCase } from "./application/use-cases/list-employee-documents.use-case.js";
-import { UploadEmployeeDocumentUseCase } from "./application/use-cases/upload-employee-document.use-case.js";
-import { ReplaceEmployeeDocumentUseCase } from "./application/use-cases/replace-employee-document.use-case.js";
-import { RemoveEmployeeDocumentUseCase } from "./application/use-cases/remove-employee-document.use-case.js";
-import { GetEmployeeDocumentDownloadUrlUseCase } from "./application/use-cases/get-employee-document-download-url.use-case.js";
-import { GetEmployeeDocumentHistoryUseCase } from "./application/use-cases/get-employee-document-history.use-case.js";
-import { GetDocumentOverviewUseCase } from "./application/use-cases/get-document-overview.use-case.js";
 import { GetHrOverviewUseCase } from "./application/use-cases/get-hr-overview.use-case.js";
 import { ListShiftsToReviewUseCase } from "./application/use-cases/list-shifts-to-review.use-case.js";
 import { GetShiftToReviewUseCase } from "./application/use-cases/get-shift-to-review.use-case.js";
@@ -79,7 +69,6 @@ import { CreateWorkShiftUseCase } from "./application/use-cases/create-work-shif
 import { UpdateWorkShiftUseCase } from "./application/use-cases/update-work-shift.use-case.js";
 import { DuplicateWorkShiftUseCase } from "./application/use-cases/duplicate-work-shift.use-case.js";
 import { DeleteWorkShiftUseCase } from "./application/use-cases/delete-work-shift.use-case.js";
-import { ListPendingDocumentsUseCase, ReplaceMyDocumentUseCase, ReviewEmployeeDocumentUseCase } from "./application/use-cases/employee-document-review.use-cases.js";
 import {
   CancelMyRequestUseCase,
   CreateMyRequestUseCase,
@@ -103,6 +92,7 @@ import {
   SetLeaveBalanceUseCase,
 } from "./application/use-cases/absences.use-cases.js";
 import { DateTime } from "luxon";
+import type { ListPendingDocumentsPort } from "../documents/domain/ports/in/employee-document.ports.js";
 import { REPORT_TIMEZONE } from "../../utils/lisbonDayInstants.js";
 import { UndoDeleteWorkShiftsUseCase } from "./application/use-cases/undo-delete-work-shifts.use-case.js";
 import { PublishWorkShiftsUseCase } from "./application/use-cases/publish-work-shifts.use-case.js";
@@ -126,10 +116,8 @@ import { HrMeController } from "./adapters/in/hr-me.controller.js";
 import { SupabasePunchRepository } from "./adapters/out/supabase-punch.repository.js";
 import { GetPortalHomeUseCase, RegisterPunchUseCase } from "./application/use-cases/portal-me.use-cases.js";
 import {
-  GetMyDocumentUrlUseCase,
   GetMyLeaveUseCase,
   ListMyCoworkersUseCase,
-  ListMyDocumentsUseCase,
   ListMyShiftsUseCase,
 } from "./application/use-cases/portal-self-service.use-cases.js";
 import { GetPortalAccessUseCase, GrantPortalAccessUseCase, RevokePortalAccessUseCase } from "./application/use-cases/portal-access.use-cases.js";
@@ -165,7 +153,9 @@ import { HrAttendanceController } from "./adapters/in/hr-attendance.controller.j
 export function createHrModule(deps: {
   /** Portal ligado ao Novo RH: o ponto deste colaborador já é no Novo RH — a picagem antiga recusa. */
   movedToNovoRh?: (organizationId: OrganizationId, employeeId: string) => Promise<boolean>;
-} = {}): { router: Router; meRouter: Router; generateAllAutomations: GenerateAllAutomationsPort } {
+  /** Envios do Portal por validar (módulo `documents`, ADR-0040 fase 1) — caixa `/hr/requests`. */
+  listPendingDocuments: ListPendingDocumentsPort;
+}): { router: Router; meRouter: Router; generateAllAutomations: GenerateAllAutomationsPort } {
   const employeeRepository = new SupabaseEmployeeRepository(createScopedQuery);
   const employeeDocumentRepository = new SupabaseDocumentRepository(createScopedQuery);
   const documentCategoryRepository = new SupabaseDocumentCategoryRepository(createScopedQuery);
@@ -198,7 +188,6 @@ export function createHrModule(deps: {
     documentCategoryRepository,
   );
   const getPeopleKpis = new GetPeopleKpisUseCase(employeeRepository, employeeDocumentRepository, documentCategoryRepository);
-  const getDocumentOverview = new GetDocumentOverviewUseCase(employeeRepository, employeeDocumentRepository, documentCategoryRepository);
   const getEmployeeProfile = new GetEmployeeProfileUseCase(
     employeeRepository,
     employeeDocumentRepository,
@@ -210,26 +199,6 @@ export function createHrModule(deps: {
   const setEmployeeStatus = new SetEmployeeStatusUseCase(employeeRepository, auditLog);
   const uploadEmployeePhoto = new UploadEmployeePhotoUseCase(employeeRepository, hrFileStorage, auditLog);
   const getEmployeeHistory = new GetEmployeeHistoryUseCase(auditLog);
-  const listEmployeeDocuments = new ListEmployeeDocumentsUseCase(employeeDocumentRepository);
-  const uploadEmployeeDocument = new UploadEmployeeDocumentUseCase(
-    employeeRepository,
-    employeeDocumentRepository,
-    hrFileStorage,
-    auditLog,
-    documentCategoryRepository,
-  );
-  const replaceEmployeeDocument = new ReplaceEmployeeDocumentUseCase(
-    employeeRepository,
-    employeeDocumentRepository,
-    hrFileStorage,
-    auditLog,
-  );
-  const removeEmployeeDocument = new RemoveEmployeeDocumentUseCase(employeeDocumentRepository, auditLog);
-  const getEmployeeDocumentDownloadUrl = new GetEmployeeDocumentDownloadUrlUseCase(
-    employeeDocumentRepository,
-    hrFileStorage,
-  );
-  const getEmployeeDocumentHistory = new GetEmployeeDocumentHistoryUseCase(employeeDocumentRepository);
   const getHrOverview = new GetHrOverviewUseCase(
     employeeRepository,
     employeeDocumentRepository,
@@ -359,14 +328,6 @@ export function createHrModule(deps: {
     setEmployeeStatus,
     uploadEmployeePhoto,
     getEmployeeHistory,
-    listEmployeeDocuments,
-    uploadEmployeeDocument,
-    replaceEmployeeDocument,
-    removeEmployeeDocument,
-    getEmployeeDocumentDownloadUrl,
-    getEmployeeDocumentHistory,
-    getDocumentOverview,
-    new ReviewEmployeeDocumentUseCase(employeeDocumentRepository, auditLog),
   );
   const overviewController = new HrOverviewController(getHrOverview, listShiftsToReview, getShiftToReview);
   const schedulesController = new HrSchedulesController(
@@ -418,10 +379,6 @@ export function createHrModule(deps: {
     new SetPositionActiveUseCase(positionRepository, employeeRepository, auditLog),
   );
 
-  const payslipsController = new HrPayslipsController(
-    new PreviewPayslipImportUseCase(employeeRepository, employeeDocumentRepository, documentCategoryRepository, new PdfParseTextExtractorAdapter()),
-    new ImportPayslipsUseCase(employeeDocumentRepository, documentCategoryRepository, uploadEmployeeDocument, replaceEmployeeDocument),
-  );
 
   const shiftTemplateRepository = new SupabaseShiftTemplateRepository(createScopedQuery);
   const templateApplicationDeps = {
@@ -475,19 +432,15 @@ export function createHrModule(deps: {
       {
         listMyShifts: new ListMyShiftsUseCase(portalAccounts, workShiftRepository, locationRepository),
         listMyCoworkers: new ListMyCoworkersUseCase(portalAccounts, workShiftRepository, employeeRepository, positionRepository),
-        listMyDocuments: new ListMyDocumentsUseCase(portalAccounts, employeeDocumentRepository, documentCategoryRepository, lisbonToday),
-        getMyDocumentUrl: new GetMyDocumentUrlUseCase(portalAccounts, getEmployeeDocumentDownloadUrl),
         getMyLeave: new GetMyLeaveUseCase(portalAccounts, leaveRead),
         createMyRequest: new CreateMyRequestUseCase(portalAccounts, workShiftRepository, portalRequests, hrFileStorage, auditLog, lisbonToday),
         listMyRequests: new ListMyRequestsUseCase(portalAccounts, portalRequests),
         cancelMyRequest: new CancelMyRequestUseCase(portalAccounts, portalRequests, auditLog),
-        replaceMyDocument: new ReplaceMyDocumentUseCase(portalAccounts, employeeDocumentRepository, documentCategoryRepository, hrFileStorage, auditLog, lisbonToday),
       },
   ).router;
   router.use(shiftTemplatesController.router);
   router.use(shiftAutomationsController.router);
   router.use(positionsController.router);
-  router.use(payslipsController.router);
   router.use(overviewController.router);
   router.use(
     new HrAbsencesController(
@@ -502,7 +455,7 @@ export function createHrModule(deps: {
   router.use(
     new HrRequestsController(
       new ListInboxRequestsUseCase(portalRequests, employeeRepository, workShiftRepository),
-      new ListPendingDocumentsUseCase(employeeDocumentRepository, employeeRepository, documentCategoryRepository),
+      deps.listPendingDocuments,
       new DecidePortalRequestUseCase(portalRequests, new SupabaseLeaveWriteAdapter(createScopedQuery), employeeRepository, workShiftRepository, auditLog),
       new GetRequestAttachmentUrlUseCase(portalRequests, hrFileStorage),
     ).router,

@@ -1,16 +1,15 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
-import { Employee } from "../../domain/entities/employee.js";
-import { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
-import { DocumentCategoryDefinition } from "../../../documents/domain/entities/document-category.js";
+import { Document as EmployeeDocument } from "../../domain/entities/document.js";
+import { DocumentCategoryDefinition } from "../../domain/entities/document-category.js";
 import { GetDocumentOverviewUseCase } from "../../application/use-cases/get-document-overview.use-case.js";
-import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
-import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
-import { FakeDocumentCategoryRepository } from "../../../documents/__tests__/fakes/fake-document-category-repository.js";
+import { FakeEmployeeDirectory, employee } from "../fakes/fake-employee-directory.js";
+import { FakeDocumentRepository } from "../fakes/fake-document-repository.js";
+import { FakeDocumentCategoryRepository } from "../fakes/fake-document-category-repository.js";
 
 const ORG = mintOrganizationId("org-test");
 
 function makeUseCase() {
-  const employees = new FakeEmployeeRepository();
+  const employees = new FakeEmployeeDirectory();
   const documents = new FakeDocumentRepository();
   const categories = new FakeDocumentCategoryRepository();
   return { employees, documents, categories, useCase: new GetDocumentOverviewUseCase(employees, documents, categories) };
@@ -19,7 +18,7 @@ function makeUseCase() {
 describe("GetDocumentOverviewUseCase", () => {
   it("1 linha por requisito obrigatório aplicável, mesmo sem documento; opcionais sem documento não são 'Em falta' (ticket 09)", async () => {
     const { employees, useCase } = makeUseCase();
-    const e = Employee.create({ fullName: "Sem Documentos" });
+    const e = employee({ fullName: "Sem Documentos" });
     employees.seed(ORG, e);
 
     const rows = await useCase.execute({ organizationId: ORG });
@@ -34,7 +33,7 @@ describe("GetDocumentOverviewUseCase", () => {
 
   it("nunca inclui colaboradores inativos", async () => {
     const { employees, useCase } = makeUseCase();
-    employees.seed(ORG, Employee.create({ fullName: "Inativo" }).deactivate());
+    employees.seed(ORG, employee({ fullName: "Inativo" }).deactivate());
 
     const rows = await useCase.execute({ organizationId: ORG });
 
@@ -43,7 +42,7 @@ describe("GetDocumentOverviewUseCase", () => {
 
   it("documento enviado aparece com o seu id/validade/estado real", async () => {
     const { employees, documents, useCase } = makeUseCase();
-    const e = Employee.create({ fullName: "Com Contrato" });
+    const e = employee({ fullName: "Com Contrato" });
     employees.seed(ORG, e);
     documents.seed(
       ORG,
@@ -71,8 +70,8 @@ describe("GetDocumentOverviewUseCase", () => {
 
   it("recibos (categoria periódica, ticket 10): uma linha por período, nunca 'Em falta'", async () => {
     const { employees, documents, useCase } = makeUseCase();
-    const e = Employee.create({ fullName: "Com Recibos" });
-    const sem = Employee.create({ fullName: "Sem Recibos" });
+    const e = employee({ fullName: "Com Recibos" });
+    const sem = employee({ fullName: "Sem Recibos" });
     employees.seed(ORG, e);
     employees.seed(ORG, sem);
     for (const period of ["2026-08", "2026-09"]) {
@@ -108,8 +107,8 @@ describe("GetDocumentOverviewUseCase", () => {
 describe("Ticket 09 — obrigatoriedade por Cargo e opcionais", () => {
   it("categoria obrigatória para 'Cargos selecionados' só gera pendência a quem tem esse cargo", async () => {
     const { employees, categories, useCase } = makeUseCase();
-    const gerente = Employee.create({ fullName: "Gerente", positionId: "pos-gerente" });
-    const outro = Employee.create({ fullName: "Outro", positionId: "pos-prep" });
+    const gerente = employee({ fullName: "Gerente", positionId: "pos-gerente" });
+    const outro = employee({ fullName: "Outro", positionId: "pos-prep" });
     employees.seed(ORG, gerente);
     employees.seed(ORG, outro);
     await categories.create(
@@ -132,7 +131,7 @@ describe("Ticket 09 — obrigatoriedade por Cargo e opcionais", () => {
 
   it("categoria opcional com documento aparece (para acompanhar a validade)", async () => {
     const { employees, documents, useCase } = makeUseCase();
-    const e = Employee.create({ fullName: "Com Certificado" });
+    const e = employee({ fullName: "Com Certificado" });
     employees.seed(ORG, e);
     documents.seed(
       ORG,
@@ -159,7 +158,7 @@ describe("Ticket 09 — obrigatoriedade por Cargo e opcionais", () => {
 describe("Base Organizacional — documento empresarial (teste crítico)", () => {
   it("uma categoria só da Empresa nunca aparece como requisito/'Em falta' dos colaboradores", async () => {
     const { employees, categories, useCase } = makeUseCase();
-    employees.seed(ORG, Employee.create({ fullName: "Colaborador" }));
+    employees.seed(ORG, employee({ fullName: "Colaborador" }));
     await categories.create(
       ORG,
       DocumentCategoryDefinition.create({
@@ -179,7 +178,7 @@ describe("Base Organizacional — documento empresarial (teste crítico)", () =>
 
   it("um documento da Empresa nunca conta como documento de nenhum colaborador", async () => {
     const { employees, documents, useCase } = makeUseCase();
-    const e = Employee.create({ fullName: "Colaborador" });
+    const e = employee({ fullName: "Colaborador" });
     employees.seed(ORG, e);
     documents.seed(
       ORG,

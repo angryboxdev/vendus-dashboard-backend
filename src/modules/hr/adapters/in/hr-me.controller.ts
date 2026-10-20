@@ -2,15 +2,12 @@ import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import { PortalBadRequestError, PortalNotLinkedError, PortalResourceNotFoundError, PunchRefusedError } from "../../domain/errors.js";
 import type {
-  GetMyDocumentUrlPort,
   GetMyLeavePort,
   GetPortalHomePort,
   ListMyCoworkersPort,
-  ListMyDocumentsPort,
   ListMyShiftsPort,
   PortalIdentity,
   RegisterPunchPort,
-  ReplaceMyDocumentPort,
 } from "../../domain/ports/in/portal-me.ports.js";
 import type { CancelMyRequestPort, CreateMyRequestPort, ListMyRequestsPort } from "../../domain/ports/in/portal-requests.ports.js";
 import { InvalidPortalRequestError, PortalRequestNotPendingError } from "../../domain/entities/portal-request.js";
@@ -88,10 +85,7 @@ export class HrMeController {
     private readonly selfService: {
       listMyShifts: ListMyShiftsPort;
       listMyCoworkers: ListMyCoworkersPort;
-      listMyDocuments: ListMyDocumentsPort;
-      getMyDocumentUrl: GetMyDocumentUrlPort;
       getMyLeave: GetMyLeavePort;
-      replaceMyDocument: ReplaceMyDocumentPort;
       createMyRequest: CreateMyRequestPort;
       listMyRequests: ListMyRequestsPort;
       cancelMyRequest: CancelMyRequestPort;
@@ -109,29 +103,7 @@ export class HrMeController {
     // Self-service (tickets 07–09) — sempre do colaborador da sessão.
     this.router.get("/me/shifts", run((req) => this.selfService.listMyShifts.execute(identity(req), String(req.query.from ?? ""), String(req.query.to ?? ""))));
     this.router.get("/me/shifts/:id/coworkers", run((req) => this.selfService.listMyCoworkers.execute(identity(req), req.params.id as string)));
-    this.router.get("/me/documents", run((req) => this.selfService.listMyDocuments.execute(identity(req))));
-    this.router.get("/me/documents/:id/download-url", run((req) => this.selfService.getMyDocumentUrl.execute(identity(req), req.params.id as string)));
-    this.router.post("/me/documents/:id/replace", portalUpload.single("file"), async (req, res) => {
-      try {
-        if (!req.file) {
-          res.status(400).json({ error: "Escolha um PDF ou uma foto (JPG/PNG) até 10 MB." });
-          return;
-        }
-        const body = (req.body ?? {}) as Record<string, string | undefined>;
-        res.json(
-          await this.selfService.replaceMyDocument.execute({
-            ...identity(req),
-            documentId: req.params.id as string,
-            buffer: req.file.buffer,
-            filename: req.file.originalname,
-            mimeType: req.file.mimetype,
-            ...(body.expiresAt ? { expiresAt: body.expiresAt } : {}),
-          }),
-        );
-      } catch (e) {
-        handleError(e, res);
-      }
-    });
+    // Documentos (/me/documents*): módulo `documents` (ADR-0040, fase 1).
     // Pedidos (ticket 12): justificar falta (com anexo opcional) / pedir folga.
     this.router.get("/me/requests", run((req) => this.selfService.listMyRequests.execute(identity(req))));
     this.router.post("/me/requests/:id/cancel", run((req) => this.selfService.cancelMyRequest.execute(identity(req), req.params.id as string)));

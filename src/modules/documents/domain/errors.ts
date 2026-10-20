@@ -64,3 +64,44 @@ export class InvalidDocumentError extends Error {
     this.name = "InvalidDocumentError";
   }
 }
+
+// ── Documentos de colaborador (ADR-0040, fase 1: vindos do RH antigo) ─────
+
+/** O colaborador dono do documento não existe nesta organização. */
+export class EmployeeNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Funcionário não encontrado: ${id}`);
+    this.name = "EmployeeNotFoundError";
+  }
+}
+
+export class EmployeeDocumentNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Documento não encontrado: ${id}`);
+    this.name = "EmployeeDocumentNotFoundError";
+  }
+}
+
+/** Portal: a conta da sessão não está ligada a nenhum colaborador (403 `PORTAL_NOT_LINKED`). */
+export class PortalNotLinkedError extends Error {
+  constructor() {
+    super("Esta conta não está ligada a nenhum colaborador");
+    this.name = "PortalNotLinkedError";
+  }
+}
+
+/** Portal: recurso inexistente ou de outro colaborador — 404, sem revelar qual. */
+export class PortalResourceNotFoundError extends Error {
+  constructor(what: string) {
+    super(`${what} não encontrado`);
+    this.name = "PortalResourceNotFoundError";
+  }
+}
+
+/** Portal: pedido inválido (formato, data de validade). */
+export class PortalBadRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PortalBadRequestError";
+  }
+}

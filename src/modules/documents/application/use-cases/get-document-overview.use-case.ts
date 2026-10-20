@@ -1,6 +1,6 @@
-import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
-import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
-import type { DocumentCategoryRepositoryPort } from "../../../documents/domain/ports/out/document-category-repository.port.js";
+import type { EmployeeDirectoryPort } from "../../domain/ports/out/employee-directory.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../domain/ports/out/document-repository.port.js";
+import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
 import { applicableCategoriesFor, computeDocumentRequirementRows, computePeriodicDocumentRows } from "../../domain/services/document-status.service.js";
 import type {
   DocumentOverviewRowDTO,
@@ -19,7 +19,7 @@ import type {
  */
 export class GetDocumentOverviewUseCase implements GetDocumentOverviewPort {
   constructor(
-    private readonly employeeRepository: EmployeeRepositoryPort,
+    private readonly employeeRepository: EmployeeDirectoryPort,
     private readonly employeeDocumentRepository: EmployeeDocumentRepositoryPort,
     private readonly documentCategoryRepository: DocumentCategoryRepositoryPort,
   ) {}

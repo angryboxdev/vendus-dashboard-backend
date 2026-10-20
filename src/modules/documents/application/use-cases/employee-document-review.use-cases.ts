@@ -1,12 +1,10 @@
-import { randomUUID } from "crypto";
-import type { DocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
-import type { DocumentCategoryRepositoryPort } from "../../../documents/domain/ports/out/document-category-repository.port.js";
+import type { DocumentRepositoryPort } from "../../domain/ports/out/document-repository.port.js";
+import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
 import { EmployeeDocumentNotFoundError, PortalBadRequestError, PortalResourceNotFoundError } from "../../domain/errors.js";
-import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
-import type { HrAuditLogPort } from "../../domain/ports/out/hr-audit-log.port.js";
-import type { HrFileStoragePort } from "../../domain/ports/out/hr-file-storage.port.js";
-import type { PortalAccountPort } from "../../domain/ports/out/portal-account.port.js";
-import type { MyDocumentDTO, PortalIdentity, ReplaceMyDocumentCommand, ReplaceMyDocumentPort } from "../../domain/ports/in/portal-me.ports.js";
+import type { EmployeeDirectoryPort } from "../../domain/ports/out/employee-directory.port.js";
+import type { DocumentAuditLogPort } from "../../domain/ports/out/document-audit-log.port.js";
+import type { EmployeeFileStoragePort } from "../../domain/ports/out/employee-file-storage.port.js";
+import type { MyDocumentDTO, PortalIdentity, ReplaceMyDocumentCommand, ReplaceMyDocumentPort } from "../../domain/ports/in/my-document.ports.js";
 import type {
   PendingDocumentDTO,
   ListPendingDocumentsPort,
@@ -14,9 +12,9 @@ import type {
   ReviewEmployeeDocumentPort,
 } from "../../domain/ports/in/employee-document.ports.js";
 import { canReplaceDocument } from "../../domain/services/document-replacement.service.js";
-import { resolvePortalEmployeeId } from "./portal-me.use-cases.js";
-import { toMyDocumentDTO } from "./portal-self-service.use-cases.js";
-import { toEmployeeDocumentDTO } from "./shared.js";
+import { resolvePortalEmployeeId } from "./employee-document-shared.js";
+import { toMyDocumentDTO } from "./my-documents.use-cases.js";
+import { toEmployeeDocumentDTO } from "./employee-document-shared.js";
 
 const PORTAL_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png"];
 
@@ -27,17 +25,17 @@ const PORTAL_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png"];
  */
 export class ReplaceMyDocumentUseCase implements ReplaceMyDocumentPort {
   constructor(
-    private readonly accounts: PortalAccountPort,
+    private readonly employees: EmployeeDirectoryPort,
     private readonly documents: DocumentRepositoryPort,
     private readonly categories: DocumentCategoryRepositoryPort,
-    private readonly storage: HrFileStoragePort,
-    private readonly auditLog: HrAuditLogPort,
+    private readonly storage: EmployeeFileStoragePort,
+    private readonly auditLog: DocumentAuditLogPort,
     private readonly today: () => string,
   ) {}
 
   async execute(command: ReplaceMyDocumentCommand): Promise<MyDocumentDTO> {
     const org = command.organizationId;
-    const employeeId = await resolvePortalEmployeeId(this.accounts, command);
+    const employeeId = await resolvePortalEmployeeId(this.employees, command);
     const previous = await this.documents.findById(org, command.documentId);
     if (!previous || previous.ownerType !== "employee" || previous.ownerId !== employeeId || !previous.isCurrent) {
       throw new PortalResourceNotFoundError("Documento");
@@ -53,7 +51,7 @@ export class ReplaceMyDocumentUseCase implements ReplaceMyDocumentPort {
       throw new PortalBadRequestError("A nova data de validade tem de ser depois de hoje.");
     }
 
-    const storagePath = await this.storage.store("document", command.buffer, command.filename, command.mimeType, org);
+    const storagePath = await this.storage.store(command.buffer, command.filename, command.mimeType, org);
     const next = previous.supersede({
       fileName: command.filename,
       storagePath,
@@ -64,7 +62,7 @@ export class ReplaceMyDocumentUseCase implements ReplaceMyDocumentPort {
       origin: "colaborador",
     });
     const saved = await this.documents.create(org, next).catch(async (e) => {
-      await this.storage.remove("document", storagePath, org).catch(() => {});
+      await this.storage.remove(storagePath, org).catch(() => {});
       throw e;
     });
     await this.documents.update(org, previous.markSuperseded());
@@ -74,12 +72,10 @@ export class ReplaceMyDocumentUseCase implements ReplaceMyDocumentPort {
       actor: command.actor,
       entityType: "employee_document",
       entityId: saved.id,
-      employeeId,
       action: "document_submitted",
-      description: `Documento "${category?.label ?? saved.category}" enviado pelo colaborador no Portal (v${previous.version} → v${saved.version}) — aguarda validação`,
+      reason: `Documento "${category?.label ?? saved.category}" enviado pelo colaborador no Portal (v${previous.version} → v${saved.version}) — aguarda validação`,
       before: previous.toProps(),
       after: saved.toProps(),
-      correlationId: randomUUID(),
     });
     return toMyDocumentDTO(saved, category ?? null, today, null);
   }
@@ -93,7 +89,7 @@ export class ReplaceMyDocumentUseCase implements ReplaceMyDocumentPort {
 export class ReviewEmployeeDocumentUseCase implements ReviewEmployeeDocumentPort {
   constructor(
     private readonly documents: DocumentRepositoryPort,
-    private readonly auditLog: HrAuditLogPort,
+    private readonly auditLog: DocumentAuditLogPort,
   ) {}
 
   async execute(command: ReviewEmployeeDocumentCommand) {
@@ -110,12 +106,10 @@ export class ReviewEmployeeDocumentUseCase implements ReviewEmployeeDocumentPort
         actor: command.actor,
         entityType: "employee_document",
         entityId: saved.id,
-        employeeId: command.employeeId,
         action: "document_validated",
-        description: `Documento "${saved.category}" enviado pelo colaborador validado`,
+        reason: `Documento "${saved.category}" enviado pelo colaborador validado`,
         before: doc.toProps(),
         after: saved.toProps(),
-        correlationId: randomUUID(),
       });
       return toEmployeeDocumentDTO(saved);
     }
@@ -131,12 +125,10 @@ export class ReviewEmployeeDocumentUseCase implements ReviewEmployeeDocumentPort
       actor: command.actor,
       entityType: "employee_document",
       entityId: saved.id,
-      employeeId: command.employeeId,
       action: "document_rejected",
-      description: `Documento "${saved.category}" enviado pelo colaborador rejeitado: ${saved.reviewNote}`,
+      reason: `Documento "${saved.category}" enviado pelo colaborador rejeitado: ${saved.reviewNote}`,
       before: doc.toProps(),
       after: saved.toProps(),
-      correlationId: randomUUID(),
     });
     return toEmployeeDocumentDTO(saved);
   }
@@ -146,7 +138,7 @@ export class ReviewEmployeeDocumentUseCase implements ReviewEmployeeDocumentPort
 export class ListPendingDocumentsUseCase implements ListPendingDocumentsPort {
   constructor(
     private readonly documents: DocumentRepositoryPort,
-    private readonly employees: EmployeeRepositoryPort,
+    private readonly employees: EmployeeDirectoryPort,
     private readonly categories: DocumentCategoryRepositoryPort,
   ) {}
 

@@ -1,13 +1,13 @@
-import type { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
-import type { DocumentCategoryDefinition } from "../../../documents/domain/entities/document-category.js";
+import type { Document as EmployeeDocument } from "../entities/document.js";
+import type { DocumentCategoryDefinition } from "../entities/document-category.js";
 
 // Estado de validade genérico — vive no motor de documentos (Base Organizacional, ticket 03).
 export {
   computeDocumentDisplayStatus,
   EXPIRING_SOON_DAYS,
   type DocumentDisplayStatus,
-} from "../../../documents/domain/services/document-validity.service.js";
-import { computeDocumentDisplayStatus } from "../../../documents/domain/services/document-validity.service.js";
+} from "./document-validity.service.js";
+import { computeDocumentDisplayStatus } from "./document-validity.service.js";
 
 export interface MandatoryDocumentsSummary {
   mandatoryTotal: number;

@@ -28,6 +28,16 @@ describe("inventário de rotas", () => {
     ]);
   });
 
+  test("expande a variável de um ciclo sobre literais (uma rota por valor)", () => {
+    const routes = scanRoutes([
+      {
+        file: "src/modules/documents/adapters/in/x.controller.ts",
+        content: ['for (const base of ["/novo-rh/x", "/hr/x"]) {', "  router.get(`${base}/:id/docs`, h);", "}", "router.get(`${desconhecida}/y`, h);"].join("\n"),
+      },
+    ]);
+    expect(routes.map((r) => `${r.method} ${r.path}`)).toEqual(["GET /api/hr/x/:id/docs", "GET /api/novo-rh/x/:id/docs"]);
+  });
+
   test("montagem espelha o server.ts", () => {
     expect(mountOf("src/routes/hrLeaveRoutes.ts")).toEqual({ prefix: "/api/hr", preAuth: false });
     expect(mountOf("src/routes/authRoutes.ts").prefix).toBe("/api/auth");

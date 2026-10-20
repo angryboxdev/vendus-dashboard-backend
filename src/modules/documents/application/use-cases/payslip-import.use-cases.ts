@@ -1,9 +1,9 @@
 import { randomUUID } from "crypto";
-import { isValidDocumentPeriod } from "../../../documents/domain/entities/document.js";
-import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
-import type { DocumentCategoryRepositoryPort } from "../../../documents/domain/ports/out/document-category-repository.port.js";
+import { isValidDocumentPeriod } from "../../domain/entities/document.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../domain/ports/out/document-repository.port.js";
+import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
 import { DocumentPeriodAlreadyExistsError, InvalidDocumentError } from "../../domain/errors.js";
-import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
+import type { EmployeeDirectoryPort } from "../../domain/ports/out/employee-directory.port.js";
 import type { PdfTextExtractorPort } from "../../domain/ports/out/pdf-text-extractor.port.js";
 import type { ReplaceEmployeeDocumentPort, UploadEmployeeDocumentPort } from "../../domain/ports/in/employee-document.ports.js";
 import {
@@ -39,7 +39,7 @@ async function assertPayslipCategory(categories: DocumentCategoryRepositoryPort,
  */
 export class PreviewPayslipImportUseCase implements PreviewPayslipImportPort {
   constructor(
-    private readonly employeeRepository: EmployeeRepositoryPort,
+    private readonly employeeRepository: EmployeeDirectoryPort,
     private readonly employeeDocumentRepository: EmployeeDocumentRepositoryPort,
     private readonly documentCategoryRepository: DocumentCategoryRepositoryPort,
     private readonly pdfTextExtractor: PdfTextExtractorPort,

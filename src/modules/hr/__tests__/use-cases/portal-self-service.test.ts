@@ -1,21 +1,15 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { Location } from "../../../locations/domain/entities/location.js";
-import { Document } from "../../../documents/domain/entities/document.js";
-import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
-import { FakeDocumentCategoryRepository } from "../../../documents/__tests__/fakes/fake-document-category-repository.js";
 import { Employee } from "../../domain/entities/employee.js";
 import { Position } from "../../domain/entities/position.js";
 import { WorkShift } from "../../domain/entities/work-shift.js";
-import { EmployeeDocumentNotFoundError, PortalBadRequestError, PortalNotLinkedError, PortalResourceNotFoundError } from "../../domain/errors.js";
+import { PortalBadRequestError, PortalNotLinkedError, PortalResourceNotFoundError } from "../../domain/errors.js";
 import {
   coworkerShortName,
-  GetMyDocumentUrlUseCase,
   GetMyLeaveUseCase,
   ListMyCoworkersUseCase,
-  ListMyDocumentsUseCase,
   ListMyShiftsUseCase,
 } from "../../application/use-cases/portal-self-service.use-cases.js";
-import type { GetEmployeeDocumentDownloadUrlPort } from "../../domain/ports/in/employee-document.ports.js";
 import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
 import { FakeLeaveReadAdapter } from "../fakes/fake-leave-read.js";
 import { FakeLocationRepository } from "../fakes/fake-location-repository.js";
@@ -121,58 +115,6 @@ describe("Portal — Quem trabalha comigo", () => {
   });
 });
 
-describe("Portal — Documentos", () => {
-  const doc = (ownerId: string, category: string, extra: Partial<{ period: string; expiresAt: string }> = {}) =>
-    Document.createFirstVersion({
-      owner: { type: "employee", id: ownerId },
-      category,
-      mandatory: false,
-      fileName: `${category}.pdf`,
-      storagePath: `x/${category}.pdf`,
-      mimeType: "application/pdf",
-      fileSizeBytes: 10,
-      origin: "rh",
-      expiresAt: extra.expiresAt ?? null,
-      period: extra.period ?? null,
-      uploadedBy: "rh@example.com",
-    });
-
-  it("lista os atuais do próprio, sem removidos, recibos marcados e por período desc", async () => {
-    const { accounts, carla, gabriel, who } = setup();
-    const documents = new FakeDocumentRepository();
-    documents.seed(ORG, doc(carla.id, "recibo_vencimento", { period: "2026-08" }));
-    documents.seed(ORG, doc(carla.id, "recibo_vencimento", { period: "2026-09" }));
-    documents.seed(ORG, doc(carla.id, "nif"));
-    documents.seed(ORG, doc(carla.id, "atestado_saude").remove());
-    documents.seed(ORG, doc(gabriel.id, "nif"));
-    const list = await new ListMyDocumentsUseCase(accounts, documents, new FakeDocumentCategoryRepository()).execute(who);
-    expect(list.map((d) => [d.categoryLabel, d.period, d.isPayslip])).toEqual([
-      ["Recibo de vencimento", "2026-09", true],
-      ["Recibo de vencimento", "2026-08", true],
-      ["NIF", null, false],
-    ]);
-  });
-
-  it("download de documento de outro colaborador → 404 (nunca o URL)", async () => {
-    const { accounts, carla, who } = setup();
-    const calls: unknown[] = [];
-    const download: GetEmployeeDocumentDownloadUrlPort = {
-      async execute(cmd) {
-        calls.push(cmd);
-        if (cmd.documentId !== "doc-carla") throw new EmployeeDocumentNotFoundError(cmd.documentId);
-        return { url: "https://signed/doc-carla" };
-      },
-    };
-    const uc = new GetMyDocumentUrlUseCase(accounts, download);
-    await expect(uc.execute(who, "doc-carla")).resolves.toEqual({ url: "https://signed/doc-carla" });
-    await expect(uc.execute(who, "doc-gabriel")).rejects.toBeInstanceOf(PortalResourceNotFoundError);
-    // O colaborador vem sempre da sessão.
-    expect(calls).toEqual([
-      { organizationId: ORG, employeeId: carla.id, documentId: "doc-carla" },
-      { organizationId: ORG, employeeId: carla.id, documentId: "doc-gabriel" },
-    ]);
-  });
-});
 
 describe("Portal — Ausências", () => {
   it("só as do próprio que tocam o ano; sem saldo", async () => {

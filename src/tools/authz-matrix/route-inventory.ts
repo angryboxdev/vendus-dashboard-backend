@@ -4,8 +4,9 @@
  * (que precisa de BD no arranque). Pura: recebe o conteúdo dos ficheiros.
  *
  * Reconhece `<router>.<método>(<caminho>, …)` com caminho em literal ou em
- * template que use constantes `const X = "…"` do mesmo ficheiro. O prefixo de
- * montagem e se a rota está antes da autenticação vêm de `mountOf()`, que
+ * template que use constantes `const X = "…"` do mesmo ficheiro ou a variável
+ * de um ciclo sobre literais (`for (const base of ["/a", "/b"])` → uma rota
+ * por valor). O prefixo de montagem e se a rota está antes da autenticação vêm de `mountOf()`, que
  * espelha `src/server.ts` — ao mudar a montagem lá, mudar aqui.
  */
 
@@ -38,19 +39,30 @@ export function mountOf(file: string): { prefix: string; preAuth: boolean } {
 
 const CALL = /\b(\w+)\.(get|post|put|patch|delete)\(\s*(["'`])((?:(?!\3)[^\\]|\\.)*)\3/g;
 const CONST = /\bconst\s+([A-Za-z_]\w*)\s*=\s*(["'`])([^"'`$]*)\2/g;
+const LOOP = /\bfor\s*\(\s*const\s+([A-Za-z_]\w*)\s+of\s+\[([^\]]*)\]\s*\)/g;
+
+/** Resolve `${x}`: constante do ficheiro, ou um caminho por valor da variável de ciclo. */
+function expand(path: string, consts: Map<string, string>, loops: Map<string, string[]>): string[] {
+  const m = /\$\{(\w+)\}/.exec(path);
+  if (!m) return [path];
+  const values = consts.has(m[1]!) ? [consts.get(m[1]!)!] : (loops.get(m[1]!) ?? []);
+  return values.flatMap((v) => expand(path.replace(m[0], v), consts, loops));
+}
 
 export function scanRoutes(files: SourceFile[]): RouteEntry[] {
   const out: RouteEntry[] = [];
   for (const { file, content } of files) {
     const consts = new Map<string, string>();
     for (const m of content.matchAll(CONST)) consts.set(m[1]!, m[3]!);
+    const loops = new Map<string, string[]>();
+    for (const m of content.matchAll(LOOP)) loops.set(m[1]!, [...m[2]!.matchAll(/["']([^"']*)["']/g)].map((v) => v[1]!));
     const { prefix, preAuth } = mountOf(file);
     for (const m of content.matchAll(CALL)) {
       const routerName = m[1]!;
-      let path = m[4]!;
-      if (m[3] === "`") path = path.replace(/\$\{(\w+)\}/g, (_, name: string) => consts.get(name) ?? `\${${name}}`);
-      if (!path.startsWith("/") || path.includes("${")) continue;
-      out.push({ method: m[2]!.toUpperCase(), path: prefix + path, file, preAuth: preAuth || PRE_AUTH_ROUTERS.has(routerName) });
+      for (const path of m[3] === "`" ? expand(m[4]!, consts, loops) : [m[4]!]) {
+        if (!path.startsWith("/") || path.includes("${")) continue;
+        out.push({ method: m[2]!.toUpperCase(), path: prefix + path, file, preAuth: preAuth || PRE_AUTH_ROUTERS.has(routerName) });
+      }
     }
     // Rotas com constante sem template: router.get(BASE, …)
     for (const m of content.matchAll(/\b(\w+)\.(get|post|put|patch|delete)\(\s*([A-Z_][A-Z0-9_]*)\s*,/g)) {
