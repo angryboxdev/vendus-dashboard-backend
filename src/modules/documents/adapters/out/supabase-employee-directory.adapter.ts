@@ -3,15 +3,22 @@ import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-quer
 import type { DocumentEmployee, EmployeeDirectoryPort } from "../../domain/ports/out/employee-directory.port.js";
 
 const PAGE = 1000; // PostgREST max_rows
-type Row = { id: string; full_name: string; nif: string | null; position_id: string | null };
-const toEmployee = (r: Row): DocumentEmployee => ({ id: r.id, fullName: r.full_name, nif: r.nif, positionId: r.position_id });
+type Row = { id: string; full_name: string; nif: string | null; position_id: string | null; status: string };
+const SELECT = "id, full_name, nif, position_id, status";
+const toEmployee = (r: Row): DocumentEmployee => ({
+  id: r.id,
+  fullName: r.full_name,
+  nif: r.nif,
+  positionId: r.position_id,
+  status: r.status === "active" ? "active" : "inactive",
+});
 
 /** Ficha partilhada `hr_employees` (fica sempre — ADR-0040), só leitura. */
 export class SupabaseEmployeeDirectoryAdapter implements EmployeeDirectoryPort {
   constructor(private readonly scopedQuery: ScopedQueryFactory) {}
 
   async findById(organizationId: OrganizationId, id: string): Promise<DocumentEmployee | null> {
-    const { data, error } = await this.scopedQuery(organizationId).table("hr_employees").select("id, full_name, nif, position_id").eq("id", id).maybeSingle();
+    const { data, error } = await this.scopedQuery(organizationId).table("hr_employees").select(SELECT).eq("id", id).maybeSingle();
     if (error) throw new Error(error.message);
     return data ? toEmployee(data as unknown as Row) : null;
   }
@@ -21,7 +28,7 @@ export class SupabaseEmployeeDirectoryAdapter implements EmployeeDirectoryPort {
     for (let from = 0; ; from += PAGE) {
       let q = this.scopedQuery(organizationId)
         .table("hr_employees")
-        .select("id, full_name, nif, position_id")
+        .select(SELECT)
         .order("full_name", { ascending: true })
         .order("id", { ascending: true })
         .range(from, from + PAGE - 1);

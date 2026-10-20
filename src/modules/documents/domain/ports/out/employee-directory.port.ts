@@ -7,6 +7,7 @@ export interface DocumentEmployee {
   nif: string | null;
   /** Cargo — decide as categorias aplicáveis. */
   positionId: string | null;
+  status: "active" | "inactive";
 }
 
 /**

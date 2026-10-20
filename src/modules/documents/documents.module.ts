@@ -32,6 +32,7 @@ import { RemoveEmployeeDocumentUseCase } from "./application/use-cases/remove-em
 import { GetEmployeeDocumentDownloadUrlUseCase } from "./application/use-cases/get-employee-document-download-url.use-case.js";
 import { GetEmployeeDocumentHistoryUseCase } from "./application/use-cases/get-employee-document-history.use-case.js";
 import { GetDocumentOverviewUseCase } from "./application/use-cases/get-document-overview.use-case.js";
+import { GetEmployeeDocumentSummaryUseCase } from "./application/use-cases/get-employee-document-summary.use-case.js";
 import { ListPendingDocumentsUseCase, ReplaceMyDocumentUseCase, ReviewEmployeeDocumentUseCase } from "./application/use-cases/employee-document-review.use-cases.js";
 import { ImportPayslipsUseCase, PreviewPayslipImportUseCase } from "./application/use-cases/payslip-import.use-cases.js";
 import { GetMyDocumentUrlUseCase, ListMyDocumentsUseCase } from "./application/use-cases/my-documents.use-cases.js";
@@ -93,6 +94,7 @@ export function createDocumentsModule(): {
     new GetEmployeeDocumentHistoryUseCase(documentRepository),
     new GetDocumentOverviewUseCase(employees, documentRepository, categoryRepository),
     new ReviewEmployeeDocumentUseCase(documentRepository, auditLog),
+    new GetEmployeeDocumentSummaryUseCase(employees, documentRepository, categoryRepository),
   );
   const payslipsController = new PayslipsController(
     new PreviewPayslipImportUseCase(employees, documentRepository, categoryRepository, new PdfParseTextExtractorAdapter()),

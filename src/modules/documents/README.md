@@ -119,7 +119,10 @@ mesmo comportamento e as mesmas respostas.
   multipart, `POST /:id/replace`, `DELETE /:id` lógico,
   `GET /:id/download-url`, `GET /:id/history`) — `manager`+.
 - `EmployeeDocumentsController` → `/api/novo-rh/people/:id/documents*`
-  e `/api/novo-rh/documents/overview` (`hr.documents`); os mesmos
+  e `/api/novo-rh/documents/overview` (`hr.documents`); só no Novo RH,
+  `GET /api/novo-rh/people/:id/documents/summary` (resumo da ficha:
+  obrigatórios, em falta, a expirar, alertas — o que o perfil do RH antigo
+  dava); os mesmos
   handlers em `/api/hr/people/:id/documents*` e `/api/hr/document-overview`
   até à fase 4 da ADR-0040. Escritas também com `requireMinRole("manager")`.
 - `PayslipsController` → `/api/novo-rh/payslips/import(/preview)` e

@@ -12,6 +12,7 @@ import {
 } from "../../domain/errors.js";
 import type {
   GetDocumentOverviewPort,
+  GetEmployeeDocumentSummaryPort,
   GetEmployeeDocumentDownloadUrlPort,
   GetEmployeeDocumentHistoryPort,
   ListEmployeeDocumentsPort,
@@ -47,6 +48,7 @@ export class EmployeeDocumentsController {
     private readonly getEmployeeDocumentHistory: GetEmployeeDocumentHistoryPort,
     private readonly getDocumentOverview: GetDocumentOverviewPort,
     private readonly reviewEmployeeDocument: ReviewEmployeeDocumentPort,
+    private readonly getEmployeeDocumentSummary: GetEmployeeDocumentSummaryPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -63,6 +65,19 @@ export class EmployeeDocumentsController {
     };
     this.router.get("/novo-rh/documents/overview", overview);
     this.router.get("/hr/document-overview", overview);
+
+    /** Resumo documental da ficha do Novo RH (obrigatórios, em falta, alertas). Só Novo RH. */
+    this.router.get("/novo-rh/people/:id/documents/summary", async (req, res) => {
+      try {
+        res.json(await this.getEmployeeDocumentSummary.execute({ organizationId: req.auth!.orgId, employeeId: req.params["id"] as string }));
+      } catch (e) {
+        if (e instanceof EmployeeNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
 
     for (const people of ["/novo-rh/people", "/hr/people"]) {
       /** GET …/:id/documents — versões atuais. */
