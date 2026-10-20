@@ -1,3 +1,4 @@
+import compression from "compression";
 import { ENV } from "./config/env.js";
 import cors from "cors";
 import { documentsRoutes } from "./routes/documentsRoutes.js";
@@ -123,6 +124,9 @@ const corsOptions: cors.CorsOptions = {
   exposedHeaders: ["ETag", "X-Correlation-Id", "Idempotent-Replayed", "X-Novo-RH-Mode"],
 };
 app.use(cors(corsOptions));
+// Respostas JSON comprimidas (gzip/br): o painel e a Visão geral de 100+ pessoas pesam muito menos.
+// Fluxos (text/event-stream, ex.: pedidos AirMenu) ficam de fora — comprimir atrasava cada evento.
+app.use(compression({ filter: (req, res) => !String(res.getHeader("Content-Type") ?? "").includes("text/event-stream") && compression.filter(req, res) }));
 app.use(express.json());
 // GET: leituras idênticas à base dentro do mesmo pedido vão uma vez (request-memo.ts).
 app.use((req, _res, next) => (req.method === "GET" ? runWithRequestMemo(next) : next()));
