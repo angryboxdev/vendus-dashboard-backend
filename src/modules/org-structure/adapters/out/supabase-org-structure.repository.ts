@@ -75,11 +75,18 @@ export class SupabaseOrgStructureRepository implements OrgStructureRepositoryPor
   }
 
   async listAssignments(orgId: OrganizationId, filter: { employeeId?: string; unitType?: UnitType; unitId?: string }) {
-    let q = this.scoped(orgId).table("employee_org_assignments").select(ASG);
-    if (filter.employeeId) q = q.eq("employee_id", filter.employeeId);
-    if (filter.unitType) q = q.eq("unit_type", filter.unitType);
-    if (filter.unitId) q = q.eq("unit_id", filter.unitId);
-    return check<AsgRow[]>(await q.order("valid_from")).map(asg);
+    // Por páginas de 1000 (limite do PostgREST): uma organização grande não fica cortada sem aviso.
+    const out: AsgRow[] = [];
+    for (let from = 0; ; from += 1000) {
+      let q = this.scoped(orgId).table("employee_org_assignments").select(ASG);
+      if (filter.employeeId) q = q.eq("employee_id", filter.employeeId);
+      if (filter.unitType) q = q.eq("unit_type", filter.unitType);
+      if (filter.unitId) q = q.eq("unit_id", filter.unitId);
+      const rows = check<AsgRow[]>(await q.order("valid_from").order("id").range(from, from + 999));
+      out.push(...rows);
+      if (rows.length < 1000) break;
+    }
+    return out.map(asg);
   }
   async createAssignment(orgId: OrganizationId, input: Omit<Assignment, "id"> & { createdBy: string }) {
     const row = {

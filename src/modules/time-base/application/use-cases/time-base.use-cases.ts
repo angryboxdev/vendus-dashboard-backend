@@ -265,26 +265,25 @@ export class TimeBaseUseCases {
       this.repo.listAssignments(org),
       this.repo.listHolidayDays(org),
     ]);
-    const days: TheoreticalDay[] = [];
-    for (const date of dates) {
-      const units = await this.context.unitsAt(org, employeeId, date);
-      const sa = resolveAssignment(assignments, "schedule", units, date);
-      const schedule = sa ? schedules.find((s) => s.id === sa.resourceId) : undefined;
-      const version = schedule ? versionOn(versions.filter((v) => v.scheduleId === schedule.id), date) : null;
-      const ha = resolveAssignment(assignments, "holiday_calendar", units, date);
-      const holiday = ha ? (holidayDays.find((h) => h.calendarId === ha.resourceId && h.date === date) ?? null) : null;
-      const mode = await this.context.theoreticalModeAt(org, employeeId, date);
-      days.push(
-        theoreticalDay({
+    // O contexto de cada dia (unidades, modo, contrato) pede-se em paralelo — antes um dia de cada vez.
+    const days: TheoreticalDay[] = await Promise.all(
+      dates.map(async (date) => {
+        const [units, mode] = await Promise.all([this.context.unitsAt(org, employeeId, date), this.context.theoreticalModeAt(org, employeeId, date)]);
+        const sa = resolveAssignment(assignments, "schedule", units, date);
+        const schedule = sa ? schedules.find((s) => s.id === sa.resourceId) : undefined;
+        const version = schedule ? versionOn(versions.filter((v) => v.scheduleId === schedule.id), date) : null;
+        const ha = resolveAssignment(assignments, "holiday_calendar", units, date);
+        const holiday = ha ? (holidayDays.find((h) => h.calendarId === ha.resourceId && h.date === date) ?? null) : null;
+        return theoreticalDay({
           date,
           schedule: schedule && version ? { kind: schedule.kind, name: schedule.name, version } : null,
           holiday,
           mode,
           contractWeeklyMinutes: mode === "contract" ? await this.context.contractWeeklyMinutesAt(org, employeeId, date) : null,
           halfDay: halfDays.includes(date),
-        }),
-      );
-    }
+        });
+      }),
+    );
     return { days, totalMinutes: days.reduce((s, d) => s + d.minutes, 0) };
   }
 

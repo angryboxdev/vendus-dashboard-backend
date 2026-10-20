@@ -130,6 +130,9 @@ export interface OrgUnitsLookup {
   membersOf(orgId: OrganizationId, unitType: "department" | "group", unitIds: string[], date: string): Promise<string[]>;
 }
 
+/** Validade da cache de centros por organização (ver `locationsOf`). */
+const LOCATIONS_TTL_MS = 10_000;
+
 /** Centros do colaborador = local principal + outros locais autorizados; departamentos/grupos da estrutura. */
 export class SupabaseEmployeeSegments implements EmployeeSegmentsPort {
   constructor(
@@ -137,16 +140,45 @@ export class SupabaseEmployeeSegments implements EmployeeSegmentsPort {
     private readonly units: OrgUnitsLookup,
   ) {}
 
+  /**
+   * Centro principal e centros extra de todos os colaboradores da organização,
+   * guardados ${LOCATIONS_TTL_MS / 1000} s (outros módulos escrevem nestas tabelas: TTL curto). Antes eram
+   * duas leituras por colaborador × dia.
+   */
+  private readonly locationsCache = new Map<string, { at: number; value: Promise<{ primary: Map<string, string | null>; extra: Map<string, string[]> }> }>();
+  private locationsOf(orgId: OrganizationId) {
+    const hit = this.locationsCache.get(orgId);
+    if (hit && Date.now() - hit.at < LOCATIONS_TTL_MS) return hit.value;
+    // Por páginas de 1000 (limite do PostgREST), ordem estável.
+    const all = async <T>(table: "hr_employees" | "hr_employee_locations", cols: string, order: string[]) => {
+      const out: T[] = [];
+      for (let from = 0; ; from += 1000) {
+        let q = this.scoped(orgId).table(table).select(cols);
+        for (const c of order) q = q.order(c);
+        const rows = check(await q.range(from, from + 999)) as unknown as T[];
+        out.push(...rows);
+        if (rows.length < 1000) break;
+      }
+      return out;
+    };
+    const value = Promise.all([
+      all<{ id: string; primary_location_id: string | null }>("hr_employees", "id, primary_location_id", ["id"]),
+      all<{ employee_id: string; location_id: string }>("hr_employee_locations", "employee_id, location_id", ["employee_id", "location_id"]),
+    ]).then(([emp, extra]) => {
+      const primary = new Map(emp.map((r) => [r.id, r.primary_location_id]));
+      const byEmployee = new Map<string, string[]>();
+      for (const r of extra) byEmployee.set(r.employee_id, [...(byEmployee.get(r.employee_id) ?? []), r.location_id]);
+      return { primary, extra: byEmployee };
+    });
+    this.locationsCache.set(orgId, { at: Date.now(), value });
+    value.catch(() => this.locationsCache.delete(orgId));
+    return value;
+  }
+
   async segmentsOf(orgId: OrganizationId, employeeId: string, date: string): Promise<EmployeeSegments> {
-    const q = this.scoped(orgId);
-    // As três leituras são independentes: em paralelo (antes as unidades esperavam pela ficha).
-    const [emp, extra, units] = await Promise.all([
-      q.table("hr_employees").select("id, primary_location_id").eq("id", employeeId).maybeSingle(),
-      q.table("hr_employee_locations").select("location_id").eq("employee_id", employeeId),
-      this.units.unitsOf(orgId, employeeId, date),
-    ]);
-    const e = check(emp) as unknown as { primary_location_id: string | null } | null;
-    const locs = (check(extra) as unknown as { location_id: string }[]).map((r) => r.location_id);
+    const [all, units] = await Promise.all([this.locationsOf(orgId), this.units.unitsOf(orgId, employeeId, date)]);
+    const e = all.primary.has(employeeId) ? { primary_location_id: all.primary.get(employeeId) ?? null } : null;
+    const locs = all.extra.get(employeeId) ?? [];
     const { departmentIds, groupIds, locationIds: dated } = units;
     // Com histórico de centros (transferências) vale o centro dessa data; senão o principal atual.
     const main = dated ?? (e?.primary_location_id ? [e.primary_location_id] : []);
