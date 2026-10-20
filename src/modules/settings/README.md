@@ -84,6 +84,8 @@ regras de cada módulo noutro sítio: os módulos do Novo RH leem daqui
 - Dependências validadas contra a "vista do perfil" (o próprio valor, senão o global, senão o default) — aproximação segura para perfis de segmento/pessoais.
 - Um alvo com início no passado também é retroativo (muda dias passados).
 
+- **Desempenho** (2026-10-20): a fotografia de perfis/alvos/valores fica 60 s em memória por organização e qualquer escrita deste módulo a limpa (só ele escreve nestas tabelas); `today` também. `everTrue(org, key)` diz se algum perfil alguma vez ligou um parâmetro — para saltar trabalho que nunca se aplica (ex.: validação de excedente nos Pedidos).
+
 ## How to test
 
 - Domínio/use cases e HTTP: `npx jest --config jest.config.cjs src/modules/settings`.

@@ -60,11 +60,25 @@ export class OverviewUseCases {
     if (day > today) throw new OverviewValidationError("O painel não mostra dias futuros.");
 
     const key = `${org}|${day}|${viewer.canPrivate ? 1 : 0}`;
+    const load = () => {
+      const entry: { at: number; value: Promise<Omit<Overview, "kpis" | "locations" | "week">>; settled?: boolean; refreshing?: boolean } = { at: this.now(), value: this.build(org, day, today, viewer.canPrivate) };
+      entry.value.then(
+        () => (entry.settled = true),
+        () => (this.cache.get(key) === entry ? this.cache.delete(key) : undefined),
+      );
+      return entry;
+    };
     let hit = this.cache.get(key);
-    if (!hit || this.now() - hit.at >= CACHE_MS) {
-      hit = { at: this.now(), value: this.build(org, day, today, viewer.canPrivate) };
+    const age = hit ? this.now() - hit.at : Infinity;
+    if (!hit || age >= TODAY_STALE_MS || (age >= CACHE_MS && !hit.settled)) {
+      hit = load();
       this.cache.set(key, hit);
-      hit.value.catch(() => this.cache.delete(key));
+    } else if (age >= CACHE_MS && !hit.refreshing) {
+      // Como em `today`: devolve logo o último resultado e recalcula em segundo plano.
+      hit.refreshing = true;
+      const stale = hit;
+      const next = load();
+      next.value.then(() => this.cache.set(key, next)).catch(() => void (stale.refreshing = false));
     }
     const base = await hit.value;
     // Âmbito de quem vê: em paralelo (antes uma pessoa de cada vez); a ordem mantém-se.

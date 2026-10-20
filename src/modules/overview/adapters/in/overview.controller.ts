@@ -18,6 +18,11 @@ export function createOverviewRouter(uc: OverviewUseCases, viewerOf: (req: Reque
       throw e;
     }
   });
+  // Só hoje (lista de Pessoas, Dashboard): o mesmo apuramento sem a semana — muito mais leve.
+  r.get("/novo-rh/overview/today", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(await uc.today(req.auth!.orgId, viewerOf(req)));
+  });
   r.get("/novo-rh/overview/plan", async (req, res) => {
     const q = (k: string) => (typeof req.query[k] === "string" ? (req.query[k] as string) : "");
     try {

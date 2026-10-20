@@ -1335,6 +1335,9 @@ const inboxModule = createInboxModule({
       // Uma pessoa de cada vez somava as latências de toda a equipa (Visão geral > 15 s);
       // em paralelo limitado, com a mesma ordem e as mesmas regras.
       list: async (org, actor, { employeeIds }) => {
+        // Validação de excedente desligada por omissão: se nenhum perfil a ligou, nada a procurar
+        // (antes recalculava 92 dias de assiduidade por pessoa em cada abertura dos Pedidos).
+        if (!(await settingsModule.settings.everTrue(org, "time_tracking.bank.excess_validation"))) return [];
         const perEmployee = await mapLimit(employeeIds, INBOX_OVERTIME_CONCURRENCY, async (employeeId) => {
           const [own, pending] = await Promise.all([isOwn(org, actor.userId, employeeId), timeBankModule.timeBank.pendingValidations(org, employeeId)]);
           return pending.map((v) => {

@@ -489,7 +489,8 @@ export class AbsencesUseCases {
       const t = types.find((x) => x.id === r.typeId);
       const isPrivate = !!t?.private;
       // O próprio colaborador vê sempre as suas; sem a permissão, as privadas ficam mascaradas.
-      const own = viewerUserId !== null && (viewerUserId === r.requestedByUserId || viewerUserId === (await this.ctx.userOfEmployee(org, r.employeeId)));
+      // Só interessa para tipos privados sem permissão (antes uma leitura por linha, sempre).
+      const own = isPrivate && !canPrivate && viewerUserId !== null && viewerUserId !== "sistema" && (viewerUserId === r.requestedByUserId || viewerUserId === (await this.ctx.userOfEmployee(org, r.employeeId)));
       const mask = isPrivate && !canPrivate && !own;
       const attachment = r.attachment ? { name: mask ? "Anexo" : r.attachment.name, mime: r.attachment.mime } : null;
       out.push({ ...r, attachment, comment: mask ? null : r.comment, typeName: mask ? "Ausência" : (t?.name ?? "—"), typeColor: mask ? null : (t?.color ?? null), typeCategory: mask ? null : (t?.category ?? null), private: isPrivate });

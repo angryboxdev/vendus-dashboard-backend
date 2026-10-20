@@ -89,23 +89,23 @@ export class DashboardUseCases {
           throw isTransient(e) ? new DashboardWarmingError() : e;
         }),
       ),
-      timed("requests", this.cache.getOrLoad({ org, metric: "REQUESTS", date: "today", viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () => withBudget(viewer.requests(), Math.max(this.coverageBudgetMs, Math.min(REQUESTS_BUDGET_MS, this.peopleBudgetMs)))))
+      // O limite de tempo fica fora da cache: o cálculo continua e o próximo pedido aproveita-o (antes era deitado fora e recomeçado).
+      timed("requests", withBudget(this.cache.getOrLoad({ org, metric: "REQUESTS", date: "today", viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () => viewer.requests()), Math.max(this.coverageBudgetMs, Math.min(REQUESTS_BUDGET_MS, this.peopleBudgetMs))))
         .catch((e): { value: DashboardRequest[]; hit: boolean } => (this.onSourceError("requests", e), partial.push("requests"), { value: [], hit: false })),
     ]);
     const { today, people: all, holidays } = peopleRes.value;
     const tomorrow = this.sources.tomorrowOf(today);
-    const coverageRes = await timed("coverage", this.cache
-      .getOrLoad({ org, metric: "COVERAGE", date: today, viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () =>
-        withBudget(
-          this.sources.coverage(
-            org,
-            all.map((p) => ({ id: p.employeeId, name: p.name, locationId: p.locationId })),
-            today,
-            tomorrow,
-          ),
-          this.coverageBudgetMs,
+    const coverageRes = await timed("coverage", withBudget(
+      this.cache.getOrLoad({ org, metric: "COVERAGE", date: today, viewer: viewer.userId, context: "organization" }, LIVE_TTL_MS, () =>
+        this.sources.coverage(
+          org,
+          all.map((p) => ({ id: p.employeeId, name: p.name, locationId: p.locationId })),
+          today,
+          tomorrow,
         ),
-      )
+      ),
+      this.coverageBudgetMs,
+    )
       .catch((e): { value: CoverageGap[]; hit: boolean } => (this.onSourceError("coverage", e), partial.push("coverage"), { value: [], hit: false })));
     const known = new Map(all.filter((p) => p.locationId).map((p) => [p.locationId!, p.locationName ?? "—"]));
     if (locationId && !known.has(locationId)) throw new DashboardValidationError("Local fora do seu âmbito.");

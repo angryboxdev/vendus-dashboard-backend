@@ -1,10 +1,10 @@
 # Matriz de autorização (perfil × endpoint)
 
-> Gerado por `npm run authz:matrix` em 2026-10-19. Não editar à mão.
+> Gerado por `npm run authz:matrix` em 2026-10-20. Não editar à mão.
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 779 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 780 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -499,6 +499,7 @@ Endpoints: 779 · pré-autenticação: 23 · não classificados: 0
 | PUT | `/api/novo-rh/legal-entities/locations/:locationId` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/overview` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/overview/plan` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/overview/today` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/people` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/people` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/people/:id` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |

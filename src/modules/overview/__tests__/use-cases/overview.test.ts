@@ -140,3 +140,19 @@ describe("Painel — leituras em lote (perf)", () => {
     expect(o.people.some((p) => p.employeeId === "e-rui")).toBe(false);
   });
 });
+
+describe("Desempenho — painel da semana", () => {
+  test("depois de 30 s devolve logo o último resultado e recalcula em segundo plano (como «hoje»)", async () => {
+    const { uc, sources, advance } = setup();
+    await uc.get(ORG, all, null);
+    const first = sources.daysCalls;
+    advance(60_000);
+    const stale = await uc.get(ORG, all, null);
+    expect(stale.people.length).toBeGreaterThan(0);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sources.daysCalls).toBe(first * 2);
+    // Dentro dos 30 s: nada se recalcula.
+    await uc.get(ORG, all, null);
+    expect(sources.daysCalls).toBe(first * 2);
+  });
+});
