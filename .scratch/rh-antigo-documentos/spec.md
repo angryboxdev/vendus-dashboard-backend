@@ -1,6 +1,6 @@
 # RH antigo, fase 1: documentos dos colaboradores fora de `modules/hr`
 
-Estado: **D1 feita** (backend, 2026-10-20, ramo `feat/documentos-novo-rh` → `rh`); D2 e D3 por fazer. ADR-0040, fase 1 (o PIN do quiosque já passou para Pessoas, PR #97/#70).
+Estado (2026-10-20): **D1 e D2 feitas** nos ramos `feat/documentos-novo-rh` (backend e frontend), por publicar. **D3 adiada para a fase 3/4**: as rotas `/api/hr/employees/:id/documents*` (`hrRoutes.ts` + `hrDocumentService.ts`) ainda são usadas pela página antiga `HrEmployeeDetailPage` (`/hr/employees/:id`, via `pages/hr/hrApi.ts`). ADR-0040, fase 1 (o PIN do quiosque já passou para Pessoas, PR #97/#70).
 
 ## Ponto de partida (verificado)
 - O motor de documentos já é hexagonal e ativo: `src/modules/documents`.

@@ -48,7 +48,7 @@ categorias, feriados e o bucket `hr-documents` são partilhadas com o Novo RH e
    e o separador da ficha) para o módulo de documentos/pessoas — backend feito
    2026-10-20 (D1: módulo `documents`, rotas `/api/novo-rh/...` + aliases
    `/api/hr/*`; auditoria em `document_audit_logs`, sem histórico antigo);
-   falta o frontend (D2) e a limpeza (D3). O PIN do
+   frontend feito (D2, 2026-10-20); a limpeza das rotas `/api/hr/employees/:id/documents*` (D3) fica para a fase 3/4, porque a página antiga `/hr/employees/:id` ainda as usa. O PIN do
    quiosque já se define na ficha do Novo RH (`PUT /api/novo-rh/people/:id/kiosk-pin`,
    `hr.kiosk_pin`, mesmo hash) *(feito 2026-10-20)*.
 2. Acesso e passagem: Novo RH aberto por permissão *(feito 2026-10-20)*; saldos
