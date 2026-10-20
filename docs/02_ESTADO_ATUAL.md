@@ -14,7 +14,7 @@ Atualizado: 2026-10-18 (verificado contra o repositório, os ramos e a produçã
 - **Financeiro/Stock v1.2 em pausa** (ramo `financeiro`): `.scratch/financeiro-stock-v1-2/task-mestre-v1.2.md` — **F3** e **F4** por fazer; validação da F2 no browser pendente.
 
 ## Última tarefa concluída
-F2 em produção (backend e frontend), 2026-10-18.
+2026-10-20 — em produção: MFA opcional por empresa (`security.mfa.required`, desligada por omissão; backend #94 → `20af8b5`); áreas fictícias na demonstração (#95 → `6b08916`); frontend #66–#68 (→ `1b54129`): ficha com IBAN PT50/indicativo/listas, «Atribuir turnos» recolhível (+ discreto) e a acompanhar o scroll (`appMainClass`), área num seletor, PDF premium da escala (4 organizações, individual, siglas+legenda). Antes: F2 do Financeiro (2026-10-18).
 
 ## Próxima tarefa
 1. Validar a F2 no browser em produção (checklist: três modos sem perda; «Por valores» 100+250+300 = 650 € fecha, 649/651 bloqueiam; guardar rascunho → reabrir pela lista → lançar; «Decidir no documento» e desmarcar «Enviar para Stock» com motivo; «Total a pagar | Em atraso» com filtros; Centros de Custo → Aplicação em Faturas).
@@ -24,7 +24,7 @@ F2 em produção (backend e frontend), 2026-10-18.
 ## Pendências operacionais (produção)
 - Correr `POST /api/fiscal-documents/backfill` com `{ "dryRun": true }` e rever (precisa de sessão de gestor).
 - `GET /api/invoices/integrity/payable-duplicates`: se houver duplicados históricos, o índice único de contas a pagar não foi criado — limpar e reexecutar a migração `20261030130000`.
-- Novo RH: decisões humanas D0–D12 (`docs/relatorios/novo-rh-resumo-final.md`); MFA TOTP do Supabase tem de estar ativo.
+- Novo RH: decisões humanas D0–D12 (`docs/relatorios/novo-rh-resumo-final.md`); MFA TOTP do Supabase só é necessária se a empresa ligar «Autenticação de dois fatores na gestão» (desligada por omissão desde 2026-10-20).
 
 ## Problemas conhecidos (transversais)
 - **Ambiente local usa o Supabase de produção** (`.env` do backend e do frontend): testes locais escrevem em dados reais e dependem das migrações de produção. Recomendado: projeto Supabase de desenvolvimento.
