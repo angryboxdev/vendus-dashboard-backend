@@ -272,6 +272,16 @@ describe("Valor da empresa (funcionalidades opcionais)", () => {
   });
 });
 
+describe("Funcionalidades opcionais da empresa", () => {
+  test("banco de horas e quiosque ligados por omissão (nada muda nas empresas existentes); as outras desligadas; seguem o perfil geral", async () => {
+    const { uc } = setup();
+    const f = await uc.features(ORG);
+    expect(f).toMatchObject({ "time_tracking.bank.enabled": true, "time_tracking.kiosk.enabled": true, "time_tracking.roster.coverage_enabled": false, "security.mfa.required": false });
+    await uc.setCompanyValue(ORG, "time_tracking.bank.enabled", false, "Desligado em Funcionalidades", ADMIN);
+    expect((await uc.features(ORG))["time_tracking.bank.enabled"]).toBe(false);
+  });
+});
+
 describe("Desempenho — fotografia em cache", () => {
   test("várias leituras seguidas leem a base uma vez; cada escrita limpa a cache; everTrue", async () => {
     const { uc, repo } = setup();

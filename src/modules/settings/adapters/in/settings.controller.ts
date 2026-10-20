@@ -149,6 +149,10 @@ export class SettingsController {
     r.get("/me/session-policy", async (req, res) => {
       res.json(await this.settings.sessionPolicy(req.auth!.orgId));
     });
+    // Funcionalidades ligadas/desligadas da empresa (só sim/não) — o ecrã esconde menus do que está desligado.
+    r.get("/me/features", async (req, res) => {
+      res.json(await this.settings.features(req.auth!.orgId));
+    });
 
     this.router = r;
   }

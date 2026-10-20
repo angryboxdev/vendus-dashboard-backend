@@ -62,6 +62,8 @@ export interface SettingsPorts {
   sessionPolicy(orgId: OrganizationId): Promise<{ inactivityMinutes: number; mfaRequired: boolean }>;
   /** Valor de hoje para a empresa (perfil global ou predefinição), sem exceções por pessoa ou centro. */
   companyValue(orgId: OrganizationId, key: string): Promise<SettingData | null>;
+  /** Estado (ligado/desligado) das funcionalidades opcionais da empresa. */
+  features(orgId: OrganizationId): Promise<Record<string, boolean>>;
   /** Algum perfil alguma vez ligou este parâmetro (ou a predefinição é ligado)? Para saltar trabalho que nunca se aplica. */
   everTrue(orgId: OrganizationId, key: string): Promise<boolean>;
   /** Grava um valor da empresa a partir de hoje (perfil geral do domínio; cria-o se faltar), com motivo e auditoria. */

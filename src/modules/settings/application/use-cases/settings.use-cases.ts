@@ -1,3 +1,4 @@
+import { FEATURE_KEYS } from "../../domain/services/setting-catalog.js";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { SettingData, SettingDefinition, SettingDomain } from "../../domain/entities/setting-definition.js";
 import type { SettingProfile, SettingTarget, TargetType } from "../../domain/entities/setting-profile.js";
@@ -67,6 +68,13 @@ export class SettingsUseCases implements SettingsPorts {
   }
   private changed(orgId: OrganizationId) {
     this.snapshots.delete(orgId);
+  }
+
+  /** Estado das funcionalidades opcionais da empresa (para o ecrã esconder o que está desligado). */
+  async features(orgId: OrganizationId): Promise<Record<string, boolean>> {
+    const out: Record<string, boolean> = {};
+    for (const key of FEATURE_KEYS) if (this.catalog.some((d) => d.key === key)) out[key] = (await this.companyValue(orgId, key)) === true;
+    return out;
   }
 
   /** Algum perfil (geral ou exceção) alguma vez ligou este parâmetro (ou a predefinição é ligado)? */

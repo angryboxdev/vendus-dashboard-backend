@@ -86,6 +86,8 @@ regras de cada módulo noutro sítio: os módulos do Novo RH leem daqui
 
 - **Desempenho** (2026-10-20): a fotografia de perfis/alvos/valores fica 60 s em memória por organização e qualquer escrita deste módulo a limpa (só ele escreve nestas tabelas); `today` também. `everTrue(org, key)` diz se algum perfil alguma vez ligou um parâmetro — para saltar trabalho que nunca se aplica (ex.: validação de excedente nos Pedidos).
 
+- **Funcionalidades opcionais** (2026-10-20): `FEATURE_KEYS` (catálogo) lista os interruptores da empresa — banco de horas e quiosque (novos, ligados por omissão para nada mudar nas empresas existentes), cobertura, Portal no Novo RH, geolocalização, saída automática, correções pelo colaborador, MFA. `GET /api/me/features` devolve só ligado/desligado (valor da empresa) para o frontend esconder menus e definições do que está desligado.
+
 ## How to test
 
 - Domínio/use cases e HTTP: `npx jest --config jest.config.cjs src/modules/settings`.

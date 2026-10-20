@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 780 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 781 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -360,6 +360,7 @@ Endpoints: 780 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/me/documents` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/documents/:id/download-url` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/documents/:id/replace` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/features` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/leave` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/notifications` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/notifications/:id/read` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |

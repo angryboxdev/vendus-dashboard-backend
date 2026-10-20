@@ -376,6 +376,17 @@ export const SETTING_CATALOG: SettingDefinition[] = [
     toValidate: true,
   },
   {
+    key: "time_tracking.kiosk.enabled",
+    domain: "time_tracking",
+    type: "bool",
+    label: "Quiosque de ponto",
+    description: "Marcação de ponto num equipamento partilhado do centro (PIN, QR ou NFC). Desligado: o quiosque e as suas definições ficam escondidos.",
+    defaultValue: true,
+    sensitive: false,
+    legal: false,
+    toValidate: false,
+  },
+  {
     key: "time_tracking.kiosk.methods",
     domain: "time_tracking",
     type: "list",
@@ -442,6 +453,17 @@ export const SETTING_CATALOG: SettingDefinition[] = [
     activeFromPhase: 7,
   },
   // ── Banco de horas (C4.5, C6.5 — D11, ADR-0029) ────────────────────
+  {
+    key: "time_tracking.bank.enabled",
+    domain: "time_tracking",
+    type: "bool",
+    label: "Banco de horas",
+    description: "Saldo de horas a mais/a menos de cada colaborador, com compensação e pagamento. Desligado: o separador e as definições do banco ficam escondidos.",
+    defaultValue: true,
+    sensitive: false,
+    legal: false,
+    toValidate: false,
+  },
   {
     key: "time_tracking.bank.period",
     domain: "time_tracking",
@@ -691,3 +713,19 @@ export const SETTING_CATALOG: SettingDefinition[] = [
     toValidate: false,
   },
 ];
+
+/**
+ * Funcionalidades opcionais da empresa (interruptores em Configurações →
+ * Funcionalidades). O ecrã esconde menus e definições de uma funcionalidade
+ * desligada. Valor da empresa (perfil geral), sem exceções.
+ */
+export const FEATURE_KEYS = [
+  "time_tracking.bank.enabled",
+  "time_tracking.roster.coverage_enabled",
+  "time_tracking.kiosk.enabled",
+  "time_tracking.portal.uses_novo_rh",
+  "time_tracking.geofence.require_coordinates",
+  "time_tracking.auto_close.enabled",
+  "time_tracking.correction.employee_can_refuse",
+  "security.mfa.required",
+] as const;
