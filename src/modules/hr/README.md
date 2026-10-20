@@ -1,6 +1,6 @@
 # Module: hr
 
-> Status: active
+> Status: deprecated (em remoção faseada — ADR-0040; não estender)
 > Last updated: 2026-10-06
 
 ---

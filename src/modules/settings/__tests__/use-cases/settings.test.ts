@@ -271,3 +271,31 @@ describe("Valor da empresa (funcionalidades opcionais)", () => {
     await expect(uc.setCompanyValue(ORG, "nao.existe", true, "x", ADMIN)).rejects.toThrow();
   });
 });
+
+describe("Funcionalidades opcionais da empresa", () => {
+  test("banco de horas e quiosque ligados por omissão (nada muda nas empresas existentes); as outras desligadas; seguem o perfil geral", async () => {
+    const { uc } = setup();
+    const f = await uc.features(ORG);
+    expect(f).toMatchObject({ "time_tracking.bank.enabled": true, "time_tracking.kiosk.enabled": true, "time_tracking.roster.coverage_enabled": false, "security.mfa.required": false });
+    await uc.setCompanyValue(ORG, "time_tracking.bank.enabled", false, "Desligado em Funcionalidades", ADMIN);
+    expect((await uc.features(ORG))["time_tracking.bank.enabled"]).toBe(false);
+  });
+});
+
+describe("Desempenho — fotografia em cache", () => {
+  test("várias leituras seguidas leem a base uma vez; cada escrita limpa a cache; everTrue", async () => {
+    const { uc, repo } = setup();
+    const spy = jest.spyOn(repo, "loadSnapshot");
+    await uc.effectiveFor(ORG, "e1", "2026-10-11");
+    await uc.effectiveFor(ORG, "e2", "2026-10-12");
+    await uc.listProfiles(ORG);
+    expect(spy).toHaveBeenCalledTimes(1);
+    const KEY = "time_tracking.bank.excess_validation";
+    expect(await uc.everTrue(ORG, KEY)).toBe(false);
+    const g = await uc.createProfile(ORG, { domain: "time_tracking", name: "Global", kind: "global" }, ADMIN);
+    await uc.setValue(ORG, g.id, { key: KEY, value: true, validFrom: "2026-10-11", reason: "ligar" }, ADMIN);
+    // A escrita limpou a cache: o valor novo vê-se logo.
+    expect(await uc.everTrue(ORG, KEY)).toBe(true);
+    expect((await effective(uc, "e1", "2026-10-11", KEY)).value).toBe(true);
+  });
+});

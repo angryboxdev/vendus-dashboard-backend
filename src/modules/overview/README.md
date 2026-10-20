@@ -77,6 +77,8 @@ RE-6) com ausências aprovadas, pendentes e feriados.
 - Ausências privadas aparecem com o nome genérico para quem não tem `hr.absences_private`.
 - Sem aniversários: data de nascimento é dado pessoal e não é necessária para a gestão do dia (minimização, RGPD).
 
+- **Desempenho** (2026-10-20): a semana (`get`) também devolve logo o último resultado depois de 30 s e recalcula em segundo plano (até 10 min), como `today`. `GET /api/novo-rh/overview/today` (`hr.overview`) serve só o dia de hoje — usado pela lista de Pessoas, que antes pedia a semana inteira.
+
 ## How to test
 
 - `npx jest --config jest.config.cjs src/modules/overview src/modules/attendance`

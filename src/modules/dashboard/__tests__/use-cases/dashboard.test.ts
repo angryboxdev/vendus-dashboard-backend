@@ -281,3 +281,25 @@ describe("Dashboard — falhas das pessoas", () => {
     expect(isTransient(new Error("duplicate key value violates unique constraint"))).toBe(false);
   });
 });
+
+describe("Desempenho — limite de tempo não deita fora o cálculo", () => {
+  test("cobertura lenta: o pedido segue sem ela, mas o cálculo continua e o seguinte aproveita-o (uma só carga)", async () => {
+    const sources = new FakeSources();
+    let calls = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    sources.coverage = async () => {
+      calls++;
+      await gate;
+      return [];
+    };
+    const uc = new DashboardUseCases(sources, new FakeLayouts(), new MemoryDashboardCache(), () => {}, 20);
+    const first = await uc.snapshot(ORG_A, new FakeViewer("u1", PEOPLE), null);
+    expect(first.partial).toEqual(["coverage"]);
+    release();
+    await new Promise((r) => setTimeout(r, 5));
+    const second = await uc.snapshot(ORG_A, new FakeViewer("u1", PEOPLE), null);
+    expect(second.partial).toEqual([]);
+    expect(calls).toBe(1);
+  });
+});
