@@ -1,3 +1,4 @@
+import { hashPin } from "./utils/kiosk.js";
 import compression from "compression";
 import { ENV } from "./config/env.js";
 import cors from "cors";
@@ -665,6 +666,7 @@ const notificationsModule = createNotificationsModule();
 app.use("/api", notificationsModule.router);
 // Novo RH → Pessoas (Fase 2): ficha, contratos, responsáveis, remuneração, campos, CSV.
 const peopleModule = createPeopleModule({
+  pinHasher: (pin) => (ENV.HR_KIOSK_HMAC_SECRET ? hashPin(ENV.HR_KIOSK_HMAC_SECRET, pin) : null),
   audit: auditModule.recorder,
   accounts: { disableLinkedUser: (org, userId, actor) => accessModule.governance.disableLinkedUser(org, userId, actor) },
   clock: new OrganizationTimezoneClock(createScopedQuery),

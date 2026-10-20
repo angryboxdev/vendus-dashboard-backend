@@ -11,7 +11,7 @@ import {
   type Employee,
   type EmployeeInput,
 } from "../../domain/entities/employee.js";
-import { PeopleConflictError, PeopleForbiddenError, PeopleNotFoundError, PeopleValidationError } from "../../domain/errors.js";
+import { PeopleConflictError, PeopleForbiddenError, PeopleNotFoundError, PeopleRuleViolation, PeopleValidationError } from "../../domain/errors.js";
 import type { EmployeeView, ImportResult, Viewer } from "../../domain/ports/in/people.ports.js";
 import type { PeopleAccountPort, PeopleAuditPort, PeopleClockPort, PeoplePhotoPort, PeopleRepositoryPort } from "../../domain/ports/out/people.ports.js";
 import { parseCsv, toCsv } from "../../domain/services/csv.js";
@@ -78,7 +78,22 @@ export class PeopleUseCases {
     private readonly clock: PeopleClockPort,
     /** Sem adapter de fotos, `photoUrl` sai sempre null. */
     private readonly photos: PeoplePhotoPort | null = null,
+    /** Hash do PIN do quiosque (o mesmo do quiosque e do fecho de caixa); null = quiosque não configurado no servidor. */
+    private readonly pinHasher: ((pin: string) => string | null) | null = null,
   ) {}
+
+  /**
+   * PIN do quiosque (4 dígitos), definido na ficha do Novo RH — antes só no RH
+   * antigo. Único na organização; o PIN nunca vai para a auditoria nem volta na resposta.
+   */
+  async setKioskPin(org: OrganizationId, viewer: Viewer, id: string, pin: string): Promise<void> {
+    await this.visible(org, viewer, await this.repo.get(org, id));
+    if (!/^\d{4}$/.test(pin)) throw new PeopleValidationError("O PIN tem de ter exatamente 4 dígitos.", "pin");
+    const hash = this.pinHasher?.(pin) ?? null;
+    if (!hash) throw new PeopleRuleViolation("O quiosque não está configurado no servidor.", "kiosk_not_configured");
+    if ((await this.repo.setKioskPin(org, id, hash)) === "taken") throw new PeopleConflictError("Este PIN já está em uso por outro colaborador.", "pin_taken", "pin");
+    await this.audit.record(org, { actor: viewer.actor, action: "people.employee.kiosk_pin", resourceType: "employee", resourceId: id, before: null, after: { pinSet: true }, reason: null });
+  }
 
   view(viewer: Viewer, e: Employee, photoUrl: string | null = null): EmployeeView {
     const hidden: string[] = [];

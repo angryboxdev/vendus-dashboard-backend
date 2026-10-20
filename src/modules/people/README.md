@@ -44,7 +44,7 @@ chegam num `Viewer` montado pelo `server.ts` a partir do módulo access.
 
 ### Input (use cases)
 
-- `PeopleUseCases` — listar/abrir (âmbito + máscara), criar, editar (If-Match, motivo em sensíveis), desativar/reativar (RE-4), exportar CSV (RE-3, RE-34), importar CSV (simulação, erros por linha, tudo-ou-nada).
+- `PeopleUseCases` — listar/abrir (âmbito + máscara), criar, editar (If-Match, motivo em sensíveis), desativar/reativar (RE-4), PIN do quiosque (`setKioskPin`), exportar CSV (RE-3, RE-34), importar CSV (simulação, erros por linha, tudo-ou-nada).
 - `EmploymentUseCases` — contratos, convénios, responsáveis, complementos/benefícios, campos personalizados.
 
 ### Output (domain dependencies)
@@ -56,7 +56,7 @@ chegam num `Viewer` montado pelo `server.ts` a partir do módulo access.
 
 ### Input
 
-- `PeopleController` → `/api/novo-rh/people/*` (`hr.employees`; `export.csv` = especial `hr.people_export`) e `/api/novo-rh/catalog/*` (`company.structure`; inclui `catalog/locations` e `catalog/positions` — centros e cargos ativos, usados pelo Novo RH também em modo Demonstração).
+- `PeopleController` → `/api/novo-rh/people/*` (`hr.employees`; `export.csv` = especial `hr.people_export`; `PUT :id/kiosk-pin` = `hr.kiosk_pin` MANAGE) e `/api/novo-rh/catalog/*` (`company.structure`; inclui `catalog/locations` e `catalog/positions` — centros e cargos ativos, usados pelo Novo RH também em modo Demonstração).
 
 ### Output
 
@@ -67,6 +67,7 @@ chegam num `Viewer` montado pelo `server.ts` a partir do módulo access.
 
 - **O meu perfil** (2026-10-18, Portal): `GET /api/me/profile` devolve só identificação (nome, foto assinada, cargo, local, admissão, estado) da ficha ligada à conta (`findByUserId`); nunca campos sensíveis — esses ficam na ficha com privacidade por campo.
 
+- **PIN do quiosque** (2026-10-20, ADR-0040 fase 1): definido na ficha do Novo RH (antes só em `PATCH /api/hr/employees/:id/kiosk-pin`). 4 dígitos, guardado como HMAC em `hr_employees.kiosk_pin_hash` com o mesmo segredo (`HR_KIOSK_HMAC_SECRET`) do quiosque e do fecho de caixa, por isso os dois continuam a reconhecê-lo. O hash entra por `pinHasher` no composition root (o domínio não conhece o segredo). Sem segredo → 422 `kiosk_not_configured`; PIN de outro colaborador (índice único) → 409 `pin_taken`. O PIN nunca volta na resposta nem vai para a auditoria (`after: { pinSet: true }`).
 - Uma só ficha (`hr_employees`), tabelas novas à volta — ADR-0025.
 - NIF obrigatório só nas escritas do Novo RH (não parte o RH atual); índice único parcial na BD.
 - Contratos: sobreposição recusada na aplicação (409) e por trigger na BD.

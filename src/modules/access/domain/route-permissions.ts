@@ -104,6 +104,7 @@ export const ROUTE_RULES: RouteRule[] = [
   // Entidades legais e a entidade de cada centro (FE-092/093): dados da empresa.
   { pattern: /^\/api\/novo-rh\/legal-entities(\/|$)/, target: p("company.structure") },
   { pattern: /^\/api\/novo-rh\/people\/export\.csv$/, target: p("hr.people_export", "MANAGE") },
+  { pattern: /^\/api\/novo-rh\/people\/[^/]+\/kiosk-pin$/, target: p("hr.kiosk_pin", "MANAGE") },
   { pattern: /^\/api\/novo-rh\/people(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/time\/(holiday-calendars|holidays)(\/|$)/, target: p("company.holidays") },
   { pattern: /^\/api\/novo-rh\/time\/vacation-calendars(\/|$)/, target: p("hr.leave") },

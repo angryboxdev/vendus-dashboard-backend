@@ -15,6 +15,8 @@ export type EmployeeWrite = EmployeeInput & { fullName?: string };
 export interface PeopleRepositoryPort {
   list(org: OrganizationId, filter: { status: "active" | "inactive" | "all"; q?: string; locationId?: string }): Promise<Employee[]>;
   get(org: OrganizationId, id: string): Promise<Employee | null>;
+  /** PIN do quiosque (já em hash). `taken`: outro colaborador já usa este PIN (único na organização). */
+  setKioskPin(org: OrganizationId, id: string, pinHash: string): Promise<"ok" | "taken">;
   /** Ficha ligada a uma conta (Portal: «o meu perfil»). */
   findByUserId(org: OrganizationId, userId: string): Promise<Employee | null>;
   /** Outra ficha com este NIF normalizado (RE-2). */

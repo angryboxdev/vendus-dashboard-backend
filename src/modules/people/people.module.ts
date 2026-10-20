@@ -18,9 +18,11 @@ export function createPeopleModule(deps: {
   accounts: PeopleAccountPort;
   clock: PeopleClockPort;
   viewerOf: (req: Request) => Promise<Viewer>;
+  /** Hash do PIN do quiosque; sem ele (ou null), «quiosque não configurado». */
+  pinHasher?: (pin: string) => string | null;
 }): { router: Router; people: PeopleUseCases; employment: EmploymentUseCases } {
   const repo = new SupabasePeopleRepository(createScopedQuery);
-  const people = new PeopleUseCases(repo, deps.accounts, deps.audit, deps.clock, new SupabasePeoplePhotoAdapter());
+  const people = new PeopleUseCases(repo, deps.accounts, deps.audit, deps.clock, new SupabasePeoplePhotoAdapter(), deps.pinHasher ?? null);
   const employment = new EmploymentUseCases(repo, deps.audit, deps.clock);
   const controller = new PeopleController(people, employment, new SupabaseIdempotencyStore(createScopedQuery), deps.viewerOf);
   return { router: controller.router, people, employment };
