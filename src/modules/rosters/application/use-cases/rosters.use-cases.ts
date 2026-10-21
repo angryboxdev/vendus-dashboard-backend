@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
-import { sameState, stateOf, validateAreaName, validateSegments, validateTemplate, type Roster, type RosterShift, type Segment, type ShiftState, type ShiftTemplateInput } from "../../domain/entities/roster.js";
+import { sameState, stateOf, validateAreaName, validateSegments, validateTemplate, type Roster, type RosterShift, type Segment, type ShiftState, type ShiftTemplate, type ShiftTemplateInput, type ShiftTemplateView } from "../../domain/entities/roster.js";
 import { RosterBlockedError, RosterConflictError, RosterForbiddenError, RosterNotFoundError, RosterValidationError } from "../../domain/errors.js";
 import type { PeriodGuardPort, RosterPublishedPort, RostersAuditPort, RostersContextPort, RostersNotifierPort, RostersRepositoryPort } from "../../domain/ports/out/rosters.ports.js";
 import { evaluate, findOverlap, shiftHours, type CountedShift, type Violation } from "../../domain/services/constraints.js";
@@ -65,10 +65,57 @@ export class RostersUseCases {
     return t;
   }
 
-  /** Muda só a cor do modelo (a escala pinta os turnos com ela); null = cor automática. */
+  /** Gestão dos modelos: os ativos e arquivados, cada um com `used` (já atribuído alguma vez). */
+  async listTemplatesWithUsage(org: OrganizationId): Promise<ShiftTemplateView[]> {
+    const all = await this.repo.listTemplates(org);
+    const used = await this.repo.usedTemplateIds(org, all.filter((t) => !t.archived).map((t) => t.id));
+    return all.map((t) => ({ ...t, used: used.has(t.id) }));
+  }
+
+  /**
+   * Editar um modelo. Nunca usado → altera-o no lugar. Já usado → nova versão:
+   * arquiva este e cria outro com as alterações. Os turnos já feitos (rascunho
+   * ou publicados) continuam no modelo antigo — horário, nome e cor de antes;
+   * só as atribuições novas usam o novo (decisão do utilizador).
+   */
+  async updateTemplate(org: OrganizationId, actor: Actor, id: string, input: ShiftTemplateInput): Promise<{ template: ShiftTemplate; versioned: boolean }> {
+    validateTemplate(input);
+    const all = await this.repo.listTemplates(org);
+    const before = all.find((t) => t.id === id && !t.archived);
+    if (!before) throw new RosterNotFoundError("Modelo não encontrado.");
+    const next = { ...input, name: input.name.trim(), abbreviation: input.abbreviation.trim() };
+    const lower = next.name.toLocaleLowerCase("pt");
+    if (all.some((t) => t.id !== id && !t.archived && t.name.toLocaleLowerCase("pt") === lower)) throw new RosterConflictError("Já existe um modelo com este nome.", "duplicate_name");
+    const { archived: _a, id: _i, ...beforeInput } = before;
+
+    if (!(await this.repo.usedTemplateIds(org, [id])).has(id)) {
+      const after = await this.repo.updateTemplate(org, id, next);
+      // Uma atribuição pode ter entrado entre a verificação e a gravação: desfaz e pede para repetir.
+      if ((await this.repo.usedTemplateIds(org, [id])).has(id)) {
+        await this.repo.updateTemplate(org, id, beforeInput);
+        throw new RosterConflictError("Este turno acabou de ser usado numa escala. Guarda outra vez para criar uma nova versão.", "template_in_use");
+      }
+      await this.log(org, actor.email, "rosters.template.update", "roster_shift_template", id, before, after);
+      return { template: after, versioned: false };
+    }
+
+    await this.repo.archiveTemplate(org, id);
+    let created: ShiftTemplate;
+    try {
+      created = await this.repo.createTemplate(org, next, actor.email);
+    } catch (e) {
+      await this.repo.unarchiveTemplate(org, id);
+      throw e;
+    }
+    await this.log(org, actor.email, "rosters.template.version", "roster_shift_template", created.id, { previousId: id, ...before }, created);
+    return { template: created, versioned: true };
+  }
+
+  /** Muda só a cor do modelo (a escala pinta os turnos com ela); null = cor automática. Num modelo já usado, recusa — mudar a cor passa por editar (nova versão). */
   async setTemplateColor(org: OrganizationId, actor: Actor, id: string, color: string | null) {
     const before = (await this.repo.listTemplates(org)).find((t) => t.id === id && !t.archived);
     if (!before) throw new RosterNotFoundError("Modelo não encontrado.");
+    if ((await this.repo.usedTemplateIds(org, [id])).has(id)) throw new RosterConflictError("Cor bloqueada: turno já utilizado numa escala.", "template_in_use");
     validateTemplate({ ...before, color });
     const after = await this.repo.setTemplateColor(org, id, color);
     await this.log(org, actor.email, "rosters.template.color", "roster_shift_template", id, { color: before.color }, { color });

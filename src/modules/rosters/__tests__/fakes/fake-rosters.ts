@@ -18,6 +18,10 @@ export class FakeRostersRepository implements RostersRepositoryPort {
     return this.templates.map((t) => ({ ...t }));
   }
   async createTemplate(_o: OrganizationId, t: ShiftTemplateInput) {
+    if (this.failNextCreate) {
+      this.failNextCreate = false;
+      throw new Error("falha simulada");
+    }
     const row = { ...t, id: nextId(), archived: false };
     this.templates.push(row);
     return row;
@@ -29,6 +33,21 @@ export class FakeRostersRepository implements RostersRepositoryPort {
   }
   async archiveTemplate(_o: OrganizationId, id: string) {
     this.templates.find((t) => t.id === id)!.archived = true;
+  }
+  /** Para simular uma atribuição que chega a meio de uma edição. */
+  onUpdateTemplate: (() => void) | null = null;
+  async updateTemplate(_o: OrganizationId, id: string, t: ShiftTemplateInput) {
+    const row = this.templates.find((x) => x.id === id)!;
+    Object.assign(row, t);
+    this.onUpdateTemplate?.();
+    return { ...row };
+  }
+  failNextCreate = false;
+  async unarchiveTemplate(_o: OrganizationId, id: string) {
+    this.templates.find((t) => t.id === id)!.archived = false;
+  }
+  async usedTemplateIds(_o: OrganizationId, ids: string[]) {
+    return new Set(ids.filter((id) => this.shifts.some((s) => s.templateId === id)));
   }
   areas: WorkArea[] = [];
   async listAreas() {
