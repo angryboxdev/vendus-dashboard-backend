@@ -14,7 +14,7 @@ export class PeopleValidationError extends Error {
 export class PeopleConflictError extends Error {
   constructor(
     message: string,
-    readonly code: "duplicate_document" | "contract_overlap" | "assignment_overlap" | "version_conflict",
+    readonly code: "duplicate_document" | "contract_overlap" | "assignment_overlap" | "version_conflict" | "pin_taken",
     readonly field?: string,
   ) {
     super(message);

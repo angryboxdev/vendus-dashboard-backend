@@ -124,6 +124,12 @@ export class PeopleController {
       setEtag(res, etagFor(updated.version));
       res.json(updated);
     });
+    // PIN do quiosque (permissão hr.kiosk_pin): nunca volta na resposta.
+    r.put(`${P}/:id/kiosk-pin`, async (req, res) => {
+      const viewer = await viewerOf(req);
+      await run(() => people.setKioskPin(org(req), viewer, id(req), s(req.body?.pin)));
+      res.json({ ok: true });
+    });
     for (const action of ["deactivate", "reactivate"] as const) {
       r.post(`${P}/:id/${action}`, async (req, res) => {
         const viewer = await viewerOf(req);

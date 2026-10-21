@@ -240,11 +240,8 @@ export class RostersUseCases {
   private async violationsFor(org: OrganizationId, draftIds: Set<string>, extraDrafts: RosterShift[] = []): Promise<Violation[]> {
     const touched = [...extraDrafts];
     if (draftIds.size) {
-      for (const id of draftIds) {
-        if (touched.some((t) => t.id === id)) continue;
-        const s = await this.repo.getShift(org, id);
-        if (s) touched.push(s);
-      }
+      const missing = [...draftIds].filter((id) => !touched.some((t) => t.id === id));
+      for (const s of await Promise.all(missing.map((id) => this.repo.getShift(org, id)))) if (s) touched.push(s);
     }
     if (!touched.length) return [];
     const employees = [...new Set(touched.flatMap((s) => [s.employeeId, s.published?.employeeId].filter((x): x is string => !!x)))];
@@ -255,8 +252,13 @@ export class RostersUseCases {
     const byId = new Map(all.map((s) => [s.id, s]));
     for (const t of touched) byId.set(t.id, t);
     const states = [...byId.values()].map((s) => counting(s, draftIds)).filter((x): x is ShiftState => !!x);
+    // Ausências de cada colaborador em paralelo (blocos de 8) — antes uma pessoa de cada vez.
     const absences = new Map<string, Set<string>>();
-    for (const e of employees) absences.set(e, new Set(await this.ctx.approvedAbsenceDates(org, e, from, to)));
+    for (let i = 0; i < employees.length; i += 8) {
+      const chunk = employees.slice(i, i + 8);
+      const dates = await Promise.all(chunk.map((e) => this.ctx.approvedAbsenceDates(org, e, from, to)));
+      chunk.forEach((e, k) => absences.set(e, new Set(dates[k])));
+    }
     // Foco: os dias alterados e o dia seguinte (um noturno ou pouco descanso aparecem no turno de D+1).
     const focus = new Set(
       touched.flatMap((s) => [s, ...(s.published ? [s.published] : [])].flatMap((x) => [`${x.employeeId}|${x.workDate}`, `${x.employeeId}|${plusDays(x.workDate, 1)}`])),

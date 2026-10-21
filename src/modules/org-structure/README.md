@@ -62,6 +62,8 @@ Fornece `unitsOf`/`membersOf` ao motor de configurações.
 - Raio da zona dos centros 10–1000 m como CHECK `not valid`: vale para linhas novas/alteradas sem falhar nas existentes.
 - Aceitação de termos append-only; o rollback não a apaga (registo legal).
 
+- **Desempenho** (2026-10-20): departamentos, grupos e todas as pertenças da organização ficam 30 s em memória (`unitsData`); só este módulo escreve nestas tabelas e cada escrita limpa a cache. `listAssignments` lê por páginas de 1000.
+
 ## How to test
 
 - `npx jest --config jest.config.cjs src/modules/org-structure`.

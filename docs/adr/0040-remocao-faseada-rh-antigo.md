@@ -41,8 +41,9 @@ categorias, feriados e o bucket `hr-documents` são partilhadas com o Novo RH e
 1. Desacoplar o Novo RH: lista de colaboradores das Configurações já lê do
    Novo RH e a ficha deixou de ligar à página antiga *(feito 2026-10-20)*;
    falta mover documentos (`/api/hr/people/:id/documents*`, `/api/me/documents*`
-   e o separador da ficha) para o módulo de documentos/pessoas, e o PIN do
-   quiosque para Pessoas.
+   e o separador da ficha) para o módulo de documentos/pessoas. O PIN do
+   quiosque já se define na ficha do Novo RH (`PUT /api/novo-rh/people/:id/kiosk-pin`,
+   `hr.kiosk_pin`, mesmo hash) *(feito 2026-10-20)*.
 2. Acesso e passagem: Novo RH aberto por permissão *(feito 2026-10-20)*; saldos
    de abertura e piloto do Portal; `uses_novo_rh` ligado em todas as
    organizações; quiosque no Novo RH.

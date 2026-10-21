@@ -62,6 +62,12 @@ export class FakePeopleRepo implements PeopleRepositoryPort {
   async list(_o: OrganizationId, f: { status: "active" | "inactive" | "all" }) {
     return this.employees.filter((e) => f.status === "all" || e.status === f.status).map((e) => ({ ...e }));
   }
+  pins = new Map<string, string>();
+  async setKioskPin(_o: OrganizationId, id: string, pinHash: string) {
+    if ([...this.pins.entries()].some(([other, h]) => other !== id && h === pinHash)) return "taken" as const;
+    this.pins.set(id, pinHash);
+    return "ok" as const;
+  }
   async get(_o: OrganizationId, id: string) {
     const e = this.employees.find((x) => x.id === id);
     return e ? { ...e } : null;

@@ -220,3 +220,15 @@ describe("Transferência de centro (CF-2, TK-10)", () => {
     expect((await at("2026-11-01")).origin.profileName).toBe("Braga");
   });
 });
+
+describe("Desempenho — unidades em memória", () => {
+  test("várias pessoas e datas seguidas: uma só leitura; qualquer escrita limpa e a nova pertença vê-se logo", async () => {
+    const { uc, repo } = setup();
+    const dep = await uc.createDepartment(ORG, "Sala", ACTOR);
+    const spy = jest.spyOn(repo, "listAssignments");
+    for (const e of ["e1", "e2", "e3"]) for (const d of ["2026-10-01", "2026-10-02"]) await uc.unitsOf(ORG, e, d);
+    expect(spy).toHaveBeenCalledTimes(1);
+    await uc.assign(ORG, { employeeId: "e2", unitType: "department", unitId: dep.id, validFrom: "2026-10-01", validTo: null }, ACTOR);
+    expect(await uc.unitsOf(ORG, "e2", "2026-10-02")).toMatchObject({ departmentIds: [dep.id] });
+  });
+});

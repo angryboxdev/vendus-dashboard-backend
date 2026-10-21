@@ -183,6 +183,12 @@ export class SupabasePeopleRepository implements PeopleRepositoryPort {
     const r = check<EmpRow | null>(await this.scoped(org).table("hr_employees").select(EMP_COLS).eq("id", id).maybeSingle());
     return r ? toEmployee(r) : null;
   }
+  async setKioskPin(org: OrganizationId, id: string, pinHash: string) {
+    const { error } = await this.scoped(org).table("hr_employees").update({ kiosk_pin_hash: pinHash, updated_at: new Date().toISOString() }).eq("id", id);
+    if (error?.code === "23505") return "taken" as const;
+    if (error) throw new Error(error.message);
+    return "ok" as const;
+  }
   async findByUserId(org: OrganizationId, userId: string) {
     const r = check<EmpRow | null>(await this.scoped(org).table("hr_employees").select(EMP_COLS).eq("user_id", userId).maybeSingle());
     return r ? toEmployee(r) : null;

@@ -19,13 +19,36 @@ import type { OrgStructureAuditPort, OrgStructureRepositoryPort, RequestIpPort }
 
 const lower = (s: string) => s.toLocaleLowerCase("pt");
 
+/** Validade da cache de unidades (ver `unitsData`). */
+const UNITS_TTL_MS = 30_000;
+
 export class OrgStructureUseCases implements OrgStructurePorts {
   constructor(
     private readonly repo: OrgStructureRepositoryPort,
     private readonly audit: OrgStructureAuditPort,
     private readonly ip: RequestIpPort,
     private readonly today: (orgId: OrganizationId) => Promise<string> = async () => new Date().toISOString().slice(0, 10),
+    private readonly now: () => number = () => Date.now(),
   ) {}
+
+  /**
+   * Departamentos, grupos e todas as pertenças da organização, em memória
+   * ${UNITS_TTL_MS / 1000} s. Só este módulo escreve nestas tabelas e cada escrita
+   * limpa a cache. Antes, cada colaborador × dia lia três tabelas (o motor de
+   * configurações pede as unidades de cada pessoa em cada data).
+   */
+  private readonly unitsCache = new Map<string, { at: number; value: Promise<{ deps: Awaited<ReturnType<OrgStructureRepositoryPort["listDepartments"]>>; groups: Awaited<ReturnType<OrgStructureRepositoryPort["listGroups"]>>; assignments: Awaited<ReturnType<OrgStructureRepositoryPort["listAssignments"]>> }> }>();
+  private unitsData(orgId: OrganizationId) {
+    const hit = this.unitsCache.get(orgId);
+    if (hit && this.now() - hit.at < UNITS_TTL_MS) return hit.value;
+    const value = Promise.all([this.repo.listDepartments(orgId), this.repo.listGroups(orgId), this.repo.listAssignments(orgId, {})]).then(([deps, groups, assignments]) => ({ deps, groups, assignments }));
+    this.unitsCache.set(orgId, { at: this.now(), value });
+    value.catch(() => this.unitsCache.delete(orgId));
+    return value;
+  }
+  private changed(orgId: OrganizationId) {
+    this.unitsCache.delete(orgId);
+  }
 
   listDepartments(orgId: OrganizationId) {
     return this.repo.listDepartments(orgId);
@@ -36,6 +59,7 @@ export class OrgStructureUseCases implements OrgStructurePorts {
     const all = await this.repo.listDepartments(orgId);
     if (all.some((d) => !d.archived && lower(d.name) === lower(name))) throw new OrgStructureError("Já existe um departamento com este nome.", "name");
     const dep = await this.repo.createDepartment(orgId, { name, createdBy: actor });
+    this.changed(orgId);
     await this.audit.record(orgId, { actor, action: "structure.department.create", resourceType: "org_department", resourceId: dep.id, before: null, after: dep, reason: null });
     return dep;
   }
@@ -51,6 +75,7 @@ export class OrgStructureUseCases implements OrgStructurePorts {
     }
     if (patch.archived !== undefined) next.archived = patch.archived;
     const dep = await this.repo.updateDepartment(orgId, id, next);
+    this.changed(orgId);
     await this.audit.record(orgId, {
       actor,
       action: patch.archived === true ? "structure.department.archive" : "structure.department.update",
@@ -74,6 +99,7 @@ export class OrgStructureUseCases implements OrgStructurePorts {
     if (all.some((x) => !x.archived && lower(x.code) === lower(g.code))) throw new OrgStructureError("Já existe um grupo com este código.", "code");
     if (g.parentId && !all.some((x) => x.id === g.parentId && !x.archived)) throw new OrgStructureError("Grupo-pai não encontrado.", "parentId");
     const created = await this.repo.createGroup(orgId, { ...g, createdBy: actor });
+    this.changed(orgId);
     await this.audit.record(orgId, { actor, action: "structure.group.create", resourceType: "org_group", resourceId: created.id, before: null, after: created, reason: null });
     return created;
   }
@@ -101,6 +127,7 @@ export class OrgStructureUseCases implements OrgStructurePorts {
       throw new OrgStructureError("Arquive primeiro os subgrupos.", "archived");
     }
     const updated = await this.repo.updateGroup(orgId, id, next);
+    this.changed(orgId);
     await this.audit.record(orgId, {
       actor,
       action: patch.archived === true ? "structure.group.archive" : "structure.group.update",
@@ -128,6 +155,7 @@ export class OrgStructureUseCases implements OrgStructurePorts {
     const existing = await this.repo.listAssignments(orgId, { employeeId: input.employeeId });
     if (overlapsExisting(existing, input)) throw new OrgStructureError("O colaborador já pertence a esta unidade nesse período.", "validFrom");
     const a = await this.repo.createAssignment(orgId, { ...input, createdBy: actor });
+    this.changed(orgId);
     await this.audit.record(orgId, { actor, action: "structure.assignment.create", resourceType: "employee", resourceId: input.employeeId, before: null, after: a, reason: null });
     return a;
   }
@@ -139,6 +167,7 @@ export class OrgStructureUseCases implements OrgStructurePorts {
     validatePeriod(cur.validFrom, validTo);
     if (cur.validTo !== null && validTo > cur.validTo) throw new OrgStructureError("Só se pode encurtar a vigência.", "validTo");
     const a = await this.repo.endAssignment(orgId, id, validTo);
+    this.changed(orgId);
     await this.audit.record(orgId, { actor, action: "structure.assignment.end", resourceType: "employee", resourceId: cur.employeeId, before: cur, after: a, reason: null });
     return a;
   }
@@ -188,6 +217,7 @@ export class OrgStructureUseCases implements OrgStructurePorts {
     const dayBefore = new Date(Date.parse(`${effectiveDate}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
     if (current) await this.repo.endAssignment(orgId, current.id, dayBefore);
     const next = await this.repo.createAssignment(orgId, { employeeId, unitType: "location", unitId: locationId, validFrom: effectiveDate, validTo: null, createdBy: actor });
+    this.changed(orgId);
     // O RH atual lê o centro principal: só muda quando a data chega (transferências futuras: ver dívida no README).
     if (effectiveDate <= (await this.today(orgId))) await this.repo.setPrimaryLocation(orgId, employeeId, locationId);
     await this.audit.record(orgId, {
@@ -209,7 +239,8 @@ export class OrgStructureUseCases implements OrgStructurePorts {
   }
 
   async unitsOf(orgId: OrganizationId, employeeId: string, date: string) {
-    const [rows, deps, groups] = await Promise.all([this.repo.listAssignments(orgId, { employeeId }), this.repo.listDepartments(orgId), this.repo.listGroups(orgId)]);
+    const { assignments, deps, groups } = await this.unitsData(orgId);
+    const rows = assignments.filter((a) => a.employeeId === employeeId);
     // Unidades arquivadas deixam de contar; só a pertença direta (o subgrupo não herda o grupo-pai).
     const liveDeps = new Set(deps.filter((d) => !d.archived).map((d) => d.id));
     const liveGroups = new Set(groups.filter((g) => !g.archived).map((g) => g.id));

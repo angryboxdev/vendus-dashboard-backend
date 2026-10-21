@@ -238,3 +238,34 @@ describe("Portal — o meu perfil", () => {
     await expect(people.myProfile(ORG, "u-sem-ficha")).rejects.toBeInstanceOf(PeopleNotFoundError);
   });
 });
+
+describe("PIN do quiosque na ficha (ADR-0040, fase 1)", () => {
+  function withHasher(hasher: ((pin: string) => string | null) | null) {
+    const repo = new FakePeopleRepo();
+    const events: { action: string; after: unknown }[] = [];
+    const audit = { record: async (_o: unknown, e: (typeof events)[number]) => void events.push(e) };
+    const people = new PeopleUseCases(repo, { disableLinkedUser: async () => {} }, audit, { today: async () => "2026-10-20" }, null, hasher);
+    repo.seed({ id: "e1", firstName: "Ana", lastName: "Teste", hireDate: "2025-01-01", primaryLocationId: "loc-porto" });
+    repo.seed({ id: "e2", firstName: "Rui", lastName: "Teste", hireDate: "2025-01-01", primaryLocationId: "loc-porto" });
+    return { repo, people, events };
+  }
+
+  test("guarda o hash, nunca o PIN, e audita sem o valor", async () => {
+    const { repo, people, events } = withHasher((pin) => `h:${pin}`);
+    await people.setKioskPin(ORG, ADMIN, "e1", "1234");
+    expect(repo.pins.get("e1")).toBe("h:1234");
+    expect(events).toEqual([expect.objectContaining({ action: "people.employee.kiosk_pin", after: { pinSet: true } })]);
+    expect(JSON.stringify(events)).not.toContain("1234");
+  });
+
+  test("só 4 dígitos; PIN de outro colaborador dá 409; sem segredo no servidor dá 422", async () => {
+    const { people } = withHasher((pin) => `h:${pin}`);
+    for (const bad of ["123", "12345", "12a4", ""]) await expect(people.setKioskPin(ORG, ADMIN, "e1", bad)).rejects.toBeInstanceOf(PeopleValidationError);
+    await people.setKioskPin(ORG, ADMIN, "e1", "1234");
+    await expect(people.setKioskPin(ORG, ADMIN, "e2", "1234")).rejects.toMatchObject({ code: "pin_taken" });
+    await people.setKioskPin(ORG, ADMIN, "e1", "1234"); // o próprio pode repetir
+    await expect(withHasher(() => null).people.setKioskPin(ORG, ADMIN, "e1", "1234")).rejects.toBeInstanceOf(PeopleRuleViolation);
+    await expect(withHasher(null).people.setKioskPin(ORG, ADMIN, "e1", "1234")).rejects.toBeInstanceOf(PeopleRuleViolation);
+    await expect(people.setKioskPin(ORG, ADMIN, "nao-existe", "1234")).rejects.toBeInstanceOf(PeopleNotFoundError);
+  });
+});
