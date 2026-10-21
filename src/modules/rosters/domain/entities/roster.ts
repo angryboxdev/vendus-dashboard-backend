@@ -19,6 +19,9 @@ export interface ShiftTemplate {
 
 export type ShiftTemplateInput = Omit<ShiftTemplate, "id" | "archived">;
 
+/** Modelo na gestão: `used` = já atribuído alguma vez (rascunho, publicado, apagado ou escala arquivada). */
+export type ShiftTemplateView = ShiftTemplate & { used: boolean };
+
 export interface Roster {
   id: string;
   name: string;

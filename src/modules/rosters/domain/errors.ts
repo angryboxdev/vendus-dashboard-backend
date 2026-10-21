@@ -24,7 +24,7 @@ export class RosterBlockedError extends Error {
 export class RosterConflictError extends Error {
   constructor(
     message: string,
-    readonly code: "confirmation_required" | "duplicate_name" | "nothing_to_publish" | "invalid_state" | "period_closed",
+    readonly code: "confirmation_required" | "duplicate_name" | "nothing_to_publish" | "invalid_state" | "period_closed" | "template_in_use",
     readonly violations: Violation[] = [],
   ) {
     super(message);

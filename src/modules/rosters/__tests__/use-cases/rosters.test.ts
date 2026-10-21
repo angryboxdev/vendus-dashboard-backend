@@ -331,3 +331,85 @@ describe("Cor do modelo de turno", () => {
     await expect(uc.setTemplateColor(ORG, BOSS, "nao-existe", "#96BAE4")).rejects.toThrow("Modelo não encontrado");
   });
 });
+
+describe("Editar modelo de turno (V2)", () => {
+  const input = (over: Partial<{ name: string; abbreviation: string; color: string | null; segments: { start: string; end: string }[] }> = {}) => ({
+    name: "Tarde",
+    abbreviation: "T",
+    color: null,
+    onCall: false,
+    segments: [{ start: "16:00", end: "22:00" }],
+    ...over,
+  });
+
+  test("nunca usado: altera no lugar (mesmo id) e audita", async () => {
+    const { uc, audit } = setup();
+    const { tarde } = await rosterWithTemplates(uc);
+    const out = await uc.updateTemplate(ORG, BOSS, tarde.id, input({ name: " Tarde longa ", segments: [{ start: "15:00", end: "23:00" }] }));
+    expect(out.versioned).toBe(false);
+    expect(out.template).toMatchObject({ id: tarde.id, name: "Tarde longa", segments: [{ start: "15:00", end: "23:00" }] });
+    expect((await uc.listTemplatesWithUsage(ORG)).find((t) => t.id === tarde.id)).toMatchObject({ used: false, archived: false });
+    expect(audit.actions.map((e) => e.action)).toContain("rosters.template.update");
+  });
+
+  test("usado (rascunho ou publicado): nova versão; os turnos existentes ficam no modelo antigo", async () => {
+    const { uc, repo } = setup();
+    const { roster, tarde } = await rosterWithTemplates(uc);
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-19", tarde.id));
+    expect((await uc.listTemplatesWithUsage(ORG)).find((t) => t.id === tarde.id)?.used).toBe(true);
+    const out = await uc.updateTemplate(ORG, BOSS, tarde.id, input({ segments: [{ start: "17:00", end: "23:00" }], color: "#96BAE4" }));
+    expect(out.versioned).toBe(true);
+    expect(out.template.id).not.toBe(tarde.id);
+    expect(out.template).toMatchObject({ name: "Tarde", color: "#96BAE4", segments: [{ start: "17:00", end: "23:00" }], archived: false });
+    // O antigo fica arquivado e o turno já feito mantém-no, com o horário de antes.
+    expect(repo.templates.find((t) => t.id === tarde.id)?.archived).toBe(true);
+    const existing = repo.shifts.find((s) => s.employeeId === "e1" && s.workDate === "2026-10-19")!;
+    expect(existing).toMatchObject({ templateId: tarde.id, segments: [{ start: "16:00", end: "22:00" }] });
+    // Atribuições novas usam o novo; o antigo já não se atribui.
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-20", out.template.id));
+    expect(repo.shifts.find((s) => s.workDate === "2026-10-20")?.segments).toEqual([{ start: "17:00", end: "23:00" }]);
+    await expect(uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-21", tarde.id))).rejects.toThrow("Modelo não encontrado");
+  });
+
+  test("nova versão que falha a criar repõe o modelo antigo", async () => {
+    const { uc, repo } = setup();
+    const { roster, tarde } = await rosterWithTemplates(uc);
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-19", tarde.id));
+    repo.failNextCreate = true;
+    await expect(uc.updateTemplate(ORG, BOSS, tarde.id, input({ name: "Tarde B" }))).rejects.toThrow("falha simulada");
+    expect(repo.templates.find((t) => t.id === tarde.id)?.archived).toBe(false);
+  });
+
+  test("atribuição a meio da edição: desfaz e devolve 409 template_in_use", async () => {
+    const { uc, repo } = setup();
+    const { roster, tarde } = await rosterWithTemplates(uc);
+    // Outro gestor atribui o modelo entre a verificação e a gravação.
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-19", (await uc.createTemplate(ORG, BOSS, input({ name: "Aux", abbreviation: "A" }))).id));
+    const assigned = repo.shifts[repo.shifts.length - 1]!;
+    repo.onUpdateTemplate = () => {
+      repo.onUpdateTemplate = null;
+      repo.shifts.push({ ...assigned, id: "s-concorrente", templateId: tarde.id });
+    };
+    const err = await uc.updateTemplate(ORG, BOSS, tarde.id, input({ name: "Outra" })).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(RosterConflictError);
+    expect((err as RosterConflictError).code).toBe("template_in_use");
+    expect(repo.templates.find((t) => t.id === tarde.id)?.name).toBe("Tarde");
+  });
+
+  test("validações: nome duplicado de outro modelo, faixas inválidas, modelo inexistente ou arquivado", async () => {
+    const { uc } = setup();
+    const { tarde, noite } = await rosterWithTemplates(uc);
+    await expect(uc.updateTemplate(ORG, BOSS, tarde.id, input({ name: "noturno" }))).rejects.toMatchObject({ code: "duplicate_name" });
+    await expect(uc.updateTemplate(ORG, BOSS, tarde.id, input({ segments: [{ start: "10:00", end: "10:00" }] }))).rejects.toBeInstanceOf(RosterValidationError);
+    await expect(uc.updateTemplate(ORG, BOSS, "nao-existe", input())).rejects.toThrow("Modelo não encontrado");
+    await uc.archiveTemplate(ORG, BOSS, noite.id);
+    await expect(uc.updateTemplate(ORG, BOSS, noite.id, input({ name: "Noturno" }))).rejects.toThrow("Modelo não encontrado");
+  });
+
+  test("cor de um modelo já usado fica bloqueada (409 template_in_use)", async () => {
+    const { uc } = setup();
+    const { roster, tarde } = await rosterWithTemplates(uc);
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-19", tarde.id));
+    await expect(uc.setTemplateColor(ORG, BOSS, tarde.id, "#96BAE4")).rejects.toMatchObject({ code: "template_in_use" });
+  });
+});

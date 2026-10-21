@@ -55,10 +55,15 @@ export function createRostersRouter(
   // Período opcional (ex.: a semana visível): valida e publica só os pendentes desse período.
   const period = (from: unknown, to: unknown) => (optS(from) && optS(to) ? { from: optS(from)!, to: optS(to)! } : null);
 
-  r.get(`${R}/templates`, async (req, res) => res.json(await uc.listTemplates(org(req))));
+  r.get(`${R}/templates`, async (req, res) => res.json(await uc.listTemplatesWithUsage(org(req))));
   r.post(`${R}/templates`, async (req, res) => {
     const b = body(req);
     res.status(201).json(await run(() => uc.createTemplate(org(req), actorOf(req), { name: s(b.name), abbreviation: s(b.abbreviation), color: optS(b.color), onCall: b.onCall === true, segments: segs(b.segments) })));
+  });
+  // Editar: nunca usado → no lugar; usado → nova versão (os turnos existentes ficam no antigo).
+  r.put(`${R}/templates/:id`, async (req, res) => {
+    const b = body(req);
+    res.json(await run(() => uc.updateTemplate(org(req), actorOf(req), id(req), { name: s(b.name), abbreviation: s(b.abbreviation), color: optS(b.color), onCall: b.onCall === true, segments: segs(b.segments) })));
   });
   r.put(`${R}/templates/:id/color`, async (req, res) => res.json(await run(() => uc.setTemplateColor(org(req), actorOf(req), id(req), optS(body(req).color)))));
   r.post(`${R}/templates/:id/archive`, async (req, res) => {

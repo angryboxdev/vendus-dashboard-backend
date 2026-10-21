@@ -82,6 +82,20 @@ export class SupabaseRostersRepository implements RostersRepositoryPort {
   async archiveTemplate(org: OrganizationId, id: string) {
     check(await this.scoped(org).table("roster_shift_templates").update({ archived: true }).eq("id", id));
   }
+  async updateTemplate(org: OrganizationId, id: string, t: ShiftTemplateInput) {
+    const row = { name: t.name, abbreviation: t.abbreviation, color: t.color, on_call: t.onCall, segments: t.segments };
+    return toTpl(check(await this.scoped(org).table("roster_shift_templates").update(row).eq("id", id).select(TPL).single()));
+  }
+  async unarchiveTemplate(org: OrganizationId, id: string) {
+    check(await this.scoped(org).table("roster_shift_templates").update({ archived: false }).eq("id", id));
+  }
+  async usedTemplateIds(org: OrganizationId, ids: string[]) {
+    // Um turno basta (os turnos nunca são apagados fisicamente — `deleted` é uma marca).
+    const hits = await Promise.all(
+      ids.map(async (id) => (check<Row[]>(await this.scoped(org).table("roster_shifts").select("id").eq("template_id", id).limit(1)).length > 0 ? id : null)),
+    );
+    return new Set(hits.filter((x): x is string => x !== null));
+  }
 
   async listAreas(org: OrganizationId) {
     return check<Row[]>(await this.scoped(org).table("work_areas").select(ARE).order("sort_order").order("name")).map(toArea);

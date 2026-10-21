@@ -6,8 +6,14 @@ export interface RostersRepositoryPort {
   listTemplates(org: OrganizationId): Promise<ShiftTemplate[]>;
   createTemplate(org: OrganizationId, t: ShiftTemplateInput, by: string): Promise<ShiftTemplate>;
   archiveTemplate(org: OrganizationId, id: string): Promise<void>;
-  /** Só a cor (a mesma na escala); as faixas de um modelo não mudam depois de criado. */
+  /** Só a cor (a mesma na escala). */
   setTemplateColor(org: OrganizationId, id: string, color: string | null): Promise<ShiftTemplate>;
+  /** Altera o modelo no lugar — só para modelos nunca usados (o caso de uso garante-o). */
+  updateTemplate(org: OrganizationId, id: string, t: ShiftTemplateInput): Promise<ShiftTemplate>;
+  /** Repõe um modelo arquivado (só para desfazer uma nova versão que falhou). */
+  unarchiveTemplate(org: OrganizationId, id: string): Promise<void>;
+  /** Modelos (destes ids) com pelo menos um turno, em qualquer estado ou escala. */
+  usedTemplateIds(org: OrganizationId, ids: string[]): Promise<Set<string>>;
 
   /** Áreas de trabalho (todas, incluindo desativadas — os turnos antigos mantêm o nome). */
   listAreas(org: OrganizationId): Promise<WorkArea[]>;
