@@ -1,11 +1,11 @@
 import { EmployeeDocumentNotFoundError } from "../../domain/errors.js";
-import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../domain/ports/out/document-repository.port.js";
 import type {
   GetEmployeeDocumentHistoryCommand,
   GetEmployeeDocumentHistoryPort,
   EmployeeDocumentDTO,
 } from "../../domain/ports/in/employee-document.ports.js";
-import { toEmployeeDocumentDTO } from "./shared.js";
+import { toEmployeeDocumentDTO } from "./employee-document-shared.js";
 
 export class GetEmployeeDocumentHistoryUseCase implements GetEmployeeDocumentHistoryPort {
   constructor(private readonly employeeDocumentRepository: EmployeeDocumentRepositoryPort) {}

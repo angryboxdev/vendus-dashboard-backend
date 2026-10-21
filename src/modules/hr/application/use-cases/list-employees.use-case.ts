@@ -8,7 +8,7 @@ import {
   computeMandatoryDocumentsSummary,
   deriveOverallDocumentSituation,
   DEFAULT_MANDATORY_REQUIREMENTS,
-} from "../../domain/services/document-status.service.js";
+} from "../../../documents/domain/services/document-status.service.js";
 import { computeProfileCompletionPercent } from "../../domain/services/profile-completeness.service.js";
 import type {
   ListEmployeesCommand,

@@ -1,7 +1,7 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
-import { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
+import { Document as EmployeeDocument } from "../../domain/entities/document.js";
 import { ListEmployeeDocumentsUseCase } from "../../application/use-cases/list-employee-documents.use-case.js";
-import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
+import { FakeDocumentRepository } from "../fakes/fake-document-repository.js";
 
 const ORG = mintOrganizationId("org-test");
 

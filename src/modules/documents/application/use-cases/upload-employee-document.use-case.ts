@@ -1,29 +1,28 @@
-import { randomUUID } from "crypto";
 import {
   EmployeeNotFoundError,
   DocumentCategoryAlreadyExistsError,
   DocumentPeriodAlreadyExistsError,
   InvalidDocumentError,
 } from "../../domain/errors.js";
-import { Document as EmployeeDocument, isValidDocumentPeriod } from "../../../documents/domain/entities/document.js";
-import type { DocumentCategoryRepositoryPort } from "../../../documents/domain/ports/out/document-category-repository.port.js";
-import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
-import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
-import type { HrFileStoragePort } from "../../domain/ports/out/hr-file-storage.port.js";
-import type { HrAuditLogPort } from "../../domain/ports/out/hr-audit-log.port.js";
+import { Document as EmployeeDocument, isValidDocumentPeriod } from "../../domain/entities/document.js";
+import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/document-category-repository.port.js";
+import type { EmployeeDirectoryPort } from "../../domain/ports/out/employee-directory.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../domain/ports/out/document-repository.port.js";
+import type { EmployeeFileStoragePort } from "../../domain/ports/out/employee-file-storage.port.js";
+import type { DocumentAuditLogPort } from "../../domain/ports/out/document-audit-log.port.js";
 import type {
   UploadEmployeeDocumentCommand,
   UploadEmployeeDocumentPort,
   EmployeeDocumentDTO,
 } from "../../domain/ports/in/employee-document.ports.js";
-import { toEmployeeDocumentDTO } from "./shared.js";
+import { toEmployeeDocumentDTO } from "./employee-document-shared.js";
 
 export class UploadEmployeeDocumentUseCase implements UploadEmployeeDocumentPort {
   constructor(
-    private readonly employeeRepository: EmployeeRepositoryPort,
+    private readonly employeeRepository: EmployeeDirectoryPort,
     private readonly employeeDocumentRepository: EmployeeDocumentRepositoryPort,
-    private readonly hrFileStorage: HrFileStoragePort,
-    private readonly auditLog: HrAuditLogPort,
+    private readonly hrFileStorage: EmployeeFileStoragePort,
+    private readonly auditLog: DocumentAuditLogPort,
     private readonly documentCategoryRepository: DocumentCategoryRepositoryPort,
   ) {}
 
@@ -52,9 +51,7 @@ export class UploadEmployeeDocumentUseCase implements UploadEmployeeDocumentPort
       throw new DocumentCategoryAlreadyExistsError(command.category);
     }
 
-    const storagePath = await this.hrFileStorage.store(
-      "document",
-      command.buffer,
+    const storagePath = await this.hrFileStorage.store(command.buffer,
       command.filename,
       command.mimeType,
       command.organizationId,
@@ -76,7 +73,7 @@ export class UploadEmployeeDocumentUseCase implements UploadEmployeeDocumentPort
     });
 
     const saved = await this.employeeDocumentRepository.create(command.organizationId, document).catch(async (e) => {
-      await this.hrFileStorage.remove("document", storagePath, command.organizationId).catch(() => {});
+      await this.hrFileStorage.remove(storagePath, command.organizationId).catch(() => {});
       throw e;
     });
 
@@ -85,11 +82,9 @@ export class UploadEmployeeDocumentUseCase implements UploadEmployeeDocumentPort
       actor: command.actor,
       entityType: "employee_document",
       entityId: saved.id,
-      employeeId: command.employeeId,
       action: "document_created",
-      description: `Documento "${saved.category}"${period ? ` (${period})` : ""} enviado para ${employee.fullName}${command.importBatchId ? " — importação de recibos" : ""}`,
+      reason: `Documento "${saved.category}"${period ? ` (${period})` : ""} enviado para ${employee.fullName}${command.importBatchId ? ` — importação de recibos (lote ${command.importBatchId})` : ""}`,
       after: saved.toProps(),
-      correlationId: command.importBatchId ?? randomUUID(),
     });
 
     return toEmployeeDocumentDTO(saved);

@@ -1,7 +1,6 @@
-import { randomUUID } from "crypto";
 import { EmployeeDocumentNotFoundError } from "../../domain/errors.js";
-import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
-import type { HrAuditLogPort } from "../../domain/ports/out/hr-audit-log.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../domain/ports/out/document-repository.port.js";
+import type { DocumentAuditLogPort } from "../../domain/ports/out/document-audit-log.port.js";
 import type {
   RemoveEmployeeDocumentCommand,
   RemoveEmployeeDocumentPort,
@@ -11,7 +10,7 @@ import type {
 export class RemoveEmployeeDocumentUseCase implements RemoveEmployeeDocumentPort {
   constructor(
     private readonly employeeDocumentRepository: EmployeeDocumentRepositoryPort,
-    private readonly auditLog: HrAuditLogPort,
+    private readonly auditLog: DocumentAuditLogPort,
   ) {}
 
   async execute(command: RemoveEmployeeDocumentCommand): Promise<void> {
@@ -28,12 +27,10 @@ export class RemoveEmployeeDocumentUseCase implements RemoveEmployeeDocumentPort
       actor: command.actor,
       entityType: "employee_document",
       entityId: existing.id,
-      employeeId: command.employeeId,
       action: "document_removed",
-      description: `Documento "${existing.category}" removido (versão mantida para auditoria)`,
+      reason: `Documento "${existing.category}" removido (versão mantida para auditoria)`,
       before: existing.toProps(),
       after: removed.toProps(),
-      correlationId: randomUUID(),
     });
   }
 }

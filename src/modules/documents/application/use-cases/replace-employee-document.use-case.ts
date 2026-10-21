@@ -1,15 +1,14 @@
-import { randomUUID } from "crypto";
 import { EmployeeNotFoundError, EmployeeDocumentNotFoundError } from "../../domain/errors.js";
-import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
-import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
-import type { HrFileStoragePort } from "../../domain/ports/out/hr-file-storage.port.js";
-import type { HrAuditLogPort } from "../../domain/ports/out/hr-audit-log.port.js";
+import type { EmployeeDirectoryPort } from "../../domain/ports/out/employee-directory.port.js";
+import type { DocumentRepositoryPort as EmployeeDocumentRepositoryPort } from "../../domain/ports/out/document-repository.port.js";
+import type { EmployeeFileStoragePort } from "../../domain/ports/out/employee-file-storage.port.js";
+import type { DocumentAuditLogPort } from "../../domain/ports/out/document-audit-log.port.js";
 import type {
   ReplaceEmployeeDocumentCommand,
   ReplaceEmployeeDocumentPort,
   EmployeeDocumentDTO,
 } from "../../domain/ports/in/employee-document.ports.js";
-import { toEmployeeDocumentDTO } from "./shared.js";
+import { toEmployeeDocumentDTO } from "./employee-document-shared.js";
 
 /**
  * "Substituir": nunca apaga a versão anterior — cria uma nova linha
@@ -19,10 +18,10 @@ import { toEmployeeDocumentDTO } from "./shared.js";
  */
 export class ReplaceEmployeeDocumentUseCase implements ReplaceEmployeeDocumentPort {
   constructor(
-    private readonly employeeRepository: EmployeeRepositoryPort,
+    private readonly employeeRepository: EmployeeDirectoryPort,
     private readonly employeeDocumentRepository: EmployeeDocumentRepositoryPort,
-    private readonly hrFileStorage: HrFileStoragePort,
-    private readonly auditLog: HrAuditLogPort,
+    private readonly hrFileStorage: EmployeeFileStoragePort,
+    private readonly auditLog: DocumentAuditLogPort,
   ) {}
 
   async execute(command: ReplaceEmployeeDocumentCommand): Promise<EmployeeDocumentDTO> {
@@ -34,9 +33,7 @@ export class ReplaceEmployeeDocumentUseCase implements ReplaceEmployeeDocumentPo
       throw new EmployeeDocumentNotFoundError(command.documentId);
     }
 
-    const storagePath = await this.hrFileStorage.store(
-      "document",
-      command.buffer,
+    const storagePath = await this.hrFileStorage.store(command.buffer,
       command.filename,
       command.mimeType,
       command.organizationId,
@@ -52,7 +49,7 @@ export class ReplaceEmployeeDocumentUseCase implements ReplaceEmployeeDocumentPo
     });
 
     const saved = await this.employeeDocumentRepository.create(command.organizationId, nextVersion).catch(async (e) => {
-      await this.hrFileStorage.remove("document", storagePath, command.organizationId).catch(() => {});
+      await this.hrFileStorage.remove(storagePath, command.organizationId).catch(() => {});
       throw e;
     });
     await this.employeeDocumentRepository.update(command.organizationId, previous.markSuperseded());
@@ -62,12 +59,10 @@ export class ReplaceEmployeeDocumentUseCase implements ReplaceEmployeeDocumentPo
       actor: command.actor,
       entityType: "employee_document",
       entityId: saved.id,
-      employeeId: command.employeeId,
       action: "document_replaced",
-      description: `Documento "${saved.category}"${saved.period ? ` (${saved.period})` : ""} substituído (v${previous.version} → v${saved.version}) para ${employee.fullName}${command.importBatchId ? " — importação de recibos" : ""}`,
+      reason: `Documento "${saved.category}"${saved.period ? ` (${saved.period})` : ""} substituído (v${previous.version} → v${saved.version}) para ${employee.fullName}${command.importBatchId ? ` — importação de recibos (lote ${command.importBatchId})` : ""}`,
       before: previous.toProps(),
       after: saved.toProps(),
-      correlationId: command.importBatchId ?? randomUUID(),
     });
 
     return toEmployeeDocumentDTO(saved);

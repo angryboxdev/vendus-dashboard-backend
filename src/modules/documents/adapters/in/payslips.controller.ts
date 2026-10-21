@@ -72,8 +72,9 @@ function handleError(e: unknown, res: Response): void {
  * ticket 10). Só `admin`: os recibos têm dados salariais. Dois passos —
  * pré-visualizar (não grava) e importar o que o utilizador confirmou; os
  * PDFs são reenviados no 2.º passo (nada fica guardado entre os dois).
+ * Em `/novo-rh/payslips/*` e, até à fase 4 da ADR-0040, `/hr/payslips/*`.
  */
-export class HrPayslipsController {
+export class PayslipsController {
   readonly router: Router;
 
   constructor(
@@ -85,8 +86,12 @@ export class HrPayslipsController {
   }
 
   private registerRoutes(): void {
+    for (const base of ["/novo-rh/payslips", "/hr/payslips"]) this.registerAt(base);
+  }
+
+  private registerAt(base: string): void {
     /** POST /api/hr/payslips/import/preview (multipart "files" + "period" YYYY-MM + "category" opcional). */
-    this.router.post("/hr/payslips/import/preview", payslipUpload.array("files", MAX_FILES), async (req, res) => {
+    this.router.post(`${base}/import/preview`, payslipUpload.array("files", MAX_FILES), async (req, res) => {
       try {
         const files = readFiles(req.files);
         const body = (req.body ?? {}) as Record<string, unknown>;
@@ -103,7 +108,7 @@ export class HrPayslipsController {
     });
 
     /** POST /api/hr/payslips/import (multipart "files" + "period" + "mapping" JSON). */
-    this.router.post("/hr/payslips/import", payslipUpload.array("files", MAX_FILES), async (req, res) => {
+    this.router.post(`${base}/import`, payslipUpload.array("files", MAX_FILES), async (req, res) => {
       try {
         const body = (req.body ?? {}) as Record<string, unknown>;
         const mapping = readMapping(body.mapping);

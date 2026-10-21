@@ -8,8 +8,8 @@ import {
   deriveOverallDocumentSituation,
   EXPIRING_SOON_DAYS,
 } from "../../domain/services/document-status.service.js";
-import { DocumentCategoryDefinition } from "../../../documents/domain/entities/document-category.js";
-import type { DocumentStatus } from "../../../documents/domain/entities/document.js";
+import { DocumentCategoryDefinition } from "../../domain/entities/document-category.js";
+import type { DocumentStatus } from "../../domain/entities/document.js";
 
 function categoryDef(overrides: {
   slug: string;

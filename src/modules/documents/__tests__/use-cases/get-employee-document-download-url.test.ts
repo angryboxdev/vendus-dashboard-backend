@@ -1,8 +1,8 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
-import { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
+import { Document as EmployeeDocument } from "../../domain/entities/document.js";
 import { GetEmployeeDocumentDownloadUrlUseCase } from "../../application/use-cases/get-employee-document-download-url.use-case.js";
-import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
-import { FakeHrFileStorage } from "../fakes/fake-hr-file-storage.js";
+import { FakeDocumentRepository } from "../fakes/fake-document-repository.js";
+import { FakeEmployeeFileStorage } from "../fakes/fake-employee-file-storage.js";
 import { EmployeeDocumentNotFoundError } from "../../domain/errors.js";
 
 const ORG = mintOrganizationId("org-test");
@@ -10,7 +10,7 @@ const ORG = mintOrganizationId("org-test");
 describe("GetEmployeeDocumentDownloadUrlUseCase", () => {
   it("devolve um URL assinado (TTL curto) para o storagePath do documento", async () => {
     const documents = new FakeDocumentRepository();
-    const storage = new FakeHrFileStorage();
+    const storage = new FakeEmployeeFileStorage();
     const doc = EmployeeDocument.createFirstVersion({
       owner: { type: "employee", id: "e1" },
       category: "nif",
@@ -48,7 +48,7 @@ describe("GetEmployeeDocumentDownloadUrlUseCase", () => {
     });
     documents.seed(ORG, doc);
 
-    const useCase = new GetEmployeeDocumentDownloadUrlUseCase(documents, new FakeHrFileStorage());
+    const useCase = new GetEmployeeDocumentDownloadUrlUseCase(documents, new FakeEmployeeFileStorage());
     await expect(
       useCase.execute({ organizationId: ORG, employeeId: "outro", documentId: doc.id }),
     ).rejects.toThrow(EmployeeDocumentNotFoundError);

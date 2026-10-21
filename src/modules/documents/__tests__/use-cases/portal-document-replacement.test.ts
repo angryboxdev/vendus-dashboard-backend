@@ -1,36 +1,32 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
-import { Document, DocumentNotPendingError, DocumentRejectionReasonRequiredError } from "../../../documents/domain/entities/document.js";
-import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
-import { FakeDocumentCategoryRepository } from "../../../documents/__tests__/fakes/fake-document-category-repository.js";
-import { Employee } from "../../domain/entities/employee.js";
+import { Document, DocumentNotPendingError, DocumentRejectionReasonRequiredError } from "../../domain/entities/document.js";
+import { FakeDocumentRepository } from "../fakes/fake-document-repository.js";
+import { FakeDocumentCategoryRepository } from "../fakes/fake-document-category-repository.js";
 import { PortalBadRequestError, PortalResourceNotFoundError } from "../../domain/errors.js";
 import {
   ListPendingDocumentsUseCase,
   ReplaceMyDocumentUseCase,
   ReviewEmployeeDocumentUseCase,
 } from "../../application/use-cases/employee-document-review.use-cases.js";
-import { ListMyDocumentsUseCase } from "../../application/use-cases/portal-self-service.use-cases.js";
-import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
-import { FakeHrAuditLog } from "../fakes/fake-hr-audit-log.js";
-import { FakeHrFileStorage } from "../fakes/fake-hr-file-storage.js";
-import { FakePortalAccount } from "../fakes/fake-portal-account.js";
+import { ListMyDocumentsUseCase } from "../../application/use-cases/my-documents.use-cases.js";
+import { FakeEmployeeDirectory, employee } from "../fakes/fake-employee-directory.js";
+import { FakeDocumentAuditLog } from "../fakes/fake-document-audit-log.js";
+import { FakeEmployeeFileStorage } from "../fakes/fake-employee-file-storage.js";
 
 const ORG = mintOrganizationId("org-test");
 const TODAY = "2026-10-07";
 
 function setup() {
-  const accounts = new FakePortalAccount();
-  const employees = new FakeEmployeeRepository();
+  const employees = new FakeEmployeeDirectory();
   const documents = new FakeDocumentRepository();
   const categories = new FakeDocumentCategoryRepository();
-  const storage = new FakeHrFileStorage();
-  const audit = new FakeHrAuditLog();
-  const carla = Employee.create({ fullName: "CARLA DEMO", email: "carla@example.com" });
-  const outro = Employee.create({ fullName: "OUTRO DEMO" });
+  const storage = new FakeEmployeeFileStorage();
+  const audit = new FakeDocumentAuditLog();
+  const carla = employee({ fullName: "CARLA DEMO", email: "carla@example.com" });
+  const outro = employee({ fullName: "OUTRO DEMO" });
   employees.seed(ORG, carla);
   employees.seed(ORG, outro);
-  accounts.seedAccount({ userId: "u-carla", email: "carla@example.com", role: "employee" });
-  accounts.links.set(carla.id, "u-carla");
+  employees.links.set(carla.id, "u-carla");
   const who = { organizationId: ORG, userId: "u-carla", actor: "carla@example.com" };
   const doc = (ownerId: string, category: string, expiresAt: string | null) => {
     const d = Document.createFirstVersion({
@@ -48,11 +44,11 @@ function setup() {
     documents.seed(ORG, d);
     return d;
   };
-  const replace = new ReplaceMyDocumentUseCase(accounts, documents, categories, storage, audit, () => TODAY);
+  const replace = new ReplaceMyDocumentUseCase(employees, documents, categories, storage, audit, () => TODAY);
   const review = new ReviewEmployeeDocumentUseCase(documents, audit);
-  const list = new ListMyDocumentsUseCase(accounts, documents, categories, () => TODAY);
+  const list = new ListMyDocumentsUseCase(employees, documents, categories, () => TODAY);
   const file = { buffer: Buffer.from("pdf"), filename: "novo.pdf", mimeType: "application/pdf" };
-  return { accounts, employees, documents, categories, audit, carla, outro, who, doc, replace, review, list, file };
+  return { employees, documents, categories, audit, carla, outro, who, doc, replace, review, list, file };
 }
 
 describe("Portal — substituir documento (ticket 11)", () => {

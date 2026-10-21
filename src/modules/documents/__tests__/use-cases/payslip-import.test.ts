@@ -1,15 +1,14 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
-import { Employee } from "../../domain/entities/employee.js";
 import { UploadEmployeeDocumentUseCase } from "../../application/use-cases/upload-employee-document.use-case.js";
 import { ReplaceEmployeeDocumentUseCase } from "../../application/use-cases/replace-employee-document.use-case.js";
 import { ImportPayslipsUseCase, PreviewPayslipImportUseCase } from "../../application/use-cases/payslip-import.use-cases.js";
 import { InvalidDocumentError } from "../../domain/errors.js";
-import { FakeEmployeeRepository } from "../fakes/fake-employee-repository.js";
-import { FakeHrFileStorage } from "../fakes/fake-hr-file-storage.js";
-import { FakeHrAuditLog } from "../fakes/fake-hr-audit-log.js";
+import { FakeEmployeeDirectory, employee } from "../fakes/fake-employee-directory.js";
+import { FakeEmployeeFileStorage } from "../fakes/fake-employee-file-storage.js";
+import { FakeDocumentAuditLog } from "../fakes/fake-document-audit-log.js";
 import { FakePdfTextExtractor } from "../fakes/fake-pdf-text-extractor.js";
-import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
-import { FakeDocumentCategoryRepository } from "../../../documents/__tests__/fakes/fake-document-category-repository.js";
+import { FakeDocumentRepository } from "../fakes/fake-document-repository.js";
+import { FakeDocumentCategoryRepository } from "../fakes/fake-document-category-repository.js";
 
 const ORG = mintOrganizationId("org-test");
 const PERIOD = "2026-09";
@@ -18,16 +17,16 @@ const ACTOR = "admin@exemplo.pt";
 const pdf = (text: string) => ({ buffer: Buffer.from(text), mimeType: "application/pdf" });
 
 function setup() {
-  const employees = new FakeEmployeeRepository();
+  const employees = new FakeEmployeeDirectory();
   const documents = new FakeDocumentRepository();
   const categories = new FakeDocumentCategoryRepository();
-  const storage = new FakeHrFileStorage();
-  const auditLog = new FakeHrAuditLog();
+  const storage = new FakeEmployeeFileStorage();
+  const auditLog = new FakeDocumentAuditLog();
   const upload = new UploadEmployeeDocumentUseCase(employees, documents, storage, auditLog, categories);
   const replace = new ReplaceEmployeeDocumentUseCase(employees, documents, storage, auditLog);
   // Dados fictícios (RGPD).
-  const carlos = Employee.create({ fullName: "Carlos Andrés", nif: "100000001" });
-  const gabriel = Employee.create({ fullName: "Gabriel Gomes", nif: "100000002" });
+  const carlos = employee({ fullName: "Carlos Andrés", nif: "100000001" });
+  const gabriel = employee({ fullName: "Gabriel Gomes", nif: "100000002" });
   employees.seed(ORG, carlos);
   employees.seed(ORG, gabriel);
   return {
@@ -144,8 +143,11 @@ describe("Importação de recibos — gravar", () => {
     expect((await payslipsOf(documents, carlos.id)).map((d) => d.period).sort()).toEqual(["2026-09", "2026-10"]);
 
     const batch = auditLog.entries.filter((e) => e.action === "document_created").slice(0, 2);
-    expect(batch[0]!.correlationId).toBe(batch[1]!.correlationId);
-    expect(batch[0]!.description).toContain("importação de recibos");
+    // O lote liga as entradas da mesma importação.
+    const lote = (e: (typeof batch)[number]) => /\(lote ([^)]+)\)/.exec(e.reason ?? "")?.[1];
+    expect(lote(batch[0]!)).toBeDefined();
+    expect(lote(batch[0]!)).toBe(lote(batch[1]!));
+    expect(batch[0]!.reason).toContain("importação de recibos");
   });
 
   it("recibo verde é uma categoria à parte: não conta como duplicado do recibo de vencimento", async () => {

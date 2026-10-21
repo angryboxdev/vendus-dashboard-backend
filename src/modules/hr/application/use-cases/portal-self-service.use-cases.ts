@@ -1,31 +1,22 @@
 import type { LocationRepositoryPort } from "../../../locations/domain/ports/out/location-repository.port.js";
-import type { DocumentRepositoryPort } from "../../../documents/domain/ports/out/document-repository.port.js";
-import type { DocumentCategoryRepositoryPort } from "../../../documents/domain/ports/out/document-category-repository.port.js";
 import type { WorkShift } from "../../domain/entities/work-shift.js";
-import { EmployeeDocumentNotFoundError, PortalBadRequestError, PortalResourceNotFoundError } from "../../domain/errors.js";
+import { PortalBadRequestError, PortalResourceNotFoundError } from "../../domain/errors.js";
 import type { EmployeeRepositoryPort } from "../../domain/ports/out/employee-repository.port.js";
 import type { LeaveReadPort } from "../../domain/ports/out/leave-read.port.js";
 import type { PortalAccountPort } from "../../domain/ports/out/portal-account.port.js";
 import type { PositionRepositoryPort } from "../../domain/ports/out/position-repository.port.js";
 import type { WorkShiftRepositoryPort } from "../../domain/ports/out/work-shift-repository.port.js";
-import type { GetEmployeeDocumentDownloadUrlPort } from "../../domain/ports/in/employee-document.ports.js";
 import type {
   CoworkerDTO,
-  GetMyDocumentUrlPort,
   GetMyLeavePort,
   ListMyCoworkersPort,
-  ListMyDocumentsPort,
   ListMyShiftsPort,
-  MyDocumentDTO,
   MyLeaveDTO,
   MyShiftDTO,
   PortalIdentity,
 } from "../../domain/ports/in/portal-me.ports.js";
 import { occurrenceOverlapsShift } from "../../domain/services/shift-recurrence.service.js";
 import { resolvePortalEmployeeId } from "./portal-me.use-cases.js";
-import { canReplaceDocument } from "../../domain/services/document-replacement.service.js";
-import type { Document } from "../../../documents/domain/entities/document.js";
-import type { DocumentCategoryDefinition } from "../../../documents/domain/entities/document-category.js";
 import { addDays } from "./schedule-shared.js";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 
@@ -126,75 +117,8 @@ export class ListMyCoworkersUseCase implements ListMyCoworkersPort {
   }
 }
 
-export function toMyDocumentDTO(
-  d: Document,
-  cat: Pick<DocumentCategoryDefinition, "label" | "requiresPeriod"> | null,
-  today: string,
-  lastRejection: MyDocumentDTO["lastRejection"],
-): MyDocumentDTO {
-  return {
-    id: d.id,
-    categoryLabel: cat?.label ?? d.category,
-    fileName: d.fileName,
-    status: d.status,
-    canReplace: canReplaceDocument(d, today).ok,
-    lastRejection,
-    period: d.period,
-    isPayslip: cat?.requiresPeriod === true,
-    issuedAt: d.issuedAt,
-    expiresAt: d.expiresAt,
-    uploadedAt: d.uploadedAt,
-  };
-}
 
-/** Documentos do próprio (motor documental existente) — versões atuais, sem removidos/rejeitados. Recibos = categorias com período. */
-export class ListMyDocumentsUseCase implements ListMyDocumentsPort {
-  constructor(
-    private readonly accounts: PortalAccountPort,
-    private readonly documents: DocumentRepositoryPort,
-    private readonly categories: DocumentCategoryRepositoryPort,
-    private readonly today: () => string = () => new Date().toISOString().slice(0, 10),
-  ) {}
 
-  async execute(identity: PortalIdentity): Promise<MyDocumentDTO[]> {
-    const org = identity.organizationId;
-    const employeeId = await resolvePortalEmployeeId(this.accounts, identity);
-    const [docs, cats] = await Promise.all([this.documents.findCurrentByOwners(org, "employee", [employeeId]), this.categories.findMany(org)]);
-    const bySlug = new Map(cats.map((c) => [c.slug, c]));
-    const today = this.today();
-    const visible = docs.filter((d) => d.status !== "removed" && d.status !== "rejected");
-    const result: MyDocumentDTO[] = [];
-    for (const d of visible) {
-      // Só os substituíveis podem ter uma rejeição recente a mostrar — evita ler o histórico de todos.
-      let lastRejection: MyDocumentDTO["lastRejection"] = null;
-      if (canReplaceDocument(d, today).ok) {
-        const newest = (await this.documents.findVersionHistory(org, "employee", employeeId, d.category))[0];
-        if (newest && newest.status === "rejected" && newest.reviewNote) lastRejection = { note: newest.reviewNote, at: newest.reviewedAt ?? newest.uploadedAt };
-      }
-      result.push(toMyDocumentDTO(d, bySlug.get(d.category) ?? null, today, lastRejection));
-    }
-    return result
-      .sort((a, b) => (b.period ?? "").localeCompare(a.period ?? "") || b.uploadedAt.localeCompare(a.uploadedAt));
-  }
-}
-
-/** Download pelo mecanismo seguro existente (URL assinada de curta duração), sempre com o colaborador da sessão. */
-export class GetMyDocumentUrlUseCase implements GetMyDocumentUrlPort {
-  constructor(
-    private readonly accounts: PortalAccountPort,
-    private readonly getDownloadUrl: GetEmployeeDocumentDownloadUrlPort,
-  ) {}
-
-  async execute(identity: PortalIdentity, documentId: string): Promise<{ url: string }> {
-    const employeeId = await resolvePortalEmployeeId(this.accounts, identity);
-    try {
-      return await this.getDownloadUrl.execute({ organizationId: identity.organizationId, employeeId, documentId });
-    } catch (e) {
-      if (e instanceof EmployeeDocumentNotFoundError) throw new PortalResourceNotFoundError("Documento");
-      throw e;
-    }
-  }
-}
 
 /** Ausências do próprio, só consulta (sem saldo de férias nem feriados — decisão do produto). */
 export class GetMyLeaveUseCase implements GetMyLeavePort {

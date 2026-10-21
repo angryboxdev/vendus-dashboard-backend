@@ -34,6 +34,10 @@ categorias, feriados e o bucket `hr-documents` são partilhadas com o Novo RH e
 - Dados do RH antigo (turnos, presenças, férias, pedidos, pagamentos,
   auditoria): **arquivar, não migrar** (D-P2 do Portal). Só se apagam depois
   de exportados e de a retenção ser validada (RGPD/laboral).
+- **Sem histórico no Novo RH** (utilizador, 2026-10-20): o Novo RH começa sem
+  registo passado — nada do histórico/auditoria antigo é lido nem mostrado.
+  Passam só as informações dos colaboradores que já existem (fichas e
+  documentos, que já estão em tabelas partilhadas).
 
 ## Fases
 
@@ -41,7 +45,10 @@ categorias, feriados e o bucket `hr-documents` são partilhadas com o Novo RH e
 1. Desacoplar o Novo RH: lista de colaboradores das Configurações já lê do
    Novo RH e a ficha deixou de ligar à página antiga *(feito 2026-10-20)*;
    falta mover documentos (`/api/hr/people/:id/documents*`, `/api/me/documents*`
-   e o separador da ficha) para o módulo de documentos/pessoas. O PIN do
+   e o separador da ficha) para o módulo de documentos/pessoas — backend feito
+   2026-10-20 (D1: módulo `documents`, rotas `/api/novo-rh/...` + aliases
+   `/api/hr/*`; auditoria em `document_audit_logs`, sem histórico antigo);
+   frontend feito (D2, 2026-10-20); a limpeza das rotas `/api/hr/employees/:id/documents*` (D3) fica para a fase 3/4, porque a página antiga `/hr/employees/:id` ainda as usa. O PIN do
    quiosque já se define na ficha do Novo RH (`PUT /api/novo-rh/people/:id/kiosk-pin`,
    `hr.kiosk_pin`, mesmo hash) *(feito 2026-10-20)*.
 2. Acesso e passagem: Novo RH aberto por permissão *(feito 2026-10-20)*; saldos

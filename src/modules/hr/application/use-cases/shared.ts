@@ -1,8 +1,5 @@
 import type { Employee } from "../../domain/entities/employee.js";
-import type { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
 import type { EmployeeDTO } from "../../domain/ports/in/employee.ports.js";
-import type { EmployeeDocumentDTO } from "../../domain/ports/in/employee-document.ports.js";
-import { computeDocumentDisplayStatus } from "../../domain/services/document-status.service.js";
 import {
   maskSensitiveValue,
   shouldMaskSensitiveFields,
@@ -47,22 +44,3 @@ export function toEmployeeDTO(employee: Employee, viewerRole: ViewerRole, photoU
   };
 }
 
-export function toEmployeeDocumentDTO(doc: EmployeeDocument): EmployeeDocumentDTO {
-  return {
-    id: doc.id,
-    employeeId: doc.ownerId,
-    category: doc.category,
-    mandatory: doc.mandatory,
-    fileName: doc.fileName,
-    mimeType: doc.mimeType,
-    fileSizeBytes: doc.fileSizeBytes,
-    origin: doc.origin,
-    expiresAt: doc.expiresAt,
-    period: doc.period,
-    version: doc.version,
-    previousVersionId: doc.previousVersionId,
-    displayStatus: computeDocumentDisplayStatus(doc),
-    uploadedBy: doc.uploadedBy,
-    uploadedAt: doc.uploadedAt,
-  };
-}

@@ -356,7 +356,12 @@ const stockPlanningModule = createStockPlanningModule(
 // geração diária das automatizações de turnos (RH 2.0). As rotas continuam
 // montadas mais abaixo, depois do requireAuth.
 // Portal ligado ao Novo RH (Fase 2): com a regra ligada, a picagem antiga recusa (nunca dois registos de ponto).
-const hrModule = createHrModule({ movedToNovoRh: (org, employeeId) => attendanceModule.attendance.portalUsesNovoRh(org, employeeId) });
+// Documents (motor único): criado antes do `hr`, que usa os envios do Portal por validar na sua caixa de pedidos.
+const documentsModule = createDocumentsModule();
+const hrModule = createHrModule({
+  movedToNovoRh: (org, employeeId) => attendanceModule.attendance.portalUsesNovoRh(org, employeeId),
+  listPendingDocuments: documentsModule.listPendingDocuments,
+});
 setKioskNovoRhGuard((org, employeeId) => attendanceModule.attendance.portalUsesNovoRh(org, employeeId));
 
 // Internal cron routes: authenticated via requireCronSecret (Bearer
@@ -605,6 +610,8 @@ app.use("/api", demoOrgModule.router);
 // requireMinRole(...) no próprio mount correm para todo o /api e recusariam
 // o colaborador antes de chegar a elas.
 app.use("/api", hrModule.meRouter);
+// Documentos do próprio (/me/documents*, ADR-0040 fase 1).
+app.use("/api", documentsModule.meRouter);
 app.use("/api", accessModule.meRouter);
 app.use("/api", accessModule.governanceRouter);
 app.use("/api", accessModule.adminRouter);
@@ -624,7 +631,6 @@ app.use("/api", organizationModule.router);
 // categorias (GET qualquer role autenticado; escrita manager) e documentos da
 // Empresa (manager+, inline). Montado antes do `hr`, que deixou de expor as
 // categorias diretamente.
-const documentsModule = createDocumentsModule();
 app.use("/api", documentsModule.router);
 
 // Calendar module (hexagonal, Base Organizacional — Calendário & Eventos):

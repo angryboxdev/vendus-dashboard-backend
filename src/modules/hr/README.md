@@ -1,7 +1,14 @@
 # Module: hr
 
 > Status: deprecated (em remoção faseada — ADR-0040; não estender)
-> Last updated: 2026-10-06
+> Last updated: 2026-10-20
+>
+> **Saiu deste módulo (ADR-0040, fase 1, 2026-10-20):** documentos de
+> colaborador (`/api/hr/people/:id/documents*`, `/api/hr/document-overview`),
+> importação de recibos (`/api/hr/payslips/*`), documentos do Portal
+> (`/me/documents*`) e os serviços `document-status`/`document-replacement`/
+> `payslip-identification` — agora no módulo `documents` (mesmos caminhos como
+> aliases). As secções abaixo que os descrevem são o estado anterior.
 
 ---
 

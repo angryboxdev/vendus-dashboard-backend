@@ -1,8 +1,8 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
-import { Document as EmployeeDocument } from "../../../documents/domain/entities/document.js";
+import { Document as EmployeeDocument } from "../../domain/entities/document.js";
 import { RemoveEmployeeDocumentUseCase } from "../../application/use-cases/remove-employee-document.use-case.js";
-import { FakeDocumentRepository } from "../../../documents/__tests__/fakes/fake-document-repository.js";
-import { FakeHrAuditLog } from "../fakes/fake-hr-audit-log.js";
+import { FakeDocumentRepository } from "../fakes/fake-document-repository.js";
+import { FakeDocumentAuditLog } from "../fakes/fake-document-audit-log.js";
 import { EmployeeDocumentNotFoundError } from "../../domain/errors.js";
 
 const ORG = mintOrganizationId("org-test");
@@ -10,7 +10,7 @@ const ORG = mintOrganizationId("org-test");
 describe("RemoveEmployeeDocumentUseCase", () => {
   it("marca removed/isCurrent=false sem apagar a linha nem o ficheiro", async () => {
     const documents = new FakeDocumentRepository();
-    const auditLog = new FakeHrAuditLog();
+    const auditLog = new FakeDocumentAuditLog();
     const doc = EmployeeDocument.createFirstVersion({
       owner: { type: "employee", id: "e1" },
       category: "outro",
@@ -51,7 +51,7 @@ describe("RemoveEmployeeDocumentUseCase", () => {
     });
     documents.seed(ORG, doc);
 
-    const useCase = new RemoveEmployeeDocumentUseCase(documents, new FakeHrAuditLog());
+    const useCase = new RemoveEmployeeDocumentUseCase(documents, new FakeDocumentAuditLog());
     await expect(
       useCase.execute({ organizationId: ORG, actor: "rh@angrybox.com", employeeId: "outro-colaborador", documentId: doc.id }),
     ).rejects.toThrow(EmployeeDocumentNotFoundError);

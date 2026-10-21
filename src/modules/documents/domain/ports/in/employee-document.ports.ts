@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { DocumentOrigin } from "../../../../documents/domain/entities/document.js";
+import type { DocumentOrigin } from "../../entities/document.js";
 import type { DocumentDisplayStatus } from "../../services/document-status.service.js";
 
 export interface EmployeeDocumentDTO {
@@ -164,4 +164,24 @@ export interface PendingDocumentDTO {
 }
 export interface ListPendingDocumentsPort {
   execute(command: { organizationId: OrganizationId }): Promise<PendingDocumentDTO[]>;
+}
+
+// ── Resumo documental do colaborador (ficha do Novo RH) ───────────────────
+
+/** O mesmo cálculo que o perfil do RH antigo fazia (`GetEmployeeProfile`), só a parte documental. */
+export interface EmployeeDocumentSummaryDTO {
+  employeeId: string;
+  /** Cargo — o frontend filtra as categorias aplicáveis com ele. */
+  positionId: string | null;
+  mandatoryTotal: number;
+  mandatoryCompleted: number;
+  missingRequirements: string[];
+  missingOptional: string[];
+  expiringSoonCount: number;
+  /** Só alertas documentais (a expirar, em falta). Vazio para inativos. */
+  alerts: Array<{ type: "document_expiring" | "document_missing"; message: string }>;
+}
+
+export interface GetEmployeeDocumentSummaryPort {
+  execute(command: { organizationId: OrganizationId; employeeId: string }): Promise<EmployeeDocumentSummaryDTO>;
 }

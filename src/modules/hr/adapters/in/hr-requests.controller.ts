@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { can } from "../../../access/domain/services/effective-access.service.js";
 import { InvalidPortalRequestError, PortalRequestNotPendingError, type PortalRequestKind } from "../../domain/entities/portal-request.js";
 import { PortalResourceNotFoundError, RequestNotAllowedError } from "../../domain/errors.js";
-import type { ListPendingDocumentsPort } from "../../domain/ports/in/employee-document.ports.js";
+import type { ListPendingDocumentsPort } from "../../../documents/domain/ports/in/employee-document.ports.js";
 import type { DecidePortalRequestPort, GetRequestAttachmentUrlPort, ListInboxRequestsPort } from "../../domain/ports/in/portal-requests.ports.js";
 
 /**
