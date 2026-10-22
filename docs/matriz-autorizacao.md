@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 797 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 799 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -500,6 +500,7 @@ Endpoints: 797 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/novo-rh/legal-entities/catalog` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
 | GET | `/api/novo-rh/legal-entities/locations` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
 | PUT | `/api/novo-rh/legal-entities/locations/:locationId` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/org-chart` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/overview` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/overview/plan` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/overview/today` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
@@ -518,6 +519,7 @@ Endpoints: 797 · pré-autenticação: 23 · não classificados: 0
 | POST | `/api/novo-rh/people/:id/contracts/:cid/cancel` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/people/:id/custom-fields` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | PUT | `/api/novo-rh/people/:id/custom-fields` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| PUT | `/api/novo-rh/people/:id/direct-manager` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/people/:id/documents` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/people/:id/documents` | permission:hr.documents:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | DELETE | `/api/novo-rh/people/:id/documents/:docId` | permission:hr.documents:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |

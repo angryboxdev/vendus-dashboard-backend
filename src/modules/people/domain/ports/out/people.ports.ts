@@ -43,6 +43,8 @@ export interface PeopleRepositoryPort {
   archiveAgreement(org: OrganizationId, id: string): Promise<void>;
 
   listManagers(org: OrganizationId, employeeId: string): Promise<ManagerLink[]>;
+  /** Todas as chefias da organização (organograma), numa leitura. */
+  listAllManagers(org: OrganizationId): Promise<ManagerLink[]>;
   createManager(org: OrganizationId, input: Omit<ManagerLink, "id">, createdBy: string): Promise<ManagerLink>;
   endManager(org: OrganizationId, id: string, validTo: string): Promise<ManagerLink>;
 

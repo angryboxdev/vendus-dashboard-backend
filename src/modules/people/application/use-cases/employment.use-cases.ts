@@ -11,6 +11,8 @@ import {
   type ContractInput,
   type CustomFieldDefinition,
   type ManagerLink,
+  createsCycle,
+  directOn,
 } from "../../domain/entities/employment.js";
 import { PeopleConflictError, PeopleForbiddenError, PeopleNotFoundError, PeopleRuleViolation, PeopleValidationError } from "../../domain/errors.js";
 import type { Viewer } from "../../domain/ports/in/people.ports.js";
@@ -20,6 +22,12 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const lower = (s: string) => s.toLocaleLowerCase("pt");
 
 /** Contratos (TK-9), convénios, responsáveis, complementos/benefícios (CF-14), campos personalizados. */
+const addDays = (date: string, n: number) => {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
 export class EmploymentUseCases {
   constructor(
     private readonly repo: PeopleRepositoryPort,
@@ -135,6 +143,48 @@ export class EmploymentUseCases {
     const m = await this.repo.endManager(org, linkId, validTo);
     await this.audit.record(org, { actor: viewer.actor, action: "people.manager.end", resourceType: "employee", resourceId: employeeId, before: cur, after: m, reason: null });
     return m;
+  }
+
+  // ── Organograma ─────────────────────────────────────────────────────
+  /** Chefias diretas em vigor num dia, só entre colaboradores que quem consulta pode ver. */
+  async orgChart(org: OrganizationId, viewer: Viewer, date: string) {
+    if (!DATE.test(date)) throw new PeopleValidationError("Data inválida.", "date");
+    const links = directOn(await this.repo.listAllManagers(org), date);
+    const seen = new Map<string, boolean>();
+    const visible = async (id: string) => {
+      if (!seen.has(id)) seen.set(id, await viewer.canSee(id, date));
+      return seen.get(id)!;
+    };
+    const out: { employeeId: string; managerEmployeeId: string; linkId: string; validFrom: string }[] = [];
+    for (const m of links) if ((await visible(m.employeeId)) && (await visible(m.managerEmployeeId))) out.push({ employeeId: m.employeeId, managerEmployeeId: m.managerEmployeeId, linkId: m.id, validFrom: m.validFrom });
+    return out;
+  }
+
+  /**
+   * Organograma → mudar a chefia direta a partir de `validFrom`: termina a atual
+   * na véspera e cria a nova (`null` = fica sem chefia). Recusa ciclos.
+   */
+  async setDirectManager(org: OrganizationId, viewer: Viewer, employeeId: string, managerEmployeeId: string | null, validFrom: string) {
+    if (!DATE.test(validFrom)) throw new PeopleValidationError("Indique a data de efeito.", "validFrom");
+    await this.employee(org, viewer, employeeId);
+    if (managerEmployeeId !== null) {
+      await this.employee(org, viewer, managerEmployeeId);
+      if (managerEmployeeId === employeeId) throw new PeopleValidationError("Um colaborador não pode ser responsável de si próprio.", "managerEmployeeId");
+      if (createsCycle(directOn(await this.repo.listAllManagers(org), validFrom), employeeId, managerEmployeeId)) {
+        throw new PeopleValidationError("Isto criava um ciclo: o novo responsável já está abaixo deste colaborador.", "managerEmployeeId");
+      }
+    }
+    const own = await this.repo.listManagers(org, employeeId);
+    const current = own.find((m) => m.kind === "direct" && (m.validTo === null || m.validTo >= validFrom));
+    if (current?.managerEmployeeId === managerEmployeeId) return current;
+    if (current) {
+      // Começou no próprio dia (ou depois): fica só esse dia; a nova começa no seguinte.
+      const end = current.validFrom >= validFrom ? current.validFrom : addDays(validFrom, -1);
+      await this.endManager(org, viewer, employeeId, current.id, end);
+      if (end >= validFrom) validFrom = addDays(end, 1);
+    }
+    if (managerEmployeeId === null) return null;
+    return this.addManager(org, viewer, { employeeId, managerEmployeeId, kind: "direct", level: 1, validFrom, validTo: null });
   }
 
   // ── Complementos e benefícios ───────────────────────────────────────

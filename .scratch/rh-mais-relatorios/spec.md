@@ -9,6 +9,9 @@ Pedido do utilizador (2026-10-22). Uma fase de cada vez; mudanças visuais prime
 - **«Importar excel ou pdf»** = exportar (Excel e PDF), por grupo, centro ou pessoa.
 - Sem dependências novas sem perguntar (há `recharts`, `jspdf`/`jspdf-autotable` no frontend; `xlsx` e `pdfkit` no backend).
 
+## Estado (2026-10-22)
+Fases 1–3 em produção (backend #100, frontend #75); fase 4 no `rh`, por publicar; fase 5 por fazer (depende do quiosque no Novo RH).
+
 ## Fases
 1. **Navegação «Mais» + Documentos por pastas + RH antigo fora do menu**
    - Menu principal: Documentos sai; entra «Mais» com Documentos, Relatórios, Organograma.

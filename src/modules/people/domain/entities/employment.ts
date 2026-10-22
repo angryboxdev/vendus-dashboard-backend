@@ -100,6 +100,25 @@ export function validateManager(m: Omit<ManagerLink, "id">, existing: ManagerLin
   if (clash) throw new PeopleValidationError("Já existe um responsável deste tipo e nível nesse período. Termine o atual primeiro.", "kind");
 }
 
+/** Chefia direta em vigor num dia (organograma). */
+export const directOn = (links: ManagerLink[], date: string) =>
+  links.filter((m) => m.kind === "direct" && m.validFrom <= date && (m.validTo === null || date <= m.validTo));
+
+/**
+ * Mudar a chefia direta de `employeeId` para `managerId` criaria um ciclo?
+ * (o novo responsável já está, direta ou indiretamente, abaixo do colaborador).
+ */
+export function createsCycle(active: ManagerLink[], employeeId: string, managerId: string): boolean {
+  const up = new Map(active.map((m) => [m.employeeId, m.managerEmployeeId]));
+  const seen = new Set<string>();
+  for (let cur: string | undefined = managerId; cur; cur = up.get(cur)) {
+    if (cur === employeeId) return true;
+    if (seen.has(cur)) return false;
+    seen.add(cur);
+  }
+  return false;
+}
+
 export type CompensationKind = "complement" | "benefit";
 export type PayPeriod = "monthly" | "biweekly" | "weekly";
 

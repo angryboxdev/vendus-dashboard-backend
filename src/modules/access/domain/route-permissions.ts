@@ -110,6 +110,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/documents\/(overview|archive)$/, target: p("hr.documents") },
   { pattern: /^\/api\/novo-rh\/payslips(\/|$)/, target: p("hr.payslip_import") },
   { pattern: /^\/api\/novo-rh\/people(\/|$)/, target: p("hr.employees") },
+  { pattern: /^\/api\/novo-rh\/org-chart$/, methods: GET, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/time\/(holiday-calendars|holidays)(\/|$)/, target: p("company.holidays") },
   { pattern: /^\/api\/novo-rh\/time\/vacation-calendars(\/|$)/, target: p("hr.leave") },
   { pattern: /^\/api\/novo-rh\/time(\/|$)/, target: p("hr.schedules") },

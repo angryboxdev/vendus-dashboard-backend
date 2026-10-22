@@ -267,6 +267,9 @@ export class SupabasePeopleRepository implements PeopleRepositoryPort {
   async listManagers(org: OrganizationId, employeeId: string) {
     return check<Record<string, unknown>[]>(await this.scoped(org).table("employee_managers").select(MGR_COLS).eq("employee_id", employeeId).order("valid_from")).map(toManager);
   }
+  async listAllManagers(org: OrganizationId) {
+    return check<Record<string, unknown>[]>(await this.scoped(org).table("employee_managers").select(MGR_COLS).order("valid_from")).map(toManager);
+  }
   async createManager(org: OrganizationId, m: Omit<ManagerLink, "id">, createdBy: string) {
     const row = { employee_id: m.employeeId, manager_employee_id: m.managerEmployeeId, kind: m.kind, level: m.level, valid_from: m.validFrom, valid_to: m.validTo, created_by: createdBy };
     return toManager(check(await this.scoped(org).table("employee_managers").insert(row).select(MGR_COLS).single()));
