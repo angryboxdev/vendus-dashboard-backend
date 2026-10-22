@@ -231,8 +231,6 @@ Endpoints: 799 · pré-autenticação: 23 · não classificados: 0
 | POST | `/api/hr/people/:id/portal-access` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | PATCH | `/api/hr/people/:id/status` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/hr/people/kpis` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
-| GET | `/api/hr/positions` | permission:company.positions:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
-| POST | `/api/hr/positions` | permission:company.positions:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | PATCH | `/api/hr/positions/:id` | permission:company.positions:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | PATCH | `/api/hr/positions/:id/active` | permission:company.positions:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/hr/requests` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
@@ -548,6 +546,8 @@ Endpoints: 799 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/novo-rh/periods/reopenings` | permission:hr.closure:READ | ✔ | ✖ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/periods/reopenings/:id/approve` | permission:hr.closure:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/periods/reopenings/:id/reject` | permission:hr.closure:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| PATCH | `/api/novo-rh/positions/:id` | permission:company.positions:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| PATCH | `/api/novo-rh/positions/:id/active` | permission:company.positions:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/reminders/run` | permission:governance.settings:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/reports` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/reports/:key` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |

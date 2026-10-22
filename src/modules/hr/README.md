@@ -12,6 +12,9 @@
 
 ---
 
+
+> 2026-10-22: os cargos (`HrPositionsController`) também são servidos em `/api/novo-rh/positions` (mesmos handlers, `company.positions`) — é aí que o modo Demonstração do Novo RH se aplica; `/api/hr/positions` fica até à fase 4 da ADR-0040.
+
 ## What it is and what it's for (business perspective)
 
 Módulo **Pessoas & Documentos** (RH-02) + **Visão Geral operacional** (RH-01)

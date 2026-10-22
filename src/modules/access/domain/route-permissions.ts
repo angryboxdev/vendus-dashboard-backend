@@ -47,7 +47,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/calendar\/events(\/|$)/, target: p("company.calendar") },
   { pattern: /^\/api\/calendar(\/upcoming)?$/, methods: GET, target: { kind: "base" } },
   { pattern: /^\/api\/location-credentials(\/|$)/, target: p("company.devices") },
-  { pattern: /^\/api\/hr\/positions(\/|$)/, target: p("company.positions") },
+  { pattern: /^\/api\/(hr|novo-rh)\/positions(\/|$)/, target: p("company.positions") },
 
   // ── Vendas ───────────────────────────────────────────────────────────
   { pattern: /^\/api\/(analytics|vendus|documents)(\/|$)/, target: p("sales.dashboard") },

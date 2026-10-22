@@ -47,8 +47,14 @@ export class HrPositionsController {
   }
 
   private registerRoutes(): void {
+    // Novo RH (ADR-0040): os mesmos handlers em /novo-rh/positions — em modo Demonstração
+    // seguem para a organização fictícia (o cabeçalho só vale em /api/novo-rh/*).
+    for (const base of ["/hr/positions", "/novo-rh/positions"]) this.registerAt(base);
+  }
+
+  private registerAt(base: string): void {
     /** GET /api/hr/positions — todos os cargos (ativos primeiro) com nº de colaboradores ativos. */
-    this.router.get("/hr/positions", async (req, res) => {
+    this.router.get(base, async (req, res) => {
       try {
         res.json(await this.listPositions.execute(req.auth!.orgId));
       } catch (e) {
@@ -57,7 +63,7 @@ export class HrPositionsController {
     });
 
     /** POST /api/hr/positions — body `{ name, description? }`. */
-    this.router.post("/hr/positions", requireMinRole("manager"), async (req, res) => {
+    this.router.post(base, requireMinRole("manager"), async (req, res) => {
       try {
         const body = (req.body ?? {}) as Record<string, unknown>;
         if (typeof body.name !== "string") {
@@ -77,7 +83,7 @@ export class HrPositionsController {
     });
 
     /** PATCH /api/hr/positions/:id — alteração parcial de nome/descrição/categoria. */
-    this.router.patch("/hr/positions/:id", requireMinRole("manager"), async (req, res) => {
+    this.router.patch(`${base}/:id`, requireMinRole("manager"), async (req, res) => {
       try {
         const body = (req.body ?? {}) as Record<string, unknown>;
         res.json(
@@ -95,7 +101,7 @@ export class HrPositionsController {
     });
 
     /** PATCH /api/hr/positions/:id/active — body `{ active: boolean }`. */
-    this.router.patch("/hr/positions/:id/active", requireMinRole("manager"), async (req, res) => {
+    this.router.patch(`${base}/:id/active`, requireMinRole("manager"), async (req, res) => {
       try {
         const active = (req.body as { active?: unknown } | undefined)?.active;
         if (typeof active !== "boolean") {
