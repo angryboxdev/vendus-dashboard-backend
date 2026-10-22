@@ -36,6 +36,10 @@ Atualizado: 2026-10-21 (verificado contra o repositório, os ramos e a produçã
 2. Pendências operacionais da F1 (abaixo).
 3. Com autorização do utilizador: iniciar a F3.
 
+## Perguntas em aberto (voltar a perguntar ao utilizador)
+- **Localização na saída** (2026-10-22): hoje «Exigir localização» e «Bloquear fora da zona» valem para entrada, saída e pausas (`punch-policy.ts`); só o «cedo demais» é só da entrada. Proposta: opção «Bloquear fora da zona só na entrada» (a saída fora da zona passa, guardando a localização). O utilizador pediu para voltar a perguntar mais tarde.
+- **Cargo do Raul volta para «Gerente»** (2026-10-22): sem diagnóstico. Perguntar onde testou (local/produção) e se apareceu mensagem vermelha; proposta de mostrar o erro da gravação na barra «Guardar alterações» da ficha.
+
 ## Pendências operacionais (produção)
 - Correr `POST /api/fiscal-documents/backfill` com `{ "dryRun": true }` e rever (precisa de sessão de gestor).
 - `GET /api/invoices/integrity/payable-duplicates`: se houver duplicados históricos, o índice único de contas a pagar não foi criado — limpar e reexecutar a migração `20261030130000`.
