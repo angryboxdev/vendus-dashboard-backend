@@ -67,4 +67,14 @@ describe("Organograma (chefias diretas)", () => {
     await expect(employment.addManager(ORG, ADMIN, { employeeId: "a", managerEmployeeId: "ceo", kind: "direct", level: 1, validFrom: "2026-12-01", validTo: null })).rejects.toThrow("já está atribuído");
     await expect(employment.setDirectManagers(ORG, ADMIN, "ceo", ["a"], "2026-11-01")).rejects.toThrow("ciclo");
   });
+
+  test("corrigir no mesmo dia vale logo: a chefia que ainda não tinha começado sai (auditada), sem esperar por amanhã", async () => {
+    const { repo, employment, events } = setup();
+    await employment.setDirectManagers(ORG, ADMIN, "c", ["a"], "2026-10-22");
+    await employment.setDirectManagers(ORG, ADMIN, "c", ["b"], "2026-10-22");
+    await employment.setDirectManagers(ORG, ADMIN, "c", ["a"], "2026-10-22");
+    expect((await employment.orgChart(ORG, ADMIN, "2026-10-22")).filter((l) => l.employeeId === "c").map((l) => l.managerEmployeeId)).toEqual(["a"]);
+    expect((await repo.listManagers(ORG, "c")).map((m) => [m.managerEmployeeId, m.validFrom, m.validTo])).toEqual([["a", "2026-10-22", null]]);
+    expect(events.filter((e) => e === "people.manager.remove")).toHaveLength(2);
+  });
 });

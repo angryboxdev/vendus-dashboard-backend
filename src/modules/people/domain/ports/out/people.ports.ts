@@ -47,6 +47,8 @@ export interface PeopleRepositoryPort {
   listAllManagers(org: OrganizationId): Promise<ManagerLink[]>;
   createManager(org: OrganizationId, input: Omit<ManagerLink, "id">, createdBy: string): Promise<ManagerLink>;
   endManager(org: OrganizationId, id: string, validTo: string): Promise<ManagerLink>;
+  /** Apaga uma chefia que ainda não começou antes da data da correção (organograma: corrigir no mesmo dia). */
+  deleteManager(org: OrganizationId, id: string): Promise<void>;
 
   listCompensationItems(org: OrganizationId): Promise<CompensationItem[]>;
   createCompensationItem(org: OrganizationId, input: Omit<CompensationItem, "id" | "active">, createdBy: string): Promise<CompensationItem>;

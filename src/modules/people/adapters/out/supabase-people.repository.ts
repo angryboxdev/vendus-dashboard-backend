@@ -274,6 +274,9 @@ export class SupabasePeopleRepository implements PeopleRepositoryPort {
     const row = { employee_id: m.employeeId, manager_employee_id: m.managerEmployeeId, kind: m.kind, level: m.level, valid_from: m.validFrom, valid_to: m.validTo, created_by: createdBy };
     return toManager(check(await this.scoped(org).table("employee_managers").insert(row).select(MGR_COLS).single()));
   }
+  async deleteManager(org: OrganizationId, id: string) {
+    check(await this.scoped(org).table("employee_managers").delete().eq("id", id));
+  }
   async endManager(org: OrganizationId, id: string, validTo: string) {
     return toManager(check(await this.scoped(org).table("employee_managers").update({ valid_to: validTo }).eq("id", id).select(MGR_COLS).single()));
   }

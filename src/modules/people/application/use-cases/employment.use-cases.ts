@@ -183,18 +183,20 @@ export class EmploymentUseCases {
       if (createsCycle(active, employeeId, m)) throw new PeopleValidationError("Isto criava um ciclo: o novo responsável já está abaixo deste colaborador.", "managerEmployeeId");
     }
     const current = (await this.repo.listManagers(org, employeeId)).filter((m) => m.kind === "direct" && (m.validTo === null || m.validTo >= validFrom));
-    let start = validFrom;
     for (const c of current.filter((c) => !wanted.includes(c.managerEmployeeId))) {
-      // Começou no próprio dia (ou depois): fica só esse dia; os novos começam no seguinte.
-      const end = c.validFrom >= validFrom ? c.validFrom : addDays(validFrom, -1);
-      await this.endManager(org, viewer, employeeId, c.id, end);
-      if (end >= start) start = addDays(end, 1);
+      if (c.validFrom >= validFrom) {
+        // Ainda não tinha começado antes desta data (ex.: mexido hoje e corrigido hoje): é uma correção — sai já, com auditoria.
+        await this.repo.deleteManager(org, c.id);
+        await this.audit.record(org, { actor: viewer.actor, action: "people.manager.remove", resourceType: "employee", resourceId: employeeId, before: c, after: null, reason: "Correção no organograma" });
+      } else {
+        await this.endManager(org, viewer, employeeId, c.id, addDays(validFrom, -1));
+      }
     }
     const keep = new Set(current.map((c) => c.managerEmployeeId));
     for (const m of wanted.filter((m) => !keep.has(m))) {
-      await this.addManager(org, viewer, { employeeId, managerEmployeeId: m, kind: "direct", level: 1, validFrom: start, validTo: null });
+      await this.addManager(org, viewer, { employeeId, managerEmployeeId: m, kind: "direct", level: 1, validFrom, validTo: null });
     }
-    return directOn(await this.repo.listManagers(org, employeeId), start);
+    return directOn(await this.repo.listManagers(org, employeeId), validFrom);
   }
 
   // ── Complementos e benefícios ───────────────────────────────────────

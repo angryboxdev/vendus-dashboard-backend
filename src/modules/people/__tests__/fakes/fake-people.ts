@@ -148,6 +148,9 @@ export class FakePeopleRepo implements PeopleRepositoryPort {
     this.managers.push(m);
     return m;
   }
+  async deleteManager(_o: OrganizationId, id: string) {
+    this.managers = this.managers.filter((m) => m.id !== id);
+  }
   async endManager(_o: OrganizationId, id: string, validTo: string) {
     const m = this.managers.find((x) => x.id === id)!;
     m.validTo = validTo;
