@@ -185,3 +185,26 @@ export interface EmployeeDocumentSummaryDTO {
 export interface GetEmployeeDocumentSummaryPort {
   execute(command: { organizationId: OrganizationId; employeeId: string }): Promise<EmployeeDocumentSummaryDTO>;
 }
+
+// ── Arquivo por pastas (Novo RH → Mais → Documentos → Colaboradores) ─────
+
+export interface DocumentArchiveRowDTO {
+  employeeId: string;
+  employeeName: string;
+  category: string;
+  /** Categoria periódica (ex: recibos) — vai para a pasta «Recibos e faturas». */
+  requiresPeriod: boolean;
+  /** Documentos atuais (não removidos) desta categoria. */
+  count: number;
+  /** Último arquivamento (ISO) nesta categoria. */
+  lastUploadedAt: string;
+}
+
+export interface GetDocumentArchiveCommand {
+  organizationId: OrganizationId;
+}
+
+/** 1 linha por (colaborador ativo × categoria com documentos): contagem e último arquivamento. */
+export interface GetDocumentArchivePort {
+  execute(command: GetDocumentArchiveCommand): Promise<DocumentArchiveRowDTO[]>;
+}

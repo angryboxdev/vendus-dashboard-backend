@@ -107,7 +107,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/people\/[^/]+\/kiosk-pin$/, target: p("hr.kiosk_pin", "MANAGE") },
   // Documentos de colaborador e recibos (módulo `documents`, ADR-0040 fase 1).
   { pattern: new RegExp(`^/api/novo-rh/people/${ID}/documents(/|$)`), target: p("hr.documents") },
-  { pattern: /^\/api\/novo-rh\/documents\/overview$/, target: p("hr.documents") },
+  { pattern: /^\/api\/novo-rh\/documents\/(overview|archive)$/, target: p("hr.documents") },
   { pattern: /^\/api\/novo-rh\/payslips(\/|$)/, target: p("hr.payslip_import") },
   { pattern: /^\/api\/novo-rh\/people(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/time\/(holiday-calendars|holidays)(\/|$)/, target: p("company.holidays") },
@@ -124,6 +124,8 @@ export const ROUTE_RULES: RouteRule[] = [
   // Envio de documentos a vários colaboradores (FE-065): a mesma permissão dos documentos de colaborador.
   { pattern: /^\/api\/novo-rh\/document-distributions(\/|$)/, target: p("hr.documents") },
   { pattern: /^\/api\/novo-rh\/workspace(\/|$)/, target: p("hr.employees") },
+  // Exportar uma tabela já vista é leitura (POST só por causa do tamanho do pedido).
+  { pattern: /^\/api\/novo-rh\/reports\/export\/xlsx$/, methods: ["POST"], target: p("hr.employees", "READ") },
   { pattern: /^\/api\/novo-rh\/reports(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/alerts(\/|$)/, target: p("hr.overview") },
   { pattern: /^\/api\/novo-rh\/overview(\/plan|\/today)?$/, target: p("hr.overview") },

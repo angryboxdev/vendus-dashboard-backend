@@ -11,6 +11,7 @@ import { RemoveEmployeeDocumentUseCase } from "../../application/use-cases/remov
 import { GetEmployeeDocumentDownloadUrlUseCase } from "../../application/use-cases/get-employee-document-download-url.use-case.js";
 import { GetEmployeeDocumentHistoryUseCase } from "../../application/use-cases/get-employee-document-history.use-case.js";
 import { GetDocumentOverviewUseCase } from "../../application/use-cases/get-document-overview.use-case.js";
+import { GetDocumentArchiveUseCase } from "../../application/use-cases/get-document-archive.use-case.js";
 import { GetEmployeeDocumentSummaryUseCase } from "../../application/use-cases/get-employee-document-summary.use-case.js";
 import { ReplaceMyDocumentUseCase, ReviewEmployeeDocumentUseCase } from "../../application/use-cases/employee-document-review.use-cases.js";
 import { GetMyDocumentUrlUseCase, ListMyDocumentsUseCase } from "../../application/use-cases/my-documents.use-cases.js";
@@ -78,6 +79,7 @@ describe("API documentos de colaborador (Novo RH + aliases /hr)", () => {
       new GetDocumentOverviewUseCase(employees, documents, categories),
       new ReviewEmployeeDocumentUseCase(documents, audit),
       new GetEmployeeDocumentSummaryUseCase(employees, documents, categories),
+      new GetDocumentArchiveUseCase(employees, documents, categories),
     );
     const me = new MyDocumentsController(
       new ListMyDocumentsUseCase(employees, documents, categories, () => "2026-10-20"),
