@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 794 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 795 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -475,6 +475,7 @@ Endpoints: 794 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/novo-rh/document-distributions/:id/report` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/document-distributions/audience-preview` | permission:hr.documents:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/document-distributions/by-employee/:employeeId` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/documents/archive` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/documents/overview` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/google-reviews` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | DELETE | `/api/novo-rh/google-reviews/locations/:id` | permission:company.locations:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |

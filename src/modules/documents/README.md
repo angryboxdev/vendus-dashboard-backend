@@ -120,6 +120,10 @@ mesmo comportamento e as mesmas respostas.
   `GET /:id/download-url`, `GET /:id/history`) — `manager`+.
 - `EmployeeDocumentsController` → `/api/novo-rh/people/:id/documents*`
   e `/api/novo-rh/documents/overview` (`hr.documents`); só no Novo RH,
+  `GET /api/novo-rh/documents/archive` (arquivo por pastas, 2026-10-22: por
+  colaborador ativo × categoria, contagem dos documentos atuais e último
+  `uploadedAt`; uma leitura em lote — `GetDocumentArchiveUseCase`; as pastas
+  são do frontend) e
   `GET /api/novo-rh/people/:id/documents/summary` (resumo da ficha:
   obrigatórios, em falta, a expirar, alertas — o que o perfil do RH antigo
   dava); os mesmos

@@ -107,7 +107,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/people\/[^/]+\/kiosk-pin$/, target: p("hr.kiosk_pin", "MANAGE") },
   // Documentos de colaborador e recibos (módulo `documents`, ADR-0040 fase 1).
   { pattern: new RegExp(`^/api/novo-rh/people/${ID}/documents(/|$)`), target: p("hr.documents") },
-  { pattern: /^\/api\/novo-rh\/documents\/overview$/, target: p("hr.documents") },
+  { pattern: /^\/api\/novo-rh\/documents\/(overview|archive)$/, target: p("hr.documents") },
   { pattern: /^\/api\/novo-rh\/payslips(\/|$)/, target: p("hr.payslip_import") },
   { pattern: /^\/api\/novo-rh\/people(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/time\/(holiday-calendars|holidays)(\/|$)/, target: p("company.holidays") },

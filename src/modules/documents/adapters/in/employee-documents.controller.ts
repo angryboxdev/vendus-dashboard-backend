@@ -11,6 +11,7 @@ import {
   InvalidDocumentError,
 } from "../../domain/errors.js";
 import type {
+  GetDocumentArchivePort,
   GetDocumentOverviewPort,
   GetEmployeeDocumentSummaryPort,
   GetEmployeeDocumentDownloadUrlPort,
@@ -49,6 +50,7 @@ export class EmployeeDocumentsController {
     private readonly getDocumentOverview: GetDocumentOverviewPort,
     private readonly reviewEmployeeDocument: ReviewEmployeeDocumentPort,
     private readonly getEmployeeDocumentSummary: GetEmployeeDocumentSummaryPort,
+    private readonly getDocumentArchive: GetDocumentArchivePort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -65,6 +67,15 @@ export class EmployeeDocumentsController {
     };
     this.router.get("/novo-rh/documents/overview", overview);
     this.router.get("/hr/document-overview", overview);
+
+    /** Arquivo por pastas: contagem e último arquivamento por colaborador × categoria. Só Novo RH. */
+    this.router.get("/novo-rh/documents/archive", async (req, res) => {
+      try {
+        res.json(await this.getDocumentArchive.execute({ organizationId: req.auth!.orgId }));
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
 
     /** Resumo documental da ficha do Novo RH (obrigatórios, em falta, alertas). Só Novo RH. */
     this.router.get("/novo-rh/people/:id/documents/summary", async (req, res) => {
