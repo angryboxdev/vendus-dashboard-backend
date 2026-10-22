@@ -1,6 +1,8 @@
 import { Router, type Request } from "express";
+import multer from "multer";
 import { problem } from "../../../../infra/http/problem-details.js";
 import type { ReportsUseCases } from "../../application/use-cases/reports.use-cases.js";
+import type { AttendanceDaysUseCases } from "../../application/use-cases/attendance-days.use-cases.js";
 import { ReportError } from "../../domain/errors.js";
 
 const STATUS: Record<ReportError["code"], number> = { validation: 400, not_found: 404, forbidden: 403 };
@@ -27,9 +29,44 @@ const ids = (v: unknown): string[] => (typeof v === "string" && v ? [...new Set(
  * descarregar (CSV). Filtros por identificadores: `locations`, `employees` e
  * `columns` (FE-063).
  */
-export function createReportsRouter(uc: ReportsUseCases, access: ReportsAccess): Router {
+/** A tabela a exportar vem num campo de formulário (`table`, JSON): não passa pelo limite de 100 KB do corpo JSON. */
+const tableForm = multer({ limits: { fieldSize: 3 * 1024 * 1024, fields: 2 } }).none();
+
+export function createReportsRouter(uc: ReportsUseCases, access: ReportsAccess, attendanceDays?: AttendanceDaysUseCases): Router {
   const r = Router();
   const R = "/novo-rh/reports";
+  if (attendanceDays) {
+    /** Assiduidade por blocos (≤ 31 dias): pessoas no âmbito e filtros, e os dias apurados de cada uma. */
+    r.get(`${R}/attendance/days`, async (req, res) => {
+      const from = String(req.query.from ?? "");
+      const to = String(req.query.to ?? "");
+      const today = new Date().toISOString().slice(0, 10);
+      const out = await run(() =>
+        attendanceDays.run(
+          req.auth!.orgId,
+          { from, to },
+          { locationIds: ids(req.query.locations), groupIds: ids(req.query.groups), departmentIds: ids(req.query.departments), employeeIds: ids(req.query.employees) },
+          (employeeId) => access.canSeeEmployee(req, employeeId, /^\d{4}-\d{2}-\d{2}$/.test(to) && to < today ? to : today),
+        ),
+      );
+      res.setHeader("Cache-Control", "no-store");
+      res.json(out);
+    });
+    /** Excel de uma tabela já calculada no ecrã. */
+    r.post(`${R}/export/xlsx`, tableForm, async (req, res) => {
+      let table: unknown = null;
+      try {
+        table = JSON.parse(String((req.body as { table?: unknown } | undefined)?.table ?? "null"));
+      } catch {
+        table = null;
+      }
+      const out = await run(async () => attendanceDays.exportXlsx(table));
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${out.name}"`);
+      res.setHeader("Cache-Control", "no-store");
+      res.send(out.file);
+    });
+  }
   const go = (req: Request) => {
     const from = String(req.query.from ?? "");
     const to = String(req.query.to ?? "");

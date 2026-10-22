@@ -124,6 +124,8 @@ export const ROUTE_RULES: RouteRule[] = [
   // Envio de documentos a vários colaboradores (FE-065): a mesma permissão dos documentos de colaborador.
   { pattern: /^\/api\/novo-rh\/document-distributions(\/|$)/, target: p("hr.documents") },
   { pattern: /^\/api\/novo-rh\/workspace(\/|$)/, target: p("hr.employees") },
+  // Exportar uma tabela já vista é leitura (POST só por causa do tamanho do pedido).
+  { pattern: /^\/api\/novo-rh\/reports\/export\/xlsx$/, methods: ["POST"], target: p("hr.employees", "READ") },
   { pattern: /^\/api\/novo-rh\/reports(\/|$)/, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/alerts(\/|$)/, target: p("hr.overview") },
   { pattern: /^\/api\/novo-rh\/overview(\/plan|\/today)?$/, target: p("hr.overview") },

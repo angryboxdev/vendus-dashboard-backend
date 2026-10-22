@@ -1225,6 +1225,25 @@ const reportsModule = createReportsModule({
     },
     employeeLocations: async (org) => new Map((await peopleRepo.list(org, { status: "all" })).map((e) => [e.id, e.primaryLocationId])),
   },
+  // Relatórios → Assiduidade (2026-10-22): o motor em lote (≤ 31 dias por pedido), grupos e departamentos com vigência.
+  attendanceDays: {
+    people: async (org) =>
+      (await peopleRepo.list(org, { status: "all" })).map((e) => ({ id: e.id, name: e.fullName, locationId: e.primaryLocationId, hireDate: e.hireDate, status: e.status, deactivatedAt: e.deactivatedAt })),
+    units: async (org, date) => {
+      const out = new Map<string, { groups: string[]; departments: string[] }>();
+      for (const a of await orgStructureModule.structure.listAssignments(org, {})) {
+        if (a.unitType === "location" || a.validFrom > date || (a.validTo !== null && a.validTo < date)) continue;
+        const u = out.get(a.employeeId) ?? { groups: [], departments: [] };
+        (a.unitType === "group" ? u.groups : u.departments).push(a.unitId);
+        out.set(a.employeeId, u);
+      }
+      return out;
+    },
+    daysMany: async (org, employeeIds, from, to) => {
+      const all = await attendanceModule.attendance.boardMany(org, employeeIds, from, to);
+      return new Map([...all].map(([id, b]) => [id, b.days]));
+    },
+  },
   access: {
     canSeeEmployee,
     canAudit: (req) => !!req.access && can(req.access, "governance.audit", "READ"),
