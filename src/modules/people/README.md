@@ -63,6 +63,13 @@ chegam num `Viewer` montado pelo `server.ts` a partir do módulo access.
 - `SupabasePeopleRepository`.
 - `SupabasePeoplePhotoAdapter` — URLs assinados (1 h) no bucket privado `hr-photos`; caminhos `demo-avatars/…` (só a organização de demonstração) apontam para ficheiros estáticos do frontend.
 
+
+### Organograma (2026-10-22)
+
+- `GET /api/novo-rh/org-chart?date` (`hr.employees`, GET): chefias diretas em vigor (`directOn`) entre colaboradores que quem consulta pode ver — `EmploymentUseCases.orgChart`, `listAllManagers` (uma leitura).
+- `PUT /api/novo-rh/people/:id/direct-manager` `{ managerEmployeeIds: [], validFrom }` (ou `managerEmployeeId`, compatível) → `setDirectManagers`: lista completa dos responsáveis diretos a partir da data; termina na véspera os que saem, cria os que entram (mesmas regras e auditoria de `addManager`/`endManager`); recusa ciclos (`createsCycle`). Sem tabela nova (`employee_managers`).
+- **Co-chefia** (2026-10-22): até `MAX_DIRECT` (3) responsáveis diretos em simultâneo (ex.: os dois sócios), sem repetir a mesma pessoa; os tipos aprovador continuam com um por nível. Quem usa a chefia direta (aprovação de ausências, lembretes) já trabalha com a lista.
+
 ## Design decisions (ADR summary)
 
 - **O meu perfil** (2026-10-18, Portal): `GET /api/me/profile` devolve só identificação (nome, foto assinada, cargo, local, admissão, estado) da ficha ligada à conta (`findByUserId`); nunca campos sensíveis — esses ficam na ficha com privacidade por campo.

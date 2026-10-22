@@ -47,7 +47,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/calendar\/events(\/|$)/, target: p("company.calendar") },
   { pattern: /^\/api\/calendar(\/upcoming)?$/, methods: GET, target: { kind: "base" } },
   { pattern: /^\/api\/location-credentials(\/|$)/, target: p("company.devices") },
-  { pattern: /^\/api\/hr\/positions(\/|$)/, target: p("company.positions") },
+  { pattern: /^\/api\/(hr|novo-rh)\/positions(\/|$)/, target: p("company.positions") },
 
   // ── Vendas ───────────────────────────────────────────────────────────
   { pattern: /^\/api\/(analytics|vendus|documents)(\/|$)/, target: p("sales.dashboard") },
@@ -110,6 +110,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/novo-rh\/documents\/(overview|archive)$/, target: p("hr.documents") },
   { pattern: /^\/api\/novo-rh\/payslips(\/|$)/, target: p("hr.payslip_import") },
   { pattern: /^\/api\/novo-rh\/people(\/|$)/, target: p("hr.employees") },
+  { pattern: /^\/api\/novo-rh\/org-chart$/, methods: GET, target: p("hr.employees") },
   { pattern: /^\/api\/novo-rh\/time\/(holiday-calendars|holidays)(\/|$)/, target: p("company.holidays") },
   { pattern: /^\/api\/novo-rh\/time\/vacation-calendars(\/|$)/, target: p("hr.leave") },
   { pattern: /^\/api\/novo-rh\/time(\/|$)/, target: p("hr.schedules") },

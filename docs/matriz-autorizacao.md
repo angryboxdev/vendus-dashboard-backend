@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 797 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 799 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -231,8 +231,6 @@ Endpoints: 797 · pré-autenticação: 23 · não classificados: 0
 | POST | `/api/hr/people/:id/portal-access` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | PATCH | `/api/hr/people/:id/status` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/hr/people/kpis` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
-| GET | `/api/hr/positions` | permission:company.positions:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
-| POST | `/api/hr/positions` | permission:company.positions:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | PATCH | `/api/hr/positions/:id` | permission:company.positions:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | PATCH | `/api/hr/positions/:id/active` | permission:company.positions:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/hr/requests` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
@@ -500,6 +498,7 @@ Endpoints: 797 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/novo-rh/legal-entities/catalog` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
 | GET | `/api/novo-rh/legal-entities/locations` | permission:company.structure:READ | ✔ | ✔ | ✔ | ✔ | ✖ |
 | PUT | `/api/novo-rh/legal-entities/locations/:locationId` | permission:company.structure:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/novo-rh/org-chart` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/overview` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/overview/plan` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/overview/today` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
@@ -518,6 +517,7 @@ Endpoints: 797 · pré-autenticação: 23 · não classificados: 0
 | POST | `/api/novo-rh/people/:id/contracts/:cid/cancel` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/people/:id/custom-fields` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | PUT | `/api/novo-rh/people/:id/custom-fields` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| PUT | `/api/novo-rh/people/:id/direct-manager` | permission:hr.employees:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/people/:id/documents` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/people/:id/documents` | permission:hr.documents:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | DELETE | `/api/novo-rh/people/:id/documents/:docId` | permission:hr.documents:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
@@ -546,6 +546,8 @@ Endpoints: 797 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/novo-rh/periods/reopenings` | permission:hr.closure:READ | ✔ | ✖ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/periods/reopenings/:id/approve` | permission:hr.closure:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/periods/reopenings/:id/reject` | permission:hr.closure:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| PATCH | `/api/novo-rh/positions/:id` | permission:company.positions:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
+| PATCH | `/api/novo-rh/positions/:id/active` | permission:company.positions:MANAGE | ✔ | ✖ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/reminders/run` | permission:governance.settings:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/novo-rh/reports` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/reports/:key` | permission:hr.employees:READ | ✔ | ✔ | ✔ | ✖ | ✖ |

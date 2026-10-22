@@ -84,20 +84,48 @@ export interface ManagerLink {
   validTo: string | null;
 }
 
+/** Responsáveis diretos em simultâneo (co-chefia). */
+export const MAX_DIRECT = 3;
+
 export function validateManager(m: Omit<ManagerLink, "id">, existing: ManagerLink[]): void {
   if (m.managerEmployeeId === m.employeeId) throw new PeopleValidationError("Um colaborador não pode ser responsável de si próprio.", "managerEmployeeId");
   if (!MANAGER_KINDS.includes(m.kind)) throw new PeopleValidationError("Tipo de responsável inválido.", "kind");
   if (m.kind === "direct" && m.level !== 1) throw new PeopleValidationError("O responsável direto só tem um nível.", "level");
   if (!(m.level >= 1 && m.level <= 3)) throw new PeopleValidationError("Nível entre 1 e 3.", "level");
   if (!DATE.test(m.validFrom) || (m.validTo !== null && (!DATE.test(m.validTo) || m.validTo < m.validFrom))) throw new PeopleValidationError("Vigência inválida.", "validFrom");
-  const clash = existing.some(
+  const overlapping = existing.filter(
     (x) =>
       x.kind === m.kind &&
       x.level === m.level &&
       (x.validTo === null || m.validFrom <= x.validTo) &&
       (m.validTo === null || x.validFrom <= m.validTo),
   );
-  if (clash) throw new PeopleValidationError("Já existe um responsável deste tipo e nível nesse período. Termine o atual primeiro.", "kind");
+  // Chefia direta partilhada (co-chefia, ex.: dois sócios): até MAX_DIRECT em simultâneo, sem repetir a mesma pessoa.
+  if (m.kind === "direct") {
+    if (overlapping.some((x) => x.managerEmployeeId === m.managerEmployeeId)) throw new PeopleValidationError("Este responsável direto já está atribuído nesse período.", "managerEmployeeId");
+    if (overlapping.length >= MAX_DIRECT) throw new PeopleValidationError(`No máximo ${MAX_DIRECT} responsáveis diretos em simultâneo.`, "managerEmployeeId");
+    return;
+  }
+  if (overlapping.length) throw new PeopleValidationError("Já existe um responsável deste tipo e nível nesse período. Termine o atual primeiro.", "kind");
+}
+
+/** Chefia direta em vigor num dia (organograma). */
+export const directOn = (links: ManagerLink[], date: string) =>
+  links.filter((m) => m.kind === "direct" && m.validFrom <= date && (m.validTo === null || date <= m.validTo));
+
+/**
+ * Mudar a chefia direta de `employeeId` para `managerId` criaria um ciclo?
+ * (o novo responsável já está, direta ou indiretamente, abaixo do colaborador).
+ */
+export function createsCycle(active: ManagerLink[], employeeId: string, managerId: string): boolean {
+  const up = new Map(active.map((m) => [m.employeeId, m.managerEmployeeId]));
+  const seen = new Set<string>();
+  for (let cur: string | undefined = managerId; cur; cur = up.get(cur)) {
+    if (cur === employeeId) return true;
+    if (seen.has(cur)) return false;
+    seen.add(cur);
+  }
+  return false;
 }
 
 export type CompensationKind = "complement" | "benefit";

@@ -198,6 +198,22 @@ export class PeopleController {
       res.json(await run(async () => employment.endManager(org(req), await viewerOf(req), id(req), req.params.mid as string, s(req.body?.validTo))));
     });
 
+    /** Organograma: chefias diretas em vigor num dia (omisso = hoje), entre quem se pode ver. */
+    r.get("/novo-rh/org-chart", async (req, res) => {
+      const date = typeof req.query.date === "string" && req.query.date ? req.query.date : new Date().toISOString().slice(0, 10);
+      res.json(await run(async () => employment.orgChart(org(req), await viewerOf(req), date)));
+    });
+    /** Organograma: mudar a chefia direta (termina a atual na véspera e cria a nova). */
+    r.put(`${P}/:id/direct-manager`, async (req, res) => {
+      const b = (req.body ?? {}) as Record<string, unknown>;
+      const list = Array.isArray(b.managerEmployeeIds)
+        ? b.managerEmployeeIds.map((x) => s(x)).filter(Boolean)
+        : b.managerEmployeeId === null || b.managerEmployeeId === undefined || b.managerEmployeeId === ""
+          ? []
+          : [s(b.managerEmployeeId)];
+      res.json(await run(async () => employment.setDirectManagers(org(req), await viewerOf(req), id(req), list, s(b.validFrom))));
+    });
+
     // ── Remuneração ──────────────────────────────────────────────────
     r.get(`${P}/:id/compensations`, async (req, res) => {
       res.json(await run(async () => employment.listEmployeeCompensations(org(req), await viewerOf(req), id(req))));
