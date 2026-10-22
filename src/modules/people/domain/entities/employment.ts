@@ -84,20 +84,29 @@ export interface ManagerLink {
   validTo: string | null;
 }
 
+/** Responsáveis diretos em simultâneo (co-chefia). */
+export const MAX_DIRECT = 3;
+
 export function validateManager(m: Omit<ManagerLink, "id">, existing: ManagerLink[]): void {
   if (m.managerEmployeeId === m.employeeId) throw new PeopleValidationError("Um colaborador não pode ser responsável de si próprio.", "managerEmployeeId");
   if (!MANAGER_KINDS.includes(m.kind)) throw new PeopleValidationError("Tipo de responsável inválido.", "kind");
   if (m.kind === "direct" && m.level !== 1) throw new PeopleValidationError("O responsável direto só tem um nível.", "level");
   if (!(m.level >= 1 && m.level <= 3)) throw new PeopleValidationError("Nível entre 1 e 3.", "level");
   if (!DATE.test(m.validFrom) || (m.validTo !== null && (!DATE.test(m.validTo) || m.validTo < m.validFrom))) throw new PeopleValidationError("Vigência inválida.", "validFrom");
-  const clash = existing.some(
+  const overlapping = existing.filter(
     (x) =>
       x.kind === m.kind &&
       x.level === m.level &&
       (x.validTo === null || m.validFrom <= x.validTo) &&
       (m.validTo === null || x.validFrom <= m.validTo),
   );
-  if (clash) throw new PeopleValidationError("Já existe um responsável deste tipo e nível nesse período. Termine o atual primeiro.", "kind");
+  // Chefia direta partilhada (co-chefia, ex.: dois sócios): até MAX_DIRECT em simultâneo, sem repetir a mesma pessoa.
+  if (m.kind === "direct") {
+    if (overlapping.some((x) => x.managerEmployeeId === m.managerEmployeeId)) throw new PeopleValidationError("Este responsável direto já está atribuído nesse período.", "managerEmployeeId");
+    if (overlapping.length >= MAX_DIRECT) throw new PeopleValidationError(`No máximo ${MAX_DIRECT} responsáveis diretos em simultâneo.`, "managerEmployeeId");
+    return;
+  }
+  if (overlapping.length) throw new PeopleValidationError("Já existe um responsável deste tipo e nível nesse período. Termine o atual primeiro.", "kind");
 }
 
 /** Chefia direta em vigor num dia (organograma). */

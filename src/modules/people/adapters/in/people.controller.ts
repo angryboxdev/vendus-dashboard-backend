@@ -206,8 +206,12 @@ export class PeopleController {
     /** Organograma: mudar a chefia direta (termina a atual na véspera e cria a nova). */
     r.put(`${P}/:id/direct-manager`, async (req, res) => {
       const b = (req.body ?? {}) as Record<string, unknown>;
-      const managerEmployeeId = b.managerEmployeeId === null || b.managerEmployeeId === undefined || b.managerEmployeeId === "" ? null : s(b.managerEmployeeId);
-      res.json(await run(async () => employment.setDirectManager(org(req), await viewerOf(req), id(req), managerEmployeeId, s(b.validFrom))));
+      const list = Array.isArray(b.managerEmployeeIds)
+        ? b.managerEmployeeIds.map((x) => s(x)).filter(Boolean)
+        : b.managerEmployeeId === null || b.managerEmployeeId === undefined || b.managerEmployeeId === ""
+          ? []
+          : [s(b.managerEmployeeId)];
+      res.json(await run(async () => employment.setDirectManagers(org(req), await viewerOf(req), id(req), list, s(b.validFrom))));
     });
 
     // ── Remuneração ──────────────────────────────────────────────────

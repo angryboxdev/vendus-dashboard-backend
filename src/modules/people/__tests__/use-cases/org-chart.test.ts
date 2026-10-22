@@ -50,4 +50,21 @@ describe("Organograma (chefias diretas)", () => {
     const scoped = viewer({ scope: ["a", "b"] });
     expect((await employment.orgChart(ORG, scoped, "2026-10-22")).map((l) => l.employeeId)).toEqual(["b"]);
   });
+
+  test("co-chefia: dois responsáveis diretos em simultâneo; trocar a lista termina só quem sai", async () => {
+    const { repo, employment } = setup();
+    // Os dois sócios por cima do gerente.
+    await employment.setDirectManagers(ORG, ADMIN, "a", ["ceo", "b"], "2026-10-22");
+    expect((await employment.orgChart(ORG, ADMIN, "2026-10-22")).map((l) => l.managerEmployeeId).sort()).toEqual(["b", "ceo"]);
+    await expect(employment.setDirectManagers(ORG, ADMIN, "a", ["ceo", "b", "c", "a"], "2026-10-23")).rejects.toThrow("No máximo 3");
+    await employment.setDirectManagers(ORG, ADMIN, "a", ["ceo"], "2026-11-01");
+    const own = await repo.listManagers(ORG, "a");
+    expect(own.map((m) => [m.managerEmployeeId, m.validTo])).toEqual([
+      ["ceo", null],
+      ["b", "2026-10-31"],
+    ]);
+    // O mesmo responsável não se repete; ciclos continuam recusados.
+    await expect(employment.addManager(ORG, ADMIN, { employeeId: "a", managerEmployeeId: "ceo", kind: "direct", level: 1, validFrom: "2026-12-01", validTo: null })).rejects.toThrow("já está atribuído");
+    await expect(employment.setDirectManagers(ORG, ADMIN, "ceo", ["a"], "2026-11-01")).rejects.toThrow("ciclo");
+  });
 });

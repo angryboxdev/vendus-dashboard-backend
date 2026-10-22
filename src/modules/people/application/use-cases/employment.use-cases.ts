@@ -13,6 +13,7 @@ import {
   type ManagerLink,
   createsCycle,
   directOn,
+  MAX_DIRECT,
 } from "../../domain/entities/employment.js";
 import { PeopleConflictError, PeopleForbiddenError, PeopleNotFoundError, PeopleRuleViolation, PeopleValidationError } from "../../domain/errors.js";
 import type { Viewer } from "../../domain/ports/in/people.ports.js";
@@ -160,31 +161,40 @@ export class EmploymentUseCases {
     return out;
   }
 
+  /** Organograma → uma só chefia direta (`null` = sem chefia). Atalho de `setDirectManagers`. */
+  setDirectManager(org: OrganizationId, viewer: Viewer, employeeId: string, managerEmployeeId: string | null, validFrom: string) {
+    return this.setDirectManagers(org, viewer, employeeId, managerEmployeeId === null ? [] : [managerEmployeeId], validFrom);
+  }
+
   /**
-   * Organograma → mudar a chefia direta a partir de `validFrom`: termina a atual
-   * na véspera e cria a nova (`null` = fica sem chefia). Recusa ciclos.
+   * Organograma → responsáveis diretos a partir de `validFrom` (lista completa;
+   * vazia = sem chefia; até `MAX_DIRECT`, co-chefia): termina na véspera os que
+   * saem e cria os que entram; os que ficam não mexem. Recusa ciclos.
    */
-  async setDirectManager(org: OrganizationId, viewer: Viewer, employeeId: string, managerEmployeeId: string | null, validFrom: string) {
+  async setDirectManagers(org: OrganizationId, viewer: Viewer, employeeId: string, managerIds: string[], validFrom: string) {
     if (!DATE.test(validFrom)) throw new PeopleValidationError("Indique a data de efeito.", "validFrom");
+    const wanted = [...new Set(managerIds)];
+    if (wanted.length > MAX_DIRECT) throw new PeopleValidationError(`No máximo ${MAX_DIRECT} responsáveis diretos em simultâneo.`, "managerEmployeeId");
     await this.employee(org, viewer, employeeId);
-    if (managerEmployeeId !== null) {
-      await this.employee(org, viewer, managerEmployeeId);
-      if (managerEmployeeId === employeeId) throw new PeopleValidationError("Um colaborador não pode ser responsável de si próprio.", "managerEmployeeId");
-      if (createsCycle(directOn(await this.repo.listAllManagers(org), validFrom), employeeId, managerEmployeeId)) {
-        throw new PeopleValidationError("Isto criava um ciclo: o novo responsável já está abaixo deste colaborador.", "managerEmployeeId");
-      }
+    const active = directOn(await this.repo.listAllManagers(org), validFrom);
+    for (const m of wanted) {
+      await this.employee(org, viewer, m);
+      if (m === employeeId) throw new PeopleValidationError("Um colaborador não pode ser responsável de si próprio.", "managerEmployeeId");
+      if (createsCycle(active, employeeId, m)) throw new PeopleValidationError("Isto criava um ciclo: o novo responsável já está abaixo deste colaborador.", "managerEmployeeId");
     }
-    const own = await this.repo.listManagers(org, employeeId);
-    const current = own.find((m) => m.kind === "direct" && (m.validTo === null || m.validTo >= validFrom));
-    if (current?.managerEmployeeId === managerEmployeeId) return current;
-    if (current) {
-      // Começou no próprio dia (ou depois): fica só esse dia; a nova começa no seguinte.
-      const end = current.validFrom >= validFrom ? current.validFrom : addDays(validFrom, -1);
-      await this.endManager(org, viewer, employeeId, current.id, end);
-      if (end >= validFrom) validFrom = addDays(end, 1);
+    const current = (await this.repo.listManagers(org, employeeId)).filter((m) => m.kind === "direct" && (m.validTo === null || m.validTo >= validFrom));
+    let start = validFrom;
+    for (const c of current.filter((c) => !wanted.includes(c.managerEmployeeId))) {
+      // Começou no próprio dia (ou depois): fica só esse dia; os novos começam no seguinte.
+      const end = c.validFrom >= validFrom ? c.validFrom : addDays(validFrom, -1);
+      await this.endManager(org, viewer, employeeId, c.id, end);
+      if (end >= start) start = addDays(end, 1);
     }
-    if (managerEmployeeId === null) return null;
-    return this.addManager(org, viewer, { employeeId, managerEmployeeId, kind: "direct", level: 1, validFrom, validTo: null });
+    const keep = new Set(current.map((c) => c.managerEmployeeId));
+    for (const m of wanted.filter((m) => !keep.has(m))) {
+      await this.addManager(org, viewer, { employeeId, managerEmployeeId: m, kind: "direct", level: 1, validFrom: start, validTo: null });
+    }
+    return directOn(await this.repo.listManagers(org, employeeId), start);
   }
 
   // ── Complementos e benefícios ───────────────────────────────────────
