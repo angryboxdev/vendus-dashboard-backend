@@ -2,7 +2,7 @@
 
 Atualizado: 2026-10-21 (verificado contra o repositório, os ramos e a produção; produção backend `89393ef`, frontend `dbeb18d`). Detalhe por módulo em `docs/modulos/`.
 
-## Em produção (`origin/main` backend = `a65d27c`; frontend = `762c680`)
+## Em produção (`origin/main` backend = `54cdc14`; frontend = `6d3eea2`)
 - Todos os 51 módulos de `src/modules` (exceto `tasks`, módulo de referência não montado) + camada legada.
 - **Novo RH** fases 0–9 (2026-10-12), organização de demonstração, dashboard executivo, Google reviews, Assistente Mezza (OpenAI ou Gemini por variável de ambiente).
 - **Financeiro/Stock v1.2 — F1** (2026-10-14, PRs #79/#49): identidade fiscal partilhada, motor único de valores, uma obrigação por documento, versão/auditoria/idempotência nas faturas. Migrações `20261030110000`→`20261030160000` aplicadas.
@@ -43,6 +43,7 @@ Atualizado: 2026-10-21 (verificado contra o repositório, os ramos e a produçã
 ## Decisões de 2026-10-23
 - **Localização:** «Bloquear entradas fora da zona do centro» só bloqueia a **entrada**; saída e pausas fora do raio passam, com a localização guardada (`punch-policy.ts`). «Exigir localização» continua a valer para todas as marcações.
 - **Cargo do Raul:** resolvido pelo utilizador.
+- **Em produção** (backend #102 → `54cdc14`, frontend #78 → `6d3eea2`; sem migrações): localização só na entrada, P0 do Portal e fim do interruptor (abaixo).
 - **Portal — P0 (escala):** `GET /api/me/roster` passa a trazer, sem remover nada, o centro, a área e o modelo de cada turno (sem migração). O Portal mostra as folgas, todos os períodos e noturnos, os 7 dias da semana («Folga» / «Sem turno publicado») e, se houver erro, «Tentar novamente».
 - **Novo RH = único sistema:** o interruptor `time_tracking.portal.uses_novo_rh` saiu (catálogo, Configurações, `ModeAwarePortalApiAdapter`). O Portal usa sempre o Novo RH; a picagem antiga (Portal e quiosque) é sempre recusada. `/api/me/portal-mode` responde sempre `novo_rh`, até sair com o RH antigo.
 - **Fase 5 (apagar o RH antigo):** autorizada. O quiosque não é usado (as lojas picam no telemóvel).
