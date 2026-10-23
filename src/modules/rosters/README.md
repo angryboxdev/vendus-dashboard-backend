@@ -69,6 +69,7 @@ time-base (`plannedDays`) e pede o recálculo da assiduidade a cada publicação
 ## Design decisions (ADR summary)
 
 - **Colegas do turno no Portal** (2026-10-18, Portal ligado ao Novo RH): `GET /api/me/roster/shifts/:id/coworkers` — mesma escala, turno publicado com horário sobreposto (noturnos de dias vizinhos incluídos; encostar não conta), só nome curto, cargo e horário (nunca contactos nem ids; inativos não aparecem). Respeita `security.visibility.coworkers_shifts` (desligado por omissão, ADR-0030): desligado → 403 no servidor. Regras puras em `domain/services/coworkers.service.ts`; contexto `coworkersVisible`/`peopleBrief` ligado em `server.ts`.
+- **A minha escala no Portal** (2026-10-23): `GET /api/me/roster` devolve, além do estado publicado (turnos e folgas), campos aditivos — `rosterName`, `locationId`/`locationName` (centro da área do turno; sem área, o centro da escala quando é de centro), `areaName` e `template` (`name`, `abbreviation`, `color`). Rascunhos nunca aparecem; a pessoa vem sempre da sessão (`employeeForUser`). Nomes dos centros pela porta `locationNames` (ligada a `peopleRepo.listLocations` em `server.ts`).
 
 - ADR-0030: versões publicadas; alteração pós-publicação com motivo e publicação imediata; restrições com valores Legal (D6) e severidade aviso por omissão; sobreposição bloqueia (também já em rascunho: criar, alterar e atribuição em massa recusam com 422 se o colaborador já tem turno planeado à mesma hora, em qualquer escala); trocas com aceitação do colega e aprovação da gestão; turnos dos colegas não visíveis no Portal.
 

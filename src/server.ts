@@ -355,14 +355,14 @@ const stockPlanningModule = createStockPlanningModule(
 // RH (hexagonal) — construído aqui, antes do cron interno, para expor a
 // geração diária das automatizações de turnos (RH 2.0). As rotas continuam
 // montadas mais abaixo, depois do requireAuth.
-// Portal ligado ao Novo RH (Fase 2): com a regra ligada, a picagem antiga recusa (nunca dois registos de ponto).
+// O Novo RH é o único sistema de ponto (2026-10-23, sem interruptor): a picagem antiga (Portal e quiosque) recusa sempre.
 // Documents (motor único): criado antes do `hr`, que usa os envios do Portal por validar na sua caixa de pedidos.
 const documentsModule = createDocumentsModule();
 const hrModule = createHrModule({
-  movedToNovoRh: (org, employeeId) => attendanceModule.attendance.portalUsesNovoRh(org, employeeId),
+  movedToNovoRh: async () => true,
   listPendingDocuments: documentsModule.listPendingDocuments,
 });
-setKioskNovoRhGuard((org, employeeId) => attendanceModule.attendance.portalUsesNovoRh(org, employeeId));
+setKioskNovoRhGuard(async () => true);
 
 // Internal cron routes: authenticated via requireCronSecret (Bearer
 // CRON_SECRET), not user sessions — must be mounted before the global
@@ -763,6 +763,7 @@ const rostersModule = createRostersModule({
   userOfEmployee: (org, employeeId) => absencesDirectory.userOfEmployee(org, employeeId),
   // Portal: «Mostrar os turnos dos colegas» (segurança) e só nome/cargo dos colegas.
   securitySettings: (org, employeeId, date) => settingsModule.settings.effectiveFor(org, employeeId, date, "security"),
+  locationNames: async (org) => new Map((await peopleRepo.listLocations(org)).map((l) => [l.id, l.name])),
   peopleBrief: async (org, ids) => {
     const [people, positions] = await Promise.all([Promise.all(ids.map((id) => peopleRepo.get(org, id))), peopleRepo.listPositions(org)]);
     const pos = new Map(positions.map((p) => [p.id, p.name]));

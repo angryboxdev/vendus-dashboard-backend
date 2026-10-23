@@ -61,6 +61,8 @@ export interface RostersContextPort {
   peopleBrief(org: OrganizationId, employeeIds: string[]): Promise<{ id: string; fullName: string; positionName: string | null; active: boolean }[]>;
   /** Colaboradores ativos que pertencem ao alvo da escala numa data (centro: principal ou pertença; grupo: membros). */
   targetMembers(org: OrganizationId, targetType: "location" | "group", targetId: string, date: string): Promise<string[]>;
+  /** Nomes dos centros (Portal: onde é o turno). */
+  locationNames(org: OrganizationId): Promise<Map<string, string>>;
 }
 
 export interface RostersNotifierPort {

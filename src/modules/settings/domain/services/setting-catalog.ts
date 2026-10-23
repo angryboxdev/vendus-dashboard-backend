@@ -275,20 +275,6 @@ export const SETTING_CATALOG: SettingDefinition[] = [
     toValidate: false,
   },
   {
-    // Portal ligado ao Novo RH (Fase 2, .scratch/portal-novo-rh): interruptor por organização ou por local (piloto).
-    // Ligado: o Portal usa o ponto, a escala e as ausências do Novo RH e a picagem antiga (Portal/quiosque)
-    // é recusada para esse colaborador — nunca dois registos de ponto ao mesmo tempo (ADR-0027).
-    key: "time_tracking.portal.uses_novo_rh",
-    domain: "time_tracking",
-    type: "bool",
-    label: "O Portal do Colaborador usa o Novo RH",
-    description: "Ponto, escala e ausências do Portal passam para o Novo RH. A picagem antiga (Portal e quiosque) deixa de ser aceite para quem estiver abrangido. Ligar no início de um período.",
-    defaultValue: false,
-    sensitive: false,
-    legal: false,
-    toValidate: true,
-  },
-  {
     // D7 (ADR-0027): desligado até haver DPIA.
     key: "time_tracking.geofence.require_coordinates",
     domain: "time_tracking",
@@ -723,7 +709,6 @@ export const FEATURE_KEYS = [
   "time_tracking.bank.enabled",
   "time_tracking.roster.coverage_enabled",
   "time_tracking.kiosk.enabled",
-  "time_tracking.portal.uses_novo_rh",
   "time_tracking.geofence.require_coordinates",
   "time_tracking.auto_close.enabled",
   "time_tracking.correction.employee_can_refuse",

@@ -164,6 +164,29 @@ describe("Escalas — casos de uso", () => {
     expect((await uc.myRoster(ORG, E1, "2026-10-19", "2026-10-19")).shifts.map((s) => s.segments[0]!.start)).toEqual(["16:00"]);
   });
 
+  test("Portal (/me/roster): só o publicado, com centro, área, modelo e folgas", async () => {
+    const { uc, ctx } = setup();
+    const { roster, noite } = await rosterWithTemplates(uc);
+    ctx.locations.set(roster.targetId, "Porto Centro");
+    const bar = await uc.createArea(ORG, BOSS, { locationId: "22222222-2222-4222-8222-222222222222", name: "Bar" });
+    ctx.locations.set("22222222-2222-4222-8222-222222222222", "Porto Ribeira");
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-19", noite.id));
+    // Escala de grupo: o centro vem da área do turno.
+    const extras = await uc.createRoster(ORG, BOSS, { name: "Extras", targetType: "group", targetId: "33333333-3333-4333-8333-333333333333" });
+    await uc.addShift(ORG, BOSS, extras.id, { ...shift("e1", "2026-10-21", noite.id), areaId: bar.id });
+    await uc.publish(ORG, BOSS, extras.id, { reason: null, confirm: false });
+    await uc.addShift(ORG, BOSS, roster.id, { employeeId: "e1", workDate: "2026-10-20", kind: "day_off", templateId: null, segments: [] });
+    // O rascunho da «Loja Porto» ainda não aparece; só o turno já publicado dos «Extras».
+    expect((await uc.myRoster(ORG, E1, "2026-10-19", "2026-10-21")).shifts.map((s) => s.workDate)).toEqual(["2026-10-21"]);
+    await uc.publish(ORG, BOSS, roster.id, { reason: null, confirm: false });
+    const { shifts } = await uc.myRoster(ORG, E1, "2026-10-19", "2026-10-21");
+    const byDate = new Map(shifts.map((s) => [s.workDate, s]));
+    expect(byDate.get("2026-10-19")).toMatchObject({ kind: "shift", rosterName: "Loja Porto", locationName: "Porto Centro", areaName: null, template: { name: "Noturno", abbreviation: "N", color: null } });
+    expect(byDate.get("2026-10-20")).toMatchObject({ kind: "day_off", locationName: "Porto Centro", template: null });
+    expect(byDate.get("2026-10-21")).toMatchObject({ locationName: "Porto Ribeira", areaName: "Bar" });
+    expect((await uc.myRoster(ORG, E2, "2026-10-19", "2026-10-21")).shifts).toEqual([]);
+  });
+
   test("duas publicações ao mesmo tempo: a segunda é recusada", async () => {
     const { uc, repo } = setup();
     const { roster, manha } = await rosterWithTemplates(uc);

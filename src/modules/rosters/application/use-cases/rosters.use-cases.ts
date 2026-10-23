@@ -689,8 +689,33 @@ export class RostersUseCases {
     if (!DATE.test(from) || !DATE.test(to) || to < from || span(from, to) > MAX_VIEW_DAYS) throw new RosterValidationError(`Período inválido (máx. ${MAX_VIEW_DAYS} dias).`, "from");
     const employeeId = await this.ctx.employeeForUser(org, actor.userId);
     if (!employeeId) throw new RosterNotFoundError("Esta conta não está ligada a uma ficha de colaborador.");
-    const shifts = await this.repo.listShifts(org, { employeeIds: [employeeId], from, to, includeDeleted: true });
-    return { employeeId, shifts: shifts.filter((s) => s.published?.employeeId === employeeId).map((s) => ({ id: s.id, rosterId: s.rosterId, ...s.published! })) };
+    const mine = (await this.repo.listShifts(org, { employeeIds: [employeeId], from, to, includeDeleted: true })).filter((s) => s.published?.employeeId === employeeId);
+    if (!mine.length) return { employeeId, shifts: [] };
+    // Onde e o quê (campos aditivos): centro = área do turno, senão o centro da escala; modelo = nome, abreviatura e cor.
+    const [rosters, areas, templates, locations] = await Promise.all([this.repo.listRosters(org), this.repo.listAreas(org), this.repo.listTemplates(org), this.ctx.locationNames(org)]);
+    const rosterById = new Map(rosters.map((r) => [r.id, r]));
+    const areaById = new Map(areas.map((a) => [a.id, a]));
+    const templateById = new Map(templates.map((t) => [t.id, t]));
+    return {
+      employeeId,
+      shifts: mine.map((s) => {
+        const p = s.published!;
+        const roster = rosterById.get(s.rosterId);
+        const area = p.areaId ? areaById.get(p.areaId) : undefined;
+        const locationId = area?.locationId ?? (roster?.targetType === "location" ? roster.targetId : null);
+        const template = p.templateId ? templateById.get(p.templateId) : undefined;
+        return {
+          id: s.id,
+          rosterId: s.rosterId,
+          ...p,
+          rosterName: roster?.name ?? null,
+          locationId,
+          locationName: locationId ? (locations.get(locationId) ?? null) : null,
+          areaName: area?.name ?? null,
+          template: template ? { name: template.name, abbreviation: template.abbreviation, color: template.color } : null,
+        };
+      }),
+    };
   }
 
   /**

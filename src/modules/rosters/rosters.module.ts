@@ -39,6 +39,7 @@ export function createRostersModule(deps: {
   periods?: PeriodGuardPort;
   /** Parâmetros de segurança efetivos (visibilidade no Portal); sem eles, colegas nunca visíveis. */
   securitySettings?: (org: OrganizationId, employeeId: string, date: string) => Promise<{ key: string; value: unknown }[]>;
+  locationNames?: (org: OrganizationId) => Promise<Map<string, string>>;
   peopleBrief?: (org: OrganizationId, employeeIds: string[]) => Promise<{ id: string; fullName: string; positionName: string | null; active: boolean }[]>;
   /** Quem pertence ao centro/grupo da escala (seletor de colaboradores); sem ele, ninguém é «do centro». */
   targetMembers?: (org: OrganizationId, targetType: "location" | "group", targetId: string, date: string) => Promise<string[]>;
@@ -59,6 +60,7 @@ export function createRostersModule(deps: {
         deps.securitySettings ? (await deps.securitySettings(org, employeeId, date)).find((v) => v.key === "security.visibility.coworkers_shifts")?.value === true : false,
       peopleBrief: async (org, ids) => (deps.peopleBrief && ids.length ? deps.peopleBrief(org, ids) : []),
       targetMembers: async (org, targetType, targetId, date) => (deps.targetMembers ? deps.targetMembers(org, targetType, targetId, date) : []),
+      locationNames: async (org) => (deps.locationNames ? deps.locationNames(org) : new Map()),
     },
     deps.notifier,
     deps.published,
