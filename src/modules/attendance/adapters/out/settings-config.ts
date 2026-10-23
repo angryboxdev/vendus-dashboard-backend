@@ -33,6 +33,5 @@ export function configFromSettings(values: Value[], timeZone: string): Attendanc
       blockOutsideGeofence: bool("time_tracking.geofence.block_outside"),
     },
     refusal: { enabled: bool("time_tracking.correction.employee_can_refuse"), hours: num("time_tracking.correction.refusal_hours", 48) },
-    portal: { usesNovoRh: bool("time_tracking.portal.uses_novo_rh") },
   };
 }

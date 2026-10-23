@@ -73,8 +73,6 @@ export interface AttendanceConfig {
   policy: PunchPolicy;
   /** RE-11: o colaborador pode recusar correções da gestão (prazo em horas). */
   refusal: { enabled: boolean; hours: number };
-  /** Portal ligado ao Novo RH (`time_tracking.portal.uses_novo_rh`). */
-  portal: { usesNovoRh: boolean };
 }
 
 /** O que a assiduidade precisa de outros módulos (ligado no composition root). */

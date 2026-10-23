@@ -55,7 +55,7 @@ horas (Fase 6), que vai ler os ajustes daqui.
 ### Input
 
 - `createAttendanceMeRouter` → `/api/me/clock*` (Portal; o colaborador é sempre o da sessão).
-- `GET /api/me/portal-mode` → `{ source: "novo_rh" | "legacy" }`, a partir de `time_tracking.portal.uses_novo_rh` (por organização ou centro). Com o interruptor ligado, o ponto antigo do Portal recusa (`MOVED_TO_NOVO_RH`) e o quiosque antigo devolve 409 — nunca dois registos de ponto (guardas ligadas em `src/server.ts`).
+- **Novo RH = único sistema de ponto** (2026-10-23, decisão do utilizador): o interruptor `time_tracking.portal.uses_novo_rh` foi retirado do catálogo; o ponto antigo do Portal recusa sempre (`MOVED_TO_NOVO_RH`) e o quiosque antigo devolve sempre 409 (guardas em `src/server.ts`). `GET /api/me/portal-mode` devolve sempre `{ source: "novo_rh" }` — só para o Portal já publicado; sai com o RH antigo.
 - `createAttendanceAdminRouter` → `/api/novo-rh/attendance/*` (`hr.attendance`, âmbito por colaborador, Idempotency-Key obrigatório).
 
 ### Output

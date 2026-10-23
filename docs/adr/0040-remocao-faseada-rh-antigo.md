@@ -53,7 +53,11 @@ categorias, feriados e o bucket `hr-documents` são partilhadas com o Novo RH e
    `hr.kiosk_pin`, mesmo hash) *(feito 2026-10-20)*.
 2. Acesso e passagem: Novo RH aberto por permissão *(feito 2026-10-20)*; saldos
    de abertura e piloto do Portal; `uses_novo_rh` ligado em todas as
-   organizações; quiosque no Novo RH.
+   organizações; quiosque no Novo RH. **Atualização 2026-10-23** (utilizador:
+   «elimine o interruptor e use sempre o novo rh, esse novo rh passará a ser
+   único»): o interruptor saiu do catálogo e o Portal usa sempre o Novo RH;
+   a picagem antiga (Portal e quiosque) é sempre recusada. O quiosque antigo
+   deixa de picar até haver quiosque no Novo RH (hoje pica-se no telemóvel).
 3. Remover o frontend antigo (com redirecionamentos para `/hr/novo/*`).
 4. Remover o backend antigo e as regras `/api/hr/*` da matriz.
 5. Arquivar e apagar as tabelas só do RH antigo (com rollback), depois da validação da retenção.

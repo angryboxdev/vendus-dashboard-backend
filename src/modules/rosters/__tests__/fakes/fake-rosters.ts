@@ -170,6 +170,10 @@ export class FakeRostersContext implements RostersContextPort {
   async targetMembers(_o: OrganizationId, targetType: "location" | "group", targetId: string) {
     return this.members.get(`${targetType}:${targetId}`) ?? [];
   }
+  locations = new Map<string, string>();
+  async locationNames() {
+    return this.locations;
+  }
 }
 
 export class FakeRostersNotifier {
