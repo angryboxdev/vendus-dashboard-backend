@@ -40,9 +40,9 @@ Atualizado: 2026-10-21 (verificado contra o repositório, os ramos e a produçã
 - **Ecrãs retirados do menu** (horários, feriados, férias, tipos de ausência, fluxos — hoje só pela API): o utilizador pediu para voltar a perguntar depois.
 
 ## Decisões de 2026-10-23
-- **Localização:** «Bloquear entradas fora da zona do centro» só bloqueia a **entrada**; saída e pausas fora do raio passam, com a localização guardada (). «Exigir localização» continua a valer para todas as marcações. No , por publicar.
+- **Localização:** «Bloquear entradas fora da zona do centro» só bloqueia a **entrada**; saída e pausas fora do raio passam, com a localização guardada (`punch-policy.ts`). «Exigir localização» continua a valer para todas as marcações. No `rh`, por publicar.
 - **Cargo do Raul:** resolvido pelo utilizador.
-- **Portal (task «Portal premium mobile»):** autorizada a alteração aditiva a  (centro, área e modelo de cada turno; sem migração). Trabalho num worktree isolado, sem commit até aprovação.
+- **Portal (task «Portal premium mobile»):** autorizada a alteração aditiva a `GET /api/me/roster` (centro, área e modelo de cada turno; sem migração). Trabalho num worktree isolado, sem commit até aprovação.
 - **Fase 5 (apagar o RH antigo):** autorizada. O quiosque não é usado (as lojas picam no telemóvel).
 - **Financeiro/Stock:** fica para depois.
 
