@@ -25,11 +25,12 @@ Atualizado: 2026-10-21 (verificado contra o repositório, os ramos e a produçã
 
 ## Próxima tarefa
 **RH (ADR-0040, remoção faseada do RH antigo) — próximas fases, cada uma com aprovação:**
-1. Fase 2: saldos de abertura e piloto do Portal ligado ao Novo RH; ligar `time_tracking.portal.uses_novo_rh` em todas as organizações; refazer o quiosque no Novo RH (o PIN já se define na ficha).
-2. Fase 3: remover o frontend antigo (`pages/hr`, `modules/hr`, `HrEmployeeDetailPage`) com redirecionamentos para `/hr/novo/*`; depois a D3 dos documentos (apagar `hrRoutes.ts` rotas `/employees/:id/documents*` + `hrDocumentService.ts`) e mover `pages/hr/hr.types` usado por `utils/schedulePdf.ts`.
-3. Fase 4: remover o backend antigo (`modules/hr`, `routes/hr*`) e os aliases `/api/hr/*` dos documentos; fase 5: arquivar tabelas só do RH antigo (validar retenção RGPD/laboral antes).
-4. Dívida pequena: o inventário da matriz (`src/tools/authz-matrix/route-inventory.ts`) não vê rotas registadas com uma variável não-template (ex.: `document-categories` com `prefix`).
-5. Worktree `vendus-dashboard-frontend-preview` (ramo `preview/dashboard-premium-v2`) tem alterações por commitar — perguntar antes de apagar.
+1. Fase 2: saldos de abertura; refazer o quiosque no Novo RH, se voltar a ser preciso (o PIN já se define na ficha). O interruptor do Portal já não existe (2026-10-23).
+2. Portal (task «Portal premium mobile»): P1 (mobile premium, «link à parte» na 5174) e depois P2 (documentos em pastas).
+3. Fase 3: remover o frontend antigo (`pages/hr`, `modules/hr`, `HrEmployeeDetailPage`) com redirecionamentos para `/hr/novo/*`; depois a D3 dos documentos (apagar `hrRoutes.ts` rotas `/employees/:id/documents*` + `hrDocumentService.ts`) e mover `pages/hr/hr.types` usado por `utils/schedulePdf.ts`.
+4. Fase 4: remover o backend antigo (`modules/hr`, `routes/hr*`) e os aliases `/api/hr/*` dos documentos; fase 5: arquivar tabelas só do RH antigo (validar retenção RGPD/laboral antes).
+5. Dívida pequena: o inventário da matriz (`src/tools/authz-matrix/route-inventory.ts`) não vê rotas registadas com uma variável não-template (ex.: `document-categories` com `prefix`).
+6. Worktree `vendus-dashboard-frontend-preview` (ramo `preview/dashboard-premium-v2`) tem alterações por commitar — perguntar antes de apagar.
 
 **Financeiro/Stock (em pausa):**
 1. Validar a F2 no browser em produção (checklist: três modos sem perda; «Por valores» 100+250+300 = 650 € fecha, 649/651 bloqueiam; guardar rascunho → reabrir pela lista → lançar; «Decidir no documento» e desmarcar «Enviar para Stock» com motivo; «Total a pagar | Em atraso» com filtros; Centros de Custo → Aplicação em Faturas).
@@ -40,9 +41,10 @@ Atualizado: 2026-10-21 (verificado contra o repositório, os ramos e a produçã
 - **Ecrãs retirados do menu** (horários, feriados, férias, tipos de ausência, fluxos — hoje só pela API): o utilizador pediu para voltar a perguntar depois.
 
 ## Decisões de 2026-10-23
-- **Localização:** «Bloquear entradas fora da zona do centro» só bloqueia a **entrada**; saída e pausas fora do raio passam, com a localização guardada (`punch-policy.ts`). «Exigir localização» continua a valer para todas as marcações. No `rh`, por publicar.
+- **Localização:** «Bloquear entradas fora da zona do centro» só bloqueia a **entrada**; saída e pausas fora do raio passam, com a localização guardada (`punch-policy.ts`). «Exigir localização» continua a valer para todas as marcações.
 - **Cargo do Raul:** resolvido pelo utilizador.
-- **Portal (task «Portal premium mobile»):** autorizada a alteração aditiva a `GET /api/me/roster` (centro, área e modelo de cada turno; sem migração). Trabalho num worktree isolado, sem commit até aprovação.
+- **Portal — P0 (escala):** `GET /api/me/roster` passa a trazer, sem remover nada, o centro, a área e o modelo de cada turno (sem migração). O Portal mostra as folgas, todos os períodos e noturnos, os 7 dias da semana («Folga» / «Sem turno publicado») e, se houver erro, «Tentar novamente».
+- **Novo RH = único sistema:** o interruptor `time_tracking.portal.uses_novo_rh` saiu (catálogo, Configurações, `ModeAwarePortalApiAdapter`). O Portal usa sempre o Novo RH; a picagem antiga (Portal e quiosque) é sempre recusada. `/api/me/portal-mode` responde sempre `novo_rh`, até sair com o RH antigo.
 - **Fase 5 (apagar o RH antigo):** autorizada. O quiosque não é usado (as lojas picam no telemóvel).
 - **Financeiro/Stock:** fica para depois.
 
