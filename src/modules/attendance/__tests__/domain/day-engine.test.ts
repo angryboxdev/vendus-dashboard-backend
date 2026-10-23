@@ -140,8 +140,11 @@ describe("Regras ao picar", () => {
     const north = (m: number) => ({ latitude: centre.latitude + m / 111_320, longitude: centre.longitude });
     expect(Math.round(distanceMeters(centre, north(350)))).toBe(350);
     const policy = { ...OFF, requireCoordinates: true, blockOutsideGeofence: true };
-    expect(checkPunch(policy, { ...CTX, isEntry: false, ...north(350), location: centre })).toBe("outside_geofence");
-    expect(checkPunch(policy, { ...CTX, isEntry: false, ...north(150), location: centre })).toBeNull();
+    // Entrada: fora do raio recusa, dentro aceita.
+    expect(checkPunch(policy, { ...CTX, ...north(350), location: centre })).toBe("outside_geofence");
+    expect(checkPunch(policy, { ...CTX, ...north(150), location: centre })).toBeNull();
+    // Saída/pausas: fora do raio passa (2026-10-23), mas continua a exigir a localização.
+    expect(checkPunch(policy, { ...CTX, isEntry: false, ...north(350), location: centre })).toBeNull();
     expect(checkPunch(policy, { ...CTX, isEntry: false, location: centre })).toBe("coordinates_required");
   });
 

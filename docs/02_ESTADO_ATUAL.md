@@ -37,8 +37,14 @@ Atualizado: 2026-10-21 (verificado contra o repositório, os ramos e a produçã
 3. Com autorização do utilizador: iniciar a F3.
 
 ## Perguntas em aberto (voltar a perguntar ao utilizador)
-- **Localização na saída** (2026-10-22): hoje «Exigir localização» e «Bloquear fora da zona» valem para entrada, saída e pausas (`punch-policy.ts`); só o «cedo demais» é só da entrada. Proposta: opção «Bloquear fora da zona só na entrada» (a saída fora da zona passa, guardando a localização). O utilizador pediu para voltar a perguntar mais tarde.
-- **Cargo do Raul volta para «Gerente»** (2026-10-22): sem diagnóstico. Perguntar onde testou (local/produção) e se apareceu mensagem vermelha; proposta de mostrar o erro da gravação na barra «Guardar alterações» da ficha.
+- **Ecrãs retirados do menu** (horários, feriados, férias, tipos de ausência, fluxos — hoje só pela API): o utilizador pediu para voltar a perguntar depois.
+
+## Decisões de 2026-10-23
+- **Localização:** «Bloquear entradas fora da zona do centro» só bloqueia a **entrada**; saída e pausas fora do raio passam, com a localização guardada (). «Exigir localização» continua a valer para todas as marcações. No , por publicar.
+- **Cargo do Raul:** resolvido pelo utilizador.
+- **Portal (task «Portal premium mobile»):** autorizada a alteração aditiva a  (centro, área e modelo de cada turno; sem migração). Trabalho num worktree isolado, sem commit até aprovação.
+- **Fase 5 (apagar o RH antigo):** autorizada. O quiosque não é usado (as lojas picam no telemóvel).
+- **Financeiro/Stock:** fica para depois.
 
 ## Pendências operacionais (produção)
 - Correr `POST /api/fiscal-documents/backfill` com `{ "dryRun": true }` e rever (precisa de sessão de gestor).

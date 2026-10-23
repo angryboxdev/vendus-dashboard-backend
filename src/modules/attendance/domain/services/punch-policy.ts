@@ -45,7 +45,8 @@ export function checkPunch(policy: PunchPolicy, ctx: PunchContext): PunchRefusal
     if (ctx.nowUtc < earliest) return "before_start";
   }
   if (policy.requireCoordinates && (ctx.latitude === null || ctx.longitude === null)) return "coordinates_required";
-  if (policy.blockOutsideGeofence && ctx.location?.latitude != null && ctx.location.longitude != null) {
+  // Fora da zona só se bloqueia a entrada (decisão do utilizador, 2026-10-23): saída e pausas fora passam, com a localização guardada.
+  if (policy.blockOutsideGeofence && ctx.isEntry && ctx.location?.latitude != null && ctx.location.longitude != null) {
     if (ctx.latitude === null || ctx.longitude === null) return "coordinates_required";
     const d = distanceMeters({ latitude: ctx.latitude, longitude: ctx.longitude }, { latitude: ctx.location.latitude, longitude: ctx.location.longitude });
     if (d > ctx.location.radiusMeters) return "outside_geofence";
