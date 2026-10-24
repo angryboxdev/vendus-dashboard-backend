@@ -932,6 +932,16 @@ export class FinancialBaseController {
         if ("defaultFinancialType" in body) data.defaultFinancialType = (body.defaultFinancialType as string | null) ?? null;
         if ("defaultFinancialMode" in body) data.defaultFinancialMode = (body.defaultFinancialMode as FinancialMode | null) ?? null;
         if ("defaultLocationId" in body) data.defaultLocationId = (body.defaultLocationId as string | null) ?? null;
+        if ("logoUrl" in body) {
+          // Só ficheiros guardados no nosso armazenamento (logótipo proposto a partir de uma fatura).
+          const logo = (body.logoUrl as string | null) ?? null;
+          const allowed = `${(process.env.SUPABASE_URL ?? "").replace(/\/$/, "")}/storage/v1/object/public/`;
+          if (logo !== null && (typeof logo !== "string" || !process.env.SUPABASE_URL || !logo.startsWith(allowed))) {
+            res.status(400).json({ error: "Logótipo inválido." });
+            return;
+          }
+          data.logoUrl = logo;
+        }
         const result = await this.updateSupplier.execute({
           organizationId: req.auth!.orgId,
           id: req.params["id"] as string,

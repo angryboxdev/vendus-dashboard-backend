@@ -59,4 +59,15 @@ describe("Supplier", () => {
       expect(s.status).toBe("inactive");
     });
   });
+  describe("logótipo (E3b)", () => {
+    it("começa sem logótipo; update define e remove; ativar/desativar mantém", () => {
+      const s = Supplier.create({ name: "Fornecedor Teste" });
+      expect(s.logoUrl).toBeNull();
+      const withLogo = s.update({ logoUrl: "https://exemplo.supabase.co/storage/v1/object/public/invoice-documents/org/logo.png" });
+      expect(withLogo.logoUrl).toContain("logo.png");
+      expect(withLogo.update({ notes: "x" }).logoUrl).toBe(withLogo.logoUrl);
+      expect(withLogo.deactivate().logoUrl).toBe(withLogo.logoUrl);
+      expect(withLogo.update({ logoUrl: null }).logoUrl).toBeNull();
+    });
+  });
 });

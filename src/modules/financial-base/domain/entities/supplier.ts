@@ -44,6 +44,8 @@ interface SupplierProps {
   defaultFinancialMode?: FinancialMode | null;
   /** Destino habitual — uma loja concreta, nunca «todas». */
   defaultLocationId?: string | null;
+  /** Logótipo do fornecedor (URL do ficheiro guardado; vindo de uma fatura confirmada pela pessoa ou enviado à mão). */
+  logoUrl?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -63,6 +65,7 @@ export interface UpdateSupplierData {
   defaultFinancialType?: string | null;
   defaultFinancialMode?: FinancialMode | null;
   defaultLocationId?: string | null;
+  logoUrl?: string | null;
 }
 
 export class Supplier {
@@ -82,6 +85,7 @@ export class Supplier {
   readonly defaultFinancialType: string | null;
   readonly defaultFinancialMode: FinancialMode | null;
   readonly defaultLocationId: string | null;
+  readonly logoUrl: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 
@@ -102,6 +106,7 @@ export class Supplier {
     this.defaultFinancialType = props.defaultFinancialType ?? null;
     this.defaultFinancialMode = props.defaultFinancialMode ?? null;
     this.defaultLocationId = props.defaultLocationId ?? null;
+    this.logoUrl = props.logoUrl ?? null;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
   }
@@ -182,6 +187,7 @@ export class Supplier {
       defaultFinancialType: data.defaultFinancialType !== undefined ? data.defaultFinancialType : this.defaultFinancialType,
       defaultFinancialMode: data.defaultFinancialMode !== undefined ? data.defaultFinancialMode : this.defaultFinancialMode,
       defaultLocationId: data.defaultLocationId !== undefined ? data.defaultLocationId : this.defaultLocationId,
+      logoUrl: data.logoUrl !== undefined ? data.logoUrl : this.logoUrl,
       createdAt: this.createdAt,
       updatedAt: new Date(),
     });
@@ -213,6 +219,7 @@ export class Supplier {
       defaultFinancialType: this.defaultFinancialType,
       defaultFinancialMode: this.defaultFinancialMode,
       defaultLocationId: this.defaultLocationId,
+      logoUrl: this.logoUrl,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };

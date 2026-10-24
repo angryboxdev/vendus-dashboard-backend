@@ -75,6 +75,22 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     return { reading: accepted ? reading : null, qr: validQr, qrType: qr?.documentType ?? null };
   }
 
+  /**
+   * Logótipo da fatura para um fornecedor ainda sem logótipo (E3b): guardado no armazenamento da
+   * organização e devolvido como sugestão — só fica no fornecedor se a pessoa confirmar. Nunca falha o import.
+   */
+  private async suggestLogo(command: ImportInvoiceCommand): Promise<{ url: string; width: number; height: number } | null> {
+    if (!this.smart || command.mimeType !== "application/pdf") return null;
+    try {
+      const logo = await this.smart.pdf.extractLogo(command.fileBuffer);
+      if (!logo) return null;
+      const url = await this.storage.store(logo.png, "logo-fornecedor.png", "image/png", command.organizationId);
+      return { url, width: logo.width, height: logo.height };
+    } catch {
+      return null;
+    }
+  }
+
   /** Categoria sugerida por linha; nunca faz falhar a importação. */
   private async classify(organizationId: ImportInvoiceCommand["organizationId"], supplierId: string | null, extraction: AiExtractionResult): Promise<LineClassification[]> {
     if (!this.smart?.classifyLines || extraction.lines.length === 0) return [];
@@ -279,6 +295,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       await this.smart.readingWrite.save(command.organizationId, finalInvoice.id, { fiscalQr: (reading?.qr ?? qr)?.fields ?? null, source: reading ? "deterministic" : "ai" }).catch(() => undefined);
     }
     const classifications = await this.classify(command.organizationId, supplierMatch?.id ?? null, extraction);
+    const logoSuggestion = supplierMatch?.logoUrl ? null : await this.suggestLogo(command);
     const byIndex = new Map(classifications.map((c) => [c.index, c]));
 
     return {
@@ -328,6 +345,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
           ms: readMs,
         },
       }),
+      ...(logoSuggestion && { logoSuggestion }),
       fiscal: {
         kind: fiscalCheck.kind,
         ...(fiscalCheck.kind === "existing_stock_only" && { identityId: fiscalCheck.identityId }),
