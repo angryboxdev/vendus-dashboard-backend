@@ -1,10 +1,10 @@
 # Matriz de autorização (perfil × endpoint)
 
-> Gerado por `npm run authz:matrix` em 2026-10-22. Não editar à mão.
+> Gerado por `npm run authz:matrix` em 2026-10-24. Não editar à mão.
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 799 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 802 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -356,8 +356,10 @@ Endpoints: 799 · pré-autenticação: 23 · não classificados: 0
 | POST | `/api/me/document-distributions/:id/confirm` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/document-distributions/:id/download-url` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/documents` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| POST | `/api/me/documents` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/documents/:id/download-url` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | POST | `/api/me/documents/:id/replace` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
+| GET | `/api/me/documents/checklist` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/features` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/leave` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
 | GET | `/api/me/notifications` | portal | ✔ | ✔ | ✔ | ✔ | ✔ |
@@ -475,6 +477,7 @@ Endpoints: 799 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/novo-rh/document-distributions/by-employee/:employeeId` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/documents/archive` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/documents/overview` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/documents/pending` | permission:hr.documents:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/google-reviews` | permission:hr.overview:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | DELETE | `/api/novo-rh/google-reviews/locations/:id` | permission:company.locations:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | PUT | `/api/novo-rh/google-reviews/locations/:id` | permission:company.locations:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
