@@ -10,7 +10,7 @@ import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { MakroLayout } from "../../domain/services/reading/makro-layout.js";
 import type { PdfContent } from "../../domain/entities/invoice-reading.js";
 import type { ClassifyInvoiceLinesPort } from "../../domain/ports/in/classify-invoice-lines.port.js";
-import { syntheticMakro } from "../domain/reading/synthetic-makro.js";
+import { QR, syntheticMakro } from "../domain/reading/synthetic-makro.js";
 
 const ORG = mintOrganizationId("org-test");
 
@@ -75,6 +75,16 @@ describe("ImportInvoiceUseCase — leitor inteligente (E3)", () => {
     const r = await run();
     expect(r.extractedLines[0]!.suggestedCostCenterCategoryId).toBeUndefined();
     expect(r.invoice.totalWithVat).toBe(8063);
+  });
+
+  test("pró-forma (QR tipo PF) é recusada antes de guardar o ficheiro; nota de crédito (NC) é aceite", async () => {
+    const pf = syntheticMakro({ qr: QR.replace("D:FT", "D:PF") });
+    const s = setup(pf);
+    await expect(s.run()).rejects.toThrow(/fatura pró-forma \(PF\).*não gera conta a pagar/);
+    expect(s.ai.calls).toBe(0);
+    const nc = setup(syntheticMakro({ qr: QR.replace("D:FT", "D:NC") }));
+    const r = await nc.run();
+    expect(r.invoice.documentType).toBe("credit_note");
   });
 
   test("layout desconhecido ou PDF sem texto → IA como hoje (uma chamada)", async () => {

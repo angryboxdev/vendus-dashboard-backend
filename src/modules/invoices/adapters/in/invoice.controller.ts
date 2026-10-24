@@ -40,6 +40,7 @@ import {
   LinesTotalMismatchError,
   InvoiceLinesLockedByAppliedStockReviewError,
   StockReviewRemovalConfirmationRequiredError,
+  NotAFiscalInvoiceError,
 } from "../../domain/errors.js";
 
 interface InvoicePorts {
@@ -115,6 +116,10 @@ function handleError(res: import("express").Response, err: unknown): void {
   }
   if (err instanceof StockReviewRemovalConfirmationRequiredError) {
     res.status(409).json({ error: err.message, requiresConfirmation: true });
+    return;
+  }
+  if (err instanceof NotAFiscalInvoiceError) {
+    res.status(422).json({ error: err.message, code: "not_fiscal_invoice", documentType: err.documentType });
     return;
   }
   if (err instanceof LineDetailModeError || err instanceof LinesTotalMismatchError) {

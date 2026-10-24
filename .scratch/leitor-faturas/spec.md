@@ -54,6 +54,12 @@ Origem: TASK V2 do utilizador (2026-10-24) + anexo de auditoria de 3 faturas Mak
 - Prova (fora do repo): 19/23 faturas de outros fornecedores com QR prontas sem IA (Pestsafe, Bricolage, Cartrack, Algeco, Uber, AcustekPro…); 4 caem para a IA com dados do QR (Algeco 3846, 2 Bricolage, CDM — por investigar). Regressão: fixture Makro 100%, 41 Makro prontas, AT/SS iguais. CEPSA descartadas a pedido do utilizador.
 - Categoria «Controlo de pragas» (EST.08, Estrutura & Instalações) aprovada pelo utilizador: migração `20261107100000_cost_center_pest_control` (+ rollback, validada em PGlite); regra de palavras-chave (desratização, pragas…) já aponta para ela.
 
+## E3b-2 — variações de faturas (2026-10-24)
+- Notas de crédito: 3 reais (Justdrinks, 2 Makro) lidas sem IA como crédito; linhas a negativo tratadas em absoluto.
+- Só FT/FS/FR/NC/ND: pró-forma (caso real «FP 2026/287»), orçamentos, guias e recibos recusados com mensagem clara (decisão do utilizador).
+- Corrigidos: separador de milhares com espaço (Algeco), preços com IVA incluído (Bricolage), autoliquidação com IVA 0 € (CDM), quadro de especificação do imposto, descrições longas.
+- Prova local: 26/26 documentos com QR de outros fornecedores e NC prontos sem IA; Makro 100%; AT/SS iguais.
+
 ## Riscos / pendências
 - O leitor ainda não está ligado ao fluxo real (E3): o import continua a usar só a IA.
 - `pdfjs-dist` e `@napi-rs/canvas` são usados diretamente mas vêm como dependências do `pdf-parse`/`pdf-to-img` (versão do pdfjs fixada em `overrides`). Se quiserem, declarar `pdfjs-dist` em `dependencies` (mesma versão).

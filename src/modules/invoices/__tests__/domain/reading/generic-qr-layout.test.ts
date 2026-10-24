@@ -93,6 +93,47 @@ describe("leitor genérico — qualquer fatura com QR fiscal", () => {
     expect(r.issues.find((i) => i.code === "qr_totals_inconsistent")).toMatchObject({ blocking: false });
   });
 
+  const simple = (rows: [string, string, string, string][], qr: string) =>
+    readInvoice({
+      pages: [page(1, [
+        row(500, [[40, "Descrição"], [300, "Qtd."], [360, "Preço Unitário"], [450, "IVA"], [520, "Valor"]]),
+        ...rows.map(([d, q, u, v], i) => row(480 - i * 12, [[40, d], [300, q], [360, u], [450, "23%"], [520, v]])),
+        row(300, [[40, "Total"], [520, "x"]]),
+      ])],
+      qrCodes: [{ page: 1, text: qr }],
+    }, layouts);
+
+  test("nota de crédito com linhas a negativo: valores em absoluto (o QR já diz que é crédito)", () => {
+    const r = simple([["Devolução A", "1", "-50,00", "-50,00"], ["Devolução B", "2", "-10,00", "-20,00"]],
+      "A:599999993*B:999999990*C:PT*D:NC*E:N*F:20260801*G:NC A/1*H:ABCD-3*I1:PT*I7:70.00*I8:16.10*N:16.10*O:86.10*Q:ab12*R:1");
+    expect(r.status).toBe("ready");
+    expect(r.lines.map((l) => l.netCents)).toEqual([5000, 2000]);
+  });
+
+  test("preços com IVA incluído (retalho): bases repartidas a partir da base do QR, com aviso", () => {
+    // 36,99 + 19,29 = 56,28 com IVA; base do QR 45,76 (as bases impressas por linha somariam 45,75).
+    const r = simple([["Ventoinha", "1", "36,99", "36,99"], ["Banco", "1", "19,29", "19,29"]],
+      "A:599999993*B:999999990*C:PT*D:FS*E:N*F:20260613*G:FS B/1*H:ABCD-4*I1:PT*I7:45.76*I8:10.52*N:10.52*O:56.28*Q:ab12*R:1");
+    expect(r.status).toBe("ready");
+    expect(r.lines.reduce((a, l) => a + l.netCents, 0)).toBe(4576);
+    expect(r.issues.map((i) => i.code)).toContain("line_bases_from_vat_inclusive");
+  });
+
+  test("autoliquidação: grupo tributado com IVA 0 € no QR → taxa 0% com aviso; milhares com espaço lidos inteiros", () => {
+    const p = page(1, [
+      row(548, [[19, "Nº"], [89, "Descrição"], [218, "Qtd."], [304, "Preço Unitário"], [460, "% IVA"], [529, "Valor"]]),
+      row(529, [[19, "800257"], [230, "1"], [324, "11 520,00"], [478, "23"], [515, "11 520,00"]]),
+      row(514, [[89, "Pavimento (fornecimento e instalação, 50% da proposta)"]]),
+      row(473, [[19, "Especificação do Imposto"], [429, "Total EUR Excl. IVA"], [525, "11 520,00"]]),
+    ]);
+    const r = readInvoice({ pages: [p], qrCodes: [{ page: 1, text: "A:599999993*B:999999990*C:PT*D:FT*E:N*F:20251112*G:FT P/1*H:ABCD-5*I1:PT*I7:11520.00*N:0.00*O:11520.00*Q:ab12*R:1" }] }, layouts);
+    expect(r.status).toBe("ready");
+    expect(r.lines).toHaveLength(1);
+    expect(r.lines[0]).toMatchObject({ netCents: 1152000, vatRate: "0" });
+    expect(r.lines[0]!.description).toContain("50% da proposta");
+    expect(r.issues.find((i) => i.code === "qr_vat_zero_in_taxed_band")).toMatchObject({ blocking: false });
+  });
+
   test("sem QR o leitor genérico não se aplica (vai para a IA); Makro continua no leitor próprio", () => {
     expect(readInvoice({ ...service(), qrCodes: [] }, layouts).status).toBe("unsupported");
     const m = readInvoice(syntheticMakro(), layouts);
