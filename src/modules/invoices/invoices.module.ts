@@ -30,6 +30,9 @@ import { ListInvoiceLinesUseCase } from "./application/use-cases/list-invoice-li
 import { GetInvoiceUseCase } from "./application/use-cases/get-invoice.use-case.js";
 import { DeleteInvoiceUseCase } from "./application/use-cases/delete-invoice.use-case.js";
 import { ImportInvoiceUseCase } from "./application/use-cases/import-invoice.use-case.js";
+import { ReadPaymentDocumentUseCase } from "./application/use-cases/read-payment-document.use-case.js";
+import { PdfjsContentReaderAdapter } from "./adapters/out/pdfjs-content-reader.adapter.js";
+import { SupabaseObligationCandidatesAdapter } from "./adapters/out/supabase-obligation-candidates.adapter.js";
 import { ConfirmImportedInvoiceUseCase } from "./application/use-cases/confirm-imported-invoice.use-case.js";
 import { GetInvoiceAlertsUseCase } from "./application/use-cases/get-invoice-alerts.use-case.js";
 import { ProcessDirectDebitsUseCase } from "./application/use-cases/process-direct-debits.use-case.js";
@@ -142,6 +145,7 @@ export function createInvoicesModule(
     deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, audit),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),
     importInvoice: new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint, organizationIdentityRead, fiscal),
+    readPaymentDocument: new ReadPaymentDocumentUseCase(new PdfjsContentReaderAdapter(), new SupabaseObligationCandidatesAdapter(createScopedQuery), supplierLookup, organizationIdentityRead),
     confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit, stockRouting, categoryReader, allocationRepo),
     getInvoiceAlerts: new GetInvoiceAlertsUseCase(invoiceRepo),
     processDirectDebits,

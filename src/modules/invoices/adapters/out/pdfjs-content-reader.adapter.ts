@@ -2,6 +2,8 @@ import jsqrModule from "jsqr";
 import { pdf as pdfToImg } from "pdf-to-img";
 import type { PdfContentReaderPort } from "../../domain/ports/out/pdf-content-reader.port.js";
 import type { PdfContent, PdfWord } from "../../domain/entities/invoice-reading.js";
+import type { BarcodeState } from "../../domain/entities/payment-document.js";
+import { scanCode128 } from "./barcode/code128.js";
 
 /**
  * Lê o PDF localmente: texto nativo com posições (pdfjs, já trazido pelo `pdf-parse`)
@@ -17,6 +19,7 @@ const jsqrExport = jsqrModule as unknown as JsQr | { default: JsQr };
 const jsQR: JsQr = typeof jsqrExport === "function" ? jsqrExport : jsqrExport.default;
 
 const MAX_PAGES = 30;
+const IMAGE_TIMEOUT_MS = 1500;
 
 function toRgba(img: ImageData): Uint8ClampedArray {
   const { width: w, height: h, data, kind } = img;
@@ -101,10 +104,16 @@ export class PdfjsContentReaderAdapter implements PdfContentReaderPort {
         for (let i = 0; i < ops.fnArray.length; i++) {
           if (ops.fnArray[i] !== pdfjs.OPS.paintImageXObject) continue;
           const name = ops.argsArray[i][0] as string;
+          // Algumas imagens nunca chegam a ser resolvidas pelo pdfjs: sem limite, a leitura ficava pendurada.
           const img = await new Promise<ImageData | null>((resolve) => {
+            const timer = setTimeout(() => resolve(null), IMAGE_TIMEOUT_MS);
             try {
-              page.objs.get(name, (v: ImageData | null) => resolve(v));
+              page.objs.get(name, (v: ImageData | null) => {
+                clearTimeout(timer);
+                resolve(v);
+              });
             } catch {
+              clearTimeout(timer);
               resolve(null);
             }
           });
@@ -120,6 +129,44 @@ export class PdfjsContentReaderAdapter implements PdfContentReaderPort {
     } finally {
       await doc.destroy().catch(() => undefined);
     }
+  }
+
+  /**
+   * CODE128 (raster ou vetorial): rasteriza página a página em resolução
+   * progressiva — 2× e 3×; 4× só se o código estiver visível mas ilegível.
+   */
+  async readBarcode(fileBuffer: Buffer, maxPages: number): Promise<BarcodeState> {
+    const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+    let unreadablePage: number | null = null;
+    const scanAt = async (scale: number): Promise<BarcodeState[]> => {
+      const out: BarcodeState[] = [];
+      let page = 0;
+      for await (const png of await pdfToImg(fileBuffer, { scale })) {
+        if (++page > maxPages) break;
+        const image = await loadImage(png as Buffer);
+        const canvas = createCanvas(image.width, image.height);
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(image, 0, 0);
+        const { data, width, height } = ctx.getImageData(0, 0, image.width, image.height);
+        const scan = scanCode128(data, width, height);
+        if (scan.status === "decoded") return [{ status: "decoded", symbology: "CODE128", payload: scan.payload, page }];
+        if (scan.status === "unreadable") out.push({ status: "unreadable", page });
+      }
+      return out;
+    };
+    try {
+      for (const scale of [2, 3, 4]) {
+        if (scale === 4 && unreadablePage === null) break;
+        const found = await scanAt(scale);
+        const decoded = found.find((f) => f.status === "decoded");
+        if (decoded) return decoded;
+        const unreadable = found.find((f) => f.status === "unreadable");
+        if (unreadable && unreadable.status === "unreadable") unreadablePage = unreadable.page;
+      }
+    } catch {
+      // Falha a rasterizar: os campos continuam a vir do texto.
+    }
+    return unreadablePage !== null ? { status: "unreadable", page: unreadablePage } : { status: "absent" };
   }
 
   /** QR desenhado em vetor (sem imagem): rasterizar só a 1.ª página. */
