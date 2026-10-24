@@ -7,6 +7,7 @@ import type { DocumentCategoryRepositoryPort } from "../../domain/ports/out/docu
 import type { DocumentRepositoryPort } from "../../domain/ports/out/document-repository.port.js";
 import type { EmployeeDirectoryPort } from "../../domain/ports/out/employee-directory.port.js";
 import { canReplaceDocument } from "../../domain/services/document-replacement.service.js";
+import { DOCUMENT_CATEGORY_BASE_LABELS } from "../../domain/services/document-status.service.js";
 import { resolvePortalEmployeeId } from "./employee-document-shared.js";
 
 export function toMyDocumentDTO(
@@ -17,8 +18,11 @@ export function toMyDocumentDTO(
 ): MyDocumentDTO {
   return {
     id: d.id,
-    categoryLabel: cat?.label ?? d.category,
+    // Identificação (categorias fixas, fora da tabela) com o nome amigável — nunca o código interno.
+    categoryLabel: cat?.label ?? DOCUMENT_CATEGORY_BASE_LABELS[d.category] ?? d.category,
+    category: d.category,
     fileName: d.fileName,
+    mimeType: d.mimeType,
     status: d.status,
     canReplace: canReplaceDocument(d, today).ok,
     lastRejection,

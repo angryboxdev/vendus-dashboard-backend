@@ -52,6 +52,14 @@ describe("Portal — Documentos", () => {
     ]);
   });
 
+  it("identificação com o nome amigável (nunca o código) e categoria/tipo para as pastas", async () => {
+    const { employees, carla, who } = setup();
+    const documents = new FakeDocumentRepository();
+    documents.seed(ORG, doc(carla.id, "cartao_cidadao"));
+    const [d] = await new ListMyDocumentsUseCase(employees, documents, new FakeDocumentCategoryRepository()).execute(who);
+    expect(d).toMatchObject({ categoryLabel: "Cartão de Cidadão", category: "cartao_cidadao", mimeType: "application/pdf" });
+  });
+
   it("conta sem ficha ligada → PortalNotLinkedError", async () => {
     const { employees } = setup();
     const uc = new ListMyDocumentsUseCase(employees, new FakeDocumentRepository(), new FakeDocumentCategoryRepository());

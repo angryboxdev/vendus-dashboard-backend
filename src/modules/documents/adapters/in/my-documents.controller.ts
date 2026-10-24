@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import { PortalBadRequestError, PortalNotLinkedError, PortalResourceNotFoundError } from "../../domain/errors.js";
-import type { GetMyDocumentUrlPort, ListMyDocumentsPort, PortalIdentity, ReplaceMyDocumentPort } from "../../domain/ports/in/my-document.ports.js";
+import type { GetMyDocumentChecklistPort, GetMyDocumentUrlPort, ListMyDocumentsPort, PortalIdentity, ReplaceMyDocumentPort, SubmitMyDocumentPort } from "../../domain/ports/in/my-document.ports.js";
 
 function handleError(e: unknown, res: Response): void {
   if (e instanceof PortalNotLinkedError) {
@@ -42,6 +42,8 @@ export class MyDocumentsController {
     private readonly listMyDocuments: ListMyDocumentsPort,
     private readonly getMyDocumentUrl: GetMyDocumentUrlPort,
     private readonly replaceMyDocument: ReplaceMyDocumentPort,
+    private readonly getMyChecklist: GetMyDocumentChecklistPort,
+    private readonly submitMyDocument: SubmitMyDocumentPort,
   ) {
     this.router = Router();
     const run = (fn: (req: Request) => Promise<unknown>) => async (req: Request, res: Response) => {
@@ -52,6 +54,31 @@ export class MyDocumentsController {
       }
     };
     this.router.get("/me/documents", run((req) => this.listMyDocuments.execute(identity(req))));
+    /** Para onde posso enviar e o que falta (obrigatórios). */
+    this.router.get("/me/documents/checklist", run((req) => this.getMyChecklist.execute(identity(req))));
+    /** Enviar um documento novo para uma pasta/categoria — fica «Em validação» até o RH ou um gerente validar. */
+    this.router.post("/me/documents", portalUpload.single("file"), async (req, res) => {
+      try {
+        if (!req.file) {
+          res.status(400).json({ error: "Escolha um PDF ou uma foto (JPG/PNG) até 10 MB." });
+          return;
+        }
+        const body = (req.body ?? {}) as Record<string, string | undefined>;
+        res.status(201).json(
+          await this.submitMyDocument.execute({
+            ...identity(req),
+            category: body.category ?? "",
+            period: body.period || null,
+            buffer: req.file.buffer,
+            filename: req.file.originalname,
+            mimeType: req.file.mimetype,
+            ...(body.expiresAt ? { expiresAt: body.expiresAt } : {}),
+          }),
+        );
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
     this.router.get("/me/documents/:id/download-url", run((req) => this.getMyDocumentUrl.execute(identity(req), req.params.id as string)));
     this.router.post("/me/documents/:id/replace", portalUpload.single("file"), async (req, res) => {
       try {

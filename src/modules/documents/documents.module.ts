@@ -37,6 +37,8 @@ import { GetEmployeeDocumentSummaryUseCase } from "./application/use-cases/get-e
 import { ListPendingDocumentsUseCase, ReplaceMyDocumentUseCase, ReviewEmployeeDocumentUseCase } from "./application/use-cases/employee-document-review.use-cases.js";
 import { ImportPayslipsUseCase, PreviewPayslipImportUseCase } from "./application/use-cases/payslip-import.use-cases.js";
 import { GetMyDocumentUrlUseCase, ListMyDocumentsUseCase } from "./application/use-cases/my-documents.use-cases.js";
+import { GetMyDocumentChecklistUseCase, SubmitMyDocumentUseCase } from "./application/use-cases/my-document-submit.use-cases.js";
+import { PendingDocumentsController } from "./adapters/in/pending-documents.controller.js";
 import { EmployeeDocumentsController } from "./adapters/in/employee-documents.controller.js";
 import { PayslipsController } from "./adapters/in/payslips.controller.js";
 import { MyDocumentsController } from "./adapters/in/my-documents.controller.js";
@@ -102,23 +104,28 @@ export function createDocumentsModule(): {
     new PreviewPayslipImportUseCase(employees, documentRepository, categoryRepository, new PdfParseTextExtractorAdapter()),
     new ImportPayslipsUseCase(documentRepository, categoryRepository, uploadEmployeeDocument, replaceEmployeeDocument),
   );
+  const replaceMyDocument = new ReplaceMyDocumentUseCase(employees, documentRepository, categoryRepository, employeeFiles, auditLog, lisbonToday);
   const myDocumentsController = new MyDocumentsController(
     new ListMyDocumentsUseCase(employees, documentRepository, categoryRepository, lisbonToday),
     new GetMyDocumentUrlUseCase(employees, getEmployeeDocumentDownloadUrl),
-    new ReplaceMyDocumentUseCase(employees, documentRepository, categoryRepository, employeeFiles, auditLog, lisbonToday),
+    replaceMyDocument,
+    new GetMyDocumentChecklistUseCase(employees, documentRepository, categoryRepository, lisbonToday),
+    new SubmitMyDocumentUseCase(employees, documentRepository, categoryRepository, employeeFiles, auditLog, replaceMyDocument, lisbonToday),
   );
+  const listPendingDocuments = new ListPendingDocumentsUseCase(documentRepository, employees, categoryRepository);
 
   const router = createRouter();
   router.use(categoriesController.router);
   router.use(companyDocumentsController.router);
   router.use(employeeDocumentsController.router);
   router.use(payslipsController.router);
+  router.use(new PendingDocumentsController(listPendingDocuments).router);
   // `listCompanyDocuments` é usado pelo `calendar` (prazos de validade, ticket 05);
-  // `listPendingDocuments` pela caixa de pedidos do RH antigo (`/hr/requests`).
+  // `listPendingDocuments` pela caixa de pedidos do RH antigo (`/hr/requests`) e por `/novo-rh/documents/pending`.
   return {
     router,
     meRouter: myDocumentsController.router,
     listCompanyDocuments,
-    listPendingDocuments: new ListPendingDocumentsUseCase(documentRepository, employees, categoryRepository),
+    listPendingDocuments,
   };
 }
