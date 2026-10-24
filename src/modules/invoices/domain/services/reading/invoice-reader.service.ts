@@ -1,5 +1,5 @@
 import { computeDocumentAmounts, distribute } from "../../../../../kernel/money/document-amounts.js";
-import { dec, decToString, parseDecimal, type Dec } from "../../../../../kernel/money/decimal.js";
+import { dec, decToString, parseDecimal, pctOfCents, type Dec } from "../../../../../kernel/money/decimal.js";
 import type { FiscalQr, InvoiceReading, PdfContent, ReadingIssue, ReadLine } from "../../entities/invoice-reading.js";
 import { checkQrTotals, looksLikeAtQr, parseAtQr, qrBands } from "./fiscal-qr.js";
 import type { InvoiceLayout, LayoutResult } from "./invoice-layout.js";
@@ -33,22 +33,29 @@ export function readFiscalQr(content: PdfContent): { qr: FiscalQr | null; issues
   const parsed = parseAtQr(candidates[0]!.text);
   if (!parsed.ok) return { qr: null, issues: [{ code: "qr_invalid", blocking: true, detail: `QR fiscal inválido (${parsed.reason}).` }] };
   const issues: ReadingIssue[] = [];
-  const { taxDiffCents, totalDiffCents } = checkQrTotals(parsed.qr);
+  let qr = parsed.qr;
+  let { taxDiffCents, totalDiffCents } = checkQrTotals(qr);
+  // Alguns emissores repetem o total no campo L («não sujeito»): sem esse L tudo fecha → ignora-se o L.
+  if (!taxDiffCents && totalDiffCents && qr.notSubjectCents && totalDiffCents + qr.notSubjectCents === 0) {
+    qr = { ...qr, notSubjectCents: 0 };
+    ({ taxDiffCents, totalDiffCents } = checkQrTotals(qr));
+    issues.push({ code: "qr_totals_inconsistent", blocking: false, detail: `QR com o campo L (não sujeito) igual ao total (${eur(parsed.qr.notSubjectCents)} €) — ignorado; bases e IVA do QR fecham com o total.` });
+  }
   if (taxDiffCents || totalDiffCents) issues.push({ code: "qr_totals_inconsistent", blocking: true, detail: `QR incoerente: impostos ${eur(taxDiffCents)} €, total ${eur(totalDiffCents)} €.` });
-  return { qr: parsed.qr, issues };
+  return { qr, issues };
 }
 
 export function readInvoice(content: PdfContent, layouts: InvoiceLayout[]): InvoiceReading {
   const { qr, issues } = readFiscalQr(content);
   const layout = layouts.find((l) => l.detect(content, qr)) ?? null;
   const emptyTotals = { grossCents: 0, discountCents: 0, netCents: 0, vatCents: 0, totalCents: qr?.totalCents ?? null, depositsCents: 0, productUnits: "0", depositUnits: "0" };
-  const qrHeader = { supplierName: null, issuerNif: qr?.issuerNif ?? null, buyerNif: qr?.buyerNif ?? null, documentType: qr?.documentType ?? null, documentNumber: qr?.documentNumber ?? null, atcud: qr?.atcud ?? null, issueDate: qr?.issueDate ?? null };
+  const qrHeader = { supplierName: null, dueDate: null, issuerNif: qr?.issuerNif ?? null, buyerNif: qr?.buyerNif ?? null, documentType: qr?.documentType ?? null, documentNumber: qr?.documentNumber ?? null, atcud: qr?.atcud ?? null, issueDate: qr?.issueDate ?? null };
   if (!layout) {
     issues.push({ code: "layout_unknown", blocking: true, detail: "Layout de fatura sem leitor determinístico." });
     return { layout: null, qr, header: qrHeader, lines: [], vatTable: [], totals: emptyTotals, issues, status: "unsupported" };
   }
 
-  const parsed = layout.parse(content);
+  const parsed = layout.parse(content, qr);
   issues.push(...parsed.issues);
   const discountByLine = allocateDiscounts(parsed, issues);
 
@@ -74,7 +81,11 @@ export function readInvoice(content: PdfContent, layouts: InvoiceLayout[]): Invo
     footerDiscountCents: parsed.footer.discountTotalCents,
     declared: { totalCents: declaredTotal, vatByRate: parsed.footer.vatTable.map((v) => ({ rate: dec(v.rate), baseCents: v.baseCents, vatCents: v.vatCents })) },
   });
-  if (!amounts.reconciled) {
+  // Emitente que arredonda o IVA linha a linha: só se aceita se o IVA declarado por taxa for
+  // EXATAMENTE a soma do IVA de cada linha arredondado — fica como aviso (ajuste de arredondamento).
+  const perLine = perLineRoundingExplains(amounts, lines);
+  if (perLine) issues.push({ code: "vat_rounded_per_line", blocking: false, detail: `IVA arredondado linha a linha pelo emitente (${eur(perLine)} € face ao cálculo por taxa) — aplicar o ajuste de arredondamento.` });
+  if (!amounts.reconciled && perLine === null) {
     const detail = amounts.issues.map((i) => i.code + ("cents" in i ? ` ${eur(i.cents)} €` : "rate" in i ? ` ${i.rate}%: ${eur(i.computedCents)} vs ${eur(i.declaredCents)}` : "")).join("; ");
     issues.push({ code: "amounts_not_reconciled", blocking: true, detail: `Valores não fecham com o documento: ${detail}.` });
   }
@@ -118,10 +129,25 @@ export function readInvoice(content: PdfContent, layouts: InvoiceLayout[]): Invo
   };
 }
 
+/** Diferença (cêntimos) explicada por arredondamento do IVA linha a linha; null se não for só isso. */
+function perLineRoundingExplains(amounts: ReturnType<typeof computeDocumentAmounts>, lines: ReadLine[]): number | null {
+  if (amounts.reconciled) return null;
+  if (amounts.issues.some((i) => i.code !== "vat_mismatch" && i.code !== "difference")) return null;
+  let delta = 0;
+  for (const i of amounts.issues) {
+    if (i.code !== "vat_mismatch") continue;
+    const sumPerLine = lines.filter((l) => l.vatRate === i.rate).reduce((a, l) => a + pctOfCents(l.netCents, dec(i.rate)), 0);
+    if (sumPerLine !== i.declaredCents || Math.abs(i.declaredCents - i.computedCents) > 1 * Math.max(1, lines.length)) return null;
+    delta += i.declaredCents - i.computedCents;
+  }
+  return delta !== 0 && amounts.differenceCents === delta ? delta : null;
+}
+
 /** Descontos fora da linha → linha com o mesmo código de promoção (aplicados uma só vez). */
 function allocateDiscounts(parsed: LayoutResult, issues: ReadingIssue[]): Map<number, number> {
   const out = new Map<number, number>();
   const add = (idx: number, c: number) => out.set(idx, (out.get(idx) ?? 0) + c);
+  for (const l of parsed.lines) if (l.lineDiscountCents) add(l.index, l.lineDiscountCents);
   for (const d of parsed.discounts) {
     let targets = d.promoCode ? parsed.lines.filter((l) => l.promoCode === d.promoCode) : [];
     if (!targets.length) {
@@ -148,6 +174,7 @@ function crossCheckHeader(qr: FiscalQr | null, parsed: LayoutResult, issues: Rea
   }
   return {
     supplierName: h.supplierName,
+    dueDate: h.dueDate ?? null,
     issuerNif: qr?.issuerNif ?? h.issuerNif,
     buyerNif: qr?.buyerNif ?? h.buyerNif,
     documentType: qr?.documentType ?? null,

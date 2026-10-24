@@ -125,7 +125,8 @@ export type ReadingIssueCode =
   | "deposit_count_mismatch"
   | "net_total_mismatch"
   | "carried_total_mismatch"
-  | "amounts_not_reconciled";
+  | "amounts_not_reconciled"
+  | "vat_rounded_per_line";
 
 export interface ReadingIssue {
   code: ReadingIssueCode;
@@ -143,6 +144,8 @@ export interface InvoiceReading {
   header: {
     /** Nome do emitente tal como impresso (o QR não traz nome). */
     supplierName: string | null;
+    /** Vencimento impresso (AAAA-MM-DD) — o QR não o tem. */
+    dueDate: string | null;
     issuerNif: string | null;
     buyerNif: string | null;
     documentType: string | null;

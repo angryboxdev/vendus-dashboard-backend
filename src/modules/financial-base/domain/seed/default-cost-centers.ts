@@ -222,6 +222,16 @@ export const DEFAULT_COST_CENTERS: DefaultGroupSeed[] = [
         requiresChannel: false,
         requiresAllocation: false,
       },
+      {
+        code: "EST.08",
+        name: "Controlo de pragas",
+        financialType: "fixed_opex",
+        affectsDre: true,
+        affectsCashflow: true,
+        affectsProfitability: false,
+        requiresChannel: false,
+        requiresAllocation: false,
+      },
     ],
   },
   {

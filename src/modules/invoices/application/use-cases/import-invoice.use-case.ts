@@ -24,6 +24,10 @@ import type { AiExtractionResult } from "../../domain/entities/ai-extraction-res
 import type { LineClassification } from "../../domain/services/classification/line-classifier.js";
 import { readInvoice } from "../../domain/services/reading/invoice-reader.service.js";
 import { readingToExtraction } from "../../domain/services/reading/reading-to-extraction.js";
+import { sanitizeExtractedLines } from "../../domain/services/extracted-lines.service.js";
+import { applyQrToExtraction } from "../../domain/services/reading/reading-to-extraction.js";
+import { readFiscalQr } from "../../domain/services/reading/invoice-reader.service.js";
+import type { FiscalQr } from "../../domain/entities/invoice-reading.js";
 
 const AI_CONFIDENCE_REVIEW_THRESHOLD = 0.7;
 const VALUE_DISCREPANCY_MARGIN_CENTS = 2;
@@ -52,14 +56,21 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     private readonly smart: SmartReadingDeps | null = null,
   ) {}
 
-  /** Leitura determinística; null = sem layout reconhecido, sem linhas ou falha (segue a IA). */
-  private async readLocally(buffer: Buffer, mimeType: string): Promise<InvoiceReading | null> {
-    if (!this.smart || mimeType !== "application/pdf") return null;
+  /**
+   * Leitura determinística. `reading` = null quando nenhum layout serve (segue a IA); um layout
+   * genérico (estrito) só conta se reconciliar ao cêntimo. `qr` = QR fiscal válido, mesmo sem layout.
+   */
+  private async readLocally(buffer: Buffer, mimeType: string): Promise<{ reading: InvoiceReading | null; qr: FiscalQr | null }> {
+    if (!this.smart || mimeType !== "application/pdf") return { reading: null, qr: null };
     const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), LOCAL_READ_TIMEOUT_MS).unref?.());
     const content = await Promise.race([this.smart.pdf.read(buffer, mimeType).catch(() => null), timeout]);
-    if (!content) return null;
+    if (!content) return { reading: null, qr: null };
+    const { qr, issues } = readFiscalQr(content);
+    const validQr = qr && !issues.some((i) => i.blocking) ? qr : null;
     const reading = readInvoice(content, this.smart.layouts);
-    return reading.status !== "unsupported" && reading.lines.length > 0 ? reading : null;
+    const layout = this.smart.layouts.find((l) => l.id === reading.layout);
+    const accepted = reading.status !== "unsupported" && reading.lines.length > 0 && (!layout?.strict || reading.status === "ready");
+    return { reading: accepted ? reading : null, qr: validQr };
   }
 
   /** Categoria sugerida por linha; nunca faz falhar a importação. */
@@ -92,8 +103,18 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     // 2. Leitor determinístico primeiro (QR fiscal + texto do PDF, sem IA); sem layout conhecido → IA
     //    (buffer enviado diretamente — sem URL público).
     const t0 = Date.now();
-    const reading = await this.readLocally(command.fileBuffer, command.mimeType);
-    const extraction = reading ? readingToExtraction(reading) : await this.aiExtraction.extract(command.fileBuffer, command.mimeType);
+    const { reading, qr } = await this.readLocally(command.fileBuffer, command.mimeType);
+    let lineNotes: { code: string; blocking: boolean; detail: string }[] = [];
+    let extraction: AiExtractionResult;
+    if (reading) extraction = readingToExtraction(reading);
+    else {
+      // Linhas da IA: quantidade × preço tem de dar o total impresso da linha (senão prevalece o total).
+      const raw = await this.aiExtraction.extract(command.fileBuffer, command.mimeType);
+      const sanitized = sanitizeExtractedLines(raw.lines);
+      // Com QR fiscal válido, identidade e totais vêm do QR (dado certificado), não da leitura da IA.
+      extraction = qr ? applyQrToExtraction({ ...raw, lines: sanitized.lines }, qr) : { ...raw, lines: sanitized.lines };
+      lineNotes = sanitized.notes.map((n) => ({ code: "line_unit_price_discarded", blocking: false, detail: n.detail }));
+    }
     const readMs = Date.now() - t0;
 
     // 2b. Guard: the AI sometimes reads our own company's details off the
@@ -200,7 +221,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       supplierNif: supplierNif ?? supplierMatch?.nif ?? null,
       documentType: command.documentType ?? extraction.documentType ?? "invoice",
       invoiceNumber: extraction.invoiceNumber ?? null,
-      atcud: reading?.header.atcud ?? null,
+      atcud: reading?.header.atcud ?? qr?.atcud ?? null,
     });
     if (fiscalCheck.kind === "existing_finance" && fiscalCheck.existingInvoiceId) {
       const original = await this.invoiceRepo.findById(command.organizationId, fiscalCheck.existingInvoiceId);
@@ -248,9 +269,9 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
 
     await this.invoiceRepo.save(command.organizationId, finalInvoice);
     await this.invoiceRepo.setFileHash(command.organizationId, finalInvoice.id, sha256);
-    if (this.smart && reading) {
+    if (this.smart && (reading || qr)) {
       // Evidência da leitura: se falhar, a importação continua (o rascunho já está gravado).
-      await this.smart.readingWrite.save(command.organizationId, finalInvoice.id, { fiscalQr: reading.qr?.fields ?? null, source: "deterministic" }).catch(() => undefined);
+      await this.smart.readingWrite.save(command.organizationId, finalInvoice.id, { fiscalQr: (reading?.qr ?? qr)?.fields ?? null, source: reading ? "deterministic" : "ai" }).catch(() => undefined);
     }
     const classifications = await this.classify(command.organizationId, supplierMatch?.id ?? null, extraction);
     const byIndex = new Map(classifications.map((c) => [c.index, c]));
@@ -295,9 +316,9 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
         reading: {
           source: reading ? ("deterministic" as const) : ("ai" as const),
           layout: reading?.layout ?? null,
-          qrRead: !!reading?.qr,
+          qrRead: !!(reading?.qr ?? qr),
           status: reading?.status ?? ("unsupported" as const),
-          issues: reading?.issues ?? [],
+          issues: reading?.issues ?? lineNotes,
           aiCalls: reading ? 0 : 1,
           ms: readMs,
         },
