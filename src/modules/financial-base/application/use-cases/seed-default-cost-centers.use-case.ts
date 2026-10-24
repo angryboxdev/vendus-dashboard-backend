@@ -1,7 +1,7 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import { CostCenterGroup } from "../../domain/entities/cost-center-group.js";
 import { CostCenterCategory } from "../../domain/entities/cost-center-category.js";
-import { DEFAULT_COST_CENTERS } from "../../domain/seed/default-cost-centers.js";
+import { DEFAULT_COST_CENTERS, defaultStockReviewPolicy } from "../../domain/seed/default-cost-centers.js";
 import type { CostCenterGroupRepositoryPort } from "../../domain/ports/out/cost-center-group-repository.port.js";
 import type { CostCenterCategoryRepositoryPort } from "../../domain/ports/out/cost-center-category-repository.port.js";
 import type {
@@ -54,6 +54,7 @@ export class SeedDefaultCostCentersUseCase implements SeedDefaultCostCentersPort
           affectsProfitability: catSeed.affectsProfitability,
           requiresChannel: catSeed.requiresChannel,
           requiresAllocation: catSeed.requiresAllocation,
+          stockReviewPolicy: defaultStockReviewPolicy(catSeed.code),
         });
         await this.categoryRepository.save(organizationId, category);
         categoriesCreated++;

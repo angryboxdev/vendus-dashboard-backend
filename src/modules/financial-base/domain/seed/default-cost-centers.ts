@@ -28,7 +28,7 @@ export const DEFAULT_COST_CENTERS: DefaultGroupSeed[] = [
     categories: [
       {
         code: "OPD.01",
-        name: "CMV / Ingredientes",
+        name: "Ingredientes",
         financialType: "cmv",
         affectsDre: true,
         affectsCashflow: true,
@@ -48,7 +48,7 @@ export const DEFAULT_COST_CENTERS: DefaultGroupSeed[] = [
       },
       {
         code: "OPD.03",
-        name: "Embalagens",
+        name: "Embalagens e descartáveis",
         financialType: "variable_cost",
         affectsDre: true,
         affectsCashflow: true,
@@ -80,6 +80,26 @@ export const DEFAULT_COST_CENTERS: DefaultGroupSeed[] = [
         code: "OPD.06",
         name: "Quebras & Desperdícios",
         financialType: "cmv",
+        affectsDre: true,
+        affectsCashflow: true,
+        affectsProfitability: true,
+        requiresChannel: false,
+        requiresAllocation: false,
+      },
+      {
+        code: "OPD.08",
+        name: "Limpeza & Higiene",
+        financialType: "variable_cost",
+        affectsDre: true,
+        affectsCashflow: true,
+        affectsProfitability: true,
+        requiresChannel: false,
+        requiresAllocation: false,
+      },
+      {
+        code: "OPD.09",
+        name: "Consumíveis operacionais",
+        financialType: "variable_cost",
         affectsDre: true,
         affectsCashflow: true,
         affectsProfitability: true,
@@ -183,8 +203,8 @@ export const DEFAULT_COST_CENTERS: DefaultGroupSeed[] = [
         requiresAllocation: false,
       },
       {
-        code: "EST.05",
-        name: "Limpeza & Higiene",
+        code: "EST.06",
+        name: "Manutenção",
         financialType: "fixed_opex",
         affectsDre: true,
         affectsCashflow: true,
@@ -193,8 +213,8 @@ export const DEFAULT_COST_CENTERS: DefaultGroupSeed[] = [
         requiresAllocation: false,
       },
       {
-        code: "EST.06",
-        name: "Manutenção",
+        code: "EST.07",
+        name: "Utensílios e pequeno equipamento",
         financialType: "fixed_opex",
         affectsDre: true,
         affectsCashflow: true,
@@ -416,7 +436,7 @@ export const DEFAULT_COST_CENTERS: DefaultGroupSeed[] = [
       },
       {
         code: "FDR.05",
-        name: "Adiantamentos / Cauções",
+        name: "Adiantamentos, depósitos e cauções",
         financialType: "transitory",
         affectsDre: false,
         affectsCashflow: true,
@@ -427,3 +447,14 @@ export const DEFAULT_COST_CENTERS: DefaultGroupSeed[] = [
     ],
   },
 ];
+
+/**
+ * Política de Stock por omissão do catálogo predefinido (migração 20261105100000):
+ * ingredientes e bebidas geram Compra por rever; embalagens e limpeza decidem pelo
+ * fornecedor/documento; o resto (serviços, pessoal, CAPEX…) não afeta o Stock.
+ */
+export function defaultStockReviewPolicy(code: string): "CREATE_REVIEW" | "NO_STOCK_EFFECT" | "UNDEFINED" {
+  if (code === "OPD.01" || code === "OPD.02") return "CREATE_REVIEW";
+  if (code === "OPD.03" || code === "OPD.08") return "UNDEFINED";
+  return "NO_STOCK_EFFECT";
+}

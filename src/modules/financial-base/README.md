@@ -92,8 +92,12 @@ gerir contas a pagar (módulo `payable-entries`).
   `affectsDre`, `affectsCashflow`, `affectsProfitability`,
   `requiresChannel`, `requiresAllocation`. Imutável.
 - **FinancialType** — enum fixo de 12 valores (ver `cost-center-category.ts`).
-- **DEFAULT_COST_CENTERS** — constante de domínio com os 7 grupos e 28
-  subcategorias padrão. Usada pelo `SeedDefaultCostCentersUseCase`.
+- **DEFAULT_COST_CENTERS** — constante de domínio com os 7 grupos (no ecrã:
+  Categorias) e as subcategorias padrão. Usada pelo `SeedDefaultCostCentersUseCase`.
+  Catálogo v2 (2026-10-24, migração `20261105100000`): Limpeza & Higiene em
+  Operação Direta (OPD.08), novas OPD.09 Consumíveis operacionais e EST.07
+  Utensílios e pequeno equipamento; `defaultStockReviewPolicy(code)` dá a
+  política de Stock inicial (Ingredientes/Bebidas geram revisão).
 - **Supplier** — fornecedor com dados de contacto, IBAN, condições de
   pagamento, `defaultCostCenterGroupId` e `defaultCostCenterCategoryId`
   (sugestão de classificação para novas faturas).
