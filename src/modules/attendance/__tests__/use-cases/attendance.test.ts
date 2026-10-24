@@ -83,9 +83,21 @@ describe("Assiduidade — casos de uso (Fase 4)", () => {
     ctx.config_.policy.requireCoordinates = true;
     ctx.config_.policy.blockOutsideGeofence = true;
     ctx.location = { id: "loc-1", latitude: 41.15, longitude: -8.61, radiusMeters: 100 };
-    await expect(uc.punch(ORG, EMP, punch("work", { latitude: 41.2, longitude: -8.61 }))).rejects.toMatchObject({ code: "outside_geofence" });
+    await expect(uc.punch(ORG, EMP, punch("work", { latitude: 41.2, longitude: -8.61 }))).rejects.toMatchObject({ code: "outside_geofence", message: "Está fora da zona do centro (a cerca de 5560 m). Aproxime-se e tente novamente." });
     await uc.punch(ORG, EMP, punch("work", { latitude: 41.1502, longitude: -8.6101 }));
     expect(repo.events[0]).toMatchObject({ latitude: 41.1502, locationId: "loc-1" });
+  });
+
+  test("bloqueio sem «Exigir localização»: mede a distância na entrada mas não guarda as coordenadas; a saída fora passa", async () => {
+    const { uc, ctx, repo } = setup();
+    ctx.config_.policy.blockOutsideGeofence = true;
+    ctx.location = { id: "loc-1", latitude: 41.15, longitude: -8.61, radiusMeters: 100 };
+    await expect(uc.punch(ORG, EMP, punch("work", {}))).rejects.toMatchObject({ code: "coordinates_required" });
+    await expect(uc.punch(ORG, EMP, punch("work", { latitude: 41.153, longitude: -8.61 }))).rejects.toMatchObject({ code: "outside_geofence", message: expect.stringContaining("a cerca de 334 m") });
+    await uc.punch(ORG, EMP, punch("work", { latitude: 41.1502, longitude: -8.6101 }));
+    expect(repo.events[0]).toMatchObject({ latitude: null, longitude: null, locationId: "loc-1" });
+    await uc.punch(ORG, EMP, punch("off", { latitude: 41.2, longitude: -8.61 }));
+    expect(repo.events).toHaveLength(2);
   });
 
   test("RE_10_correcao_da_gestao_sem_motivo_e_recusada_e_com_motivo_fica_auditada", async () => {

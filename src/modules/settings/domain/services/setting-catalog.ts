@@ -290,10 +290,11 @@ export const SETTING_CATALOG: SettingDefinition[] = [
     key: "time_tracking.geofence.block_outside",
     domain: "time_tracking",
     type: "bool",
+    // Ligado por omissão e independente de «Exigir localização» (utilizador, 2026-10-24): a localização
+    // é lida na entrada só para medir a distância; guarda-se apenas com «Exigir localização» (D7).
     label: "Bloquear entradas fora da zona do centro",
-    description: "Recusa a entrada fora do raio do centro (o colaborador pode pedir correção). A saída e as pausas fora do raio são aceites, com a localização guardada.",
-    defaultValue: false,
-    requires: [{ key: "time_tracking.geofence.require_coordinates", equals: true }],
+    description: "Recusa a entrada fora do raio do centro e mostra a distância (o colaborador pode pedir correção). A saída e as pausas fora do raio são aceites. A localização só é lida para medir a distância; só fica guardada com «Exigir localização».",
+    defaultValue: true,
     sensitive: false,
     legal: false,
     toValidate: true,
@@ -710,6 +711,7 @@ export const FEATURE_KEYS = [
   "time_tracking.roster.coverage_enabled",
   "time_tracking.kiosk.enabled",
   "time_tracking.geofence.require_coordinates",
+  "time_tracking.geofence.block_outside",
   "time_tracking.auto_close.enabled",
   "time_tracking.correction.employee_can_refuse",
   "security.mfa.required",

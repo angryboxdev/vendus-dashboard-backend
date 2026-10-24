@@ -8,7 +8,7 @@ import { configHash } from "../../domain/services/config-hash.js";
 import { buildSegments, computeDays, dayBoard, type DayPlan, type DayResult, type EngineRules } from "../../domain/services/day-engine.js";
 import { clockTypeRefusal, clockTypeRule, validateClockType, type ClockTypeInput } from "../../domain/entities/clock-type.js";
 import { breakRefusal, breakRule, validateBreakType, type BreakTypeInput } from "../../domain/entities/break-type.js";
-import { checkPunch, REFUSAL_MESSAGE } from "../../domain/services/punch-policy.js";
+import { checkPunch, distanceMeters, outsideGeofenceMessage, REFUSAL_MESSAGE } from "../../domain/services/punch-policy.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 31;
@@ -304,6 +304,11 @@ export class AttendanceUseCases {
       isEntry: state === "off",
       location,
     });
+    if (refusal === "outside_geofence" && location?.latitude != null && location.longitude != null && input.latitude != null && input.longitude != null) {
+      // A mesma mensagem do Portal antigo: a que distância está do centro.
+      const d = distanceMeters({ latitude: input.latitude, longitude: input.longitude }, { latitude: location.latitude, longitude: location.longitude });
+      throw new PunchRefusedError(outsideGeofenceMessage(d), refusal);
+    }
     if (refusal) throw new PunchRefusedError(REFUSAL_MESSAGE[refusal], refusal);
     // D7: coordenadas só se a regra as pede (e só no instante da marcação).
     const keepCoords = cfg.policy.requireCoordinates;
