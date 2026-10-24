@@ -12,6 +12,7 @@ import type {
   ReviewEmployeeDocumentPort,
 } from "../../domain/ports/in/employee-document.ports.js";
 import { canReplaceDocument } from "../../domain/services/document-replacement.service.js";
+import { DOCUMENT_CATEGORY_BASE_LABELS } from "../../domain/services/document-status.service.js";
 import { resolvePortalEmployeeId } from "./employee-document-shared.js";
 import { toMyDocumentDTO } from "./my-documents.use-cases.js";
 import { toEmployeeDocumentDTO } from "./employee-document-shared.js";
@@ -145,7 +146,7 @@ export class ListPendingDocumentsUseCase implements ListPendingDocumentsPort {
   async execute(command: { organizationId: PortalIdentity["organizationId"] }): Promise<PendingDocumentDTO[]> {
     const org = command.organizationId;
     const [pending, cats] = await Promise.all([this.documents.findPendingValidation(org), this.categories.findMany(org)]);
-    const labels = new Map(cats.map((c) => [c.slug, c.label]));
+    const labels = new Map<string, string>([...Object.entries(DOCUMENT_CATEGORY_BASE_LABELS), ...cats.map((c): [string, string] => [c.slug, c.label])]);
     const result: PendingDocumentDTO[] = [];
     for (const d of pending) {
       const e = await this.employees.findById(org, d.ownerId);

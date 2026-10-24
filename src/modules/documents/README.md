@@ -132,7 +132,20 @@ mesmo comportamento e as mesmas respostas.
 - `PayslipsController` → `/api/novo-rh/payslips/import(/preview)` e
   `/api/hr/payslips/*` (`hr.payslip_import`).
 - `MyDocumentsController` → `/api/me/documents*` (Portal; `meRouter`,
-  montado em `server.ts` junto das outras rotas `/me`).
+  montado em `server.ts` junto das outras rotas `/me`). A lista traz `category`
+  (slug — o Portal agrupa em pastas) e `mimeType` (pré-visualização), campos
+  aditivos de 2026-10-23; a identificação (categorias fixas) sai com o nome
+  amigável (`DOCUMENT_CATEGORY_BASE_LABELS`), nunca o código interno.
+  `GET /api/me/documents/checklist` — para onde o colaborador pode enviar
+  (identificação, categorias que se lhe aplicam e periódicas que ele emite, ex.:
+  recibo verde; nunca o recibo de vencimento nem as da empresa), com o estado
+  do documento atual e os obrigatórios em falta. `POST /api/me/documents`
+  (multipart `file`, `category`, `period?`, `expiresAt?`) — envio novo, sempre
+  «Em validação» (origem `colaborador`); um documento atual só é substituído
+  quando vencido/a vencer (regra do ticket 11). Validar/rejeitar:
+  `POST /novo-rh/people/:id/documents/:docId/review` (gerente ou acima);
+  `GET /novo-rh/documents/pending` (`PendingDocumentsController`, `hr.documents`)
+  lista os envios por validar (2026-10-23).
 
 ### Output
 
