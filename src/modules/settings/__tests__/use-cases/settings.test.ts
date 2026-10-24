@@ -251,10 +251,11 @@ describe("Configurações da Fase 4 (C6.1, C9)", () => {
     await expect(uc.setValue(ORG, g.id, { key: "time_tracking.kiosk.methods", value: ["qr"], validFrom: "2026-10-11", reason: "x" }, ADMIN)).resolves.toBeDefined();
   });
 
-  test("bloquear fora da zona exige exigir localização (C9)", async () => {
+  test("bloquear fora da zona já não depende de «Exigir localização» (2026-10-24; antes C9)", async () => {
     const { uc } = setup();
     const g = await uc.createProfile(ORG, { domain: "time_tracking", name: "G", kind: "global" }, ADMIN);
-    await expect(uc.setValue(ORG, g.id, { key: "time_tracking.geofence.block_outside", value: true, validFrom: "2026-10-11", reason: "x" }, ADMIN)).rejects.toMatchObject({ code: "rule_violation" });
+    await expect(uc.setValue(ORG, g.id, { key: "time_tracking.geofence.block_outside", value: false, validFrom: "2026-10-11", reason: "x" }, ADMIN)).resolves.toBeDefined();
+    await expect(uc.setValue(ORG, g.id, { key: "time_tracking.geofence.block_outside", value: true, validFrom: "2026-10-12", reason: "x" }, ADMIN)).resolves.toBeDefined();
   });
 });
 

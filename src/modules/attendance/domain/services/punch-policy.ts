@@ -58,5 +58,10 @@ export const REFUSAL_MESSAGE: Record<PunchRefusal, string> = {
   ip_not_allowed: "Não é possível picar a partir desta rede.",
   before_start: "Ainda é cedo para picar a entrada. Se precisar, peça uma correção.",
   coordinates_required: "É preciso permitir a localização para picar.",
-  outside_geofence: "Está fora da zona do centro. Pode enviar um pedido de correção.",
+  outside_geofence: "Está fora da zona do centro. Aproxime-se e tente novamente.",
 };
+
+/** «Está fora da zona do centro (a cerca de 350 m). Aproxime-se e tente novamente.» — como no Portal antigo. */
+export function outsideGeofenceMessage(distanceM: number): string {
+  return `Está fora da zona do centro (a cerca de ${Math.round(distanceM)} m). Aproxime-se e tente novamente.`;
+}
