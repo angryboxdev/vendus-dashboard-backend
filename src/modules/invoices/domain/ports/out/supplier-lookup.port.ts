@@ -10,6 +10,8 @@ export interface SupplierSummary {
   /** F2 v1.2: destino habitual (loja concreta) e modo financeiro preferido. */
   defaultLocationId?: string | null;
   defaultFinancialMode?: "single" | "by_item" | "by_values" | null;
+  /** E3b: logótipo já definido (sem logótipo → propor o da fatura). */
+  logoUrl?: string | null;
 }
 
 export interface SupplierLookupPort {

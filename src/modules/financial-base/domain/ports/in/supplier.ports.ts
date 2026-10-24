@@ -19,6 +19,7 @@ export interface SupplierDTO {
   defaultFinancialType: string | null;
   defaultFinancialMode: FinancialMode | null;
   defaultLocationId: string | null;
+  logoUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -60,6 +60,11 @@ Origem: TASK V2 do utilizador (2026-10-24) + anexo de auditoria de 3 faturas Mak
 - Corrigidos: separador de milhares com espaço (Algeco), preços com IVA incluído (Bricolage), autoliquidação com IVA 0 € (CDM), quadro de especificação do imposto, descrições longas.
 - Prova local: 26/26 documentos com QR de outros fornecedores e NC prontos sem IA; Makro 100%; AT/SS iguais.
 
+## E3b-1 — logótipo do fornecedor (2026-10-25, por publicar)
+- Extraído da fatura, proposto na revisão («Usar como logótipo do fornecedor»), gravado só depois de confirmar; visível na lista e na ficha do fornecedor; removível na ficha.
+- Prova local: 6/8 faturas reais com o logótipo certo (Pestsafe, Makro, Justdrinks, Algeco, Cartrack, AcustekPro); selo CEPA e DataMatrix da Makro ignorados; 2 sem proposta (logótipo dentro de imagem de página inteira / sem imagem) — correto.
+- Migração `20261108100000_supplier_logo` (+ rollback), validada em PGlite.
+
 ## Riscos / pendências
 - O leitor ainda não está ligado ao fluxo real (E3): o import continua a usar só a IA.
 - `pdfjs-dist` e `@napi-rs/canvas` são usados diretamente mas vêm como dependências do `pdf-parse`/`pdf-to-img` (versão do pdfjs fixada em `overrides`). Se quiserem, declarar `pdfjs-dist` em `dependencies` (mesma versão).

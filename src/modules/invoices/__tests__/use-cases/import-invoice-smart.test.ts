@@ -22,15 +22,15 @@ class CountingAi extends FakeAiExtractionPort {
   }
 }
 
-function setup(content: PdfContent | null, classify: ClassifyInvoiceLinesPort | null = null) {
+function setup(content: PdfContent | null, classify: ClassifyInvoiceLinesPort | null = null, supplierLogo: string | null = null) {
   const invoiceRepo = new FakeInvoiceRepository();
   const ai = new CountingAi();
   const fiscal = new FakeFiscalIdentityPort();
   const saved: { invoiceId: string; data: unknown }[] = [];
   const suppliers = new FakeSupplierLookupPort();
-  suppliers.seed([{ id: "sup-makro", name: "Makro", nif: "502030712", defaultCostCenterGroupId: null, defaultCostCenterCategoryId: null, defaultFinancialType: null }]);
+  suppliers.seed([{ id: "sup-makro", name: "Makro", nif: "502030712", defaultCostCenterGroupId: null, defaultCostCenterCategoryId: null, defaultFinancialType: null, logoUrl: supplierLogo }]);
   const smart: SmartReadingDeps = {
-    pdf: { read: async () => content, readBarcode: async () => ({ status: "absent" }) },
+    pdf: { read: async () => content, readBarcode: async () => ({ status: "absent" }), extractLogo: async () => ({ png: Buffer.from("png"), width: 120, height: 40 }) },
     layouts: [new MakroLayout()],
     readingWrite: { save: async (_o, invoiceId, data) => void saved.push({ invoiceId, data }) },
     classifyLines: classify,
@@ -75,6 +75,14 @@ describe("ImportInvoiceUseCase — leitor inteligente (E3)", () => {
     const r = await run();
     expect(r.extractedLines[0]!.suggestedCostCenterCategoryId).toBeUndefined();
     expect(r.invoice.totalWithVat).toBe(8063);
+  });
+
+  test("logótipo: proposto quando o fornecedor ainda não tem; nunca quando já tem", async () => {
+    const without = await setup(syntheticMakro()).run();
+    expect(without.logoSuggestion).toMatchObject({ width: 120, height: 40 });
+    expect(without.logoSuggestion!.url).toContain("logo-fornecedor.png");
+    const withLogo = await setup(syntheticMakro(), null, "https://exemplo.test/logo.png").run();
+    expect(withLogo.logoSuggestion).toBeUndefined();
   });
 
   test("pró-forma (QR tipo PF) é recusada antes de guardar o ficheiro; nota de crédito (NC) é aceite", async () => {

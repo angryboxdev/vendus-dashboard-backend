@@ -17,6 +17,9 @@ class FakePdf implements PdfContentReaderPort {
     if (this.content === "throw") throw new Error("pdf inválido");
     return this.content;
   }
+  async extractLogo() {
+    return null;
+  }
   async readBarcode() {
     this.barcodeCalls++;
     return this.barcode;

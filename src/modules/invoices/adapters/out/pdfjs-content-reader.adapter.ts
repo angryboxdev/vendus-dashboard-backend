@@ -64,6 +64,18 @@ function upscale(rgba: Uint8ClampedArray, w: number, h: number, s: number, pad: 
   return { data: out, width: W, height: H };
 }
 
+/** Imagem só a preto e branco (códigos 2D): > 95% dos píxeis quase pretos ou quase brancos. */
+function isTwoTone(img: ImageData): boolean {
+  const rgba = toRgba(img);
+  let mono = 0;
+  const n = img.width * img.height;
+  for (let i = 0; i < n; i++) {
+    const l = 0.299 * rgba[i * 4]! + 0.587 * rgba[i * 4 + 1]! + 0.114 * rgba[i * 4 + 2]!;
+    if (l < 40 || l > 215) mono++;
+  }
+  return mono / n > 0.95;
+}
+
 function decodeQr(img: ImageData): string | null {
   if (img.width < 21 || img.height < 21 || img.width * img.height > 16_000_000) return null;
   const rgba = toRgba(img);
@@ -167,6 +179,78 @@ export class PdfjsContentReaderAdapter implements PdfContentReaderPort {
       // Falha a rasterizar: os campos continuam a vir do texto.
     }
     return unreadablePage !== null ? { status: "unreadable", page: unreadablePage } : { status: "absent" };
+  }
+
+  /**
+   * Logótipo provável do emitente na 1.ª página: imagens incorporadas com a posição real (matriz de
+   * transformação do PDF), no topo da página, de tamanho razoável, que não sejam QR/códigos 2D nem
+   * fundos de página; preferência pelo lado esquerdo. PNG com o lado maior ≤ 256 px.
+   */
+  async extractLogo(fileBuffer: Buffer): Promise<{ png: Buffer; width: number; height: number } | null> {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    let doc;
+    try {
+      doc = await pdfjs.getDocument({ data: new Uint8Array(fileBuffer), verbosity: 0, isEvalSupported: false }).promise;
+    } catch {
+      return null;
+    }
+    try {
+      const page = await doc.getPage(1);
+      const { width: W, height: H } = page.getViewport({ scale: 1 });
+      const ops = await page.getOperatorList();
+      type M = [number, number, number, number, number, number];
+      const mul = (m: M, n: M): M => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
+      let ctm: M = [1, 0, 0, 1, 0, 0];
+      const stack: M[] = [];
+      let best: { img: ImageData; score: number } | null = null;
+      for (let i = 0; i < ops.fnArray.length; i++) {
+        const fn = ops.fnArray[i];
+        const args = ops.argsArray[i] as unknown[];
+        if (fn === pdfjs.OPS.save) stack.push(ctm);
+        else if (fn === pdfjs.OPS.restore) ctm = stack.pop() ?? [1, 0, 0, 1, 0, 0];
+        else if (fn === pdfjs.OPS.transform) ctm = mul(ctm, args as M);
+        else if (fn === pdfjs.OPS.paintFormXObjectBegin) { stack.push(ctm); if (Array.isArray(args[0])) ctm = mul(ctm, args[0] as M); }
+        else if (fn === pdfjs.OPS.paintFormXObjectEnd) ctm = stack.pop() ?? [1, 0, 0, 1, 0, 0];
+        else if (fn === pdfjs.OPS.paintImageXObject) {
+          // Quadrado unitário da imagem → retângulo na página.
+          const xs = [ctm[4], ctm[4] + ctm[0], ctm[4] + ctm[2], ctm[4] + ctm[0] + ctm[2]];
+          const ys = [ctm[5], ctm[5] + ctm[1], ctm[5] + ctm[3], ctm[5] + ctm[1] + ctm[3]];
+          const x = Math.min(...xs), y = Math.min(...ys), w = Math.max(...xs) - x, h = Math.max(...ys) - y;
+          if (w < 30 || h < 15 || w > W * 0.6 || h > H * 0.3 || y + h < H * 0.6) continue;
+          const aspect = w / h;
+          if (aspect < 0.33 || aspect > 8) continue;
+          const name = args[0] as string;
+          const img = await new Promise<ImageData | null>((resolve) => {
+            const timer = setTimeout(() => resolve(null), IMAGE_TIMEOUT_MS);
+            try {
+              page.objs.get(name, (v: ImageData | null) => { clearTimeout(timer); resolve(v); });
+            } catch {
+              clearTimeout(timer);
+              resolve(null);
+            }
+          });
+          if (!img || img.width < 24 || img.height < 12 || decodeQr(img)) continue;
+          if (aspect > 0.8 && aspect < 1.25 && isTwoTone(img)) continue; // DataMatrix e afins
+          const score = w * h * (x + w / 2 < W / 2 ? 1.3 : 1);
+          if (!best || score > best.score) best = { img, score };
+        }
+      }
+      if (!best) return null;
+      const { createCanvas } = await import("@napi-rs/canvas");
+      const src = createCanvas(best.img.width, best.img.height);
+      const sctx = src.getContext("2d");
+      const data = sctx.createImageData(best.img.width, best.img.height);
+      data.data.set(toRgba(best.img));
+      sctx.putImageData(data, 0, 0);
+      const k = Math.min(1, 256 / Math.max(best.img.width, best.img.height));
+      const out = createCanvas(Math.max(1, Math.round(best.img.width * k)), Math.max(1, Math.round(best.img.height * k)));
+      out.getContext("2d").drawImage(src, 0, 0, out.width, out.height);
+      return { png: out.toBuffer("image/png"), width: out.width, height: out.height };
+    } catch {
+      return null;
+    } finally {
+      await doc.destroy().catch(() => undefined);
+    }
   }
 
   /** QR desenhado em vetor (sem imagem): rasterizar só a 1.ª página. */

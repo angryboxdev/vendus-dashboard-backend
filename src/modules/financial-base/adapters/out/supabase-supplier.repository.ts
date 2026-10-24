@@ -24,6 +24,7 @@ function toEntity(row: Record<string, unknown>): Supplier {
     defaultFinancialType: (row.default_financial_type as string | null) ?? null,
     defaultFinancialMode: (row.default_financial_mode as FinancialMode | null) ?? null,
     defaultLocationId: (row.default_location_id as string | null) ?? null,
+    logoUrl: (row.logo_url as string | null | undefined) ?? null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   });
@@ -105,6 +106,7 @@ export class SupabaseSupplierRepository implements SupplierRepositoryPort {
       default_financial_type: supplier.defaultFinancialType,
       default_financial_mode: supplier.defaultFinancialMode,
       default_location_id: supplier.defaultLocationId,
+      logo_url: supplier.logoUrl,
         updated_at: supplier.updatedAt.toISOString(),
       })
       .eq("id", supplier.id);

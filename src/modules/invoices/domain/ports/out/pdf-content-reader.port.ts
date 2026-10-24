@@ -9,4 +9,9 @@ export interface PdfContentReaderPort {
    * primeiras páginas em resolução progressiva. Nada sai do servidor.
    */
   readBarcode(fileBuffer: Buffer, maxPages: number): Promise<BarcodeState>;
+  /**
+   * Logótipo provável do emitente: imagem incorporada no topo da 1.ª página (não QR, nem fundo de
+   * página), em PNG reduzido. null quando não há candidato claro.
+   */
+  extractLogo(fileBuffer: Buffer): Promise<{ png: Buffer; width: number; height: number } | null>;
 }

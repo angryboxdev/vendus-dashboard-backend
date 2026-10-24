@@ -186,6 +186,8 @@ export interface InvoiceImportResultDTO {
   fiscal?: { kind: string; existingInvoiceId?: string | null; identityId?: string; candidates?: { invoiceId: string | null; seriesNumber: string }[]; missing?: string[] };
   /** Leitor usado (QR + texto do PDF, ou IA) e problemas encontrados (E3). */
   reading?: ImportReadingDTO;
+  /** E3b: logótipo encontrado na fatura para um fornecedor ainda sem logótipo — só é usado se a pessoa confirmar. */
+  logoSuggestion?: { url: string; width: number; height: number };
 }
 
 export interface InvoiceAlertsDTO {
