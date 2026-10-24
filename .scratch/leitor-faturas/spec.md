@@ -48,6 +48,12 @@ Origem: TASK V2 do utilizador (2026-10-24) + anexo de auditoria de 3 faturas Mak
 - Limitações: rascunho reaberto e reconfirmado perde os metadados das linhas (o DTO das linhas ainda não os devolve); orçamento diário de IA por organização ainda não existe (task-mestre F4) — só o limite de 120 linhas por fatura e o interruptor `INVOICE_LINE_AI=off`.
 - E3b (a seguir): logótipo do fornecedor a partir da fatura; rascunho próprio de obrigações AT/SS; leitor genérico para outros fornecedores.
 
+## E3b-1 — leitor genérico com QR + correção CPF/2530 (2026-10-24, por commitar)
+- Regra do utilizador: qualquer fatura com QR fiscal → leitura QR + texto (como a Makro); sem QR → 100% IA.
+- Causa raiz da CPF/2530 (Pestsafe): ia pela IA, que pôs o total da linha (190,00) no preço unitário; a revisão fez 4 × 190 = 760. Correções: (1) `sanitizeExtractedLines` — linha da IA em que quantidade × preço ≠ total impresso fica com o total; (2) preço derivado na revisão com casas suficientes (190/4 = 47,50; 100/3 = 33,333333); (3) leitor genérico lê-a sem IA (1 linha, qtd 4, 190,00 a 23%, total 233,70, vencimento 21/11/2026, original + duplicado = 1 documento); (4) com QR, a IA nunca define número/NIF/totais.
+- Prova (fora do repo): 19/23 faturas de outros fornecedores com QR prontas sem IA (Pestsafe, Bricolage, Cartrack, Algeco, Uber, AcustekPro…); 4 caem para a IA com dados do QR (Algeco 3846, 2 Bricolage, CDM — por investigar). Regressão: fixture Makro 100%, 41 Makro prontas, AT/SS iguais. CEPSA descartadas a pedido do utilizador.
+- Categoria «Controlo de pragas» (EST.08, Estrutura & Instalações) aprovada pelo utilizador: migração `20261107100000_cost_center_pest_control` (+ rollback, validada em PGlite); regra de palavras-chave (desratização, pragas…) já aponta para ela.
+
 ## Riscos / pendências
 - O leitor ainda não está ligado ao fluxo real (E3): o import continua a usar só a IA.
 - `pdfjs-dist` e `@napi-rs/canvas` são usados diretamente mas vêm como dependências do `pdf-parse`/`pdf-to-img` (versão do pdfjs fixada em `overrides`). Se quiserem, declarar `pdfjs-dist` em `dependencies` (mesma versão).

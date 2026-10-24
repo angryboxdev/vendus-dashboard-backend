@@ -1,6 +1,36 @@
 import { parseDecimal, toCents } from "../../../../../kernel/money/decimal.js";
 import type { AiExtractionResult } from "../../entities/ai-extraction-result.js";
-import type { InvoiceReading } from "../../entities/invoice-reading.js";
+import type { FiscalQr, InvoiceReading } from "../../entities/invoice-reading.js";
+import { qrBands } from "./fiscal-qr.js";
+import { qrVatRows } from "./qr-rates.js";
+
+/**
+ * Fatura com QR fiscal lida pela IA (layout sem leitor determinístico): emitente,
+ * número, data, tipo, bases, IVA e total passam a vir do QR — a IA só contribui
+ * com o que o QR não tem (nome, prazo, linhas). O quadro de IVA só é substituído
+ * quando todas as taxas do QR são identificáveis.
+ */
+export function applyQrToExtraction(e: AiExtractionResult, qr: FiscalQr): AiExtractionResult {
+  const bands = qrBands(qr);
+  const vat = qrVatRows(qr, e.lines.map((l) => (l.vatRate == null ? "" : String(l.vatRate))));
+  const allRates = vat.every((v) => v.code !== null);
+  return {
+    ...e,
+    supplierNif: qr.issuerNif,
+    invoiceNumber: qr.documentNumber,
+    issueDate: qr.issueDate ? new Date(`${qr.issueDate}T00:00:00Z`) : e.issueDate,
+    documentType: qr.documentType === "NC" ? "credit_note" : "invoice",
+    subtotalWithoutVat: bands.reduce((a, b) => a + b.baseCents, 0),
+    vatAmount: qr.totalTaxCents,
+    totalWithVat: qr.totalCents,
+    amounts: {
+      globalDiscountPct: e.amounts?.globalDiscountPct ?? null,
+      globalDiscountAmount: e.amounts?.globalDiscountAmount ?? null,
+      footerDiscountAmount: e.amounts?.footerDiscountAmount ?? null,
+      vatSummary: allRates ? vat.map((v) => ({ rate: Number(v.rate), baseCents: v.baseCents, vatCents: v.vatCents })) : e.amounts?.vatSummary ?? null,
+    },
+  };
+}
 
 /**
  * Converte a leitura determinística (QR + texto do PDF) no mesmo formato que a
@@ -18,7 +48,7 @@ export function readingToExtraction(r: InvoiceReading): AiExtractionResult {
     supplierEmail: null,
     invoiceNumber: r.header.documentNumber,
     issueDate: r.header.issueDate ? new Date(`${r.header.issueDate}T00:00:00Z`) : null,
-    dueDate: null,
+    dueDate: r.header.dueDate ? new Date(`${r.header.dueDate}T00:00:00Z`) : null,
     subtotalWithoutVat: r.totals.netCents,
     vatAmount: r.totals.vatCents,
     totalWithVat: r.totals.totalCents,
