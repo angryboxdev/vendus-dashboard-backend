@@ -19,6 +19,26 @@ export class InvoiceAlreadyCancelledError extends Error {
   }
 }
 
+/** Tipos de documento (QR fiscal, campo D) aceites como fatura de compra. */
+export const ACCEPTED_FISCAL_DOCUMENT_TYPES = ["FT", "FS", "FR", "NC", "ND"] as const;
+
+const DOCUMENT_TYPE_NAMES: Record<string, string> = {
+  PF: "fatura pró-forma", OR: "orçamento", NE: "nota de encomenda", FO: "folha de obra", CM: "consulta de mesa",
+  GT: "guia de transporte", GR: "guia de remessa", GA: "guia de movimentação de ativos", GC: "guia de consignação",
+  GD: "guia de devolução", RC: "recibo (IVA de caixa)", RG: "recibo", FC: "fatura de consignação", CC: "crédito de consignação",
+};
+
+/** O QR diz que o documento não é uma fatura (pró-forma, orçamento, guia, recibo…): não se lança. */
+export class NotAFiscalInvoiceError extends Error {
+  constructor(readonly documentType: string) {
+    super(
+      `Documento não aceite: ${DOCUMENT_TYPE_NAMES[documentType] ?? `tipo «${documentType}»`} (${documentType}). ` +
+        "Só são aceites faturas (FT, FS, FR), notas de crédito (NC) e notas de débito (ND) — este documento não gera conta a pagar.",
+    );
+    this.name = "NotAFiscalInvoiceError";
+  }
+}
+
 export class DuplicateInvoiceError extends Error {
   constructor(invoiceNumber: string, supplierName: string) {
     super(`Já existe uma fatura "${invoiceNumber}" para o fornecedor "${supplierName}"`);

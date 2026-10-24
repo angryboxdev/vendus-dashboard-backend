@@ -126,7 +126,9 @@ export type ReadingIssueCode =
   | "net_total_mismatch"
   | "carried_total_mismatch"
   | "amounts_not_reconciled"
-  | "vat_rounded_per_line";
+  | "vat_rounded_per_line"
+  | "line_bases_from_vat_inclusive"
+  | "qr_vat_zero_in_taxed_band";
 
 export interface ReadingIssue {
   code: ReadingIssueCode;

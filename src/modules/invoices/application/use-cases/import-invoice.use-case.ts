@@ -27,6 +27,7 @@ import { readingToExtraction } from "../../domain/services/reading/reading-to-ex
 import { sanitizeExtractedLines } from "../../domain/services/extracted-lines.service.js";
 import { applyQrToExtraction } from "../../domain/services/reading/reading-to-extraction.js";
 import { readFiscalQr } from "../../domain/services/reading/invoice-reader.service.js";
+import { ACCEPTED_FISCAL_DOCUMENT_TYPES, NotAFiscalInvoiceError } from "../../domain/errors.js";
 import type { FiscalQr } from "../../domain/entities/invoice-reading.js";
 
 const AI_CONFIDENCE_REVIEW_THRESHOLD = 0.7;
@@ -60,17 +61,18 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
    * Leitura determinística. `reading` = null quando nenhum layout serve (segue a IA); um layout
    * genérico (estrito) só conta se reconciliar ao cêntimo. `qr` = QR fiscal válido, mesmo sem layout.
    */
-  private async readLocally(buffer: Buffer, mimeType: string): Promise<{ reading: InvoiceReading | null; qr: FiscalQr | null }> {
-    if (!this.smart || mimeType !== "application/pdf") return { reading: null, qr: null };
+  private async readLocally(buffer: Buffer, mimeType: string): Promise<{ reading: InvoiceReading | null; qr: FiscalQr | null; qrType: string | null }> {
+    if (!this.smart || mimeType !== "application/pdf") return { reading: null, qr: null, qrType: null };
     const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), LOCAL_READ_TIMEOUT_MS).unref?.());
     const content = await Promise.race([this.smart.pdf.read(buffer, mimeType).catch(() => null), timeout]);
-    if (!content) return { reading: null, qr: null };
+    if (!content) return { reading: null, qr: null, qrType: null };
     const { qr, issues } = readFiscalQr(content);
     const validQr = qr && !issues.some((i) => i.blocking) ? qr : null;
     const reading = readInvoice(content, this.smart.layouts);
     const layout = this.smart.layouts.find((l) => l.id === reading.layout);
     const accepted = reading.status !== "unsupported" && reading.lines.length > 0 && (!layout?.strict || reading.status === "ready");
-    return { reading: accepted ? reading : null, qr: validQr };
+    // O tipo do documento conta mesmo com totais do QR incoerentes (o campo D continua legível).
+    return { reading: accepted ? reading : null, qr: validQr, qrType: qr?.documentType ?? null };
   }
 
   /** Categoria sugerida por linha; nunca faz falhar a importação. */
@@ -92,7 +94,13 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       return { invoice: toInvoiceDTO(sameFile), aiConfidence: sameFile.aiConfidence ?? 0, validationIssues: ["duplicate_invoice"], supplierMatch: null, extractedLines: [], reused: "same_file" };
     }
 
-    // 1. Persist the original file
+    // 1. Leitor determinístico primeiro (QR fiscal + texto do PDF, sem IA). O QR diz o tipo do documento:
+    //    pró-formas, orçamentos, guias e recibos não são faturas → recusados antes de guardar o ficheiro.
+    const t0 = Date.now();
+    const { reading, qr, qrType } = await this.readLocally(command.fileBuffer, command.mimeType);
+    if (qrType && !(ACCEPTED_FISCAL_DOCUMENT_TYPES as readonly string[]).includes(qrType)) throw new NotAFiscalInvoiceError(qrType);
+
+    // 2. Persist the original file
     const fileUrl = await this.storage.store(
       command.fileBuffer,
       command.filename,
@@ -100,10 +108,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       command.organizationId,
     );
 
-    // 2. Leitor determinístico primeiro (QR fiscal + texto do PDF, sem IA); sem layout conhecido → IA
-    //    (buffer enviado diretamente — sem URL público).
-    const t0 = Date.now();
-    const { reading, qr } = await this.readLocally(command.fileBuffer, command.mimeType);
+    // 3. Sem layout conhecido → IA (buffer enviado diretamente — sem URL público).
     let lineNotes: { code: string; blocking: boolean; detail: string }[] = [];
     let extraction: AiExtractionResult;
     if (reading) extraction = readingToExtraction(reading);

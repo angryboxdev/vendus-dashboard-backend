@@ -1,4 +1,5 @@
 import { mulToCents, parseDecimal, toCents, type Dec } from "../../../../../kernel/money/decimal.js";
+import { distribute } from "../../../../../kernel/money/document-amounts.js";
 import type { FiscalQr, PdfContent, ReadingIssue } from "../../entities/invoice-reading.js";
 import { checkQrTotals } from "./fiscal-qr.js";
 import type { InvoiceLayout, LayoutLine, LayoutResult } from "./invoice-layout.js";
@@ -30,8 +31,8 @@ function roleOf(text: string): Role {
   if (/^(DESC(ONTO)?\.?\s*%?$|DTO|%\s*DESC)/.test(t)) return "disc";
   // «IVA %» / «Taxa IVA» = taxa; «IVA Valor» / «Valor IVA» = montante (coluna de valores).
   const moneyWord = /(TOTAL|VALOR|MONTANTE|IMPORT|LIQUIDO|BASE|SUBTOTAL|INCIDENCIA)/.test(t);
-  if (/^(IVA|TAXA|TX\.?\s*IVA|%\s*IVA)/.test(t) && !moneyWord) return "rate";
-  if (/(^PREC\b|PRECO|P\.?\s*UNIT|PR\.?\s*UNIT|UNITARIO|V\.?\s*UNIT|PVP)/.test(t)) return "unit";
+  if (/(^|\s)(IVA|TAXA|TX\.?\s*IVA|%\s*IVA)/.test(t) && !moneyWord) return "rate";
+  if (/(^PREC\b|^P\.?\s*UN\.?$|PRECO|P\.?\s*UNIT|PR\.?\s*UNIT|UNITARIO|V\.?\s*UNIT|PVP)/.test(t)) return "unit";
   if (/(TOTAL|VALOR|MONTANTE|IMPORT|LIQUIDO|BASE|SUBTOTAL|INCIDENCIA)/.test(t)) return "money";
   return "text";
 }
@@ -91,7 +92,7 @@ function findHeader(rows: PdfRow[]): { row: PdfRow; labels: Label[] } | null {
 
 /** Subtotais e transportes dentro da tabela: não são artigos nem o fim da tabela. */
 const SKIP_ROW = /^(SUB-?TOTAL|TRANSPORTE|A TRANSPORTAR|VALOR TRANSPORTADO|VALOR A TRANSPORTAR)/;
-const END_OF_TABLE = /^(TOTAL|RESUMO|VALOR TOTAL|TOTAL A PAGAR|BASE TRIBUT|QUADRO|PAGAMENTO|PAGO|MEIOS DE PAGAMENTO|OBSERVA|IBAN|CONDICOES)|TAXA IVA|TOTAL IVA|TOTAL S\.?I\b|TOT\. C\/IVA|RESUMO DO IVA|QUADRO RESUMO/;
+const END_OF_TABLE = /^(TOTAL|RESUMO|VALOR TOTAL|TOTAL A PAGAR|BASE TRIBUT|QUADRO|PAGAMENTO|PAGO|MEIOS DE PAGAMENTO|OBSERVA|IBAN|CONDICOES)|TAXA IVA|TOTAL IVA|TOTAL S\.?I\b|TOT\. C\/IVA|RESUMO DO IVA|QUADRO RESUMO|^ESPECIFICACAO DO IMPOSTO|COD\.? ISENCAO|^TOTAL EUR|MOTIVO DE ISENCAO/;
 // Valores com 2 a 4 casas (alguns emissores imprimem «125,0000»); preços unitários até 9.
 const MONEY = /^-?€?\d{1,3}([.\s]\d{3})*,\d{2,4}€?$|^-?€?\d+,\d{2,4}€?$|^-?€?\d{1,3}(,\d{3})*\.\d{2,4}€?$|^-?€?\d+\.\d{2,4}€?$/;
 const NUMBER = /^-?\d+([.,]\d{1,9})?$/;
@@ -110,12 +111,18 @@ const rateOf = (text: string) => {
   return d ? String(Number(d.units) / 10 ** d.scale) : null;
 };
 
-/** Tokens de uma linha (palavras; «190,00 €» → um token monetário). */
+/** Tokens de uma linha (palavras; «190,00 €» → um token monetário; «1 405,73» → um número). */
 function tokensOf(row: PdfRow): Token[] {
   const out: Token[] = [];
   for (const w of row.words) {
     const last = out[out.length - 1];
     if (last && w.text === "€" && w.x - last.x1 < 8) {
+      last.x1 = w.x + w.width;
+      continue;
+    }
+    // Separador de milhares com espaço: «1» + «405,73» (colados) são o mesmo valor.
+    if (last && /^-?\d{1,3}( \d{3})*$/.test(last.text) && /^\d{3}([.,]\d{1,4})?$/.test(w.text) && w.x - last.x1 < 6) {
+      last.text += ` ${w.text}`;
       last.x1 = w.x + w.width;
       continue;
     }
@@ -252,7 +259,8 @@ export class GenericQrLayout implements InvoiceLayout {
         const hasQty = [...cells].some(([l, v]) => l.role === "qty" && v.some((x) => NUMBER.test(x)));
         // Artigo = valores + (descrição ou quantidade); valores soltos são resumos/totais.
         if (hasMoney && (desc || hasQty)) anchors.push({ page: page.number, y: r.y, cells, desc: desc ? [{ y: r.y, text: desc }] : [], raw: r.text });
-        else if (desc) textRows.push({ row: r, desc });
+        // Linha só de texto que começa na descrição: é continuação dela, mesmo que passe por baixo de outras colunas.
+        else if (desc) textRows.push({ row: r, desc: r.words.filter((w) => !MONEY.test(w.text)).map((w) => w.text).join(" ") });
       }
       for (const tr of textRows) {
         const near = anchors.reduce<Item | null>((b, a) => (!b || Math.abs(a.y - tr.row.y) < Math.abs(b.y - tr.row.y) ? a : b), null);
@@ -273,10 +281,15 @@ export class GenericQrLayout implements InvoiceLayout {
     const vat: QrVatRow[] = qrVatRows(qr, hints);
     if (vat.some((v) => v.code === null)) return fail(result, "Taxa de IVA de um grupo do QR não identificável.");
     result.footer.vatTable = vat.map(({ code, rate, baseCents, vatCents }) => ({ code, rate, baseCents, vatCents }));
+    if (vat.some((v) => v.zeroInTaxedBand)) {
+      issues.push({ code: "qr_vat_zero_in_taxed_band", blocking: false, detail: "O QR declara IVA 0,00 € num grupo de taxa tributada (provável autoliquidação ou isenção) — confirmar o enquadramento." });
+    }
     const rates = [...new Set(vat.map((v) => v.rate))];
     const rowRate = (it: Item): string | null => {
       const printed = rateCol ? (cellsOf(it, rateCol) ?? []).map((t) => rateOf(t)).find((r) => r !== null) ?? null : null;
-      if (printed !== null) return rates.includes(printed) ? printed : null;
+      // Taxa impressa diferente da do QR: só se aceita a do QR quando há um único grupo (ex.: autoliquidação
+      // com «23%» impresso e IVA 0 no QR); a prova das bases continua a decidir.
+      if (printed !== null) return rates.includes(printed) ? printed : rates.length === 1 && vat[0]!.zeroInTaxedBand ? rates[0]! : null;
       return rates.length === 1 ? rates[0]! : null;
     };
     const itemRates = items.map(rowRate);
@@ -295,9 +308,33 @@ export class GenericQrLayout implements InvoiceLayout {
       return vat.every((v) => (by.get(v.rate) ?? 0) === v.baseCents) && [...by.keys()].every((r) => vat.some((v) => v.rate === r));
     };
     let nets: number[] | null = null;
+    // Nota de crédito com as linhas impressas a negativo: o QR já diz que é crédito → valores em absoluto.
+    const isCredit = qr.documentType === "NC";
+    const columnValues = (l: Label) => {
+      const v = items.map((it) => { const t = cell(it, l); return t ? moneyCents(t) : null; });
+      return isCredit && v.every((x) => x === null || x <= 0) ? v.map((x) => (x === null ? null : Math.abs(x))) : v;
+    };
     for (const l of moneyLabels) {
-      const candidate = items.map((it) => { const t = cell(it, l); return t ? moneyCents(t) : null; });
+      const candidate = columnValues(l);
       if (sumsMatch(candidate)) { nets = candidate as number[]; break; }
+    }
+    if (!nets) {
+      // Preços com IVA incluído (venda a retalho): a coluna com IVA soma exatamente base + IVA do QR
+      // por taxa → a base de cada linha é repartida a partir da base do QR (fecha ao cêntimo; aviso).
+      for (const l of labels.filter((x) => x.role === "money")) {
+        const gross = columnValues(l);
+        if (gross.some((g) => g === null)) continue;
+        const ok = vat.every((v) => gross.reduce<number>((a, g, i) => a + (itemRates[i] === v.rate ? g! : 0), 0) === v.baseCents + v.vatCents);
+        if (!ok) continue;
+        const derived = new Array<number>(items.length).fill(0);
+        for (const v of vat) {
+          const idx = items.map((_, i) => i).filter((i) => itemRates[i] === v.rate);
+          distribute(v.baseCents, idx.map((i) => gross[i]!)).forEach((c, k) => (derived[idx[k]!] = c));
+        }
+        nets = derived;
+        issues.push({ code: "line_bases_from_vat_inclusive", blocking: false, detail: "Preços com IVA incluído: a base de cada linha foi repartida a partir da base do QR (diferenças de arredondamento até 1 cêntimo por linha)." });
+        break;
+      }
     }
     if (!nets && qtyCol && unitCol) {
       // Sem coluna que feche: quantidade × preço (sem desconto) por linha.
