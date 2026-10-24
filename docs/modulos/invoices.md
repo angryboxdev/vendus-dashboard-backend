@@ -16,6 +16,7 @@ Implementado. F1 (task Financeiro/Stock v1.2) em produção desde 2026-10-14 (PR
 - [ramo financeiro] «Enviar para Stock»: sugestão (exceção da loja → fornecedor → categoria) e validação em criar/confirmar (422 `stock_decision_required`/`stock_reason_required`).
 - [ramo financeiro] Modos «Única | Por artigo | Por valores» (`line_detail_mode` simple|detailed|by_values) + `invoice_allocations`; linhas reais guardadas em todos os modos; «Guardar rascunho» (`POST /invoices/:id/draft`); `PUT /invoices/:id/allocations`; detalhe devolve `storedAmounts`.
 - [ramo financeiro] `GET /invoices/payables-summary` — Total a pagar | Em atraso sobre o saldo aberto do razão.
+- [ramo financeiro, por commitar] Leitor determinístico (E1 do leitor inteligente): QR fiscal AT + layout Makro + motor de valores, sem IA (`domain/services/reading/`). Ainda não ligado ao import. Ver `.scratch/leitor-faturas/spec.md`.
 
 ## Arquitetura
 - Código: `src/modules/invoices/` (domain, application, adapters); composição: `invoices.module.ts`; documentação detalhada: `src/modules/invoices/README.md`.
