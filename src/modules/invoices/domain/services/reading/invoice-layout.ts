@@ -1,7 +1,10 @@
 import type { FiscalQr, PdfContent, ReadingIssue, ReadLine, ReadVatRow } from "../../entities/invoice-reading.js";
 
 /** Linha lida pelo layout, antes de aplicar descontos e resolver a taxa de IVA. */
-export type LayoutLine = Omit<ReadLine, "discountCents" | "netCents" | "vatRate">;
+export type LayoutLine = Omit<ReadLine, "discountCents" | "netCents" | "vatRate"> & {
+  /** Desconto já impresso na própria linha (cêntimos), quando o layout o lê diretamente. */
+  lineDiscountCents?: number;
+};
 
 /** Desconto impresso fora da linha do artigo (ex.: «Leve Mais Pague Menos … MOT»). */
 export interface LayoutDiscount {
@@ -13,7 +16,7 @@ export interface LayoutDiscount {
 }
 
 export interface LayoutResult {
-  header: { supplierName: string | null; documentNumber: string | null; atcud: string | null; issuerNif: string | null; buyerNif: string | null; issueDate: string | null };
+  header: { supplierName: string | null; dueDate?: string | null; documentNumber: string | null; atcud: string | null; issuerNif: string | null; buyerNif: string | null; issueDate: string | null };
   lines: LayoutLine[];
   discounts: LayoutDiscount[];
   footer: {
@@ -33,6 +36,8 @@ export interface LayoutResult {
 /** Leitor determinístico de um layout de fatura (um por fornecedor/formato). */
 export interface InvoiceLayout {
   readonly id: string;
+  /** Leitor genérico: só se aceita a leitura se reconciliar ao cêntimo; senão o chamador usa a IA. */
+  readonly strict?: boolean;
   detect(content: PdfContent, qr: FiscalQr | null): boolean;
-  parse(content: PdfContent): LayoutResult;
+  parse(content: PdfContent, qr: FiscalQr | null): LayoutResult;
 }
