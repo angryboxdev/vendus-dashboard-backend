@@ -63,6 +63,18 @@ describe("Finalizar fatura com o motor único de valores (F1 §1.3)", () => {
     expect(rec.lines[0]).toMatchObject({ grossCents: 12400, discountKind: "pct", discountValue: 10, discountCents: 1240, netCents: 11160 });
   });
 
+  test("E3: linha lida pelo leitor grava código do artigo e metadados; linha manual não toca nessas colunas", async () => {
+    const s = setup();
+    const inv = draft(23659); // 2 × 111,60 = 223,20; IVA 6% por taxa = 13,39
+    await s.invoiceRepo.save(ORG, inv);
+    const reading = { supplierCode: "0012345", page: 1, order: 0, kind: "product" as const, vatCode: "4", promoCode: null, relatedOrder: null, notes: [], classificationSource: "keyword", classificationEvidence: "«QJ» → ingredientes." };
+    await s.confirm.execute({ organizationId: ORG, id: inv.id, lines: [{ ...mozzarella, reading }, mozzarella], saveAsPayable: false });
+    const rec = s.amountsWrite.saved.get(inv.id)!;
+    expect(rec.lines[0]).toMatchObject({ supplierItemCode: "0012345", readingMeta: reading });
+    expect(rec.lines[1]).not.toHaveProperty("supplierItemCode");
+    expect(rec.lines[1]).not.toHaveProperty("readingMeta");
+  });
+
   test("divergência real bloqueia a confirmação: rascunho intacto, sem linhas, sem conta a pagar", async () => {
     const s = setup();
     const inv = draft(11900);

@@ -87,4 +87,19 @@ describe("SeedDefaultCostCentersUseCase", () => {
       }
     }
   });
+
+  it("catálogo v2: política de Stock por omissão e subcategorias novas", async () => {
+    const { categoryRepo, useCase } = makeUseCase();
+    await useCase.execute(ORG_ID);
+    const policy = async (code: string) => (await categoryRepo.findByCode(ORG_ID, code))?.stockReviewPolicy;
+
+    expect(await policy("OPD.01")).toBe("CREATE_REVIEW");
+    expect(await policy("OPD.02")).toBe("CREATE_REVIEW");
+    expect(await policy("OPD.03")).toBe("UNDEFINED");
+    expect(await policy("OPD.08")).toBe("UNDEFINED");
+    expect(await policy("OPD.09")).toBe("NO_STOCK_EFFECT");
+    expect(await policy("EST.07")).toBe("NO_STOCK_EFFECT");
+    expect(await policy("EST.02")).toBe("NO_STOCK_EFFECT");
+    expect(await categoryRepo.findByCode(ORG_ID, "EST.05")).toBeNull();
+  });
 });

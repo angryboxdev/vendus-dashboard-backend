@@ -69,6 +69,8 @@ interface InvoicePorts {
   deleteInvoice: DeleteInvoicePort;
   suggestLineClassification: SuggestLineClassificationPort;
   importInvoice: ImportInvoicePort;
+  /** Documentos de cobrança AT/SS: lidos antes do import de faturas (sem IA, sem gravar nada). */
+  readPaymentDocument?: import("../../domain/ports/in/payment-document.ports.js").ReadPaymentDocumentPort;
   confirmImportedInvoice: ConfirmImportedInvoicePort;
   getInvoiceAlerts: GetInvoiceAlertsPort;
   processDirectDebits: ProcessDirectDebitsPort;
@@ -495,7 +497,16 @@ export function createInvoiceRouter(ports: InvoicePorts, idempotencyStore: Idemp
         res.status(400).json({ error: "No file uploaded. Use multipart field 'file'." });
         return;
       }
-      const { documentType } = req.body as { documentType?: string };
+      const { documentType, treatAsInvoice } = req.body as { documentType?: string; treatAsInvoice?: string };
+      // Documento de cobrança (AT/SS)? Devolve a leitura para revisão e não cria fatura.
+      // `treatAsInvoice=true` mantém o fluxo antigo à escolha do utilizador.
+      if (ports.readPaymentDocument && treatAsInvoice !== "true") {
+        const payment = await ports.readPaymentDocument.execute(req.auth!.orgId, { buffer: req.file.buffer, mimeType: req.file.mimetype }).catch(() => null);
+        if (payment) {
+          res.status(200).json(payment);
+          return;
+        }
+      }
       const cmd: Parameters<typeof ports.importInvoice.execute>[0] = {
         organizationId: req.auth!.orgId,
         fileBuffer: req.file.buffer,

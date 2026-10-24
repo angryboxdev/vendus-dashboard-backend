@@ -30,6 +30,14 @@ import { ListInvoiceLinesUseCase } from "./application/use-cases/list-invoice-li
 import { GetInvoiceUseCase } from "./application/use-cases/get-invoice.use-case.js";
 import { DeleteInvoiceUseCase } from "./application/use-cases/delete-invoice.use-case.js";
 import { ImportInvoiceUseCase } from "./application/use-cases/import-invoice.use-case.js";
+import { ReadPaymentDocumentUseCase } from "./application/use-cases/read-payment-document.use-case.js";
+import { PdfjsContentReaderAdapter } from "./adapters/out/pdfjs-content-reader.adapter.js";
+import { SupabaseObligationCandidatesAdapter } from "./adapters/out/supabase-obligation-candidates.adapter.js";
+import { SupabaseInvoiceReadingWriteAdapter } from "./adapters/out/supabase-invoice-reading-write.adapter.js";
+import { SupabaseCategoryCatalogAdapter, SupabaseConfirmedLineHistoryAdapter } from "./adapters/out/supabase-line-classification.adapters.js";
+import { OpenAiLineCategoryAdapter } from "./adapters/out/openai-line-category.adapter.js";
+import { ClassifyInvoiceLinesUseCase } from "./application/use-cases/classify-invoice-lines.use-case.js";
+import { MakroLayout } from "./domain/services/reading/makro-layout.js";
 import { ConfirmImportedInvoiceUseCase } from "./application/use-cases/confirm-imported-invoice.use-case.js";
 import { GetInvoiceAlertsUseCase } from "./application/use-cases/get-invoice-alerts.use-case.js";
 import { ProcessDirectDebitsUseCase } from "./application/use-cases/process-direct-debits.use-case.js";
@@ -107,6 +115,7 @@ export function createInvoicesModule(
   const stockReviewStatusRead = new StockPurchaseReviewStatusReadAdapter(getStockPurchaseReviewStatus);
   const stockReviewDraftDelete = new StockPurchaseReviewDraftDeleteAdapter(deleteDraftStockPurchaseReview);
   const aiExtraction = new OpenAiExtractionAdapter(openaiApiKey);
+  const pdfReader = new PdfjsContentReaderAdapter();
   const fiscal = new FiscalDocumentsIdentityAdapter(fiscalDocuments);
   const amountsWrite = new SupabaseInvoiceAmountsWriteAdapter(createScopedQuery);
   const allocationRepo = new SupabaseInvoiceAllocationRepository(createScopedQuery);
@@ -141,7 +150,19 @@ export function createInvoicesModule(
     getInvoice,
     deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, audit),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),
-    importInvoice: new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint, organizationIdentityRead, fiscal),
+    // Leitor inteligente (E3): QR + texto do PDF antes da IA; categoria sugerida por linha
+    // (IA só no que as regras não resolvem; INVOICE_LINE_AI=off desliga essa parte).
+    importInvoice: new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint, organizationIdentityRead, fiscal, {
+      pdf: pdfReader,
+      layouts: [new MakroLayout()],
+      readingWrite: new SupabaseInvoiceReadingWriteAdapter(createScopedQuery),
+      classifyLines: new ClassifyInvoiceLinesUseCase(
+        new SupabaseCategoryCatalogAdapter(createScopedQuery),
+        new SupabaseConfirmedLineHistoryAdapter(createScopedQuery),
+        process.env.INVOICE_LINE_AI === "off" ? null : new OpenAiLineCategoryAdapter(openaiApiKey, process.env.OPENAI_MODEL_TEXT ?? "gpt-4o-mini"),
+      ),
+    }),
+    readPaymentDocument: new ReadPaymentDocumentUseCase(pdfReader, new SupabaseObligationCandidatesAdapter(createScopedQuery), supplierLookup, organizationIdentityRead),
     confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit, stockRouting, categoryReader, allocationRepo),
     getInvoiceAlerts: new GetInvoiceAlertsUseCase(invoiceRepo),
     processDirectDebits,

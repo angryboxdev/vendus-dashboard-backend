@@ -168,6 +168,13 @@ explicitly confirm before any `stock_movements` row is written.
 _Avoid_: Fatura de stock, segunda fatura (this is never a parallel
 invoice — editing an invoice always happens only in `invoices`).
 
+**Categoria / Subcategoria (antes «Centro de Custo» no ecrã)**:
+Natureza do gasto de uma fatura ou linha: Categoria = `cost_center_groups`,
+Subcategoria = `cost_center_categories`. Desde 2026-10-24 o Financeiro mostra
+«Categoria/Subcategoria»; tabelas, campos e rotas mantêm o nome `cost_center_*`
+(renomeação só de textos). A imputação organizacional é a loja (`location_id`).
+_Avoid_: chamar «centro de custo» a esta classificação em textos novos.
+
 **Origem dos fundos (Funding Source) vs. Centro de Custo**:
 "Funding source" (`partner|employee|platform|other` on `accounting`'s
 `AccountingDocument`) is who actually paid. Centro de Custo is where the

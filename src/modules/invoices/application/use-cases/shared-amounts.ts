@@ -111,6 +111,8 @@ export function computeAmountsForInvoice(
         discountCents: l.lineDiscountCents,
         globalDiscountCents: l.globalDiscountCents,
         netCents: l.netCents,
+        // Só linhas lidas pelo leitor determinístico tocam nas colunas da migração 20261106100000.
+        ...(cmd?.reading && { supplierItemCode: cmd.reading.supplierCode, readingMeta: cmd.reading }),
       };
     }),
   };
