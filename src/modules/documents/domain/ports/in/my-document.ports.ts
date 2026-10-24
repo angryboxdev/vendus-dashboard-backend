@@ -10,7 +10,11 @@ export interface PortalIdentity {
 export interface MyDocumentDTO {
   id: string;
   categoryLabel: string;
+  /** Categoria (slug) — o Portal agrupa por ela em pastas (campo aditivo, 2026-10-23). */
+  category: string;
   fileName: string;
+  /** Tipo do ficheiro (pré-visualização no Portal); `null` em documentos antigos. */
+  mimeType: string | null;
   /** "valid" ou "pending_validation" (enviado pelo colaborador, aguarda o RH). */
   status: string;
   /** Vencido/a vencer em 30 dias e sem envio pendente → botão "Substituir". */
@@ -42,4 +46,39 @@ export interface ReplaceMyDocumentCommand extends PortalIdentity {
 }
 export interface ReplaceMyDocumentPort {
   execute(command: ReplaceMyDocumentCommand): Promise<MyDocumentDTO>;
+}
+
+/** Categoria para onde o colaborador pode enviar, com o estado do documento atual (`null` nas periódicas). */
+export interface MySubmittableCategoryDTO {
+  slug: string;
+  label: string;
+  mandatory: boolean;
+  /** Periódica (ex.: recibo verde): cada envio é de um mês. */
+  requiresPeriod: boolean;
+  /** Tipos aceites (subconjunto de PDF/JPG/PNG). */
+  accepts: string[];
+  status: "missing" | "ok" | "expiring" | "expired" | "pending" | null;
+  /** Pode enviar agora (em falta, vencido/a vencer, ou periódica). */
+  canSubmit: boolean;
+  lastRejection: { note: string; at: string } | null;
+}
+export interface MyDocumentChecklistDTO {
+  categories: MySubmittableCategoryDTO[];
+  /** Obrigatórios em falta ou vencidos (em validação não conta). */
+  missingMandatory: { id: string; label: string; categories: string[]; status: "missing" | "expired" }[];
+}
+export interface GetMyDocumentChecklistPort {
+  execute(identity: PortalIdentity): Promise<MyDocumentChecklistDTO>;
+}
+export interface SubmitMyDocumentCommand extends PortalIdentity {
+  category: string;
+  /** `YYYY-MM` nas categorias periódicas. */
+  period?: string | null;
+  buffer: Buffer;
+  filename: string;
+  mimeType: string;
+  expiresAt?: string | null;
+}
+export interface SubmitMyDocumentPort {
+  execute(command: SubmitMyDocumentCommand): Promise<MyDocumentDTO>;
 }
