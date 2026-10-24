@@ -61,7 +61,7 @@ export class MakroLayout implements InvoiceLayout {
     const discounts: LayoutDiscount[] = [];
     const carried: LayoutResult["carried"] = [];
     const footer: LayoutResult["footer"] = { discountTotalCents: null, itemCountText: null, depositCountText: null, netTotalCents: null, depositTotalCents: null, vatTable: [], totalCents: null };
-    const header: LayoutResult["header"] = { documentNumber: null, atcud: null, issuerNif: null, buyerNif: null, issueDate: null };
+    const header: LayoutResult["header"] = { supplierName: null, documentNumber: null, atcud: null, issuerNif: null, buyerNif: null, issueDate: null };
     let inFooter = false;
     let lastProduct: number | null = null;
     let pendingDepositTotal = false;
@@ -122,6 +122,7 @@ export class MakroLayout implements InvoiceLayout {
 
   private readHeaderRow(r: PdfRow, h: LayoutResult["header"]) {
     const t = r.text;
+    h.supplierName ??= /(MAKRO CASH & CARRY PORTUGAL, S\.A\.)/i.exec(t)?.[1] ?? null;
     h.documentNumber ??= /Fa(?:c)?tura\s+N[ºo°]\s*:?\s*(.+?)\s*$/i.exec(t)?.[1] ?? null;
     h.atcud ??= /ATCUD:\s*(\S+)/i.exec(t)?.[1] ?? null;
     h.issuerNif ??= /N[ºo°]\s*Contribuinte:\s*(\d{9})/i.exec(t)?.[1] ?? null;

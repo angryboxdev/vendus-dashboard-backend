@@ -7,7 +7,9 @@ export class FakeFiscalIdentityPort implements FiscalIdentityPort {
   released: string[] = [];
   next: InvoiceFiscalCheck | null = null;
   nextCheck: InvoiceFiscalCheck | null = null;
-  async check(): Promise<InvoiceFiscalCheck> {
+  checks: InvoiceFiscalInput[] = [];
+  async check(_o?: OrganizationId, input?: InvoiceFiscalInput): Promise<InvoiceFiscalCheck> {
+    if (input) this.checks.push(input);
     const r = this.nextCheck ?? { kind: "new" };
     this.nextCheck = null;
     return r;

@@ -14,6 +14,24 @@ export interface AiExtractedLine {
   /** Desconto comercial da linha: % (10 = 10%) ou valor em cêntimos. */
   discountPct?: number | null;
   discountAmount?: number | null;
+  /** Só no leitor determinístico (E3): o que foi lido do documento para esta linha. */
+  meta?: LineReadingMeta;
+}
+
+/** Metadados de uma linha lida pelo leitor determinístico (guardados em `invoice_lines.reading_meta`). */
+export interface LineReadingMeta {
+  supplierCode: string | null;
+  page: number;
+  order: number;
+  kind: "product" | "deposit";
+  vatCode: string | null;
+  promoCode: string | null;
+  /** Depósito/caução: ordem da linha do artigo a que pertence. */
+  relatedOrder: number | null;
+  notes: string[];
+  /** Categoria sugerida na importação: origem e evidência (preenchido pela classificação). */
+  classificationSource?: string | null;
+  classificationEvidence?: string | null;
 }
 
 export interface AiExtractedAmounts {

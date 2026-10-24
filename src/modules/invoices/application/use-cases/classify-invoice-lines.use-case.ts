@@ -1,18 +1,14 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { CategoryCatalogReadPort, ConfirmedLineHistoryPort, LineCategoryAiPort } from "../../domain/ports/out/line-classification.ports.js";
-import { classifyLinesDeterministic, type LineClassification, type LineToClassify } from "../../domain/services/classification/line-classifier.js";
+import { classifyLinesDeterministic, type LineToClassify } from "../../domain/services/classification/line-classifier.js";
+import type { ClassifyInvoiceLinesPort, ClassifyInvoiceLinesResult } from "../../domain/ports/in/classify-invoice-lines.port.js";
 
 const HISTORY_LIMIT = 500;
 /** Uma chamada por fatura, no máximo com este número de linhas (o resto fica para revisão). */
 const AI_MAX_LINES = 120;
 
-export interface ClassifyInvoiceLinesResult {
-  classifications: LineClassification[];
-  metrics: { lines: number; deterministic: number; aiRequested: number; aiResolved: number; aiError: boolean };
-}
-
 /** Classifica as linhas reais de uma fatura: regras/histórico primeiro, IA só no que sobra. */
-export class ClassifyInvoiceLinesUseCase {
+export class ClassifyInvoiceLinesUseCase implements ClassifyInvoiceLinesPort {
   constructor(
     private readonly catalog: CategoryCatalogReadPort,
     private readonly history: ConfirmedLineHistoryPort,

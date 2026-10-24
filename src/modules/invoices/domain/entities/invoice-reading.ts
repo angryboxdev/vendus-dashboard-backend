@@ -141,6 +141,8 @@ export interface InvoiceReading {
   layout: string | null;
   qr: FiscalQr | null;
   header: {
+    /** Nome do emitente tal como impresso (o QR não traz nome). */
+    supplierName: string | null;
     issuerNif: string | null;
     buyerNif: string | null;
     documentType: string | null;

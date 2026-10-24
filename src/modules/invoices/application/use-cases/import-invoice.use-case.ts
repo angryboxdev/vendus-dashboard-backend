@@ -15,9 +15,30 @@ import { normalizeSupplierName, supplierNameSimilarity, FUZZY_MATCH_THRESHOLD } 
 import { toInvoiceDTO } from "./shared.js";
 import { createHash } from "node:crypto";
 import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.port.js";
+import type { PdfContentReaderPort } from "../../domain/ports/out/pdf-content-reader.port.js";
+import type { InvoiceReadingWritePort } from "../../domain/ports/out/invoice-reading-write.port.js";
+import type { ClassifyInvoiceLinesPort } from "../../domain/ports/in/classify-invoice-lines.port.js";
+import type { InvoiceLayout } from "../../domain/services/reading/invoice-layout.js";
+import type { InvoiceReading } from "../../domain/entities/invoice-reading.js";
+import type { AiExtractionResult } from "../../domain/entities/ai-extraction-result.js";
+import type { LineClassification } from "../../domain/services/classification/line-classifier.js";
+import { readInvoice } from "../../domain/services/reading/invoice-reader.service.js";
+import { readingToExtraction } from "../../domain/services/reading/reading-to-extraction.js";
 
 const AI_CONFIDENCE_REVIEW_THRESHOLD = 0.7;
 const VALUE_DISCREPANCY_MARGIN_CENTS = 2;
+const LOCAL_READ_TIMEOUT_MS = 8000;
+
+/**
+ * Leitor inteligente (E3): leitura determinística (QR + texto do PDF) antes da IA e
+ * categoria sugerida por linha. Opcional — sem ela a importação é a de sempre.
+ */
+export interface SmartReadingDeps {
+  pdf: PdfContentReaderPort;
+  layouts: InvoiceLayout[];
+  readingWrite: InvoiceReadingWritePort;
+  classifyLines: ClassifyInvoiceLinesPort | null;
+}
 
 export class ImportInvoiceUseCase implements ImportInvoicePort {
   constructor(
@@ -28,7 +49,29 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     private readonly supplierHint: SupplierHintPort,
     private readonly organizationIdentityRead: OrganizationIdentityReadPort,
     private readonly fiscal: FiscalIdentityPort,
+    private readonly smart: SmartReadingDeps | null = null,
   ) {}
+
+  /** Leitura determinística; null = sem layout reconhecido, sem linhas ou falha (segue a IA). */
+  private async readLocally(buffer: Buffer, mimeType: string): Promise<InvoiceReading | null> {
+    if (!this.smart || mimeType !== "application/pdf") return null;
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), LOCAL_READ_TIMEOUT_MS).unref?.());
+    const content = await Promise.race([this.smart.pdf.read(buffer, mimeType).catch(() => null), timeout]);
+    if (!content) return null;
+    const reading = readInvoice(content, this.smart.layouts);
+    return reading.status !== "unsupported" && reading.lines.length > 0 ? reading : null;
+  }
+
+  /** Categoria sugerida por linha; nunca faz falhar a importação. */
+  private async classify(organizationId: ImportInvoiceCommand["organizationId"], supplierId: string | null, extraction: AiExtractionResult): Promise<LineClassification[]> {
+    if (!this.smart?.classifyLines || extraction.lines.length === 0) return [];
+    try {
+      const lines = extraction.lines.map((l, index) => ({ index, kind: l.meta?.kind ?? ("product" as const), supplierCode: l.meta?.supplierCode ?? null, description: l.description }));
+      return (await this.smart.classifyLines.execute(organizationId, { supplierId, lines })).classifications;
+    } catch {
+      return [];
+    }
+  }
 
   async execute(command: ImportInvoiceCommand): Promise<InvoiceImportResultDTO> {
     // 0. Mesmo ficheiro já importado → devolve o mesmo documento (sem nova extração paga nem cópia).
@@ -46,8 +89,12 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       command.organizationId,
     );
 
-    // 2. Extract invoice data with AI (send buffer directly — no public URL needed)
-    const extraction = await this.aiExtraction.extract(command.fileBuffer, command.mimeType);
+    // 2. Leitor determinístico primeiro (QR fiscal + texto do PDF, sem IA); sem layout conhecido → IA
+    //    (buffer enviado diretamente — sem URL público).
+    const t0 = Date.now();
+    const reading = await this.readLocally(command.fileBuffer, command.mimeType);
+    const extraction = reading ? readingToExtraction(reading) : await this.aiExtraction.extract(command.fileBuffer, command.mimeType);
+    const readMs = Date.now() - t0;
 
     // 2b. Guard: the AI sometimes reads our own company's details off the
     // invoice (billing/"cliente" section) instead of the actual issuer's —
@@ -153,7 +200,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       supplierNif: supplierNif ?? supplierMatch?.nif ?? null,
       documentType: command.documentType ?? extraction.documentType ?? "invoice",
       invoiceNumber: extraction.invoiceNumber ?? null,
-      atcud: null,
+      atcud: reading?.header.atcud ?? null,
     });
     if (fiscalCheck.kind === "existing_finance" && fiscalCheck.existingInvoiceId) {
       const original = await this.invoiceRepo.findById(command.organizationId, fiscalCheck.existingInvoiceId);
@@ -201,6 +248,12 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
 
     await this.invoiceRepo.save(command.organizationId, finalInvoice);
     await this.invoiceRepo.setFileHash(command.organizationId, finalInvoice.id, sha256);
+    if (this.smart && reading) {
+      // Evidência da leitura: se falhar, a importação continua (o rascunho já está gravado).
+      await this.smart.readingWrite.save(command.organizationId, finalInvoice.id, { fiscalQr: reading.qr?.fields ?? null, source: "deterministic" }).catch(() => undefined);
+    }
+    const classifications = await this.classify(command.organizationId, supplierMatch?.id ?? null, extraction);
+    const byIndex = new Map(classifications.map((c) => [c.index, c]));
 
     return {
       invoice: toInvoiceDTO(finalInvoice),
@@ -216,7 +269,14 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
             defaultFinancialType: supplierMatch.defaultFinancialType,
           }
         : null,
-      extractedLines: extraction.lines.map((l) => ({
+      extractedLines: extraction.lines.map((l, i) => ({
+        ...(l.meta && { meta: l.meta }),
+        ...(byIndex.has(i) && {
+          suggestedCostCenterCategoryId: byIndex.get(i)!.categoryId,
+          classificationSource: byIndex.get(i)!.source,
+          classificationEvidence: byIndex.get(i)!.evidence,
+          ...(byIndex.get(i)!.conflict && { classificationConflict: true }),
+        }),
         description: l.description,
         quantity: l.quantity,
         unitPriceWithoutVat: l.unitPriceWithoutVat,
@@ -231,6 +291,17 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
         discountAmount: l.discountAmount ?? null,
       })),
       ...(extraction.amounts && { extractedAmounts: extraction.amounts }),
+      ...(this.smart && {
+        reading: {
+          source: reading ? ("deterministic" as const) : ("ai" as const),
+          layout: reading?.layout ?? null,
+          qrRead: !!reading?.qr,
+          status: reading?.status ?? ("unsupported" as const),
+          issues: reading?.issues ?? [],
+          aiCalls: reading ? 0 : 1,
+          ms: readMs,
+        },
+      }),
       fiscal: {
         kind: fiscalCheck.kind,
         ...(fiscalCheck.kind === "existing_stock_only" && { identityId: fiscalCheck.identityId }),

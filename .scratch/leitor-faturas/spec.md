@@ -41,6 +41,13 @@ Origem: TASK V2 do utilizador (2026-10-24) + anexo de auditoria de 3 faturas Mak
 - Bug encontrado e corrigido: leitura pendurada em certos PDFs (imagem que o pdfjs nunca resolvia) — limite de 1,5 s por imagem + 8 s na deteção.
 - Por decidir (precisa de migração): rascunho próprio de obrigação (`document_kind` + referência/período/entidade MB) para não passar pelo fluxo de faturas; ligação explícita a uma obrigação existente; categoria proposta pelo histórico do fornecedor.
 
+## E3 — leitor e classificação ligados ao import (2026-10-24, por commitar)
+- Backend: `ImportInvoiceUseCase` tenta primeiro o leitor determinístico; com layout reconhecido não chama a IA. ATCUD do QR para a identidade fiscal; QR e origem gravados na fatura; categoria sugerida por linha com origem/evidência; metadados guardados nas linhas ao confirmar. Migração `20261106100000_invoice_reading_fields` (+ rollback), validada em PGlite, **não aplicada**.
+- Frontend: revisão pré-preenchida com a subcategoria sugerida por linha (e origem), «Por artigo» quando as sugestões diferem, categoria única quando são todas iguais, aviso «Lido sem IA» com os problemas da leitura; mudar a sugestão grava a origem como «manual».
+- Prova ponta a ponta (PDFs reais, repositórios falsos): 3 faturas Makro lidas sem IA (0,1–0,8 s), totais certos, 59/59 linhas com categoria sugerida.
+- Limitações: rascunho reaberto e reconfirmado perde os metadados das linhas (o DTO das linhas ainda não os devolve); orçamento diário de IA por organização ainda não existe (task-mestre F4) — só o limite de 120 linhas por fatura e o interruptor `INVOICE_LINE_AI=off`.
+- E3b (a seguir): logótipo do fornecedor a partir da fatura; rascunho próprio de obrigações AT/SS; leitor genérico para outros fornecedores.
+
 ## Riscos / pendências
 - O leitor ainda não está ligado ao fluxo real (E3): o import continua a usar só a IA.
 - `pdfjs-dist` e `@napi-rs/canvas` são usados diretamente mas vêm como dependências do `pdf-parse`/`pdf-to-img` (versão do pdfjs fixada em `overrides`). Se quiserem, declarar `pdfjs-dist` em `dependencies` (mesma versão).

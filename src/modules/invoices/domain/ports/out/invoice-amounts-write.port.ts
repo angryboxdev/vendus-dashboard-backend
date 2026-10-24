@@ -1,4 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+import type { LineReadingMeta } from "../../entities/ai-extraction-result.js";
 
 /** Valores normalizados de uma linha (motor único) e os textos originais extraídos. */
 export interface LineAmountsRecord {
@@ -11,6 +12,9 @@ export interface LineAmountsRecord {
   discountCents: number;
   globalDiscountCents: number;
   netCents: number;
+  /** E3: só presentes nas linhas vindas do pedido (ausentes = não mexer no que está gravado). */
+  supplierItemCode?: string | null;
+  readingMeta?: LineReadingMeta | null;
 }
 
 /** Valores do documento: bruto, descontos, quadro de IVA por taxa e diferença para a fatura. */

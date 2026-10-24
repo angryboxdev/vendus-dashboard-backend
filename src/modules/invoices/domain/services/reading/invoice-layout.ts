@@ -13,7 +13,7 @@ export interface LayoutDiscount {
 }
 
 export interface LayoutResult {
-  header: { documentNumber: string | null; atcud: string | null; issuerNif: string | null; buyerNif: string | null; issueDate: string | null };
+  header: { supplierName: string | null; documentNumber: string | null; atcud: string | null; issuerNif: string | null; buyerNif: string | null; issueDate: string | null };
   lines: LayoutLine[];
   discounts: LayoutDiscount[];
   footer: {

@@ -42,7 +42,7 @@ export function readInvoice(content: PdfContent, layouts: InvoiceLayout[]): Invo
   const { qr, issues } = readFiscalQr(content);
   const layout = layouts.find((l) => l.detect(content, qr)) ?? null;
   const emptyTotals = { grossCents: 0, discountCents: 0, netCents: 0, vatCents: 0, totalCents: qr?.totalCents ?? null, depositsCents: 0, productUnits: "0", depositUnits: "0" };
-  const qrHeader = { issuerNif: qr?.issuerNif ?? null, buyerNif: qr?.buyerNif ?? null, documentType: qr?.documentType ?? null, documentNumber: qr?.documentNumber ?? null, atcud: qr?.atcud ?? null, issueDate: qr?.issueDate ?? null };
+  const qrHeader = { supplierName: null, issuerNif: qr?.issuerNif ?? null, buyerNif: qr?.buyerNif ?? null, documentType: qr?.documentType ?? null, documentNumber: qr?.documentNumber ?? null, atcud: qr?.atcud ?? null, issueDate: qr?.issueDate ?? null };
   if (!layout) {
     issues.push({ code: "layout_unknown", blocking: true, detail: "Layout de fatura sem leitor determinístico." });
     return { layout: null, qr, header: qrHeader, lines: [], vatTable: [], totals: emptyTotals, issues, status: "unsupported" };
@@ -147,6 +147,7 @@ function crossCheckHeader(qr: FiscalQr | null, parsed: LayoutResult, issues: Rea
     if (diffs.length) issues.push({ code: "qr_header_mismatch", blocking: true, detail: `QR diferente do cabeçalho: ${diffs.join("; ")}.` });
   }
   return {
+    supplierName: h.supplierName,
     issuerNif: qr?.issuerNif ?? h.issuerNif,
     buyerNif: qr?.buyerNif ?? h.buyerNif,
     documentType: qr?.documentType ?? null,

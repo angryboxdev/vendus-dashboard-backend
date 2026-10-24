@@ -1,4 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+import type { LineReadingMeta } from "../../entities/ai-extraction-result.js";
 import type {
   InvoiceStatus,
   InvoiceLineType,
@@ -150,6 +151,25 @@ export interface AiExtractedLineDTO {
   /** Desconto comercial da linha: % (10 = 10%) ou valor em cêntimos. */
   discountPct?: number | null;
   discountAmount?: number | null;
+  /** Leitor determinístico (E3): código do artigo, página, tipo, IVA do fornecedor, promoção, depósito→artigo. */
+  meta?: LineReadingMeta;
+  /** Categoria sugerida para a linha (subcategoria do catálogo da organização) — sugestão, nunca aplicada sem revisão. */
+  suggestedCostCenterCategoryId?: string | null;
+  classificationSource?: "line_kind" | "history_code" | "history_description" | "keyword" | "ai" | "none";
+  classificationEvidence?: string;
+  /** Histórico em conflito: decisão humana. */
+  classificationConflict?: boolean;
+}
+
+/** Como foi lido o documento importado (E3). */
+export interface ImportReadingDTO {
+  source: "deterministic" | "ai";
+  layout: string | null;
+  qrRead: boolean;
+  status: "ready" | "needs_attention" | "unsupported";
+  issues: { code: string; blocking: boolean; detail: string }[];
+  aiCalls: number;
+  ms: number;
 }
 
 export interface InvoiceImportResultDTO {
@@ -164,6 +184,8 @@ export interface InvoiceImportResultDTO {
   reused?: "same_file" | "same_fiscal_identity";
   /** Identidade fiscal do documento extraído (avisos na revisão). */
   fiscal?: { kind: string; existingInvoiceId?: string | null; identityId?: string; candidates?: { invoiceId: string | null; seriesNumber: string }[]; missing?: string[] };
+  /** Leitor usado (QR + texto do PDF, ou IA) e problemas encontrados (E3). */
+  reading?: ImportReadingDTO;
 }
 
 export interface InvoiceAlertsDTO {
@@ -203,6 +225,8 @@ export interface CreateInvoiceLineCommand {
   grossCentsPrinted?: number | null;
   /** Desconto comercial da linha: % (value = 10 → 10%) ou € (value em cêntimos). */
   discount?: AmountDiscountCommand | null;
+  /** Metadados do leitor determinístico (E3), guardados com a linha. */
+  reading?: LineReadingMeta | null;
 }
 
 export type FinancialModeName = "single" | "by_item" | "by_values";

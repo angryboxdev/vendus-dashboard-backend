@@ -66,6 +66,9 @@ export class SupabaseInvoiceAmountsWriteAdapter implements InvoiceAmountsWritePo
           discount_cents: l.discountCents,
           global_discount_cents: l.globalDiscountCents,
           net_cents: l.netCents,
+          // Migração 20261106100000: só quando a linha veio do pedido.
+          ...(l.supplierItemCode !== undefined && { supplier_item_code: l.supplierItemCode }),
+          ...(l.readingMeta !== undefined && { reading_meta: l.readingMeta }),
         })
         .eq("id", l.lineId)
         .eq("invoice_id", invoiceId);
