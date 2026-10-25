@@ -19,6 +19,7 @@ export class UpsertSupplierDeliveryScheduleUseCase implements UpsertSupplierDeli
           weekdays: command.weekdays,
           cutoffTime: command.cutoffTime ?? null,
           ...(command.active !== undefined && { active: command.active }),
+          ...(command.dayRules !== undefined && { dayRules: command.dayRules }),
         })
       : SupplierDeliverySchedule.create({
           supplierId: command.supplierId,
@@ -26,6 +27,7 @@ export class UpsertSupplierDeliveryScheduleUseCase implements UpsertSupplierDeli
           weekdays: command.weekdays,
           cutoffTime: command.cutoffTime ?? null,
           active: command.active ?? true,
+          dayRules: command.dayRules ?? [],
         });
 
     await this.repository.upsert(command.organizationId, schedule);

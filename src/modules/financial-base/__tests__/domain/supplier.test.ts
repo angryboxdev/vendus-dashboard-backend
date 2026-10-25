@@ -1,4 +1,5 @@
 import { Supplier } from "../../domain/entities/supplier.js";
+import { InvalidMinOrderValueError } from "../../domain/errors.js";
 
 describe("Supplier", () => {
   describe("create", () => {
@@ -68,6 +69,21 @@ describe("Supplier", () => {
       expect(withLogo.update({ notes: "x" }).logoUrl).toBe(withLogo.logoUrl);
       expect(withLogo.deactivate().logoUrl).toBe(withLogo.logoUrl);
       expect(withLogo.update({ logoUrl: null }).logoUrl).toBeNull();
+    });
+  });
+  describe("encomenda mínima", () => {
+    it("começa sem mínimo; update define, mantém e remove", () => {
+      const s = Supplier.create({ name: "Fornecedor Teste" });
+      expect(s.minOrderValue).toBeNull();
+      const withMin = s.update({ minOrderValue: 150 });
+      expect(withMin.minOrderValue).toBe(150);
+      expect(withMin.update({ notes: "x" }).minOrderValue).toBe(150);
+      expect(withMin.update({ minOrderValue: null }).minOrderValue).toBeNull();
+    });
+
+    it("rejeita valores negativos ou inválidos", () => {
+      expect(() => Supplier.create({ name: "F", minOrderValue: -1 })).toThrow(InvalidMinOrderValueError);
+      expect(() => Supplier.create({ name: "F" }).update({ minOrderValue: Number.NaN })).toThrow(InvalidMinOrderValueError);
     });
   });
 });

@@ -1,6 +1,6 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
-import { SupplierDeliverySchedule } from "../../domain/entities/supplier-delivery-schedule.js";
+import { SupplierDeliverySchedule, type DeliveryDayRule } from "../../domain/entities/supplier-delivery-schedule.js";
 import type { SupplierDeliveryScheduleRepositoryPort } from "../../domain/ports/out/supplier-delivery-schedule-repository.port.js";
 
 function toEntity(row: Record<string, unknown>): SupplierDeliverySchedule {
@@ -11,6 +11,7 @@ function toEntity(row: Record<string, unknown>): SupplierDeliverySchedule {
     weekdays: (row.weekdays as number[] | null) ?? null,
     cutoffTime: (row.cutoff_time as string | null) ?? null,
     active: Boolean(row.active),
+    dayRules: Array.isArray(row.day_rules) ? (row.day_rules as DeliveryDayRule[]) : [],
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   });
@@ -51,6 +52,7 @@ export class SupabaseSupplierDeliveryScheduleRepository implements SupplierDeliv
           weekdays: p.weekdays,
           cutoff_time: p.cutoffTime,
           active: p.active,
+          day_rules: p.dayRules,
           created_at: p.createdAt.toISOString(),
           updated_at: p.updatedAt.toISOString(),
         },

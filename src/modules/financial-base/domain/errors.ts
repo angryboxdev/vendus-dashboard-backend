@@ -82,3 +82,17 @@ export class InvalidDeliveryWeekdayError extends Error {
     this.name = "InvalidDeliveryWeekdayError";
   }
 }
+
+export class InvalidDeliveryDayRuleError extends Error {
+  constructor(detail: string) {
+    super(`Regra do calendário de entrega inválida: ${detail}`);
+    this.name = "InvalidDeliveryDayRuleError";
+  }
+}
+
+export class InvalidMinOrderValueError extends Error {
+  constructor() {
+    super("A encomenda mínima tem de ser um valor igual ou superior a 0");
+    this.name = "InvalidMinOrderValueError";
+  }
+}

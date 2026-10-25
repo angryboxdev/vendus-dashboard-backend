@@ -6,6 +6,10 @@ import type {
   SupplierRepositoryPort,
 } from "../../domain/ports/out/supplier-repository.port.js";
 
+// A encomenda mínima é guardada em cêntimos (como as faturas); o domínio trabalha em euros.
+const fromCents = (n: number): number => n / 100;
+const toCents = (n: number | null): number | null => (n == null ? null : Math.round(n * 100));
+
 function toEntity(row: Record<string, unknown>): Supplier {
   return Supplier.reconstitute({
     id: row.id as string,
@@ -25,6 +29,7 @@ function toEntity(row: Record<string, unknown>): Supplier {
     defaultFinancialMode: (row.default_financial_mode as FinancialMode | null) ?? null,
     defaultLocationId: (row.default_location_id as string | null) ?? null,
     logoUrl: (row.logo_url as string | null | undefined) ?? null,
+    minOrderValue: row.min_order_value_cents != null ? fromCents(Number(row.min_order_value_cents)) : null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   });
@@ -56,6 +61,7 @@ export class SupabaseSupplierRepository implements SupplierRepositoryPort {
       default_financial_type: supplier.defaultFinancialType,
       default_financial_mode: supplier.defaultFinancialMode,
       default_location_id: supplier.defaultLocationId,
+      min_order_value_cents: toCents(supplier.minOrderValue),
       created_at: supplier.createdAt.toISOString(),
       updated_at: supplier.updatedAt.toISOString(),
     });
@@ -107,6 +113,7 @@ export class SupabaseSupplierRepository implements SupplierRepositoryPort {
       default_financial_mode: supplier.defaultFinancialMode,
       default_location_id: supplier.defaultLocationId,
       logo_url: supplier.logoUrl,
+      min_order_value_cents: toCents(supplier.minOrderValue),
         updated_at: supplier.updatedAt.toISOString(),
       })
       .eq("id", supplier.id);

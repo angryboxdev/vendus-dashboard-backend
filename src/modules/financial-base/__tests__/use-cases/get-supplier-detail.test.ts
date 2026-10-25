@@ -104,4 +104,20 @@ describe("GetSupplierDetailUseCase", () => {
     expect(result.invoices[1]!.invoiceNumber).toBe("F002");
     expect(result.invoices[1]!.status).toBe("pending");
   });
+
+  it("devolve os artigos principais a partir das linhas compradas", async () => {
+    const repo = new FakeSupplierRepository();
+    const statsPort = new FakeSupplierInvoiceStats();
+    const s = Supplier.create({ name: "Bebidas Teste" });
+    await repo.save(ORG_ID, s);
+    statsPort.seedPurchasedLines(s.id, [
+      { invoiceDate: new Date("2026-09-12"), description: "Água 1L", supplierItemCode: "AG1", stockItemId: null, stockItemName: null, unitCostWithoutVat: 0.89, totalWithVat: 50 },
+      { invoiceDate: new Date("2026-09-08"), description: "Sumo", supplierItemCode: "SU1", stockItemId: null, stockItemName: null, unitCostWithoutVat: 0.68, totalWithVat: 20 },
+    ]);
+
+    const result = await new GetSupplierDetailUseCase(repo, statsPort).execute({ organizationId: ORG_ID, id: s.id });
+
+    expect(result.topItems.map((i) => i.code)).toEqual(["AG1", "SU1"]);
+    expect(result.topItems[0]!.lastUnitPrice).toBe(0.89);
+  });
 });

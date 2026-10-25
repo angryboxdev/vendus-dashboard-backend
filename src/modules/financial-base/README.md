@@ -144,7 +144,7 @@ módulo.
 - `ListSuppliersWithStatsPort` — lista com filtros + agregados financeiros por fornecedor (invoiceCount, totalBilled, totalPaid, totalPending).
 - `GetSupplierPort` — obtém um fornecedor por id; lança `SupplierNotFoundError`.
 - `GetSuppliersKpisPort` — `execute(organizationId)`; KPIs globais da listagem: totalActive, totalInactive, totalWithPending, totalBilledAll.
-- `GetSupplierDetailPort` — detalhe completo: dados base + resumo financeiro + lista de faturas.
+- `GetSupplierDetailPort` — detalhe completo: dados base + resumo financeiro + lista de faturas + `topItems` (5 «artigos principais»: onde mais se gastou, com código, última compra e preço unitário sem IVA dessa compra — serviço puro `domain/services/top-purchased-items.ts`, agrupa por artigo de stock, senão código do fornecedor, senão descrição normalizada).
 - `GetSupplierStatementPort` — dados filtrados por período (startDate?, endDate?) para geração de extrato PDF.
 
 **Canais**
@@ -155,14 +155,15 @@ módulo.
 
 **Calendário de entrega de fornecedores** (novo — módulo Stock — Planeamento, D10)
 - `ListSupplierDeliverySchedulesPort` — lista os calendários de um fornecedor em todas as lojas.
-- `UpsertSupplierDeliverySchedulePort` — cria ou actualiza o calendário de um par fornecedor×loja (uma linha cada, nunca duplicada); valida dias da semana (1-7).
+- `UpsertSupplierDeliverySchedulePort` — cria ou actualiza o calendário de um par fornecedor×loja (uma linha cada, nunca duplicada); valida dias da semana (1-7). Guarda também `dayRules` (por dia de entrega: dia/hora limite do pedido — `null` = véspera / hora limite geral — e observação ≤ 200 car.; coluna jsonb `day_rules`, migração `20261112100000_supplier_supply_rules`); tirar um dia apaga a sua regra; pedido sem `dayRules` mantém as atuais.
+- Fornecedor: `minOrderValue` (encomenda mínima, euros; guardada em cêntimos em `suppliers.min_order_value_cents`; ≥ 0 ou `null`).
 
 ### Saída (dependências do domínio)
 
 - `CostCenterGroupRepositoryPort` — `save(organizationId, group)`, `findById(organizationId, id)`, `findByCode(organizationId, code)`, `findAll(organizationId, filter?)`, `update(organizationId, group)`.
 - `CostCenterCategoryRepositoryPort` — `save(organizationId, category)`, `findById(organizationId, id)`, `findByCode(organizationId, code)`, `findByGroupId(organizationId, groupId)`, `findAll(organizationId, filter?)`, `update(organizationId, category)`.
 - `SupplierRepositoryPort` — `save(organizationId, supplier)`, `findById(organizationId, id)`, `findAll(organizationId, filter?)`, `update(organizationId, supplier)`.
-- `SupplierInvoiceStatsPort` — `getSummariesForSuppliers(organizationId, ids)`, `listInvoicesBySupplier(organizationId, id, filter?)`. Lê da tabela `invoices` para agregar dados financeiros por fornecedor. `SupplierInvoiceRow` inclui `totalWithoutVat`, `vatAmount`, `totalWithVat`; `filter` aceita `startDate?`/`endDate?`.
+- `SupplierInvoiceStatsPort` — `getSummariesForSuppliers(organizationId, ids)`, `listInvoicesBySupplier(organizationId, id, filter?)`, `listPurchasedLinesBySupplier(organizationId, id)` (linhas das faturas confirmadas — sem notas de crédito, anuladas, rascunhos nem em revisão). Lê da tabela `invoices` para agregar dados financeiros por fornecedor. `SupplierInvoiceRow` inclui `totalWithoutVat`, `vatAmount`, `totalWithVat`; `filter` aceita `startDate?`/`endDate?`.
 - `ChannelRepositoryPort` — `findAll(organizationId, isActive?)`, `findById(organizationId, id)`.
 - `OrganizationIdentityPort` — `findById(organizationId)`. Um único parâmetro: a tabela `organizations` está registada no `TABLE_REGISTRY` (`src/infra/scoped-db/`) com a sua própria PK (`id`) como coluna de organização, pelo que escopar por `organizationId` já é a própria consulta — não há um id de organização separado a passar (ver decisão de design abaixo).
 - `SupplierDeliveryScheduleRepositoryPort` — `findAllForSupplier(organizationId, supplierId)`, `findOne(organizationId, supplierId, locationId)`, `upsert(organizationId, schedule)`.
@@ -179,7 +180,7 @@ módulo.
 - `SupabaseCostCenterGroupRepository` → implementa `CostCenterGroupRepositoryPort` na tabela `cost_center_groups`, via `ScopedQuery`.
 - `SupabaseCostCenterCategoryRepository` → implementa `CostCenterCategoryRepositoryPort` na tabela `cost_center_categories`, via `ScopedQuery`.
 - `SupabaseSupplierRepository` → implementa `SupplierRepositoryPort` na tabela `suppliers`, via `ScopedQuery`.
-- `SupabaseSupplierInvoiceStatsAdapter` → implementa `SupplierInvoiceStatsPort` lendo da tabela `invoices`, via `ScopedQuery`. Agrega stats em TypeScript após fetch por `supplier_id`. **Atenção:** a tabela `invoices` guarda valores monetários em cêntimos (inteiros); o adapter divide por 100 ao mapear para euros — consistente com o módulo `invoices`.
+- `SupabaseSupplierInvoiceStatsAdapter` → implementa `SupplierInvoiceStatsPort` lendo da tabela `invoices`, via `ScopedQuery`. Agrega stats em TypeScript após fetch por `supplier_id`. As linhas compradas vêm de `invoice_lines` (+ nome em `stock_items`), com os ids em lotes de 200 para não exceder o URL do PostgREST. **Atenção:** a tabela `invoices` guarda valores monetários em cêntimos (inteiros); o adapter divide por 100 ao mapear para euros — consistente com o módulo `invoices`.
 - `SupabaseChannelRepository` → implementa `ChannelRepositoryPort` na tabela `channels` (read-only; canais geridos por migration), via `ScopedQuery`.
 - `SupabaseOrganizationIdentityRepository` → implementa `OrganizationIdentityPort` na tabela `organizations` (tenant root; read-only aqui), via `ScopedQuery`.
 - `SupabaseSupplierDeliveryScheduleRepository` → implementa `SupplierDeliveryScheduleRepositoryPort` na tabela `supplier_delivery_schedules` (nova, módulo Stock — Planeamento), via `ScopedQuery`.
@@ -210,7 +211,7 @@ POST   /api/financial-base/cost-centers/seed                 popular com dados p
 GET    /api/financial-base/suppliers                         lista (query: status?, search?, includeStats?)
 GET    /api/financial-base/suppliers/kpis                    KPIs globais (totalActive, totalInactive, totalWithPending, totalBilledAll)
 GET    /api/financial-base/suppliers/:id                     detalhe básico
-GET    /api/financial-base/suppliers/:id/detail              detalhe completo com resumo financeiro + lista de faturas
+GET    /api/financial-base/suppliers/:id/detail              detalhe completo com resumo financeiro + lista de faturas + artigos principais
 GET    /api/financial-base/suppliers/:id/statement-pdf       extrato PDF (query: startDate?, endDate? — formato YYYY-MM-DD)
 POST   /api/financial-base/suppliers                         criar
 PATCH  /api/financial-base/suppliers/:id                     actualizar
@@ -219,7 +220,7 @@ PATCH  /api/financial-base/suppliers/:id/status              activar/desactivar
 GET    /api/financial-base/channels                          lista (query: isActive?)
 
 GET    /api/financial-base/suppliers/:id/delivery-schedule   lista o calendário de entrega em todas as lojas (módulo Stock — Planeamento, D10)
-PUT    /api/financial-base/suppliers/:id/delivery-schedule   cria/actualiza o calendário de um par fornecedor×loja (body: locationId, weekdays, cutoffTime?, active?)
+PUT    /api/financial-base/suppliers/:id/delivery-schedule   cria/actualiza o calendário de um par fornecedor×loja (body: locationId, weekdays, cutoffTime?, active?, dayRules?)
 ```
 
 ## Tabelas Supabase

@@ -38,16 +38,39 @@ import type { SupplierStatementDTO } from "../../domain/ports/in/supplier-statem
 import type { ListChannelsPort } from "../../domain/ports/in/channel.ports.js";
 import type { GetOrganizationIdentityPort } from "../../domain/ports/in/organization-identity.ports.js";
 import type {
+  DeliveryDayRuleDTO,
   ListSupplierDeliverySchedulesPort,
   UpsertSupplierDeliverySchedulePort,
 } from "../../domain/ports/in/supplier-delivery-schedule.ports.js";
 import type { SupplierLocationRulesPort } from "../../domain/ports/in/supplier-location-rules.ports.js";
 import type { FinancialMode } from "../../domain/entities/supplier.js";
-import { InvalidDefaultStockPolicyError, InvalidFinancialModeError, InvalidSupplierDefaultsError } from "../../domain/errors.js";
+import {
+  InvalidDefaultStockPolicyError,
+  InvalidFinancialModeError,
+  InvalidMinOrderValueError,
+  InvalidSupplierDefaultsError,
+} from "../../domain/errors.js";
 
 /** Dados de fornecedor inválidos (política, modo, predefinições incoerentes) → 400. */
 const isSupplierInputError = (e: unknown) =>
-  e instanceof InvalidDefaultStockPolicyError || e instanceof InvalidFinancialModeError || e instanceof InvalidSupplierDefaultsError;
+  e instanceof InvalidDefaultStockPolicyError ||
+  e instanceof InvalidFinancialModeError ||
+  e instanceof InvalidSupplierDefaultsError ||
+  e instanceof InvalidMinOrderValueError;
+
+/** Corpo HTTP → regras por dia; a validação de conteúdo fica no domínio. */
+function parseDayRules(raw: unknown): DeliveryDayRuleDTO[] {
+  if (!Array.isArray(raw)) throw new Error("dayRules tem de ser uma lista");
+  return raw.map((r) => {
+    const o = (r ?? {}) as Record<string, unknown>;
+    return {
+      weekday: Number(o.weekday),
+      orderWeekday: o.orderWeekday == null ? null : Number(o.orderWeekday),
+      orderTime: typeof o.orderTime === "string" && o.orderTime !== "" ? o.orderTime : null,
+      notes: typeof o.notes === "string" ? o.notes : null,
+    };
+  });
+}
 
 
 // ── Helpers de formatação ─────────────────────────────────────────────────────
@@ -892,6 +915,7 @@ export class FinancialBaseController {
           defaultFinancialType: (body.defaultFinancialType as string | null | undefined) ?? null,
           defaultFinancialMode: (body.defaultFinancialMode as FinancialMode | null | undefined) ?? null,
           defaultLocationId: (body.defaultLocationId as string | null | undefined) ?? null,
+          minOrderValue: body.minOrderValue != null ? Number(body.minOrderValue) : null,
         });
         res.status(201).json(result);
       } catch (e) {
@@ -932,6 +956,7 @@ export class FinancialBaseController {
         if ("defaultFinancialType" in body) data.defaultFinancialType = (body.defaultFinancialType as string | null) ?? null;
         if ("defaultFinancialMode" in body) data.defaultFinancialMode = (body.defaultFinancialMode as FinancialMode | null) ?? null;
         if ("defaultLocationId" in body) data.defaultLocationId = (body.defaultLocationId as string | null) ?? null;
+        if ("minOrderValue" in body) data.minOrderValue = body.minOrderValue != null ? Number(body.minOrderValue) : null;
         if ("logoUrl" in body) {
           // Só ficheiros guardados no nosso armazenamento (logótipo proposto a partir de uma fatura).
           const logo = (body.logoUrl as string | null) ?? null;
@@ -1050,7 +1075,8 @@ export class FinancialBaseController {
 
     /**
      * PUT /financial-base/suppliers/:id/delivery-schedule
-     * Body: { locationId, weekdays: number[] | null, cutoffTime?, active? }
+     * Body: { locationId, weekdays: number[] | null, cutoffTime?, active?, dayRules? }
+     * dayRules: [{ weekday, orderWeekday|null, orderTime|null, notes|null }] — ausente mantém as atuais.
      * Cria ou atualiza o calendário deste par fornecedor×loja (uma linha cada, nunca duplicada).
      */
     this.router.put("/financial-base/suppliers/:id/delivery-schedule", async (req, res) => {
@@ -1067,6 +1093,7 @@ export class FinancialBaseController {
           weekdays: (body.weekdays as number[] | null | undefined) ?? null,
           cutoffTime: (body.cutoffTime as string | null | undefined) ?? null,
           ...(body.active !== undefined && { active: Boolean(body.active) }),
+          ...(body.dayRules !== undefined && { dayRules: parseDayRules(body.dayRules) }),
         });
         res.json(result);
       } catch (e) {

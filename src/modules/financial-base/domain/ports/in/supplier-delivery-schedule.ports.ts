@@ -1,4 +1,7 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+import type { DeliveryDayRule } from "../../entities/supplier-delivery-schedule.js";
+
+export type DeliveryDayRuleDTO = DeliveryDayRule;
 
 export interface SupplierDeliveryScheduleDTO {
   id: string;
@@ -7,6 +10,8 @@ export interface SupplierDeliveryScheduleDTO {
   weekdays: number[] | null;
   cutoffTime: string | null;
   active: boolean;
+  /** Por dia de entrega: até quando se encomenda e observação. */
+  dayRules: DeliveryDayRuleDTO[];
 }
 
 // ── List (por fornecedor, todas as lojas) ────────────────────────────────────
@@ -30,6 +35,8 @@ export interface UpsertSupplierDeliveryScheduleCommand {
   weekdays: number[] | null;
   cutoffTime?: string | null;
   active?: boolean;
+  /** Ausente = mantém as regras atuais. */
+  dayRules?: DeliveryDayRuleDTO[];
 }
 
 export interface UpsertSupplierDeliverySchedulePort {

@@ -35,6 +35,8 @@ import { ReviewRecommendationUseCase } from "./application/use-cases/review-reco
 import { DetectForecastDeviationUseCase } from "./application/use-cases/detect-forecast-deviation.use-case.js";
 import { SubmitForecastFeedbackUseCase } from "./application/use-cases/submit-forecast-feedback.use-case.js";
 import { GetForecastHistoryUseCase } from "./application/use-cases/get-forecast-history.use-case.js";
+import { ListSupplierReplenishmentUseCase } from "./application/use-cases/list-supplier-replenishment.use-case.js";
+import { SupplierReplenishmentReadAdapter } from "./adapters/out/supplier-replenishment-read.adapter.js";
 
 import { StockPlanningController } from "./adapters/in/stock-planning.controller.js";
 import type { RunDailyForecastPort, DetectForecastDeviationPort } from "./domain/ports/in/stock-planning.ports.js";
@@ -124,6 +126,12 @@ export function createStockPlanningModule(listLocationsPort: ListLocationsPort, 
   const detectForecastDeviation = new DetectForecastDeviationUseCase(locationRead, forecastRunRepo, demandActualsRepo, forecastFeedbackRepo);
   const submitForecastFeedback = new SubmitForecastFeedbackUseCase(forecastFeedbackRepo);
   const getForecastHistory = new GetForecastHistoryUseCase(forecastRunRepo, forecastFeedbackRepo);
+  const listSupplierReplenishment = new ListSupplierReplenishmentUseCase(
+    stockItemPlanningRead,
+    stockQuantityRead,
+    forecastRunRepo,
+    new SupplierReplenishmentReadAdapter(createScopedQuery),
+  );
 
   const controller = new StockPlanningController(
     listPlanningItems,
@@ -139,6 +147,7 @@ export function createStockPlanningModule(listLocationsPort: ListLocationsPort, 
     runDailyForecast,
     backfillDemandActuals,
     detectForecastDeviation,
+    listSupplierReplenishment,
   );
 
   return { router: controller.router, runDailyForecast, detectForecastDeviation };

@@ -21,6 +21,7 @@ import type {
   GetPlanningAlertDetailPort,
   ListPlanningAlertsPort,
   ListPlanningItemsPort,
+  ListSupplierReplenishmentPort,
   ReviewRecommendationPort,
   RunDailyForecastPort,
   SilenceAlertPort,
@@ -75,6 +76,7 @@ export class StockPlanningController {
     private readonly runDailyForecast: RunDailyForecastPort,
     private readonly backfillDemandActuals: BackfillDemandActualsPort,
     private readonly detectForecastDeviation: DetectForecastDeviationPort,
+    private readonly listSupplierReplenishment: ListSupplierReplenishmentPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -159,6 +161,25 @@ export class StockPlanningController {
           reason: body.reason,
           ...(body.until !== undefined && { until: body.until as string | null }),
           actor: req.auth!.email,
+        });
+        res.json(result);
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+
+    /**
+     * GET /stock-planning/suppliers/:supplierId/replenishment?locationId=
+     * «Necessidades de reposição» da ficha do fornecedor (separador Abastecimento).
+     */
+    this.router.get("/stock-planning/suppliers/:supplierId/replenishment", async (req, res) => {
+      try {
+        const locationId = requireLocationId(req, res);
+        if (!locationId) return;
+        const result = await this.listSupplierReplenishment.execute({
+          organizationId: req.auth!.orgId,
+          supplierId: req.params["supplierId"] as string,
+          locationId,
         });
         res.json(result);
       } catch (e) {

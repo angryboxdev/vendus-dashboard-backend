@@ -58,6 +58,7 @@ export function toSupplierDTO(s: Supplier): SupplierDTO {
     defaultFinancialMode: s.defaultFinancialMode,
     defaultLocationId: s.defaultLocationId,
     logoUrl: s.logoUrl,
+    minOrderValue: s.minOrderValue,
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,
   };
