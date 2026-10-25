@@ -23,4 +23,6 @@ export interface CreateStockItemData {
 export interface StockCatalogWritePort {
   create(organizationId: OrganizationId, data: CreateStockItemData): Promise<StockItemSnapshot>;
   findById(organizationId: OrganizationId, id: string): Promise<StockItemSnapshot | null>;
+  /** Artigos ativos (id, nome, unidade base) — conciliação F3b. */
+  listActive(organizationId: OrganizationId): Promise<StockItemSnapshot[]>;
 }

@@ -6,7 +6,7 @@
 Nem toda fatura de mercadoria muda o stock automaticamente — hoje, mesmo uma fatura da Makro paga pela conta da empresa não gera nenhum inventário nem pendência: o stock só muda por ajuste manual ou pelo consumo calculado a partir das vendas. Este módulo cria a ponte que faltava: quando uma fatura é lançada, o sistema decide (de forma auditável, nunca sozinho) se ela deve gerar uma "Compra por rever"; um gestor de St
 
 ## Estado atual
-Implementado (Compras por rever). F2 §2.1 em produção. **F3a por publicar** (ramo `financeiro`, migração `20261110100000_stock_review_f3a`): linhas com IVA/referência/categoria, custo pelo líquido, três conferências (documento bloqueia, categorias = pendência), divisão por lojas, «Excluída — não afeta Stock». F3b/F3c por fazer.
+Implementado (Compras por rever). F2 §2.1 em produção. F3a: linhas com IVA/referência/categoria, custo pelo líquido, três conferências (documento bloqueia, categorias = pendência), divisão por lojas, «Excluída — não afeta Stock». **F3a em produção** (#112). **F3b por publicar** (migração `20261111100000_stock_review_suggestions`): conciliação proposta (histórico → nome → IA, fator pela embalagem), fila ativa/histórico com valor e progresso, retirar/repor. F3c por fazer.
 
 **Funcionalidades relevantes** (`[ramo financeiro]` = commits locais/ramo não integrado em `main`):
 - Revisão de stock criada a partir de faturas finalizadas (gancho fire-and-forget de `invoices`), idempotente por fatura.
@@ -28,4 +28,4 @@ Importa portas/tipos de: [financial-base](financial-base.md), [invoices](invoice
 - Faturas sem linhas não geram revisão (até à F2 o modo «Única» não guardava linhas).
 
 ## Próximos trabalhos
-- F3b: fila com estados, reprocessamento/linhas manuais, retirar de Compras por rever. F3c: importação no Stock com pendência financeira.
+- F3c: importação no Stock com pendência financeira (inclui «A extrair»/«Falha de extração», reprocessamento e linhas manuais).

@@ -15,6 +15,10 @@ export class FakeStockCatalogWrite implements StockCatalogWritePort {
     return item;
   }
 
+  async listActive(_organizationId: OrganizationId): Promise<StockItemSnapshot[]> {
+    return [...this.items.values()].filter((i) => i.isActive);
+  }
+
   async findById(_organizationId: OrganizationId, id: string): Promise<StockItemSnapshot | null> {
     return this.items.get(id) ?? null;
   }

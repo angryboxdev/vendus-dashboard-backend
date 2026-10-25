@@ -20,6 +20,15 @@ export interface StockReviewLineDTO {
   supplierItemCode: string | null;
   costCenterCategoryId: string | null;
   locationSplits: LocationSplit[] | null;
+  /** F3b: conciliação proposta (não confirmada). */
+  suggestion: {
+    source: "learned" | "name_match" | "ai" | "none";
+    resolution: "existing_item" | "no_stock_effect" | null;
+    stockItemId: string | null;
+    conversionFactor: number | null;
+    confidence: number | null;
+    packagingChanged: boolean;
+  } | null;
   resolutionType: ResolutionType;
   stockItemId: string | null;
   conversionFactor: number | null;
@@ -72,12 +81,19 @@ export interface StockPurchaseReviewRowDTO {
   invoiceDate: string;
   status: StockPurchaseReviewStatus;
   linesCount: number;
+  /** F3b: progresso, valor e destino na fila. */
+  resolvedLines: number;
+  totalCents: number | null;
+  locationId: string | null;
+  decisionSource: DecisionSource;
 }
 
 // ── List ──────────────────────────────────────────────────────────────────
 
 export interface ListStockPurchaseReviewsCommand {
   organizationId: OrganizationId;
+  /** F3b: `active` = por tratar (omissão na UI); `history` = movimentadas, excluídas e retiradas. */
+  view?: "active" | "history";
   status?: StockPurchaseReviewStatus;
   supplierId?: string;
   from?: string;
@@ -155,6 +171,32 @@ export interface SuggestLineMappingCommand {
 
 export interface SuggestLineMappingPort {
   execute(command: SuggestLineMappingCommand): Promise<SuggestedMappingDTO | null>;
+}
+
+// ── Conciliação em lote (F3b) ─────────────────────────────────────────────
+
+export interface SuggestReviewMappingsCommand {
+  organizationId: OrganizationId;
+  reviewId: string;
+  /** Volta a procurar mesmo nas linhas que já têm sugestão (ex.: depois de criar artigos). */
+  refresh?: boolean;
+}
+
+export interface SuggestReviewMappingsPort {
+  execute(command: SuggestReviewMappingsCommand): Promise<StockPurchaseReviewDTO>;
+}
+
+// ── Repor uma revisão retirada (F3b) ──────────────────────────────────────
+
+export interface RestoreStockPurchaseReviewCommand {
+  organizationId: OrganizationId;
+  id: string;
+  actor: string;
+  expectedVersion: number;
+}
+
+export interface RestoreStockPurchaseReviewPort {
+  execute(command: RestoreStockPurchaseReviewCommand): Promise<StockPurchaseReviewDTO>;
 }
 
 // ── Confirm ───────────────────────────────────────────────────────────────

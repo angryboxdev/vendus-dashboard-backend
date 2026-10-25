@@ -25,7 +25,7 @@ export class SuggestLineMappingUseCase implements SuggestLineMappingPort {
     const suggestion = await this.learnedMapping.suggest(
       command.organizationId,
       supplierId,
-      null,
+      line.supplierItemCode,
       normalizeDescription(line.toProps().description),
     );
     return suggestion

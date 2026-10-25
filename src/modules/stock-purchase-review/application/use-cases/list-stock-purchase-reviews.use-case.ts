@@ -17,8 +17,10 @@ export class ListStockPurchaseReviewsUseCase implements ListStockPurchaseReviews
       ...(command.search !== undefined && { search: command.search }),
     });
 
+    const historyStatuses = new Set(["applied", "excluded", "cancelled"]);
+    const visible = command.view ? reviews.filter((r) => historyStatuses.has(r.status) === (command.view === "history")) : reviews;
     const rows: StockPurchaseReviewRowDTO[] = [];
-    for (const review of reviews) {
+    for (const review of visible) {
       const lines = await this.repository.findLinesByReviewId(command.organizationId, review.id);
       const p = review.toProps();
       rows.push({
@@ -29,6 +31,10 @@ export class ListStockPurchaseReviewsUseCase implements ListStockPurchaseReviews
         invoiceDate: p.invoiceDate,
         status: p.status,
         linesCount: lines.length,
+        resolvedLines: lines.filter((l) => l.resolutionType !== "unresolved").length,
+        totalCents: p.invoiceTotalCents,
+        locationId: p.locationId,
+        decisionSource: p.decisionSource,
       });
     }
     return rows.sort((a, b) => (a.invoiceDate < b.invoiceDate ? 1 : a.invoiceDate > b.invoiceDate ? -1 : 0));

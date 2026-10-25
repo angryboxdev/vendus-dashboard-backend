@@ -21,6 +21,16 @@ export function toStockReviewLineDTO(line: StockReviewLine): StockReviewLineDTO 
     supplierItemCode: p.supplierItemCode,
     costCenterCategoryId: p.costCenterCategoryId,
     locationSplits: p.locationSplits,
+    suggestion: p.suggestion
+      ? {
+          source: p.suggestion.source,
+          resolution: p.suggestion.resolution,
+          stockItemId: p.suggestion.stockItemId,
+          conversionFactor: p.suggestion.conversionFactor,
+          confidence: p.suggestion.confidence,
+          packagingChanged: p.suggestion.packagingChanged,
+        }
+      : null,
     resolutionType: p.resolutionType,
     stockItemId: p.stockItemId,
     conversionFactor: p.conversionFactor,

@@ -31,6 +31,9 @@ import { CancelEmptyStockPurchaseReviewsUseCase } from "./application/use-cases/
 import { GetStockPurchaseReviewStatusForInvoiceUseCase } from "./application/use-cases/get-stock-purchase-review-status-for-invoice.use-case.js";
 import { DeleteDraftStockPurchaseReviewUseCase } from "./application/use-cases/delete-draft-stock-purchase-review.use-case.js";
 
+import { SuggestReviewMappingsUseCase } from "./application/use-cases/suggest-review-mappings.use-case.js";
+import { RestoreStockPurchaseReviewUseCase } from "./application/use-cases/restore-stock-purchase-review.use-case.js";
+import { OpenAiStockItemMatchAdapter } from "./adapters/out/openai-stock-item-match.adapter.js";
 import { StockPurchaseReviewController } from "./adapters/in/stock-purchase-review.controller.js";
 import type {
   RecordInvoiceFinalizedForStockPort,
@@ -76,6 +79,10 @@ export function createStockPurchaseReviewModule(
   const categoryRead = new FinancialBaseCostCenterCategoryReadAdapter(listCostCenterCategoriesPort);
   const supplierRead = new FinancialBaseSupplierReadAdapter(getSupplierPort, supplierLocationRules);
   const locationRead = new LocationsReadAdapter(listLocationsPort);
+  // Conciliação por IA (F3b): sem chave ou com STOCK_MATCH_AI=off fica só histórico + nome.
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  const itemMatchAi =
+    openaiApiKey && process.env.STOCK_MATCH_AI !== "off" ? new OpenAiStockItemMatchAdapter(openaiApiKey, process.env.OPENAI_MODEL_TEXT ?? "gpt-4o-mini") : null;
 
   const recordInvoiceFinalizedForStock = new RecordInvoiceFinalizedForStockUseCase(stockMovementWrite, categoryRead, supplierRead);
   const reprocessMissingStockReviews = new ReprocessMissingStockReviewsUseCase(invoiceRead, reviewRepository, recordInvoiceFinalizedForStock);
@@ -91,6 +98,8 @@ export function createStockPurchaseReviewModule(
     new ConfirmStockPurchaseReviewUseCase(reviewRepository, stockMovementWrite, invoiceRead, locationRead, auditLog, categoryRead),
     new CancelStockPurchaseReviewUseCase(reviewRepository, auditLog),
     new CancelEmptyStockPurchaseReviewsUseCase(reviewRepository, auditLog),
+    new SuggestReviewMappingsUseCase(reviewRepository, learnedMapping, stockCatalogWrite, itemMatchAi, categoryRead),
+    new RestoreStockPurchaseReviewUseCase(reviewRepository, auditLog),
   );
 
   return {

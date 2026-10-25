@@ -74,6 +74,11 @@ export class SupabaseStockReviewLearnedMappingRepository implements StockReviewL
     const { error } = await this.scopedQuery(organizationId)
       .table("stock_review_learned_mappings")
       .upsert(row, { onConflict });
+    if (error && data.supplierReference && error.code === "23505") {
+      // A mesma descrição já foi aprendida sem referência: atualiza essa (a referência fica para a próxima).
+      await this.learn(organizationId, { ...data, supplierReference: null });
+      return;
+    }
     if (error) throw new Error(error.message);
   }
 }
