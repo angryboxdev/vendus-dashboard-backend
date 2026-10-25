@@ -13,6 +13,7 @@ import {
   LocationRequiredError,
   DocumentNotReconciledError,
   ReviewNotCancelledError,
+  StockImportNotValidatedError,
 } from "../../domain/errors.js";
 import type {
   ListStockPurchaseReviewsPort,
@@ -30,6 +31,10 @@ import type {
 function handleError(e: unknown, res: import("express").Response): void {
   if (e instanceof StockPurchaseReviewNotFoundError) {
     res.status(404).json({ error: e.message });
+    return;
+  }
+  if (e instanceof StockImportNotValidatedError) {
+    res.status(422).json({ error: e.message, code: "stock_import_not_validated" });
     return;
   }
   if (e instanceof DocumentNotReconciledError) {

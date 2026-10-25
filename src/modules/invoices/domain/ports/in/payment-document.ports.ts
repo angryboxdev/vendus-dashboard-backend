@@ -26,6 +26,20 @@ export interface CreateObligationDraftPort {
   execute(command: CreateObligationDraftCommand): Promise<import("./invoice.ports.js").InvoiceImportResultDTO>;
 }
 
+/** Ligar o documento de cobrança a um registo já existente (passa a obrigação; nada é criado). */
+export interface LinkObligationCommand {
+  organizationId: OrganizationId;
+  invoiceId: string;
+  fileBuffer: Buffer;
+  filename: string;
+  mimeType: string;
+  actor: string;
+}
+
+export interface LinkObligationPort {
+  execute(command: LinkObligationCommand): Promise<import("./invoice.ports.js").InvoiceDTO>;
+}
+
 export interface ReadPaymentDocumentPort {
   /** null = não é um documento de cobrança AT/SS (segue o fluxo de faturas, sem alterações). */
   execute(organizationId: OrganizationId, file: { buffer: Buffer; mimeType: string }): Promise<PaymentDocumentImportDTO | null>;

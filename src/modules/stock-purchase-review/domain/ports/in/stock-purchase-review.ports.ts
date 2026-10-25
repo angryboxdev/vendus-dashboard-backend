@@ -66,6 +66,9 @@ export interface StockPurchaseReviewDTO {
   invoiceTotalCents: number | null;
   /** Registadas ao confirmar (pendência para o Financeiro). */
   categoryDivergences: CategoryDivergence[] | null;
+  /** F3c: origem do documento e pendência do Financeiro. */
+  origin: "finance" | "stock";
+  financePending: boolean;
   /** Conferências da F3a (documento / Stock / categorias), calculadas na leitura. */
   conference?: ReviewConference;
   lines: StockReviewLineDTO[];
@@ -86,6 +89,8 @@ export interface StockPurchaseReviewRowDTO {
   totalCents: number | null;
   locationId: string | null;
   decisionSource: DecisionSource;
+  origin: "finance" | "stock";
+  financePending: boolean;
 }
 
 // ── List ──────────────────────────────────────────────────────────────────
@@ -277,6 +282,8 @@ export interface RecordInvoiceFinalizedForStockCommand {
   supplierNif: string | null;
   override: "auto" | "force_create" | "force_skip";
   overrideReason: string | null;
+  /** F3c: `stock` = importada diretamente no Stock (cria sempre a revisão, pendente do Financeiro). */
+  origin?: "finance" | "stock";
   /** F3a: totais da fatura (cêntimos) para a conferência do documento. */
   subtotalWithoutVat?: number | null;
   totalVat?: number | null;

@@ -6,6 +6,7 @@ import type { StockReviewLearnedMappingPort } from "../../domain/ports/out/stock
 import type { StockCatalogWritePort } from "../../domain/ports/out/stock-catalog-write.port.js";
 import type { StockItemMatchAiPort } from "../../domain/ports/out/stock-item-match-ai.port.js";
 import type { CostCenterCategoryReadPort } from "../../domain/ports/out/cost-center-category-read.port.js";
+import type { StockAiBudgetPort } from "../../domain/ports/out/ai-budget.port.js";
 import { confidentNameMatch, rankCandidates, suggestConversionFactor, type CatalogItem } from "../../domain/services/item-matching.service.js";
 import { conferenceFor, normalizeDescription, toStockPurchaseReviewDTO } from "./shared.js";
 
@@ -27,6 +28,8 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
     private readonly catalog: StockCatalogWritePort,
     private readonly ai: StockItemMatchAiPort | null,
     private readonly categoryRead?: CostCenterCategoryReadPort,
+    /** Orçamento diário de IA: esgotado → só histórico e nome. */
+    private readonly aiBudget?: StockAiBudgetPort,
   ) {}
 
   async execute(command: SuggestReviewMappingsCommand): Promise<StockPurchaseReviewDTO> {
@@ -74,7 +77,8 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
         forAi.push({ line, candidates: items.length <= FULL_CATALOG_LIMIT ? items : ranked.map((r) => r.item) });
       }
 
-      if (forAi.length && this.ai) {
+      const aiAllowed = forAi.length > 0 && this.ai !== null && (!this.aiBudget || (await this.aiBudget.consume(command.organizationId, "stock_match").catch(() => ({ allowed: true }))).allowed);
+      if (forAi.length && this.ai && aiAllowed) {
         try {
           const results = await this.ai.match(
             forAi.map((f, index) => ({ index, description: f.line.description, purchaseUnit: f.line.purchaseUnit, candidates: f.candidates.map((c) => ({ id: c.id, name: c.name, baseUnit: c.baseUnit })) })),

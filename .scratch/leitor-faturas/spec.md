@@ -71,6 +71,12 @@ Origem: TASK V2 do utilizador (2026-10-24) + anexo de auditoria de 3 faturas Mak
 - Migração `20261109100000_invoice_obligations` (+ rollback), validada em PGlite (aplicar, reexecutar, existentes = `purchase`, check, rollback com dados intactos, reaplicar).
 - Por fazer: etiqueta «Obrigação» na lista de faturas; ligar a uma obrigação existente em vez de criar.
 
+## E4 + orçamento + ligar obrigação (2026-10-25, por publicar)
+- Lote: até 10 ficheiros, 2 de cada vez, em segundo plano (painel com progresso e «Rever»); `keepDraftLines` grava as linhas no rascunho para rever mais tarde.
+- Orçamento diário de IA por organização (`ai_usage_daily`); esgotado → faturas sem QR recusadas com 429 antes de guardar; categorias/conciliação sem IA.
+- «Ligar este documento» na revisão AT/SS: o registo antigo passa a obrigação, fica com o PDF, nada é criado.
+- Por decidir: TPA (cartão usado).
+
 ## Riscos / pendências
 - O leitor ainda não está ligado ao fluxo real (E3): o import continua a usar só a IA.
 - `pdfjs-dist` e `@napi-rs/canvas` são usados diretamente mas vêm como dependências do `pdf-parse`/`pdf-to-img` (versão do pdfjs fixada em `overrides`). Se quiserem, declarar `pdfjs-dist` em `dependencies` (mesma versão).

@@ -215,3 +215,61 @@ export class InvoiceNotDraftError extends Error {
     this.name = "InvoiceNotDraftError";
   }
 }
+
+// ── F3c: importar no Stock ────────────────────────────────────────────────
+
+/** A fatura já deu entrada no Stock (revisão movimentada/excluída ou importação antiga) — bloqueia. */
+export class InvoiceAlreadyInStockError extends Error {
+  constructor(readonly reviewId: string | null, message: string) {
+    super(message);
+    this.name = "InvoiceAlreadyInStockError";
+  }
+}
+
+/** A fatura já está em Compras por rever — abrir essa revisão. */
+export class InvoiceAlreadyInStockReviewError extends Error {
+  constructor(readonly reviewId: string, message: string) {
+    super(message);
+    this.name = "InvoiceAlreadyInStockReviewError";
+  }
+}
+
+/** A fatura está em rascunho no Financeiro — concluir lá com «Enviar para Stock». */
+export class InvoiceDraftInFinanceError extends Error {
+  constructor(readonly invoiceId: string, message: string) {
+    super(message);
+    this.name = "InvoiceDraftInFinanceError";
+  }
+}
+
+/** A fatura já foi lançada no Financeiro sem ir ao Stock — pode ser encaminhada (`routeExisting`). */
+export class InvoiceExistsNotRoutedError extends Error {
+  constructor(readonly invoiceId: string, message: string) {
+    super(message);
+    this.name = "InvoiceExistsNotRoutedError";
+  }
+}
+
+/** Importação no Stock sem linhas lidas (falha de extração explícita, sem processamento infinito). */
+export class StockImportNoLinesError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StockImportNoLinesError";
+  }
+}
+
+/** Orçamento diário de IA da organização esgotado — faturas com QR continuam a ser lidas sem IA. */
+export class AiBudgetExceededError extends Error {
+  constructor(readonly limit: number) {
+    super(`Atingido o limite diário de leituras com IA (${limit}). As faturas com código QR continuam a ser lidas; esta (sem QR) pode ser importada amanhã ou lançada à mão.`);
+    this.name = "AiBudgetExceededError";
+  }
+}
+
+/** O registo escolhido não é um dos que a procura de obrigações aponta para este documento. */
+export class ObligationLinkMismatchError extends Error {
+  constructor() {
+    super("Este registo não corresponde ao documento de cobrança (valor, referência, número ou período) — não foi ligado.");
+    this.name = "ObligationLinkMismatchError";
+  }
+}

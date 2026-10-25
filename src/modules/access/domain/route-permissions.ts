@@ -66,6 +66,8 @@ export const ROUTE_RULES: RouteRule[] = [
   // ── Financeiro ───────────────────────────────────────────────────────
   { pattern: /^\/api\/financial-base\/suppliers(\/|$)/, target: p("finance.suppliers") },
   { pattern: /^\/api\/financial-base(\/|$)/, target: p("finance.cost_centers") },
+  // F3c: importar a fatura diretamente no Stock — permissão de Compras por rever, não do Financeiro.
+  { pattern: /^\/api\/invoices\/import-for-stock$/, target: p("stock.purchase_reviews", "MANAGE") },
   { pattern: /^\/api\/invoices(\/|$)/, target: p("finance.invoices") },
   // Identidade fiscal partilhada: migração do histórico (simulação/execução) — gestão de faturas.
   { pattern: /^\/api\/fiscal-documents\/backfill$/, target: p("finance.invoices", "MANAGE") },

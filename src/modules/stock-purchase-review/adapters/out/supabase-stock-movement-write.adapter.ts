@@ -35,6 +35,7 @@ export class SupabaseStockMovementWriteAdapter implements StockMovementWritePort
       invoice_net_cents: input.invoiceNetCents,
       invoice_vat_cents: input.invoiceVatCents,
       invoice_total_cents: input.invoiceTotalCents,
+      origin: input.origin ?? "finance",
     };
     const lines = input.lines.map((l) => ({
       invoice_line_id: l.invoiceLineId,
@@ -52,6 +53,15 @@ export class SupabaseStockMovementWriteAdapter implements StockMovementWritePort
     if (error) throw new Error(error.message);
     const r = (Array.isArray(data) ? data[0] : data) as unknown as { review_id: string; created_now: boolean };
     return { reviewId: r.review_id, createdNow: Boolean(r.created_now) };
+  }
+
+  async finishFinancePending(organizationId: OrganizationId, invoiceId: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("stock_purchase_reviews")
+      .update({ finance_pending: false, updated_at: new Date().toISOString() })
+      .eq("invoice_id", invoiceId)
+      .eq("finance_pending", true);
+    if (error) throw new Error(error.message);
   }
 
   async confirmReview(

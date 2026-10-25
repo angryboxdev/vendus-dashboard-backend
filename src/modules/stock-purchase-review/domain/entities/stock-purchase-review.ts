@@ -13,6 +13,9 @@ export interface CategoryDivergence {
 
 export type DecisionSource = "override" | "category" | "supplier" | "unresolved";
 
+/** F3c: de onde veio o documento — lançado no Financeiro, ou importado diretamente no Stock. */
+export type ReviewOrigin = "finance" | "stock";
+
 interface StockPurchaseReviewProps {
   id: string;
   organizationId: string;
@@ -37,6 +40,9 @@ interface StockPurchaseReviewProps {
   invoiceVatCents: number | null;
   invoiceTotalCents: number | null;
   categoryDivergences: CategoryDivergence[] | null;
+  origin: ReviewOrigin;
+  /** Importada no Stock e ainda não lançada no Financeiro (não é liquidação nem saldo). */
+  financePending: boolean;
   appliedAt: Date | null;
   cancelledAt: Date | null;
   cancellationReason: string | null;
@@ -62,6 +68,7 @@ export interface CreateStockPurchaseReviewProps {
   invoiceNetCents?: number | null;
   invoiceVatCents?: number | null;
   invoiceTotalCents?: number | null;
+  origin?: ReviewOrigin;
 }
 
 /**
@@ -98,6 +105,8 @@ export class StockPurchaseReview {
       invoiceVatCents: props.invoiceVatCents ?? null,
       invoiceTotalCents: props.invoiceTotalCents ?? null,
       categoryDivergences: null,
+      origin: props.origin ?? "finance",
+      financePending: (props.origin ?? "finance") === "stock",
       appliedAt: null,
       cancelledAt: null,
       cancellationReason: null,
@@ -229,6 +238,10 @@ export class StockPurchaseReview {
 
   get locationId(): string | null {
     return this.props.locationId;
+  }
+
+  get financePending(): boolean {
+    return this.props.financePending;
   }
 
   toProps(): StockPurchaseReviewProps {

@@ -46,14 +46,20 @@ export class RecordInvoiceFinalizedForStockUseCase implements RecordInvoiceFinal
       ? (await this.supplierRead.getDefaultStockPolicy(command.organizationId, command.supplierId)) ?? "inherit"
       : "inherit";
 
-    const decision = decideStockReview({
-      override: command.override,
-      overrideReason: command.overrideReason,
-      lineCategoryPolicies,
-      supplierDefaultPolicy,
-    });
+    // F3c: importada diretamente no Stock → a pessoa já decidiu que é para o Stock.
+    const decision =
+      command.origin === "stock"
+        ? ({ outcome: "create", source: "override", policyUsed: "stock_import" } as const)
+        : decideStockReview({
+            override: command.override,
+            overrideReason: command.overrideReason,
+            lineCategoryPolicies,
+            supplierDefaultPolicy,
+          });
 
     if (decision.outcome === "skip") {
+      // O documento pode já ter revisão nascida no Stock: o lançamento no Financeiro tem de acabar a pendência.
+      if (command.origin !== "stock") await this.stockMovementWrite.finishFinancePending?.(command.organizationId, command.invoiceId);
       return;
     }
 
@@ -88,6 +94,7 @@ export class RecordInvoiceFinalizedForStockUseCase implements RecordInvoiceFinal
       invoiceNetCents: command.subtotalWithoutVat ?? null,
       invoiceVatCents: command.totalVat ?? null,
       invoiceTotalCents: command.totalWithVat ?? null,
+      origin: command.origin ?? "finance",
       lines: command.lines.map((l) => ({
         invoiceLineId: l.id,
         description: l.description,

@@ -35,6 +35,8 @@ export class ListStockPurchaseReviewsUseCase implements ListStockPurchaseReviews
         totalCents: p.invoiceTotalCents,
         locationId: p.locationId,
         decisionSource: p.decisionSource,
+        origin: p.origin,
+        financePending: p.financePending,
       });
     }
     return rows.sort((a, b) => (a.invoiceDate < b.invoiceDate ? 1 : a.invoiceDate > b.invoiceDate ? -1 : 0));
