@@ -110,7 +110,7 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     const finalized = existing.status !== "draft_ai" && existing.status !== "pending_review";
     const identityChanged =
       updated.invoiceNumber !== existing.invoiceNumber || updated.supplierNifSnapshot !== existing.supplierNifSnapshot || updated.supplierId !== existing.supplierId || updated.documentType !== existing.documentType;
-    if (finalized && identityChanged) {
+    if (finalized && identityChanged && !updated.obligation) {
       const fiscal = await claimFiscalIdentity(this.fiscal, this.supplierLookup, command.organizationId, command.actor ?? "sistema", updated, { notADuplicate: command.notADuplicate === true });
       if (fiscal.linkedToStock && updated.stockReviewOverride !== "force_skip") updated = updated.update({ stockReviewOverride: "force_skip", stockReviewOverrideReason: "Documento já movimentado no Stock (importação feita no Stock) — sem nova revisão." });
     }

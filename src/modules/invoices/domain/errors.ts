@@ -39,6 +39,22 @@ export class NotAFiscalInvoiceError extends Error {
   }
 }
 
+/** O ficheiro enviado como obrigação não é um documento de cobrança reconhecido (Finanças / Segurança Social). */
+export class NotAPaymentDocumentError extends Error {
+  constructor(detail = "O ficheiro não é um documento de cobrança reconhecido (Finanças — retenções na fonte, ou Segurança Social — referência para pagamento).") {
+    super(detail);
+    this.name = "NotAPaymentDocumentError";
+  }
+}
+
+/** Já existe uma obrigação que é claramente esta (mesmo número/referência, ou mesmo valor e prazo). */
+export class ObligationAlreadyRegisteredError extends Error {
+  constructor(readonly existing: { invoiceId: string | null; label: string; supplierName: string }[]) {
+    super("Esta obrigação já está registada no Financeiro. Abra o registo existente em vez de criar outro.");
+    this.name = "ObligationAlreadyRegisteredError";
+  }
+}
+
 export class DuplicateInvoiceError extends Error {
   constructor(invoiceNumber: string, supplierName: string) {
     super(`Já existe uma fatura "${invoiceNumber}" para o fornecedor "${supplierName}"`);

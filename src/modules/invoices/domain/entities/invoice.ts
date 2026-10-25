@@ -7,6 +7,18 @@ export type InvoiceStatus =
   | "cancelled"
   | "review";
 
+/**
+ * Documento de cobrança do Estado registado como obrigação (E3b-2): sem IVA (não aplicável), sem linhas
+ * nem Stock; a referência de pagamento e o período identificam-no.
+ */
+export interface InvoiceObligation {
+  kind: "tax_obligation" | "contribution_obligation";
+  paymentReference: string | null;
+  mbEntity: string | null;
+  /** «AAAA-MM» */
+  period: string | null;
+}
+
 export type ReconciliationStatus = "none" | "pending_reconciliation" | "partially_reconciled" | "reconciled";
 
 /** Modo de classificação financeira (F2 §2.2): simple = «Única», detailed = «Por artigo», by_values = «Por valores». */
@@ -92,6 +104,8 @@ interface InvoiceProps {
   currency: string;
   stockReviewOverride: StockReviewOverride;
   stockReviewOverrideReason: string | null;
+  /** E3b-2: documento de cobrança (Finanças / Segurança Social) — null = fatura de compra. */
+  obligation?: InvoiceObligation | null;
   createdAt: Date;
   updatedAt: Date;
   /** Versão para bloqueio otimista (F1 §1.4) — incrementada pelo repositório a cada escrita. */
@@ -187,6 +201,7 @@ export class Invoice {
   readonly currency: string;
   readonly stockReviewOverride: StockReviewOverride;
   readonly stockReviewOverrideReason: string | null;
+  readonly obligation: InvoiceObligation | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly version: number;
@@ -228,6 +243,7 @@ export class Invoice {
     this.currency = props.currency;
     this.stockReviewOverride = props.stockReviewOverride;
     this.stockReviewOverrideReason = props.stockReviewOverrideReason;
+    this.obligation = props.obligation ?? null;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
     this.version = props.version ?? 1;
@@ -324,6 +340,7 @@ export class Invoice {
     costCenterCategoryId?: string | null;
     financialType?: string | null;
     currency?: string;
+    obligation?: InvoiceObligation | null;
   }): Invoice {
     const now = new Date();
     const documentType = props.documentType ?? "invoice";
@@ -364,6 +381,7 @@ export class Invoice {
       currency: props.currency ?? "EUR",
       stockReviewOverride: "auto",
       stockReviewOverrideReason: null,
+      obligation: props.obligation ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -526,6 +544,7 @@ export class Invoice {
       currency: this.currency,
       stockReviewOverride: this.stockReviewOverride,
       stockReviewOverrideReason: this.stockReviewOverrideReason,
+      obligation: this.obligation,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       version: this.version,

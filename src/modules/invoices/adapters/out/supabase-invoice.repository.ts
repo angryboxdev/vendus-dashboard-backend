@@ -51,6 +51,10 @@ function toEntity(row: Record<string, unknown>): Invoice {
     currency: (row.currency as string | null) ?? "EUR",
     stockReviewOverride: ((row.stock_review_override as string | null) ?? "auto") as StockReviewOverride,
     stockReviewOverrideReason: (row.stock_review_override_reason as string | null) ?? null,
+    obligation:
+      row.document_kind === "tax_obligation" || row.document_kind === "contribution_obligation"
+        ? { kind: row.document_kind, paymentReference: (row.payment_reference as string | null) ?? null, mbEntity: (row.mb_entity as string | null) ?? null, period: (row.obligation_period as string | null) ?? null }
+        : null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
     version: (row.version as number | null) ?? 1,
@@ -95,6 +99,11 @@ function toRow(invoice: Invoice): Record<string, unknown> {
     currency: invoice.currency,
     stock_review_override: invoice.stockReviewOverride,
     stock_review_override_reason: invoice.stockReviewOverrideReason,
+    // Migração 20261109100000: obrigações (Finanças/Segurança Social); faturas de compra = 'purchase'.
+    document_kind: invoice.obligation?.kind ?? "purchase",
+    payment_reference: invoice.obligation?.paymentReference ?? null,
+    mb_entity: invoice.obligation?.mbEntity ?? null,
+    obligation_period: invoice.obligation?.period ?? null,
     created_at: invoice.createdAt.toISOString(),
     updated_at: invoice.updatedAt.toISOString(),
   };

@@ -60,10 +60,16 @@ Origem: TASK V2 do utilizador (2026-10-24) + anexo de auditoria de 3 faturas Mak
 - Corrigidos: separador de milhares com espaço (Algeco), preços com IVA incluído (Bricolage), autoliquidação com IVA 0 € (CDM), quadro de especificação do imposto, descrições longas.
 - Prova local: 26/26 documentos com QR de outros fornecedores e NC prontos sem IA; Makro 100%; AT/SS iguais.
 
-## E3b-1 — logótipo do fornecedor (2026-10-25, por publicar)
+## E3b-1 — logótipo do fornecedor (2026-10-25, em produção)
 - Extraído da fatura, proposto na revisão («Usar como logótipo do fornecedor»), gravado só depois de confirmar; visível na lista e na ficha do fornecedor; removível na ficha.
 - Prova local: 6/8 faturas reais com o logótipo certo (Pestsafe, Makro, Justdrinks, Algeco, Cartrack, AcustekPro); selo CEPA e DataMatrix da Makro ignorados; 2 sem proposta (logótipo dentro de imagem de página inteira / sem imagem) — correto.
 - Migração `20261108100000_supplier_logo` (+ rollback), validada em PGlite.
+
+## E3b-2 — rascunho de obrigação AT/SS (2026-10-25, por publicar)
+- Na revisão AT/SS, «Lançar pelo fluxo atual» deu lugar a **«Criar rascunho de obrigação»**: o servidor volta a ler o PDF e grava um rascunho na tabela das faturas com tipo próprio (`document_kind`), referência, entidade MB e período; sem IVA, linhas nem Stock; abre a revisão habitual («Revisar obrigação», sem a secção do Stock) e, ao confirmar, nasce a conta a pagar com o prazo.
+- Registo parecido «forte» → aviso; o servidor recusa (409) sem `force`.
+- Migração `20261109100000_invoice_obligations` (+ rollback), validada em PGlite (aplicar, reexecutar, existentes = `purchase`, check, rollback com dados intactos, reaplicar).
+- Por fazer: etiqueta «Obrigação» na lista de faturas; ligar a uma obrigação existente em vez de criar.
 
 ## Riscos / pendências
 - O leitor ainda não está ligado ao fluxo real (E3): o import continua a usar só a IA.

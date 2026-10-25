@@ -12,6 +12,20 @@ export interface PaymentDocumentImportDTO {
   metrics: { totalMs: number; barcodeMs: number; aiCalls: 0 };
 }
 
+export interface CreateObligationDraftCommand {
+  organizationId: OrganizationId;
+  fileBuffer: Buffer;
+  filename: string;
+  mimeType: string;
+  /** A pessoa viu o registo parecido e quer mesmo criar outro. */
+  force?: boolean;
+}
+
+/** E3b-2: rascunho de obrigação (sem IVA, linhas nem Stock) a partir de um documento de cobrança. */
+export interface CreateObligationDraftPort {
+  execute(command: CreateObligationDraftCommand): Promise<import("./invoice.ports.js").InvoiceImportResultDTO>;
+}
+
 export interface ReadPaymentDocumentPort {
   /** null = não é um documento de cobrança AT/SS (segue o fluxo de faturas, sem alterações). */
   execute(organizationId: OrganizationId, file: { buffer: Buffer; mimeType: string }): Promise<PaymentDocumentImportDTO | null>;

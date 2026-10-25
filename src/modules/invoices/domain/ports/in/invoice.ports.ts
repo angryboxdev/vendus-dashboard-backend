@@ -92,6 +92,8 @@ export interface InvoiceDTO {
   /** Módulo Stock (Compra por rever) — `null` = automático (categoria/fornecedor decidem, nunca o Centro de Custo). */
   stockReviewOverride: StockReviewOverride;
   stockReviewOverrideReason: string | null;
+  /** E3b-2: obrigação (Finanças/Segurança Social) — null = fatura de compra. */
+  obligation: { kind: "tax_obligation" | "contribution_obligation"; paymentReference: string | null; mbEntity: string | null; period: string | null } | null;
   createdAt: string;
   updatedAt: string;
   /** Versão atual — enviar como `expectedVersion` ao editar/confirmar (409 `version_conflict` se mudou). */

@@ -41,6 +41,8 @@ import {
   InvoiceLinesLockedByAppliedStockReviewError,
   StockReviewRemovalConfirmationRequiredError,
   NotAFiscalInvoiceError,
+  NotAPaymentDocumentError,
+  ObligationAlreadyRegisteredError,
 } from "../../domain/errors.js";
 
 interface InvoicePorts {
@@ -72,6 +74,8 @@ interface InvoicePorts {
   importInvoice: ImportInvoicePort;
   /** Documentos de cobrança AT/SS: lidos antes do import de faturas (sem IA, sem gravar nada). */
   readPaymentDocument?: import("../../domain/ports/in/payment-document.ports.js").ReadPaymentDocumentPort;
+  /** E3b-2: rascunho de obrigação (Finanças/Segurança Social) a partir do documento de cobrança. */
+  createObligationDraft?: import("../../domain/ports/in/payment-document.ports.js").CreateObligationDraftPort;
   confirmImportedInvoice: ConfirmImportedInvoicePort;
   getInvoiceAlerts: GetInvoiceAlertsPort;
   processDirectDebits: ProcessDirectDebitsPort;
@@ -116,6 +120,14 @@ function handleError(res: import("express").Response, err: unknown): void {
   }
   if (err instanceof StockReviewRemovalConfirmationRequiredError) {
     res.status(409).json({ error: err.message, requiresConfirmation: true });
+    return;
+  }
+  if (err instanceof NotAPaymentDocumentError) {
+    res.status(422).json({ error: err.message, code: "not_payment_document" });
+    return;
+  }
+  if (err instanceof ObligationAlreadyRegisteredError) {
+    res.status(409).json({ error: err.message, code: "obligation_exists", existing: err.existing });
     return;
   }
   if (err instanceof NotAFiscalInvoiceError) {
@@ -520,6 +532,30 @@ export function createInvoiceRouter(ports: InvoicePorts, idempotencyStore: Idemp
       };
       if (documentType === "invoice" || documentType === "credit_note") cmd.documentType = documentType;
       const result = await ports.importInvoice.execute(cmd);
+      res.status(201).json(result);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // POST /invoices/obligations — rascunho de obrigação a partir do documento de cobrança (multipart «file»)
+  router.post("/invoices/obligations", upload.single("file"), async (req, res) => {
+    try {
+      if (!ports.createObligationDraft) {
+        res.status(404).json({ error: "Não disponível." });
+        return;
+      }
+      if (!req.file) {
+        res.status(400).json({ error: "No file uploaded. Use multipart field 'file'." });
+        return;
+      }
+      const result = await ports.createObligationDraft.execute({
+        organizationId: req.auth!.orgId,
+        fileBuffer: req.file.buffer,
+        filename: req.file.originalname,
+        mimeType: req.file.mimetype,
+        force: (req.body as { force?: string }).force === "true",
+      });
       res.status(201).json(result);
     } catch (err) {
       handleError(res, err);
