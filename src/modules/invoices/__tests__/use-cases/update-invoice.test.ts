@@ -206,6 +206,27 @@ describe("UpdateInvoiceUseCase", () => {
     expect(lines[0].costCenterCategoryId).toBeNull();
   });
 
+  it("«Por artigo»: o null da fatura não apaga a categoria de cada linha (FT 61707)", async () => {
+    const inv = Invoice.create({
+      supplierName: "Dream Plus",
+      invoiceNumber: "FT 1/1",
+      invoiceDate: new Date("2026-09-28"),
+      subtotalWithoutVat: 21939,
+      totalVat: 1970,
+      totalWithVat: 23909,
+    }).setLineDetailMode("detailed");
+    await repo.save(ORG_ID, inv);
+    const line = InvoiceLine.create({
+      invoiceId: inv.id, description: "Q. Cheddar Ralado kg", quantity: 7, unitCostWithoutVat: 820, vatRate: 6, vatAmount: 327, totalWithVat: 5780, costCenterCategoryId: "cat-ingredientes",
+    });
+    await lineRepo.saveAll(ORG_ID, [line]);
+
+    await useCase.execute({ organizationId: ORG_ID, id: inv.id, costCenterCategoryId: null });
+
+    const lines = await lineRepo.findByInvoiceId(ORG_ID, inv.id);
+    expect(lines[0].costCenterCategoryId).toBe("cat-ingredientes");
+  });
+
   // ── Direct Debit ──────────────────────────────────────────────────────────
 
   it("actualiza isDirectDebit e directDebitDate", async () => {

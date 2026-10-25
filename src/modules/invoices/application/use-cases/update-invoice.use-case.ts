@@ -133,8 +133,10 @@ export class UpdateInvoiceUseCase implements UpdateInvoicePort {
     await this.audit.record(command.organizationId, { invoiceId: existing.id, action: "update", actor: command.actor ?? "sistema", origin: "manual", reason: command.reason?.trim() || null, before: auditSnapshot(existing), after: auditSnapshot(updated) });
     if (syncPayable) await this.payableWrite.syncOpenForInvoice(command.organizationId, updated.id, { amount: updated.totalWithVat, dueDate: updated.dueDate });
 
-    // Propagar costCenterCategoryId às linhas sempre que o campo for explicitamente enviado
-    if (command.costCenterCategoryId !== undefined) {
+    // Propagar costCenterCategoryId às linhas quando o campo é enviado — só em «Única», onde a categoria
+    // da fatura é a das linhas. Em «Por artigo»/«Por valores» cada linha tem a sua: o `null` que o editor
+    // envia na fatura apagava a classificação de todas as linhas (FT 61707).
+    if (command.costCenterCategoryId !== undefined && updated.lineDetailMode === "simple") {
       await this.lineRepo.updateCostCenterCategoryForInvoice(command.organizationId, updated.id, updated.costCenterCategoryId);
     }
 
