@@ -1,3 +1,4 @@
+import type { GetSupplierPlanningSummaryPort } from "../../domain/ports/in/supplier-planning.ports.js";
 import { Router } from "express";
 import PDFDocument from "pdfkit";
 import path from "node:path";
@@ -383,6 +384,7 @@ export class FinancialBaseController {
     private readonly listSupplierDeliverySchedules: ListSupplierDeliverySchedulesPort,
     private readonly upsertSupplierDeliverySchedule: UpsertSupplierDeliverySchedulePort,
     private readonly supplierLocationRules: SupplierLocationRulesPort,
+    private readonly getSupplierPlanningSummary?: GetSupplierPlanningSummaryPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -783,6 +785,27 @@ export class FinancialBaseController {
           id: req.params["id"] as string,
         });
         res.json(result);
+      } catch (e) {
+        if (e instanceof SupplierNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * GET /financial-base/suppliers/:id/planning-summary
+     * «Resumo no planeamento» (separador Abastecimento): últimos 12 meses — artigos comprados, compras
+     * dos últimos 3 meses, frequência de compra, subcategorias e preços por artigo e mês.
+     */
+    this.router.get("/financial-base/suppliers/:id/planning-summary", async (req, res) => {
+      if (!this.getSupplierPlanningSummary) {
+        res.status(404).json({ error: "Indisponível." });
+        return;
+      }
+      try {
+        res.json(await this.getSupplierPlanningSummary.execute({ organizationId: req.auth!.orgId, supplierId: req.params["id"] as string }));
       } catch (e) {
         if (e instanceof SupplierNotFoundError) {
           res.status(404).json({ error: e.message });
