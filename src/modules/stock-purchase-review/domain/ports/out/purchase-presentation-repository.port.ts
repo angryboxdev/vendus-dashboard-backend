@@ -8,5 +8,7 @@ export interface PurchasePresentationRepositoryPort {
   /** Versões anteriores e a atual, da mais recente para a mais antiga. */
   history(organizationId: OrganizationId, supplierId: string, matchKey: string): Promise<PurchasePresentation[]>;
   /** Fecha a versão ativa (se houver) e grava a nova — nunca reescreve a anterior. */
+  /** Fecha a versão ativa sem a substituir (a linha deixou de ser artigo de stock). */
+  supersede(organizationId: OrganizationId, presentation: PurchasePresentation): Promise<void>;
   replaceActive(organizationId: OrganizationId, matchKey: string, next: PurchasePresentation, previous: PurchasePresentation | null): Promise<void>;
 }

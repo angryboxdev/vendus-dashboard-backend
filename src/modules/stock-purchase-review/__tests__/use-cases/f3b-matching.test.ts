@@ -94,7 +94,7 @@ function setup(ai: StockItemMatchAiPort | null) {
 }
 
 describe("F3b — conciliação em lote", () => {
-  test("histórico (pela referência) → nome → IA só para o resto, numa chamada; nada é resolvido sozinho", async () => {
+  test("histórico (pela referência) → nome → IA só para o resto, numa chamada; só o confirmado (histórico) se resolve sozinho", async () => {
     const ai = new FakeAi((l) =>
       l.description.startsWith("Refrigerante") ? { resolution: "existing_item", stockItemId: "coca", conversionFactor: 24, confidence: 0.9 }
         : l.description.startsWith("Entrega") ? { resolution: "no_stock_effect", stockItemId: null, conversionFactor: null, confidence: 0.95 }
@@ -120,7 +120,8 @@ describe("F3b — conciliação em lote", () => {
     expect(byDesc["Coisa estranha"]).toMatchObject({ source: "none" });
     expect(ai.calls).toHaveLength(1);
     expect(ai.calls[0]!.map((l) => l.description)).toEqual(["Refrigerante cola 24x33cl", "Entrega ao domicílio", "Coisa estranha"]);
-    expect(dto.lines.every((l) => l.resolutionType === "unresolved")).toBe(true);
+    // «Ensinar uma vez»: a associação confirmada resolve-se sem perguntas; nome e IA ficam por confirmar.
+    expect(dto.lines.filter((l) => l.resolutionType !== "unresolved").map((l) => [l.description, l.resolutionType, l.autoResolved, l.conversionFactor])).toEqual([["MOZZ. FDL 1KG", "existing_item", true, 1]]);
 
     // Reabrir não volta a chamar a IA; «refresh» volta.
     await s.uc.execute({ organizationId: ORG, reviewId: review.id });

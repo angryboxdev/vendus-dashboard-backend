@@ -9,8 +9,34 @@ import type { CostCenterCategoryReadPort } from "../../domain/ports/out/cost-cen
 import type { StockAiBudgetPort } from "../../domain/ports/out/ai-budget.port.js";
 import { confidentNameMatch, rankCandidates, suggestConversionFactor, type CatalogItem } from "../../domain/services/item-matching.service.js";
 import { invoiceLineToStock } from "../../domain/services/presentation-conversion.service.js";
-import { PurchasePresentation } from "../../domain/entities/purchase-presentation.js";
-import { conferenceFor, normalizeDescription, toStockPurchaseReviewDTO } from "./shared.js";
+import { PurchasePresentation, type PurchasePresentationProps } from "../../domain/entities/purchase-presentation.js";
+import type { StockReviewAuditLogPort } from "../../domain/ports/out/stock-review-audit-log.port.js";
+import { validateConversion } from "../../domain/services/unit-conversion.service.js";
+import { parsePackSize } from "../../domain/services/item-matching.service.js";
+import { unitFactor } from "../../domain/services/presentation-conversion.service.js";
+
+/** Quem resolve as linhas com decisão já confirmada (visível na revisão como «associação confirmada»). */
+export const AUTO_RESOLVED_BY = "sistema · associação confirmada";
+
+/** EAN-8/12/13/14 com dígito de controlo válido. */
+export function isEan(code: string): boolean {
+  if (!/^(\d{8}|\d{12,14})$/.test(code)) return false;
+  const digits = code.split("").map(Number);
+  const check = digits.pop()!;
+  const sum = digits.reverse().reduce((acc, d, i) => acc + d * (i % 2 === 0 ? 3 : 1), 0);
+  return (10 - (sum % 10)) % 10 === check;
+}
+
+/** A descrição traz um tamanho de embalagem diferente do confirmado (1 kg vs saco de 2,5 kg)? */
+export function packageSizeConflict(description: string, p: Pick<PurchasePresentationProps, "packageUnit" | "contentQuantity" | "contentUnit">): boolean {
+  if (!p.packageUnit) return false;
+  const size = parsePackSize(description)?.size;
+  if (!size) return false;
+  const unit = size.unit === "gr" ? "g" : size.unit === "lt" || size.unit === "lts" ? "l" : size.unit;
+  const f = unitFactor(unit, p.contentUnit);
+  return f === null || Math.abs(size.quantity * f - p.contentQuantity) > 0.000001;
+}
+import { conferenceFor, normalizeDescription, toStockPurchaseReviewDTO , withCategoryLabels } from "./shared.js";
 import { withPackaging, type PackagingDeps } from "./shared-packaging.js";
 
 /** Catálogos até este tamanho vão inteiros à IA; acima disso, só os melhores candidatos por nome. */
@@ -35,6 +61,7 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
     private readonly aiBudget?: StockAiBudgetPort,
     /** Embalagem de compra de cada linha (opcional nos testes antigos). */
     private readonly packaging?: PackagingDeps,
+    private readonly auditLog?: StockReviewAuditLogPort,
   ) {}
 
   async execute(command: SuggestReviewMappingsCommand): Promise<StockPurchaseReviewDTO> {
@@ -45,12 +72,15 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
     const pending = terminal ? [] : lines.filter((l) => l.resolutionType === "unresolved" && (command.refresh || !l.suggestion));
 
     const updated = new Map<string, StockReviewLine>();
+    let reviewAfter = review;
     if (pending.length) {
       const items: CatalogItem[] = (await this.catalog.listActive(command.organizationId)).map((i) => ({ id: i.id, name: i.name, baseUnit: i.baseUnit }));
       const byId = new Map(items.map((i) => [i.id, i]));
       const supplierId = review.toProps().decisionSupplierId;
       const now = new Date();
       const forAi: { line: StockReviewLine; candidates: CatalogItem[] }[] = [];
+      /** Linhas com decisão confirmada por pessoas (embalagem ou associação aprendida) — resolvem-se sozinhas. */
+      const confirmed = new Set<string>();
 
       const presentations = supplierId && this.packaging ? await this.packaging.presentations.listActiveBySupplier(command.organizationId, supplierId) : [];
       const presByKey = new Map(presentations.map((pr) => [PurchasePresentation.matchKey(pr.toProps().supplierReference, normalizeDescription(pr.toProps().description)), pr] as const));
@@ -60,7 +90,10 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
         const presItem = pres ? byId.get(pres.stockItemId) : undefined;
         const presFactor = pres && presItem ? invoiceLineToStock(pres.toProps(), 1, 1, presItem.baseUnit)?.conversionFactor ?? null : null;
         if (pres && presItem && presFactor) {
-          updated.set(line.id, line.withSuggestion({ source: "learned", resolution: "existing_item", stockItemId: presItem.id, conversionFactor: presFactor, confidence: 1, packagingChanged: false, suggestedAt: now }));
+          // A descrição diz outro tamanho (ex.: «1 kg» com o saco de 2,5 kg confirmado) → embalagem nova: pergunta uma vez.
+          const conflict = packageSizeConflict(line.description, pres.toProps());
+          updated.set(line.id, line.withSuggestion({ source: "learned", resolution: "existing_item", stockItemId: presItem.id, conversionFactor: conflict ? null : presFactor, confidence: 1, packagingChanged: conflict, suggestedAt: now }));
+          if (!conflict) confirmed.add(line.id);
           continue;
         }
         const learned = supplierId
@@ -70,6 +103,8 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
           const packagingChanged =
             learned.resolutionType === "existing_item" && learned.purchaseUnit !== null && learned.purchaseUnit.trim().toLowerCase() !== line.purchaseUnit.trim().toLowerCase();
           const item = learned.stockItemId ? byId.get(learned.stockItemId) : undefined;
+          // Decisão confirmada por uma pessoa para esta linha (fornecedor + referência/descrição): aplica-se sozinha.
+          if (!packagingChanged && (learned.resolutionType === "no_stock_effect" || (item && learned.conversionFactor))) confirmed.add(line.id);
           updated.set(line.id, line.withSuggestion({
             source: "learned",
             resolution: learned.resolutionType,
@@ -82,6 +117,15 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
             suggestedAt: now,
           }));
           continue;
+        }
+        // EAN já associado noutro fornecedor (confirmado lá): ajuda como proposta, sem copiar preços.
+        if (line.supplierItemCode && isEan(line.supplierItemCode) && this.learnedMapping.suggestByReference) {
+          const byEan = await this.learnedMapping.suggestByReference(command.organizationId, line.supplierItemCode);
+          const eanItem = byEan?.stockItemId ? byId.get(byEan.stockItemId) : undefined;
+          if (byEan && byEan.resolutionType === "existing_item" && eanItem) {
+            updated.set(line.id, line.withSuggestion({ source: "learned", resolution: "existing_item", stockItemId: eanItem.id, conversionFactor: byEan.purchaseUnit && byEan.purchaseUnit.toLowerCase() === line.purchaseUnit.toLowerCase() ? byEan.conversionFactor : suggestConversionFactor(line.description, line.purchaseUnit, eanItem.baseUnit), confidence: 0.9, packagingChanged: false, suggestedAt: now }));
+            continue;
+          }
         }
         const ranked = rankCandidates(line.description, items, AI_CANDIDATES);
         const clear = confidentNameMatch(ranked);
@@ -123,12 +167,39 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
           updated.set(line.id, line.withSuggestion({ source: "none", resolution: null, stockItemId: null, conversionFactor: null, confidence: null, packagingChanged: false, suggestedAt: now }));
         }
       }
+      // «Ensinar uma vez»: o que já foi confirmado para esta linha resolve-se sem perguntas (fica marcado e pode ser corrigido).
+      for (const id of confirmed) {
+        const line = updated.get(id)!;
+        const sg = line.suggestion!;
+        if (sg.resolution === "no_stock_effect") {
+          updated.set(id, line.resolveAsNoStockEffect(AUTO_RESOLVED_BY));
+        } else if (sg.stockItemId && sg.conversionFactor) {
+          const item = byId.get(sg.stockItemId)!;
+          const check = validateConversion(line.purchaseUnit, item.baseUnit);
+          updated.set(id, line.resolveToStockItem({ stockItemId: item.id, conversionFactor: sg.conversionFactor, isItemActive: true, flaggedSuspiciousConversion: check.flagged, flagReason: check.reason }, false, AUTO_RESOLVED_BY));
+        }
+      }
       for (const line of updated.values()) await this.repository.saveLine(command.organizationId, line);
+      if (confirmed.size > 0) {
+        const all = lines.map((l) => updated.get(l.id) ?? l);
+        const refreshed = review.refreshLinesProgress(all.every((l) => l.resolutionType !== "unresolved"), all.some((l) => l.resolutionType !== "unresolved"));
+        if (refreshed !== review) await this.repository.save(command.organizationId, refreshed, review.version);
+        reviewAfter = refreshed;
+        await this.auditLog?.record({
+          organizationId: command.organizationId,
+          actor: AUTO_RESOLVED_BY,
+          entityType: "stock_purchase_review",
+          entityId: review.id,
+          action: "auto_resolve_confirmed",
+          after: { lines: [...confirmed] },
+        });
+      }
     }
 
     const finalLines = lines.map((l) => updated.get(l.id) ?? l);
-    const conference = this.categoryRead ? await conferenceFor(command.organizationId, review, finalLines, this.categoryRead) : undefined;
-    return withPackaging(command.organizationId, toStockPurchaseReviewDTO(review, finalLines, conference), this.packaging);
+    const review_ = reviewAfter;
+    const conference = this.categoryRead ? await conferenceFor(command.organizationId, review_, finalLines, this.categoryRead) : undefined;
+    return withCategoryLabels(command.organizationId, await withPackaging(command.organizationId, toStockPurchaseReviewDTO(review_, finalLines, conference), this.packaging), this.categoryRead);
   }
 
   private itemSuggestion(source: "name_match", item: CatalogItem, score: number, line: StockReviewLine, now: Date): LineSuggestion {

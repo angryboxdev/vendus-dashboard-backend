@@ -14,6 +14,9 @@ export class FakePurchasePresentationRepository implements PurchasePresentationR
   async history(_o: OrganizationId, supplierId: string, matchKey: string) {
     return this.rows.filter((r) => r.matchKey === matchKey && r.p.toProps().supplierId === supplierId).map((r) => r.p).reverse();
   }
+  async supersede(_o: OrganizationId, presentation: PurchasePresentation) {
+    this.rows = this.rows.map((r) => (r.p.id === presentation.id ? { ...r, p: r.p.supersede() } : r));
+  }
   async replaceActive(_o: OrganizationId, matchKey: string, next: PurchasePresentation, previous: PurchasePresentation | null) {
     if (previous) this.rows = this.rows.map((r) => (r.p.id === previous.id ? { ...r, p: r.p.supersede() } : r));
     this.rows.push({ matchKey, p: next });

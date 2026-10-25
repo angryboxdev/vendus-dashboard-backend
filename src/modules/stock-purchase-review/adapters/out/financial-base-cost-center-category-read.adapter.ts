@@ -13,6 +13,13 @@ export class FinancialBaseCostCenterCategoryReadAdapter implements CostCenterCat
     return category ? category.stockReviewPolicy : null;
   }
 
+  async getLabels(organizationId: OrganizationId, categoryIds: string[]): Promise<Map<string, string>> {
+    if (categoryIds.length === 0) return new Map();
+    const wanted = new Set(categoryIds);
+    const categories = await this.listCostCenterCategories.execute({ organizationId });
+    return new Map(categories.filter((c) => wanted.has(c.id)).map((c) => [c.id, `${c.code} ${c.name}`]));
+  }
+
   async getStockReviewPolicies(organizationId: OrganizationId, categoryIds: string[]): Promise<Map<string, StockReviewPolicy>> {
     if (categoryIds.length === 0) return new Map();
     const wanted = new Set(categoryIds);

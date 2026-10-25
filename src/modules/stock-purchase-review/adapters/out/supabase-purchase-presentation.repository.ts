@@ -62,6 +62,15 @@ export class SupabasePurchasePresentationRepository implements PurchasePresentat
     return ((data ?? []) as unknown as Record<string, unknown>[]).map(toEntity);
   }
 
+  async supersede(organizationId: OrganizationId, presentation: PurchasePresentation): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("supplier_purchase_presentations")
+      .update({ superseded_at: new Date().toISOString() })
+      .eq("id", presentation.id)
+      .is("superseded_at", null);
+    if (error) throw new Error(error.message);
+  }
+
   async replaceActive(organizationId: OrganizationId, matchKey: string, next: PurchasePresentation, previous: PurchasePresentation | null): Promise<void> {
     if (previous) {
       const { error } = await this.scopedQuery(organizationId)
