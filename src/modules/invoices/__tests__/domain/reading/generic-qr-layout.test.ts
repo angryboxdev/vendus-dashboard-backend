@@ -3,6 +3,7 @@ import { GenericQrLayout } from "../../../domain/services/reading/generic-qr-lay
 import { MakroLayout } from "../../../domain/services/reading/makro-layout.js";
 import type { PdfContent, PdfWord } from "../../../domain/entities/invoice-reading.js";
 import { syntheticMakro } from "./synthetic-makro.js";
+import { syntheticDreamPlus } from "./synthetic-dream-plus.js";
 
 /** Faturas sintéticas (valores fictícios) com os formatos reais que o leitor genérico tem de ler. */
 const CHAR = 4.4;
@@ -138,5 +139,30 @@ describe("leitor genérico — qualquer fatura com QR fiscal", () => {
     expect(readInvoice({ ...service(), qrCodes: [] }, layouts).status).toBe("unsupported");
     const m = readInvoice(syntheticMakro(), layouts);
     expect(m).toMatchObject({ layout: "layout:makro", status: "ready" });
+  });
+});
+
+describe("Dream Plus FT 56892 (formato PHC; task embalagens/conversões P0)", () => {
+  test("lê as 3 linhas sem IA: 4,000 = 4 (não 4000), descontos %, Qt/Cx ignorado, quadro de IVA não é artigo, fecha 206,87 €", () => {
+    const r = readInvoice(syntheticDreamPlus(), layouts);
+    expect(r.layout).toBe("layout:generic-qr");
+    expect(r.status).toBe("ready");
+    expect(r.lines.map((l) => [l.quantityText, l.unitPriceText, l.grossCents, l.lineDiscountCents ?? 0, l.vatCode])).toEqual([
+      ["5,000", "8,20", 4100, 205, "6"],
+      ["20,000", "6,20", 12400, 1240, "6"],
+      ["4,000", "10,68", 4272, 427, "23"],
+    ]);
+    expect(r.totals).toMatchObject({ netCents: 18900, totalCents: 20687 });
+    // Descrição completa (o texto começa antes do título «Designação»), sem o lote nem a menção legal.
+    expect(r.lines.map((l) => l.description)).toEqual(["Q. Cheddar Ralado kg", "Q. Mozzarella ralado 100% Eurial kg", "Tomate Mutti p/ Pizza Classico 5 kg bolsa"]);
+    expect(r.header.supplierName).toBe("Fornecedor Teste - Comércio e Distribuição Produtos Alimentares Lda");
+    // Referência do fornecedor (não o n.º de ordem «0/4/8» impresso à esquerda).
+    expect(r.lines.map((l) => l.supplierCode)).toEqual(["020051000R", "44641004", "8005110551383"]);
+    expect(codes(r).filter((c) => c !== "vat_rounded_per_line")).toEqual([]);
+  });
+
+  test("Qt/Cx é logístico: nunca é a coluna da quantidade", () => {
+    const r = readInvoice(syntheticDreamPlus(), layouts);
+    expect(r.lines.every((l) => l.quantityText !== "2")).toBe(true);
   });
 });
