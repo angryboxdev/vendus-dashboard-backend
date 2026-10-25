@@ -26,7 +26,7 @@ describe("computeRecipeCosting", () => {
       })],
     }));
     const [small, large] = report.dishes[0]!.sizes;
-    expect(small).toEqual({ size: "small", costWithoutVat: 1.2, salePrice: 8, complete: true, missingStockItemIds: [] });
+    expect(small).toMatchObject({ size: "small", costWithoutVat: 1.2, salePrice: 8, complete: true, missingStockItemIds: [] });
     expect(large).toMatchObject({ size: "large", costWithoutVat: 0.3, salePrice: 12, complete: true });
   });
 
@@ -93,5 +93,23 @@ describe("computeRecipeCosting", () => {
       dishes: [dish({ lines: [{ stockItemId: "queijo", preparationId: null, size: "small", quantity: 1, wasteFactor: null }] })],
     }));
     expect(report.ingredients).toEqual([queijo]);
+  });
+
+  it("discrimina o custo de cada linha da ficha (artigo e preparo), com perda e preço unitário", () => {
+    const molho = { id: "molho", name: "Molho", yieldQty: 100, useAsUnit: false, items: [{ stockItemId: "queijo", quantity: 50 }, { stockItemId: "tomate", quantity: 50 }] };
+    const report = computeRecipeCosting(snapshot({
+      preparations: [molho],
+      dishes: [dish({ lines: [
+        { stockItemId: "queijo", preparationId: null, size: "small", quantity: 100, wasteFactor: 0.1 },
+        { stockItemId: null, preparationId: "molho", size: "small", quantity: 100, wasteFactor: null },
+      ] })],
+    }));
+    const size = report.dishes[0]!.sizes[0]!;
+    expect(size.lines).toEqual([
+      { stockItemId: "queijo", preparationId: null, name: "Queijo", quantity: 100, baseUnit: "g", wasteFactor: 0.1, unitCostWithoutVat: 0.01, costWithoutVat: 1.1, complete: true },
+      // Preparo com um ingrediente sem preço: custo parcial (só o queijo) e linha incompleta.
+      { stockItemId: null, preparationId: "molho", name: "Molho", quantity: 100, baseUnit: null, wasteFactor: null, unitCostWithoutVat: null, costWithoutVat: 0.5, complete: false },
+    ]);
+    expect(size.costWithoutVat).toBe(1.6);
   });
 });

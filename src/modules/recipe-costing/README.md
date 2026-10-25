@@ -39,6 +39,7 @@ Leitura e cálculo, sem escrita: `GET /api/recipe-costing` devolve o custo de ca
 
 - `RecipeCostingSnapshot` — pratos (PVP + linhas da receita ativa), preparos e custo de cada ingrediente.
 - `computeRecipeCosting` (serviço puro) — custo por tamanho; preparo = fator × custo do lote, com o fator igual ao do consumo de stock (`useAsUnit` → unidades; senão `quantidade / yieldQty`); linha × `(1 + wasteFactor)`.
+- `DishSizeCost.lines` — custo de cada linha da ficha (artigo direto ou preparo), pela ordem da receita, com a perda aplicada; `complete: false` quando falta o preço de algum ingrediente da linha (num preparo, basta um). A ficha técnica (modal «Ver receita» no frontend) mostra-o por baixo de cada quantidade e o total do prato no rodapé.
 - Preço ≤ 0 ou ausente = sem preço: não bloqueia, marca o tamanho `complete: false` e entra em `missingPrices` com os pratos que o usam.
 
 ## Portas
@@ -76,4 +77,5 @@ Leitura e cálculo, sem escrita: `GET /api/recipe-costing` devolve o custo de ca
 ## Pontos de atenção
 
 - Os itens das receitas e o custo são por organização (sem dimensão de loja).
+- **Unidade do custo: euros por unidade base.** `stock_movements.unit_cost_per_base_unit_*` está em euros em todo o Stock; até à migração `20261115100000` a confirmação das Compras por rever copiava o valor da linha em cêntimos (×100). Ver o README de `stock-purchase-review`.
 - O custo por fatura só aparece depois de a linha da fatura estar associada ao artigo e confirmada para o stock (movimento `purchase` com custo).

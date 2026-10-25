@@ -1,5 +1,6 @@
 import type {
   DishCosting,
+  DishLineCost,
   DishSizeCost,
   IngredientCost,
   MissingPriceIngredient,
@@ -69,8 +70,13 @@ export function computeRecipeCosting(snapshot: RecipeCostingSnapshot): RecipeCos
     const sizeCosts: DishSizeCost[] = sizes.map((size) => {
       let total = 0;
       const missingIds = new Set<string>();
+      const lineCosts: DishLineCost[] = [];
       for (const line of lines.filter((l) => l.size === size)) {
-        for (const use of expandLine(line, preparations)) {
+        let lineTotal = 0;
+        let lineComplete = true;
+        const uses = expandLine(line, preparations);
+        if (uses.length === 0) lineComplete = false;
+        for (const use of uses) {
           usedIngredientIds.add(use.stockItemId);
           const cost = costs.get(use.stockItemId);
           if (!hasPrice(cost)) {
@@ -85,10 +91,24 @@ export function computeRecipeCosting(snapshot: RecipeCostingSnapshot): RecipeCos
               entry.usedIn.push({ pizzaId: dish.pizzaId, name: dish.name });
             }
             missing.set(use.stockItemId, entry);
+            lineComplete = false;
             continue;
           }
-          total += use.quantity * cost.unitCostWithoutVat;
+          lineTotal += use.quantity * cost.unitCostWithoutVat;
         }
+        total += lineTotal;
+        const item = line.stockItemId ? costs.get(line.stockItemId) : undefined;
+        lineCosts.push({
+          stockItemId: line.stockItemId,
+          preparationId: line.stockItemId ? null : line.preparationId,
+          name: line.stockItemId ? (item?.name ?? "") : (preparations.get(line.preparationId ?? "")?.name ?? ""),
+          quantity: line.quantity,
+          baseUnit: line.stockItemId ? (item?.baseUnit ?? null) : null,
+          wasteFactor: line.wasteFactor,
+          unitCostWithoutVat: line.stockItemId && hasPrice(item) ? item.unitCostWithoutVat : null,
+          costWithoutVat: roundCost(lineTotal),
+          complete: lineComplete,
+        });
       }
       const price = dish.prices.find((p) => p.size === size);
       return {
@@ -97,6 +117,7 @@ export function computeRecipeCosting(snapshot: RecipeCostingSnapshot): RecipeCos
         salePrice: price ? price.price : null,
         complete: missingIds.size === 0,
         missingStockItemIds: [...missingIds],
+        lines: lineCosts,
       };
     });
 

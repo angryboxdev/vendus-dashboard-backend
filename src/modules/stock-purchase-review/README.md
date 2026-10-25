@@ -166,6 +166,17 @@ estruturadas (ver Known gaps).
 
 ## Design decisions (ADR summary)
 
+### Linhas em cêntimos, movimentos em euros
+
+As linhas de revisão guardam tudo em cêntimos, incluindo
+`unit_cost_per_base_unit_*` (ex.: 0,558 cêntimos/g). Em `stock_movements`
+o mesmo campo está em **euros** por unidade base em todo o Stock (catálogo,
+custo das fichas técnicas, anomalias de preço, movimentos manuais). Desde a
+migração `20261115100000_stock_review_movement_cost_euros`,
+`fn_stock_review_confirm` converte (÷ 100) ao criar o movimento. Antes dela
+não chegou a haver movimentos confirmados por esta via em produção, por isso
+não houve conversão de dados.
+
 ### Ciclo de construção `invoices` ↔ `stock-purchase-review` resolvido com um indirection object
 
 `invoices` precisa do `recordInvoiceFinalizedForStock` deste módulo no
