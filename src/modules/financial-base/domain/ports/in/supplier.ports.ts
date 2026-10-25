@@ -20,6 +20,8 @@ export interface SupplierDTO {
   defaultFinancialMode: FinancialMode | null;
   defaultLocationId: string | null;
   logoUrl: string | null;
+  /** Encomenda mínima (euros); `null` = sem mínimo. */
+  minOrderValue: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -41,6 +43,7 @@ export interface CreateSupplierCommand {
   defaultFinancialType?: string | null;
   defaultFinancialMode?: FinancialMode | null;
   defaultLocationId?: string | null;
+  minOrderValue?: number | null;
 }
 
 export interface CreateSupplierPort {

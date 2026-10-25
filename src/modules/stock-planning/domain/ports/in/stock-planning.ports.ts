@@ -5,6 +5,7 @@ import type { RiskLevel } from "../../services/risk-classification.service.js";
 import type { ConfidenceLevel } from "../../services/confidence.service.js";
 import type { AffectedProductSummary } from "../../services/impact-simulation.service.js";
 import type { ProjectionPoint } from "../../services/stock-projection.service.js";
+import type { ReplenishmentRow } from "../../services/supplier-replenishment.service.js";
 
 // ── DTOs partilhados ──────────────────────────────────────────────────────
 
@@ -191,6 +192,20 @@ export interface ListPlanningItemsCommand {
 
 export interface ListPlanningItemsPort {
   execute(command: ListPlanningItemsCommand): Promise<PlanningItemRowDTO[]>;
+}
+
+/** «Necessidades de reposição» do separador Abastecimento da ficha do fornecedor. */
+export type SupplierReplenishmentRowDTO = ReplenishmentRow;
+
+export interface ListSupplierReplenishmentCommand {
+  organizationId: OrganizationId;
+  supplierId: string;
+  /** Loja do último run de previsão (a sugestão é por loja). */
+  locationId: string;
+}
+
+export interface ListSupplierReplenishmentPort {
+  execute(command: ListSupplierReplenishmentCommand): Promise<SupplierReplenishmentRowDTO[]>;
 }
 
 export interface GetItemPlanningDetailCommand {

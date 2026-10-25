@@ -94,6 +94,13 @@ reais. Não é um sistema de Purchase Order/receção/tracking de entrega.
 - `ReviewRecommendationPort` — audita revisão manual da quantidade.
 - `DetectForecastDeviationPort` / `SubmitForecastFeedbackPort`.
 - `GetForecastHistoryPort` — tela "Histórico de previsões".
+- `ListSupplierReplenishmentPort` — «Necessidades de reposição» do separador
+  Abastecimento da ficha do fornecedor (`GET /stock-planning/suppliers/:supplierId/replenishment?locationId=`).
+  Artigos = os já comprados ao fornecedor (linhas de faturas ligadas a stock) +
+  os que a última recomendação da loja lhe atribui. Sugestão = recomendação do
+  Planeamento; sem ela, só repor até ao stock mínimo (serviço puro
+  `supplier-replenishment.service.ts`). Stock atual e consumo de 30 dias são da
+  organização (como o ecrã de Planeamento); consumo = saídas `consumption`/`sale`/`loss`.
 
 ### Output (domain dependencies)
 
@@ -116,6 +123,10 @@ reais. Não é um sistema de Purchase Order/receção/tracking de entrega.
   `stock-purchase-review`/`stock-count` (ver Design decisions — sem port
   formal exposto por esses módulos nesta ronda).
 - `LocationReadPort` — D10 → `locations`.
+- `SupplierReplenishmentReadPort` — última compra por artigo a um fornecedor
+  (`invoices`/`invoice_lines`), consumo dos últimos N dias (`stock_movements`) e
+  nomes de categoria (`stock_categories`), lidos diretamente como os outros
+  adapters de leitura (`SupplierReplenishmentReadAdapter`, ids em lotes de 200).
 
 ## Adapters
 

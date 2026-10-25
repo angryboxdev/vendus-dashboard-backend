@@ -4,6 +4,7 @@ import type {
   SupplierInvoiceRow,
   SupplierInvoiceStats,
   SupplierInvoiceStatsPort,
+  SupplierPurchasedLine,
 } from "../../domain/ports/out/supplier-invoice-stats.port.js";
 
 /**
@@ -15,10 +16,22 @@ import type {
 export class FakeSupplierInvoiceStats implements SupplierInvoiceStatsPort {
   private readonly summaries = new Map<string, SupplierInvoiceStats>();
   private readonly invoiceRows = new Map<string, SupplierInvoiceRow[]>();
+  private readonly purchasedLines = new Map<string, SupplierPurchasedLine[]>();
 
   seed(stats: SupplierInvoiceStats, invoices?: SupplierInvoiceRow[]): void {
     this.summaries.set(stats.supplierId, stats);
     if (invoices) this.invoiceRows.set(stats.supplierId, invoices);
+  }
+
+  seedPurchasedLines(supplierId: string, lines: SupplierPurchasedLine[]): void {
+    this.purchasedLines.set(supplierId, lines);
+  }
+
+  async listPurchasedLinesBySupplier(
+    _organizationId: OrganizationId,
+    supplierId: string,
+  ): Promise<SupplierPurchasedLine[]> {
+    return this.purchasedLines.get(supplierId) ?? [];
   }
 
   async getSummariesForSuppliers(

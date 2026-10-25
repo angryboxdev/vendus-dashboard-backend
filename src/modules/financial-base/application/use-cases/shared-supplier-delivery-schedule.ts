@@ -10,5 +10,6 @@ export function toScheduleDTO(schedule: SupplierDeliverySchedule): SupplierDeliv
     weekdays: p.weekdays,
     cutoffTime: p.cutoffTime,
     active: p.active,
+    dayRules: p.dayRules,
   };
 }

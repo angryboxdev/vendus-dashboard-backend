@@ -14,7 +14,7 @@ Nota do utilizador: as faturas enviadas para o Stock passam a ser lançadas semp
 - Migração `20261110100000_stock_review_f3a` (+ rollback) validada em PGlite: aplicar, reexecutar, IVA preenchido nas revisões por aplicar, divisão 7+5 → 175+125, recusa de soma errada, confirmação idempotente, excluded, rollback (movimentos intactos), reaplicar.
 - Fora: NC devolução física vs. correção de preço (continua só no Financeiro); ecrã de pendências no Financeiro (a pendência fica na revisão).
 
-## F3b — conciliação e fila (feita, por publicar)
+## F3b — conciliação e fila (em produção: #113 / #86, #87)
 - Pedido do utilizador (2026-10-25): revisão/classificação de artigos mais inteligente — se o nome condiz, sugerir a «conciliação».
 - Conciliação: histórico do fornecedor (referência → descrição) → nome claro no catálogo → IA (uma chamada por revisão, só candidatos reais, pode dizer «não é item de stock», ≥ 60%). Fator pela embalagem. Gravada na linha; nunca resolve sozinha; «Aceitar» / «Ajustar» / «Aceitar as N propostas».
 - Fila «Por tratar | Histórico», valor, progresso, destino, origem; estados Por mapear → Em revisão → Pronto → Movimentado (+ Excluída, Retirada); saiu «Cancelar revisões sem linhas».

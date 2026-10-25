@@ -5,6 +5,7 @@ import type {
   SupplierInvoiceRow,
   SupplierInvoiceStats,
   SupplierInvoiceStatsPort,
+  SupplierPurchasedLine,
 } from "../../domain/ports/out/supplier-invoice-stats.port.js";
 
 // Os valores monetários são guardados em cêntimos na tabela invoices (alinhado com InvoicesView).
@@ -14,6 +15,7 @@ const fromCents = (n: number): number => n / 100;
 const EXCLUDED_FROM_BILLED = new Set(["cancelled", "draft_ai", "pending_review"]);
 // Statuses que representam valores em aberto (a pagar)
 const PENDING_STATUSES = new Set(["pending", "overdue", "partial"]);
+const IN_CHUNK = 200;
 
 /**
  * Nunca guarda um `SupabaseClient` — recebe o factory `createScopedQuery`
@@ -127,6 +129,64 @@ export class SupabaseSupplierInvoiceStatsAdapter implements SupplierInvoiceStats
       status: row.status as string,
       paidAt: row.paid_at ? new Date(row.paid_at as string) : null,
       attachmentUrl: (row.attachment_url as string | null) ?? null,
+    }));
+  }
+
+  async listPurchasedLinesBySupplier(
+    organizationId: OrganizationId,
+    supplierId: string,
+  ): Promise<SupplierPurchasedLine[]> {
+    const inv = await this.scopedQuery(organizationId)
+      .table("invoices")
+      .select("id, invoice_date, status")
+      .eq("supplier_id", supplierId)
+      .eq("document_type", "invoice");
+    if (inv.error) throw new Error(inv.error.message);
+
+    const invoiceDates = new Map<string, Date>();
+    for (const row of (inv.data ?? []) as unknown as Array<{ id: string; invoice_date: string; status: string }>) {
+      if (!EXCLUDED_FROM_BILLED.has(row.status)) invoiceDates.set(row.id, new Date(row.invoice_date));
+    }
+    if (invoiceDates.size === 0) return [];
+
+    // Em lotes: um `in` com centenas de ids passaria o limite do URL do PostgREST.
+    const lineRows: Array<{
+      invoice_id: string;
+      description: string;
+      supplier_item_code: string | null;
+      stock_item_id: string | null;
+      unit_cost_without_vat: number;
+      total_with_vat: number;
+    }> = [];
+    const ids = [...invoiceDates.keys()];
+    for (let i = 0; i < ids.length; i += IN_CHUNK) {
+      const { data, error } = await this.scopedQuery(organizationId)
+        .table("invoice_lines")
+        .select("invoice_id, description, supplier_item_code, stock_item_id, unit_cost_without_vat, total_with_vat")
+        .in("invoice_id", ids.slice(i, i + IN_CHUNK));
+      if (error) throw new Error(error.message);
+      lineRows.push(...((data ?? []) as unknown as typeof lineRows));
+    }
+
+    const stockIds = [...new Set(lineRows.map((l) => l.stock_item_id).filter((id): id is string => !!id))];
+    const stockNames = new Map<string, string>();
+    for (let i = 0; i < stockIds.length; i += IN_CHUNK) {
+      const { data, error } = await this.scopedQuery(organizationId)
+        .table("stock_items")
+        .select("id, name")
+        .in("id", stockIds.slice(i, i + IN_CHUNK));
+      if (error) throw new Error(error.message);
+      for (const s of (data ?? []) as unknown as Array<{ id: string; name: string }>) stockNames.set(s.id, s.name);
+    }
+
+    return lineRows.map((l) => ({
+      invoiceDate: invoiceDates.get(l.invoice_id)!,
+      description: l.description,
+      supplierItemCode: l.supplier_item_code,
+      stockItemId: l.stock_item_id,
+      stockItemName: l.stock_item_id ? (stockNames.get(l.stock_item_id) ?? null) : null,
+      unitCostWithoutVat: fromCents(l.unit_cost_without_vat),
+      totalWithVat: fromCents(l.total_with_vat),
     }));
   }
 }

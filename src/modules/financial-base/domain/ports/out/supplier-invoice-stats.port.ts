@@ -25,6 +25,21 @@ export interface SupplierInvoiceRow {
   attachmentUrl: string | null;
 }
 
+/** Linha de uma fatura confirmada do fornecedor (só faturas; notas de crédito não contam). */
+export interface SupplierPurchasedLine {
+  invoiceDate: Date;
+  description: string;
+  /** Código do artigo no fornecedor, lido da fatura. */
+  supplierItemCode: string | null;
+  stockItemId: string | null;
+  /** Nome do artigo de stock ligado, quando existe. */
+  stockItemName: string | null;
+  /** Euros, sem IVA. */
+  unitCostWithoutVat: number;
+  /** Euros, com IVA. */
+  totalWithVat: number;
+}
+
 export interface SupplierInvoiceFilter {
   startDate?: Date;
   endDate?: Date;
@@ -50,4 +65,13 @@ export interface SupplierInvoiceStatsPort {
     supplierId: string,
     filter?: SupplierInvoiceFilter,
   ): Promise<SupplierInvoiceRow[]>;
+
+  /**
+   * Linhas das faturas confirmadas do fornecedor (exclui anuladas, rascunhos,
+   * em revisão e notas de crédito). Base dos «Artigos principais».
+   */
+  listPurchasedLinesBySupplier(
+    organizationId: OrganizationId,
+    supplierId: string,
+  ): Promise<SupplierPurchasedLine[]>;
 }

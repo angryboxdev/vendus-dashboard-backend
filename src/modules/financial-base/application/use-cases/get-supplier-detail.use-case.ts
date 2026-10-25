@@ -8,6 +8,9 @@ import type {
   SupplierStatsDTO,
 } from "../../domain/ports/in/supplier-detail.ports.js";
 import { toSupplierDTO } from "./shared.js";
+import { rankTopPurchasedItems } from "../../domain/services/top-purchased-items.js";
+
+const TOP_ITEMS_LIMIT = 5;
 
 const EMPTY_STATS: SupplierStatsDTO = {
   invoiceCount: 0,
@@ -28,9 +31,10 @@ export class GetSupplierDetailUseCase implements GetSupplierDetailPort {
     const supplier = await this.supplierRepository.findById(command.organizationId, command.id);
     if (!supplier) throw new SupplierNotFoundError(command.id);
 
-    const [summaries, invoices] = await Promise.all([
+    const [summaries, invoices, purchasedLines] = await Promise.all([
       this.invoiceStats.getSummariesForSuppliers(command.organizationId, [supplier.id]),
       this.invoiceStats.listInvoicesBySupplier(command.organizationId, supplier.id),
+      this.invoiceStats.listPurchasedLinesBySupplier(command.organizationId, supplier.id),
     ]);
 
     const summary = summaries[0];
@@ -60,6 +64,7 @@ export class GetSupplierDetailUseCase implements GetSupplierDetailPort {
         paidAt: inv.paidAt,
         attachmentUrl: inv.attachmentUrl,
       })),
+      topItems: rankTopPurchasedItems(purchasedLines, TOP_ITEMS_LIMIT),
     };
   }
 }

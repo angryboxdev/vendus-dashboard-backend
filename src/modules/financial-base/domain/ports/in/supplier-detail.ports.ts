@@ -59,9 +59,23 @@ export interface SupplierInvoiceRowDTO {
   attachmentUrl: string | null;
 }
 
+/** «Artigos principais»: onde mais se gastou neste fornecedor. */
+export interface SupplierTopItemDTO {
+  key: string;
+  name: string;
+  code: string | null;
+  stockItemId: string | null;
+  lastPurchaseDate: Date;
+  /** Preço unitário sem IVA da compra mais recente (euros). */
+  lastUnitPrice: number;
+  totalSpent: number;
+  purchaseCount: number;
+}
+
 export interface SupplierDetailDTO extends SupplierDTO {
   stats: SupplierStatsDTO;
   invoices: SupplierInvoiceRowDTO[];
+  topItems: SupplierTopItemDTO[];
 }
 
 export interface GetSupplierDetailCommand {

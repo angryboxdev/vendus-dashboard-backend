@@ -1,4 +1,4 @@
-import { InvalidDefaultStockPolicyError, InvalidFinancialModeError } from "../errors.js";
+import { InvalidDefaultStockPolicyError, InvalidFinancialModeError, InvalidMinOrderValueError } from "../errors.js";
 
 export type SupplierStatus = "active" | "inactive";
 
@@ -46,6 +46,8 @@ interface SupplierProps {
   defaultLocationId?: string | null;
   /** Logótipo do fornecedor (URL do ficheiro guardado; vindo de uma fatura confirmada pela pessoa ou enviado à mão). */
   logoUrl?: string | null;
+  /** Encomenda mínima configurada (euros); `null` = sem mínimo. */
+  minOrderValue?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -66,6 +68,7 @@ export interface UpdateSupplierData {
   defaultFinancialMode?: FinancialMode | null;
   defaultLocationId?: string | null;
   logoUrl?: string | null;
+  minOrderValue?: number | null;
 }
 
 export class Supplier {
@@ -86,6 +89,7 @@ export class Supplier {
   readonly defaultFinancialMode: FinancialMode | null;
   readonly defaultLocationId: string | null;
   readonly logoUrl: string | null;
+  readonly minOrderValue: number | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 
@@ -107,6 +111,7 @@ export class Supplier {
     this.defaultFinancialMode = props.defaultFinancialMode ?? null;
     this.defaultLocationId = props.defaultLocationId ?? null;
     this.logoUrl = props.logoUrl ?? null;
+    this.minOrderValue = props.minOrderValue ?? null;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
   }
@@ -126,11 +131,13 @@ export class Supplier {
     defaultFinancialType?: string | null;
     defaultFinancialMode?: string | null;
     defaultLocationId?: string | null;
+    minOrderValue?: number | null;
   }): Supplier {
     if (props.defaultStockPolicy !== undefined && !DEFAULT_STOCK_POLICIES.includes(props.defaultStockPolicy as DefaultStockPolicy)) {
       throw new InvalidDefaultStockPolicyError(props.defaultStockPolicy);
     }
     assertFinancialMode(props.defaultFinancialMode);
+    assertMinOrderValue(props.minOrderValue);
     const now = new Date();
     return new Supplier({
       id: crypto.randomUUID(),
@@ -149,6 +156,7 @@ export class Supplier {
       defaultFinancialType: props.defaultFinancialType ?? null,
       defaultFinancialMode: (props.defaultFinancialMode as FinancialMode | null | undefined) ?? null,
       defaultLocationId: props.defaultLocationId ?? null,
+      minOrderValue: props.minOrderValue ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -163,6 +171,7 @@ export class Supplier {
       throw new InvalidDefaultStockPolicyError(data.defaultStockPolicy);
     }
     assertFinancialMode(data.defaultFinancialMode);
+    assertMinOrderValue(data.minOrderValue);
     return new Supplier({
       id: this.id,
       name: data.name !== undefined ? data.name.trim() : this.name,
@@ -188,6 +197,7 @@ export class Supplier {
       defaultFinancialMode: data.defaultFinancialMode !== undefined ? data.defaultFinancialMode : this.defaultFinancialMode,
       defaultLocationId: data.defaultLocationId !== undefined ? data.defaultLocationId : this.defaultLocationId,
       logoUrl: data.logoUrl !== undefined ? data.logoUrl : this.logoUrl,
+      minOrderValue: data.minOrderValue !== undefined ? data.minOrderValue : this.minOrderValue,
       createdAt: this.createdAt,
       updatedAt: new Date(),
     });
@@ -220,10 +230,16 @@ export class Supplier {
       defaultFinancialMode: this.defaultFinancialMode,
       defaultLocationId: this.defaultLocationId,
       logoUrl: this.logoUrl,
+      minOrderValue: this.minOrderValue,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };
   }
+}
+
+function assertMinOrderValue(value: number | null | undefined): void {
+  if (value == null) return;
+  if (!Number.isFinite(value) || value < 0) throw new InvalidMinOrderValueError();
 }
 
 function assertFinancialMode(mode: string | null | undefined): void {

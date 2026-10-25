@@ -33,6 +33,7 @@ export class CreateSupplierUseCase implements CreateSupplierPort {
       defaultFinancialType: command.defaultFinancialType ?? null,
       defaultFinancialMode: command.defaultFinancialMode ?? null,
       defaultLocationId: command.defaultLocationId ?? null,
+      minOrderValue: command.minOrderValue ?? null,
     });
     await assertSupplierDefaults(this.categories, this.locations, command.organizationId, {
       costCenterGroupId: supplier.defaultCostCenterGroupId,
