@@ -10,6 +10,8 @@ import { SupplierLocationRulesUseCases } from "./application/use-cases/supplier-
 import type { SupplierLocationRulesPort } from "./domain/ports/in/supplier-location-rules.ports.js";
 import { SupabaseCostCenterCategoryRepository } from "./adapters/out/supabase-cost-center-category.repository.js";
 import { SupabaseSupplierRepository } from "./adapters/out/supabase-supplier.repository.js";
+import { SupabaseSupplierPlanningReadAdapter } from "./adapters/out/supabase-supplier-planning-read.adapter.js";
+import { GetSupplierPlanningSummaryUseCase } from "./application/use-cases/get-supplier-planning-summary.use-case.js";
 import { SupabaseSupplierInvoiceStatsAdapter } from "./adapters/out/supabase-supplier-invoice-stats.adapter.js";
 import { SupabaseInvoicePaymentReadAdapter } from "./adapters/out/supabase-invoice-payment-read.adapter.js";
 import { SupabaseChannelRepository } from "./adapters/out/supabase-channel.repository.js";
@@ -167,6 +169,7 @@ export function createFinancialBaseModule(): {
     listSupplierDeliverySchedules,
     upsertSupplierDeliverySchedule,
     supplierLocationRules,
+    new GetSupplierPlanningSummaryUseCase(supplierRepository, new SupabaseSupplierPlanningReadAdapter(createScopedQuery)),
   );
 
   return {
