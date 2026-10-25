@@ -6,6 +6,8 @@ import type {
   InvoiceDTO,
 } from "../../domain/ports/in/invoice.ports.js";
 import type { InvoiceRepositoryPort, InvoiceFilter } from "../../domain/ports/out/invoice-repository.port.js";
+import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
+import type { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import type { CostCenterCategoryReaderPort, CategoryLookup } from "../../domain/ports/out/cost-center-category-reader.port.js";
 import { findDuplicateInvoiceIds } from "../../domain/utils/duplicate-detection.js";
 import { toInvoiceDTO } from "./shared.js";
@@ -22,6 +24,7 @@ export class ListInvoicesUseCase implements ListInvoicesPort {
     private readonly invoiceRepo: InvoiceRepositoryPort,
     private readonly categoryReader: CostCenterCategoryReaderPort,
     private readonly allocationRepo?: Pick<InvoiceAllocationRepositoryPort, "findAll">,
+    private readonly lineRepo?: Pick<InvoiceLineRepositoryPort, "findByInvoiceIds">,
   ) {}
 
   async execute(organizationId: OrganizationId, filter?: ListInvoicesFilter): Promise<InvoiceDTO[]> {
@@ -63,9 +66,19 @@ export class ListInvoicesUseCase implements ListInvoicesPort {
         allocationsByInvoice.set(a.invoiceId, [...(allocationsByInvoice.get(a.invoiceId) ?? []), a]);
       }
     }
+    // «Por artigo»: a classificação vem das linhas (igual ao detalhe) — sem elas, a lista caía na
+    // categoria do cabeçalho, que nestas faturas fica vazia, e mostrava «Classificação pendente».
+    const linesByInvoice = new Map<string, InvoiceLine[]>();
+    const detailedIds = invoices.filter((inv) => inv.lineDetailMode === "detailed").map((inv) => inv.id);
+    if (this.lineRepo && detailedIds.length > 0) {
+      for (const l of await this.lineRepo.findByInvoiceIds(organizationId, detailedIds)) {
+        linesByInvoice.set(l.invoiceId, [...(linesByInvoice.get(l.invoiceId) ?? []), l]);
+      }
+    }
     const categoryIds = [...new Set([
       ...invoices.map((inv) => inv.costCenterCategoryId).filter((id): id is string => id != null),
       ...[...allocationsByInvoice.values()].flat().map((a) => a.costCenterCategoryId),
+      ...[...linesByInvoice.values()].flat().map((l) => l.costCenterCategoryId).filter((id): id is string => id != null),
     ])];
     const lookups: CategoryLookup[] = categoryIds.length > 0
       ? await this.categoryReader.findManyByIds(organizationId, categoryIds)
@@ -78,7 +91,7 @@ export class ListInvoicesUseCase implements ListInvoicesPort {
     const duplicateIds = findDuplicateInvoiceIds(invoices);
 
     return invoices.map((inv) =>
-      toInvoiceDTO(inv, undefined, categoryMap, duplicateIds.has(inv.id), inv.lineDetailMode === "by_values" ? (allocationsByInvoice.get(inv.id) ?? []) : undefined),
+      toInvoiceDTO(inv, linesByInvoice.get(inv.id), categoryMap, duplicateIds.has(inv.id), inv.lineDetailMode === "by_values" ? (allocationsByInvoice.get(inv.id) ?? []) : undefined),
     );
   }
 }

@@ -89,6 +89,8 @@ interface InvoicePorts {
   linkObligation?: import("../../domain/ports/in/payment-document.ports.js").LinkObligationPort;
   /** F3c: importar a fatura diretamente no Stock. */
   importInvoiceForStock?: import("../../domain/ports/in/invoice.ports.js").ImportInvoiceForStockPort;
+  /** Logótipos dos fornecedores a partir das faturas (lista de fornecedores). */
+  fillSupplierLogos?: import("../../domain/ports/in/supplier-logo.ports.js").FillSupplierLogosPort;
   confirmImportedInvoice: ConfirmImportedInvoicePort;
   getInvoiceAlerts: GetInvoiceAlertsPort;
   processDirectDebits: ProcessDirectDebitsPort;
@@ -207,6 +209,22 @@ export function createInvoiceRouter(ports: InvoicePorts, idempotencyStore: Idemp
   router.post("/invoices", idem);
   router.post("/invoices/import", idem);
   router.post("/invoices/:id/confirm", idem);
+
+  // POST /invoices/supplier-logos/fill — um lote de fornecedores sem logótipo (o ecrã repete com `after`
+  // até `next` ser null). Permissão: Fornecedores (Gerir), classificada antes da regra geral de faturas.
+  router.post("/invoices/supplier-logos/fill", async (req, res) => {
+    if (!ports.fillSupplierLogos) {
+      res.status(404).json({ error: "Indisponível." });
+      return;
+    }
+    try {
+      const body = (req.body ?? {}) as { after?: unknown };
+      const result = await ports.fillSupplierLogos.fillMissing(req.auth!.orgId, typeof body.after === "string" ? { after: body.after } : {});
+      res.json(result);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
 
   // GET /invoices/payables-summary — Total a pagar | Em atraso (respeita pesquisa, período, fornecedor, loja, moeda).
   router.get("/invoices/payables-summary", async (req, res) => {
@@ -422,11 +440,14 @@ export function createInvoiceRouter(ports: InvoicePorts, idempotencyStore: Idemp
         vatAmount: number;
         totalWithVat: number;
         locationId?: string | null;
+        confirmRemoveStockReview?: boolean;
       };
       const line = await ports.addInvoiceLine.execute({
         organizationId: req.auth!.orgId,
         invoiceId: req.params.invoiceId,
         ...body,
+        confirmRemoveStockReview: body.confirmRemoveStockReview === true,
+        actor: req.auth!.email,
       });
       res.status(201).json(line);
     } catch (err) {
@@ -471,7 +492,10 @@ export function createInvoiceRouter(ports: InvoicePorts, idempotencyStore: Idemp
   // DELETE /invoices/:invoiceId/lines/:lineId
   router.delete("/invoices/:invoiceId/lines/:lineId", async (req, res) => {
     try {
-      await ports.deleteInvoiceLine.execute(req.auth!.orgId, req.params.invoiceId, req.params.lineId);
+      await ports.deleteInvoiceLine.execute(req.auth!.orgId, req.params.invoiceId, req.params.lineId, {
+        confirmRemoveStockReview: req.query.confirmRemoveStockReview === "true",
+        actor: req.auth!.email,
+      });
       res.status(204).send();
     } catch (err) {
       handleError(res, err);

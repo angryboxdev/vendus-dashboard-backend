@@ -3,7 +3,15 @@ import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
 import { Invoice } from "../../domain/entities/invoice.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
-import { InvoiceNotFoundError, InvoiceLineNotFoundError, LineDetailModeError } from "../../domain/errors.js";
+import {
+  InvoiceNotFoundError,
+  InvoiceLineNotFoundError,
+  LineDetailModeError,
+  InvoiceLinesLockedByAppliedStockReviewError,
+  StockReviewRemovalConfirmationRequiredError,
+} from "../../domain/errors.js";
+import { FakeInvoiceStockReviewStatusRead } from "../fakes/fake-invoice-stock-review-status-read.js";
+import { FakeInvoiceStockReviewDraftDelete } from "../fakes/fake-invoice-stock-review-draft-delete.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 
 const ORG_ID = mintOrganizationId("org-test");
@@ -115,5 +123,52 @@ describe("DeleteInvoiceLineUseCase", () => {
     await expect(
       useCase.execute(ORG_ID, inv.id, lineDeOutra.id),
     ).rejects.toThrow(InvoiceLineNotFoundError);
+  });
+});
+
+describe("DeleteInvoiceLineUseCase — fatura em Compras por rever (FK stock_review_lines)", () => {
+  let invoiceRepo: FakeInvoiceRepository;
+  let lineRepo: FakeInvoiceLineRepository;
+  let statusRead: FakeInvoiceStockReviewStatusRead;
+  let draftDelete: FakeInvoiceStockReviewDraftDelete;
+  let useCase: DeleteInvoiceLineUseCase;
+
+  beforeEach(() => {
+    invoiceRepo = new FakeInvoiceRepository();
+    lineRepo = new FakeInvoiceLineRepository();
+    statusRead = new FakeInvoiceStockReviewStatusRead();
+    draftDelete = new FakeInvoiceStockReviewDraftDelete();
+    useCase = new DeleteInvoiceLineUseCase(invoiceRepo, lineRepo, { statusRead, draftDelete });
+  });
+
+  async function seeded(status: "pending" | "applied") {
+    const inv = makeDetailedInvoice();
+    const line = makeLine(inv.id);
+    await invoiceRepo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, [line]);
+    statusRead.seed(inv.id, { reviewId: "rev-1", status });
+    return { inv, line };
+  }
+
+  it("já movimentada no Stock: bloqueia com mensagem clara, mesmo com confirmação, e não apaga", async () => {
+    const { inv, line } = await seeded("applied");
+    await expect(useCase.execute(ORG_ID, inv.id, line.id, { confirmRemoveStockReview: true })).rejects.toThrow(InvoiceLinesLockedByAppliedStockReviewError);
+    await expect(useCase.execute(ORG_ID, inv.id, line.id)).rejects.toThrow(/já deu entrada no stock/);
+    expect(await lineRepo.findByInvoiceId(ORG_ID, inv.id)).toHaveLength(1);
+    expect(draftDelete.calls).toHaveLength(0);
+  });
+
+  it("por aplicar e sem confirmação: pede confirmação e não apaga", async () => {
+    const { inv, line } = await seeded("pending");
+    await expect(useCase.execute(ORG_ID, inv.id, line.id)).rejects.toThrow(StockReviewRemovalConfirmationRequiredError);
+    expect(await lineRepo.findByInvoiceId(ORG_ID, inv.id)).toHaveLength(1);
+    expect(draftDelete.calls).toHaveLength(0);
+  });
+
+  it("por aplicar e com confirmação: descarta a revisão primeiro e apaga a linha", async () => {
+    const { inv, line } = await seeded("pending");
+    await useCase.execute(ORG_ID, inv.id, line.id, { confirmRemoveStockReview: true, actor: "gestor@teste.pt" });
+    expect(draftDelete.calls).toEqual([{ organizationId: ORG_ID, invoiceId: inv.id, actor: "gestor@teste.pt" }]);
+    expect(await lineRepo.findByInvoiceId(ORG_ID, inv.id)).toHaveLength(0);
   });
 });

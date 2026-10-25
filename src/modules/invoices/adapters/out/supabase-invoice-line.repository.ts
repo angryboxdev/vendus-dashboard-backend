@@ -4,6 +4,9 @@ import { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import type { InvoiceLineType } from "../../domain/entities/invoice.js";
 import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
 
+const IN_CHUNK = 200;
+const PAGE = 1000;
+
 function toEntity(row: Record<string, unknown>): InvoiceLine {
   return InvoiceLine.reconstitute({
     id: row.id as string,
@@ -100,6 +103,29 @@ export class SupabaseInvoiceLineRepository implements InvoiceLineRepositoryPort 
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
     return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => toEntity(r));
+  }
+
+  async findByInvoiceIds(organizationId: OrganizationId, invoiceIds: string[]): Promise<InvoiceLine[]> {
+    // Em lotes (um `in` com centenas de ids passaria o limite do URL do PostgREST) e por páginas
+    // (o PostgREST corta cada resposta no máximo de linhas configurado).
+    const rows: Record<string, unknown>[] = [];
+    for (let i = 0; i < invoiceIds.length; i += IN_CHUNK) {
+      const ids = invoiceIds.slice(i, i + IN_CHUNK);
+      for (let page = 0; ; page++) {
+        const { data, error } = await this.scopedQuery(organizationId)
+          .table("invoice_lines")
+          .select("*")
+          .in("invoice_id", ids)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(page * PAGE, page * PAGE + PAGE - 1);
+        if (error) throw new Error(error.message);
+        const batch = (data ?? []) as unknown as Record<string, unknown>[];
+        rows.push(...batch);
+        if (batch.length < PAGE) break;
+      }
+    }
+    return rows.map((r) => toEntity(r));
   }
 
   async updateLine(organizationId: OrganizationId, line: InvoiceLine): Promise<void> {
