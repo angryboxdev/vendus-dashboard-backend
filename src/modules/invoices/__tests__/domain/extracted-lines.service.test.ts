@@ -41,3 +41,32 @@ describe("fatura com QR lida pela IA — identidade e totais vêm do QR", () => 
     expect(r.lines).toEqual(ai.lines);
   });
 });
+
+describe("sanitizeExtractedLines — ordem de grandeza (Dream Plus FT 56892, leitura pela IA)", () => {
+  const line = (description: string, quantity: number, price: number, pct: number, total: number, quantityText: string) => ({
+    description, quantity, unitPriceWithoutVat: price, vatRate: 6, vatAmount: null, totalWithoutVat: total, totalWithVat: null, discountPct: pct, quantityText,
+  });
+
+  test("«4,000» lido como 4000 → 4 sacos (e 20000 → 20 kg, 5000 → 5 kg), com aviso para rever; linhas certas ficam", () => {
+    const r = sanitizeExtractedLines([
+      line("Q. Cheddar Ralado kg", 5000, 820, 5, 3895, "5,000"),
+      line("Q. Mozzarella ralado 100% Eurial kg", 20000, 620, 10, 11160, "20,000"),
+      line("Tomate Mutti p/ Pizza Classico 5 kg bolsa", 4000, 1068, 10, 3845, "4,000"),
+      line("Linha certa", 2, 820, 5, 1558, "2,000"),
+    ]);
+    expect(r.lines.map((l) => l.quantity)).toEqual([5, 20, 4, 2]);
+    expect(r.lines.map((l) => l.unitPriceWithoutVat)).toEqual([820, 620, 1068, 820]);
+    expect(r.notes.map((n) => [n.index, n.code])).toEqual([[0, "quantity_scale_corrected"], [1, "quantity_scale_corrected"], [2, "quantity_scale_corrected"]]);
+    expect(r.notes[2]!.detail).toMatch(/quantidade lida 4000 corrigida para 4 \(«4,000» com vírgula decimal\)/);
+  });
+
+  test("preço lido ×100 → corrigido com aviso; nada que feche → prevalece o total impresso (como antes)", () => {
+    const r = sanitizeExtractedLines([
+      line("Preço errado", 4, 106800, 10, 3845, "4"),
+      { description: "Total no preço", quantity: 4, unitPriceWithoutVat: 19000, vatRate: 23, vatAmount: null, totalWithoutVat: 19000, totalWithVat: null },
+    ]);
+    expect(r.lines[0]!.unitPriceWithoutVat).toBe(1068);
+    expect(r.notes.map((n) => n.code)).toEqual(["unit_price_scale_corrected", "line_unit_price_discarded"]);
+    expect(r.lines[1]!.unitPriceWithoutVat).toBeNull();
+  });
+});

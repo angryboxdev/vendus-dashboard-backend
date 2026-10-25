@@ -22,7 +22,7 @@ Nota do utilizador: as faturas enviadas para o Stock passam a ser lançadas semp
 - Migração `20261111150000_stock_review_suggestions` (+ rollback) validada em PGlite.
 - Passado para a F3c: «A extrair»/«Falha de extração», reprocessamento limitado e linhas manuais (dependem da importação direta no Stock).
 
-## F3c — importar no Stock (feita, por publicar)
+## F3c — importar no Stock (em produção: #115 / #89)
 - Pedido do utilizador: mesma lógica de leitura do QR; se a fatura já tiver dado entrada no Stock → aviso e bloqueio.
 - `POST /invoices/import-for-stock`: mesmo leitor/duplicados; already_in_stock (bloqueia) / already_in_review / draft_in_finance / exists_not_routed (+ routeExisting) / extraction_failed (rascunho apagado).
 - Rascunho «Do Stock» (`invoices.import_origin`), identidade fiscal reservada, revisão `origin=stock`, `finance_pending`; lançamento no Financeiro acaba a pendência (RPC idempotente) sem repetir quantidades.

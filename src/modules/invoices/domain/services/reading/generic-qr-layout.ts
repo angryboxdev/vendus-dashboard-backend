@@ -27,6 +27,9 @@ function roleOf(text: string): Role {
   const t = norm(text);
   if (/^(DESCRI|DESIGNA|PRODUTO|SERVICO|DESCRIPTION|ITEM|ARTIGO$|ARTIGOS$)/.test(t)) return "desc";
   if (/^(COD|REF|C[OÓ]DIGO|ART\.?$)/.test(t)) return "code";
+  // «Qt/Cx», «Un/Cx», «Cx»: informação logística (unidades por caixa / n.º de caixas) — nunca é a quantidade
+  // faturada nem multiplica valores ou Stock (Dream Plus FT 56892).
+  if (/^(QTD?\.?\s*\/\s*CX|QT\.?\s*CX|UN\.?\s*\/\s*CX|CX\.?$|CAIXAS?$)/.test(t)) return "text";
   if (/^(QT|QUANT|QTY|QNT)/.test(t)) return "qty";
   if (/^(DESC(ONTO)?\.?\s*%?$|DTO|%\s*DESC)/.test(t)) return "disc";
   // «IVA %» / «Taxa IVA» = taxa; «IVA Valor» / «Valor IVA» = montante (coluna de valores).
@@ -92,7 +95,8 @@ function findHeader(rows: PdfRow[]): { row: PdfRow; labels: Label[] } | null {
 
 /** Subtotais e transportes dentro da tabela: não são artigos nem o fim da tabela. */
 const SKIP_ROW = /^(SUB-?TOTAL|TRANSPORTE|A TRANSPORTAR|VALOR TRANSPORTADO|VALOR A TRANSPORTAR)/;
-const END_OF_TABLE = /^(TOTAL|RESUMO|VALOR TOTAL|TOTAL A PAGAR|BASE TRIBUT|QUADRO|PAGAMENTO|PAGO|MEIOS DE PAGAMENTO|OBSERVA|IBAN|CONDICOES)|TAXA IVA|TOTAL IVA|TOTAL S\.?I\b|TOT\. C\/IVA|RESUMO DO IVA|QUADRO RESUMO|^ESPECIFICACAO DO IMPOSTO|COD\.? ISENCAO|^TOTAL EUR|MOTIVO DE ISENCAO/;
+// Inclui quadros de IVA «Taxa | Base de Incidência | Valor do I.V.A.» (PHC) e a linha do ATCUD por baixo da tabela.
+const END_OF_TABLE = /^(TOTAL|RESUMO|VALOR TOTAL|TOTAL A PAGAR|BASE TRIBUT|QUADRO|PAGAMENTO|PAGO|MEIOS DE PAGAMENTO|OBSERVA|IBAN|CONDICOES|ATCUD)|TAXA IVA|^TAXA\s+BASE|BASE DE INCIDENCIA|COLOCADOS A DISPOSICAO|TOTAL IVA|TOTAL S\.?I\b|TOT\. C\/IVA|RESUMO DO IVA|QUADRO RESUMO|^ESPECIFICACAO DO IMPOSTO|COD\.? ISENCAO|^TOTAL EUR|MOTIVO DE ISENCAO/;
 // Valores com 2 a 4 casas (alguns emissores imprimem «125,0000»); preços unitários até 9.
 const MONEY = /^-?€?\d{1,3}([.\s]\d{3})*,\d{2,4}€?$|^-?€?\d+,\d{2,4}€?$|^-?€?\d{1,3}(,\d{3})*\.\d{2,4}€?$|^-?€?\d+\.\d{2,4}€?$/;
 const NUMBER = /^-?\d+([.,]\d{1,9})?$/;
@@ -138,9 +142,13 @@ function tokensOf(row: PdfRow): Token[] {
 function columnOf(t: Token, labels: Label[]): Label | null {
   const di = labels.findIndex((l) => l.role === "desc");
   if (di >= 0 && !MONEY.test(t.text) && !RATE.test(t.text)) {
-    const start = labels[di]!.x0 - 8;
+    // A descrição começa logo a seguir à coluna anterior (o título pode estar mais à direita do texto,
+    // ex.: PHC «Designação») e acaba antes da coluna seguinte (valores dela, ex.: «Lote», podem
+    // começar uns pontos à esquerda do título).
+    const prev = labels[di - 1];
+    const start = prev ? Math.min(labels[di]!.x0 - 8, prev.x1 + 4) : labels[di]!.x0 - 8;
     const end = labels[di + 1]?.x0 ?? Infinity;
-    if (t.x0 >= start && t.x0 < end - 2) return labels[di]!;
+    if (t.x0 >= start && t.x0 < end - 10) return labels[di]!;
   }
   let best: Label | null = null, bestD = Infinity;
   for (const l of labels) {
@@ -167,11 +175,24 @@ function cellsOf(it: Item, l: Label): string[] | undefined {
 }
 
 /** Nome do emitente: linha com o NIF do QR (ou a anterior), até à forma jurídica. */
+// A forma jurídica tem de acabar a palavra («Santa» não é «S.A.»).
+const LEGAL_NAME = /([A-ZÀ-Ú0-9][\wÀ-ú&.,'\- ]{2,}?\b(?:UNIPESSOAL,?\s+LDA|LDA|S\.?\s?A|LIMITADA))\.?(?![\wÀ-ú])/i;
+
 function supplierNameOf(rows: PdfRow[], nif: string): string | null {
   for (let i = 0; i < rows.length; i++) {
     if (!rows[i]!.text.replace(/\D/g, "").includes(nif)) continue;
     for (const r of [rows[i]!, rows[i - 1]].filter(Boolean) as PdfRow[]) {
-      const m = /([A-ZÀ-Ú0-9][\wÀ-ú&.,'\- ]{2,}?\b(?:UNIPESSOAL,?\s+LDA|LDA|S\.?\s?A|LIMITADA))\.?/i.exec(r.text);
+      const m = LEGAL_NAME.exec(r.text);
+      if (m) return m[1]!.trim();
+    }
+    // Bloco do emitente com morada entre o nome e o NIF (ex.: PHC): linhas acima, só a coluna do
+    // NIF (o adquirente costuma estar noutra coluna da mesma altura).
+    const x = rows[i]!.words[0]!.x;
+    for (let k = i - 2; k >= Math.max(0, i - 8); k--) {
+      const r = rows[k]!;
+      if (r.page !== rows[i]!.page || r.y - rows[i]!.y > 140) break;
+      const sameColumn = r.words.filter((w) => w.x >= x - 20 && w.x < x + 240).map((w) => w.text).join(" ");
+      const m = LEGAL_NAME.exec(sameColumn);
       if (m) return m[1]!.trim();
     }
   }
@@ -373,7 +394,8 @@ export class GenericQrLayout implements InvoiceLayout {
         index,
         page: it.page,
         kind: "product",
-        supplierCode: code ? (cellsOf(it, code) ?? [])[0] ?? null : null,
+        // Referência: o token mais comprido da coluna (à esquerda pode haver um n.º de ordem, ex.: PHC «0/4/8»).
+        supplierCode: code ? [...(cellsOf(it, code) ?? [])].sort((a, b) => b.length - a.length)[0] ?? null : null,
         description: description || "(sem descrição)",
         pack: null,
         basePriceText: null,

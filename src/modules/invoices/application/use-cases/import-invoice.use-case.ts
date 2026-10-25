@@ -144,7 +144,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       const sanitized = sanitizeExtractedLines(raw.lines);
       // Com QR fiscal válido, identidade e totais vêm do QR (dado certificado), não da leitura da IA.
       extraction = qr ? applyQrToExtraction({ ...raw, lines: sanitized.lines }, qr) : { ...raw, lines: sanitized.lines };
-      lineNotes = sanitized.notes.map((n) => ({ code: "line_unit_price_discarded", blocking: false, detail: n.detail }));
+      lineNotes = sanitized.notes.map((n) => ({ code: n.code, blocking: false, detail: n.detail }));
     }
     const readMs = Date.now() - t0;
 
@@ -268,6 +268,8 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       validationIssues.push(fiscalCheck.missing.includes("issuer_tax_id_invalid") ? "supplier_nif_invalid" : "fiscal_identity_incomplete");
     }
 
+    // Quantidade/preço corrigidos por ordem de grandeza (separador decimal): fica «para rever».
+    if (lineNotes.some((n) => n.code === "quantity_scale_corrected" || n.code === "unit_price_scale_corrected")) validationIssues.push("quantity_scale_corrected");
     const requiresReview = validationIssues.length > 0;
 
     // 5. Apply supplier defaults if found
