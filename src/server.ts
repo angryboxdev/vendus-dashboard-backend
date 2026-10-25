@@ -57,6 +57,7 @@ import type {
   DeleteDraftStockPurchaseReviewPort,
 } from "./modules/stock-purchase-review/domain/ports/in/stock-purchase-review.ports.js";
 import { createStockCountModule } from "./modules/stock-count/stock-count.module.js";
+import { createRecipeCostingModule } from "./modules/recipe-costing/recipe-costing.module.js";
 import { createStockPlanningModule } from "./modules/stock-planning/stock-planning.module.js";
 import { createSalesDeclarationModule } from "./modules/sales-declaration/sales-declaration.module.js";
 import { correlationId } from "./infra/http/correlation.js";
@@ -1688,6 +1689,11 @@ app.use("/api", stockPurchaseReviewModule.router);
 // sobreposição/definir valor final manual (secção 64).
 const stockCountModule = createStockCountModule(locationsModule.listLocations);
 app.use("/api", stockCountModule.router);
+
+// Recipe costing module (hexagonal) — custo das fichas técnicas a partir do
+// último custo de compra (faturas importadas) ou do custo manual do artigo.
+const recipeCostingModule = createRecipeCostingModule();
+app.use("/api", recipeCostingModule.router);
 
 // Stock planning module (hexagonal) — "Planeamento de Stock". Instanciado
 // acima (antes do cron interno) para expor runDailyForecast/

@@ -4,6 +4,7 @@ import type { Notification } from "../../domain/entities/notification.js";
 import type { NotificationStorePort } from "../../domain/ports/out/notification-store.port.js";
 
 type Res = { data: unknown; error: { message: string } | null; count?: number | null };
+const UNIQUE_VIOLATION = "23505";
 function check<T>(res: Res): T {
   if (res.error) throw new Error(res.error.message);
   return res.data as T;
@@ -24,9 +25,33 @@ const toNotification = (r: Row): Notification => ({ id: r.id, kind: r.kind, titl
 export class SupabaseNotificationStore implements NotificationStorePort {
   constructor(private readonly scoped: ScopedQueryFactory) {}
 
+  /**
+   * O índice de duplicados é parcial (`where dedupe_key is not null`) e o
+   * `ON CONFLICT` do PostgREST não o consegue usar (erro 42P10). Por isso os
+   * já existentes filtram-se antes e, numa corrida (23505), insere-se um a um
+   * ignorando os repetidos.
+   */
   async insert(org: OrganizationId, rows: { recipientUserId: string; kind: string; title: string; body: string | null; link: string | null; dedupeKey: string | null }[]) {
+    const key = (userId: string, dedupeKey: string) => `${userId}|${dedupeKey}`;
+    const keys = [...new Set(rows.flatMap((r) => (r.dedupeKey ? [r.dedupeKey] : [])))];
+    const seen = new Set<string>();
+    if (keys.length) {
+      const users = [...new Set(rows.map((r) => r.recipientUserId))];
+      const existing = check<{ recipient_user_id: string; dedupe_key: string }[]>(
+        await this.scoped(org).table("notifications").select("recipient_user_id, dedupe_key").in("dedupe_key", keys).in("recipient_user_id", users),
+      );
+      for (const e of existing) seen.add(key(e.recipient_user_id, e.dedupe_key));
+    }
+    const fresh = rows.filter((r) => {
+      if (!r.dedupeKey) return true;
+      const k = key(r.recipientUserId, r.dedupeKey);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    if (!fresh.length) return 0;
     const now = new Date().toISOString();
-    const payload = rows.map((r) => ({
+    const payload = fresh.map((r) => ({
       recipient_user_id: r.recipientUserId,
       channel: "in_app",
       kind: r.kind,
@@ -37,10 +62,14 @@ export class SupabaseNotificationStore implements NotificationStorePort {
       status: "sent",
       sent_at: now,
     }));
-    const res = rows.some((r) => r.dedupeKey)
-      ? await this.scoped(org).table("notifications").upsert(payload, { onConflict: "org_id,recipient_user_id,dedupe_key", ignoreDuplicates: true }).select("id")
-      : await this.scoped(org).table("notifications").insert(payload).select("id");
-    return check<unknown[]>(res).length;
+    const res = await this.scoped(org).table("notifications").insert(payload).select("id");
+    if (res.error?.code !== UNIQUE_VIOLATION) return check<unknown[]>(res).length;
+    let n = 0;
+    for (const p of payload) {
+      const one = await this.scoped(org).table("notifications").insert(p).select("id");
+      if (one.error?.code !== UNIQUE_VIOLATION) n += check<unknown[]>(one).length;
+    }
+    return n;
   }
 
   async list(org: OrganizationId, userId: string, opts: { unreadOnly: boolean; limit: number }) {

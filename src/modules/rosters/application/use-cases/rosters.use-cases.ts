@@ -607,7 +607,8 @@ export class RostersUseCases {
     const employees = [...new Set(changes.flatMap((c) => [c.employeeId, c.before?.employeeId].filter((x): x is string => !!x)))];
     const users = (await Promise.all(employees.map((e) => this.ctx.userOfEmployee(org, e)))).filter((u): u is string => !!u);
     if (users.length) {
-      await this.notifier.notify(org, users, { title, body: `A escala "${roster.name}" foi atualizada. Veja os seus turnos.`, link: "/hr/novo/escalas", dedupeKey: `roster:${roster.id}:${roster.version + 1}` });
+      // O título leva o motivo escrito pelo gestor: corta-se ao máximo das notificações (160).
+      await this.notifier.notify(org, users, { title: title.length > 160 ? `${title.slice(0, 159)}…` : title, body: `A escala "${roster.name}" foi atualizada. Veja os seus turnos.`, link: "/hr/novo/escalas", dedupeKey: `roster:${roster.id}:${roster.version + 1}` });
     }
     this.hook.published(
       org,
