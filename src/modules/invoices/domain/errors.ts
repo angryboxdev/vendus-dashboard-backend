@@ -257,3 +257,19 @@ export class StockImportNoLinesError extends Error {
     this.name = "StockImportNoLinesError";
   }
 }
+
+/** Orçamento diário de IA da organização esgotado — faturas com QR continuam a ser lidas sem IA. */
+export class AiBudgetExceededError extends Error {
+  constructor(readonly limit: number) {
+    super(`Atingido o limite diário de leituras com IA (${limit}). As faturas com código QR continuam a ser lidas; esta (sem QR) pode ser importada amanhã ou lançada à mão.`);
+    this.name = "AiBudgetExceededError";
+  }
+}
+
+/** O registo escolhido não é um dos que a procura de obrigações aponta para este documento. */
+export class ObligationLinkMismatchError extends Error {
+  constructor() {
+    super("Este registo não corresponde ao documento de cobrança (valor, referência, número ou período) — não foi ligado.");
+    this.name = "ObligationLinkMismatchError";
+  }
+}

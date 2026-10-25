@@ -2,6 +2,7 @@ import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { CategoryCatalogReadPort, ConfirmedLineHistoryPort, LineCategoryAiPort } from "../../domain/ports/out/line-classification.ports.js";
 import { classifyLinesDeterministic, type LineToClassify } from "../../domain/services/classification/line-classifier.js";
 import type { ClassifyInvoiceLinesPort, ClassifyInvoiceLinesResult } from "../../domain/ports/in/classify-invoice-lines.port.js";
+import type { AiBudgetPort } from "../../domain/ports/out/ai-budget.port.js";
 
 const HISTORY_LIMIT = 500;
 /** Uma chamada por fatura, no máximo com este número de linhas (o resto fica para revisão). */
@@ -13,6 +14,8 @@ export class ClassifyInvoiceLinesUseCase implements ClassifyInvoiceLinesPort {
     private readonly catalog: CategoryCatalogReadPort,
     private readonly history: ConfirmedLineHistoryPort,
     private readonly ai: LineCategoryAiPort | null,
+    /** Orçamento diário de IA: esgotado → só regras/histórico. */
+    private readonly aiBudget: AiBudgetPort | null = null,
   ) {}
 
   async execute(organizationId: OrganizationId, input: { supplierId: string | null; lines: LineToClassify[] }): Promise<ClassifyInvoiceLinesResult> {
@@ -25,6 +28,9 @@ export class ClassifyInvoiceLinesUseCase implements ClassifyInvoiceLinesPort {
     const pending = result.filter((c) => c.source === "none" && !c.conflict).slice(0, AI_MAX_LINES);
     const metrics = { lines: input.lines.length, deterministic, aiRequested: 0, aiResolved: 0, aiError: false };
     if (!this.ai || !pending.length) return { classifications: result, metrics };
+    if (this.aiBudget && !(await this.aiBudget.consume(organizationId, "line_classification").catch(() => ({ allowed: true }))).allowed) {
+      return { classifications: result, metrics };
+    }
 
     const active = catalog.filter((c) => c.isActive);
     const byId = new Map(active.map((c) => [c.id, c]));

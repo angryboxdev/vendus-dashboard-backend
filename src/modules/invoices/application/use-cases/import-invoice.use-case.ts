@@ -27,7 +27,8 @@ import { readingToExtraction } from "../../domain/services/reading/reading-to-ex
 import { sanitizeExtractedLines } from "../../domain/services/extracted-lines.service.js";
 import { applyQrToExtraction } from "../../domain/services/reading/reading-to-extraction.js";
 import { readFiscalQr } from "../../domain/services/reading/invoice-reader.service.js";
-import { ACCEPTED_FISCAL_DOCUMENT_TYPES, NotAFiscalInvoiceError } from "../../domain/errors.js";
+import { ACCEPTED_FISCAL_DOCUMENT_TYPES, AiBudgetExceededError, NotAFiscalInvoiceError } from "../../domain/errors.js";
+import type { AiBudgetPort } from "../../domain/ports/out/ai-budget.port.js";
 import type { FiscalQr } from "../../domain/entities/invoice-reading.js";
 
 const AI_CONFIDENCE_REVIEW_THRESHOLD = 0.7;
@@ -43,6 +44,8 @@ export interface SmartReadingDeps {
   layouts: InvoiceLayout[];
   readingWrite: InvoiceReadingWritePort;
   classifyLines: ClassifyInvoiceLinesPort | null;
+  /** Orçamento diário de IA por organização (sem ele, sem limite). */
+  aiBudget?: AiBudgetPort | null;
 }
 
 export class ImportInvoiceUseCase implements ImportInvoicePort {
@@ -115,6 +118,13 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     const t0 = Date.now();
     const { reading, qr, qrType } = await this.readLocally(command.fileBuffer, command.mimeType);
     if (qrType && !(ACCEPTED_FISCAL_DOCUMENT_TYPES as readonly string[]).includes(qrType)) throw new NotAFiscalInvoiceError(qrType);
+
+    // Orçamento diário de IA: sem leitura determinística, a leitura pela IA tem de caber no limite do dia
+    // (verificado antes de guardar o ficheiro — recusar não deixa nada para trás).
+    if (!reading && this.smart?.aiBudget) {
+      const budget = await this.smart.aiBudget.consume(command.organizationId, "invoice_extraction");
+      if (!budget.allowed) throw new AiBudgetExceededError(budget.limit);
+    }
 
     // 2. Persist the original file
     const fileUrl = await this.storage.store(

@@ -34,6 +34,13 @@ import { DeleteDraftStockPurchaseReviewUseCase } from "./application/use-cases/d
 import { SuggestReviewMappingsUseCase } from "./application/use-cases/suggest-review-mappings.use-case.js";
 import { RestoreStockPurchaseReviewUseCase } from "./application/use-cases/restore-stock-purchase-review.use-case.js";
 import { OpenAiStockItemMatchAdapter } from "./adapters/out/openai-stock-item-match.adapter.js";
+import { SupabaseStockAiBudgetAdapter } from "./adapters/out/supabase-ai-budget.adapter.js";
+
+/** Limite diário de chamadas à IA por organização (mesma variável do leitor de faturas). */
+function aiDailyLimit(): number {
+  const n = Number(process.env.AI_DAILY_LIMIT_PER_ORG);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 300;
+}
 import { StockPurchaseReviewController } from "./adapters/in/stock-purchase-review.controller.js";
 import type {
   RecordInvoiceFinalizedForStockPort,
@@ -98,7 +105,7 @@ export function createStockPurchaseReviewModule(
     new ConfirmStockPurchaseReviewUseCase(reviewRepository, stockMovementWrite, invoiceRead, locationRead, auditLog, categoryRead),
     new CancelStockPurchaseReviewUseCase(reviewRepository, auditLog),
     new CancelEmptyStockPurchaseReviewsUseCase(reviewRepository, auditLog),
-    new SuggestReviewMappingsUseCase(reviewRepository, learnedMapping, stockCatalogWrite, itemMatchAi, categoryRead),
+    new SuggestReviewMappingsUseCase(reviewRepository, learnedMapping, stockCatalogWrite, itemMatchAi, categoryRead, new SupabaseStockAiBudgetAdapter(createScopedQuery, aiDailyLimit())),
     new RestoreStockPurchaseReviewUseCase(reviewRepository, auditLog),
   );
 

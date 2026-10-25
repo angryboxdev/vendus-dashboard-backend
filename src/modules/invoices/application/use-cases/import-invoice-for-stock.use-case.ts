@@ -7,8 +7,6 @@ import {
   StockImportNoLinesError,
 } from "../../domain/errors.js";
 import type {
-  AiExtractedLineDTO,
-  CreateInvoiceLineCommand,
   ImportInvoiceForStockCommand,
   ImportInvoiceForStockPort,
   ImportInvoiceForStockResultDTO,
@@ -26,32 +24,10 @@ import type { SaveInvoiceDraftUseCase } from "./save-invoice-draft.use-case.js";
 import type { Invoice } from "../../domain/entities/invoice.js";
 import type { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import { claimFiscalIdentity } from "./shared-fiscal-identity.js";
+import { persistExtractedDraft } from "./shared-extracted-draft.js";
+
+export { extractedToLineCommand } from "./shared-extracted-draft.js";
 import { FiscalIdentityConflictError } from "../../domain/errors.js";
-
-const STD_VAT = [0, 6, 13, 23];
-const nearestVat = (rate: number | null) => (rate == null ? 0 : STD_VAT.reduce((a, b) => (Math.abs(b - rate) < Math.abs(a - rate) ? b : a)));
-
-/** Linha extraída (leitor/IA) → linha do rascunho; o motor de valores recalcula ao guardar. */
-export function extractedToLineCommand(l: AiExtractedLineDTO): CreateInvoiceLineCommand {
-  const quantity = l.quantity && l.quantity > 0 ? l.quantity : 1;
-  const hasDiscount = (l.discountPct ?? 0) > 0 || (l.discountAmount ?? 0) > 0;
-  const unit = l.unitPriceWithoutVat ?? (!hasDiscount && l.totalWithoutVat != null ? Math.round(l.totalWithoutVat / quantity) : 0);
-  const vatAmount = l.vatAmount ?? 0;
-  return {
-    description: l.description,
-    quantity,
-    unitCostWithoutVat: unit,
-    vatRate: nearestVat(l.vatRate),
-    vatAmount,
-    totalWithVat: l.totalWithVat ?? (l.totalWithoutVat ?? Math.round(unit * quantity)) + vatAmount,
-    quantityText: l.quantityText ?? null,
-    unitPriceText: l.unitPriceText ?? null,
-    grossCentsPrinted: l.grossWithoutDiscount ?? null,
-    discount: (l.discountPct ?? 0) > 0 ? { kind: "pct", value: l.discountPct! } : (l.discountAmount ?? 0) > 0 ? { kind: "amount", value: l.discountAmount! } : null,
-    reading: l.meta ? { ...l.meta, classificationSource: l.classificationSource ?? null, classificationEvidence: l.classificationEvidence ?? null } : null,
-    costCenterCategoryId: l.suggestedCostCenterCategoryId ?? null,
-  };
-}
 
 /**
  * Importar uma fatura diretamente no Stock (task v1.2 F3c). Usa a mesma ingestão do Financeiro
@@ -95,25 +71,7 @@ export class ImportInvoiceForStockUseCase implements ImportInvoiceForStockPort {
     }
 
     // Linhas reais gravadas no rascunho (motor de valores) e origem Stock.
-    await this.saveDraft.execute({
-      organizationId: org,
-      id: draft.id,
-      lines: result.extractedLines.map(extractedToLineCommand),
-      financialMode: "by_item",
-      ...(result.extractedAmounts && {
-        amounts: {
-          globalDiscount:
-            (result.extractedAmounts.globalDiscountPct ?? 0) > 0
-              ? { kind: "pct", value: result.extractedAmounts.globalDiscountPct! }
-              : (result.extractedAmounts.globalDiscountAmount ?? 0) > 0
-                ? { kind: "amount", value: result.extractedAmounts.globalDiscountAmount! }
-                : null,
-          footerDiscountCents: result.extractedAmounts.footerDiscountAmount,
-          vatSummary: result.extractedAmounts.vatSummary,
-        },
-      }),
-      actor: command.actor,
-    });
+    await persistExtractedDraft(this.saveDraft, org, result, command.actor);
     const saved = await this.invoiceRepo.findById(org, draft.id);
     if (!saved) throw new StockImportNoLinesError("O documento lido não ficou gravado.");
     const invoice = saved.markImportedFromStock();

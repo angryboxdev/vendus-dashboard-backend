@@ -31,6 +31,9 @@ import { GetInvoiceUseCase } from "./application/use-cases/get-invoice.use-case.
 import { DeleteInvoiceUseCase } from "./application/use-cases/delete-invoice.use-case.js";
 import { ImportInvoiceUseCase } from "./application/use-cases/import-invoice.use-case.js";
 import { ReadPaymentDocumentUseCase } from "./application/use-cases/read-payment-document.use-case.js";
+import { SupabaseAiBudgetAdapter } from "./adapters/out/supabase-ai-budget.adapter.js";
+import { ImportInvoiceKeepingLinesUseCase } from "./application/use-cases/import-invoice-keeping-lines.use-case.js";
+import { LinkObligationUseCase } from "./application/use-cases/link-obligation.use-case.js";
 import { ImportInvoiceForStockUseCase } from "./application/use-cases/import-invoice-for-stock.use-case.js";
 import { CreateObligationDraftUseCase } from "./application/use-cases/create-obligation-draft.use-case.js";
 import { PdfjsContentReaderAdapter } from "./adapters/out/pdfjs-content-reader.adapter.js";
@@ -126,6 +129,8 @@ export function createInvoicesModule(
   const audit = new SupabaseInvoiceAuditAdapter(createScopedQuery);
   const stockRouting = new StockPurchaseReviewRoutingAdapter(suggestStockRouting);
   const idempotencyStore = new SupabaseIdempotencyStore(createScopedQuery);
+  // Orçamento diário de IA por organização (AI_DAILY_LIMIT_PER_ORG, omissão 300 chamadas/dia).
+  const aiBudget = new SupabaseAiBudgetAdapter(createScopedQuery, aiDailyLimit());
   // F3c: linhas já em Compras por rever ficam protegidas ao guardar/confirmar no Financeiro.
   const stockLines = { statusRead: stockReviewStatusRead, draftDelete: stockReviewDraftDelete };
 
@@ -145,7 +150,9 @@ export function createInvoicesModule(
       new SupabaseCategoryCatalogAdapter(createScopedQuery),
       new SupabaseConfirmedLineHistoryAdapter(createScopedQuery),
       process.env.INVOICE_LINE_AI === "off" ? null : new OpenAiLineCategoryAdapter(openaiApiKey, process.env.OPENAI_MODEL_TEXT ?? "gpt-4o-mini"),
+      aiBudget,
     ),
+    aiBudget,
   });
   const saveInvoiceDraft = new SaveInvoiceDraftUseCase(invoiceRepo, lineRepo, amountsWrite, categoryReader, allocationRepo, audit, stockLines);
 
@@ -172,13 +179,21 @@ export function createInvoicesModule(
     deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, audit),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),
     importInvoice,
+    importInvoiceKeepingLines: new ImportInvoiceKeepingLinesUseCase(importInvoice, saveInvoiceDraft, invoiceRepo),
     importInvoiceForStock: new ImportInvoiceForStockUseCase(importInvoice, saveInvoiceDraft, invoiceRepo, lineRepo, storage, stockReviewStatusRead, stockDecisionNotify, fiscal, supplierLookup),
     readPaymentDocument,
     createObligationDraft: new CreateObligationDraftUseCase(readPaymentDocument, storage, invoiceRepo, supplierLookup),
+    linkObligation: new LinkObligationUseCase(readPaymentDocument, invoiceRepo, storage, audit),
     confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit, stockRouting, categoryReader, allocationRepo, stockLines),
     getInvoiceAlerts: new GetInvoiceAlertsUseCase(invoiceRepo),
     processDirectDebits,
   }, idempotencyStore);
 
   return { router, processDirectDebits, listInvoices, listInvoiceLines, getInvoice };
+}
+
+/** Limite diário de chamadas à IA por organização (todas as funcionalidades). */
+function aiDailyLimit(): number {
+  const n = Number(process.env.AI_DAILY_LIMIT_PER_ORG);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 300;
 }

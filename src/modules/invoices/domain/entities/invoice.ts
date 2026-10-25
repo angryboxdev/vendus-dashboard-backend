@@ -487,6 +487,11 @@ export class Invoice {
     });
   }
 
+  /** Documento de cobrança ligado a um registo existente: passa a obrigação; anexo só se não tinha. */
+  linkObligation(obligation: InvoiceObligation, attachmentUrl: string | null): Invoice {
+    return new Invoice({ ...this.toProps(), obligation, attachmentUrl: this.attachmentUrl ?? attachmentUrl, updatedAt: new Date() });
+  }
+
   /** F3c: rascunho criado pela importação no Stock — «Enviar para Stock» já decidido pela pessoa. */
   markImportedFromStock(): Invoice {
     return new Invoice({ ...this.toProps(), importOrigin: "stock", stockReviewOverride: "force_create", stockReviewOverrideReason: "Importada no Stock.", updatedAt: new Date() });

@@ -41,6 +41,8 @@ import {
   InvoiceLinesLockedByAppliedStockReviewError,
   StockReviewRemovalConfirmationRequiredError,
   InvoiceAlreadyInStockError,
+  AiBudgetExceededError,
+  ObligationLinkMismatchError,
   InvoiceAlreadyInStockReviewError,
   InvoiceDraftInFinanceError,
   InvoiceExistsNotRoutedError,
@@ -81,6 +83,10 @@ interface InvoicePorts {
   readPaymentDocument?: import("../../domain/ports/in/payment-document.ports.js").ReadPaymentDocumentPort;
   /** E3b-2: rascunho de obrigação (Finanças/Segurança Social) a partir do documento de cobrança. */
   createObligationDraft?: import("../../domain/ports/in/payment-document.ports.js").CreateObligationDraftPort;
+  /** E4: importação em lote — as linhas lidas ficam gravadas no rascunho. */
+  importInvoiceKeepingLines?: import("../../domain/ports/in/invoice.ports.js").ImportInvoicePort;
+  /** Ligar um documento de cobrança a um registo existente. */
+  linkObligation?: import("../../domain/ports/in/payment-document.ports.js").LinkObligationPort;
   /** F3c: importar a fatura diretamente no Stock. */
   importInvoiceForStock?: import("../../domain/ports/in/invoice.ports.js").ImportInvoiceForStockPort;
   confirmImportedInvoice: ConfirmImportedInvoicePort;
@@ -123,6 +129,14 @@ function handleError(res: import("express").Response, err: unknown): void {
   }
   if (err instanceof FiscalIdentityConflictError) {
     res.status(409).json({ error: err.message, code: err.code, ...err.details });
+    return;
+  }
+  if (err instanceof ObligationLinkMismatchError) {
+    res.status(422).json({ error: err.message, code: "obligation_link_mismatch" });
+    return;
+  }
+  if (err instanceof AiBudgetExceededError) {
+    res.status(429).json({ error: err.message, code: "ai_budget_exceeded", limit: err.limit });
     return;
   }
   if (err instanceof InvoiceAlreadyInStockError) {
@@ -541,7 +555,7 @@ export function createInvoiceRouter(ports: InvoicePorts, idempotencyStore: Idemp
         res.status(400).json({ error: "No file uploaded. Use multipart field 'file'." });
         return;
       }
-      const { documentType, treatAsInvoice } = req.body as { documentType?: string; treatAsInvoice?: string };
+      const { documentType, treatAsInvoice, keepDraftLines } = req.body as { documentType?: string; treatAsInvoice?: string; keepDraftLines?: string };
       // Documento de cobrança (AT/SS)? Devolve a leitura para revisão e não cria fatura.
       // `treatAsInvoice=true` mantém o fluxo antigo à escolha do utilizador.
       if (ports.readPaymentDocument && treatAsInvoice !== "true") {
@@ -558,7 +572,9 @@ export function createInvoiceRouter(ports: InvoicePorts, idempotencyStore: Idemp
         mimeType: req.file.mimetype,
       };
       if (documentType === "invoice" || documentType === "credit_note") cmd.documentType = documentType;
-      const result = await ports.importInvoice.execute(cmd);
+      // E4 (lote/segundo plano): `keepDraftLines=true` grava já as linhas lidas no rascunho.
+      const importer = keepDraftLines === "true" && ports.importInvoiceKeepingLines ? ports.importInvoiceKeepingLines : ports.importInvoice;
+      const result = await importer.execute({ ...cmd, actor: req.auth!.email || req.auth!.sub } as typeof cmd);
       res.status(201).json(result);
     } catch (err) {
       handleError(res, err);
@@ -585,6 +601,32 @@ export function createInvoiceRouter(ports: InvoicePorts, idempotencyStore: Idemp
         actor: req.auth!.email || req.auth!.sub,
       });
       res.status(201).json(result);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // POST /invoices/:id/link-obligation — liga o documento de cobrança (multipart «file») a este registo
+  router.post("/invoices/:id/link-obligation", upload.single("file"), async (req, res) => {
+    try {
+      if (!ports.linkObligation) {
+        res.status(404).json({ error: "Não disponível." });
+        return;
+      }
+      if (!req.file) {
+        res.status(400).json({ error: "No file uploaded. Use multipart field 'file'." });
+        return;
+      }
+      res.json(
+        await ports.linkObligation.execute({
+          organizationId: req.auth!.orgId,
+          invoiceId: req.params.id as string,
+          fileBuffer: req.file.buffer,
+          filename: req.file.originalname,
+          mimeType: req.file.mimetype,
+          actor: req.auth!.email || req.auth!.sub,
+        }),
+      );
     } catch (err) {
       handleError(res, err);
     }
