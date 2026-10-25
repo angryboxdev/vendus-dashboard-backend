@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 806 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 807 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -303,6 +303,7 @@ Endpoints: 806 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/invoices/alerts` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/allocations` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/invoices/import` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
+| POST | `/api/invoices/import-for-stock` | permission:stock.purchase_reviews:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/invoices/integrity/payable-duplicates` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/lines` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/invoices/obligations` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |

@@ -70,6 +70,8 @@ export function toStockPurchaseReviewDTO(review: StockPurchaseReview, lines: Sto
     invoiceVatCents: p.invoiceVatCents,
     invoiceTotalCents: p.invoiceTotalCents,
     categoryDivergences: p.categoryDivergences,
+    origin: p.origin,
+    financePending: p.financePending,
     ...(conference && { conference }),
     lines: lines.map(toStockReviewLineDTO),
     createdAt: p.createdAt.toISOString(),

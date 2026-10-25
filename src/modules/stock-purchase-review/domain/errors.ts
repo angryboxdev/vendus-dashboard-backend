@@ -96,3 +96,14 @@ export class ReviewNotCancelledError extends Error {
     this.name = "ReviewNotCancelledError";
   }
 }
+
+/**
+ * F3c: importada no Stock e ainda não lançada no Financeiro — só pode movimentar com a validação
+ * documental mínima (identidade e linhas a bater com a fatura). Não é aprovação contabilística.
+ */
+export class StockImportNotValidatedError extends Error {
+  constructor(reason: string) {
+    super(`Ainda não lançada no Financeiro: para dar entrada no Stock antes disso, ${reason}`);
+    this.name = "StockImportNotValidatedError";
+  }
+}

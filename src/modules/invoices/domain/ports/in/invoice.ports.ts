@@ -94,6 +94,8 @@ export interface InvoiceDTO {
   stockReviewOverrideReason: string | null;
   /** E3b-2: obrigação (Finanças/Segurança Social) — null = fatura de compra. */
   obligation: { kind: "tax_obligation" | "contribution_obligation"; paymentReference: string | null; mbEntity: string | null; period: string | null } | null;
+  /** F3c: `stock` = importada no Stock; enquanto rascunho, «Aguardando lançamento no Financeiro». */
+  importOrigin: "stock" | null;
   createdAt: string;
   updatedAt: string;
   /** Versão atual — enviar como `expectedVersion` ao editar/confirmar (409 `version_conflict` se mudou). */
@@ -474,6 +476,8 @@ export interface ConfirmImportedInvoiceCommand {
   notADuplicate?: boolean;
   /** Completar o documento que já existe só no Stock (identidade fiscal indicada). */
   completeStockIdentityId?: string;
+  /** F3c: a pessoa aceitou descartar a revisão de Stock por aplicar ao mudar as linhas. */
+  confirmRemoveStockReview?: boolean;
   amounts?: DocumentAmountsCommand;
   /** F2 §2.2: modo financeiro; omitido = «Por artigo» se houver linhas, senão «Única». */
   financialMode?: FinancialModeName;
@@ -613,4 +617,29 @@ export interface SetInvoiceLineDeductibilityOverrideCommand {
 
 export interface SetInvoiceLineDeductibilityOverridePort {
   execute(command: SetInvoiceLineDeductibilityOverrideCommand): Promise<InvoiceLineDTO>;
+}
+
+// ── F3c: importar a fatura diretamente no Stock ───────────────────────────
+
+export interface ImportInvoiceForStockCommand {
+  organizationId: OrganizationId;
+  fileBuffer: Buffer;
+  filename: string;
+  mimeType: string;
+  /** A fatura já está lançada no Financeiro sem ir ao Stock: a pessoa escolheu encaminhá-la. */
+  routeExisting?: boolean;
+  actor: string;
+}
+
+export interface ImportInvoiceForStockResultDTO {
+  /** `created` = rascunho novo (aguarda o Financeiro); `routed` = fatura já lançada enviada para o Stock. */
+  kind: "created" | "routed";
+  invoiceId: string;
+  reviewId: string | null;
+  validationIssues: string[];
+  reading: ImportReadingDTO | null;
+}
+
+export interface ImportInvoiceForStockPort {
+  execute(command: ImportInvoiceForStockCommand): Promise<ImportInvoiceForStockResultDTO>;
 }

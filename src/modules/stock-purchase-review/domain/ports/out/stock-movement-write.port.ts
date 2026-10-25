@@ -37,6 +37,8 @@ export interface CreateReviewFromInvoiceInput {
   invoiceNetCents: number | null;
   invoiceVatCents: number | null;
   invoiceTotalCents: number | null;
+  /** F3c: `stock` = importada no Stock (fica pendente do Financeiro); `finance` limpa essa pendência se a revisão já existir. */
+  origin?: "finance" | "stock";
   lines: CreateReviewFromInvoiceLineInput[];
 }
 
@@ -55,6 +57,8 @@ export interface CreateReviewFromInvoiceResult {
  */
 export interface StockMovementWritePort {
   createReviewFromInvoice(organizationId: OrganizationId, input: CreateReviewFromInvoiceInput): Promise<CreateReviewFromInvoiceResult>;
+  /** F3c: o Financeiro lançou a fatura importada no Stock (sem nova revisão) → acaba a pendência. */
+  finishFinancePending?(organizationId: OrganizationId, invoiceId: string): Promise<void>;
   confirmReview(
     organizationId: OrganizationId,
     reviewId: string,

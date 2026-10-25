@@ -1,4 +1,4 @@
-import { StockPurchaseReviewNotFoundError, StaleInvoiceSnapshotError, LocationRequiredError, DocumentNotReconciledError } from "../../domain/errors.js";
+import { StockPurchaseReviewNotFoundError, StaleInvoiceSnapshotError, LocationRequiredError, DocumentNotReconciledError, StockImportNotValidatedError } from "../../domain/errors.js";
 import type { CostCenterCategoryReadPort } from "../../domain/ports/out/cost-center-category-read.port.js";
 import type { ReviewConference } from "../../domain/services/review-conference.service.js";
 import type { ConfirmStockPurchaseReviewCommand, ConfirmStockPurchaseReviewPort, StockPurchaseReviewDTO } from "../../domain/ports/in/stock-purchase-review.ports.js";
@@ -44,6 +44,16 @@ export class ConfirmStockPurchaseReviewUseCase implements ConfirmStockPurchaseRe
       conference = await conferenceFor(command.organizationId, review, currentLines, this.categoryRead);
       if (conference.document.status === "mismatch") {
         throw new DocumentNotReconciledError(conference.document.netDifferenceCents ?? 0, conference.document.vatDifferenceCents ?? 0);
+      }
+    }
+    // F3c: importada no Stock e ainda sem lançamento no Financeiro → só com identidade e linhas conferidas.
+    if (!done && review.financePending) {
+      const p = review.toProps();
+      if (!p.invoiceNumber.trim() || !p.supplierName.trim() || p.supplierName === "Fornecedor desconhecido") {
+        throw new StockImportNotValidatedError("a fatura tem de ter fornecedor e número identificados");
+      }
+      if (conference?.document.status !== "ok") {
+        throw new StockImportNotValidatedError("as linhas têm de bater com a base e o IVA da fatura");
       }
     }
 

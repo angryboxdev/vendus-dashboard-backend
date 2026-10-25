@@ -106,6 +106,8 @@ interface InvoiceProps {
   stockReviewOverrideReason: string | null;
   /** E3b-2: documento de cobrança (Finanças / Segurança Social) — null = fatura de compra. */
   obligation?: InvoiceObligation | null;
+  /** F3c: `stock` = importada diretamente no Stock (rascunho aguarda lançamento no Financeiro). */
+  importOrigin?: "stock" | null;
   createdAt: Date;
   updatedAt: Date;
   /** Versão para bloqueio otimista (F1 §1.4) — incrementada pelo repositório a cada escrita. */
@@ -202,6 +204,7 @@ export class Invoice {
   readonly stockReviewOverride: StockReviewOverride;
   readonly stockReviewOverrideReason: string | null;
   readonly obligation: InvoiceObligation | null;
+  readonly importOrigin: "stock" | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly version: number;
@@ -244,6 +247,7 @@ export class Invoice {
     this.stockReviewOverride = props.stockReviewOverride;
     this.stockReviewOverrideReason = props.stockReviewOverrideReason;
     this.obligation = props.obligation ?? null;
+    this.importOrigin = props.importOrigin ?? null;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
     this.version = props.version ?? 1;
@@ -483,6 +487,11 @@ export class Invoice {
     });
   }
 
+  /** F3c: rascunho criado pela importação no Stock — «Enviar para Stock» já decidido pela pessoa. */
+  markImportedFromStock(): Invoice {
+    return new Invoice({ ...this.toProps(), importOrigin: "stock", stockReviewOverride: "force_create", stockReviewOverrideReason: "Importada no Stock.", updatedAt: new Date() });
+  }
+
   setLineDetailMode(mode: LineDetailMode): Invoice {
     return new Invoice({ ...this.toProps(), lineDetailMode: mode, updatedAt: new Date() });
   }
@@ -545,6 +554,7 @@ export class Invoice {
       stockReviewOverride: this.stockReviewOverride,
       stockReviewOverrideReason: this.stockReviewOverrideReason,
       obligation: this.obligation,
+      importOrigin: this.importOrigin,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       version: this.version,

@@ -20,6 +20,7 @@ import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.
 import type { SupplierLookupPort } from "../../domain/ports/out/supplier-lookup.port.js";
 import type { InvoiceAmountsWritePort } from "../../domain/ports/out/invoice-amounts-write.port.js";
 import { reconcileForFinalize } from "./shared-amounts.js";
+import { keepLinesUnderStockReview, type StockLockedLinesDeps } from "./shared-stock-locked-lines.js";
 import type { StockRoutingPort } from "../../domain/ports/out/stock-routing.port.js";
 import { resolveStockRouting } from "./shared-stock-routing.js";
 import type { CostCenterCategoryReaderPort } from "../../domain/ports/out/cost-center-category-reader.port.js";
@@ -42,6 +43,8 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     private readonly stockRouting: StockRoutingPort,
     private readonly categoryReader: CostCenterCategoryReaderPort,
     private readonly allocationRepo: InvoiceAllocationRepositoryPort,
+    /** F3c: linhas já em Compras por rever (opcional nos testes antigos). */
+    private readonly stockLines?: StockLockedLinesDeps,
   ) {}
 
   async execute(command: ConfirmImportedInvoiceCommand): Promise<InvoiceDTO> {
@@ -97,8 +100,20 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       confirmed = confirmed.markPaid(paidAt);
     }
 
+    // F3c: linhas já em Compras por rever ficam (só a classificação muda); mudá-las exige confirmação.
+    const storedBefore = await this.lineRepo.findByInvoiceId(command.organizationId, confirmed.id);
+    const kept = await keepLinesUnderStockReview(this.stockLines, {
+      organizationId: command.organizationId,
+      invoiceId: confirmed.id,
+      storedLines: storedBefore,
+      lineCommands: command.lines,
+      confirmRemoveStockReview: command.confirmRemoveStockReview,
+      actor: command.actor ?? "sistema",
+    });
+    const requestLines = kept ? undefined : command.lines;
+
     // Linhas confirmadas (novas) + as que o rascunho já tinha.
-    const lineCommands = command.lines ?? [];
+    const lineCommands = requestLines ?? [];
     const newLines: InvoiceLine[] = lineCommands.map((lc) => {
       const lineProps: Parameters<typeof InvoiceLine.create>[0] = {
         invoiceId: confirmed.id,
@@ -119,15 +134,16 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       return InvoiceLine.create(lineProps);
     });
     // Linhas do rascunho («Guardar rascunho», F2): as enviadas no pedido substituem-nas; sem `lines` mantêm-se.
-    const draftLines = await this.lineRepo.findByInvoiceId(command.organizationId, confirmed.id);
-    const replaceStored = command.lines !== undefined && draftLines.length > 0;
-    const storedLines = command.lines !== undefined ? [] : draftLines;
+    const draftLines = kept ?? (await this.lineRepo.findByInvoiceId(command.organizationId, confirmed.id));
+    const replaceStored = requestLines !== undefined && draftLines.length > 0;
+    const storedLines = requestLines !== undefined ? [] : draftLines;
 
     // Motor único de valores (task v1.2 §1.3): o servidor recalcula; não reconcilia ao cêntimo → não
     // finaliza (o rascunho fica como estava, nada foi gravado ainda).
     const amounts = reconcileForFinalize(
       confirmed,
-      [...storedLines.map((line) => ({ line })), ...newLines.map((line, i) => ({ line, cmd: lineCommands[i] }))],
+      // Linhas mantidas pela revisão de Stock: os valores do pedido (descontos, textos) servem para as recalcular.
+      [...storedLines.map((line, i) => ({ line, cmd: kept ? command.lines?.[i] : undefined })), ...newLines.map((line, i) => ({ line, cmd: lineCommands[i] }))],
       command.amounts,
     );
     confirmed = amounts.invoice;

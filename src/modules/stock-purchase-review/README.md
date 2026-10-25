@@ -300,6 +300,13 @@ que mantêm a exceção estreita:
 - O botão «Cancelar revisões sem linhas» saiu da UI (o endpoint fica, sem uso).
 - Fora (F3c): estados «A extrair»/«Falha de extração», reprocessamento e linhas manuais — só fazem sentido com a importação direta no Stock.
 
+### F3c (task v1.2) — fatura importada diretamente no Stock
+
+- A importação vive em `invoices` (`POST /invoices/import-for-stock`, ver o README desse módulo); aqui a revisão nasce com `origin = "stock"` e `financePending = true` (`RecordInvoiceFinalizedForStockCommand.origin`; decisão sempre `override`/`stock_import`). Colunas `stock_purchase_reviews.origin`/`finance_pending` (migração `20261112150000_stock_import_origin`).
+- **Fim da pendência sem repetir quantidades**: quando o Financeiro lança a mesma fatura, o gancho volta a chamar `fn_stock_review_create_from_invoice` — idempotente por fatura — que, com origem `finance`, só limpa `finance_pending`. Se o Financeiro decidir «não afeta Stock», `StockMovementWritePort.finishFinancePending` limpa-a na mesma.
+- **Entrada antes do Financeiro** (`ConfirmStockPurchaseReviewUseCase`): só com validação documental mínima — fornecedor e número identificados e conferência do documento «ok» (linhas = base e IVA da fatura); senão `StockImportNotValidatedError` (422 `stock_import_not_validated`). Não é aprovação contabilística nem cria conta a pagar.
+- Lista e detalhe devolvem `origin`/`financePending` («Aguarda Financeiro»).
+
 ## Como testar
 
 - `npx jest src/modules/stock-purchase-review` (fakes para todas as portas
@@ -314,6 +321,7 @@ que mantêm a exceção estreita:
   desta ronda — ver Known gaps.
 - F3a (`__tests__/use-cases/f3a-conference.test.ts`): exemplo Makro 650 € (documento reconcilia, Stock 400 €, equipamento fica financeiro), base diferente bloqueia, revisões antigas «indisponíveis», divergências de categoria sem bloquear, Mozzarella (custo pelo líquido com desconto), divisão por lojas válida/inválida, todas não inventariáveis → `excluded`, gancho de faturas com IVA/categoria/loja/totais.
 - F3b (`__tests__/use-cases/f3b-matching.test.ts`): nomes e embalagens (domínio), ordem histórico → nome → IA numa só chamada, sem resolver nada, reabrir sem nova IA e `refresh`, IA fora dos candidatos ignorada, falha da IA, embalagem alterada, fila ativa/histórico, repor.
+- F3c (`__tests__/use-cases/f3c-stock-import.test.ts`): revisão do Stock criada sempre, «não afeta» no Financeiro acaba a pendência, entrada antes do Financeiro só com identidade e linhas conferidas.
 - `DeleteDraftStockPurchaseReviewUseCase`/`GetStockPurchaseReviewStatusForInvoiceUseCase`
   (`delete-draft-stock-purchase-review.test.ts`) cobrem: no-op sem revisão,
   hard-delete com auditoria quando ainda não aplicada, e

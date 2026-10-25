@@ -40,6 +40,11 @@ import {
   LinesTotalMismatchError,
   InvoiceLinesLockedByAppliedStockReviewError,
   StockReviewRemovalConfirmationRequiredError,
+  InvoiceAlreadyInStockError,
+  InvoiceAlreadyInStockReviewError,
+  InvoiceDraftInFinanceError,
+  InvoiceExistsNotRoutedError,
+  StockImportNoLinesError,
   NotAFiscalInvoiceError,
   NotAPaymentDocumentError,
   ObligationAlreadyRegisteredError,
@@ -76,6 +81,8 @@ interface InvoicePorts {
   readPaymentDocument?: import("../../domain/ports/in/payment-document.ports.js").ReadPaymentDocumentPort;
   /** E3b-2: rascunho de obrigação (Finanças/Segurança Social) a partir do documento de cobrança. */
   createObligationDraft?: import("../../domain/ports/in/payment-document.ports.js").CreateObligationDraftPort;
+  /** F3c: importar a fatura diretamente no Stock. */
+  importInvoiceForStock?: import("../../domain/ports/in/invoice.ports.js").ImportInvoiceForStockPort;
   confirmImportedInvoice: ConfirmImportedInvoicePort;
   getInvoiceAlerts: GetInvoiceAlertsPort;
   processDirectDebits: ProcessDirectDebitsPort;
@@ -116,6 +123,26 @@ function handleError(res: import("express").Response, err: unknown): void {
   }
   if (err instanceof FiscalIdentityConflictError) {
     res.status(409).json({ error: err.message, code: err.code, ...err.details });
+    return;
+  }
+  if (err instanceof InvoiceAlreadyInStockError) {
+    res.status(409).json({ error: err.message, code: "already_in_stock", reviewId: err.reviewId });
+    return;
+  }
+  if (err instanceof InvoiceAlreadyInStockReviewError) {
+    res.status(409).json({ error: err.message, code: "already_in_review", reviewId: err.reviewId });
+    return;
+  }
+  if (err instanceof InvoiceDraftInFinanceError) {
+    res.status(409).json({ error: err.message, code: "draft_in_finance", invoiceId: err.invoiceId });
+    return;
+  }
+  if (err instanceof InvoiceExistsNotRoutedError) {
+    res.status(409).json({ error: err.message, code: "exists_not_routed", invoiceId: err.invoiceId });
+    return;
+  }
+  if (err instanceof StockImportNoLinesError) {
+    res.status(422).json({ error: err.message, code: "extraction_failed" });
     return;
   }
   if (err instanceof StockReviewRemovalConfirmationRequiredError) {
@@ -532,6 +559,31 @@ export function createInvoiceRouter(ports: InvoicePorts, idempotencyStore: Idemp
       };
       if (documentType === "invoice" || documentType === "credit_note") cmd.documentType = documentType;
       const result = await ports.importInvoice.execute(cmd);
+      res.status(201).json(result);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // POST /invoices/import-for-stock — F3c (multipart «file», `routeExisting`); permissão de Compras por rever.
+  router.post("/invoices/import-for-stock", upload.single("file"), async (req, res) => {
+    try {
+      if (!ports.importInvoiceForStock) {
+        res.status(404).json({ error: "Não disponível." });
+        return;
+      }
+      if (!req.file) {
+        res.status(400).json({ error: "No file uploaded. Use multipart field 'file'." });
+        return;
+      }
+      const result = await ports.importInvoiceForStock.execute({
+        organizationId: req.auth!.orgId,
+        fileBuffer: req.file.buffer,
+        filename: req.file.originalname,
+        mimeType: req.file.mimetype,
+        routeExisting: (req.body as { routeExisting?: string }).routeExisting === "true",
+        actor: req.auth!.email || req.auth!.sub,
+      });
       res.status(201).json(result);
     } catch (err) {
       handleError(res, err);

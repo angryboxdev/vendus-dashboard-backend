@@ -1,3 +1,4 @@
+import { keepLinesUnderStockReview, type StockLockedLinesDeps } from "./shared-stock-locked-lines.js";
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import type { UpdateInvoiceData } from "../../domain/entities/invoice.js";
 import { InvoiceNotDraftError, InvoiceNotFoundError, InvoiceVersionConflictError } from "../../domain/errors.js";
@@ -39,6 +40,8 @@ export class SaveInvoiceDraftUseCase {
     private readonly categoryReader: CostCenterCategoryReaderPort,
     private readonly allocationRepo: InvoiceAllocationRepositoryPort,
     private readonly audit: InvoiceAuditPort,
+    /** F3c: linhas já em Compras por rever (opcional nos testes antigos). */
+    private readonly stockLines?: StockLockedLinesDeps,
   ) {}
 
   async execute(command: ConfirmImportedInvoiceCommand): Promise<SaveDraftResult> {
@@ -70,9 +73,19 @@ export class SaveInvoiceDraftUseCase {
     let draft = existing.update(data);
 
     // Linhas reais: as enviadas substituem as do rascunho; sem `lines` mantêm-se.
-    const lineCommands = command.lines;
-    const lines =
-      lineCommands === undefined
+    // F3c: já em Compras por rever → mantêm-se as guardadas (só a classificação muda) ou pede confirmação.
+    const kept = await keepLinesUnderStockReview(this.stockLines, {
+      organizationId: command.organizationId,
+      invoiceId: draft.id,
+      storedLines: command.lines === undefined ? [] : await this.lineRepo.findByInvoiceId(command.organizationId, draft.id),
+      lineCommands: command.lines,
+      confirmRemoveStockReview: command.confirmRemoveStockReview,
+      actor: command.actor ?? "sistema",
+    });
+    const lineCommands = kept ? undefined : command.lines;
+    const lines = kept
+      ? kept
+      : lineCommands === undefined
         ? await this.lineRepo.findByInvoiceId(command.organizationId, draft.id)
         : lineCommands.map((lc) => {
             const props: Parameters<typeof InvoiceLine.create>[0] = {
@@ -91,7 +104,7 @@ export class SaveInvoiceDraftUseCase {
             return InvoiceLine.create(props);
           });
 
-    const amounts = computeAmountsForInvoice(draft, lines.map((line, i) => ({ line, cmd: lineCommands?.[i] })), command.amounts);
+    const amounts = computeAmountsForInvoice(draft, lines.map((line, i) => ({ line, cmd: (kept ? command.lines : lineCommands)?.[i] })), command.amounts);
     draft = amounts.invoice;
 
     const mode = toLineDetailMode(command.financialMode) ?? draft.lineDetailMode;
@@ -118,6 +131,7 @@ export class SaveInvoiceDraftUseCase {
       await this.lineRepo.deleteByInvoiceId(command.organizationId, draft.id);
       if (amounts.lines.length) await this.lineRepo.saveAll(command.organizationId, amounts.lines);
     }
+    if (kept) for (const l of amounts.lines) await this.lineRepo.updateLine(command.organizationId, l);
     await this.amountsWrite.save(command.organizationId, draft.id, amounts.record);
     if (mode === "by_values" && command.allocations !== undefined) {
       await this.allocationRepo.replaceForInvoice(command.organizationId, draft.id, allocations);

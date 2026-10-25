@@ -1,6 +1,6 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
-import { StockPurchaseReview, type CategoryDivergence, type DecisionSource, type StockPurchaseReviewStatus } from "../../domain/entities/stock-purchase-review.js";
+import { StockPurchaseReview, type CategoryDivergence, type DecisionSource, type ReviewOrigin, type StockPurchaseReviewStatus } from "../../domain/entities/stock-purchase-review.js";
 import { StockReviewLine, type LineSuggestion, type LocationSplit, type ResolutionType } from "../../domain/entities/stock-review-line.js";
 import { StaleReviewVersionError } from "../../domain/errors.js";
 import type {
@@ -32,6 +32,8 @@ function reviewToEntity(row: Record<string, unknown>): StockPurchaseReview {
     invoiceVatCents: row.invoice_vat_cents != null ? Number(row.invoice_vat_cents) : null,
     invoiceTotalCents: row.invoice_total_cents != null ? Number(row.invoice_total_cents) : null,
     categoryDivergences: (row.category_divergences as CategoryDivergence[] | null) ?? null,
+    origin: ((row.origin as ReviewOrigin | null) ?? "finance"),
+    financePending: Boolean(row.finance_pending),
     appliedAt: row.applied_at ? new Date(row.applied_at as string) : null,
     cancelledAt: row.cancelled_at ? new Date(row.cancelled_at as string) : null,
     cancellationReason: (row.cancellation_reason as string | null) ?? null,

@@ -23,6 +23,8 @@ export interface InvoiceFinalizedForStockData {
   supplierNif: string | null;
   override: "auto" | "force_create" | "force_skip";
   overrideReason: string | null;
+  /** F3c: `stock` = importada no Stock (cria a revisão, pendente do Financeiro). */
+  origin?: "finance" | "stock";
   /** F3a: totais (cêntimos) para a conferência do documento no Stock. */
   subtotalWithoutVat: number;
   totalVat: number;
