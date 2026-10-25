@@ -1,4 +1,4 @@
--- Rollback de 20261111100000_stock_review_suggestions.sql. Só se perdem as sugestões
+-- Rollback de 20261111150000_stock_review_suggestions.sql. Só se perdem as sugestões
 -- (voltam a ser calculadas ao abrir a revisão); resoluções e movimentos não são afetados.
 alter table public.stock_review_lines drop constraint if exists stock_review_lines_suggestion_check;
 alter table public.stock_review_lines

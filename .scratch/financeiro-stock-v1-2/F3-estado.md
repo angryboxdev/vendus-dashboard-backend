@@ -19,7 +19,7 @@ Nota do utilizador: as faturas enviadas para o Stock passam a ser lançadas semp
 - Conciliação: histórico do fornecedor (referência → descrição) → nome claro no catálogo → IA (uma chamada por revisão, só candidatos reais, pode dizer «não é item de stock», ≥ 60%). Fator pela embalagem. Gravada na linha; nunca resolve sozinha; «Aceitar» / «Ajustar» / «Aceitar as N propostas».
 - Fila «Por tratar | Histórico», valor, progresso, destino, origem; estados Por mapear → Em revisão → Pronto → Movimentado (+ Excluída, Retirada); saiu «Cancelar revisões sem linhas».
 - «Retirar de Compras por rever» (motivo + auditoria, sem tocar no Financeiro) e «Repor» (só retiradas; sem movimentos a repetir).
-- Migração `20261111100000_stock_review_suggestions` (+ rollback) validada em PGlite.
+- Migração `20261111150000_stock_review_suggestions` (+ rollback) validada em PGlite.
 - Passado para a F3c: «A extrair»/«Falha de extração», reprocessamento limitado e linhas manuais (dependem da importação direta no Stock).
 
 ## F3c — importar no Stock (por fazer)
