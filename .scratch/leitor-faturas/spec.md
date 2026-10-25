@@ -65,7 +65,7 @@ Origem: TASK V2 do utilizador (2026-10-24) + anexo de auditoria de 3 faturas Mak
 - Prova local: 6/8 faturas reais com o logótipo certo (Pestsafe, Makro, Justdrinks, Algeco, Cartrack, AcustekPro); selo CEPA e DataMatrix da Makro ignorados; 2 sem proposta (logótipo dentro de imagem de página inteira / sem imagem) — correto.
 - Migração `20261108100000_supplier_logo` (+ rollback), validada em PGlite.
 
-## E3b-2 — rascunho de obrigação AT/SS (2026-10-25, por publicar)
+## E3b-2 — rascunho de obrigação AT/SS (2026-10-25, em produção)
 - Na revisão AT/SS, «Lançar pelo fluxo atual» deu lugar a **«Criar rascunho de obrigação»**: o servidor volta a ler o PDF e grava um rascunho na tabela das faturas com tipo próprio (`document_kind`), referência, entidade MB e período; sem IVA, linhas nem Stock; abre a revisão habitual («Revisar obrigação», sem a secção do Stock) e, ao confirmar, nasce a conta a pagar com o prazo.
 - Registo parecido «forte» → aviso; o servidor recusa (409) sem `force`.
 - Migração `20261109100000_invoice_obligations` (+ rollback), validada em PGlite (aplicar, reexecutar, existentes = `purchase`, check, rollback com dados intactos, reaplicar).
