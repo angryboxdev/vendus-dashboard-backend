@@ -31,6 +31,7 @@ import { GetInvoiceUseCase } from "./application/use-cases/get-invoice.use-case.
 import { DeleteInvoiceUseCase } from "./application/use-cases/delete-invoice.use-case.js";
 import { ImportInvoiceUseCase } from "./application/use-cases/import-invoice.use-case.js";
 import { ReadPaymentDocumentUseCase } from "./application/use-cases/read-payment-document.use-case.js";
+import { CreateObligationDraftUseCase } from "./application/use-cases/create-obligation-draft.use-case.js";
 import { PdfjsContentReaderAdapter } from "./adapters/out/pdfjs-content-reader.adapter.js";
 import { SupabaseObligationCandidatesAdapter } from "./adapters/out/supabase-obligation-candidates.adapter.js";
 import { SupabaseInvoiceReadingWriteAdapter } from "./adapters/out/supabase-invoice-reading-write.adapter.js";
@@ -117,6 +118,7 @@ export function createInvoicesModule(
   const stockReviewDraftDelete = new StockPurchaseReviewDraftDeleteAdapter(deleteDraftStockPurchaseReview);
   const aiExtraction = new OpenAiExtractionAdapter(openaiApiKey);
   const pdfReader = new PdfjsContentReaderAdapter();
+  const readPaymentDocument = new ReadPaymentDocumentUseCase(pdfReader, new SupabaseObligationCandidatesAdapter(createScopedQuery), supplierLookup, organizationIdentityRead);
   const fiscal = new FiscalDocumentsIdentityAdapter(fiscalDocuments);
   const amountsWrite = new SupabaseInvoiceAmountsWriteAdapter(createScopedQuery);
   const allocationRepo = new SupabaseInvoiceAllocationRepository(createScopedQuery);
@@ -164,7 +166,8 @@ export function createInvoicesModule(
         process.env.INVOICE_LINE_AI === "off" ? null : new OpenAiLineCategoryAdapter(openaiApiKey, process.env.OPENAI_MODEL_TEXT ?? "gpt-4o-mini"),
       ),
     }),
-    readPaymentDocument: new ReadPaymentDocumentUseCase(pdfReader, new SupabaseObligationCandidatesAdapter(createScopedQuery), supplierLookup, organizationIdentityRead),
+    readPaymentDocument,
+    createObligationDraft: new CreateObligationDraftUseCase(readPaymentDocument, storage, invoiceRepo, supplierLookup),
     confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit, stockRouting, categoryReader, allocationRepo),
     getInvoiceAlerts: new GetInvoiceAlertsUseCase(invoiceRepo),
     processDirectDebits,

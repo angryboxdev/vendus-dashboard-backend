@@ -158,16 +158,20 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
 
     // Identidade fiscal partilhada (task v1.2 §1.2): reserva antes de finalizar.
     // Já movimentado no Stock → completa o mesmo documento sem nova revisão de stock.
-    const fiscal = await claimFiscalIdentity(this.fiscal, this.supplierLookup, command.organizationId, command.actor ?? "sistema", confirmed, {
-      notADuplicate: command.notADuplicate === true,
-      ...(command.completeStockIdentityId && { completeStockIdentityId: command.completeStockIdentityId }),
-    });
+    // Obrigações (Finanças/Segurança Social, E3b-2) não são documentos de compra: sem identidade fiscal de
+    // faturas nem Stock (os duplicados são controlados ao criar o rascunho, pela referência e valor).
+    const fiscal = confirmed.obligation
+      ? { linkedToStock: false }
+      : await claimFiscalIdentity(this.fiscal, this.supplierLookup, command.organizationId, command.actor ?? "sistema", confirmed, {
+          notADuplicate: command.notADuplicate === true,
+          ...(command.completeStockIdentityId && { completeStockIdentityId: command.completeStockIdentityId }),
+        });
     if (fiscal.linkedToStock && confirmed.stockReviewOverride !== "force_skip") {
       confirmed = confirmed.update({ stockReviewOverride: "force_skip", stockReviewOverrideReason: "Documento já movimentado no Stock (importação feita no Stock) — sem nova revisão." });
     }
 
     // «Enviar para Stock» (F2 §2.1): decisão explícita ou predefinição aplicada; «Decidir» sem escolha → recusa.
-    confirmed = (await resolveStockRouting(this.stockRouting, this.supplierLookup, command.organizationId, confirmed, [...reconciledStored, ...lines])).invoice;
+    if (!confirmed.obligation) confirmed = (await resolveStockRouting(this.stockRouting, this.supplierLookup, command.organizationId, confirmed, [...reconciledStored, ...lines])).invoice;
 
     // Bloqueio otimista atómico: dois cliques/sessões a confirmar o mesmo rascunho → só um passa.
     const version = await this.invoiceRepo.claimVersion(command.organizationId, existing.id, command.expectedVersion ?? existing.version);

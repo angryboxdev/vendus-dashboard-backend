@@ -139,6 +139,7 @@ export function toInvoiceDTO(
     currency: invoice.currency,
     stockReviewOverride: invoice.stockReviewOverride,
     stockReviewOverrideReason: invoice.stockReviewOverrideReason,
+    obligation: invoice.obligation,
     createdAt: invoice.createdAt.toISOString(),
     updatedAt: invoice.updatedAt.toISOString(),
     version: invoice.version,
