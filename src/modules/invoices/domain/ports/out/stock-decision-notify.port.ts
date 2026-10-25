@@ -7,6 +7,9 @@ export interface InvoiceFinalizedForStockLineData {
   unit: string | null;
   unitCostWithoutVat: number;
   totalWithVat: number;
+  /** F3a: IVA da linha (líquido com descontos = total − IVA). */
+  vatAmount: number;
+  supplierItemCode: string | null;
   costCenterCategoryId: string | null;
   locationId: string | null;
 }
@@ -20,6 +23,10 @@ export interface InvoiceFinalizedForStockData {
   supplierNif: string | null;
   override: "auto" | "force_create" | "force_skip";
   overrideReason: string | null;
+  /** F3a: totais (cêntimos) para a conferência do documento no Stock. */
+  subtotalWithoutVat: number;
+  totalVat: number;
+  totalWithVat: number;
   lines: InvoiceFinalizedForStockLineData[];
   actor: string | null;
 }

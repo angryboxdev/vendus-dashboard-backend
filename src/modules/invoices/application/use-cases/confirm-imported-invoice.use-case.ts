@@ -225,6 +225,7 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       });
     }
 
+    const supplierCodes = new Map(amounts.record.lines.map((r) => [r.lineId, r.supplierItemCode ?? null] as const));
     try {
       await this.stockDecisionNotify.notifyInvoiceFinalized(command.organizationId, {
         invoiceId: finalInvoice.id,
@@ -235,6 +236,9 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
         supplierNif: finalInvoice.supplierNifSnapshot,
         override: finalInvoice.stockReviewOverride,
         overrideReason: finalInvoice.stockReviewOverrideReason,
+        subtotalWithoutVat: finalInvoice.subtotalWithoutVat,
+        totalVat: finalInvoice.totalVat,
+        totalWithVat: finalInvoice.totalWithVat,
         // Todas as linhas reais seguem para o Stock, em qualquer modo financeiro (F2 §2.2).
         lines: allLines.map((l) => ({
           id: l.id,
@@ -243,6 +247,8 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
           unit: l.unit,
           unitCostWithoutVat: l.unitCostWithoutVat,
           totalWithVat: l.totalWithVat,
+          vatAmount: l.vatAmount,
+          supplierItemCode: supplierCodes.get(l.id) ?? null,
           costCenterCategoryId: l.costCenterCategoryId ?? finalInvoice.costCenterCategoryId,
           locationId: l.locationId,
         })),

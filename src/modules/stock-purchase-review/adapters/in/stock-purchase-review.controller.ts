@@ -11,6 +11,7 @@ import {
   ReviewAlreadyCancelledError,
   CancellationReasonRequiredError,
   LocationRequiredError,
+  DocumentNotReconciledError,
 } from "../../domain/errors.js";
 import type {
   ListStockPurchaseReviewsPort,
@@ -26,6 +27,10 @@ import type {
 function handleError(e: unknown, res: import("express").Response): void {
   if (e instanceof StockPurchaseReviewNotFoundError) {
     res.status(404).json({ error: e.message });
+    return;
+  }
+  if (e instanceof DocumentNotReconciledError) {
+    res.status(422).json({ error: e.message, code: "document_not_reconciled", netDifferenceCents: e.netDifferenceCents, vatDifferenceCents: e.vatDifferenceCents });
     return;
   }
   if (e instanceof StaleReviewVersionError) {
@@ -129,6 +134,12 @@ export class StockPurchaseReviewController {
           }),
           ...(body.conversionFactor !== undefined && { conversionFactor: Number(body.conversionFactor) }),
           locationId: (body.locationId as string | null | undefined) ?? null,
+          ...(Array.isArray(body.locationSplits) && {
+            locationSplits: (body.locationSplits as Array<Record<string, unknown>>).map((sp) => ({
+              locationId: String(sp.locationId),
+              purchaseQuantity: Number(sp.purchaseQuantity),
+            })),
+          }),
           actor: req.auth!.email,
         });
         res.json(result);

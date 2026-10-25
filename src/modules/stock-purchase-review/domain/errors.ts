@@ -75,3 +75,16 @@ export class LocationRequiredError extends Error {
     this.name = "LocationRequiredError";
   }
 }
+
+/** F3a: as linhas não batem com a base/IVA da fatura — diferença de base ou IVA impede movimentar. */
+export class DocumentNotReconciledError extends Error {
+  constructor(
+    public readonly netDifferenceCents: number,
+    public readonly vatDifferenceCents: number,
+  ) {
+    super(
+      `As linhas da revisão não batem com a fatura (base ${(netDifferenceCents / 100).toFixed(2)} €, IVA ${(vatDifferenceCents / 100).toFixed(2)} €) — corrigir a fatura no Financeiro antes de movimentar`,
+    );
+    this.name = "DocumentNotReconciledError";
+  }
+}

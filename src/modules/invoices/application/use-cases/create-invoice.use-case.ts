@@ -138,6 +138,7 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
       });
     }
 
+    const supplierCodes = new Map(amounts.record.lines.map((r) => [r.lineId, r.supplierItemCode ?? null] as const));
     try {
       await this.stockDecisionNotify.notifyInvoiceFinalized(command.organizationId, {
         invoiceId: invoice.id,
@@ -148,6 +149,9 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
         supplierNif: invoice.supplierNifSnapshot,
         override: invoice.stockReviewOverride,
         overrideReason: invoice.stockReviewOverrideReason,
+        subtotalWithoutVat: invoice.subtotalWithoutVat,
+        totalVat: invoice.totalVat,
+        totalWithVat: invoice.totalWithVat,
         lines: lines.map((l) => ({
           id: l.id,
           description: l.description,
@@ -155,6 +159,8 @@ export class CreateInvoiceUseCase implements CreateInvoicePort {
           unit: l.unit,
           unitCostWithoutVat: l.unitCostWithoutVat,
           totalWithVat: l.totalWithVat,
+          vatAmount: l.vatAmount,
+          supplierItemCode: supplierCodes.get(l.id) ?? null,
           costCenterCategoryId: l.costCenterCategoryId ?? invoice.costCenterCategoryId,
           locationId: l.locationId,
         })),

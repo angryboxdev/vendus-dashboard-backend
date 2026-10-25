@@ -5,7 +5,9 @@ import type { StockCatalogWritePort } from "../../domain/ports/out/stock-catalog
 import type { StockReviewLearnedMappingPort } from "../../domain/ports/out/stock-review-learned-mapping.port.js";
 import type { StockReviewAuditLogPort } from "../../domain/ports/out/stock-review-audit-log.port.js";
 import { validateConversion } from "../../domain/services/unit-conversion.service.js";
-import { toStockPurchaseReviewDTO, normalizeDescription } from "./shared.js";
+import type { LocationReadPort } from "../../domain/ports/out/location-read.port.js";
+import type { CostCenterCategoryReadPort } from "../../domain/ports/out/cost-center-category-read.port.js";
+import { conferenceFor, toStockPurchaseReviewDTO, normalizeDescription } from "./shared.js";
 
 export class ResolveReviewLineUseCase implements ResolveReviewLinePort {
   constructor(
@@ -13,6 +15,9 @@ export class ResolveReviewLineUseCase implements ResolveReviewLinePort {
     private readonly stockCatalogWrite: StockCatalogWritePort,
     private readonly learnedMapping: StockReviewLearnedMappingPort,
     private readonly auditLog: StockReviewAuditLogPort,
+    /** F3a: valida as lojas da divisão (ativas na organização). */
+    private readonly locationRead?: LocationReadPort,
+    private readonly categoryRead?: CostCenterCategoryReadPort,
   ) {}
 
   async execute(command: ResolveReviewLineCommand): Promise<StockPurchaseReviewDTO> {
@@ -57,12 +62,20 @@ export class ResolveReviewLineUseCase implements ResolveReviewLinePort {
         baseUnit = item.baseUnit;
       }
 
+      const splits = command.locationSplits && command.locationSplits.length > 0 ? command.locationSplits : null;
+      if (splits && this.locationRead) {
+        const active = new Set((await this.locationRead.listActive(command.organizationId)).map((l) => l.id));
+        const unknown = splits.find((sp) => !active.has(sp.locationId));
+        if (unknown) throw new InvalidReviewLineResolutionError(`a loja "${unknown.locationId}" não existe ou está inativa`);
+      }
+
       const conversionCheck = validateConversion(line.toProps().purchaseUnit, baseUnit);
       resolvedLine = line.resolveToStockItem(
         {
           stockItemId,
           conversionFactor,
           ...(command.locationId !== undefined && { locationId: command.locationId }),
+          ...(splits && { locationSplits: splits }),
           isItemActive: true,
           flaggedSuspiciousConversion: conversionCheck.flagged,
           flagReason: conversionCheck.reason,
@@ -104,6 +117,7 @@ export class ResolveReviewLineUseCase implements ResolveReviewLinePort {
       after: resolvedLine.toProps(),
     });
 
-    return toStockPurchaseReviewDTO(updatedReview, updatedLines);
+    const conference = this.categoryRead ? await conferenceFor(command.organizationId, updatedReview, updatedLines, this.categoryRead) : undefined;
+    return toStockPurchaseReviewDTO(updatedReview, updatedLines, conference);
   }
 }

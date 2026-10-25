@@ -1,11 +1,13 @@
-import { StockPurchaseReviewNotFoundError, StaleInvoiceSnapshotError, LocationRequiredError } from "../../domain/errors.js";
+import { StockPurchaseReviewNotFoundError, StaleInvoiceSnapshotError, LocationRequiredError, DocumentNotReconciledError } from "../../domain/errors.js";
+import type { CostCenterCategoryReadPort } from "../../domain/ports/out/cost-center-category-read.port.js";
+import type { ReviewConference } from "../../domain/services/review-conference.service.js";
 import type { ConfirmStockPurchaseReviewCommand, ConfirmStockPurchaseReviewPort, StockPurchaseReviewDTO } from "../../domain/ports/in/stock-purchase-review.ports.js";
 import type { StockPurchaseReviewRepositoryPort } from "../../domain/ports/out/stock-purchase-review-repository.port.js";
 import type { StockMovementWritePort } from "../../domain/ports/out/stock-movement-write.port.js";
 import type { InvoiceReadPort } from "../../domain/ports/out/invoice-read.port.js";
 import type { LocationReadPort } from "../../domain/ports/out/location-read.port.js";
 import type { StockReviewAuditLogPort } from "../../domain/ports/out/stock-review-audit-log.port.js";
-import { computeInvoiceSourceHash, toStockPurchaseReviewDTO } from "./shared.js";
+import { computeInvoiceSourceHash, conferenceFor, toStockPurchaseReviewDTO } from "./shared.js";
 
 export class ConfirmStockPurchaseReviewUseCase implements ConfirmStockPurchaseReviewPort {
   constructor(
@@ -14,6 +16,8 @@ export class ConfirmStockPurchaseReviewUseCase implements ConfirmStockPurchaseRe
     private readonly invoiceRead: InvoiceReadPort,
     private readonly locationRead: LocationReadPort,
     private readonly auditLog: StockReviewAuditLogPort,
+    /** F3a: conferências (documento bloqueia; categorias ficam como pendência). */
+    private readonly categoryRead?: CostCenterCategoryReadPort,
   ) {}
 
   async execute(command: ConfirmStockPurchaseReviewCommand): Promise<StockPurchaseReviewDTO> {
@@ -29,6 +33,17 @@ export class ConfirmStockPurchaseReviewUseCase implements ConfirmStockPurchaseRe
         if (currentHash !== review.sourceHash) {
           throw new StaleInvoiceSnapshotError();
         }
+      }
+    }
+
+    // F3a: diferença de base/IVA entre as linhas e a fatura impede movimentar; categoria não.
+    let conference: ReviewConference | undefined;
+    const done = review.status === "applied" || review.status === "excluded";
+    if (!done && this.categoryRead) {
+      const currentLines = await this.repository.findLinesByReviewId(command.organizationId, command.id);
+      conference = await conferenceFor(command.organizationId, review, currentLines, this.categoryRead);
+      if (conference.document.status === "mismatch") {
+        throw new DocumentNotReconciledError(conference.document.netDifferenceCents ?? 0, conference.document.vatDifferenceCents ?? 0);
       }
     }
 
@@ -53,6 +68,11 @@ export class ConfirmStockPurchaseReviewUseCase implements ConfirmStockPurchaseRe
       effectiveLocationId,
     );
 
+    const divergences = conference?.categories.divergences ?? [];
+    if (!result.alreadyApplied && divergences.length > 0) {
+      await this.repository.saveCategoryDivergences(command.organizationId, command.id, divergences);
+    }
+
     const updated = await this.repository.findById(command.organizationId, command.id);
     if (!updated) throw new StockPurchaseReviewNotFoundError(command.id);
     const lines = await this.repository.findLinesByReviewId(command.organizationId, command.id);
@@ -63,12 +83,12 @@ export class ConfirmStockPurchaseReviewUseCase implements ConfirmStockPurchaseRe
         actor: command.actor,
         entityType: "stock_purchase_review",
         entityId: command.id,
-        action: "confirm",
+        action: updated.status === "excluded" ? "confirm_excluded" : "confirm",
         before,
         after: updated.toProps(),
       });
     }
 
-    return toStockPurchaseReviewDTO(updated, lines);
+    return toStockPurchaseReviewDTO(updated, lines, conference);
   }
 }

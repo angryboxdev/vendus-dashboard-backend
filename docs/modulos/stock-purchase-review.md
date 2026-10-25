@@ -6,7 +6,7 @@
 Nem toda fatura de mercadoria muda o stock automaticamente — hoje, mesmo uma fatura da Makro paga pela conta da empresa não gera nenhum inventário nem pendência: o stock só muda por ajuste manual ou pelo consumo calculado a partir das vendas. Este módulo cria a ponte que faltava: quando uma fatura é lançada, o sistema decide (de forma auditável, nunca sozinho) se ela deve gerar uma "Compra por rever"; um gestor de St
 
 ## Estado atual
-Implementado (Compras por rever). F2 §2.1 (sugestão de envio) no ramo `financeiro`. F3 da task v1.2 por iniciar.
+Implementado (Compras por rever). F2 §2.1 em produção. **F3a por publicar** (ramo `financeiro`, migração `20261110100000_stock_review_f3a`): linhas com IVA/referência/categoria, custo pelo líquido, três conferências (documento bloqueia, categorias = pendência), divisão por lojas, «Excluída — não afeta Stock». F3b/F3c por fazer.
 
 **Funcionalidades relevantes** (`[ramo financeiro]` = commits locais/ramo não integrado em `main`):
 - Revisão de stock criada a partir de faturas finalizadas (gancho fire-and-forget de `invoices`), idempotente por fatura.
@@ -28,4 +28,4 @@ Importa portas/tipos de: [financial-base](financial-base.md), [invoices](invoice
 - Faturas sem linhas não geram revisão (até à F2 o modo «Única» não guardava linhas).
 
 ## Próximos trabalhos
-- F3: linhas reais (associar/criar artigo/«Não é item de stock»), fila com estados, retirar de Compras por rever, importação no Stock com pendência financeira.
+- F3b: fila com estados, reprocessamento/linhas manuais, retirar de Compras por rever. F3c: importação no Stock com pendência financeira.

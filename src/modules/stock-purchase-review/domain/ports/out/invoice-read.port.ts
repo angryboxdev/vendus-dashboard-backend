@@ -7,6 +7,7 @@ export interface InvoiceLineSnapshot {
   unit: string | null;
   unitCostWithoutVat: number;
   totalWithVat: number;
+  vatAmount: number;
   costCenterCategoryId: string | null;
   locationId: string | null;
 }
@@ -21,6 +22,9 @@ export interface InvoiceSnapshot {
   status: string;
   stockReviewOverride: "auto" | "force_create" | "force_skip";
   stockReviewOverrideReason: string | null;
+  subtotalWithoutVat: number;
+  totalVat: number;
+  totalWithVat: number;
   lines: InvoiceLineSnapshot[];
 }
 

@@ -1,6 +1,7 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { DecisionSource, StockPurchaseReviewStatus } from "../../entities/stock-purchase-review.js";
-import type { ResolutionType } from "../../entities/stock-review-line.js";
+import type { CategoryDivergence, DecisionSource, StockPurchaseReviewStatus } from "../../entities/stock-purchase-review.js";
+import type { LocationSplit, ResolutionType } from "../../entities/stock-review-line.js";
+import type { ReviewConference } from "../../services/review-conference.service.js";
 
 // ── DTOs ──────────────────────────────────────────────────────────────────
 
@@ -12,6 +13,13 @@ export interface StockReviewLineDTO {
   purchaseUnit: string;
   unitCostWithoutVat: number;
   totalWithVat: number;
+  /** F3a — null em revisões anteriores (sem IVA da linha guardado). */
+  vatAmount: number | null;
+  netAmount: number | null;
+  discountAmount: number | null;
+  supplierItemCode: string | null;
+  costCenterCategoryId: string | null;
+  locationSplits: LocationSplit[] | null;
   resolutionType: ResolutionType;
   stockItemId: string | null;
   conversionFactor: number | null;
@@ -44,6 +52,13 @@ export interface StockPurchaseReviewDTO {
   appliedAt: string | null;
   cancelledAt: string | null;
   cancellationReason: string | null;
+  invoiceNetCents: number | null;
+  invoiceVatCents: number | null;
+  invoiceTotalCents: number | null;
+  /** Registadas ao confirmar (pendência para o Financeiro). */
+  categoryDivergences: CategoryDivergence[] | null;
+  /** Conferências da F3a (documento / Stock / categorias), calculadas na leitura. */
+  conference?: ReviewConference;
   lines: StockReviewLineDTO[];
   createdAt: string;
   updatedAt: string;
@@ -97,6 +112,8 @@ export interface ResolveReviewLineCommand {
   newItem?: { name: string; categoryId: string; type: string; baseUnit: string };
   conversionFactor?: number;
   locationId?: string | null;
+  /** F3a: divisão por lojas (≥ 2, quantidades explícitas que somam a da linha). */
+  locationSplits?: LocationSplit[] | null;
   actor: string;
 }
 
@@ -126,6 +143,8 @@ export interface SuggestedMappingDTO {
   conversionFactor: number | null;
   purchaseUnit: string | null;
   isItemActive: boolean;
+  /** A unidade/embalagem da linha mudou desde o mapeamento aprendido — o fator tem de ser conferido de novo. */
+  packagingChanged: boolean;
 }
 
 export interface SuggestLineMappingCommand {
@@ -199,6 +218,9 @@ export interface RecordInvoiceFinalizedForStockLineData {
   unit: string | null;
   unitCostWithoutVat: number;
   totalWithVat: number;
+  /** F3a: IVA da linha (líquido com descontos = total − IVA). */
+  vatAmount?: number | null;
+  supplierItemCode?: string | null;
   costCenterCategoryId: string | null;
   locationId: string | null;
 }
@@ -213,6 +235,10 @@ export interface RecordInvoiceFinalizedForStockCommand {
   supplierNif: string | null;
   override: "auto" | "force_create" | "force_skip";
   overrideReason: string | null;
+  /** F3a: totais da fatura (cêntimos) para a conferência do documento. */
+  subtotalWithoutVat?: number | null;
+  totalVat?: number | null;
+  totalWithVat?: number | null;
   lines: RecordInvoiceFinalizedForStockLineData[];
   actor: string | null;
 }

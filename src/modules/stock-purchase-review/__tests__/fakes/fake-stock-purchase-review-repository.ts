@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
-import type { StockPurchaseReview } from "../../domain/entities/stock-purchase-review.js";
+import type { CategoryDivergence, StockPurchaseReview } from "../../domain/entities/stock-purchase-review.js";
 import type { StockReviewLine } from "../../domain/entities/stock-review-line.js";
 import { StaleReviewVersionError } from "../../domain/errors.js";
 import type {
@@ -43,6 +43,11 @@ export class FakeStockPurchaseReviewRepository implements StockPurchaseReviewRep
       throw new StaleReviewVersionError(existing.version);
     }
     this.reviews.set(review.id, review);
+  }
+
+  async saveCategoryDivergences(_organizationId: OrganizationId, reviewId: string, divergences: CategoryDivergence[]): Promise<void> {
+    const review = this.reviews.get(reviewId);
+    if (review) this.reviews.set(reviewId, review.recordCategoryDivergences(divergences));
   }
 
   async findLinesByReviewId(_organizationId: OrganizationId, reviewId: string): Promise<StockReviewLine[]> {

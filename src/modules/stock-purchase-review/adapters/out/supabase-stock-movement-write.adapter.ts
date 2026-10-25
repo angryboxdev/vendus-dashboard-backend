@@ -12,6 +12,7 @@ import {
   InactiveStockItemReferencedError,
   LocationRequiredError,
   StockPurchaseReviewNotFoundError,
+  InvalidReviewLineResolutionError,
 } from "../../domain/errors.js";
 
 export class SupabaseStockMovementWriteAdapter implements StockMovementWritePort {
@@ -31,6 +32,9 @@ export class SupabaseStockMovementWriteAdapter implements StockMovementWritePort
       supplier_name: input.supplierName,
       invoice_number: input.invoiceNumber,
       invoice_date: input.invoiceDate,
+      invoice_net_cents: input.invoiceNetCents,
+      invoice_vat_cents: input.invoiceVatCents,
+      invoice_total_cents: input.invoiceTotalCents,
     };
     const lines = input.lines.map((l) => ({
       invoice_line_id: l.invoiceLineId,
@@ -39,6 +43,10 @@ export class SupabaseStockMovementWriteAdapter implements StockMovementWritePort
       purchase_unit: l.purchaseUnit,
       unit_cost_without_vat: l.unitCostWithoutVat,
       total_with_vat: l.totalWithVat,
+      vat_amount: l.vatAmount,
+      supplier_item_code: l.supplierItemCode,
+      cost_center_category_id: l.costCenterCategoryId,
+      location_id: l.locationId,
     }));
     const { data, error } = await this.scopedQuery(organizationId).createStockPurchaseReviewFromInvoice(review, lines);
     if (error) throw new Error(error.message);
@@ -74,6 +82,7 @@ export class SupabaseStockMovementWriteAdapter implements StockMovementWritePort
       if (error.message.includes("not_ready")) throw new ReviewNotReadyError("há linhas por resolver ou a revisão não está Pronta");
       if (error.message.includes("inactive_item")) throw new InactiveStockItemReferencedError("(ver linhas da revisão)");
       if (error.message.includes("location_required")) throw new LocationRequiredError();
+      if (error.message.includes("split_mismatch")) throw new InvalidReviewLineResolutionError("a divisão por lojas não soma a quantidade da linha");
       if (error.message.includes("review_not_found")) throw new StockPurchaseReviewNotFoundError(reviewId);
       throw new Error(error.message);
     }

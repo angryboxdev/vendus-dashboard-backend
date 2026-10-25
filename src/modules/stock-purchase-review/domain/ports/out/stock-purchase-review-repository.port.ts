@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { StockPurchaseReview } from "../../entities/stock-purchase-review.js";
+import type { CategoryDivergence, StockPurchaseReview } from "../../entities/stock-purchase-review.js";
 import type { StockReviewLine } from "../../entities/stock-review-line.js";
 
 export interface StockPurchaseReviewFilter {
@@ -16,6 +16,8 @@ export interface StockPurchaseReviewRepositoryPort {
   findAll(organizationId: OrganizationId, filter?: StockPurchaseReviewFilter): Promise<StockPurchaseReview[]>;
   /** `expectedVersion` — lock otimista; 0 linhas afetadas ⇒ o adapter lança `StaleReviewVersionError`. */
   save(organizationId: OrganizationId, review: StockPurchaseReview, expectedVersion?: number): Promise<void>;
+  /** Pendência de categorias registada ao confirmar (F3a); não mexe na versão. */
+  saveCategoryDivergences(organizationId: OrganizationId, reviewId: string, divergences: CategoryDivergence[]): Promise<void>;
   findLinesByReviewId(organizationId: OrganizationId, reviewId: string): Promise<StockReviewLine[]>;
   saveLines(organizationId: OrganizationId, lines: StockReviewLine[]): Promise<void>;
   saveLine(organizationId: OrganizationId, line: StockReviewLine): Promise<void>;
