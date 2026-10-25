@@ -47,6 +47,23 @@ export interface RecipeCostingSnapshot {
   ingredients: IngredientCost[];
 }
 
+/** Custo de uma linha da ficha técnica (artigo direto ou preparo), já com a perda aplicada. */
+export interface DishLineCost {
+  stockItemId: string | null;
+  preparationId: string | null;
+  name: string;
+  /** Quantidade da linha tal como está na ficha (unidade base do artigo, ou unidades/rendimento do preparo). */
+  quantity: number;
+  /** Unidade base do artigo; num preparo, `null`. */
+  baseUnit: string | null;
+  wasteFactor: number | null;
+  /** Custo s/ IVA por unidade base do artigo (só artigos diretos com preço). */
+  unitCostWithoutVat: number | null;
+  /** Custo s/ IVA da linha; parcial quando `complete = false`. */
+  costWithoutVat: number;
+  complete: boolean;
+}
+
 export interface DishSizeCost {
   size: string;
   /** Custo s/ IVA do prato neste tamanho; parcial quando `complete = false`. */
@@ -56,6 +73,8 @@ export interface DishSizeCost {
   /** `false` quando algum ingrediente usado não tem preço (o custo está subavaliado). */
   complete: boolean;
   missingStockItemIds: string[];
+  /** Custo de cada linha da ficha, pela ordem da receita. */
+  lines: DishLineCost[];
 }
 
 export interface DishCosting {
