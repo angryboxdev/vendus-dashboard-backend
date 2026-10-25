@@ -21,6 +21,7 @@ import type { SupplierLookupPort } from "../../domain/ports/out/supplier-lookup.
 import type { InvoiceAmountsWritePort } from "../../domain/ports/out/invoice-amounts-write.port.js";
 import { reconcileForFinalize } from "./shared-amounts.js";
 import { keepLinesUnderStockReview, type StockLockedLinesDeps } from "./shared-stock-locked-lines.js";
+import type { FillSupplierLogosPort } from "../../domain/ports/in/supplier-logo.ports.js";
 import type { StockRoutingPort } from "../../domain/ports/out/stock-routing.port.js";
 import { resolveStockRouting } from "./shared-stock-routing.js";
 import type { CostCenterCategoryReaderPort } from "../../domain/ports/out/cost-center-category-reader.port.js";
@@ -45,6 +46,8 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
     private readonly allocationRepo: InvoiceAllocationRepositoryPort,
     /** F3c: linhas já em Compras por rever (opcional nos testes antigos). */
     private readonly stockLines?: StockLockedLinesDeps,
+    /** Logótipo do fornecedor a partir desta fatura, se ainda não tiver (opcional nos testes antigos). */
+    private readonly supplierLogos?: Pick<FillSupplierLogosPort, "fillForSupplier">,
   ) {}
 
   async execute(command: ConfirmImportedInvoiceCommand): Promise<InvoiceDTO> {
@@ -272,6 +275,13 @@ export class ConfirmImportedInvoiceUseCase implements ConfirmImportedInvoicePort
       });
     } catch (e) {
       console.error("[invoices] falha ao notificar stock-purchase-review (ignorada, sweep fará retry):", e);
+    }
+
+    // Logótipo do fornecedor (só se ainda não tiver): em segundo plano — ler o PDF não atrasa nem falha a confirmação.
+    if (this.supplierLogos && finalInvoice.supplierId && finalInvoice.attachmentUrl) {
+      void this.supplierLogos.fillForSupplier(command.organizationId, finalInvoice.supplierId, finalInvoice.id).catch((e) => {
+        console.error("[invoices] logótipo do fornecedor não gravado (ignorado):", e);
+      });
     }
 
     await this.audit.record(command.organizationId, { invoiceId: finalInvoice.id, action: "confirm", actor: command.actor ?? "sistema", origin: "import", reason: null, before: auditSnapshot(existing), after: auditSnapshot(finalInvoice) });

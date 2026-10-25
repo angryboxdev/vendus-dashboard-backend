@@ -4,6 +4,8 @@ import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-l
 import { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import { InvoiceNotFoundError, LineDetailModeError, LinesTotalMismatchError } from "../../domain/errors.js";
 import { toInvoiceLineDTO } from "./shared.js";
+import type { StockLockedLinesDeps } from "./shared-stock-locked-lines.js";
+import { guardAgainstBlockingStockReview } from "./shared-stock-review-guard.js";
 
 /** Tolerância máxima de arredondamento: 1 cêntimo (valores em cêntimos inteiros) */
 const LINE_TOTAL_TOLERANCE_CENTS = 1;
@@ -12,6 +14,7 @@ export class AddInvoiceLineUseCase implements AddInvoiceLinePort {
   constructor(
     private readonly invoiceRepo: InvoiceRepositoryPort,
     private readonly lineRepo: InvoiceLineRepositoryPort,
+    private readonly stockLines?: StockLockedLinesDeps,
   ) {}
 
   async execute(command: AddInvoiceLineCommand): Promise<InvoiceLineDTO> {
@@ -20,6 +23,19 @@ export class AddInvoiceLineUseCase implements AddInvoiceLinePort {
 
     if (invoice.lineDetailMode === "simple") {
       throw new LineDetailModeError(command.invoiceId);
+    }
+
+    // Fatura em Compras por rever: uma linha nova ficaria fora da revisão — já movimentada →
+    // bloqueia; senão só com confirmação (a revisão por aplicar é descartada).
+    if (this.stockLines) {
+      await guardAgainstBlockingStockReview({
+        organizationId: command.organizationId,
+        invoiceId: command.invoiceId,
+        confirmRemoveStockReview: command.confirmRemoveStockReview,
+        actor: command.actor ?? "system",
+        statusRead: this.stockLines.statusRead,
+        draftDelete: this.stockLines.draftDelete,
+      });
     }
 
     // Validar que a nova linha não fará a soma divergir dos totais da fatura

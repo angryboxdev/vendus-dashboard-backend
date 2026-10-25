@@ -2,7 +2,15 @@ import { AddInvoiceLineUseCase } from "../../application/use-cases/add-invoice-l
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
 import { Invoice } from "../../domain/entities/invoice.js";
-import { InvoiceNotFoundError, LineDetailModeError, LinesTotalMismatchError } from "../../domain/errors.js";
+import {
+  InvoiceNotFoundError,
+  LineDetailModeError,
+  LinesTotalMismatchError,
+  InvoiceLinesLockedByAppliedStockReviewError,
+  StockReviewRemovalConfirmationRequiredError,
+} from "../../domain/errors.js";
+import { FakeInvoiceStockReviewStatusRead } from "../fakes/fake-invoice-stock-review-status-read.js";
+import { FakeInvoiceStockReviewDraftDelete } from "../fakes/fake-invoice-stock-review-draft-delete.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 
 const ORG_ID = mintOrganizationId("org-test");
@@ -326,5 +334,37 @@ describe("AddInvoiceLineUseCase", () => {
     });
 
     expect(dto.id).toBeDefined();
+  });
+});
+
+describe("AddInvoiceLineUseCase — fatura em Compras por rever", () => {
+  const line = { description: "Farinha T55", quantity: 1, unitCostWithoutVat: 1000, vatRate: 23, vatAmount: 230, totalWithVat: 1230 };
+
+  async function setup(status: "in_review" | "applied") {
+    const invoiceRepo = new FakeInvoiceRepository();
+    const lineRepo = new FakeInvoiceLineRepository();
+    const statusRead = new FakeInvoiceStockReviewStatusRead();
+    const draftDelete = new FakeInvoiceStockReviewDraftDelete();
+    const useCase = new AddInvoiceLineUseCase(invoiceRepo, lineRepo, { statusRead, draftDelete });
+    const invoice = makeDetailedInvoice({ subtotalWithoutVat: 1000, totalVat: 230, totalWithVat: 1230 });
+    await invoiceRepo.save(ORG_ID, invoice);
+    statusRead.seed(invoice.id, { reviewId: "rev-1", status });
+    return { useCase, lineRepo, draftDelete, invoice };
+  }
+
+  it("já movimentada no Stock: bloqueia e não acrescenta", async () => {
+    const { useCase, lineRepo, invoice } = await setup("applied");
+    await expect(useCase.execute({ organizationId: ORG_ID, invoiceId: invoice.id, ...line, confirmRemoveStockReview: true })).rejects.toThrow(InvoiceLinesLockedByAppliedStockReviewError);
+    expect(await lineRepo.findByInvoiceId(ORG_ID, invoice.id)).toHaveLength(0);
+  });
+
+  it("por aplicar: sem confirmação pede-a; com confirmação descarta a revisão e acrescenta", async () => {
+    const { useCase, lineRepo, draftDelete, invoice } = await setup("in_review");
+    await expect(useCase.execute({ organizationId: ORG_ID, invoiceId: invoice.id, ...line })).rejects.toThrow(StockReviewRemovalConfirmationRequiredError);
+    expect(await lineRepo.findByInvoiceId(ORG_ID, invoice.id)).toHaveLength(0);
+
+    await useCase.execute({ organizationId: ORG_ID, invoiceId: invoice.id, ...line, confirmRemoveStockReview: true });
+    expect(draftDelete.calls).toHaveLength(1);
+    expect(await lineRepo.findByInvoiceId(ORG_ID, invoice.id)).toHaveLength(1);
   });
 });

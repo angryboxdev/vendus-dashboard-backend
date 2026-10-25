@@ -5,6 +5,8 @@ export interface InvoiceLineRepositoryPort {
   saveAll(organizationId: OrganizationId, lines: InvoiceLine[]): Promise<void>;
   findAll(organizationId: OrganizationId): Promise<InvoiceLine[]>;
   findByInvoiceId(organizationId: OrganizationId, invoiceId: string): Promise<InvoiceLine[]>;
+  /** Linhas de várias faturas de uma vez (lista de faturas: classificação das «Por artigo»). */
+  findByInvoiceIds(organizationId: OrganizationId, invoiceIds: string[]): Promise<InvoiceLine[]>;
   updateLine(organizationId: OrganizationId, line: InvoiceLine): Promise<void>;
   deleteByInvoiceId(organizationId: OrganizationId, invoiceId: string): Promise<void>;
   deleteLineById(organizationId: OrganizationId, lineId: string): Promise<void>;

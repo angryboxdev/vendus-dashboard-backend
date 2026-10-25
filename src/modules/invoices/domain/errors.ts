@@ -119,9 +119,10 @@ export class InvalidDeductibilityOverrideError extends Error {
  * movimentos. Bloqueia sempre, nunca aceita confirmação.
  */
 export class InvoiceLinesLockedByAppliedStockReviewError extends Error {
-  constructor(invoiceId: string) {
+  // Mensagem sem o id interno: é mostrada tal e qual a quem edita a fatura.
+  constructor(_invoiceId: string) {
     super(
-      `Esta fatura (${invoiceId}) já foi incluída no stock. Remova ou anule a entrada de stock (em "Compras por rever") antes de fazer esta alteração.`,
+      "Esta fatura já deu entrada no stock (em «Compras por rever»), por isso não se podem mudar as linhas, o impacto no stock nem apagá-la. A classificação de cada linha continua editável no separador «Linhas»; para o resto, anule primeiro a entrada no Stock.",
     );
     this.name = "InvoiceLinesLockedByAppliedStockReviewError";
   }
@@ -135,9 +136,9 @@ export class InvoiceLinesLockedByAppliedStockReviewError extends Error {
  * (`confirmRemoveStockReview: true`) antes de prosseguir.
  */
 export class StockReviewRemovalConfirmationRequiredError extends Error {
-  constructor(invoiceId: string) {
+  constructor(_invoiceId: string) {
     super(
-      `A fatura (${invoiceId}) tem uma revisão de stock associada ainda não aplicada. Confirmar para remover essa revisão e continuar?`,
+      "Esta fatura está em «Compras por rever» no Stock (ainda sem entrada no stock). Para gravar esta alteração, essa compra é retirada do Stock e o trabalho de conciliação feito lá perde-se. Continuar?",
     );
     this.name = "StockReviewRemovalConfirmationRequiredError";
   }
