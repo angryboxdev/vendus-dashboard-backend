@@ -20,6 +20,7 @@ type PreparationRow = {
   yield_qty: number;
   yield_unit: string;
   use_as_unit: boolean;
+  is_active?: boolean | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -32,6 +33,7 @@ function rowToPreparation(row: PreparationRow): Preparation {
     yield_qty: Number(row.yield_qty),
     yield_unit: row.yield_unit,
     use_as_unit: Boolean(row.use_as_unit),
+    is_active: row.is_active !== false,
   };
   if (row.created_at !== undefined) p.created_at = row.created_at;
   if (row.updated_at !== undefined) p.updated_at = row.updated_at;
@@ -57,7 +59,7 @@ function rowToPreparationItem(row: PreparationItemRow): PreparationItem {
   return item;
 }
 
-const PREPARATION_COLS = "id, name, description, yield_qty, yield_unit, use_as_unit, created_at, updated_at";
+const PREPARATION_COLS = "id, name, description, yield_qty, yield_unit, use_as_unit, is_active, created_at, updated_at";
 const PREPARATION_ITEM_COLS = "id, preparation_id, stock_item_id, quantity, created_at";
 
 // -----------------------------------------------------------------------
@@ -129,6 +131,7 @@ export async function updatePreparation(
   if (body.use_as_unit !== undefined) {
     updates.use_as_unit = body.use_as_unit === true;
   }
+  if (body.is_active !== undefined) updates.is_active = body.is_active === true;
   const { data, error } = await createScopedQuery(organizationId)
     .table("preparations")
     .update(updates)

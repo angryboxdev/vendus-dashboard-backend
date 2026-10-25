@@ -5,6 +5,8 @@ export type Preparation = {
   yield_qty: number;
   yield_unit: string;
   use_as_unit: boolean;
+  /** Inativo: não aparece para adicionar a receitas; as que já o usam continuam a funcionar. */
+  is_active: boolean;
   created_at?: string;
   updated_at?: string;
 };
@@ -31,6 +33,7 @@ export type PreparationUpdateBody = {
   yield_qty?: number;
   yield_unit?: string;
   use_as_unit?: boolean;
+  is_active?: boolean;
 };
 
 export type PreparationItemCreateBody = {
