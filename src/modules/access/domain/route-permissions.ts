@@ -87,6 +87,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/stock-planning\/(backfill|run-forecast|detect-deviation)$/, target: p("stock.forecast_ops") },
   { pattern: /^\/api\/stock-planning(\/|$)/, target: p("stock.planning") },
   { pattern: /^\/api\/(pizzas|preparations)(\/|$)/, target: p("stock.recipes") },
+  { pattern: /^\/api\/recipe-costing$/, target: p("stock.recipes") },
 
   // ── CRM ──────────────────────────────────────────────────────────────
   { pattern: /^\/api\/crm\/contacts(\/|$)/, target: p("crm.contacts") },

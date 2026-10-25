@@ -51,6 +51,7 @@ Não envia e-mails.
 ## Design decisions (ADR summary)
 
 - Primeiro uso: alteração retroativa no motor de configurações avisa os Admins ativos.
+- Duplicados (`dedupeKey`) sem `upsert` (2026-10-25): o índice único é parcial (`where dedupe_key is not null`) e o `ON CONFLICT` do PostgREST não o usa (42P10 → «Erro interno» ao publicar escalas, decidir ausências, etc.). O store filtra os já existentes antes de inserir e, numa corrida (23505), insere um a um ignorando os repetidos. Sem migração.
 - Não é um outbox transacional de eventos de domínio (o Supabase REST não junta escritas numa transação) — dívida registada no relatório da Fase 1.
 
 ## How to test
