@@ -46,13 +46,16 @@ export class FakeStockMovementWrite implements StockMovementWritePort {
 
     if (this.repository) {
       const review = this.repository.reviews.get(reviewId);
-      if (review && review.status === "applied") {
-        return { reviewId, status: "applied", version: review.version, movementIds: ["mov-existing"], alreadyApplied: true };
+      if (review && (review.status === "applied" || review.status === "excluded")) {
+        return { reviewId, status: review.status, version: review.version, movementIds: ["mov-existing"], alreadyApplied: true };
       }
       if (review) {
-        const applied = review.apply();
+        // Espelha a RPC: sem linhas inventariáveis → «Excluída — não afeta Stock».
+        const lines = await this.repository.findLinesByReviewId(organizationId, reviewId);
+        const inventoriable = lines.some((l) => l.resolutionType === "existing_item" || l.resolutionType === "new_item");
+        const applied = review.apply(lines.length > 0 && !inventoriable);
         await this.repository.save(organizationId, applied, expectedVersion);
-        return { reviewId, status: "applied", version: applied.version, movementIds: [randomUUID()], alreadyApplied: false };
+        return { reviewId, status: applied.status, version: applied.version, movementIds: applied.status === "excluded" ? [] : [randomUUID()], alreadyApplied: false };
       }
     }
 

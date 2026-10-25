@@ -8,4 +8,8 @@ export class FakeCostCenterCategoryRead implements CostCenterCategoryReadPort {
   async getStockReviewPolicy(_organizationId: OrganizationId, categoryId: string): Promise<StockReviewPolicy | null> {
     return this.policies.get(categoryId) ?? null;
   }
+
+  async getStockReviewPolicies(_organizationId: OrganizationId, categoryIds: string[]): Promise<Map<string, StockReviewPolicy>> {
+    return new Map(categoryIds.filter((id) => this.policies.has(id)).map((id) => [id, this.policies.get(id)!]));
+  }
 }

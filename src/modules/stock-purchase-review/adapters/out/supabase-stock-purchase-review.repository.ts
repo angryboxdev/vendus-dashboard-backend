@@ -1,7 +1,7 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
-import { StockPurchaseReview, type DecisionSource, type StockPurchaseReviewStatus } from "../../domain/entities/stock-purchase-review.js";
-import { StockReviewLine, type ResolutionType } from "../../domain/entities/stock-review-line.js";
+import { StockPurchaseReview, type CategoryDivergence, type DecisionSource, type StockPurchaseReviewStatus } from "../../domain/entities/stock-purchase-review.js";
+import { StockReviewLine, type LocationSplit, type ResolutionType } from "../../domain/entities/stock-review-line.js";
 import { StaleReviewVersionError } from "../../domain/errors.js";
 import type {
   StockPurchaseReviewFilter,
@@ -28,6 +28,10 @@ function reviewToEntity(row: Record<string, unknown>): StockPurchaseReview {
     invoiceNumber: row.invoice_number as string,
     invoiceDate: row.invoice_date as string,
     locationId: (row.location_id as string | null) ?? null,
+    invoiceNetCents: row.invoice_net_cents != null ? Number(row.invoice_net_cents) : null,
+    invoiceVatCents: row.invoice_vat_cents != null ? Number(row.invoice_vat_cents) : null,
+    invoiceTotalCents: row.invoice_total_cents != null ? Number(row.invoice_total_cents) : null,
+    categoryDivergences: (row.category_divergences as CategoryDivergence[] | null) ?? null,
     appliedAt: row.applied_at ? new Date(row.applied_at as string) : null,
     cancelledAt: row.cancelled_at ? new Date(row.cancelled_at as string) : null,
     cancellationReason: (row.cancellation_reason as string | null) ?? null,
@@ -47,6 +51,14 @@ function lineToEntity(row: Record<string, unknown>): StockReviewLine {
     purchaseUnit: row.purchase_unit as string,
     unitCostWithoutVat: Number(row.unit_cost_without_vat),
     totalWithVat: Number(row.total_with_vat),
+    vatAmount: row.vat_amount != null ? Number(row.vat_amount) : null,
+    supplierItemCode: (row.supplier_item_code as string | null) ?? null,
+    costCenterCategoryId: (row.cost_center_category_id as string | null) ?? null,
+    locationSplits: Array.isArray(row.location_splits)
+      ? (row.location_splits as Array<{ location_id: string; purchase_quantity: number | string }>).map(
+          (s): LocationSplit => ({ locationId: s.location_id, purchaseQuantity: Number(s.purchase_quantity) }),
+        )
+      : null,
     resolutionType: row.resolution_type as ResolutionType,
     stockItemId: (row.stock_item_id as string | null) ?? null,
     conversionFactor: row.conversion_factor != null ? Number(row.conversion_factor) : null,
@@ -73,6 +85,10 @@ function lineToRow(line: StockReviewLine): Record<string, unknown> {
     purchase_unit: p.purchaseUnit,
     unit_cost_without_vat: p.unitCostWithoutVat,
     total_with_vat: p.totalWithVat,
+    vat_amount: p.vatAmount,
+    supplier_item_code: p.supplierItemCode,
+    cost_center_category_id: p.costCenterCategoryId,
+    location_splits: p.locationSplits ? p.locationSplits.map((s) => ({ location_id: s.locationId, purchase_quantity: s.purchaseQuantity })) : null,
     resolution_type: p.resolutionType,
     stock_item_id: p.stockItemId,
     conversion_factor: p.conversionFactor,
@@ -151,6 +167,15 @@ export class SupabaseStockPurchaseReviewRepository implements StockPurchaseRevie
     if (expectedVersion !== undefined && (!data || data.length === 0)) {
       throw new StaleReviewVersionError(p.version);
     }
+  }
+
+  /** Pendência de categorias registada ao confirmar (não mexe na versão — a RPC já a incrementou). */
+  async saveCategoryDivergences(organizationId: OrganizationId, reviewId: string, divergences: CategoryDivergence[]): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("stock_purchase_reviews")
+      .update({ category_divergences: divergences.length > 0 ? divergences : null })
+      .eq("id", reviewId);
+    if (error) throw new Error(error.message);
   }
 
   async findLinesByReviewId(organizationId: OrganizationId, reviewId: string): Promise<StockReviewLine[]> {

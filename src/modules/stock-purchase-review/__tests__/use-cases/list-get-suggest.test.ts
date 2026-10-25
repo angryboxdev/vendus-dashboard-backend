@@ -105,6 +105,7 @@ describe("SuggestLineMappingUseCase", () => {
       conversionFactor: 1000,
       purchaseUnit: "kg",
       isItemActive: true,
+      packagingChanged: false,
     });
     // A sugestão nunca resolve a linha sozinha — continua unresolved.
     const lines = await repository.findLinesByReviewId(ORG, review.id);

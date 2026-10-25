@@ -84,11 +84,11 @@ export function createStockPurchaseReviewModule(
 
   const controller = new StockPurchaseReviewController(
     new ListStockPurchaseReviewsUseCase(reviewRepository),
-    new GetStockPurchaseReviewUseCase(reviewRepository),
-    new ResolveReviewLineUseCase(reviewRepository, stockCatalogWrite, learnedMapping, auditLog),
+    new GetStockPurchaseReviewUseCase(reviewRepository, categoryRead),
+    new ResolveReviewLineUseCase(reviewRepository, stockCatalogWrite, learnedMapping, auditLog, locationRead, categoryRead),
     new DecideUnresolvedReviewUseCase(reviewRepository, auditLog),
     new SuggestLineMappingUseCase(reviewRepository, learnedMapping),
-    new ConfirmStockPurchaseReviewUseCase(reviewRepository, stockMovementWrite, invoiceRead, locationRead, auditLog),
+    new ConfirmStockPurchaseReviewUseCase(reviewRepository, stockMovementWrite, invoiceRead, locationRead, auditLog, categoryRead),
     new CancelStockPurchaseReviewUseCase(reviewRepository, auditLog),
     new CancelEmptyStockPurchaseReviewsUseCase(reviewRepository, auditLog),
   );

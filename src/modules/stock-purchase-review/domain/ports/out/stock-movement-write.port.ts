@@ -15,6 +15,10 @@ export interface CreateReviewFromInvoiceLineInput {
   purchaseUnit: string;
   unitCostWithoutVat: number;
   totalWithVat: number;
+  vatAmount: number | null;
+  supplierItemCode: string | null;
+  costCenterCategoryId: string | null;
+  locationId: string | null;
 }
 
 export interface CreateReviewFromInvoiceInput {
@@ -30,6 +34,9 @@ export interface CreateReviewFromInvoiceInput {
   supplierName: string;
   invoiceNumber: string;
   invoiceDate: string;
+  invoiceNetCents: number | null;
+  invoiceVatCents: number | null;
+  invoiceTotalCents: number | null;
   lines: CreateReviewFromInvoiceLineInput[];
 }
 

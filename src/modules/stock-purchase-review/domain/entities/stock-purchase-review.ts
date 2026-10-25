@@ -1,6 +1,15 @@
 import { CancellationReasonRequiredError, ReviewAlreadyAppliedError, ReviewAlreadyCancelledError } from "../errors.js";
 
-export type StockPurchaseReviewStatus = "pending" | "in_review" | "partial" | "ready" | "applied" | "cancelled";
+/** `excluded` (F3a) = «Excluída — não afeta Stock»: confirmada com todas as linhas não inventariáveis, sem movimento. */
+export type StockPurchaseReviewStatus = "pending" | "in_review" | "partial" | "ready" | "applied" | "cancelled" | "excluded";
+
+/** Pendência para o Financeiro (F3a): a categoria financeira da linha não bate com o tratamento de Stock. Nunca bloqueia nem corrige. */
+export interface CategoryDivergence {
+  lineId: string;
+  description: string;
+  costCenterCategoryId: string;
+  kind: "stock_line_in_non_stock_category" | "non_stock_line_in_stock_category";
+}
 
 export type DecisionSource = "override" | "category" | "supplier" | "unresolved";
 
@@ -23,6 +32,11 @@ interface StockPurchaseReviewProps {
   invoiceNumber: string;
   invoiceDate: string;
   locationId: string | null;
+  /** Totais da fatura na criação (cêntimos) — conferência do documento. Null em revisões anteriores à F3a. */
+  invoiceNetCents: number | null;
+  invoiceVatCents: number | null;
+  invoiceTotalCents: number | null;
+  categoryDivergences: CategoryDivergence[] | null;
   appliedAt: Date | null;
   cancelledAt: Date | null;
   cancellationReason: string | null;
@@ -45,6 +59,9 @@ export interface CreateStockPurchaseReviewProps {
   invoiceNumber: string;
   invoiceDate: string;
   locationId?: string | null;
+  invoiceNetCents?: number | null;
+  invoiceVatCents?: number | null;
+  invoiceTotalCents?: number | null;
 }
 
 /**
@@ -77,6 +94,10 @@ export class StockPurchaseReview {
       invoiceNumber: props.invoiceNumber,
       invoiceDate: props.invoiceDate,
       locationId: props.locationId ?? null,
+      invoiceNetCents: props.invoiceNetCents ?? null,
+      invoiceVatCents: props.invoiceVatCents ?? null,
+      invoiceTotalCents: props.invoiceTotalCents ?? null,
+      categoryDivergences: null,
       appliedAt: null,
       cancelledAt: null,
       cancellationReason: null,
@@ -90,7 +111,7 @@ export class StockPurchaseReview {
   }
 
   private assertNotTerminal(): void {
-    if (this.props.status === "applied") throw new ReviewAlreadyAppliedError(this.props.id);
+    if (this.props.status === "applied" || this.props.status === "excluded") throw new ReviewAlreadyAppliedError(this.props.id);
     if (this.props.status === "cancelled") throw new ReviewAlreadyCancelledError(this.props.id);
   }
 
@@ -130,21 +151,26 @@ export class StockPurchaseReview {
   }
 
   /** O `plpgsql` de confirmação é quem de facto marca `applied` na BD — este método é o espelho de domínio usado pelos testes/fakes. */
-  apply(): StockPurchaseReview {
+  apply(excluded = false): StockPurchaseReview {
     if (this.props.status !== "ready") {
       throw new ReviewAlreadyAppliedError(this.props.id);
     }
     return new StockPurchaseReview({
       ...this.props,
-      status: "applied",
+      status: excluded ? "excluded" : "applied",
       appliedAt: new Date(),
       version: this.props.version + 1,
       updatedAt: new Date(),
     });
   }
 
+  /** Espelho de `saveCategoryDivergences` (pendência registada depois de confirmar; não mexe na versão). */
+  recordCategoryDivergences(divergences: CategoryDivergence[]): StockPurchaseReview {
+    return new StockPurchaseReview({ ...this.props, categoryDivergences: divergences.length > 0 ? divergences : null });
+  }
+
   cancel(reason: string): StockPurchaseReview {
-    if (this.props.status === "applied") throw new ReviewAlreadyAppliedError(this.props.id);
+    if (this.props.status === "applied" || this.props.status === "excluded") throw new ReviewAlreadyAppliedError(this.props.id);
     if (this.props.status === "cancelled") throw new ReviewAlreadyCancelledError(this.props.id);
     if (!reason || reason.trim().length === 0) throw new CancellationReasonRequiredError();
     return new StockPurchaseReview({

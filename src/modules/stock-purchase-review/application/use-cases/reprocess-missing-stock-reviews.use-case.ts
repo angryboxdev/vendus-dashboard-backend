@@ -45,6 +45,9 @@ export class ReprocessMissingStockReviewsUseCase implements ReprocessMissingStoc
         supplierNif: invoice.supplierNif,
         override: invoice.stockReviewOverride,
         overrideReason: invoice.stockReviewOverrideReason,
+        subtotalWithoutVat: invoice.subtotalWithoutVat,
+        totalVat: invoice.totalVat,
+        totalWithVat: invoice.totalWithVat,
         lines: invoice.lines.map((l) => ({
           id: l.id,
           description: l.description,
@@ -52,6 +55,7 @@ export class ReprocessMissingStockReviewsUseCase implements ReprocessMissingStoc
           unit: l.unit,
           unitCostWithoutVat: l.unitCostWithoutVat,
           totalWithVat: l.totalWithVat,
+          vatAmount: l.vatAmount,
           costCenterCategoryId: l.costCenterCategoryId,
           locationId: l.locationId,
         })),

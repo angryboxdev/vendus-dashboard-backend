@@ -13,6 +13,9 @@ function toSnapshot(invoice: InvoiceDTO): InvoiceSnapshot {
     status: invoice.status,
     stockReviewOverride: invoice.stockReviewOverride,
     stockReviewOverrideReason: invoice.stockReviewOverrideReason,
+    subtotalWithoutVat: invoice.subtotalWithoutVat,
+    totalVat: invoice.totalVat,
+    totalWithVat: invoice.totalWithVat,
     lines: (invoice.lines ?? []).map((l) => ({
       id: l.id,
       description: l.description,
@@ -20,6 +23,7 @@ function toSnapshot(invoice: InvoiceDTO): InvoiceSnapshot {
       unit: l.unit,
       unitCostWithoutVat: l.unitCostWithoutVat,
       totalWithVat: l.totalWithVat,
+      vatAmount: l.vatAmount,
       costCenterCategoryId: l.costCenterCategoryId,
       locationId: l.locationId,
     })),

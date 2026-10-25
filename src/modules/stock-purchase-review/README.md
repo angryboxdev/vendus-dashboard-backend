@@ -280,6 +280,16 @@ que mantêm a exceção estreita:
   `DeleteDraftStockPurchaseReviewPort`) pode desencadear isto, nunca um
   humano diretamente em "Compras por rever".
 
+### F3a (task v1.2) — linhas reais e três conferências
+
+- **Linhas reais com valores do documento**: a fatura passa ao Stock, por linha, o IVA (líquido com descontos = total − IVA), a referência do fornecedor, a categoria financeira (snapshot) e a loja; e os totais da fatura (base/IVA/total). Colunas novas em `stock_review_lines`/`stock_purchase_reviews` (migração `20261110100000_stock_review_f3a`). Revisões anteriores ficam com estes campos a null e as conferências «indisponíveis» (nunca bloqueiam).
+- **Custo unitário a partir do líquido** (`StockReviewLine.resolveToStockItem`): sem IVA = líquido ÷ (qtd × fator); com IVA = total ÷ (qtd × fator). Descontos de linha e globais já vêm repartidos no líquido; o custo das linhas «Não é item de stock» (ex.: equipamento) nunca é espalhado pelas outras. Sem IVA guardado → cálculo original.
+- **Três conferências** (`domain/services/review-conference.service.ts`, calculadas em GET/resolver/confirmar): (1) **Documento** — todas as linhas, incluindo as não inventariáveis, somam a base e o IVA da fatura; diferença → `DocumentNotReconciledError` (422 `document_not_reconciled`) e nada é movimentado. (2) **Stock** — só as inventariáveis geram quantidade/custo (não precisam de somar o total). (3) **Categorias** — política de Stock da categoria financeira contra o tratamento da linha (artigo numa categoria `NO_STOCK_EFFECT`, ou «Não é item de stock» numa `CREATE_REVIEW`); é **pendência para o Financeiro**: não bloqueia, não corrige nada, fica gravada em `category_divergences` ao confirmar.
+- **Divisão por lojas**: `locationSplits` (≥ 2 lojas ativas, distintas, quantidades explícitas cuja soma = quantidade da linha); a RPC cria um movimento por loja (índice único passa a revisão + linha + loja) e volta a validar a soma (`split_mismatch`). Nunca a quantidade integral em cada loja.
+- **«Excluída — não afeta Stock»** (`excluded`): confirmar com todas as linhas «Não é item de stock» termina sem movimento (estado terminal, auditoria `confirm_excluded`). Para o guard de edição de `invoices` conta como não aplicada (não há movimentos).
+- **Embalagem alterada**: a sugestão aprendida traz `packagingChanged` quando a unidade da linha difere da aprendida — o frontend não reaproveita o fator antigo.
+- Fora da F3a (ficam para F3b/F3c): estados da fila, reprocessamento/linhas manuais, «Retirar de Compras por rever», importação no Stock; NC (devolução física vs. correção de preço) continua só no Financeiro.
+
 ## Como testar
 
 - `npx jest src/modules/stock-purchase-review` (fakes para todas as portas
@@ -292,6 +302,7 @@ que mantêm a exceção estreita:
   `alreadyApplied`).
 - Testes de integração (Supabase real) para as 2 RPCs ficam pendentes
   desta ronda — ver Known gaps.
+- F3a (`__tests__/use-cases/f3a-conference.test.ts`): exemplo Makro 650 € (documento reconcilia, Stock 400 €, equipamento fica financeiro), base diferente bloqueia, revisões antigas «indisponíveis», divergências de categoria sem bloquear, Mozzarella (custo pelo líquido com desconto), divisão por lojas válida/inválida, todas não inventariáveis → `excluded`, gancho de faturas com IVA/categoria/loja/totais.
 - `DeleteDraftStockPurchaseReviewUseCase`/`GetStockPurchaseReviewStatusForInvoiceUseCase`
   (`delete-draft-stock-purchase-review.test.ts`) cobrem: no-op sem revisão,
   hard-delete com auditoria quando ainda não aplicada, e
@@ -309,8 +320,8 @@ que mantêm a exceção estreita:
   em si (concorrência real, `FOR UPDATE`) fica para uma próxima ronda.
 - **Fase 2 (mockups completos)** — o frontend desta ronda é mínimo (lista
   simples + formulário simples), sem os 6 ecrãs do mockup original.
-- **Sem multi-armazém completo** — a resolução de loja no confirm cobre só
-  o caso de 0/1/N lojas ativas; não há hierarquia nem regras avançadas de
-  localização.
+- **Sem multi-armazém completo** — além da divisão explícita por lojas
+  (F3a), a resolução de loja no confirm cobre só 0/1/N lojas ativas; não há
+  hierarquia nem regras avançadas de localização.
 - **Reversão física de Nota de Crédito** — nunca implementada nesta task,
   por desenho (a Nota de Crédito só afeta o Financeiro).

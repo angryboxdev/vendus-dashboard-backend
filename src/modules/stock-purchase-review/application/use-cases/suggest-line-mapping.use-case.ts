@@ -35,6 +35,10 @@ export class SuggestLineMappingUseCase implements SuggestLineMappingPort {
           conversionFactor: suggestion.conversionFactor,
           purchaseUnit: suggestion.purchaseUnit,
           isItemActive: suggestion.isItemActive,
+          packagingChanged:
+            suggestion.resolutionType === "existing_item" &&
+            suggestion.purchaseUnit !== null &&
+            suggestion.purchaseUnit.trim().toLowerCase() !== line.toProps().purchaseUnit.trim().toLowerCase(),
         }
       : null;
   }

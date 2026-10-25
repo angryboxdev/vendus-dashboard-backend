@@ -85,6 +85,9 @@ export class RecordInvoiceFinalizedForStockUseCase implements RecordInvoiceFinal
       supplierName: command.supplierName,
       invoiceNumber: command.invoiceNumber,
       invoiceDate: command.invoiceDate,
+      invoiceNetCents: command.subtotalWithoutVat ?? null,
+      invoiceVatCents: command.totalVat ?? null,
+      invoiceTotalCents: command.totalWithVat ?? null,
       lines: command.lines.map((l) => ({
         invoiceLineId: l.id,
         description: l.description,
@@ -92,6 +95,10 @@ export class RecordInvoiceFinalizedForStockUseCase implements RecordInvoiceFinal
         purchaseUnit: l.unit ?? "un",
         unitCostWithoutVat: l.unitCostWithoutVat,
         totalWithVat: l.totalWithVat,
+        vatAmount: l.vatAmount ?? null,
+        supplierItemCode: l.supplierItemCode ?? null,
+        costCenterCategoryId: l.costCenterCategoryId,
+        locationId: l.locationId,
       })),
     });
   }

@@ -1,6 +1,6 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 
-export type InvoiceStockReviewStatus = "pending" | "in_review" | "partial" | "ready" | "applied" | "cancelled";
+export type InvoiceStockReviewStatus = "pending" | "in_review" | "partial" | "ready" | "applied" | "cancelled" | "excluded";
 
 export type InvoiceStockReviewStatusSnapshot = { reviewId: string; status: InvoiceStockReviewStatus } | null;
 

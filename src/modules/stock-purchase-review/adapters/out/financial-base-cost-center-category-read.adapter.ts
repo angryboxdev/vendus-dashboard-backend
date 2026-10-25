@@ -12,4 +12,11 @@ export class FinancialBaseCostCenterCategoryReadAdapter implements CostCenterCat
     const category = categories.find((c) => c.id === categoryId);
     return category ? category.stockReviewPolicy : null;
   }
+
+  async getStockReviewPolicies(organizationId: OrganizationId, categoryIds: string[]): Promise<Map<string, StockReviewPolicy>> {
+    if (categoryIds.length === 0) return new Map();
+    const wanted = new Set(categoryIds);
+    const categories = await this.listCostCenterCategories.execute({ organizationId });
+    return new Map(categories.filter((c) => wanted.has(c.id)).map((c) => [c.id, c.stockReviewPolicy]));
+  }
 }
