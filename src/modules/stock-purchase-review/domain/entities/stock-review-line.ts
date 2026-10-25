@@ -12,6 +12,22 @@ export interface LocationSplit {
 
 const QUANTITY_TOLERANCE = 0.000001;
 
+/**
+ * Conciliação proposta (F3b) — gravada para não repetir IA a cada abertura. Nunca resolve a
+ * linha sozinha: `source: "none"` = procurou-se e não houve sugestão.
+ */
+export interface LineSuggestion {
+  source: "learned" | "name_match" | "ai" | "none";
+  resolution: "existing_item" | "no_stock_effect" | null;
+  stockItemId: string | null;
+  conversionFactor: number | null;
+  /** 0..1 */
+  confidence: number | null;
+  /** A unidade da linha difere da aprendida — o fator antigo não serve. */
+  packagingChanged: boolean;
+  suggestedAt: Date;
+}
+
 interface StockReviewLineProps {
   id: string;
   organizationId: string;
@@ -28,6 +44,7 @@ interface StockReviewLineProps {
   /** Categoria financeira da linha (snapshot) — só para a conferência de categorias, nunca decide nada sozinha. */
   costCenterCategoryId: string | null;
   locationSplits: LocationSplit[] | null;
+  suggestion: LineSuggestion | null;
   resolutionType: ResolutionType;
   stockItemId: string | null;
   conversionFactor: number | null;
@@ -93,6 +110,7 @@ export class StockReviewLine {
       supplierItemCode: props.supplierItemCode ?? null,
       costCenterCategoryId: props.costCenterCategoryId ?? null,
       locationSplits: null,
+      suggestion: null,
       resolutionType: "unresolved",
       stockItemId: null,
       conversionFactor: null,
@@ -183,6 +201,26 @@ export class StockReviewLine {
       );
     }
     return splits.map((s) => ({ locationId: s.locationId, purchaseQuantity: s.purchaseQuantity }));
+  }
+
+  withSuggestion(suggestion: LineSuggestion): StockReviewLine {
+    return new StockReviewLine({ ...this.props, suggestion });
+  }
+
+  get suggestion(): LineSuggestion | null {
+    return this.props.suggestion;
+  }
+
+  get supplierItemCode(): string | null {
+    return this.props.supplierItemCode;
+  }
+
+  get description(): string {
+    return this.props.description;
+  }
+
+  get purchaseUnit(): string {
+    return this.props.purchaseUnit;
   }
 
   /** Líquido com descontos (total − IVA); null quando o IVA da linha não foi guardado (revisões anteriores à F3a). */

@@ -1,7 +1,7 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import { StockPurchaseReview, type CategoryDivergence, type DecisionSource, type StockPurchaseReviewStatus } from "../../domain/entities/stock-purchase-review.js";
-import { StockReviewLine, type LocationSplit, type ResolutionType } from "../../domain/entities/stock-review-line.js";
+import { StockReviewLine, type LineSuggestion, type LocationSplit, type ResolutionType } from "../../domain/entities/stock-review-line.js";
 import { StaleReviewVersionError } from "../../domain/errors.js";
 import type {
   StockPurchaseReviewFilter,
@@ -59,6 +59,17 @@ function lineToEntity(row: Record<string, unknown>): StockReviewLine {
           (s): LocationSplit => ({ locationId: s.location_id, purchaseQuantity: Number(s.purchase_quantity) }),
         )
       : null,
+    suggestion: row.suggested_at
+      ? {
+          source: row.suggestion_source as LineSuggestion["source"],
+          resolution: (row.suggested_resolution as LineSuggestion["resolution"]) ?? null,
+          stockItemId: (row.suggested_stock_item_id as string | null) ?? null,
+          conversionFactor: row.suggested_conversion_factor != null ? Number(row.suggested_conversion_factor) : null,
+          confidence: row.suggestion_confidence != null ? Number(row.suggestion_confidence) : null,
+          packagingChanged: Boolean(row.suggestion_packaging_changed),
+          suggestedAt: new Date(row.suggested_at as string),
+        }
+      : null,
     resolutionType: row.resolution_type as ResolutionType,
     stockItemId: (row.stock_item_id as string | null) ?? null,
     conversionFactor: row.conversion_factor != null ? Number(row.conversion_factor) : null,
@@ -89,6 +100,16 @@ function lineToRow(line: StockReviewLine): Record<string, unknown> {
     supplier_item_code: p.supplierItemCode,
     cost_center_category_id: p.costCenterCategoryId,
     location_splits: p.locationSplits ? p.locationSplits.map((s) => ({ location_id: s.locationId, purchase_quantity: s.purchaseQuantity })) : null,
+    // Colunas da F3b só quando há sugestão (linhas sem sugestão gravam como antes).
+    ...(p.suggestion && {
+      suggestion_source: p.suggestion.source,
+      suggested_resolution: p.suggestion.resolution,
+      suggested_stock_item_id: p.suggestion.stockItemId,
+      suggested_conversion_factor: p.suggestion.conversionFactor,
+      suggestion_confidence: p.suggestion.confidence,
+      suggestion_packaging_changed: p.suggestion.packagingChanged,
+      suggested_at: p.suggestion.suggestedAt.toISOString(),
+    }),
     resolution_type: p.resolutionType,
     stock_item_id: p.stockItemId,
     conversion_factor: p.conversionFactor,

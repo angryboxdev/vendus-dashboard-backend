@@ -34,6 +34,21 @@ export class SupabaseStockCatalogWriteAdapter implements StockCatalogWritePort {
     return { id: r.id, name: r.name, baseUnit: r.base_unit, isActive: Boolean(r.is_active) };
   }
 
+  async listActive(organizationId: OrganizationId): Promise<StockItemSnapshot[]> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("stock_items")
+      .select("id, name, base_unit, is_active")
+      .eq("is_active", true)
+      .order("name", { ascending: true });
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as unknown as { id: string; name: string; base_unit: string; is_active: boolean }[]).map((r) => ({
+      id: r.id,
+      name: r.name,
+      baseUnit: r.base_unit,
+      isActive: Boolean(r.is_active),
+    }));
+  }
+
   async findById(organizationId: OrganizationId, id: string): Promise<StockItemSnapshot | null> {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("stock_items")

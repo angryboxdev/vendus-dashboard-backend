@@ -1,4 +1,4 @@
-import { CancellationReasonRequiredError, ReviewAlreadyAppliedError, ReviewAlreadyCancelledError } from "../errors.js";
+import { CancellationReasonRequiredError, ReviewAlreadyAppliedError, ReviewAlreadyCancelledError, ReviewNotCancelledError } from "../errors.js";
 
 /** `excluded` (F3a) = «Excluída — não afeta Stock»: confirmada com todas as linhas não inventariáveis, sem movimento. */
 export type StockPurchaseReviewStatus = "pending" | "in_review" | "partial" | "ready" | "applied" | "cancelled" | "excluded";
@@ -159,6 +159,22 @@ export class StockPurchaseReview {
       ...this.props,
       status: excluded ? "excluded" : "applied",
       appliedAt: new Date(),
+      version: this.props.version + 1,
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
+   * «Repor em Compras por rever» (F3b): só uma revisão retirada (cancelada) volta à fila, com o
+   * estado recalculado pelas linhas. Uma retirada nunca teve movimentos, por isso repor não os repete.
+   */
+  restore(allResolved: boolean, anyResolved: boolean): StockPurchaseReview {
+    if (this.props.status !== "cancelled") throw new ReviewNotCancelledError(this.props.id);
+    return new StockPurchaseReview({
+      ...this.props,
+      status: allResolved ? "ready" : anyResolved ? "partial" : "in_review",
+      cancelledAt: null,
+      cancellationReason: null,
       version: this.props.version + 1,
       updatedAt: new Date(),
     });

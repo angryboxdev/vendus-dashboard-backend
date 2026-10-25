@@ -35,7 +35,7 @@ export class ResolveReviewLineUseCase implements ResolveReviewLinePort {
       if (p.decisionSupplierId) {
         await this.learnedMapping.learn(command.organizationId, {
           supplierId: p.decisionSupplierId,
-          supplierReference: null,
+          supplierReference: line.supplierItemCode,
           normalizedDescription: normalizeDescription(resolvedLine.toProps().description),
           resolutionType: "no_stock_effect",
         });
@@ -88,7 +88,7 @@ export class ResolveReviewLineUseCase implements ResolveReviewLinePort {
       if (p.decisionSupplierId && command.resolution === "existing_item") {
         await this.learnedMapping.learn(command.organizationId, {
           supplierId: p.decisionSupplierId,
-          supplierReference: null,
+          supplierReference: line.supplierItemCode,
           normalizedDescription: normalizeDescription(resolvedLine.toProps().description),
           resolutionType: "existing_item",
           stockItemId,

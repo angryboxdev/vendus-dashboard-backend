@@ -12,12 +12,15 @@ import {
   CancellationReasonRequiredError,
   LocationRequiredError,
   DocumentNotReconciledError,
+  ReviewNotCancelledError,
 } from "../../domain/errors.js";
 import type {
   ListStockPurchaseReviewsPort,
   GetStockPurchaseReviewPort,
   ResolveReviewLinePort,
   DecideUnresolvedReviewPort,
+  SuggestReviewMappingsPort,
+  RestoreStockPurchaseReviewPort,
   SuggestLineMappingPort,
   ConfirmStockPurchaseReviewPort,
   CancelStockPurchaseReviewPort,
@@ -46,7 +49,8 @@ function handleError(e: unknown, res: import("express").Response): void {
     e instanceof ReviewAlreadyAppliedError ||
     e instanceof ReviewAlreadyCancelledError ||
     e instanceof CancellationReasonRequiredError ||
-    e instanceof LocationRequiredError
+    e instanceof LocationRequiredError ||
+    e instanceof ReviewNotCancelledError
   ) {
     res.status(400).json({ error: e.message });
     return;
@@ -66,6 +70,8 @@ export class StockPurchaseReviewController {
     private readonly confirmStockPurchaseReview: ConfirmStockPurchaseReviewPort,
     private readonly cancelStockPurchaseReview: CancelStockPurchaseReviewPort,
     private readonly cancelEmptyStockPurchaseReviews: CancelEmptyStockPurchaseReviewsPort,
+    private readonly suggestReviewMappings: SuggestReviewMappingsPort,
+    private readonly restoreStockPurchaseReview: RestoreStockPurchaseReviewPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -88,9 +94,10 @@ export class StockPurchaseReviewController {
 
     this.router.get("/stock-purchase-reviews", async (req, res) => {
       try {
-        const { status, supplierId, from, to, search } = req.query as Record<string, string | undefined>;
+        const { status, supplierId, from, to, search, view } = req.query as Record<string, string | undefined>;
         const result = await this.listStockPurchaseReviews.execute({
           organizationId: req.auth!.orgId,
+          ...((view === "active" || view === "history") && { view }),
           ...(status !== undefined && { status: status as never }),
           ...(supplierId !== undefined && { supplierId }),
           ...(from !== undefined && { from }),
@@ -195,6 +202,39 @@ export class StockPurchaseReviewController {
           actor: req.auth!.email,
           ...(body.effectiveDate !== undefined && { effectiveDate: body.effectiveDate as string }),
           ...(body.locationId !== undefined && { locationId: body.locationId as string | null }),
+        });
+        res.json(result);
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+
+    this.router.post("/stock-purchase-reviews/:id/suggestions", async (req, res) => {
+      try {
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const result = await this.suggestReviewMappings.execute({
+          organizationId: req.auth!.orgId,
+          reviewId: req.params["id"] as string,
+          refresh: body.refresh === true,
+        });
+        res.json(result);
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+
+    this.router.post("/stock-purchase-reviews/:id/restore", async (req, res) => {
+      try {
+        const body = req.body as Record<string, unknown>;
+        if (typeof body.expectedVersion !== "number") {
+          res.status(400).json({ error: "expectedVersion é obrigatório" });
+          return;
+        }
+        const result = await this.restoreStockPurchaseReview.execute({
+          organizationId: req.auth!.orgId,
+          id: req.params["id"] as string,
+          actor: req.auth!.email,
+          expectedVersion: body.expectedVersion,
         });
         res.json(result);
       } catch (e) {

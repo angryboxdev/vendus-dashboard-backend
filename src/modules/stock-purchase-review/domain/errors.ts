@@ -88,3 +88,11 @@ export class DocumentNotReconciledError extends Error {
     this.name = "DocumentNotReconciledError";
   }
 }
+
+/** F3b: só uma revisão retirada (cancelada) pode ser reposta em Compras por rever. */
+export class ReviewNotCancelledError extends Error {
+  constructor(id: string) {
+    super(`Compra por rever "${id}" não está retirada — não há nada a repor`);
+    this.name = "ReviewNotCancelledError";
+  }
+}

@@ -290,6 +290,16 @@ que mantêm a exceção estreita:
 - **Embalagem alterada**: a sugestão aprendida traz `packagingChanged` quando a unidade da linha difere da aprendida — o frontend não reaproveita o fator antigo.
 - Fora da F3a (ficam para F3b/F3c): estados da fila, reprocessamento/linhas manuais, «Retirar de Compras por rever», importação no Stock; NC (devolução física vs. correção de preço) continua só no Financeiro.
 
+### F3b (task v1.2) — conciliação inteligente e fila
+
+- **Conciliação proposta por linha** (`SuggestReviewMappingsUseCase`, `POST /stock-purchase-reviews/:id/suggestions`, `{ refresh? }`): para as linhas por resolver, por esta ordem — (1) **histórico do fornecedor** (`StockReviewLearnedMappingPort`, agora pela referência do fornecedor e depois pela descrição; aprender também grava a referência); (2) **nome claramente igual no catálogo** (`domain/services/item-matching.service.ts`: tokens sem acentos/embalagem/stopwords, pontuação ≥ 0,75 e 0,15 acima do segundo); (3) **IA** (`StockItemMatchAiPort` → `OpenAiStockItemMatchAdapter`, uma chamada por revisão só com o que sobra; enum = ids reais dos candidatos dessa linha, pode responder «não é item de stock»; abaixo de 60% de confiança é ignorada; falhar não bloqueia). Sem `OPENAI_API_KEY` ou com `STOCK_MATCH_AI=off` fica só histórico + nome. A IA só recebe descrições e nomes de artigos (sem fornecedor, NIF nem valores).
+- **Fator pela embalagem** (`suggestConversionFactor`): «25kg» em saco → 25 kg; «1,5L x6» → 9 L ou 6 un; «24x33cl» → 7920 ml; kg → g = 1000; nunca massa ↔ volume. Embalagem diferente da aprendida → `packagingChanged` e fator recalculado pela nova embalagem.
+- **Gravada na linha** (`suggestion_*`, migração `20261111150000_stock_review_suggestions`): reabrir não volta a pagar IA; `source: "none"` = procurado sem resultado. **Nunca resolve sozinha** — aceitar é um `resolve` normal, feito pela pessoa (um a um ou «Aceitar as N propostas»). O adapter só escreve as colunas da sugestão quando a linha a tem.
+- **Fila**: `GET /stock-purchase-reviews?view=active|history` (por tratar vs. movimentadas/excluídas/retiradas); linhas com progresso (`resolvedLines`), valor (`totalCents`), destino e origem. Estados na UI: Por mapear → Em revisão → Pronto → Movimentado; Excluída; Retirada.
+- **Retirar / Repor**: «Retirar de Compras por rever» é o `cancel(reason)` existente (motivo + auditoria, não toca na fatura, conta a pagar, pagamentos nem conciliação). `POST /stock-purchase-reviews/:id/restore` (`RestoreStockPurchaseReviewUseCase`) repõe só retiradas, com o estado recalculado pelas linhas — uma retirada nunca teve movimentos, por isso não há nada a repetir. Movimentada continua a não se poder retirar (exige ajuste/estorno).
+- O botão «Cancelar revisões sem linhas» saiu da UI (o endpoint fica, sem uso).
+- Fora (F3c): estados «A extrair»/«Falha de extração», reprocessamento e linhas manuais — só fazem sentido com a importação direta no Stock.
+
 ## Como testar
 
 - `npx jest src/modules/stock-purchase-review` (fakes para todas as portas
@@ -303,6 +313,7 @@ que mantêm a exceção estreita:
 - Testes de integração (Supabase real) para as 2 RPCs ficam pendentes
   desta ronda — ver Known gaps.
 - F3a (`__tests__/use-cases/f3a-conference.test.ts`): exemplo Makro 650 € (documento reconcilia, Stock 400 €, equipamento fica financeiro), base diferente bloqueia, revisões antigas «indisponíveis», divergências de categoria sem bloquear, Mozzarella (custo pelo líquido com desconto), divisão por lojas válida/inválida, todas não inventariáveis → `excluded`, gancho de faturas com IVA/categoria/loja/totais.
+- F3b (`__tests__/use-cases/f3b-matching.test.ts`): nomes e embalagens (domínio), ordem histórico → nome → IA numa só chamada, sem resolver nada, reabrir sem nova IA e `refresh`, IA fora dos candidatos ignorada, falha da IA, embalagem alterada, fila ativa/histórico, repor.
 - `DeleteDraftStockPurchaseReviewUseCase`/`GetStockPurchaseReviewStatusForInvoiceUseCase`
   (`delete-draft-stock-purchase-review.test.ts`) cobrem: no-op sem revisão,
   hard-delete com auditoria quando ainda não aplicada, e
