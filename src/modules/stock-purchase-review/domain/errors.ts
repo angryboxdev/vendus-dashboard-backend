@@ -77,6 +77,22 @@ export class LocationRequiredError extends Error {
 }
 
 /** F3a: as linhas não batem com a base/IVA da fatura — diferença de base ou IVA impede movimentar. */
+/** A fatura conta numa unidade (ex.: kg) e a conversão da linha dá menos do que uma dessa unidade (1 g em vez de 1000 g). */
+export class SuspiciousConversionError extends Error {
+  constructor(
+    public readonly lineDescription: string,
+    public readonly conversionFactor: number,
+    public readonly expectedFactor: number,
+    invoiceUnit: string,
+    baseUnit: string,
+  ) {
+    super(
+      `«${lineDescription}»: a fatura conta em ${invoiceUnit} mas a conversão está 1 ${invoiceUnit} = ${conversionFactor} ${baseUnit} (deve ser pelo menos ${expectedFactor} ${baseUnit}) — corrigir a conversão/embalagem da linha antes de confirmar`,
+    );
+    this.name = "SuspiciousConversionError";
+  }
+}
+
 export class DocumentNotReconciledError extends Error {
   constructor(
     public readonly netDifferenceCents: number,

@@ -166,6 +166,18 @@ estruturadas (ver Known gaps).
 
 ## Design decisions (ADR summary)
 
+### Unidade da fatura nas embalagens e travão de conversão
+
+Quando a fatura conta o conteúdo, a quantidade está na unidade que a própria
+linha indica (`invoiceQuantityUnit`: unidade da linha se for de medida, ou
+unidade solta no fim da descrição — «…Eurial kg»; nunca um tamanho como «25 kg»),
+mesmo que o saco esteja configurado noutra unidade (2500 g). Sem unidade
+conhecida, vale a do conteúdo. Uma associação aprendida com fator abaixo de
+1 dessa unidade (1 g para «kg») deixa de se aplicar sozinha. Na confirmação,
+`SuspiciousConversionError` (422 `suspicious_conversion`) recusa linhas em que
+a fatura conta em kg/l e a conversão dá menos do que 1 kg/l na unidade do
+artigo (caso real: FT 64311, 20 kg entraram como 20 g).
+
 ### Linhas em cêntimos, movimentos em euros
 
 As linhas de revisão guardam tudo em cêntimos, incluindo

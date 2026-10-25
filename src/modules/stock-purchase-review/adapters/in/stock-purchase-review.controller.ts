@@ -12,6 +12,7 @@ import {
   CancellationReasonRequiredError,
   LocationRequiredError,
   DocumentNotReconciledError,
+  SuspiciousConversionError,
   ReviewNotCancelledError,
   StockImportNotValidatedError,
   InvalidPurchasePresentationError,
@@ -40,6 +41,10 @@ function handleError(e: unknown, res: import("express").Response): void {
   }
   if (e instanceof StockImportNotValidatedError) {
     res.status(422).json({ error: e.message, code: "stock_import_not_validated" });
+    return;
+  }
+  if (e instanceof SuspiciousConversionError) {
+    res.status(422).json({ error: e.message, code: "suspicious_conversion", conversionFactor: e.conversionFactor, expectedFactor: e.expectedFactor });
     return;
   }
   if (e instanceof DocumentNotReconciledError) {

@@ -8,7 +8,7 @@ import type { StockItemMatchAiPort } from "../../domain/ports/out/stock-item-mat
 import type { CostCenterCategoryReadPort } from "../../domain/ports/out/cost-center-category-read.port.js";
 import type { StockAiBudgetPort } from "../../domain/ports/out/ai-budget.port.js";
 import { confidentNameMatch, rankCandidates, suggestConversionFactor, type CatalogItem } from "../../domain/services/item-matching.service.js";
-import { invoiceLineToStock } from "../../domain/services/presentation-conversion.service.js";
+import { invoiceLineToStock, invoiceQuantityUnit } from "../../domain/services/presentation-conversion.service.js";
 import { PurchasePresentation, type PurchasePresentationProps } from "../../domain/entities/purchase-presentation.js";
 import type { StockReviewAuditLogPort } from "../../domain/ports/out/stock-review-audit-log.port.js";
 import type { EntryRulesRepositoryPort } from "../../domain/ports/out/entry-rules-repository.port.js";
@@ -95,7 +95,8 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
         // Embalagem confirmada pelo utilizador: artigo e fator vêm dela (fatura em sacos ou em kg).
         const pres = (line.supplierItemCode ? presByKey.get(PurchasePresentation.matchKey(line.supplierItemCode, "")) : undefined) ?? presByKey.get(PurchasePresentation.matchKey(null, normalizeDescription(line.description)));
         const presItem = pres ? byId.get(pres.stockItemId) : undefined;
-        const presFactor = pres && presItem ? invoiceLineToStock(pres.toProps(), 1, 1, presItem.baseUnit)?.conversionFactor ?? null : null;
+        const invoiceUnit = invoiceQuantityUnit(line.purchaseUnit, line.description);
+        const presFactor = pres && presItem ? invoiceLineToStock(pres.toProps(), 1, 1, presItem.baseUnit, invoiceUnit)?.conversionFactor ?? null : null;
         if (pres && presItem && presFactor) {
           // A descrição diz outro tamanho (ex.: «1 kg» com o saco de 2,5 kg confirmado) → embalagem nova: pergunta uma vez.
           const conflict = packageSizeConflict(line.description, pres.toProps());
@@ -107,9 +108,13 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
           ? await this.learnedMapping.suggest(command.organizationId, supplierId, line.supplierItemCode, normalizeDescription(line.description))
           : null;
         if (learned && learned.isItemActive) {
-          const packagingChanged =
-            learned.resolutionType === "existing_item" && learned.purchaseUnit !== null && learned.purchaseUnit.trim().toLowerCase() !== line.purchaseUnit.trim().toLowerCase();
           const item = learned.stockItemId ? byId.get(learned.stockItemId) : undefined;
+          // A fatura diz em que unidade conta (ex.: kg) e o fator aprendido fica abaixo de 1 kg em g
+          // (1 em vez de 1000) → pergunta de novo. Um fator maior (saco de 25 kg) continua válido.
+          const unitFactorFromInvoice = item && invoiceUnit ? unitFactor(invoiceUnit, item.baseUnit) : null;
+          const packagingChanged =
+            (learned.resolutionType === "existing_item" && learned.purchaseUnit !== null && learned.purchaseUnit.trim().toLowerCase() !== line.purchaseUnit.trim().toLowerCase()) ||
+            (learned.resolutionType === "existing_item" && unitFactorFromInvoice !== null && learned.conversionFactor !== null && learned.conversionFactor < unitFactorFromInvoice);
           // Decisão confirmada por uma pessoa para esta linha (fornecedor + referência/descrição): aplica-se sozinha.
           if (!packagingChanged && (learned.resolutionType === "no_stock_effect" || (item && learned.conversionFactor))) confirmed.add(line.id);
           updated.set(line.id, line.withSuggestion({
@@ -117,7 +122,7 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
             resolution: learned.resolutionType,
             stockItemId: learned.stockItemId,
             conversionFactor: packagingChanged
-              ? item ? suggestConversionFactor(line.description, line.purchaseUnit, item.baseUnit) : null
+              ? item ? (unitFactorFromInvoice ?? suggestConversionFactor(line.description, line.purchaseUnit, item.baseUnit)) : null
               : learned.conversionFactor,
             confidence: 1,
             packagingChanged,
