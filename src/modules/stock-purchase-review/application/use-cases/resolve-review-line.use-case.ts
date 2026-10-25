@@ -7,7 +7,10 @@ import type { StockReviewAuditLogPort } from "../../domain/ports/out/stock-revie
 import { validateConversion } from "../../domain/services/unit-conversion.service.js";
 import type { LocationReadPort } from "../../domain/ports/out/location-read.port.js";
 import type { CostCenterCategoryReadPort } from "../../domain/ports/out/cost-center-category-read.port.js";
-import { conferenceFor, toStockPurchaseReviewDTO, normalizeDescription } from "./shared.js";
+import { conferenceFor, toStockPurchaseReviewDTO, normalizeDescription , withCategoryLabels } from "./shared.js";
+import { PurchasePresentation } from "../../domain/entities/purchase-presentation.js";
+import type { StockReviewLine } from "../../domain/entities/stock-review-line.js";
+import { unitFactor } from "../../domain/services/presentation-conversion.service.js";
 import { withPackaging, type PackagingDeps } from "./shared-packaging.js";
 
 export class ResolveReviewLineUseCase implements ResolveReviewLinePort {
@@ -102,6 +105,7 @@ export class ResolveReviewLineUseCase implements ResolveReviewLinePort {
     }
 
     await this.repository.saveLine(command.organizationId, resolvedLine);
+    await this.followHumanCorrection(command, review.toProps().decisionSupplierId, line, resolvedLine);
 
     const updatedLines = lines.map((l) => (l.id === resolvedLine.id ? resolvedLine : l));
     const allResolved = updatedLines.every((l) => l.resolutionType !== "unresolved");
@@ -121,6 +125,47 @@ export class ResolveReviewLineUseCase implements ResolveReviewLinePort {
     });
 
     const conference = this.categoryRead ? await conferenceFor(command.organizationId, updatedReview, updatedLines, this.categoryRead) : undefined;
-    return withPackaging(command.organizationId, toStockPurchaseReviewDTO(updatedReview, updatedLines, conference), this.packaging);
+    return withCategoryLabels(command.organizationId, await withPackaging(command.organizationId, toStockPurchaseReviewDTO(updatedReview, updatedLines, conference), this.packaging), this.categoryRead);
+  }
+
+  /**
+   * Correção humana prevalece nas próximas faturas: a embalagem confirmada para esta linha segue o
+   * artigo escolhido (versão nova, mesma embalagem) ou é desativada se a linha deixou de ser stock.
+   * Nunca mexe no passado (as versões anteriores ficam).
+   */
+  private async followHumanCorrection(command: ResolveReviewLineCommand, supplierId: string | null, line: StockReviewLine, resolved: StockReviewLine): Promise<void> {
+    if (!this.packaging || !supplierId) return;
+    const key = PurchasePresentation.matchKey(line.supplierItemCode, normalizeDescription(line.description));
+    const active = await this.packaging.presentations.findActive(command.organizationId, supplierId, key);
+    if (!active) return;
+    const r = resolved.toProps();
+    if (r.resolutionType === "no_stock_effect") {
+      await this.packaging.presentations.supersede(command.organizationId, active);
+      return;
+    }
+    if (!r.stockItemId || r.stockItemId === active.stockItemId) return;
+    const item = await this.packaging.catalog.findById(command.organizationId, r.stockItemId);
+    const a = active.toProps();
+    if (!item || unitFactor(a.contentUnit, item.baseUnit) === null) {
+      await this.packaging.presentations.supersede(command.organizationId, active);
+      return;
+    }
+    const next = PurchasePresentation.create({
+      organizationId: a.organizationId,
+      supplierId: a.supplierId,
+      supplierReference: a.supplierReference,
+      description: a.description,
+      stockItemId: item.id,
+      packageUnit: a.packageUnit,
+      contentQuantity: a.contentQuantity,
+      contentUnit: a.contentUnit,
+      invoicedBy: a.invoicedBy,
+      minOrderPackages: a.minOrderPackages,
+      orderIncrementPackages: a.orderIncrementPackages,
+      source: "user",
+      confidence: 1,
+      createdBy: command.actor,
+    });
+    await this.packaging.presentations.replaceActive(command.organizationId, key, next, active);
   }
 }

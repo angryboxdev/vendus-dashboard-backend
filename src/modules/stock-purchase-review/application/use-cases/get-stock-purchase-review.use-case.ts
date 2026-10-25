@@ -2,7 +2,7 @@ import { StockPurchaseReviewNotFoundError } from "../../domain/errors.js";
 import type { GetStockPurchaseReviewCommand, GetStockPurchaseReviewPort, StockPurchaseReviewDTO } from "../../domain/ports/in/stock-purchase-review.ports.js";
 import type { StockPurchaseReviewRepositoryPort } from "../../domain/ports/out/stock-purchase-review-repository.port.js";
 import type { CostCenterCategoryReadPort } from "../../domain/ports/out/cost-center-category-read.port.js";
-import { conferenceFor, toStockPurchaseReviewDTO } from "./shared.js";
+import { conferenceFor, toStockPurchaseReviewDTO , withCategoryLabels } from "./shared.js";
 import { withPackaging, type PackagingDeps } from "./shared-packaging.js";
 
 export class GetStockPurchaseReviewUseCase implements GetStockPurchaseReviewPort {
@@ -19,6 +19,6 @@ export class GetStockPurchaseReviewUseCase implements GetStockPurchaseReviewPort
     if (!review) throw new StockPurchaseReviewNotFoundError(command.id);
     const lines = await this.repository.findLinesByReviewId(command.organizationId, command.id);
     const conference = this.categoryRead ? await conferenceFor(command.organizationId, review, lines, this.categoryRead) : undefined;
-    return withPackaging(command.organizationId, toStockPurchaseReviewDTO(review, lines, conference), this.packaging);
+    return withCategoryLabels(command.organizationId, await withPackaging(command.organizationId, toStockPurchaseReviewDTO(review, lines, conference), this.packaging), this.categoryRead);
   }
 }

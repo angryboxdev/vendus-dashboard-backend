@@ -25,6 +25,19 @@ export class SupabaseStockReviewLearnedMappingRepository implements StockReviewL
     return byDescription ? this.toSuggestion(organizationId, byDescription) : null;
   }
 
+  async suggestByReference(organizationId: OrganizationId, supplierReference: string): Promise<LearnedMappingSuggestion | null> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("stock_review_learned_mappings")
+      .select("*")
+      .eq("supplier_reference", supplierReference)
+      .eq("resolution_type", "existing_item")
+      .order("last_used_at", { ascending: false })
+      .limit(1);
+    if (error) throw new Error(error.message);
+    const row = ((data ?? []) as unknown as Record<string, unknown>[])[0];
+    return row ? this.toSuggestion(organizationId, row) : null;
+  }
+
   private async findOne(
     organizationId: OrganizationId,
     supplierId: string,

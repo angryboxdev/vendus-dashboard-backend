@@ -31,4 +31,6 @@ export interface StockReviewLearnedMappingPort {
     normalizedDescription: string,
   ): Promise<LearnedMappingSuggestion | null>;
   learn(organizationId: OrganizationId, data: LearnMappingData): Promise<void>;
+  /** Mesma referência (EAN) já confirmada noutro fornecedor da organização — só para propor. */
+  suggestByReference?(organizationId: OrganizationId, supplierReference: string): Promise<LearnedMappingSuggestion | null>;
 }

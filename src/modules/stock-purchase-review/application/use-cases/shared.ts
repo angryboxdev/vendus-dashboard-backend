@@ -42,6 +42,7 @@ export function toStockReviewLineDTO(line: StockReviewLine): StockReviewLineDTO 
     flagReason: p.flagReason,
     resolvedBy: p.resolvedBy,
     resolvedAt: p.resolvedAt ? p.resolvedAt.toISOString() : null,
+    autoResolved: p.resolvedBy?.startsWith("sistema ·") ?? false,
   };
 }
 
@@ -123,4 +124,16 @@ export async function conferenceFor(
     lines: props.map((l) => ({ id: l.id, description: l.description, totalWithVat: l.totalWithVat, vatAmount: l.vatAmount, resolutionType: l.resolutionType, costCenterCategoryId: l.costCenterCategoryId })),
     categoryPolicies,
   });
+}
+
+/** Nome da categoria financeira em cada linha (uma leitura do catálogo). */
+export async function withCategoryLabels(
+  organizationId: import("../../../../kernel/organization-id.js").OrganizationId,
+  dto: StockPurchaseReviewDTO,
+  categoryRead: import("../../domain/ports/out/cost-center-category-read.port.js").CostCenterCategoryReadPort | undefined,
+): Promise<StockPurchaseReviewDTO> {
+  if (!categoryRead?.getLabels) return dto;
+  const ids = [...new Set(dto.lines.map((l) => l.costCenterCategoryId).filter((id): id is string => !!id))];
+  const labels = await categoryRead.getLabels(organizationId, ids);
+  return { ...dto, lines: dto.lines.map((l) => ({ ...l, costCenterCategoryLabel: l.costCenterCategoryId ? labels.get(l.costCenterCategoryId) ?? null : null })) };
 }
