@@ -1,6 +1,6 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 
-export type StockReviewAuditEntityType = "stock_purchase_review" | "purchase_presentation";
+export type StockReviewAuditEntityType = "stock_purchase_review" | "purchase_presentation" | "stock_entry_rules";
 
 export interface StockReviewAuditLogEntry {
   organizationId: OrganizationId;

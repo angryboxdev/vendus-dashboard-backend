@@ -406,3 +406,16 @@ export interface SavePurchasePresentationPort {
 export interface ListPurchasePresentationsPort {
   execute(organizationId: OrganizationId, supplierId: string): Promise<PurchasePresentationDTO[]>;
 }
+
+// ── Regras de entrada no Stock por tipo de artigo (V4 §2) ─────────────────
+
+export interface SaveEntryRulesCommand {
+  organizationId: OrganizationId;
+  rules: Record<string, "stock" | "no_stock" | "review">;
+  actor: string;
+}
+
+export interface EntryRulesPort {
+  get(organizationId: OrganizationId): Promise<Record<string, "stock" | "no_stock" | "review">>;
+  save(command: SaveEntryRulesCommand): Promise<Record<string, "stock" | "no_stock" | "review">>;
+}

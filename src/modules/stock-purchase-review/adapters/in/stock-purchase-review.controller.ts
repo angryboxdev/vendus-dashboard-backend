@@ -15,6 +15,7 @@ import {
   ReviewNotCancelledError,
   StockImportNotValidatedError,
   InvalidPurchasePresentationError,
+  InvalidEntryRulesError,
 } from "../../domain/errors.js";
 import type {
   ListStockPurchaseReviewsPort,
@@ -24,6 +25,7 @@ import type {
   SuggestReviewMappingsPort,
   SavePurchasePresentationPort,
   ListPurchasePresentationsPort,
+  EntryRulesPort,
   RestoreStockPurchaseReviewPort,
   SuggestLineMappingPort,
   ConfirmStockPurchaseReviewPort,
@@ -59,7 +61,8 @@ function handleError(e: unknown, res: import("express").Response): void {
     e instanceof CancellationReasonRequiredError ||
     e instanceof LocationRequiredError ||
     e instanceof ReviewNotCancelledError ||
-    e instanceof InvalidPurchasePresentationError
+    e instanceof InvalidPurchasePresentationError ||
+    e instanceof InvalidEntryRulesError
   ) {
     res.status(400).json({ error: e.message });
     return;
@@ -83,6 +86,7 @@ export class StockPurchaseReviewController {
     private readonly restoreStockPurchaseReview: RestoreStockPurchaseReviewPort,
     private readonly savePurchasePresentation: SavePurchasePresentationPort,
     private readonly listPurchasePresentations: ListPurchasePresentationsPort,
+    private readonly entryRules: EntryRulesPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -116,6 +120,28 @@ export class StockPurchaseReviewController {
           ...(search !== undefined && { search }),
         });
         res.json(result);
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+
+    // Regras de entrada no Stock por tipo de artigo (antes de «/:id»): GET efetivas; PUT { rules: { tipo: modo } }.
+    this.router.get("/stock-purchase-reviews/entry-rules", async (req, res) => {
+      try {
+        res.json(await this.entryRules.get(req.auth!.orgId));
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+
+    this.router.put("/stock-purchase-reviews/entry-rules", async (req, res) => {
+      try {
+        const rules = ((req.body ?? {}) as { rules?: Record<string, "stock" | "no_stock" | "review"> }).rules;
+        if (!rules || typeof rules !== "object") {
+          res.status(400).json({ error: "rules é obrigatório" });
+          return;
+        }
+        res.json(await this.entryRules.save({ organizationId: req.auth!.orgId, rules, actor: req.auth!.email }));
       } catch (e) {
         handleError(e, res);
       }

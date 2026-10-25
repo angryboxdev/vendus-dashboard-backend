@@ -115,3 +115,11 @@ export class InvalidPurchasePresentationError extends Error {
     this.name = "InvalidPurchasePresentationError";
   }
 }
+
+/** Regras de entrada no Stock inválidas (tipo de artigo ou modo). */
+export class InvalidEntryRulesError extends Error {
+  constructor(reason: string) {
+    super(`Regras de entrada no Stock inválidas: ${reason}`);
+    this.name = "InvalidEntryRulesError";
+  }
+}

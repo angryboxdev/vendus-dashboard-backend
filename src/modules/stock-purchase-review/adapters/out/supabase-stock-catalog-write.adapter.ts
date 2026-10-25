@@ -27,37 +27,38 @@ export class SupabaseStockCatalogWriteAdapter implements StockCatalogWritePort {
     const { data: created, error } = await this.scopedQuery(organizationId)
       .table("stock_items")
       .insert(row)
-      .select("id, name, base_unit, is_active")
+      .select("id, name, base_unit, is_active, type")
       .single();
     if (error) throw new Error(error.message);
-    const r = created as unknown as { id: string; name: string; base_unit: string; is_active: boolean };
+    const r = created as unknown as { id: string; name: string; base_unit: string; is_active: boolean; type?: string | null };
     return { id: r.id, name: r.name, baseUnit: r.base_unit, isActive: Boolean(r.is_active) };
   }
 
   async listActive(organizationId: OrganizationId): Promise<StockItemSnapshot[]> {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("stock_items")
-      .select("id, name, base_unit, is_active")
+      .select("id, name, base_unit, is_active, type")
       .eq("is_active", true)
       .order("name", { ascending: true });
     if (error) throw new Error(error.message);
-    return ((data ?? []) as unknown as { id: string; name: string; base_unit: string; is_active: boolean }[]).map((r) => ({
+    return ((data ?? []) as unknown as { id: string; name: string; base_unit: string; is_active: boolean; type?: string | null }[]).map((r) => ({
       id: r.id,
       name: r.name,
       baseUnit: r.base_unit,
       isActive: Boolean(r.is_active),
+      type: r.type ?? null,
     }));
   }
 
   async findById(organizationId: OrganizationId, id: string): Promise<StockItemSnapshot | null> {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("stock_items")
-      .select("id, name, base_unit, is_active")
+      .select("id, name, base_unit, is_active, type")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    const r = data as unknown as { id: string; name: string; base_unit: string; is_active: boolean };
+    const r = data as unknown as { id: string; name: string; base_unit: string; is_active: boolean; type?: string | null };
     return { id: r.id, name: r.name, baseUnit: r.base_unit, isActive: Boolean(r.is_active) };
   }
 }
