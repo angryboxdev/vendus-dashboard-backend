@@ -8,6 +8,7 @@ import { validateConversion } from "../../domain/services/unit-conversion.servic
 import type { LocationReadPort } from "../../domain/ports/out/location-read.port.js";
 import type { CostCenterCategoryReadPort } from "../../domain/ports/out/cost-center-category-read.port.js";
 import { conferenceFor, toStockPurchaseReviewDTO, normalizeDescription } from "./shared.js";
+import { withPackaging, type PackagingDeps } from "./shared-packaging.js";
 
 export class ResolveReviewLineUseCase implements ResolveReviewLinePort {
   constructor(
@@ -18,6 +19,8 @@ export class ResolveReviewLineUseCase implements ResolveReviewLinePort {
     /** F3a: valida as lojas da divisão (ativas na organização). */
     private readonly locationRead?: LocationReadPort,
     private readonly categoryRead?: CostCenterCategoryReadPort,
+    /** Embalagem de compra de cada linha (opcional nos testes antigos). */
+    private readonly packaging?: PackagingDeps,
   ) {}
 
   async execute(command: ResolveReviewLineCommand): Promise<StockPurchaseReviewDTO> {
@@ -118,6 +121,6 @@ export class ResolveReviewLineUseCase implements ResolveReviewLinePort {
     });
 
     const conference = this.categoryRead ? await conferenceFor(command.organizationId, updatedReview, updatedLines, this.categoryRead) : undefined;
-    return toStockPurchaseReviewDTO(updatedReview, updatedLines, conference);
+    return withPackaging(command.organizationId, toStockPurchaseReviewDTO(updatedReview, updatedLines, conference), this.packaging);
   }
 }

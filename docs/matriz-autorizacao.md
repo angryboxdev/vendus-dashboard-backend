@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 808 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 810 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -780,6 +780,8 @@ Endpoints: 808 · pré-autenticação: 23 · não classificados: 0
 | POST | `/api/stock-purchase-reviews/:id/restore` | permission:stock.purchase_reviews:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/stock-purchase-reviews/:id/suggestions` | permission:stock.purchase_reviews:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/stock-purchase-reviews/cancel-empty` | permission:stock.purchase_reviews:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/stock-purchase-reviews/presentations` | permission:stock.purchase_reviews:READ | ✔ | ✔ | ✖ | ✔ | ✖ |
+| PUT | `/api/stock-purchase-reviews/presentations` | permission:stock.purchase_reviews:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/stock/categories` | permission:stock.items:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/stock/categories` | permission:stock.items:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | DELETE | `/api/stock/categories/:id` | permission:stock.items:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |

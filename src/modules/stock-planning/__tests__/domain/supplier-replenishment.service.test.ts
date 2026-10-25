@@ -41,3 +41,27 @@ describe("buildReplenishmentRows", () => {
     expect(rows.map((r) => r.stockItemId)).toEqual(["z", "a", "b"]);
   });
 });
+
+describe("buildReplenishmentRows — embalagem de compra (task embalagens/conversões P2)", () => {
+  const saco = { packageUnit: "saco", contentQuantity: 2.5, contentUnit: "kg" as const, invoicedBy: "content" as const, minOrderPackages: 1, orderIncrementPackages: 1 };
+
+  it("preciso de 12 kg → encomendar 5 sacos (12,5 kg), excedente 0,5 kg", () => {
+    const [row] = buildReplenishmentRows([input({ baseUnit: "kg", currentQuantity: 3, minStockQty: 15, presentation: saco })]);
+    expect(row).toMatchObject({
+      suggestedBaseQty: 12, suggestedPurchaseQty: 5, purchaseUnit: "saco", presentationConfigured: true,
+      order: { packageUnit: "saco", packages: 5, contentQuantity: 2.5, contentUnit: "kg", quantityBase: 12.5, surplusBase: 0.5 },
+    });
+  });
+
+  it("artigo em g, previsão de 500 g → 1 saco (nunca meio saco)", () => {
+    const [row] = buildReplenishmentRows([input({ baseUnit: "g", recommendation: { suggestedBaseQty: 500, suggestedPurchaseQty: null, purchaseUnit: null }, presentation: saco })]);
+    expect(row).toMatchObject({ suggestedPurchaseQty: 1, order: { packages: 1, quantityBase: 2500, surplusBase: 2000 } });
+  });
+
+  it("sem necessidade → 0 sacos; sem embalagem confirmada → por configurar (sem encomenda em embalagens)", () => {
+    const [none] = buildReplenishmentRows([input({ baseUnit: "kg", currentQuantity: 30, minStockQty: 10, presentation: saco })]);
+    expect(none).toMatchObject({ order: { packages: 0 }, needsReplenishment: false });
+    const [missing] = buildReplenishmentRows([input({ baseUnit: "kg", currentQuantity: 3, minStockQty: 15 })]);
+    expect(missing).toMatchObject({ order: null, presentationConfigured: false, suggestedBaseQty: 12 });
+  });
+});

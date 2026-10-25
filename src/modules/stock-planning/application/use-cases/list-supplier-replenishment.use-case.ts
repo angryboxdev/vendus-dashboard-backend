@@ -43,10 +43,11 @@ export class ListSupplierReplenishmentUseCase implements ListSupplierReplenishme
     if (supplierItems.length === 0) return [];
 
     const ids = supplierItems.map((i) => i.id);
-    const [quantities, consumption, categories] = await Promise.all([
+    const [quantities, consumption, categories, presentations] = await Promise.all([
       this.stockQuantityRead.getQuantities(organizationId, ids),
       this.replenishmentRead.consumptionLastDays(organizationId, ids, CONSUMPTION_DAYS),
       this.replenishmentRead.categoryNames(organizationId, [...new Set(supplierItems.map((i) => i.categoryId))]),
+      this.replenishmentRead.presentationsBySupplier(organizationId, supplierId),
     ]);
 
     return buildReplenishmentRows(
@@ -60,6 +61,7 @@ export class ListSupplierReplenishmentUseCase implements ListSupplierReplenishme
           baseUnit: item.baseUnit,
           currentQuantity: quantities.get(item.id)?.currentQuantity ?? 0,
           minStockQty: item.minStockQty,
+          presentation: presentations.get(item.id) ?? null,
           consumption30d: consumption.get(item.id) ?? 0,
           // Recomendação de outro fornecedor não conta como sugestão deste.
           recommendation: rec && (rec.supplierId === supplierId || rec.supplierId === null) ? rec : null,

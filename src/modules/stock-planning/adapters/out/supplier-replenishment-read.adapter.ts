@@ -1,4 +1,5 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { ContentUnit, InvoicedBy, PresentationShape } from "../../../../kernel/units/purchase-presentation.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import type {
   SupplierItemPurchase,
@@ -97,6 +98,28 @@ export class SupplierReplenishmentReadAdapter implements SupplierReplenishmentRe
       const { data, error } = await this.scopedQuery(organizationId).table("stock_categories").select("id, name").in("id", ids);
       if (error) throw new Error(error.message);
       for (const c of (data ?? []) as unknown as Array<{ id: string; name: string }>) out.set(c.id, c.name);
+    }
+    return out;
+  }
+
+  async presentationsBySupplier(organizationId: OrganizationId, supplierId: string): Promise<Map<string, PresentationShape>> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("supplier_purchase_presentations")
+      .select("stock_item_id, package_unit, content_quantity, content_unit, invoiced_by, min_order_packages, order_increment_packages, created_at")
+      .eq("supplier_id", supplierId)
+      .is("superseded_at", null)
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    const out = new Map<string, PresentationShape>();
+    for (const r of (data ?? []) as unknown as Record<string, unknown>[]) {
+      out.set(r.stock_item_id as string, {
+        packageUnit: (r.package_unit as string | null) ?? null,
+        contentQuantity: Number(r.content_quantity),
+        contentUnit: r.content_unit as ContentUnit,
+        invoicedBy: r.invoiced_by as InvoicedBy,
+        minOrderPackages: Number(r.min_order_packages),
+        orderIncrementPackages: Number(r.order_increment_packages),
+      });
     }
     return out;
   }

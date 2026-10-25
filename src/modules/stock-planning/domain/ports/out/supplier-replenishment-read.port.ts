@@ -1,4 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
+import type { PresentationShape } from "../../../../../kernel/units/purchase-presentation.js";
 
 /** Última compra de um artigo de stock a um fornecedor (linhas de faturas confirmadas). */
 export interface SupplierItemPurchase {
@@ -24,4 +25,6 @@ export interface SupplierReplenishmentReadPort {
   /** Saídas de stock (consumo, venda, quebra) dos últimos `days` dias, em unidade base, por artigo. */
   consumptionLastDays(organizationId: OrganizationId, stockItemIds: string[], days: number): Promise<Map<string, number>>;
   categoryNames(organizationId: OrganizationId, categoryIds: string[]): Promise<Map<string, string>>;
+  /** Apresentação de compra ativa deste fornecedor, por artigo (a mais recente, se houver várias referências). */
+  presentationsBySupplier(organizationId: OrganizationId, supplierId: string): Promise<Map<string, PresentationShape>>;
 }

@@ -28,4 +28,5 @@ Importa portas/tipos de: [financial-base](financial-base.md), [invoices](invoice
 - Faturas sem linhas não geram revisão (até à F2 o modo «Única» não guardava linhas).
 
 ## Próximos trabalhos
+- [produção 2026-10-25] Embalagem de compra (saco de 2,5 kg, fatura em kg ou em sacos, mínimo/incremento), pré-visualização por linha e encomenda em embalagens inteiras no Abastecimento (migração `20261113100000_supplier_purchase_presentations`).
 - Linhas manuais quando a leitura falha (hoje: 422 e nova tentativa, ou lançar pelo Financeiro); NC devolução física vs. correção de preço.
