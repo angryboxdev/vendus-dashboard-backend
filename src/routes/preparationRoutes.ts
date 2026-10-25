@@ -77,6 +77,9 @@ preparationRoutes.put("/preparations/:id", async (req, res) => {
     if (body.use_as_unit !== undefined && typeof body.use_as_unit !== "boolean") {
       res.status(400).json({ error: "use_as_unit deve ser booleano" }); return;
     }
+    if (body.is_active !== undefined && typeof body.is_active !== "boolean") {
+      res.status(400).json({ error: "is_active deve ser booleano" }); return;
+    }
     const updated = await updatePreparation(req.auth!.orgId, id, body);
     res.json(updated);
   } catch (e: unknown) {
