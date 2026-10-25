@@ -314,6 +314,15 @@ que mantêm a exceção estreita:
 - **Contas** em `src/kernel/units/purchase-presentation.ts` (partilhadas com o Planeamento): `invoiceLineToStock` (fator, quantidade em unidade base, embalagens equivalentes, custo líquido por unidade base, por kg e por saco) e `orderForNeed` (arredonda para cima ao incremento, respeita o mínimo; 12 kg com saco de 2,5 kg → 5 sacos, excedente 0,5 kg). Só converte dentro da mesma dimensão.
 - **Na revisão**: cada linha traz `packaging` (`shared-packaging.ts`, em GET/resolver/sugestões) com a apresentação ativa e a pré-visualização; a proposta de conciliação usa a embalagem confirmada antes do histórico/nome/IA. Sem apresentação → `presentation: null` («Embalagem por configurar»).
 
+### Regras de entrada no Stock por tipo de artigo (V4 §2)
+
+- `stock_entry_rules` (migração `20261114100000`): por empresa, cada tipo de artigo (`ingredient`, `beverage`, `packaging`, `cleaning`, `consumable`, `other`, mais `unknown` = sem artigo) → `stock` | `no_stock` | `review`; sem linha = predefinição (`entry-rules.service.ts`: Ingredientes/Bebidas/Embalagens entram, Higiene/Limpeza fora, resto por rever). `GET/PUT /stock-purchase-reviews/entry-rules` (`EntryRulesUseCase`, auditado como `stock_entry_rules`).
+- Prioridade: decisão manual da linha → associação/embalagem confirmada (resolve-se sozinha) → regra da empresa → proposta da IA/nome. A regra só atua sobre propostas: artigo proposto de um tipo «fora do Stock» → proposta «Não é item de stock». Só faturas futuras.
+
+### «Ensinar uma vez» (V4 §3)
+
+- `SuggestReviewMappingsUseCase` resolve sozinho (`resolvedBy = AUTO_RESOLVED_BY`, `autoResolved` no DTO) as linhas com decisão confirmada por pessoas (embalagem ou associação aprendida do mesmo fornecedor + referência/descrição), com o custo da fatura nova; tamanho diferente na descrição (`packageSizeConflict`) → pergunta uma vez; EAN confirmado noutro fornecedor → só proposta. `ResolveReviewLineUseCase` faz a correção humana seguir a embalagem (versão nova) ou desativá-la.
+
 ## Como testar
 
 - `npx jest src/modules/stock-purchase-review` (fakes para todas as portas

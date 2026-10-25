@@ -84,6 +84,8 @@ export const TABLE_REGISTRY = {
   ai_usage_daily: { organizationColumn: "org_id", locationBearing: false },
   // Apresentação de compra por fornecedor/artigo (20261113100000_supplier_purchase_presentations).
   supplier_purchase_presentations: { organizationColumn: "org_id", locationBearing: false },
+  // Regras de entrada no Stock por tipo de artigo (20261114100000_stock_entry_rules).
+  stock_entry_rules: { organizationColumn: "org_id", locationBearing: false },
   stock_review_audit_logs: { organizationColumn: "org_id", locationBearing: false },
 
   // Módulo Stock — Contagem Física de Stock 2.0.

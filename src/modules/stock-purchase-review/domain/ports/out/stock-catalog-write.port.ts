@@ -5,6 +5,8 @@ export interface StockItemSnapshot {
   name: string;
   baseUnit: string;
   isActive: boolean;
+  /** Tipo de artigo (ingredient, beverage, packaging, cleaning, consumable, other) — regras de entrada. */
+  type?: string | null;
 }
 
 export interface CreateStockItemData {

@@ -11,6 +11,8 @@ import { confidentNameMatch, rankCandidates, suggestConversionFactor, type Catal
 import { invoiceLineToStock } from "../../domain/services/presentation-conversion.service.js";
 import { PurchasePresentation, type PurchasePresentationProps } from "../../domain/entities/purchase-presentation.js";
 import type { StockReviewAuditLogPort } from "../../domain/ports/out/stock-review-audit-log.port.js";
+import type { EntryRulesRepositoryPort } from "../../domain/ports/out/entry-rules-repository.port.js";
+import { effectiveRules, modeForItemType } from "../../domain/services/entry-rules.service.js";
 import { validateConversion } from "../../domain/services/unit-conversion.service.js";
 import { parsePackSize } from "../../domain/services/item-matching.service.js";
 import { unitFactor } from "../../domain/services/presentation-conversion.service.js";
@@ -62,6 +64,8 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
     /** Embalagem de compra de cada linha (opcional nos testes antigos). */
     private readonly packaging?: PackagingDeps,
     private readonly auditLog?: StockReviewAuditLogPort,
+    /** Regras de entrada no Stock por tipo de artigo (V4 §2). */
+    private readonly entryRules?: EntryRulesRepositoryPort,
   ) {}
 
   async execute(command: SuggestReviewMappingsCommand): Promise<StockPurchaseReviewDTO> {
@@ -74,7 +78,10 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
     const updated = new Map<string, StockReviewLine>();
     let reviewAfter = review;
     if (pending.length) {
-      const items: CatalogItem[] = (await this.catalog.listActive(command.organizationId)).map((i) => ({ id: i.id, name: i.name, baseUnit: i.baseUnit }));
+      const catalogItems = await this.catalog.listActive(command.organizationId);
+      const items: CatalogItem[] = catalogItems.map((i) => ({ id: i.id, name: i.name, baseUnit: i.baseUnit }));
+      const typeOf = new Map(catalogItems.map((i) => [i.id, i.type ?? null]));
+      const rules = this.entryRules ? effectiveRules(await this.entryRules.list(command.organizationId)) : null;
       const byId = new Map(items.map((i) => [i.id, i]));
       const supplierId = review.toProps().decisionSupplierId;
       const now = new Date();
@@ -167,6 +174,19 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
           updated.set(line.id, line.withSuggestion({ source: "none", resolution: null, stockItemId: null, conversionFactor: null, confidence: null, packagingChanged: false, suggestedAt: now }));
         }
       }
+      // Regra da empresa pelo tipo do artigo proposto (só onde não há decisão confirmada): tipo «fora do
+      // Stock» (ex.: Higiene/Limpeza) → a proposta passa a «Não é item de stock». Continua a ser proposta.
+      if (rules) {
+        for (const [id, line] of updated) {
+          if (confirmed.has(id)) continue;
+          const sg = line.suggestion;
+          if (!sg || sg.source === "none" || sg.resolution !== "existing_item" || !sg.stockItemId) continue;
+          if (modeForItemType(rules, typeOf.get(sg.stockItemId)) === "no_stock") {
+            updated.set(id, line.withSuggestion({ ...sg, resolution: "no_stock_effect", stockItemId: null, conversionFactor: null }));
+          }
+        }
+      }
+
       // «Ensinar uma vez»: o que já foi confirmado para esta linha resolve-se sem perguntas (fica marcado e pode ser corrigido).
       for (const id of confirmed) {
         const line = updated.get(id)!;
