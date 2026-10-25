@@ -2,6 +2,8 @@ import { ListInvoicesUseCase } from "../../application/use-cases/list-invoices.u
 import { FakeInvoiceRepository } from "../fakes/fake-invoice-repository.js";
 import { FakeCostCenterCategoryReader } from "../fakes/fake-cost-center-category-reader.js";
 import { Invoice } from "../../domain/entities/invoice.js";
+import { InvoiceLine } from "../../domain/entities/invoice-line.js";
+import { FakeInvoiceLineRepository } from "../fakes/fake-invoice-line-repository.js";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 
 const ORG_ID = mintOrganizationId("org-test");
@@ -225,5 +227,42 @@ describe("ListInvoicesUseCase", () => {
     expect(creditNotesOnly).toHaveLength(1);
     expect(creditNotesOnly[0]!.invoiceNumber).toBe("NC-001");
     expect(creditNotesOnly[0]!.totalWithVat).toBeLessThan(0);
+  });
+});
+
+describe("ListInvoicesUseCase — classificação das faturas «Por artigo» (pelas linhas)", () => {
+  const CAT_B = { id: "cat-b", code: "OPD.02", name: "Embalagens", financialType: "opex" };
+
+  async function setup(lineCats: (string | null)[]) {
+    const repo = new FakeInvoiceRepository();
+    const lineRepo = new FakeInvoiceLineRepository();
+    const categoryReader = new FakeCostCenterCategoryReader();
+    categoryReader.seedLookup(CAT_A);
+    categoryReader.seedLookup(CAT_B);
+    // Cabeçalho sem categoria, como fica uma fatura «Por artigo» (ex.: FT 61707 depois de editada).
+    const inv = makeInvoice({ lineDetailMode: "detailed" });
+    await repo.save(ORG_ID, inv);
+    await lineRepo.saveAll(ORG_ID, lineCats.map((cat, i) => InvoiceLine.create({
+      invoiceId: inv.id, description: `Artigo ${i}`, quantity: 1, unitCostWithoutVat: 1000, vatRate: 6, vatAmount: 60, totalWithVat: 1060,
+      ...(cat && { costCenterCategoryId: cat }),
+    })));
+    return new ListInvoicesUseCase(repo, categoryReader, undefined, lineRepo);
+  }
+
+  it("todas as linhas na mesma categoria → única, com essa categoria (não «pendente»)", async () => {
+    const [dto] = await (await setup(["cat-a", "cat-a"])).execute(ORG_ID);
+    expect(dto!.classificationSummary.mode).toBe("unique");
+    expect(dto!.classificationSummary.entries).toEqual([expect.objectContaining({ costCenterCategoryId: "cat-a", name: "CMV / Ingredientes", totalWithVat: 2120 })]);
+  });
+
+  it("linhas em categorias diferentes → mista", async () => {
+    const [dto] = await (await setup(["cat-a", "cat-b"])).execute(ORG_ID);
+    expect(dto!.classificationSummary.mode).toBe("mixed");
+    expect(dto!.classificationSummary.entries).toHaveLength(2);
+  });
+
+  it("nenhuma linha classificada → pendente", async () => {
+    const [dto] = await (await setup([null, null])).execute(ORG_ID);
+    expect(dto!.classificationSummary.mode).toBe("none");
   });
 });

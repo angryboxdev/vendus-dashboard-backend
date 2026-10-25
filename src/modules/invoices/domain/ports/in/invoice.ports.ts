@@ -502,6 +502,15 @@ export interface AddInvoiceLineCommand {
   affectsProfitability?: boolean;
   /** Loja a que este custo é alocado (spec B2 D4) — opcional; ausente/null = custo da organização. */
   locationId?: string | null;
+  /** Fatura em Compras por rever por aplicar: confirma descartar essa revisão (ver `UpdateInvoiceCommand.confirmRemoveStockReview`). */
+  confirmRemoveStockReview?: boolean;
+  actor?: string;
+}
+
+/** Ver `AddInvoiceLineCommand.confirmRemoveStockReview` — mesma semântica ao apagar uma linha. */
+export interface DeleteInvoiceLineOptions {
+  confirmRemoveStockReview?: boolean;
+  actor?: string;
 }
 
 // ── Input ports ───────────────────────────────────────────────────────────────
@@ -603,7 +612,7 @@ export interface UpdateInvoiceLinePort {
 }
 
 export interface DeleteInvoiceLinePort {
-  execute(organizationId: OrganizationId, invoiceId: string, lineId: string): Promise<void>;
+  execute(organizationId: OrganizationId, invoiceId: string, lineId: string, options?: DeleteInvoiceLineOptions): Promise<void>;
 }
 
 export interface SetInvoiceLineDeductibilityOverrideCommand {

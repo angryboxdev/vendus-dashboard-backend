@@ -25,6 +25,11 @@ export class FakeInvoiceLineRepository implements InvoiceLineRepositoryPort {
     return [...this.store.values()].filter((l) => l.invoiceId === invoiceId);
   }
 
+  async findByInvoiceIds(_organizationId: OrganizationId, invoiceIds: string[]): Promise<InvoiceLine[]> {
+    const ids = new Set(invoiceIds);
+    return [...this.store.values()].filter((l) => ids.has(l.invoiceId));
+  }
+
   async updateLine(_organizationId: OrganizationId, line: InvoiceLine): Promise<void> {
     this.store.set(line.id, line);
   }

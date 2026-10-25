@@ -293,6 +293,7 @@ const invoicesModule = createInvoicesModule(
   deleteDraftStockPurchaseReviewProxy,
   fiscalDocumentsModule.fiscalDocuments,
   suggestStockRoutingProxy,
+  financialBaseModule.updateSupplier,
 );
 setStockImportFiscalDocuments(fiscalDocumentsModule.fiscalDocuments);
 // Migração do histórico com simulação (POST /api/fiscal-documents/backfill, dryRun por omissão).

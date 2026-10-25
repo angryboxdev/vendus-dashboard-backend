@@ -80,6 +80,13 @@ export const objectStorage = {
     return data.publicUrl;
   },
 
+  /** Conteúdo de um objeto já guardado (o chamador tem o caminho real, como em `createSignedUrl`). */
+  async download(bucket: StorageBucketName, path: string, _organizationId: OrganizationId): Promise<Buffer> {
+    const { data, error } = await client().storage.from(bucket).download(path);
+    if (error || !data) throw new Error(`Document download failed: ${error?.message}`);
+    return Buffer.from(await data.arrayBuffer());
+  },
+
   async remove(bucket: StorageBucketName, path: string): Promise<void> {
     const { error } = await client().storage.from(bucket).remove([path]);
     if (error) throw new Error(`Document delete failed: ${error.message}`);
