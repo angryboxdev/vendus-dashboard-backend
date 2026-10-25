@@ -8,7 +8,10 @@ import type { StockItemMatchAiPort } from "../../domain/ports/out/stock-item-mat
 import type { CostCenterCategoryReadPort } from "../../domain/ports/out/cost-center-category-read.port.js";
 import type { StockAiBudgetPort } from "../../domain/ports/out/ai-budget.port.js";
 import { confidentNameMatch, rankCandidates, suggestConversionFactor, type CatalogItem } from "../../domain/services/item-matching.service.js";
+import { invoiceLineToStock } from "../../domain/services/presentation-conversion.service.js";
+import { PurchasePresentation } from "../../domain/entities/purchase-presentation.js";
 import { conferenceFor, normalizeDescription, toStockPurchaseReviewDTO } from "./shared.js";
+import { withPackaging, type PackagingDeps } from "./shared-packaging.js";
 
 /** Catálogos até este tamanho vão inteiros à IA; acima disso, só os melhores candidatos por nome. */
 const FULL_CATALOG_LIMIT = 80;
@@ -30,6 +33,8 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
     private readonly categoryRead?: CostCenterCategoryReadPort,
     /** Orçamento diário de IA: esgotado → só histórico e nome. */
     private readonly aiBudget?: StockAiBudgetPort,
+    /** Embalagem de compra de cada linha (opcional nos testes antigos). */
+    private readonly packaging?: PackagingDeps,
   ) {}
 
   async execute(command: SuggestReviewMappingsCommand): Promise<StockPurchaseReviewDTO> {
@@ -47,7 +52,17 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
       const now = new Date();
       const forAi: { line: StockReviewLine; candidates: CatalogItem[] }[] = [];
 
+      const presentations = supplierId && this.packaging ? await this.packaging.presentations.listActiveBySupplier(command.organizationId, supplierId) : [];
+      const presByKey = new Map(presentations.map((pr) => [PurchasePresentation.matchKey(pr.toProps().supplierReference, normalizeDescription(pr.toProps().description)), pr] as const));
       for (const line of pending) {
+        // Embalagem confirmada pelo utilizador: artigo e fator vêm dela (fatura em sacos ou em kg).
+        const pres = (line.supplierItemCode ? presByKey.get(PurchasePresentation.matchKey(line.supplierItemCode, "")) : undefined) ?? presByKey.get(PurchasePresentation.matchKey(null, normalizeDescription(line.description)));
+        const presItem = pres ? byId.get(pres.stockItemId) : undefined;
+        const presFactor = pres && presItem ? invoiceLineToStock(pres.toProps(), 1, 1, presItem.baseUnit)?.conversionFactor ?? null : null;
+        if (pres && presItem && presFactor) {
+          updated.set(line.id, line.withSuggestion({ source: "learned", resolution: "existing_item", stockItemId: presItem.id, conversionFactor: presFactor, confidence: 1, packagingChanged: false, suggestedAt: now }));
+          continue;
+        }
         const learned = supplierId
           ? await this.learnedMapping.suggest(command.organizationId, supplierId, line.supplierItemCode, normalizeDescription(line.description))
           : null;
@@ -113,7 +128,7 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
 
     const finalLines = lines.map((l) => updated.get(l.id) ?? l);
     const conference = this.categoryRead ? await conferenceFor(command.organizationId, review, finalLines, this.categoryRead) : undefined;
-    return toStockPurchaseReviewDTO(review, finalLines, conference);
+    return withPackaging(command.organizationId, toStockPurchaseReviewDTO(review, finalLines, conference), this.packaging);
   }
 
   private itemSuggestion(source: "name_match", item: CatalogItem, score: number, line: StockReviewLine, now: Date): LineSuggestion {

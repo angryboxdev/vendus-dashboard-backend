@@ -365,3 +365,6 @@ verificação manual pendente.
   isso.
 - Frontend (6 mockups, `recharts`, abas do fornecedor) não faz parte
   desta entrega — âmbito desta tarefa foi só o backend.
+
+## Embalagem de compra na reposição (task «embalagens e conversões» P2)
+- `SupplierReplenishmentReadPort.presentationsBySupplier` lê a apresentação ativa por artigo (`supplier_purchase_presentations`). Com ela, `buildReplenishmentRows` devolve `order` (embalagens inteiras, quantidade e excedente — `orderForNeed` do kernel) e a sugestão passa a ser em embalagens; sem ela, `presentationConfigured: false` («Embalagem por configurar») e nunca se sugere fracionar. Sem preço contratual, não há custo estimado.

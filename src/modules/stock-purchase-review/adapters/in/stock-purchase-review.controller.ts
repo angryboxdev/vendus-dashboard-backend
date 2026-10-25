@@ -14,6 +14,7 @@ import {
   DocumentNotReconciledError,
   ReviewNotCancelledError,
   StockImportNotValidatedError,
+  InvalidPurchasePresentationError,
 } from "../../domain/errors.js";
 import type {
   ListStockPurchaseReviewsPort,
@@ -21,6 +22,8 @@ import type {
   ResolveReviewLinePort,
   DecideUnresolvedReviewPort,
   SuggestReviewMappingsPort,
+  SavePurchasePresentationPort,
+  ListPurchasePresentationsPort,
   RestoreStockPurchaseReviewPort,
   SuggestLineMappingPort,
   ConfirmStockPurchaseReviewPort,
@@ -55,7 +58,8 @@ function handleError(e: unknown, res: import("express").Response): void {
     e instanceof ReviewAlreadyCancelledError ||
     e instanceof CancellationReasonRequiredError ||
     e instanceof LocationRequiredError ||
-    e instanceof ReviewNotCancelledError
+    e instanceof ReviewNotCancelledError ||
+    e instanceof InvalidPurchasePresentationError
   ) {
     res.status(400).json({ error: e.message });
     return;
@@ -77,6 +81,8 @@ export class StockPurchaseReviewController {
     private readonly cancelEmptyStockPurchaseReviews: CancelEmptyStockPurchaseReviewsPort,
     private readonly suggestReviewMappings: SuggestReviewMappingsPort,
     private readonly restoreStockPurchaseReview: RestoreStockPurchaseReviewPort,
+    private readonly savePurchasePresentation: SavePurchasePresentationPort,
+    private readonly listPurchasePresentations: ListPurchasePresentationsPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -110,6 +116,48 @@ export class StockPurchaseReviewController {
           ...(search !== undefined && { search }),
         });
         res.json(result);
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+
+    // Apresentações de compra (antes de «/:id»): GET ?supplierId= lista as ativas; PUT grava uma versão nova.
+    this.router.get("/stock-purchase-reviews/presentations", async (req, res) => {
+      try {
+        const supplierId = String((req.query as Record<string, string | undefined>).supplierId ?? "");
+        if (!supplierId) {
+          res.status(400).json({ error: "supplierId é obrigatório" });
+          return;
+        }
+        res.json(await this.listPurchasePresentations.execute(req.auth!.orgId, supplierId));
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+
+    this.router.put("/stock-purchase-reviews/presentations", async (req, res) => {
+      try {
+        const b = (req.body ?? {}) as Record<string, unknown>;
+        if (typeof b.supplierId !== "string" || typeof b.stockItemId !== "string" || typeof b.description !== "string") {
+          res.status(400).json({ error: "supplierId, stockItemId e description são obrigatórios" });
+          return;
+        }
+        res.json(
+          await this.savePurchasePresentation.execute({
+            organizationId: req.auth!.orgId,
+            supplierId: b.supplierId,
+            supplierReference: typeof b.supplierReference === "string" ? b.supplierReference : null,
+            description: b.description,
+            stockItemId: b.stockItemId,
+            packageUnit: typeof b.packageUnit === "string" ? b.packageUnit : null,
+            contentQuantity: Number(b.contentQuantity),
+            contentUnit: String(b.contentUnit) as never,
+            invoicedBy: b.invoicedBy === "package" ? "package" : "content",
+            ...(b.minOrderPackages != null && { minOrderPackages: Number(b.minOrderPackages) }),
+            ...(b.orderIncrementPackages != null && { orderIncrementPackages: Number(b.orderIncrementPackages) }),
+            actor: req.auth!.email,
+          }),
+        );
       } catch (e) {
         handleError(e, res);
       }

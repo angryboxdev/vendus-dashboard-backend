@@ -107,3 +107,11 @@ export class StockImportNotValidatedError extends Error {
     this.name = "StockImportNotValidatedError";
   }
 }
+
+/** Apresentação de compra inválida (conteúdo, unidades, mínimo/incremento). */
+export class InvalidPurchasePresentationError extends Error {
+  constructor(reason: string) {
+    super(`Embalagem de compra inválida: ${reason}`);
+    this.name = "InvalidPurchasePresentationError";
+  }
+}

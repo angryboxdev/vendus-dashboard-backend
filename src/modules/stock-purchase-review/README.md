@@ -307,6 +307,13 @@ que mantêm a exceção estreita:
 - **Entrada antes do Financeiro** (`ConfirmStockPurchaseReviewUseCase`): só com validação documental mínima — fornecedor e número identificados e conferência do documento «ok» (linhas = base e IVA da fatura); senão `StockImportNotValidatedError` (422 `stock_import_not_validated`). Não é aprovação contabilística nem cria conta a pagar.
 - Lista e detalhe devolvem `origin`/`financePending` («Aguarda Financeiro»).
 
+### Embalagem de compra (task «embalagens e conversões» P1/P2)
+
+- **Apresentação de compra** (`PurchasePresentation`, tabela `supplier_purchase_presentations`, migração `20261113100000`): por organização + fornecedor + referência do fornecedor (ou descrição normalizada) → artigo — **vem em saco/caixa/lata… (ou não), quanto tem cada embalagem** (1 saco = 2,5 kg), **se a fatura conta embalagens ou o conteúdo** (tomate: «4,000» sacos; mozzarella: «20,000» kg) e **encomenda mínima/incremento** em embalagens. Caixas/paletes logísticas e «Qt/Cx» não entram (decisão do utilizador: não têm significado). Origem, confiança, autor e **versões** (`superseded_at`): alterar cria outra e o passado (fatores usados, movimentos) não muda.
+- `PUT /stock-purchase-reviews/presentations` (`SavePurchasePresentationUseCase`): valida artigo ativo e que o conteúdo se converte na unidade base (kg→g sim, kg→L não — `InvalidPurchasePresentationError`); fecha a versão anterior, grava a nova, atualiza o mapeamento aprendido com o fator derivado e audita (`purchase_presentation`). `GET …/presentations?supplierId=` lista as ativas.
+- **Contas** em `src/kernel/units/purchase-presentation.ts` (partilhadas com o Planeamento): `invoiceLineToStock` (fator, quantidade em unidade base, embalagens equivalentes, custo líquido por unidade base, por kg e por saco) e `orderForNeed` (arredonda para cima ao incremento, respeita o mínimo; 12 kg com saco de 2,5 kg → 5 sacos, excedente 0,5 kg). Só converte dentro da mesma dimensão.
+- **Na revisão**: cada linha traz `packaging` (`shared-packaging.ts`, em GET/resolver/sugestões) com a apresentação ativa e a pré-visualização; a proposta de conciliação usa a embalagem confirmada antes do histórico/nome/IA. Sem apresentação → `presentation: null` («Embalagem por configurar»).
+
 ## Como testar
 
 - `npx jest src/modules/stock-purchase-review` (fakes para todas as portas
@@ -322,6 +329,7 @@ que mantêm a exceção estreita:
 - F3a (`__tests__/use-cases/f3a-conference.test.ts`): exemplo Makro 650 € (documento reconcilia, Stock 400 €, equipamento fica financeiro), base diferente bloqueia, revisões antigas «indisponíveis», divergências de categoria sem bloquear, Mozzarella (custo pelo líquido com desconto), divisão por lojas válida/inválida, todas não inventariáveis → `excluded`, gancho de faturas com IVA/categoria/loja/totais.
 - F3b (`__tests__/use-cases/f3b-matching.test.ts`): nomes e embalagens (domínio), ordem histórico → nome → IA numa só chamada, sem resolver nada, reabrir sem nova IA e `refresh`, IA fora dos candidatos ignorada, falha da IA, embalagem alterada, fila ativa/histórico, repor.
 - F3c (`__tests__/use-cases/f3c-stock-import.test.ts`): revisão do Stock criada sempre, «não afeta» no Financeiro acaba a pendência, entrada antes do Financeiro só com identidade e linhas conferidas.
+- Embalagens (`__tests__/domain/presentation-conversion.test.ts`, `__tests__/use-cases/purchase-presentations.test.ts`): casos da Dream Plus (20 kg = 8 sacos = 20 000 g, 5,58 €/kg, 13,95 €/saco; tomate 4 sacos = 20 kg, 1,9225 €/kg), encomenda 12 kg → 5 sacos, 0,5 → 1, 10 → 4, 20 → 8, 0 → 0, mínimo/incremento, dimensões diferentes recusadas, versões sem reescrever o passado, pré-visualização por linha, proposta pela embalagem.
 - `DeleteDraftStockPurchaseReviewUseCase`/`GetStockPurchaseReviewStatusForInvoiceUseCase`
   (`delete-draft-stock-purchase-review.test.ts`) cobrem: no-op sem revisão,
   hard-delete com auditoria quando ainda não aplicada, e

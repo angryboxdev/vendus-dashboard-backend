@@ -2,6 +2,8 @@ import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { CategoryDivergence, DecisionSource, StockPurchaseReviewStatus } from "../../entities/stock-purchase-review.js";
 import type { LocationSplit, ResolutionType } from "../../entities/stock-review-line.js";
 import type { ReviewConference } from "../../services/review-conference.service.js";
+import type { ContentUnit, InvoicedBy } from "../../entities/purchase-presentation.js";
+import type { InvoiceLineToStock } from "../../services/presentation-conversion.service.js";
 
 // ── DTOs ──────────────────────────────────────────────────────────────────
 
@@ -29,6 +31,12 @@ export interface StockReviewLineDTO {
     confidence: number | null;
     packagingChanged: boolean;
   } | null;
+  /** Apresentação de compra ativa e o que esta linha dá em embalagens/Stock/custos (null = por configurar). */
+  packaging?: {
+    presentation: PurchasePresentationDTO | null;
+    preview: InvoiceLineToStock | null;
+    baseUnit: string | null;
+  };
   resolutionType: ResolutionType;
   stockItemId: string | null;
   conversionFactor: number | null;
@@ -348,4 +356,49 @@ export interface DeleteDraftStockPurchaseReviewResult {
 
 export interface DeleteDraftStockPurchaseReviewPort {
   execute(command: DeleteDraftStockPurchaseReviewCommand): Promise<DeleteDraftStockPurchaseReviewResult>;
+}
+
+// ── Apresentação de compra (task «embalagens e conversões») ───────────────
+
+export interface PurchasePresentationDTO {
+  id: string;
+  supplierId: string;
+  supplierReference: string | null;
+  description: string;
+  stockItemId: string;
+  /** saco, caixa, lata… — null = não vem em embalagem. */
+  packageUnit: string | null;
+  contentQuantity: number;
+  contentUnit: ContentUnit;
+  invoicedBy: InvoicedBy;
+  minOrderPackages: number;
+  orderIncrementPackages: number;
+  source: "user" | "document" | "catalog";
+  confidence: number | null;
+  createdBy: string | null;
+  createdAt: string;
+  supersededAt: string | null;
+}
+
+export interface SavePurchasePresentationCommand {
+  organizationId: OrganizationId;
+  supplierId: string;
+  supplierReference: string | null;
+  description: string;
+  stockItemId: string;
+  packageUnit: string | null;
+  contentQuantity: number;
+  contentUnit: ContentUnit;
+  invoicedBy: InvoicedBy;
+  minOrderPackages?: number;
+  orderIncrementPackages?: number;
+  actor: string;
+}
+
+export interface SavePurchasePresentationPort {
+  execute(command: SavePurchasePresentationCommand): Promise<PurchasePresentationDTO>;
+}
+
+export interface ListPurchasePresentationsPort {
+  execute(organizationId: OrganizationId, supplierId: string): Promise<PurchasePresentationDTO[]>;
 }

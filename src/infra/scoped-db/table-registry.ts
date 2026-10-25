@@ -82,6 +82,8 @@ export const TABLE_REGISTRY = {
   stock_review_learned_mappings: { organizationColumn: "org_id", locationBearing: false },
   // Orçamento diário de IA por organização (20261112160000_ai_usage_daily).
   ai_usage_daily: { organizationColumn: "org_id", locationBearing: false },
+  // Apresentação de compra por fornecedor/artigo (20261113100000_supplier_purchase_presentations).
+  supplier_purchase_presentations: { organizationColumn: "org_id", locationBearing: false },
   stock_review_audit_logs: { organizationColumn: "org_id", locationBearing: false },
 
   // Módulo Stock — Contagem Física de Stock 2.0.

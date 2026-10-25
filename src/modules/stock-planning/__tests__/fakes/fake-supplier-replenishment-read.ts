@@ -1,3 +1,4 @@
+import type { PresentationShape } from "../../../../kernel/units/purchase-presentation.js";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type {
   SupplierItemPurchase,
@@ -8,6 +9,7 @@ export class FakeSupplierReplenishmentRead implements SupplierReplenishmentReadP
   purchasesBySupplier = new Map<string, SupplierItemPurchase[]>();
   consumption = new Map<string, number>();
   categories = new Map<string, string>();
+  presentations = new Map<string, PresentationShape>();
 
   async lastPurchasesBySupplier(_organizationId: OrganizationId, supplierId: string): Promise<SupplierItemPurchase[]> {
     return this.purchasesBySupplier.get(supplierId) ?? [];
@@ -15,6 +17,10 @@ export class FakeSupplierReplenishmentRead implements SupplierReplenishmentReadP
 
   async consumptionLastDays(_organizationId: OrganizationId, stockItemIds: string[]): Promise<Map<string, number>> {
     return new Map(stockItemIds.filter((id) => this.consumption.has(id)).map((id) => [id, this.consumption.get(id)!]));
+  }
+
+  async presentationsBySupplier(): Promise<Map<string, PresentationShape>> {
+    return this.presentations;
   }
 
   async categoryNames(_organizationId: OrganizationId, categoryIds: string[]): Promise<Map<string, string>> {
