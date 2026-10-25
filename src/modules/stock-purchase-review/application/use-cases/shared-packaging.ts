@@ -3,7 +3,7 @@ import { PurchasePresentation } from "../../domain/entities/purchase-presentatio
 import type { StockPurchaseReviewDTO } from "../../domain/ports/in/stock-purchase-review.ports.js";
 import type { PurchasePresentationRepositoryPort } from "../../domain/ports/out/purchase-presentation-repository.port.js";
 import type { StockCatalogWritePort } from "../../domain/ports/out/stock-catalog-write.port.js";
-import { invoiceLineToStock } from "../../domain/services/presentation-conversion.service.js";
+import { invoiceLineToStock, invoiceQuantityUnit } from "../../domain/services/presentation-conversion.service.js";
 import { toPurchasePresentationDTO } from "./purchase-presentations.use-case.js";
 import { normalizeDescription } from "./shared.js";
 
@@ -41,7 +41,7 @@ export async function withPackaging(organizationId: OrganizationId, dto: StockPu
       const x = p.toProps();
       const baseUnit = await baseUnitOf(x.stockItemId);
       const net = l.netAmount ?? Math.round(l.unitCostWithoutVat * l.purchaseQuantity);
-      const preview = baseUnit ? invoiceLineToStock(x, l.purchaseQuantity, net, baseUnit) : null;
+      const preview = baseUnit ? invoiceLineToStock(x, l.purchaseQuantity, net, baseUnit, invoiceQuantityUnit(l.purchaseUnit, l.description)) : null;
       return { ...l, packaging: { presentation: toPurchasePresentationDTO(p), preview, baseUnit } };
     }),
   );

@@ -50,18 +50,44 @@ export interface InvoiceLineToStock {
   netCostPerPackage: number | null;
 }
 
+const MEASURE_ALIASES: Record<string, string> = { g: "g", gr: "g", grs: "g", kg: "kg", kgs: "kg", ml: "ml", cl: "cl", l: "l", lt: "l", lts: "l" };
+
+/**
+ * Unidade de medida em que a fatura conta a quantidade: a unidade da linha, se for de medida
+ * (kg, g, l…); senão uma unidade solta no fim da descrição («…Eurial kg»), nunca um tamanho
+ * («… 2,5 kg» é a embalagem, não a unidade faturada). Null quando não se sabe.
+ */
+export function invoiceQuantityUnit(purchaseUnit: string | null, description: string): string | null {
+  const own = MEASURE_ALIASES[(purchaseUnit ?? "").trim().toLowerCase().replace(/\.$/, "")];
+  if (own) return own;
+  const tokens = description.trim().toLowerCase().split(/\s+/);
+  const last = MEASURE_ALIASES[(tokens[tokens.length - 1] ?? "").replace(/\.$/, "")];
+  const before = tokens[tokens.length - 2] ?? "";
+  if (!last || tokens.length < 2 || /^[\d.,x×]+$/.test(before)) return null;
+  return last;
+}
+
 /**
  * Linha da fatura → Stock: 20 kg (fatura em kg) com saco de 2,5 kg e artigo em g → fator 1000,
  * +20 000 g, 8 sacos, 5,58 €/kg, 13,95 €/saco. 4 sacos (fatura em sacos) de 5 kg, artigo em kg →
  * fator 5, +20 kg. Null quando o conteúdo não se converte na unidade base do artigo.
+ * Fatura a contar o conteúdo: a quantidade está em `invoiceUnit` (ex.: kg) quando se sabe, mesmo
+ * que o saco esteja configurado noutra unidade da mesma dimensão (2500 g); senão na do conteúdo.
  */
-export function invoiceLineToStock(p: PresentationShape, invoicedQuantity: number, lineNetCents: number, baseUnit: string): InvoiceLineToStock | null {
+export function invoiceLineToStock(
+  p: PresentationShape,
+  invoicedQuantity: number,
+  lineNetCents: number,
+  baseUnit: string,
+  invoiceUnit: string | null = null,
+): InvoiceLineToStock | null {
   const contentToBase = unitFactor(p.contentUnit, baseUnit);
   if (contentToBase === null || !(invoicedQuantity > 0)) return null;
-  const conversionFactor = p.invoicedBy === "package" ? round6(p.contentQuantity * contentToBase) : contentToBase;
+  const countedIn = invoiceUnit && unitFactor(invoiceUnit, p.contentUnit) !== null ? invoiceUnit : p.contentUnit;
+  const conversionFactor = p.invoicedBy === "package" ? round6(p.contentQuantity * contentToBase) : unitFactor(countedIn, baseUnit)!;
   const stockQuantity = round6(invoicedQuantity * conversionFactor);
-  const contentQuantity = p.invoicedBy === "package" ? invoicedQuantity * p.contentQuantity : invoicedQuantity;
-  const packages = p.packageUnit ? round6(p.invoicedBy === "package" ? invoicedQuantity : invoicedQuantity / p.contentQuantity) : null;
+  const contentQuantity = p.invoicedBy === "package" ? invoicedQuantity * p.contentQuantity : invoicedQuantity * unitFactor(countedIn, p.contentUnit)!;
+  const packages = p.packageUnit ? round6(p.invoicedBy === "package" ? invoicedQuantity : contentQuantity / p.contentQuantity) : null;
   return {
     conversionFactor,
     stockQuantity,

@@ -1,4 +1,6 @@
-import { StockPurchaseReviewNotFoundError, StaleInvoiceSnapshotError, LocationRequiredError, DocumentNotReconciledError, StockImportNotValidatedError } from "../../domain/errors.js";
+import { StockPurchaseReviewNotFoundError, StaleInvoiceSnapshotError, LocationRequiredError, DocumentNotReconciledError, StockImportNotValidatedError, SuspiciousConversionError } from "../../domain/errors.js";
+import type { StockCatalogWritePort } from "../../domain/ports/out/stock-catalog-write.port.js";
+import { invoiceQuantityUnit, unitFactor } from "../../domain/services/presentation-conversion.service.js";
 import type { CostCenterCategoryReadPort } from "../../domain/ports/out/cost-center-category-read.port.js";
 import type { ReviewConference } from "../../domain/services/review-conference.service.js";
 import type { ConfirmStockPurchaseReviewCommand, ConfirmStockPurchaseReviewPort, StockPurchaseReviewDTO } from "../../domain/ports/in/stock-purchase-review.ports.js";
@@ -18,6 +20,8 @@ export class ConfirmStockPurchaseReviewUseCase implements ConfirmStockPurchaseRe
     private readonly auditLog: StockReviewAuditLogPort,
     /** F3a: conferências (documento bloqueia; categorias ficam como pendência). */
     private readonly categoryRead?: CostCenterCategoryReadPort,
+    /** Unidade base dos artigos — travão de conversão (fatura em kg com 1 kg = 1 g). */
+    private readonly catalog?: StockCatalogWritePort,
   ) {}
 
   async execute(command: ConfirmStockPurchaseReviewCommand): Promise<StockPurchaseReviewDTO> {
@@ -44,6 +48,21 @@ export class ConfirmStockPurchaseReviewUseCase implements ConfirmStockPurchaseRe
       conference = await conferenceFor(command.organizationId, review, currentLines, this.categoryRead);
       if (conference.document.status === "mismatch") {
         throw new DocumentNotReconciledError(conference.document.netDifferenceCents ?? 0, conference.document.vatDifferenceCents ?? 0);
+      }
+    }
+    // Travão: a fatura conta em kg/l e a conversão dá menos do que 1 kg/l na unidade do artigo.
+    if (!done && this.catalog) {
+      const lines = await this.repository.findLinesByReviewId(command.organizationId, command.id);
+      for (const line of lines) {
+        const p = line.toProps();
+        if ((p.resolutionType !== "existing_item" && p.resolutionType !== "new_item") || !p.stockItemId || !p.conversionFactor) continue;
+        const invoiceUnit = invoiceQuantityUnit(p.purchaseUnit, p.description);
+        if (!invoiceUnit) continue;
+        const item = await this.catalog.findById(command.organizationId, p.stockItemId);
+        const expected = item ? unitFactor(invoiceUnit, item.baseUnit) : null;
+        if (item && expected !== null && p.conversionFactor < expected) {
+          throw new SuspiciousConversionError(p.description, p.conversionFactor, expected, invoiceUnit, item.baseUnit);
+        }
       }
     }
     // F3c: importada no Stock e ainda sem lançamento no Financeiro → só com identidade e linhas conferidas.

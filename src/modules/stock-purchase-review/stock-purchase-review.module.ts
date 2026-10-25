@@ -109,7 +109,7 @@ export function createStockPurchaseReviewModule(
     new ResolveReviewLineUseCase(reviewRepository, stockCatalogWrite, learnedMapping, auditLog, locationRead, categoryRead, packaging),
     new DecideUnresolvedReviewUseCase(reviewRepository, auditLog),
     new SuggestLineMappingUseCase(reviewRepository, learnedMapping),
-    new ConfirmStockPurchaseReviewUseCase(reviewRepository, stockMovementWrite, invoiceRead, locationRead, auditLog, categoryRead),
+    new ConfirmStockPurchaseReviewUseCase(reviewRepository, stockMovementWrite, invoiceRead, locationRead, auditLog, categoryRead, stockCatalogWrite),
     new CancelStockPurchaseReviewUseCase(reviewRepository, auditLog),
     new CancelEmptyStockPurchaseReviewsUseCase(reviewRepository, auditLog),
     new SuggestReviewMappingsUseCase(reviewRepository, learnedMapping, stockCatalogWrite, itemMatchAi, categoryRead, new SupabaseStockAiBudgetAdapter(createScopedQuery, aiDailyLimit()), packaging, auditLog, entryRules),
