@@ -85,7 +85,7 @@ describe("computeRecipeCosting", () => {
 
   it("prato sem receita ativa: sem custo, mas mostra os tamanhos com PVP", () => {
     const report = computeRecipeCosting(snapshot({ dishes: [dish({ lines: null, prices: [{ size: "small", price: 8 }] })] }));
-    expect(report.dishes[0]).toMatchObject({ hasActiveRecipe: false, sizes: [{ size: "small", costWithoutVat: 0, salePrice: 8, complete: true }] });
+    expect(report.dishes[0]).toMatchObject({ hasActiveRecipe: false, sizes: [{ size: "small", costWithoutVat: 0, salePrice: 8, complete: false, margin: null }] }); // sem linhas não há custo (V7: evita margem de 100%)
   });
 
   it("lista só os ingredientes usados, com a origem do custo", () => {

@@ -165,7 +165,7 @@ pizzaRoutes.post("/pizzas/:pizzaId/prices", async (req, res) => {
     }
     const body = req.body as Omit<PizzaPriceCreateBody, "pizza_id">;
     if (!body?.size || !validatePizzaSize(body.size)) {
-      res.status(400).json({ error: "size inválido (small, large)" });
+      res.status(400).json({ error: "size inválido (xs, small, large)" });
       return;
     }
     const price = Number(body.price);
@@ -341,7 +341,7 @@ pizzaRoutes.post("/pizzas/:pizzaId/recipes/:recipeId/items", async (req, res) =>
       return;
     }
     if (!body?.size || !validatePizzaSize(body.size)) {
-      res.status(400).json({ error: "size inválido (small, large)" });
+      res.status(400).json({ error: "size inválido (xs, small, large)" });
       return;
     }
     const quantity = Number(body.quantity);

@@ -57,7 +57,7 @@ export type MatchedProductEntry = {
   qty_sold: number;
   match_type: "pizza" | "stock";
   pizza_id?: string;
-  size?: "small" | "large";
+  size?: "xs" | "small" | "large";
   stock_item_id?: string;
   stock_item_name?: string;
 };

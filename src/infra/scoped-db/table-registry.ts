@@ -88,6 +88,8 @@ export const TABLE_REGISTRY = {
   stock_entry_rules: { organizationColumn: "org_id", locationBearing: false },
   // Localização principal do Stock por empresa (20261117100000_stock_settings_default_location).
   stock_settings: { organizationColumn: "org_id", locationBearing: false },
+  // IVA das vendas para a margem dos pratos (20261129100000_menu_xs_and_sales_vat).
+  menu_costing_settings: { organizationColumn: "org_id", locationBearing: false },
   // Versões das fichas técnicas, gravadas por triggers (20261118100000_recipe_versions).
   recipe_versions: { organizationColumn: "org_id", locationBearing: false },
   stock_review_audit_logs: { organizationColumn: "org_id", locationBearing: false },
