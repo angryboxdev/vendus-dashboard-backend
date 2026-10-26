@@ -15,7 +15,7 @@ export interface MonthFigures {
   /** Movimentos que contam para a conciliação: os importados menos os créditos aceites automaticamente (`isAutoAcceptedCredit`). */
   reconcilableMovements: number;
   reconciledMovements: number;
-  /** `null` sem extrato ou sem movimentos — nunca um 100% inventado. */
+  /** `null` sem extrato, sem movimentos ou sem movimentos conciliáveis («Não aplicável») — nunca um 100% inventado. */
   reconciledPercent: number | null;
   inflowCents: number;
   outflowCents: number;
@@ -61,11 +61,12 @@ export function computeMonthFigures(movements: BankMovement[], statementCoversMo
   const reconciled = reconcilable.filter((m) => RESOLVED_STATUSES.has(m.reconciliationStatus)).length;
   const inflowCents = movements.filter((m) => m.movementType === "credit").reduce((s, m) => s + m.amount, 0);
   const outflowCents = movements.filter((m) => m.movementType === "debit").reduce((s, m) => s + m.amount, 0);
-  // Só com extrato e com movimentos; sem nada para conciliar (só créditos aceites) o mês está feito.
-  const reconciledPercent = !statementImported || movements.length === 0 ? null : reconcilable.length === 0 ? 100 : Math.round((reconciled / reconcilable.length) * 100);
+  // Só com movimentos conciliáveis há percentagem; sem nada para conciliar (só entradas aceites
+  // automaticamente) é «Não aplicável» e o mês fica «Importado», não «Conciliado» (task Bancos V3 §9.3).
+  const reconciledPercent = !statementImported || reconcilable.length === 0 ? null : Math.round((reconciled / reconcilable.length) * 100);
   const status: MonthStatus = !statementImported
     ? "no_statement"
-    : movements.length === 0 || (reconcilable.length > 0 && reconciled === 0)
+    : reconcilable.length === 0 || reconciled === 0
       ? "imported"
       : reconciled === reconcilable.length
         ? "reconciled"
@@ -86,9 +87,29 @@ export function computeMonthFigures(movements: BankMovement[], statementCoversMo
   };
 }
 
-/** O período do extrato toca o mês (1.º ao último dia, datas de calendário). */
-export function periodCoversMonth(period: { start: Date; end: Date }, year: number, month: number): boolean {
-  const ym = (d: Date) => d.getFullYear() * 12 + d.getMonth();
-  const target = year * 12 + (month - 1);
-  return ym(period.start) <= target && target <= ym(period.end);
+/** Dias do calendário como inteiro (UTC), para unir períodos sem problemas de hora/fuso. */
+const dayNumber = (d: Date) => Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 86_400_000);
+
+/**
+ * Que parte do mês os extratos cobrem (task Bancos V3 §9.1): une os períodos (sobrepostos ou não) e conta
+ * os dias do mês cobertos. `partial` quando há extrato mas não cobre o mês todo (ex.: 15 a 30 de setembro,
+ * ou o mês corrente ainda a meio). Sem extratos → `covered: false`.
+ */
+export function monthCoverage(
+  periods: { start: Date; end: Date }[],
+  year: number,
+  month: number,
+): { covered: boolean; partial: boolean; coveredDays: number; daysInMonth: number } {
+  const first = dayNumber(new Date(Date.UTC(year, month - 1, 1)));
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const last = first + daysInMonth - 1;
+  const days = new Set<number>();
+  for (const p of periods) {
+    const from = Math.max(dayNumber(p.start), first);
+    const to = Math.min(dayNumber(p.end), last);
+    for (let d = from; d <= to; d++) days.add(d);
+  }
+  const covered = days.size > 0;
+  return { covered, partial: covered && days.size < daysInMonth, coveredDays: days.size, daysInMonth };
 }
+
