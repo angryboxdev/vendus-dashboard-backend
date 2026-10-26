@@ -71,6 +71,15 @@ export class FakeInvoiceRepository implements InvoiceRepositoryPort {
     this.hashes.set(invoiceId, sha256);
   }
 
+  /** invoiceId → grupo do documento de pagamento (a entidade não muda; os testes leem daqui). */
+  paymentGroups = new Map<string, string>();
+  async setPaymentGroup(_organizationId: OrganizationId, invoiceIds: string[], groupId: string): Promise<void> {
+    for (const id of invoiceIds) this.paymentGroups.set(id, groupId);
+  }
+  async findByPaymentGroup(_organizationId: OrganizationId, groupId: string): Promise<Invoice[]> {
+    return [...this.paymentGroups].filter(([, g]) => g === groupId).flatMap(([id]) => (this.store.has(id) ? [this.store.get(id)!] : []));
+  }
+
   async delete(_organizationId: OrganizationId, id: string): Promise<void> {
     this.store.delete(id);
   }

@@ -42,6 +42,7 @@ Importa portas/tipos de: [financial-base](financial-base.md), [fiscal-documents]
 - Frontend ainda não envia `Idempotency-Key`.
 
 ## Próximos trabalhos
+- 2026-10-26 (ramo `financeiro-faturas-recorrencias`): QR em vetor/várias páginas/vários QR; linhas da IA conferidas com o QR; fornecedor com NIF ≠ QR recusado; documento de pagamento → uma fatura por QR (`payment_group_id`, migração `20261130110000`); associação automática à recorrência ao lançar (ADR-0041).
 - Concluir F2 no frontend e integrar (ver docs/02_ESTADO_ATUAL.md).
 - Correr o backfill da identidade fiscal em produção (dry-run primeiro).
 

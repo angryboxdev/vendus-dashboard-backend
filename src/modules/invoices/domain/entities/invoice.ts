@@ -108,6 +108,8 @@ interface InvoiceProps {
   obligation?: InvoiceObligation | null;
   /** F3c: `stock` = importada diretamente no Stock (rascunho aguarda lançamento no Financeiro). */
   importOrigin?: "stock" | null;
+  /** Documento de pagamento com várias faturas fiscais (ex.: águas + resíduos): as faturas do mesmo documento partilham este id. Gravado à parte (`setPaymentGroup`). */
+  paymentGroupId?: string | null;
   createdAt: Date;
   updatedAt: Date;
   /** Versão para bloqueio otimista (F1 §1.4) — incrementada pelo repositório a cada escrita. */
@@ -205,6 +207,7 @@ export class Invoice {
   readonly stockReviewOverrideReason: string | null;
   readonly obligation: InvoiceObligation | null;
   readonly importOrigin: "stock" | null;
+  readonly paymentGroupId: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly version: number;
@@ -248,6 +251,7 @@ export class Invoice {
     this.stockReviewOverrideReason = props.stockReviewOverrideReason;
     this.obligation = props.obligation ?? null;
     this.importOrigin = props.importOrigin ?? null;
+    this.paymentGroupId = props.paymentGroupId ?? null;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
     this.version = props.version ?? 1;
@@ -560,6 +564,7 @@ export class Invoice {
       stockReviewOverrideReason: this.stockReviewOverrideReason,
       obligation: this.obligation,
       importOrigin: this.importOrigin,
+      paymentGroupId: this.paymentGroupId,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       version: this.version,

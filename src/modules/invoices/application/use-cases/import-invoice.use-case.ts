@@ -13,7 +13,7 @@ import type { OrganizationIdentityReadPort } from "../../domain/ports/out/organi
 import { normalizeNif } from "../../domain/utils/nif.js";
 import { normalizeSupplierName, supplierNameSimilarity, FUZZY_MATCH_THRESHOLD } from "../../domain/utils/supplier-name.js";
 import { toInvoiceDTO } from "./shared.js";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.port.js";
 import type { PdfContentReaderPort } from "../../domain/ports/out/pdf-content-reader.port.js";
 import type { InvoiceReadingWritePort } from "../../domain/ports/out/invoice-reading-write.port.js";
@@ -25,11 +25,11 @@ import type { LineClassification } from "../../domain/services/classification/li
 import { readInvoice } from "../../domain/services/reading/invoice-reader.service.js";
 import { readingToExtraction } from "../../domain/services/reading/reading-to-extraction.js";
 import { sanitizeExtractedLines } from "../../domain/services/extracted-lines.service.js";
-import { applyQrToExtraction } from "../../domain/services/reading/reading-to-extraction.js";
-import { readFiscalQr } from "../../domain/services/reading/invoice-reader.service.js";
+import { applyQrToExtraction, enforceQrLines } from "../../domain/services/reading/reading-to-extraction.js";
+import { otherFiscalQrs, readFiscalQr } from "../../domain/services/reading/invoice-reader.service.js";
 import { ACCEPTED_FISCAL_DOCUMENT_TYPES, AiBudgetExceededError, NotAFiscalInvoiceError } from "../../domain/errors.js";
 import type { AiBudgetPort } from "../../domain/ports/out/ai-budget.port.js";
-import type { FiscalQr } from "../../domain/entities/invoice-reading.js";
+import type { FiscalQr, ReadingIssue } from "../../domain/entities/invoice-reading.js";
 
 const AI_CONFIDENCE_REVIEW_THRESHOLD = 0.7;
 const VALUE_DISCREPANCY_MARGIN_CENTS = 2;
@@ -64,18 +64,28 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
    * Leitura determinística. `reading` = null quando nenhum layout serve (segue a IA); um layout
    * genérico (estrito) só conta se reconciliar ao cêntimo. `qr` = QR fiscal válido, mesmo sem layout.
    */
-  private async readLocally(buffer: Buffer, mimeType: string): Promise<{ reading: InvoiceReading | null; qr: FiscalQr | null; qrType: string | null }> {
-    if (!this.smart || mimeType !== "application/pdf") return { reading: null, qr: null, qrType: null };
+  private async readLocally(
+    buffer: Buffer,
+    mimeType: string,
+  ): Promise<{ reading: InvoiceReading | null; qr: FiscalQr | null; qrType: string | null; qrNotes: ReadingIssue[]; otherQrs: FiscalQr[] }> {
+    const none = { reading: null, qr: null, qrType: null, qrNotes: [], otherQrs: [] };
+    if (!this.smart || mimeType !== "application/pdf") return none;
     const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), LOCAL_READ_TIMEOUT_MS).unref?.());
     const content = await Promise.race([this.smart.pdf.read(buffer, mimeType).catch(() => null), timeout]);
-    if (!content) return { reading: null, qr: null, qrType: null };
+    if (!content) return none;
     const { qr, issues } = readFiscalQr(content);
     const validQr = qr && !issues.some((i) => i.blocking) ? qr : null;
     const reading = readInvoice(content, this.smart.layouts);
     const layout = this.smart.layouts.find((l) => l.id === reading.layout);
     const accepted = reading.status !== "unsupported" && reading.lines.length > 0 && (!layout?.strict || reading.status === "ready");
     // O tipo do documento conta mesmo com totais do QR incoerentes (o campo D continua legível).
-    return { reading: accepted ? reading : null, qr: validQr, qrType: qr?.documentType ?? null };
+    return {
+      reading: accepted ? reading : null,
+      qr: validQr,
+      qrType: qr?.documentType ?? null,
+      qrNotes: issues.filter((i) => !i.blocking && i.code === "qr_multiple_documents"),
+      otherQrs: validQr ? otherFiscalQrs(content, validQr) : [],
+    };
   }
 
   /**
@@ -116,7 +126,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     // 1. Leitor determinístico primeiro (QR fiscal + texto do PDF, sem IA). O QR diz o tipo do documento:
     //    pró-formas, orçamentos, guias e recibos não são faturas → recusados antes de guardar o ficheiro.
     const t0 = Date.now();
-    const { reading, qr, qrType } = await this.readLocally(command.fileBuffer, command.mimeType);
+    const { reading, qr, qrType, qrNotes, otherQrs } = await this.readLocally(command.fileBuffer, command.mimeType);
     if (qrType && !(ACCEPTED_FISCAL_DOCUMENT_TYPES as readonly string[]).includes(qrType)) throw new NotAFiscalInvoiceError(qrType);
 
     // Orçamento diário de IA: sem leitura determinística, a leitura pela IA tem de caber no limite do dia
@@ -145,9 +155,70 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       // Com QR fiscal válido, identidade e totais vêm do QR (dado certificado), não da leitura da IA.
       extraction = qr ? applyQrToExtraction({ ...raw, lines: sanitized.lines }, qr) : { ...raw, lines: sanitized.lines };
       lineNotes = sanitized.notes.map((n) => ({ code: n.code, blocking: false, detail: n.detail }));
+      // «Linhas conferidas»: com QR, linhas da IA que não fecham com ele dão lugar às bases do QR por taxa.
+      if (qr) {
+        const enforced = enforceQrLines(extraction, qr);
+        extraction = enforced.extraction;
+        if (enforced.note) lineNotes = [{ code: "lines_replaced_by_qr", blocking: false, detail: enforced.note }];
+      }
     }
+    lineNotes.push(...qrNotes.map((n) => ({ code: n.code, blocking: false, detail: n.detail })));
     const readMs = Date.now() - t0;
 
+    // 4. Um rascunho por fatura fiscal: a 1.ª com a leitura acima; num documento de pagamento com
+    //    vários QR (ex.: águas + resíduos), as restantes saem de cada QR (emitente pelo NIF, uma linha
+    //    por taxa) — sem nova chamada à IA — e ficam no mesmo grupo de pagamento.
+    const primary = await this.buildDraft(command, { extraction, reading, qr, lineNotes, fileUrl, sha256, readMs, primary: true });
+    const siblings: InvoiceImportResultDTO[] = [];
+    for (const other of otherQrs) {
+      if (!(ACCEPTED_FISCAL_DOCUMENT_TYPES as readonly string[]).includes(other.documentType ?? "")) continue;
+      const fromQr = enforceQrLines(
+        applyQrToExtraction({ ...extraction, supplierName: null, supplierAddress: null, supplierEmail: null, lines: [], confidence: 1, validationIssues: [] }, other),
+        other,
+      ).extraction;
+      const note = { code: "read_from_qr", blocking: false, detail: `Fatura ${other.documentNumber} lida do QR fiscal do mesmo documento de pagamento (sem IA) — confirme o fornecedor e classifique.` };
+      siblings.push(await this.buildDraft(command, { extraction: fromQr, reading: null, qr: other, lineNotes: [note], fileUrl, sha256, readMs, primary: false }));
+    }
+    if (!siblings.length) {
+      if (primary.reused) await this.storage.delete(fileUrl).catch(() => undefined);
+      return primary;
+    }
+
+    const all = [primary, ...siblings];
+    // Tudo já existia: nada novo ficou a apontar para o ficheiro acabado de guardar.
+    if (all.every((r) => r.reused)) await this.storage.delete(fileUrl).catch(() => undefined);
+    const fresh = all.filter((r) => !r.reused);
+    let groupId: string | null = null;
+    if (fresh.length > 1) {
+      // A ligação é uma ajuda (recorrência e conciliação do grupo): se falhar, as faturas ficam criadas.
+      try {
+        const id = randomUUID();
+        await this.invoiceRepo.setPaymentGroup(command.organizationId, fresh.map((r) => r.invoice.id), id);
+        groupId = id;
+      } catch (e) {
+        console.error("[invoices] não foi possível ligar as faturas do mesmo documento de pagamento (ignorado):", e instanceof Error ? e.message : e);
+      }
+    }
+    const withGroup = (r: InvoiceImportResultDTO) => (groupId && !r.reused ? { ...r, invoice: { ...r.invoice, paymentGroupId: groupId } } : r);
+    return { ...withGroup(primary), siblings: siblings.map(withGroup) };
+  }
+
+  /** Fornecedor, validações, identidade fiscal e rascunho de UMA fatura lida (a 1.ª do PDF ou outra pelo seu QR). */
+  private async buildDraft(
+    command: ImportInvoiceCommand,
+    ctx: {
+      extraction: AiExtractionResult;
+      reading: InvoiceReading | null;
+      qr: FiscalQr | null;
+      lineNotes: { code: string; blocking: boolean; detail: string }[];
+      fileUrl: string;
+      sha256: string;
+      readMs: number;
+      /** A 1.ª fatura do PDF: fica com o hash do ficheiro, a IA (se houve) e o logótipo. */
+      primary: boolean;
+    },
+  ): Promise<InvoiceImportResultDTO> {
+    const { extraction, reading, qr, lineNotes, fileUrl, sha256, readMs } = ctx;
     // 2b. Guard: the AI sometimes reads our own company's details off the
     // invoice (billing/"cliente" section) instead of the actual issuer's —
     // never let our own NIF end up as the supplier of an imported invoice,
@@ -194,9 +265,23 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       }
     }
 
+    // 3b. Com QR, o NIF do emitente é certificado: um fornecedor achado pela dica ou pelo nome com
+    //     outro NIF não é este emitente (ex.: «Águas e Energia do Porto» → «Goldenergy»). Fica sem
+    //     fornecedor (a revisão propõe criá-lo com o NIF do QR); se essa ficha tiver o NIF da própria
+    //     empresa (o cliente da fatura), avisa — a ficha está errada.
+    let supplierRecordHasOwnNif = false;
+    if (qr && supplierMatch && supplierMatchMethod !== "nif" && supplierMatch.nif && normalizeNif(supplierMatch.nif) !== normalizeNif(qr.issuerNif)) {
+      const recordNif = normalizeNif(supplierMatch.nif);
+      supplierRecordHasOwnNif =
+        (!!ownNif && recordNif === normalizeNif(ownNif)) || (!!qr.buyerNif && recordNif === normalizeNif(qr.buyerNif));
+      supplierMatch = null;
+      supplierMatchMethod = null;
+    }
+
     // 4. Collect validation issues
     const validationIssues = [...extraction.validationIssues];
     if (extractedIsOwnCompany) validationIssues.push("supplier_is_own_company");
+    if (supplierRecordHasOwnNif) validationIssues.push("supplier_record_has_own_nif");
 
     // Duplicate check — warn only, don't block (user can correct in review).
     // Prefer the resolved supplier (reliable regardless of whether the AI
@@ -257,7 +342,6 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     if (fiscalCheck.kind === "existing_finance" && fiscalCheck.existingInvoiceId) {
       const original = await this.invoiceRepo.findById(command.organizationId, fiscalCheck.existingInvoiceId);
       if (original) {
-        await this.storage.delete(fileUrl).catch(() => undefined);
         return { invoice: toInvoiceDTO(original), aiConfidence: extraction.confidence, validationIssues: ["duplicate_invoice"], supplierMatch: null, extractedLines: [], reused: "same_fiscal_identity", fiscal: { kind: fiscalCheck.kind, existingInvoiceId: original.id, identityId: fiscalCheck.identityId } };
       }
     }
@@ -301,13 +385,13 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     });
 
     await this.invoiceRepo.save(command.organizationId, finalInvoice);
-    await this.invoiceRepo.setFileHash(command.organizationId, finalInvoice.id, sha256);
+    if (ctx.primary) await this.invoiceRepo.setFileHash(command.organizationId, finalInvoice.id, sha256);
     if (this.smart && (reading || qr)) {
       // Evidência da leitura: se falhar, a importação continua (o rascunho já está gravado).
-      await this.smart.readingWrite.save(command.organizationId, finalInvoice.id, { fiscalQr: (reading?.qr ?? qr)?.fields ?? null, source: reading ? "deterministic" : "ai" }).catch(() => undefined);
+      await this.smart.readingWrite.save(command.organizationId, finalInvoice.id, { fiscalQr: (reading?.qr ?? qr)?.fields ?? null, source: reading || !ctx.primary ? "deterministic" : "ai" }).catch(() => undefined);
     }
     const classifications = await this.classify(command.organizationId, supplierMatch?.id ?? null, extraction);
-    const logoSuggestion = supplierMatch?.logoUrl ? null : await this.suggestLogo(command);
+    const logoSuggestion = !ctx.primary || supplierMatch?.logoUrl ? null : await this.suggestLogo(command);
     const byIndex = new Map(classifications.map((c) => [c.index, c]));
 
     return {
@@ -348,12 +432,12 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       ...(extraction.amounts && { extractedAmounts: extraction.amounts }),
       ...(this.smart && {
         reading: {
-          source: reading ? ("deterministic" as const) : ("ai" as const),
+          source: reading || !ctx.primary ? ("deterministic" as const) : ("ai" as const),
           layout: reading?.layout ?? null,
           qrRead: !!(reading?.qr ?? qr),
-          status: reading?.status ?? ("unsupported" as const),
+          status: reading?.status ?? (ctx.primary ? ("unsupported" as const) : ("needs_attention" as const)),
           issues: reading?.issues ?? lineNotes,
-          aiCalls: reading ? 0 : 1,
+          aiCalls: reading || !ctx.primary ? 0 : 1,
           ms: readMs,
         },
       }),

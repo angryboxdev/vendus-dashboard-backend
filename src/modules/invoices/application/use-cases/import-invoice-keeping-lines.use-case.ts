@@ -18,16 +18,24 @@ export class ImportInvoiceKeepingLinesUseCase implements ImportInvoicePort {
   ) {}
 
   async execute(command: ImportInvoiceCommand & { actor?: string }): Promise<InvoiceImportResultDTO> {
-    const result = await this.importInvoice.execute(command);
-    if (result.reused || result.extractedLines.length === 0) return result;
-    try {
-      await persistExtractedDraft(this.saveDraft, command.organizationId, result, command.actor ?? "sistema");
-      const saved = await this.invoiceRepo.findById(command.organizationId, result.invoice.id);
-      // Versão nova do rascunho (guardar incrementa-a): a revisão confirma contra esta.
-      return saved ? { ...result, invoice: toInvoiceDTO(saved) } : result;
-    } catch (e) {
-      console.error("[invoices] lote: não foi possível gravar as linhas no rascunho (ignorado):", e instanceof Error ? e.message : e);
-      return result;
-    }
+    const { siblings, ...result } = await this.importInvoice.execute(command);
+    const keep = async (r: InvoiceImportResultDTO): Promise<InvoiceImportResultDTO> => {
+      if (r.reused || r.extractedLines.length === 0) return r;
+      try {
+        await persistExtractedDraft(this.saveDraft, command.organizationId, r, command.actor ?? "sistema");
+        const saved = await this.invoiceRepo.findById(command.organizationId, r.invoice.id);
+        // Versão nova do rascunho (guardar incrementa-a): a revisão confirma contra esta.
+        return saved ? { ...r, invoice: { ...toInvoiceDTO(saved), paymentGroupId: r.invoice.paymentGroupId } } : r;
+      } catch (e) {
+        console.error("[invoices] lote: não foi possível gravar as linhas no rascunho (ignorado):", e instanceof Error ? e.message : e);
+        return r;
+      }
+    };
+    // Documento de pagamento com várias faturas: cada rascunho fica com as suas linhas.
+    const primary = await keep(result);
+    if (!siblings?.length) return primary;
+    const kept: InvoiceImportResultDTO[] = [];
+    for (const sibling of siblings) kept.push(await keep(sibling));
+    return { ...primary, siblings: kept };
   }
 }

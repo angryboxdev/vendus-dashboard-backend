@@ -25,7 +25,28 @@ export class SupabaseInvoiceMatchReadAdapter implements InvoiceMatchReadPort {
       status: row.status as string,
       currency: (row.currency as string | null) ?? "EUR",
       documentType: (row.document_type as "invoice" | "credit_note" | null) ?? "invoice",
+      paymentGroupId: (row.payment_group_id as string | null | undefined) ?? null,
     };
+  }
+
+  async findPaymentGroupDocuments(
+    organizationId: OrganizationId,
+    opts: { currency: string; dateFrom: string; dateTo: string },
+  ): Promise<InvoiceMatchCandidate[]> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("invoices")
+      .select("id, supplier_id, supplier_name, invoice_number, total_with_vat, invoice_date, due_date, paid_at, status, currency, document_type, payment_group_id")
+      .not("payment_group_id", "is", null)
+      .eq("currency", opts.currency)
+      .neq("reconciliation_status", "reconciled")
+      .neq("status", "cancelled")
+      .or(
+        `and(due_date.gte.${opts.dateFrom},due_date.lte.${opts.dateTo}),and(invoice_date.gte.${opts.dateFrom},invoice_date.lte.${opts.dateTo})`
+      )
+      .order("invoice_date", { ascending: false })
+      .limit(200);
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((row) => this.mapRow(row as unknown as Record<string, unknown>));
   }
 
   async findByIds(organizationId: OrganizationId, ids: string[]): Promise<InvoiceMatchCandidate[]> {

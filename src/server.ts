@@ -286,6 +286,8 @@ const suggestStockRoutingProxy: SuggestStockRoutingPort = {
 };
 // Identidade fiscal partilhada Financeiro/Stock (task v1.2 · F1): um documento real = uma identidade.
 const fiscalDocumentsModule = createFiscalDocumentsModule();
+// Criado antes das faturas: estas associam cada fatura lançada à recorrência (router montado mais abaixo).
+const payableRecurrencesModule = createPayableRecurrencesModule();
 const invoicesModule = createInvoicesModule(
   financialBaseModule.createSupplier,
   recordInvoiceFinalizedForStockProxy,
@@ -294,6 +296,7 @@ const invoicesModule = createInvoicesModule(
   fiscalDocumentsModule.fiscalDocuments,
   suggestStockRoutingProxy,
   financialBaseModule.updateSupplier,
+  payableRecurrencesModule,
 );
 setStockImportFiscalDocuments(fiscalDocumentsModule.fiscalDocuments);
 // Migração do histórico com simulação (POST /api/fiscal-documents/backfill, dryRun por omissão).
@@ -1705,8 +1708,7 @@ app.use("/api", stockPlanningModule.router);
 const payableEntriesModule = createPayableEntriesModule();
 app.use("/api", payableEntriesModule.router);
 
-// Payable recurrences module (hexagonal)
-const payableRecurrencesModule = createPayableRecurrencesModule();
+// Payable recurrences module (hexagonal) — criado acima, antes das faturas
 app.use("/api", payableRecurrencesModule.router);
 
 // Bank accounts module (hexagonal) — must be before bank-statements

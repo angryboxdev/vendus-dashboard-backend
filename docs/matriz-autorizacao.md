@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 826 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 829 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -689,11 +689,14 @@ Endpoints: 826 · pré-autenticação: 23 · não classificados: 0
 | PATCH | `/api/payable-recurrences/:id/resume` | permission:finance.recurrences:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/payable-recurrences/batch/generate` | permission:finance.recurrences:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/payable-recurrences/employees` | permission:finance.recurrences:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
+| POST | `/api/payable-recurrences/invoice-links` | permission:finance.recurrences:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
+| GET | `/api/payable-recurrences/invoice-links/:invoiceId` | permission:finance.recurrences:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/payable-recurrences/occurrences` | permission:finance.recurrences:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | DELETE | `/api/payable-recurrences/occurrences/:occId` | permission:finance.recurrences:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/payable-recurrences/occurrences/:occId` | permission:finance.recurrences:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | DELETE | `/api/payable-recurrences/occurrences/:occId/document` | permission:finance.recurrences:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/payable-recurrences/occurrences/:occId/document` | permission:finance.recurrences:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
+| DELETE | `/api/payable-recurrences/occurrences/:occId/invoice` | permission:finance.recurrences:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/payable-recurrences/occurrences/:occId/link-invoice` | permission:finance.recurrences:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | PATCH | `/api/payable-recurrences/occurrences/:occId/pay` | permission:finance.recurrences:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/payable-recurrences/occurrences/by-invoice/:invoiceId` | permission:finance.recurrences:READ | ✔ | ✖ | ✖ | ✔ | ✖ |

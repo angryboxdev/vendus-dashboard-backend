@@ -17,6 +17,8 @@ export interface InvoiceMatchCandidate {
   status: string;
   currency: string;
   documentType: "invoice" | "credit_note";
+  /** Documento de pagamento com várias faturas fiscais (ex.: águas + resíduos, emitentes diferentes, um débito). */
+  paymentGroupId?: string | null;
 }
 
 export interface InvoiceMatchReadPort {
@@ -53,6 +55,17 @@ export interface InvoiceMatchReadPort {
    * at the adapter level; the use case re-caps to the matcher's own limit
    * (~40) by exact date-proximity to the movement date.
    */
+  /**
+   * Faturas de documentos de pagamento com várias faturas fiscais (`payment_group_id` preenchido),
+   * não conciliadas, na moeda do movimento, com data (emissão ou vencimento) na janela. O chamador
+   * agrupa por documento e procura o que bate com o movimento — os emitentes são diferentes, por
+   * isso a procura por fornecedor (`findBySupplier`) nunca os junta.
+   */
+  findPaymentGroupDocuments(
+    organizationId: OrganizationId,
+    opts: { currency: string; dateFrom: string; dateTo: string },
+  ): Promise<InvoiceMatchCandidate[]>;
+
   findBySupplier(
     organizationId: OrganizationId,
     opts: {
