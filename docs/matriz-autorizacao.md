@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 822 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 823 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -79,6 +79,7 @@ Endpoints: 822 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/bank-statements/rules` | permission:finance.banking:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/bank-statements/rules` | permission:finance.banking:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | DELETE | `/api/bank-statements/rules/:ruleId` | permission:finance.banking:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
+| PATCH | `/api/bank-statements/rules/:ruleId` | permission:finance.banking:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/calendar` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
 | POST | `/api/calendar/events` | permission:company.calendar:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | PATCH | `/api/calendar/events/:id` | permission:company.calendar:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |

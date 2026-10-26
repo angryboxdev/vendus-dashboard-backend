@@ -9,6 +9,13 @@ export interface BankMovementFilter {
   to?: Date;
 }
 
+/** Movimentos conciliados por uma regra («movimento recorrente»). */
+export interface RuleUsage {
+  ruleId: string;
+  movementsCount: number;
+  lastBookingDate: string | null; // YYYY-MM-DD
+}
+
 export interface BankMovementRepositoryPort {
   saveBulk(organizationId: OrganizationId, movements: BankMovement[]): Promise<void>;
   findByStatementId(
@@ -26,4 +33,7 @@ export interface BankMovementRepositoryPort {
   findByIds(organizationId: OrganizationId, ids: string[]): Promise<BankMovement[]>;
   update(organizationId: OrganizationId, movement: BankMovement): Promise<void>;
   existsByHash(organizationId: OrganizationId, deduplicationHash: string): Promise<boolean>;
+  /** Tira a ligação à regra dos movimentos que ela conciliou (a classificação mantém-se). */
+  detachRule(organizationId: OrganizationId, ruleId: string): Promise<void>;
+  ruleUsage(organizationId: OrganizationId): Promise<RuleUsage[]>;
 }

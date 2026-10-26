@@ -40,7 +40,7 @@ describe("Reconciliation Rules use-cases", () => {
     await createUC.execute({
       organizationId,
       name: "Rule A",
-      descriptionContains: "A",
+      descriptionContains: "TAXA ABC",
       justificationType: "despesa_bancaria_automatica",
     });
     const allRules = await listUC.execute({ organizationId, activeOnly: false });

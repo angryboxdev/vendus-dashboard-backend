@@ -11,6 +11,7 @@ import {
 import type {
   BankMovementFilter,
   BankMovementRepositoryPort,
+  RuleUsage,
 } from "../../domain/ports/out/bank-movement-repository.port.js";
 import { DuplicateMovementError } from "../../domain/errors.js";
 
@@ -20,6 +21,9 @@ import { DuplicateMovementError } from "../../domain/errors.js";
 function isUniqueViolation(error: { code?: string; message: string }): boolean {
   return error.code === "23505" || /duplicate key value violates unique constraint/i.test(error.message);
 }
+
+/** Tamanho de página das leituras longas (o PostgREST devolve no máximo 1000 linhas por pedido). */
+const PAGE_SIZE = 1000;
 
 function toEntity(row: Record<string, unknown>): BankMovement {
   return BankMovement.reconstitute({
@@ -51,6 +55,7 @@ function toEntity(row: Record<string, unknown>): BankMovement {
     vatRate: (row.vat_rate as number | null) ?? null,
     vatIncluded: (row.vat_included as boolean | null) ?? null,
     reconciliationAmountDiff: (row.reconciliation_amount_diff as number | null) ?? null,
+    classifiedByRuleId: (row.classified_by_rule_id as string | null) ?? null,
   });
 }
 
@@ -82,6 +87,13 @@ export class SupabaseBankMovementRepository implements BankMovementRepositoryPor
       deduplication_hash: m.deduplicationHash,
       created_at: m.createdAt.toISOString(),
       updated_at: m.updatedAt.toISOString(),
+      // Classificação já aplicada na importação («movimentos recorrentes»).
+      cost_center_group_id: m.costCenterGroupId,
+      cost_center_category_id: m.costCenterCategoryId,
+      supplier_id: m.supplierId,
+      vat_rate: m.vatRate,
+      vat_included: m.vatIncluded,
+      classified_by_rule_id: m.classifiedByRuleId,
     }));
     const { error } = await this.scopedQuery(organizationId).table("bank_movements").insert(rows);
     if (error) {
@@ -159,6 +171,7 @@ export class SupabaseBankMovementRepository implements BankMovementRepositoryPor
         vat_rate: movement.vatRate,
         vat_included: movement.vatIncluded,
         reconciliation_amount_diff: movement.reconciliationAmountDiff,
+        classified_by_rule_id: movement.classifiedByRuleId,
       })
       .eq("id", movement.id);
     if (error) throw new Error(error.message);
@@ -170,16 +183,55 @@ export class SupabaseBankMovementRepository implements BankMovementRepositoryPor
     from: Date,
     to: Date
   ): Promise<BankMovement[]> {
-    const { data, error } = await this.scopedQuery(organizationId)
+    // Paginado: o PostgREST corta em 1000 linhas e um ano de uma conta passa disso (~1300 movimentos).
+    const rows: Record<string, unknown>[] = [];
+    for (let offset = 0; ; offset += PAGE_SIZE) {
+      const { data, error } = await this.scopedQuery(organizationId)
+        .table("bank_movements")
+        .select("*")
+        .eq("bank_account_id", bankAccountId)
+        .gte("booking_date", from.toISOString().slice(0, 10))
+        .lte("booking_date", to.toISOString().slice(0, 10))
+        .order("booking_date", { ascending: true })
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(offset, offset + PAGE_SIZE - 1);
+      if (error) throw new Error(error.message);
+      const page = (data ?? []) as unknown as Record<string, unknown>[];
+      rows.push(...page);
+      if (page.length < PAGE_SIZE) break;
+    }
+    return rows.map(toEntity);
+  }
+
+  async detachRule(organizationId: OrganizationId, ruleId: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
       .table("bank_movements")
-      .select("*")
-      .eq("bank_account_id", bankAccountId)
-      .gte("booking_date", from.toISOString().slice(0, 10))
-      .lte("booking_date", to.toISOString().slice(0, 10))
-      .order("booking_date", { ascending: true })
-      .order("created_at", { ascending: true });
+      .update({ classified_by_rule_id: null })
+      .eq("classified_by_rule_id", ruleId);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => toEntity(r as unknown as Record<string, unknown>));
+  }
+
+  async ruleUsage(organizationId: OrganizationId): Promise<RuleUsage[]> {
+    const byRule = new Map<string, RuleUsage>();
+    for (let offset = 0; ; offset += PAGE_SIZE) {
+      const { data, error } = await this.scopedQuery(organizationId)
+        .table("bank_movements")
+        .select("id, classified_by_rule_id, booking_date")
+        .not("classified_by_rule_id", "is", null)
+        .order("id", { ascending: true })
+        .range(offset, offset + PAGE_SIZE - 1);
+      if (error) throw new Error(error.message);
+      const page = (data ?? []) as unknown as { classified_by_rule_id: string; booking_date: string }[];
+      for (const r of page) {
+        const u = byRule.get(r.classified_by_rule_id) ?? { ruleId: r.classified_by_rule_id, movementsCount: 0, lastBookingDate: null };
+        u.movementsCount += 1;
+        if (!u.lastBookingDate || r.booking_date > u.lastBookingDate) u.lastBookingDate = r.booking_date;
+        byRule.set(u.ruleId, u);
+      }
+      if (page.length < PAGE_SIZE) break;
+    }
+    return [...byRule.values()];
   }
 
   async existsByHash(organizationId: OrganizationId, deduplicationHash: string): Promise<boolean> {

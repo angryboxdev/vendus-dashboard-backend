@@ -1,7 +1,7 @@
 # Módulo: bank-statements
 
 > Status: ativo
-> Última atualização: 2026-10-26 (task «Conciliação bancária V2», fase F2: leitor do PDF «Extrato Combinado» do Millennium BCP; fase F1: estados do mês, conciliação sobre movimentos conciliáveis, fluxo de caixa mensal/anual e deduplicação pelo saldo; ver «Decisões de design»). Antes: 2026-09-30 ("Liquidação agrupada").
+> Última atualização: 2026-10-26 («Movimentos recorrentes» — regras de conciliação automática por conta, aplicadas na importação e aos meses já importados; ver «Decisões de design»). Antes: 2026-10-26 (task «Conciliação bancária V2», fase F2: leitor do PDF «Extrato Combinado» do Millennium BCP; fase F1: estados do mês, conciliação sobre movimentos conciliáveis, fluxo de caixa mensal/anual e deduplicação pelo saldo; ver «Decisões de design»). Antes: 2026-09-30 ("Liquidação agrupada").
 
 ---
 
@@ -350,9 +350,10 @@ POST   /api/bank-statements/movements/:movId/document     upload de comprovativo
 GET    /api/bank-statements/movements/:movId/candidates   candidatos pontuados para um movimento
 GET    /api/bank-statements/invoices/open-balances?ids=   saldo em aberto em batch (Record<invoiceId, cents>)
 GET    /api/bank-statements/invoices/:invoiceId/movements movimentos conciliados a uma fatura
-GET    /api/bank-statements/rules                         listar regras (?activeOnly=true)
-POST   /api/bank-statements/rules                         criar regra
-DELETE /api/bank-statements/rules/:ruleId                 remover regra
+GET    /api/bank-statements/rules                         listar «movimentos recorrentes» (?activeOnly=true), com usage (n.º de movimentos, última data)
+POST   /api/bank-statements/rules                         criar regra (bankAccountId, amountCents?, supplierId?, vatRate?, applyToExisting?) → appliedCount
+PATCH  /api/bank-statements/rules/:ruleId                 alterar / pausar / reativar (isActive) a regra; applyToExisting? → appliedCount
+DELETE /api/bank-statements/rules/:ruleId                 remover regra (os movimentos mantêm a classificação, perdem a ligação)
 PATCH  /api/bank-statements/:id/link-account              associar import a uma conta (body: { bankAccountId })
 GET    /api/bank-statements/accounts/:accountId/calendar?year=YYYY            calendário anual da conta (AccountMonthStat[])
 GET    /api/bank-statements/accounts/:accountId/calendar/:year/:month         detalhe mensal (DaySlot[])
@@ -365,6 +366,8 @@ POST   /api/bank-statements/movements/:movId/grouped-settlement              "Li
 ---
 
 ## Decisões de design (ADR resumido)
+
+**«Movimentos recorrentes» = regras de conciliação automática (2026-10-26)** — taxas TPA, despesas bancárias e outros movimentos sem fatura que se repetem: o utilizador classifica um movimento uma vez e guarda-o como regra (`bank_reconciliation_rules`, que já existia mas não tinha ecrã nem corria sozinha). Decisões do utilizador: **reconhece pela descrição, com valor opcional** (valor fixo ± margem, por defeito 1€; sem valor = qualquer valor, para taxas que variam) e **só na conta de origem** (`bank_account_id`; regras antigas sem conta valem para todas). Comparação por `recurringMatchText` nos dois lados: descrição normalizada **sem palavras com dígitos** (n.º de movimento, terminal, referências e valores mudam todos os meses) e por palavras inteiras; se várias regras servem, ganha a mais específica (conta própria → valor fixo → texto mais longo). **Só toca em movimentos intocados** (`BankMovement.isUntouched`: débito por justificar ou crédito aceite automaticamente, sem justificação nem regra) — nunca sobrepõe uma classificação manual, uma conciliação com fatura, uma sugestão ou um «sem justificativa» escolhido. Uma regra não pode aplicar «fatura» nem «sem justificativa» (`InvalidRuleError` → 400). **Quando corre**: na importação, antes de gravar (sem escritas extra; resultado `autoClassifiedCount`); ao criar/alterar/reativar com `applyToExisting`, em todo o histórico da conta, exceto extratos fechados (`applyRulesToAccount`); o botão antigo «Aplicar regras» por extrato continua. Cada movimento guarda `classified_by_rule_id` (selo «Automático», anular devolve-o a intocado; classificar à mão tira a ligação). Apagar uma regra desliga primeiro os movimentos (a FK composta não tem `on delete`) e mantém a classificação deles. Tal como a classificação manual, não atualiza as estatísticas guardadas no cabeçalho do extrato (os ecrãs de mês/ano calculam pelos movimentos). Migração `20261127100000_bank_recurring_movement_rules`. Junto: `findByAccountAndPeriod` passou a paginar (o PostgREST corta em 1000 linhas e um ano de uma conta real passa disso).
 
 **Extrato importado ≠ conciliado (V2, F1, 2026-10-26)** — `computeMonthFigures` (`domain/services/account-month-stats.service.ts`): estado `no_statement | imported | partial | reconciled`; `reconciledPercent` é `null` sem extrato ou sem movimentos (antes, `resolvedPercent` devolvia 100 com zero movimentos e os meses vazios apareciam a verde). Fluxo de caixa (entradas, saídas, resultado) pelos movimentos importados, independente da conciliação. Saldo inicial/final do mês pela cadeia «saldo antes → saldo depois» (não depende da ordem dentro do dia). O calendário devolve sempre os 12 meses; os campos antigos (`salesReconciledPercent`…) ficam como `@deprecated` só para o frontend anterior durante o deploy.
 
