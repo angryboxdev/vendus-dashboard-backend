@@ -85,6 +85,21 @@ describe("GetAccountCalendarUseCase — V2 (estado do extrato, conciliação rea
     expect(await month(8)).toMatchObject({ status: "reconciled", reconciledPercent: 100 });
   });
 
+  it("só entradas aceites automaticamente: «Não aplicável» (null) e «Importado», nunca 100%/«Conciliado»", async () => {
+    await statementRepo.save(organizationId, statement("2026-05-01", "2026-05-31"));
+    await movementRepo.saveBulk(organizationId, [mov("2026-05-03", "credit", 5_000, 105_000), mov("2026-05-04", "credit", 2_000, 107_000)]);
+    expect(await month(5)).toMatchObject({ status: "imported", reconcilableMovements: 0, reconciledPercent: null, totalMovements: 2 });
+  });
+
+  it("período parcial: extrato só de parte do mês; meses inteiros (mesmo com extratos sobrepostos) não", async () => {
+    await statementRepo.save(organizationId, statement("2026-09-15", "2026-09-30"));
+    await statementRepo.save(organizationId, statement("2026-10-01", "2026-10-20"));
+    await statementRepo.save(organizationId, statement("2026-10-15", "2026-10-31"));
+    expect(await month(9)).toMatchObject({ statementImported: true, partialPeriod: true });
+    expect(await month(10)).toMatchObject({ statementImported: true, partialPeriod: false });
+    expect(await month(11)).toMatchObject({ statementImported: false, partialPeriod: false });
+  });
+
   it("saldo inicial e final pela cadeia de saldos, mesmo com a ordem do dia trocada", async () => {
     await movementRepo.saveBulk(organizationId, [mov("2026-06-05", "debit", 300, 1_700), mov("2026-06-05", "credit", 1_000, 2_000), mov("2026-06-06", "debit", 200, 1_500)]);
     // ordem real: +1000 (1000→2000), −300 (→1700), −200 (→1500)

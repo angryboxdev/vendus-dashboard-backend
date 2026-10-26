@@ -488,6 +488,8 @@ export interface LinkStatementToAccountPort {
 export interface AccountMonthStat extends MonthFigures {
   year: number;
   month: number; // 1–12
+  /** Há extrato mas não cobre o mês todo (os totais são só dos dias cobertos). */
+  partialPeriod: boolean;
   /** @deprecated use `reconciledPercent` (dava 100 sem movimentos). Mantido para o frontend anterior durante o deploy. */
   salesReconciledPercent: number; // 0–100
   /** @deprecated use `reconciledPercent` (dava 100 sem movimentos). */
