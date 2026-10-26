@@ -112,6 +112,8 @@ export class PdfjsContentReaderAdapter implements PdfContentReaderPort {
     }
     try {
       const content: PdfContent = { pages: [], qrCodes: [] };
+      // A mesma imagem pode ser pintada várias vezes (e em várias páginas): lê-se uma vez.
+      const seenImages = new Set<string>();
       for (let p = 1; p <= Math.min(doc.numPages, MAX_PAGES); p++) {
         const page = await doc.getPage(p);
         const viewport = page.getViewport({ scale: 1 });
@@ -130,11 +132,17 @@ export class PdfjsContentReaderAdapter implements PdfContentReaderPort {
         for (let i = 0; i < ops.fnArray.length; i++) {
           if (ops.fnArray[i] !== pdfjs.OPS.paintImageXObject) continue;
           const name = ops.argsArray[i][0] as string;
+          if (seenImages.has(name)) continue;
+          seenImages.add(name);
+          // Imagens partilhadas entre páginas («g_…») vivem em `commonObjs`, não em `objs` da página:
+          // procurá-las no sítio errado esperava IMAGE_TIMEOUT_MS por cada uma (documento de pagamento
+          // das águas: ~15 ícones → ~22 s, acima do limite da leitura local → caía na IA sem QR).
+          const store = name.startsWith("g_") ? page.commonObjs : page.objs;
           // Algumas imagens nunca chegam a ser resolvidas pelo pdfjs: sem limite, a leitura ficava pendurada.
           const img = await new Promise<ImageData | null>((resolve) => {
             const timer = setTimeout(() => resolve(null), IMAGE_TIMEOUT_MS);
             try {
-              page.objs.get(name, (v: ImageData | null) => {
+              store.get(name, (v: ImageData | null) => {
                 clearTimeout(timer);
                 resolve(v);
               });
@@ -300,7 +308,9 @@ export class PdfjsContentReaderAdapter implements PdfContentReaderPort {
         }
         if (found.some((q) => q.text.startsWith("A:"))) return found;
       }
-    } catch {
+    } catch (e) {
+      // Não silenciar: sem isto, uma rasterização a falhar no servidor só se via como «lida pela IA».
+      console.error("[invoices] rasterização para procurar QR falhou:", e instanceof Error ? e.message : e);
       return [];
     }
     return [];
