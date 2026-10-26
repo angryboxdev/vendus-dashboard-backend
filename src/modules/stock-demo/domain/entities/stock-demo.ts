@@ -28,12 +28,19 @@ export interface StockDemoLink {
   createdAt: string;
 }
 
-/** Produto vendido pelo POS fictício (um prato numa variante), com o PVP com IVA. */
+/**
+ * Produto vendido pelo POS fictício, com o PVP com IVA: um prato numa variante (`dish`, baixa pela ficha técnica)
+ * ou um artigo vendido tal como vem (`item`, ex.: água ou refrigerante — baixa de 1 unidade do artigo).
+ */
 export interface PosProduct {
   reference: string;
   title: string;
-  pizzaId: string;
-  size: string;
+  kind: "dish" | "item";
+  /** Prato e variante (só `dish`). */
+  pizzaId: string | null;
+  size: string | null;
+  /** Artigo vendido avulso (só `item`). */
+  stockItemId: string | null;
   /** PVP com IVA, em cêntimos. */
   priceCents: number;
 }
@@ -43,8 +50,15 @@ export interface PosDailySale {
   date: string;
   reference: string;
   title: string;
-  pizzaId: string;
-  size: string;
+  kind: "dish" | "item";
+  pizzaId: string | null;
+  size: string | null;
+  stockItemId: string | null;
   quantity: number;
   grossCents: number;
+}
+
+/** Fonte de procura do planeamento: `pizza` → «<prato>:<variante>», `stock` → «<artigo>» (mesma identidade das vendas reais). */
+export function demandSourceOf(p: Pick<PosProduct, "kind" | "pizzaId" | "size" | "stockItemId">): { type: "pizza" | "stock"; ref: string } {
+  return p.kind === "item" ? { type: "stock", ref: p.stockItemId! } : { type: "pizza", ref: `${p.pizzaId}:${p.size}` };
 }

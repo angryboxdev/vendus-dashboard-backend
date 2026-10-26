@@ -42,8 +42,8 @@ export const HAMBURGUERIA: ScenarioDef = {
     { key: "acucar", name: "Açúcar", category: "Mercearia", type: "ingredient", unit: "g", price: 1.1, vat: 6, supplier: "mercearia", pack: { unit: "pacote", content: 1000, invoicedBy: "package" } },
     { key: "bolacha", name: "Bolacha de chocolate", category: "Mercearia", type: "ingredient", unit: "g", price: 7.5, vat: 6, supplier: "mercearia", pack: { unit: "pacote", content: 500, invoicedBy: "package" } },
     { key: "creme_avela", name: "Creme de avelã", category: "Mercearia", type: "ingredient", unit: "g", price: 9.2, vat: 6, supplier: "mercearia", pack: { unit: "balde", content: 3000, invoicedBy: "package" } },
-    { key: "refrigerante", name: "Refrigerante lata 33cl", category: "Bebidas", type: "beverage", unit: "un", price: 0.52, vat: 23, supplier: "bebidas", pack: { unit: "pack", content: 24, invoicedBy: "package" } },
-    { key: "agua", name: "Água 50cl", category: "Bebidas", type: "beverage", unit: "un", price: 0.18, vat: 6, supplier: "bebidas", pack: { unit: "pack", content: 24, invoicedBy: "package" } },
+    { key: "refrigerante", name: "Refrigerante lata 33cl", category: "Bebidas", type: "beverage", unit: "un", price: 0.52, vat: 23, supplier: "bebidas", pack: { unit: "pack", content: 24, invoicedBy: "package" }, salePrice: 2.5 },
+    { key: "agua", name: "Água 50cl", category: "Bebidas", type: "beverage", unit: "un", price: 0.18, vat: 6, supplier: "bebidas", pack: { unit: "pack", content: 24, invoicedBy: "package" }, salePrice: 1.5 },
     { key: "caixa_burger", name: "Caixa de hambúrguer", category: "Embalagens", type: "packaging", unit: "un", price: 0.21, vat: 23, supplier: "embalagens", pack: { unit: "pack", content: 100, invoicedBy: "package" } },
     { key: "saco_papel", name: "Saco de papel", category: "Embalagens", type: "packaging", unit: "un", price: 0.06, vat: 23, supplier: "embalagens", pack: { unit: "pack", content: 250, invoicedBy: "package" } },
     { key: "molho_bbq", name: "Molho barbecue", category: "Mercearia", type: "ingredient", unit: "g", price: 5.2, vat: 6, manualOnly: true },
@@ -68,7 +68,5 @@ export const HAMBURGUERIA: ScenarioDef = {
     { key: "shake_baunilha", name: "Milkshake de baunilha", category: "sweeties", prices: { xs: 3.2, small: 4.9, large: 6.5 }, lines: [["i", "gelado", 250, 400], ["i", "leite", 100, 150]] },
     { key: "shake_bolacha", name: "Milkshake de bolacha", category: "sweeties", prices: { xs: 3.5, small: 5.5, large: 7.2 }, lines: [["i", "gelado", 250, 400], ["i", "leite", 100, 150], ["i", "bolacha", 30, 50]] },
     { key: "brownie", name: "Brownie", category: "sweeties", prices: { xs: 2.9, small: 4.5 }, lines: [["p", "brownie", 120, null]] },
-    { key: "refrigerante", name: "Refrigerante", category: "classics", prices: { small: 2.5 }, lines: [["i", "refrigerante", 1, null]] },
-    { key: "agua", name: "Água", category: "classics", prices: { small: 1.5 }, lines: [["i", "agua", 1, null]] },
   ],
 };

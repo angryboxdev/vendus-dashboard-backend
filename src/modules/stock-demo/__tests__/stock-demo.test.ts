@@ -12,10 +12,11 @@ import { DemoAwareSalesReadAdapter } from "../../stock-planning/adapters/out/dem
 const REAL = mintOrganizationId("org-real");
 const DEMO = mintOrganizationId("org-demo-hamb");
 const products: PosProduct[] = [
-  { reference: "SMASH-I", title: "Smash (Individual)", pizzaId: "smash", size: "small", priceCents: 990 },
-  { reference: "SMASH-G", title: "Smash (Grande)", pizzaId: "smash", size: "large", priceCents: 1390 },
-  { reference: "BATATA", title: "Batata frita (Individual)", pizzaId: "batata", size: "small", priceCents: 450 },
-  { reference: "SHAKE", title: "Milkshake (Individual)", pizzaId: "shake", size: "small", priceCents: 550 },
+  { reference: "SMASH-I", title: "Smash (Individual)", kind: "dish", pizzaId: "smash", size: "small", stockItemId: null, priceCents: 990 },
+  { reference: "SMASH-G", title: "Smash (Grande)", kind: "dish", pizzaId: "smash", size: "large", stockItemId: null, priceCents: 1390 },
+  { reference: "BATATA", title: "Batata frita (Individual)", kind: "dish", pizzaId: "batata", size: "small", stockItemId: null, priceCents: 450 },
+  { reference: "SHAKE", title: "Milkshake (Individual)", kind: "dish", pizzaId: "shake", size: "small", stockItemId: null, priceCents: 550 },
+  { reference: "AGUA", title: "Água 50cl", kind: "item", pizzaId: null, size: null, stockItemId: "agua", priceCents: 150 },
 ];
 const link: StockDemoLink = { realOrgId: REAL, scenario: "hamburgueria", demoOrgId: DEMO, seed: 7, monthlySalesTargetCents: 6_000_000, posName: "CaixaFlow POS", posApiKeyHint: "demo-pos-••••7Q2K", createdAt: "2026-10-26T10:00:00Z" };
 
@@ -82,7 +83,10 @@ describe("casos de uso da demonstração do Stock", () => {
     const sales = (await uc.dailySales(DEMO, "2026-10-17", "2026-10-17"))!;
     const demand = (await uc.dailyDemand(DEMO, "2026-10-17"))!;
     expect(demand.reduce((s, d) => s + d.quantitySold, 0)).toBe(sales.reduce((s, d) => s + d.quantity, 0));
-    expect(demand.every((d) => d.demandSourceType === "pizza" && d.saleDate === "2026-10-17")).toBe(true);
+    expect(demand.every((d) => d.saleDate === "2026-10-17")).toBe(true);
+    // A água é um artigo vendido avulso: a procura é do artigo, não de um prato.
+    expect(demand.find((d) => d.demandSourceRef === "agua")?.demandSourceType).toBe("stock");
+    expect(demand.filter((d) => d.demandSourceType === "pizza").every((d) => d.demandSourceRef.includes(":"))).toBe(true);
   });
 
   it("planeamento: numa demo nunca chama a Vendus; numa empresa real chama", async () => {

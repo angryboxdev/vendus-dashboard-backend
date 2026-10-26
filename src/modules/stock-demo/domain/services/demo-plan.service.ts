@@ -1,4 +1,4 @@
-import type { PosProduct } from "../entities/stock-demo.js";
+import { demandSourceOf, type PosProduct } from "../entities/stock-demo.js";
 import { daysBetween, simulateDailySales, unit } from "./pos-sales.service.js";
 import type { BaseUnit, DishDef, IngredientDef, PreparationDef, PriceTrend, ScenarioDef } from "./scenarios/scenario-types.js";
 
@@ -85,10 +85,16 @@ export function buildStockDemoPlan(scenario: ScenarioDef, input: { seed: number;
   }));
 
   // ── Vendas do POS fictício e consumo pelas fichas ──
-  const products: PosProduct[] = scenario.dishes.flatMap((d) =>
-    sizesOf(d).map((s) => ({ reference: `DEMO-${d.key.toUpperCase()}-${SIZE_SUFFIX[s]}`, title: `${d.name} (${SIZE_TITLE[s]})`, pizzaId: id(`dish:${d.key}`), size: s, priceCents: Math.round(d.prices[s]! * 100) })),
+  const dishProducts: PosProduct[] = scenario.dishes.flatMap((d) =>
+    sizesOf(d).map((s) => ({ reference: `DEMO-${d.key.toUpperCase()}-${SIZE_SUFFIX[s]}`, title: `${d.name} (${SIZE_TITLE[s]})`, kind: "dish" as const, pizzaId: id(`dish:${d.key}`), size: s, stockItemId: null, priceCents: Math.round(d.prices[s]! * 100) })),
   );
-  const dishByRef = new Map(products.map((p) => [p.reference, scenario.dishes.find((d) => id(`dish:${d.key}`) === p.pizzaId)!]));
+  // Bebidas vendidas tal como vêm (água, refrigerante…): artigos vendáveis, sem ficha técnica.
+  const itemProducts: PosProduct[] = scenario.ingredients
+    .filter((i) => i.salePrice != null)
+    .map((i) => ({ reference: `DEMO-ART-${i.key.toUpperCase()}`, title: i.name, kind: "item" as const, pizzaId: null, size: null, stockItemId: id(`item:${i.key}`), priceCents: Math.round(i.salePrice! * 100) }));
+  const products = [...dishProducts, ...itemProducts];
+  const dishByRef = new Map(dishProducts.map((p) => [p.reference, scenario.dishes.find((d) => id(`dish:${d.key}`) === p.pizzaId)!]));
+  const itemKeyByRef = new Map(scenario.ingredients.filter((i) => i.salePrice != null).map((i) => [`DEMO-ART-${i.key.toUpperCase()}`, i.key]));
   const consumption = new Map<string, Map<string, number>>(); // ingrediente → dia → quantidade base
   const addUse = (key: string, day: string, q: number) => {
     const m = consumption.get(key) ?? new Map<string, number>();
@@ -107,12 +113,18 @@ export function buildStockDemoPlan(scenario: ScenarioDef, input: { seed: number;
   for (const day of daysBetween(salesFrom, salesTo)) {
     for (const sale of simulateDailySales(products, day, salesSettings)) {
       if (day >= addDays(today, -30)) salesCents30d += sale.grossCents;
-      const dish = dishByRef.get(sale.reference)!;
-      for (const line of dish.lines) {
-        const q = lineQty(line, sale.size as "xs" | "small" | "large");
-        if (q) expand(line[0], line[1], q, day, sale.quantity);
+      if (sale.kind === "item") {
+        // Artigo vendido avulso: baixa de 1 unidade do próprio artigo por venda.
+        addUse(itemKeyByRef.get(sale.reference)!, day, sale.quantity);
+      } else {
+        const dish = dishByRef.get(sale.reference)!;
+        for (const line of dish.lines) {
+          const q = lineQty(line, sale.size as "xs" | "small" | "large");
+          if (q) expand(line[0], line[1], q, day, sale.quantity);
+        }
       }
-      demandRows.push({ location_id: locationId, demand_source_type: "pizza", demand_source_ref: `${sale.pizzaId}:${sale.size}`, sale_date: day, quantity_sold: sale.quantity });
+      const source = demandSourceOf(sale);
+      demandRows.push({ location_id: locationId, demand_source_type: source.type, demand_source_ref: source.ref, sale_date: day, quantity_sold: sale.quantity });
     }
   }
   const used = (key: string, from: string, to: string) => {
@@ -147,7 +159,8 @@ export function buildStockDemoPlan(scenario: ScenarioDef, input: { seed: number;
       base_unit: i.unit,
       min_stock: min,
       is_active: true,
-      is_sellable: false,
+      is_sellable: i.salePrice != null,
+      sale_price: i.salePrice ?? null,
       purchase_reference_unit_cost_without_vat: manual,
       purchase_reference_unit_cost_with_vat: manual == null ? null : r6(manual * (1 + i.vat / 100)),
     };
@@ -286,7 +299,11 @@ export function buildStockDemoPlan(scenario: ScenarioDef, input: { seed: number;
       }),
     ),
   );
-  const mappings = products.map((p) => ({ id: id(`map:${p.reference}`), match_by: "reference", match_value: p.reference, target_type: "pizza", pizza_id: p.pizzaId, pizza_size: p.size }));
+  const mappings = products.map((p) =>
+    p.kind === "item"
+      ? { id: id(`map:${p.reference}`), match_by: "reference", match_value: p.reference, target_type: "stock", stock_item_id: p.stockItemId }
+      : { id: id(`map:${p.reference}`), match_by: "reference", match_value: p.reference, target_type: "pizza", pizza_id: p.pizzaId, pizza_size: p.size },
+  );
 
   return {
     historyFrom,
