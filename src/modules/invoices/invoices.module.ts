@@ -52,6 +52,7 @@ import { ListPayableDuplicatesUseCase } from "./application/use-cases/list-payab
 import { createInvoiceRouter } from "./adapters/in/invoice.controller.js";
 import { StockPurchaseReviewRoutingAdapter } from "./adapters/out/stock-purchase-review-routing.adapter.js";
 import { PayableRecurrencesLinkAdapter } from "./adapters/out/payable-recurrences-link.adapter.js";
+import { SupabaseRecurrenceCategoryHintAdapter } from "./adapters/out/supabase-recurrence-category-hint.adapter.js";
 import {
   ConfirmImportedInvoiceWithRecurrenceLink,
   CreateInvoiceWithRecurrenceLink,
@@ -175,6 +176,7 @@ export function createInvoicesModule(
       aiBudget,
     ),
     aiBudget,
+    recurrenceCategoryHint: new SupabaseRecurrenceCategoryHintAdapter(createScopedQuery),
   });
   const saveInvoiceDraft = new SaveInvoiceDraftUseCase(invoiceRepo, lineRepo, amountsWrite, categoryReader, allocationRepo, audit, stockLines);
 

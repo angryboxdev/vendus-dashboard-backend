@@ -161,7 +161,7 @@ export interface AiExtractedLineDTO {
   meta?: LineReadingMeta;
   /** Categoria sugerida para a linha (subcategoria do catálogo da organização) — sugestão, nunca aplicada sem revisão. */
   suggestedCostCenterCategoryId?: string | null;
-  classificationSource?: "line_kind" | "history_code" | "history_description" | "keyword" | "ai" | "none";
+  classificationSource?: "line_kind" | "history_code" | "history_description" | "keyword" | "ai" | "supplier_default" | "recurrence" | "none";
   classificationEvidence?: string;
   /** Histórico em conflito: decisão humana. */
   classificationConflict?: boolean;

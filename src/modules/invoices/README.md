@@ -374,6 +374,8 @@ fecharem ao cêntimo com as bases do QR (total e, quando dá, por taxa); senão 
 taxa do QR (`enforceQrLines`, aviso `lines_replaced_by_qr`) — a fatura fecha sempre e pode ser
 confirmada.
 
+**IVA e categoria das linhas lidas do QR (2026-10-26).** Linhas por taxa do QR cujo IVA arredonda diferente do documento (emitente arredonda linha a linha; ≤ 1 cêntimo por taxa) trazem o aviso `vat_rounded_per_line` — a revisão aplica sozinha o ajuste de arredondamento. Linhas que nenhuma regra/histórico/IA classificou recebem a categoria por defeito do fornecedor (`supplier_default`) ou, sem ela, a sub-categoria das recorrências ativas desse fornecedor quando todas coincidem (`recurrence`, `RecurrenceCategoryHintPort` → `SupabaseRecurrenceCategoryHintAdapter`, lê `recurring_contracts`). A descrição das linhas do QR é estável, por isso o histórico aprende-a depois da primeira confirmação.
+
 **Fornecedor com QR (2026-10-26).** O NIF do emitente vem do QR (certificado): um fornecedor
 achado pela dica ou pela semelhança do nome com outro NIF é recusado (fica «fornecedor não
 encontrado»); se essa ficha tiver o NIF da própria empresa (o cliente da fatura), aviso

@@ -24,7 +24,12 @@ const supplier = (id: string, name: string, nif: string | null): SupplierSummary
   id, name, nif, defaultCostCenterGroupId: null, defaultCostCenterCategoryId: null, defaultFinancialType: null,
 });
 
-function setup(suppliersSeed: SupplierSummary[], hintTo: string | null, pdfContent: PdfContent = content) {
+function setup(
+  suppliersSeed: SupplierSummary[],
+  hintTo: string | null,
+  pdfContent: PdfContent = content,
+  recurrenceHint: { categoryId: string; recurrenceName: string } | null = null,
+) {
   const ai = new FakeAiExtractionPort();
   // O que a IA leu (errado): NIF inventado, número do documento de pagamento, linhas que não fecham.
   ai.setResult({
@@ -56,6 +61,7 @@ function setup(suppliersSeed: SupplierSummary[], hintTo: string | null, pdfConte
     layouts: [new MakroLayout()],
     readingWrite: { save: async () => undefined },
     classifyLines: null,
+    recurrenceCategoryHint: { forSupplier: async () => recurrenceHint },
   };
   const useCase = new ImportInvoiceUseCase(new FakeInvoiceRepository(), new FakeDocumentStoragePort(), ai, lookup, hints, identity, new FakeFiscalIdentityPort(), smart);
   return () => useCase.execute({ organizationId: ORG, fileBuffer: Buffer.from("pdf"), filename: "aguas.pdf", mimeType: "application/pdf" });
@@ -109,5 +115,30 @@ describe("ImportInvoiceUseCase — fatura com QR lida pela IA (documento de paga
   test("dica para fornecedor sem NIF na ficha continua a valer (nada a contradizer)", async () => {
     const r = await setup([supplier("sup-sem-nif", "Águas Exemplo", null)], "sup-sem-nif")();
     expect(r.invoice.supplierId).toBe("sup-sem-nif");
+  });
+
+  test("linhas do QR: aviso de IVA arredondado linha a linha (56,59 × 6 % = 3,40 € ≠ 3,39 € do documento)", async () => {
+    const r = await setup([], null)();
+    const rounding = r.reading?.issues.find((i) => i.code === "vat_rounded_per_line");
+    expect(rounding?.blocking).toBe(false);
+    expect(rounding?.detail).toContain("-0,01 €");
+    // A fatura dos resíduos (não sujeita a IVA) não precisa de ajuste.
+  });
+
+  test("linhas sem classificação: categoria por defeito do fornecedor", async () => {
+    const withDefault = { ...supplier("sup-aguas", "Águas Exemplo", "599999993"), defaultCostCenterCategoryId: "c-agua" };
+    const r = await setup([withDefault], null)();
+    expect(r.extractedLines[0]).toMatchObject({ suggestedCostCenterCategoryId: "c-agua", classificationSource: "supplier_default" });
+  });
+
+  test("sem categoria no fornecedor: sub-categoria da recorrência desse fornecedor", async () => {
+    const r = await setup([supplier("sup-aguas", "Águas Exemplo", "599999993")], null, content, { categoryId: "c-agua", recurrenceName: "Água" })();
+    expect(r.extractedLines[0]).toMatchObject({ suggestedCostCenterCategoryId: "c-agua", classificationSource: "recurrence" });
+    expect(r.extractedLines[0]!.classificationEvidence).toContain("«Água»");
+  });
+
+  test("sem fornecedor reconhecido não se inventa categoria", async () => {
+    const r = await setup([], null, content, { categoryId: "c-agua", recurrenceName: "Água" })();
+    expect(r.extractedLines[0]!.suggestedCostCenterCategoryId).toBeUndefined();
   });
 });
