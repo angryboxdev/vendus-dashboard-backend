@@ -145,18 +145,6 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     // Sem fornecedor reconhecido só vale a recorrência do mesmo documento de pagamento (ex.: resíduos de
     // um emitente ainda por criar no cadastro, no documento das águas).
     if ((!supplier && !documentSupplierIds.length) || !extraction.lines.length) return classifications;
-    const unresolved = extraction.lines
-      .map((l, index) => ({ l, index }))
-      .filter(({ l, index }) => {
-        const c = classifications.find((x) => x.index === index);
-        if (!c) return true;
-        // Linhas do QR não têm descrição útil: um palpite da IA não vale mais do que a categoria do
-        // fornecedor ou da recorrência (o histórico, esse, vale — é a escolha confirmada antes).
-        if (c.source === "ai" && QR_LINE.test(l.description)) return true;
-        return c.categoryId === null && !c.conflict;
-      })
-      .map(({ index }) => index);
-    if (!unresolved.length) return classifications;
 
     let fallback: { categoryId: string; source: "supplier_default" | "recurrence"; evidence: string } | null = null;
     if (supplier?.defaultCostCenterCategoryId) {
@@ -172,6 +160,22 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       }
     }
     if (!fallback) return classifications;
+
+    const unresolved = extraction.lines
+      .map((l, index) => ({ l, index }))
+      .filter(({ l, index }) => {
+        const c = classifications.find((x) => x.index === index);
+        if (!c) return true;
+        // A recorrência do fornecedor (serviço único — água, luz…) é escolha do utilizador para este
+        // fornecedor: vale mais do que palavras-chave genéricas («água» → Bebidas, pensada para garrafas)
+        // e do que a IA. Nas linhas do QR (sem descrição útil) também a categoria do fornecedor vale mais
+        // do que a IA. O histórico (linhas já confirmadas deste fornecedor) vale sempre mais.
+        if (fallback!.source === "recurrence" && (c.source === "ai" || c.source === "keyword")) return true;
+        if (c.source === "ai" && QR_LINE.test(l.description)) return true;
+        return c.categoryId === null && !c.conflict;
+      })
+      .map(({ index }) => index);
+    if (!unresolved.length) return classifications;
     const filled = unresolved.map((index) => ({ index, ...fallback! }));
     return [...classifications.filter((c) => !unresolved.includes(c.index)), ...filled];
   }

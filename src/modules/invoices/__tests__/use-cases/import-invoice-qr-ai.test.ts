@@ -85,6 +85,28 @@ function setupWithHint(suppliersSeed: SupplierSummary[], forSupplier: (o: unknow
   return () => useCase.execute({ organizationId: ORG, fileBuffer: Buffer.from("pdf"), filename: "aguas.pdf", mimeType: "application/pdf" });
 }
 
+function setupClassified(suppliersSeed: SupplierSummary[], classifyLines: SmartReadingDeps["classifyLines"], hint: { categoryId: string; recurrenceName: string } | null) {
+  const ai = new FakeAiExtractionPort();
+  // Linhas que fecham com o QR (ficam as da IA, com descrição real).
+  ai.setResult({ supplierName: "Águas Exemplo", supplierNif: "599999993", totalWithVat: 5998, confidence: 0.95, lines: [
+    { description: "Consumo de água", quantity: 1, unitPriceWithoutVat: 5000, vatRate: 6, vatAmount: null, totalWithoutVat: 5000, totalWithVat: null },
+    { description: "Saneamento", quantity: 1, unitPriceWithoutVat: 659, vatRate: 6, vatAmount: null, totalWithoutVat: 659, totalWithVat: null },
+  ] });
+  const lookup = new FakeSupplierLookupPort();
+  lookup.seed(suppliersSeed);
+  const identity = new FakeOrganizationIdentityRead();
+  identity.seedNif(OWN_NIF);
+  const smart: SmartReadingDeps = {
+    pdf: { read: async () => ({ ...content, qrCodes: [content.qrCodes[0]!] }), readBarcode: async () => ({ status: "absent" }), extractLogo: async () => null },
+    layouts: [new MakroLayout()],
+    readingWrite: { save: async () => undefined },
+    classifyLines,
+    recurrenceCategoryHint: { forSupplier: async () => hint },
+  };
+  const useCase = new ImportInvoiceUseCase(new FakeInvoiceRepository(), new FakeDocumentStoragePort(), ai, lookup, new FakeSupplierHintPort(), identity, new FakeFiscalIdentityPort(), smart);
+  return () => useCase.execute({ organizationId: ORG, fileBuffer: Buffer.from("pdf"), filename: "aguas.pdf", mimeType: "application/pdf" });
+}
+
 describe("ImportInvoiceUseCase — fatura com QR lida pela IA (documento de pagamento das águas)", () => {
   test("documento com 2 QR: uma só fatura com a identidade do 1.º e a soma dos dois (90,03 €), uma linha por taxa", async () => {
     const r = await setup([], null)();
@@ -165,6 +187,38 @@ describe("ImportInvoiceUseCase — fatura com QR lida pela IA (documento de paga
     expect(r.extractedLines.map((l) => [l.suggestedCostCenterCategoryId, l.classificationSource])).toEqual([
       ["c-agua", "recurrence"],
       ["c-agua", "recurrence"],
+    ]);
+  });
+
+  test("recorrência do fornecedor vale mais do que palavras-chave e IA, mas não do que o histórico", async () => {
+    const classifyLines = {
+      execute: async () => ({
+        classifications: [
+          { index: 0, categoryId: "c-bebidas", source: "keyword" as const, evidence: "«água» → Bebidas" },
+          { index: 1, categoryId: "c-bebidas", source: "ai" as const, evidence: "IA" },
+        ],
+        metrics: { lines: 2, deterministic: 1, aiRequested: 1, aiResolved: 1, aiError: false },
+      }),
+    };
+    const run = setupClassified([supplier("sup-aguas", "Águas Exemplo", "599999993")], classifyLines, { categoryId: "c-agua", recurrenceName: "Água" });
+    const r = await run();
+    expect(r.extractedLines.map((l) => [l.suggestedCostCenterCategoryId, l.classificationSource])).toEqual([
+      ["c-agua", "recurrence"],
+      ["c-agua", "recurrence"],
+    ]);
+
+    const fromHistory = { execute: async () => ({ classifications: [0, 1].map((index) => ({ index, categoryId: "c-escolhida", source: "history_description" as const, evidence: "h" })), metrics: { lines: 2, deterministic: 2, aiRequested: 0, aiResolved: 0, aiError: false } }) };
+    const r2 = await setupClassified([supplier("sup-aguas", "Águas Exemplo", "599999993")], fromHistory, { categoryId: "c-agua", recurrenceName: "Água" })();
+    expect(r2.extractedLines.map((l) => l.classificationSource)).toEqual(["history_description", "history_description"]);
+  });
+
+  test("categoria por defeito do fornecedor não se sobrepõe a palavras-chave (só preenche o que falta)", async () => {
+    const classifyLines = { execute: async () => ({ classifications: [{ index: 0, categoryId: "c-bebidas", source: "keyword" as const, evidence: "k" }], metrics: { lines: 2, deterministic: 1, aiRequested: 0, aiResolved: 0, aiError: false } }) };
+    const withDefault = { ...supplier("sup-aguas", "Águas Exemplo", "599999993"), defaultCostCenterCategoryId: "c-agua" };
+    const r = await setupClassified([withDefault], classifyLines, null)();
+    expect(r.extractedLines.map((l) => [l.suggestedCostCenterCategoryId, l.classificationSource])).toEqual([
+      ["c-bebidas", "keyword"],
+      ["c-agua", "supplier_default"],
     ]);
   });
 });

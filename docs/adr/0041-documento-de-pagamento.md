@@ -38,3 +38,5 @@ passa a ser **uma só fatura** no emitente do 1.º QR (número, NIF e data dele)
 faturas fiscais ficam nas **notas** (número, emitente, NIF, valor). A importação deixa de criar faturas
 irmãs; o `payment_group_id`, a recorrência do grupo e a sugestão do documento na conciliação ficam
 para documentos antigos já separados (sem uso nos novos). A identidade fiscal só regista a 1.ª fatura.
+
+Ainda no mesmo dia: o documento passa a ser lido **linha a linha** sem IA (`TaxCodeLinesLayout`, 9 linhas no caso das águas), conferido com a soma dos QR; as linhas por taxa do QR ficam só como último recurso.
