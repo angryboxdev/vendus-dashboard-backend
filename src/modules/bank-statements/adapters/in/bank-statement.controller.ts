@@ -326,6 +326,131 @@ export class BankStatementController {
       }
     });
 
+    // Regras («movimentos recorrentes») antes de `/bank-statements/:id`: senão `GET /bank-statements/rules`
+    // era apanhado como o extrato com id «rules» (404) e a lista das regras vinha sempre vazia.
+    /**
+     * GET /bank-statements/rules
+     * Query: activeOnly?
+     */
+    this.router.get("/bank-statements/rules", async (req, res) => {
+      try {
+        const activeOnly = req.query["activeOnly"] === "true";
+        const rules = await this.listRules.execute({ organizationId: req.auth!.orgId, activeOnly });
+        res.json(rules);
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * POST /bank-statements/rules
+     */
+    this.router.post("/bank-statements/rules", async (req, res) => {
+      try {
+        const body = req.body as Record<string, unknown>;
+        if (!body.name || !body.descriptionContains || !body.justificationType) {
+          res.status(400).json({
+            error: "name, descriptionContains and justificationType are required",
+          });
+          return;
+        }
+        const fields = parseRuleFields(body);
+        if (typeof fields === "string") {
+          res.status(400).json({ error: fields });
+          return;
+        }
+        const ruleCmd: import("../../domain/ports/in/bank-statement.ports.js").CreateReconciliationRuleCommand = {
+          organizationId: req.auth!.orgId,
+          name: body.name as string,
+          descriptionContains: body.descriptionContains as string,
+          justificationType: body.justificationType as import("../../domain/entities/bank-movement.js").JustificationType,
+          movementType: (body.movementType as import("../../domain/entities/bank-movement.js").MovementType | undefined) ?? null,
+          costCenterGroupId: (body.costCenterGroupId as string | undefined) ?? null,
+          costCenterCategoryId: (body.costCenterCategoryId as string | undefined) ?? null,
+          ...fields,
+          ...(typeof body.bankAccountId === "string" && { bankAccountId: body.bankAccountId }),
+          ...(body.applyToExisting === true && { applyToExisting: true }),
+        };
+        if (body.requiresDocument !== undefined) ruleCmd.requiresDocument = body.requiresDocument as boolean;
+        if (body.affectsDre !== undefined) ruleCmd.affectsDre = body.affectsDre as boolean;
+        if (body.affectsCashflow !== undefined) ruleCmd.affectsCashflow = body.affectsCashflow as boolean;
+        if (body.affectsProfitability !== undefined) ruleCmd.affectsProfitability = body.affectsProfitability as boolean;
+        if (body.riskLevel !== undefined) ruleCmd.riskLevel = body.riskLevel as import("../../domain/entities/bank-movement.js").RiskLevel;
+        const rule = await this.createRule.execute(ruleCmd);
+        res.status(201).json(rule);
+      } catch (e) {
+        if (e instanceof InvalidRuleError) {
+          res.status(400).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * PATCH /bank-statements/rules/:ruleId
+     * Body: campos a alterar, isActive (pausar/reativar) e applyToExisting.
+     */
+    this.router.patch("/bank-statements/rules/:ruleId", async (req, res) => {
+      if (!this.updateRule) {
+        res.status(501).json({ error: "Not available" });
+        return;
+      }
+      try {
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const fields = parseRuleFields(body);
+        if (typeof fields === "string") {
+          res.status(400).json({ error: fields });
+          return;
+        }
+        if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
+          res.status(400).json({ error: "isActive must be a boolean" });
+          return;
+        }
+        const result = await this.updateRule.execute({
+          organizationId: req.auth!.orgId,
+          id: req.params["ruleId"]!,
+          ...fields,
+          ...(typeof body.name === "string" && { name: body.name }),
+          ...(typeof body.descriptionContains === "string" && { descriptionContains: body.descriptionContains }),
+          ...(typeof body.justificationType === "string" && {
+            justificationType: body.justificationType as import("../../domain/entities/bank-movement.js").JustificationType,
+          }),
+          ...(body.costCenterGroupId !== undefined && { costCenterGroupId: (body.costCenterGroupId as string | null) ?? null }),
+          ...(body.costCenterCategoryId !== undefined && { costCenterCategoryId: (body.costCenterCategoryId as string | null) ?? null }),
+          ...(typeof body.isActive === "boolean" && { isActive: body.isActive }),
+          ...(body.applyToExisting === true && { applyToExisting: true }),
+        });
+        res.json(result);
+      } catch (e) {
+        if (e instanceof RuleNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        if (e instanceof InvalidRuleError) {
+          res.status(400).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * DELETE /bank-statements/rules/:ruleId
+     */
+    this.router.delete("/bank-statements/rules/:ruleId", async (req, res) => {
+      try {
+        await this.deleteRule.execute({ organizationId: req.auth!.orgId, id: req.params["ruleId"]! });
+        res.status(204).send();
+      } catch (e) {
+        if (e instanceof RuleNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
     /**
      * GET /bank-statements/:id
      * Query: reconciliationStatus?, movementType?, riskLevel?
@@ -739,129 +864,6 @@ export class BankStatementController {
           return;
         }
         if (e instanceof Error && e.message.startsWith("Bank account not found")) {
-          res.status(404).json({ error: e.message });
-          return;
-        }
-        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
-      }
-    });
-
-    /**
-     * GET /bank-statements/rules
-     * Query: activeOnly?
-     */
-    this.router.get("/bank-statements/rules", async (req, res) => {
-      try {
-        const activeOnly = req.query["activeOnly"] === "true";
-        const rules = await this.listRules.execute({ organizationId: req.auth!.orgId, activeOnly });
-        res.json(rules);
-      } catch (e) {
-        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
-      }
-    });
-
-    /**
-     * POST /bank-statements/rules
-     */
-    this.router.post("/bank-statements/rules", async (req, res) => {
-      try {
-        const body = req.body as Record<string, unknown>;
-        if (!body.name || !body.descriptionContains || !body.justificationType) {
-          res.status(400).json({
-            error: "name, descriptionContains and justificationType are required",
-          });
-          return;
-        }
-        const fields = parseRuleFields(body);
-        if (typeof fields === "string") {
-          res.status(400).json({ error: fields });
-          return;
-        }
-        const ruleCmd: import("../../domain/ports/in/bank-statement.ports.js").CreateReconciliationRuleCommand = {
-          organizationId: req.auth!.orgId,
-          name: body.name as string,
-          descriptionContains: body.descriptionContains as string,
-          justificationType: body.justificationType as import("../../domain/entities/bank-movement.js").JustificationType,
-          movementType: (body.movementType as import("../../domain/entities/bank-movement.js").MovementType | undefined) ?? null,
-          costCenterGroupId: (body.costCenterGroupId as string | undefined) ?? null,
-          costCenterCategoryId: (body.costCenterCategoryId as string | undefined) ?? null,
-          ...fields,
-          ...(typeof body.bankAccountId === "string" && { bankAccountId: body.bankAccountId }),
-          ...(body.applyToExisting === true && { applyToExisting: true }),
-        };
-        if (body.requiresDocument !== undefined) ruleCmd.requiresDocument = body.requiresDocument as boolean;
-        if (body.affectsDre !== undefined) ruleCmd.affectsDre = body.affectsDre as boolean;
-        if (body.affectsCashflow !== undefined) ruleCmd.affectsCashflow = body.affectsCashflow as boolean;
-        if (body.affectsProfitability !== undefined) ruleCmd.affectsProfitability = body.affectsProfitability as boolean;
-        if (body.riskLevel !== undefined) ruleCmd.riskLevel = body.riskLevel as import("../../domain/entities/bank-movement.js").RiskLevel;
-        const rule = await this.createRule.execute(ruleCmd);
-        res.status(201).json(rule);
-      } catch (e) {
-        if (e instanceof InvalidRuleError) {
-          res.status(400).json({ error: e.message });
-          return;
-        }
-        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
-      }
-    });
-
-    /**
-     * PATCH /bank-statements/rules/:ruleId
-     * Body: campos a alterar, isActive (pausar/reativar) e applyToExisting.
-     */
-    this.router.patch("/bank-statements/rules/:ruleId", async (req, res) => {
-      if (!this.updateRule) {
-        res.status(501).json({ error: "Not available" });
-        return;
-      }
-      try {
-        const body = (req.body ?? {}) as Record<string, unknown>;
-        const fields = parseRuleFields(body);
-        if (typeof fields === "string") {
-          res.status(400).json({ error: fields });
-          return;
-        }
-        if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
-          res.status(400).json({ error: "isActive must be a boolean" });
-          return;
-        }
-        const result = await this.updateRule.execute({
-          organizationId: req.auth!.orgId,
-          id: req.params["ruleId"]!,
-          ...fields,
-          ...(typeof body.name === "string" && { name: body.name }),
-          ...(typeof body.descriptionContains === "string" && { descriptionContains: body.descriptionContains }),
-          ...(typeof body.justificationType === "string" && {
-            justificationType: body.justificationType as import("../../domain/entities/bank-movement.js").JustificationType,
-          }),
-          ...(body.costCenterGroupId !== undefined && { costCenterGroupId: (body.costCenterGroupId as string | null) ?? null }),
-          ...(body.costCenterCategoryId !== undefined && { costCenterCategoryId: (body.costCenterCategoryId as string | null) ?? null }),
-          ...(typeof body.isActive === "boolean" && { isActive: body.isActive }),
-          ...(body.applyToExisting === true && { applyToExisting: true }),
-        });
-        res.json(result);
-      } catch (e) {
-        if (e instanceof RuleNotFoundError) {
-          res.status(404).json({ error: e.message });
-          return;
-        }
-        if (e instanceof InvalidRuleError) {
-          res.status(400).json({ error: e.message });
-          return;
-        }
-        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
-      }
-    });
-
-    /**
-     * DELETE /bank-statements/rules/:ruleId
-     */
-    this.router.delete("/bank-statements/rules/:ruleId", async (req, res) => {
-      try {
-        await this.deleteRule.execute({ organizationId: req.auth!.orgId, id: req.params["ruleId"]! });
-        res.status(204).send();
-      } catch (e) {
-        if (e instanceof RuleNotFoundError) {
           res.status(404).json({ error: e.message });
           return;
         }
