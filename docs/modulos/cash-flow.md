@@ -6,14 +6,14 @@
 «Fluxo de caixa» do Mapa de rentabilidade, só a partir do banco: entradas contra saídas de todas as contas, resultado e margem, despesas por centro de custo e % das saídas justificada.
 
 ## Estado atual
-Ramo `financeiro-fluxo-caixa`, por commitar: F1 (backend: endpoint e testes) e F2 (frontend: página «Fluxo de caixa» em `/dre/fluxo-caixa`). Próximo: F3 (painel «Para tratar»); depois a DRE (aí entram as vendas do Vendus).
+Ramo `financeiro-fluxo-caixa` nos dois repositórios (commits, sem push): F1 (backend: endpoint e testes), F2 (frontend: página «Fluxo de caixa» em `/dre/fluxo-caixa`) e F3 (painel «Para tratar»: a pagar / em atraso e faturas por rever, `GET /reports/dre/fluxo-caixa/para-tratar`, `finance.payables`). Próximo: a DRE (aí entram as vendas do Vendus).
 
 ## Arquitetura
 - Código: `src/modules/cash-flow/`; composição: `cash-flow.module.ts`; documentação: `src/modules/cash-flow/README.md`.
-- Endpoint (sob `/api`): `GET /reports/dre/fluxo-caixa?year&month` — permissão `dre.statement`.
+- Endpoints (sob `/api`): `GET /reports/dre/fluxo-caixa?year&month` — permissão `dre.statement`; `GET /reports/dre/fluxo-caixa/para-tratar` — permissão `finance.payables`.
 
 ## Dependências
-Porta de [bank-statements](bank-statements.md) (`DescribeMovementPort`). Lê (só leitura) tabelas de bank-statements, invoices, payable-entries, payable-recurrences e financial-base.
+Portas de [bank-statements](bank-statements.md) (`DescribeMovementPort`), [payable-entries](payable-entries.md) (`GetPayableSummaryPort`) e [invoices](invoices.md) (`GetInvoiceAlertsPort`). Lê (só leitura) tabelas de bank-statements, invoices, payable-entries, payable-recurrences e financial-base.
 
 ## Regras de negócio
 Ver «Conceitos de domínio» e «Decisões de design» no README do módulo.
@@ -22,4 +22,4 @@ Ver «Conceitos de domínio» e «Decisões de design» no README do módulo.
 Mês incompleto se faltar importar o extrato de alguma conta (sem aviso).
 
 ## Próximos trabalhos
-F3 «Para tratar» (a pagar / em atraso, documentos por arrumar).
+DRE com as vendas do Vendus (próxima tarefa indicada pelo utilizador).

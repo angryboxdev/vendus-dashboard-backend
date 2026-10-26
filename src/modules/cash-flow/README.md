@@ -1,7 +1,7 @@
 # Módulo: cash-flow
 
 > Status: active
-> Última atualização: 2026-10-26 (F1 — endpoint do fluxo de caixa, só a partir do banco)
+> Última atualização: 2026-10-26 (F1 fluxo de caixa só a partir do banco; F3 «Para tratar»)
 
 ---
 
@@ -63,11 +63,14 @@ não altera movimentos, faturas nem categorias. A conciliação e a classificaç
 - **Justificada:** estados resolvidos contam inteiros; `conciliado_parcial` conta o valor ligado a documentos.
 - **Período:** mês corrente até hoje, comparado com os mesmos dias do mês anterior; mês fechado inteiro, comparado com o mês anterior inteiro. Mês futuro → 400.
 
+- **Para tratar** (estado atual, não depende do mês): contas a pagar em aberto e em atraso (resumo de `payable-entries`) e faturas por rever (`pendingReviewCount` dos alertas de `invoices`).
+
 ## Portas
 
 ### Entrada (casos de uso)
 
 - `GetCashFlowPort` — relatório do mês (`{ organizationId, year, month }`).
+- `GetCashFlowToHandlePort` — painel «Para tratar» (`{ organizationId }`).
 
 ### Saída (dependências do domínio)
 
@@ -75,12 +78,14 @@ não altera movimentos, faturas nem categorias. A conciliação e a classificaç
 - `ExpenseSourceReadPort` — categoria das faturas, contas a pagar e ocorrências referidas.
 - `CostCenterCatalogReadPort` — grupos e categorias de centro de custo.
 - `MovementKindPort` — tipo genérico de um movimento a partir do descritivo do banco.
+- `PayablesSummaryReadPort` — total a pagar em aberto e em atraso (cêntimos).
+- `InvoicesToReviewReadPort` — número de faturas por rever.
 
 ## Adapters
 
 ### Entrada
 
-- `CashFlowController` → `GET /reports/dre/fluxo-caixa` (permissão `dre.statement`, READ).
+- `CashFlowController` → `GET /reports/dre/fluxo-caixa` (permissão `dre.statement`, READ) e `GET /reports/dre/fluxo-caixa/para-tratar` (permissão `finance.payables`, READ).
 
 ### Saída
 
@@ -88,8 +93,12 @@ não altera movimentos, faturas nem categorias. A conciliação e a classificaç
 - `SupabaseExpenseSourceReadAdapter` → `invoices`, `invoice_lines`, `invoice_allocations`, `payable_entries`, `recurring_occurrences`, `recurring_contracts`.
 - `SupabaseCostCenterCatalogReadAdapter` → `cost_center_groups`, `cost_center_categories`.
 - `BankStatementsMovementKindAdapter` → `DescribeMovementPort` do módulo `bank-statements`.
+- `PayableEntriesSummaryAdapter` → `GetPayableSummaryPort` do módulo `payable-entries`.
+- `InvoiceAlertsToReviewAdapter` → `GetInvoiceAlertsPort` do módulo `invoices`.
 
 ## Decisões de design
+
+- **«Para tratar» num endpoint à parte, com a permissão de Contas a pagar.** São valores de outra área (Financeiro); quem só vê o Mapa (`dre.statement`) recebe 403 e o frontend esconde o painel. Reutiliza os mesmos números de Contas a pagar e dos alertas das faturas — nunca os recalcula.
 
 - **Só o banco (decisão do utilizador, 2026-10-26).** O extrato já mostra as entradas (TPA, plataformas…); o Vendus não entra neste ecrã — fica para a DRE.
 - **Categoria calculada na leitura, não gravada no movimento.** Conciliar uma saída muda logo a categoria no relatório, vale para os meses já conciliados e não exige migração. Desfazer uma conciliação também se reflete sem sincronização.

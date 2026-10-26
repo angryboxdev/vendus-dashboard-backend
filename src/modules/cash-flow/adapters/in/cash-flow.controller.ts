@@ -1,16 +1,33 @@
 import { Router } from "express";
 import type { GetCashFlowPort } from "../../domain/ports/in/get-cash-flow.port.js";
+import type { GetCashFlowToHandlePort } from "../../domain/ports/in/get-cash-flow-to-handle.port.js";
 import { InvalidCashFlowPeriodError } from "../../domain/errors.js";
 
 export class CashFlowController {
   readonly router: Router;
 
-  constructor(private readonly getCashFlow: GetCashFlowPort) {
+  constructor(
+    private readonly getCashFlow: GetCashFlowPort,
+    private readonly getToHandle: GetCashFlowToHandlePort,
+  ) {
     this.router = Router();
     this.registerRoutes();
   }
 
   private registerRoutes(): void {
+    /**
+     * GET /reports/dre/fluxo-caixa/para-tratar
+     * Estado atual (não depende do mês): contas a pagar em aberto / em atraso e faturas por rever.
+     */
+    this.router.get("/reports/dre/fluxo-caixa/para-tratar", async (req, res) => {
+      try {
+        res.json(await this.getToHandle.execute({ organizationId: req.auth!.orgId }));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Internal error";
+        res.status(500).json({ error: msg });
+      }
+    });
+
     /**
      * GET /reports/dre/fluxo-caixa?year=&month=
      * Entradas vs saídas do banco por dia, despesas por centro de custo e % justificada.

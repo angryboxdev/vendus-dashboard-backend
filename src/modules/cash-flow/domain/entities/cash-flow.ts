@@ -171,3 +171,12 @@ export interface CashFlowReport {
   categories: CashFlowCategory[];
   justification: CashFlowJustification;
 }
+
+// ─── Para tratar (estado atual, não depende do mês) ───────────────────────────
+
+export interface CashFlowToHandle {
+  /** Contas a pagar em aberto (pendentes + em atraso) e só as em atraso. */
+  payables: { dueCents: number; overdueCents: number };
+  /** Faturas importadas ainda por rever/confirmar. */
+  invoicesToReview: number;
+}

@@ -129,6 +129,7 @@ ticket do respectivo módulo.
 
 ### Entrada (use cases)
 
+- `GetPayableSummaryPort` também é devolvido pelo composition root (`getPayableSummary`, 2026-10-26) para o módulo `cash-flow` mostrar o «A pagar / em atraso» no painel «Para tratar».
 - `CreatePayableEntryPort` — cria entrada manual (sem fatura). `CreatePayableEntryCommand` inclui `organizationId`.
 - `UpdatePayableEntryPort` — edita campos de uma entrada não cancelada. `UpdatePayableEntryCommand` inclui `organizationId`.
 - `MarkPayableAsPaidPort` — marca como paga, regista `paidAt`. `MarkPayableAsPaidCommand` inclui `organizationId`.
