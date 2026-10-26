@@ -1,3 +1,5 @@
+import { ReadStatementPdfUseCase } from "./application/use-cases/read-statement-pdf.use-case.js";
+import { PdfjsStatementTextAdapter } from "./adapters/out/pdfjs-statement-text.adapter.js";
 import type { Router } from "express";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 
@@ -148,6 +150,7 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
     getMonthlySuggestions,
     getGroupedSettlementSuggestions,
     confirmGroupedSettlement,
+    new ReadStatementPdfUseCase(new PdfjsStatementTextAdapter()),
   );
 
   return { router: controller.router };

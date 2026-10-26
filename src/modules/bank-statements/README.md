@@ -1,7 +1,7 @@
 # Módulo: bank-statements
 
 > Status: ativo
-> Última atualização: 2026-10-26 (task «Conciliação bancária V2», fase F1: estados do mês, conciliação sobre movimentos conciliáveis, fluxo de caixa mensal/anual e deduplicação pelo saldo; ver «Decisões de design»). Antes: 2026-09-30 ("Liquidação agrupada").
+> Última atualização: 2026-10-26 (task «Conciliação bancária V2», fase F2: leitor do PDF «Extrato Combinado» do Millennium BCP; fase F1: estados do mês, conciliação sobre movimentos conciliáveis, fluxo de caixa mensal/anual e deduplicação pelo saldo; ver «Decisões de design»). Antes: 2026-09-30 ("Liquidação agrupada").
 
 ---
 
@@ -367,6 +367,8 @@ POST   /api/bank-statements/movements/:movId/grouped-settlement              "Li
 ## Decisões de design (ADR resumido)
 
 **Extrato importado ≠ conciliado (V2, F1, 2026-10-26)** — `computeMonthFigures` (`domain/services/account-month-stats.service.ts`): estado `no_statement | imported | partial | reconciled`; `reconciledPercent` é `null` sem extrato ou sem movimentos (antes, `resolvedPercent` devolvia 100 com zero movimentos e os meses vazios apareciam a verde). Fluxo de caixa (entradas, saídas, resultado) pelos movimentos importados, independente da conciliação. Saldo inicial/final do mês pela cadeia «saldo antes → saldo depois» (não depende da ordem dentro do dia). O calendário devolve sempre os 12 meses; os campos antigos (`salesReconciledPercent`…) ficam como `@deprecated` só para o frontend anterior durante o deploy.
+
+**Extratos em PDF lidos por posição, não por IA (V2, F2)** — `domain/services/statement-pdf/`: `StatementPdfTextPort` (adapter `PdfjsStatementTextAdapter`, o mesmo pdfjs do leitor de faturas) dá o texto com as posições; `parseStatementPdf` escolhe o modelo no registo `STATEMENT_PDF_TEMPLATES` (camada 1) e lê-o por regras (camada 2). Um banco novo = uma entrada nova no registo, sem mexer no resto. Hoje só `millennium_pdf` («EXTRATO COMBINADO»): colunas tiradas do cabeçalho da tabela (fronteiras a meio caminho entre títulos — os milhares vêm num bloco à parte e valores ≥ 100 000 começam bem antes do título), texto da margem lateral ignorado pela posição (antes cortava os últimos movimentos da página), datas «M.DD» no ano do período (dezembro→janeiro), descrições em duas linhas juntas, «SALDO INICIAL/FINAL» como saldos e «A TRANSPORTAR/TRANSPORTE» só para conferir. Metadados: conta, NIB, IBAN, moeda, n.º e período do extrato, designação do produto. **A cadeia de saldos valida a leitura**: se um saldo não for o anterior ± o valor, ou o último não for o SALDO FINAL, há um problema bloqueante e a importação devolve 422 (nunca grava valores errados); a pré-visualização mostra o resumo e os problemas (`issues`, `canImport`). Prova local (fora do repositório) com 39 extratos reais de duas contas: 4737 movimentos, 39/39 a fechar, 0 linhas de ruído. Testes do repositório só com um extrato fictício com o mesmo layout. Migração `20261126100000_bank_statement_source_pdf` (aceita `source_type = 'pdf'`). PDFs de outros layouts → 422 «não corresponde a nenhum modelo conhecido».
 
 **Créditos aceites automaticamente não contam para a %** — os créditos nascem `conciliado_sem_fatura`; contá-los fazia um mês acabado de importar nunca estar a 0% (cenário 4 da task). Um crédito justificado ou ligado a documento volta a contar.
 
