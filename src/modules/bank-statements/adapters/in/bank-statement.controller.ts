@@ -5,7 +5,8 @@ import {
   ParseError,
   type ParsedStatement,
 } from "../out/csv-statement-parser.adapter.js";
-import type { ReadStatementPdfPort } from "../../domain/ports/in/statement-pdf.ports.js";
+import type { PreviewStatementAccountPort, ReadStatementPdfPort } from "../../domain/ports/in/statement-pdf.ports.js";
+import { statementAccountHints } from "../../domain/services/statement-pdf/statement-account-hints.js";
 import type { ParsedBankStatement } from "../../domain/services/statement-pdf/parsed-statement.js";
 import type { StatementSourceType } from "../../domain/entities/bank-statement-import.js";
 import { XlsxStatementParser } from "../out/xlsx-statement-parser.adapter.js";
@@ -82,6 +83,8 @@ export class BankStatementController {
     private readonly confirmGroupedSettlement: ConfirmGroupedSettlementPort,
     /** V2 (F2): extratos em PDF de modelos reconhecidos (Millennium BCP). */
     private readonly readStatementPdf?: ReadStatementPdfPort,
+    /** V2 (F3): para que conta vai o extrato (existente ou a criar), na pré-visualização. */
+    private readonly previewStatementAccount?: PreviewStatementAccountPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -135,6 +138,8 @@ export class BankStatementController {
             accountLabel: pdf?.accountLabel ?? null,
             issues: pdf?.issues ?? [],
             canImport: !(pdf?.issues ?? []).some((i) => i.blocking),
+            // V2 (F3): conta existente ou banco/conta que vão ser criados ao importar.
+            accountResolution: pdf && this.previewStatementAccount ? await this.previewStatementAccount.execute(req.auth!.orgId, pdf) : null,
           });
         } catch (e) {
           if (e instanceof ParseError || e instanceof StatementPdfNotRecognizedError) {
@@ -168,11 +173,13 @@ export class BankStatementController {
 
           let sourceType: StatementSourceType = "manual";
           let pdfCurrency: string | null = null;
+          let pdfStatement: ParsedBankStatement | null = null;
           if (req.file) {
             const read = await this.readUpload(req.file);
             parsed = read.parsed;
             sourceType = read.sourceType;
             pdfCurrency = read.pdf?.currency ?? null;
+            pdfStatement = read.pdf;
             // Extrato em PDF que não fecha (saldos, movimentos ilegíveis): nunca se grava com valores errados.
             const blocking = (read.pdf?.issues ?? []).filter((i) => i.blocking);
             if (blocking.length > 0) {
@@ -185,7 +192,7 @@ export class BankStatementController {
 
           const bankName = (body.bankName as string | undefined) ?? parsed.bankName;
           const accountNumber =
-            (body.accountNumber as string | undefined) ?? parsed.accountNumber;
+            (body.accountNumber as string | undefined) ?? parsed.accountNumber ?? pdfStatement?.iban ?? null;
           const openingBalance = body.openingBalance != null
             ? Math.round(Number(body.openingBalance))
             : parsed.openingBalance;
@@ -232,6 +239,8 @@ export class BankStatementController {
             openingBalance,
             closingBalance,
             movements: parsed.movements,
+            // PDF reconhecido sem conta escolhida: banco e conta encontrados ou criados pelo próprio extrato.
+            ...(pdfStatement && !bankAccountId && { autoAccount: statementAccountHints(pdfStatement) }),
           });
 
           res.status(201).json(result);

@@ -8,6 +8,7 @@ import type {
 } from "../../entities/bank-movement.js";
 import type { StatementSourceType, StatementStatus } from "../../entities/bank-statement-import.js";
 import type { MonthFigures } from "../../services/account-month-stats.service.js";
+import type { StatementAccountHints, StatementAccountResolution } from "../out/statement-account-resolver.port.js";
 
 // ─── Import ───────────────────────────────────────────────────────────────────
 
@@ -34,9 +35,16 @@ export interface ImportBankStatementCommand {
   openingBalance: number; // cents
   closingBalance: number; // cents
   movements: ParsedMovement[];
+  /**
+   * V2 (F3): extrato reconhecido sem conta escolhida — o banco e a conta são encontrados pelo IBAN/nº
+   * ou criados automaticamente a partir destes dados.
+   */
+  autoAccount?: StatementAccountHints;
 }
 
 export interface ImportBankStatementResult {
+  /** V2 (F3): o que aconteceu ao banco/conta quando vieram do extrato (`autoAccount`). */
+  accountResolution?: StatementAccountResolution | null;
   id: string;
   bankAccountId: string | null;
   /** true when accountNumber matched a registered bank account automatically or via bankAccountId param */

@@ -1,6 +1,8 @@
 import type { ParsedMovement } from "../../ports/in/bank-statement.ports.js";
 
-export type StatementTemplateId = "millennium_pdf";
+import type { StatementTemplateId } from "./statement-template.js";
+
+export type { StatementTemplateId };
 
 /** Problema de leitura: `blocking` impede a importação (o extrato não fecha, falta o saldo…). */
 export interface StatementReadIssue {
@@ -15,6 +17,8 @@ export interface ParsedBankStatement {
   bankName: string;
   accountNumber: string | null;
   iban: string | null;
+  /** BIC/SWIFT do banco (ex.: «BCOMPTPL»). */
+  bic: string | null;
   /** NIB tal como impresso (só dígitos). */
   nib: string | null;
   currency: string;

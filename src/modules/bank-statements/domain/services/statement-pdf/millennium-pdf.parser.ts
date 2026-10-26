@@ -114,9 +114,11 @@ function readMetadata(lines: PdfLine[]) {
   const label = texts.map((t) => /^(CONTA [A-Z0-9 .]+?)(?:\s+N\.\s*\d+)?\s+MOEDA:/.exec(t)).find(Boolean);
   const currency = afterToken("MOEDA:");
   const nib = afterToken("NIB:");
+  const bic = afterToken("BIC/SWIFT:");
   return {
     accountNumber: afterToken("CONTA:"),
     nib: nib && /^\d+$/.test(nib) ? nib : null,
+    bic: bic && /^[A-Z0-9]{8,11}$/.test(bic) ? bic : null,
     iban: iban && /^[A-Z]{2}\d{2}[0-9A-Z]+$/.test(iban) ? iban : null,
     statementNumber: number?.[1] ?? null,
     accountLabel: label?.[1]?.trim() ?? null,
@@ -240,6 +242,7 @@ export function parseMillenniumStatement(doc: PdfDocumentText): ParsedBankStatem
     bankName: "Millennium BCP",
     accountNumber: meta.accountNumber,
     iban: meta.iban,
+    bic: meta.bic,
     nib: meta.nib,
     currency: meta.currency,
     accountLabel: meta.accountLabel,

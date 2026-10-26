@@ -3,6 +3,7 @@ import { BankStatementImport } from "../../domain/entities/bank-statement-import
 import { BankMovement } from "../../domain/entities/bank-movement.js";
 import { ReconciliationCalculatorService } from "../../domain/services/reconciliation-calculator.service.js";
 import { selectNewMovements } from "../../domain/services/movement-dedup.service.js";
+import type { StatementAccountResolution, StatementAccountResolverPort } from "../../domain/ports/out/statement-account-resolver.port.js";
 import type { BankStatementImportRepositoryPort } from "../../domain/ports/out/bank-statement-import-repository.port.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
 import type { BankAccountReadPort } from "../../domain/ports/out/bank-account-read.port.js";
@@ -35,7 +36,9 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
   constructor(
     private readonly statementRepo: BankStatementImportRepositoryPort,
     private readonly movementRepo: BankMovementRepositoryPort,
-    private readonly bankAccountRead?: BankAccountReadPort
+    private readonly bankAccountRead?: BankAccountReadPort,
+    /** V2 (F3): banco e conta encontrados ou criados a partir do extrato (`command.autoAccount`). */
+    private readonly accountResolver?: StatementAccountResolverPort,
   ) {}
 
   /** Movimentos já gravados da mesma conta no período do ficheiro (pela conta ligada; senão pelo nº de conta dos extratos). */
@@ -62,6 +65,16 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
     // 1. Resolve bank account linkage
     let resolvedBankAccountId: string | null = command.bankAccountId ?? null;
     let accountMatched = resolvedBankAccountId != null;
+    let accountResolution: StatementAccountResolution | null | undefined;
+
+    // Extrato reconhecido sem conta escolhida: encontra a conta pelo IBAN/nº ou cria banco + conta.
+    if (!accountMatched && command.autoAccount && this.accountResolver) {
+      accountResolution = await this.accountResolver.resolve(organizationId, command.autoAccount, { create: true });
+      if (accountResolution?.accountId) {
+        resolvedBankAccountId = accountResolution.accountId;
+        accountMatched = true;
+      }
+    }
 
     if (!accountMatched && this.bankAccountRead && command.accountNumber) {
       const match = await this.bankAccountRead.findByAccountNumber(organizationId, command.accountNumber);
@@ -161,6 +174,7 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
 
     return {
       id: updated.id,
+      ...(accountResolution !== undefined && { accountResolution }),
       bankAccountId: resolvedBankAccountId,
       accountMatched,
       parsedAccountNumber: command.accountNumber,
