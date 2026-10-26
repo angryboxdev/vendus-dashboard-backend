@@ -201,8 +201,9 @@ classification — a different concept, don't conflate the two).
 
 **Documento de pagamento (grupo de pagamento)**:
 Um PDF com várias faturas fiscais — cada uma com o seu QR, número e emitente — pagas num só
-débito (ex.: águas: água/saneamento da empresa das águas + resíduos de outra entidade). A
-importação cria uma fatura por QR e liga-as com o mesmo `invoices.payment_group_id`. Para a
+débito (ex.: águas: água/saneamento da empresa das águas + resíduos de outra entidade). Desde a
+revisão da ADR-0041 a importação lança-o como **uma só fatura** no emitente do 1.º QR, com a soma de
+todos; as outras faturas ficam nas notas (antes: uma fatura por QR ligadas por `invoices.payment_group_id`). Para a
 recorrência e para a conciliação o documento conta como **um pagamento** (real = soma; o débito
 concilia as faturas todas de uma vez); para a contabilidade continuam a ser faturas distintas,
 cada uma com o seu emitente e IVA. Ver ADR-0041.

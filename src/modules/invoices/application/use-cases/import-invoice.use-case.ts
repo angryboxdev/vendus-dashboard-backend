@@ -13,7 +13,7 @@ import type { OrganizationIdentityReadPort } from "../../domain/ports/out/organi
 import { normalizeNif } from "../../domain/utils/nif.js";
 import { normalizeSupplierName, supplierNameSimilarity, FUZZY_MATCH_THRESHOLD } from "../../domain/utils/supplier-name.js";
 import { toInvoiceDTO } from "./shared.js";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import type { FiscalIdentityPort } from "../../domain/ports/out/fiscal-identity.port.js";
 import type { PdfContentReaderPort } from "../../domain/ports/out/pdf-content-reader.port.js";
 import type { InvoiceReadingWritePort } from "../../domain/ports/out/invoice-reading-write.port.js";
@@ -219,21 +219,28 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     // 3. Sem layout conhecido → IA (buffer enviado diretamente — sem URL público).
     let lineNotes: { code: string; blocking: boolean; detail: string }[] = [];
     let extraction: AiExtractionResult;
-    if (reading) extraction = readingToExtraction(reading);
-    else {
+    // Documento de pagamento com vários QR fiscais (ex.: águas: água/saneamento + resíduos): uma só
+    // fatura no emitente do 1.º, com a soma de todos (decisão do utilizador, 2026-10-26).
+    const documentQrs = qr ? [qr, ...otherQrs.filter((o) => (ACCEPTED_FISCAL_DOCUMENT_TYPES as readonly string[]).includes(o.documentType ?? ""))] : [];
+    const combined = documentQrs.length > 1;
+    if (reading) {
+      extraction = readingToExtraction(reading);
+      // A leitura determinística só fechou com o 1.º QR: valores e linhas passam a ser os do documento todo.
+      if (combined) extraction = enforceQrLines(applyQrToExtraction(extraction, documentQrs), documentQrs).extraction;
+    } else {
       // Linhas da IA: quantidade × preço tem de dar o total impresso da linha (senão prevalece o total).
       const raw = await this.aiExtraction.extract(command.fileBuffer, command.mimeType);
       const sanitized = sanitizeExtractedLines(raw.lines);
       // Com QR fiscal válido, identidade e totais vêm do QR (dado certificado), não da leitura da IA.
-      extraction = qr ? applyQrToExtraction({ ...raw, lines: sanitized.lines }, qr) : { ...raw, lines: sanitized.lines };
+      extraction = qr ? applyQrToExtraction({ ...raw, lines: sanitized.lines }, documentQrs) : { ...raw, lines: sanitized.lines };
       lineNotes = sanitized.notes.map((n) => ({ code: n.code, blocking: false, detail: n.detail }));
       // «Linhas conferidas»: com QR, linhas da IA que não fecham com ele dão lugar às bases do QR por taxa.
       if (qr) {
-        const enforced = enforceQrLines(extraction, qr);
+        const enforced = enforceQrLines(extraction, documentQrs);
         extraction = enforced.extraction;
         if (enforced.note) {
           lineNotes = [{ code: "lines_replaced_by_qr", blocking: false, detail: enforced.note }];
-          const rounding = qrPerLineVatRoundingNote(qr);
+          const rounding = qrPerLineVatRoundingNote(documentQrs);
           if (rounding) lineNotes.push(rounding);
         }
       }
@@ -244,43 +251,20 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     }
     const readMs = Date.now() - t0;
 
-    // 4. Um rascunho por fatura fiscal: a 1.ª com a leitura acima; num documento de pagamento com
-    //    vários QR (ex.: águas + resíduos), as restantes saem de cada QR (emitente pelo NIF, uma linha
-    //    por taxa) — sem nova chamada à IA — e ficam no mesmo grupo de pagamento.
-    const primary = await this.buildDraft(command, { extraction, reading, qr, lineNotes, fileUrl, sha256, readMs, primary: true });
-    const siblings: InvoiceImportResultDTO[] = [];
-    for (const other of otherQrs) {
-      if (!(ACCEPTED_FISCAL_DOCUMENT_TYPES as readonly string[]).includes(other.documentType ?? "")) continue;
-      const fromQr = enforceQrLines(
-        applyQrToExtraction({ ...extraction, supplierName: null, supplierAddress: null, supplierEmail: null, lines: [], confidence: 1, validationIssues: [] }, other),
-        other,
-      ).extraction;
-      const note = { code: "read_from_qr", blocking: false, detail: `Fatura ${other.documentNumber} lida do QR fiscal do mesmo documento de pagamento (sem IA) — confirme o fornecedor e classifique.` };
-      const rounding = qrPerLineVatRoundingNote(other);
-      siblings.push(await this.buildDraft(command, { extraction: fromQr, reading: null, qr: other, lineNotes: rounding ? [note, rounding] : [note], fileUrl, sha256, readMs, primary: false, documentSupplierIds: primary.invoice.supplierId ? [primary.invoice.supplierId] : [] }));
-    }
-    if (!siblings.length) {
-      if (primary.reused) await this.storage.delete(fileUrl).catch(() => undefined);
-      return primary;
+    // 4. As outras faturas do documento ficam nas notas (número, emitente, valor) — para a contabilidade.
+    let invoiceNotes: string | null = null;
+    if (combined) {
+      const parts: string[] = [];
+      for (const o of documentQrs.slice(1)) {
+        const issuer = await this.supplierLookup.findByNif(command.organizationId, normalizeNif(o.issuerNif)).catch(() => null);
+        parts.push(`${o.documentNumber} de ${issuer?.name ?? "outro emitente"} (NIF ${o.issuerNif}, ${(o.totalCents / 100).toFixed(2).replace(".", ",")} €)`);
+      }
+      invoiceNotes = `Documento de pagamento com ${documentQrs.length} faturas fiscais, lançado como uma só (total do débito). Inclui a fatura ${parts.join(", ")}.`;
     }
 
-    const all = [primary, ...siblings];
-    // Tudo já existia: nada novo ficou a apontar para o ficheiro acabado de guardar.
-    if (all.every((r) => r.reused)) await this.storage.delete(fileUrl).catch(() => undefined);
-    const fresh = all.filter((r) => !r.reused);
-    let groupId: string | null = null;
-    if (fresh.length > 1) {
-      // A ligação é uma ajuda (recorrência e conciliação do grupo): se falhar, as faturas ficam criadas.
-      try {
-        const id = randomUUID();
-        await this.invoiceRepo.setPaymentGroup(command.organizationId, fresh.map((r) => r.invoice.id), id);
-        groupId = id;
-      } catch (e) {
-        console.error("[invoices] não foi possível ligar as faturas do mesmo documento de pagamento (ignorado):", e instanceof Error ? e.message : e);
-      }
-    }
-    const withGroup = (r: InvoiceImportResultDTO) => (groupId && !r.reused ? { ...r, invoice: { ...r.invoice, paymentGroupId: groupId } } : r);
-    return { ...withGroup(primary), siblings: siblings.map(withGroup) };
+    const primary = await this.buildDraft(command, { extraction, reading, qr, lineNotes, fileUrl, sha256, readMs, primary: true, invoiceNotes });
+    if (primary.reused) await this.storage.delete(fileUrl).catch(() => undefined);
+    return primary;
   }
 
   /** Fornecedor, validações, identidade fiscal e rascunho de UMA fatura lida (a 1.ª do PDF ou outra pelo seu QR). */
@@ -298,6 +282,8 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       primary: boolean;
       /** Fornecedores das outras faturas do mesmo documento de pagamento (categoria de recurso). */
       documentSupplierIds?: string[];
+      /** Notas da fatura (ex.: as outras faturas do mesmo documento de pagamento). */
+      invoiceNotes?: string | null;
     },
   ): Promise<InvoiceImportResultDTO> {
     const { extraction, reading, qr, lineNotes, fileUrl, sha256, readMs } = ctx;
@@ -465,6 +451,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       costCenterCategoryId,
       financialType,
       currency: extraction.currency ?? "EUR",
+      notes: ctx.invoiceNotes ?? null,
     });
 
     await this.invoiceRepo.save(command.organizationId, finalInvoice);
