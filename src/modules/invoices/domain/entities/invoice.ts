@@ -349,6 +349,8 @@ export class Invoice {
     financialType?: string | null;
     currency?: string;
     obligation?: InvoiceObligation | null;
+    /** Ex.: documento de pagamento com várias faturas fiscais lançado como uma só — as outras ficam aqui. */
+    notes?: string | null;
   }): Invoice {
     const now = new Date();
     const documentType = props.documentType ?? "invoice";
@@ -374,7 +376,7 @@ export class Invoice {
       paymentMethod: null,
       paymentNotes: null,
       competenceDate: null,
-      notes: null,
+      notes: props.notes ?? null,
       attachmentUrl: props.attachmentUrl ?? null,
       source: props.source,
       aiExtractionStatus: "done",

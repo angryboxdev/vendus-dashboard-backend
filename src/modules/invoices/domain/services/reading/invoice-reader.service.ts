@@ -72,7 +72,7 @@ export function readFiscalQr(content: PdfContent): { qr: FiscalQr | null; issues
     issues.unshift({
       code: "qr_multiple_documents",
       blocking: false,
-      detail: `O PDF traz ${others.length + 1} faturas fiscais: ${[qr, ...others].map(fmt).join(", ")}. Cada uma é lançada como fatura própria, ligadas ao mesmo pagamento.`,
+      detail: `O PDF traz ${others.length + 1} faturas fiscais: ${[qr, ...others].map(fmt).join(", ")}. Lançadas como uma só fatura (soma), no emitente da 1.ª; as outras ficam nas notas.`,
     });
   }
   return { qr, issues };
