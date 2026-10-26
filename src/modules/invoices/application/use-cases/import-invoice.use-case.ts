@@ -33,7 +33,12 @@ import type { FiscalQr, ReadingIssue } from "../../domain/entities/invoice-readi
 
 const AI_CONFIDENCE_REVIEW_THRESHOLD = 0.7;
 const VALUE_DISCREPANCY_MARGIN_CENTS = 2;
-const LOCAL_READ_TIMEOUT_MS = 8000;
+/**
+ * Limite da leitura local (texto + QR). Generoso: ler o QR evita uma chamada à IA (que também
+ * demora) e dá identidade e totais certificados; o servidor (Render starter) é bem mais lento do
+ * que uma máquina de desenvolvimento. Ultrapassado → segue pela IA, com aviso na revisão.
+ */
+const LOCAL_READ_TIMEOUT_MS = 20_000;
 
 /**
  * Leitor inteligente (E3): leitura determinística (QR + texto do PDF) antes da IA e
@@ -67,12 +72,26 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
   private async readLocally(
     buffer: Buffer,
     mimeType: string,
-  ): Promise<{ reading: InvoiceReading | null; qr: FiscalQr | null; qrType: string | null; qrNotes: ReadingIssue[]; otherQrs: FiscalQr[] }> {
-    const none = { reading: null, qr: null, qrType: null, qrNotes: [], otherQrs: [] };
+  ): Promise<{ reading: InvoiceReading | null; qr: FiscalQr | null; qrType: string | null; qrNotes: ReadingIssue[]; otherQrs: FiscalQr[]; timedOut: boolean }> {
+    const none = { reading: null, qr: null, qrType: null, qrNotes: [], otherQrs: [], timedOut: false };
     if (!this.smart || mimeType !== "application/pdf") return none;
-    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), LOCAL_READ_TIMEOUT_MS).unref?.());
-    const content = await Promise.race([this.smart.pdf.read(buffer, mimeType).catch(() => null), timeout]);
+    const TIMED_OUT = Symbol("timeout");
+    const t0 = Date.now();
+    const timeout = new Promise<typeof TIMED_OUT>((resolve) => setTimeout(() => resolve(TIMED_OUT), LOCAL_READ_TIMEOUT_MS).unref?.());
+    const content = await Promise.race([
+      this.smart.pdf.read(buffer, mimeType).catch((e: unknown) => {
+        console.error("[invoices] leitura local do PDF falhou (segue pela IA):", e instanceof Error ? e.message : e);
+        return null;
+      }),
+      timeout,
+    ]);
+    if (content === TIMED_OUT) {
+      console.warn(`[invoices] leitura local do PDF excedeu ${LOCAL_READ_TIMEOUT_MS} ms (segue pela IA, sem QR)`);
+      return { ...none, timedOut: true };
+    }
     if (!content) return none;
+    const readMs = Date.now() - t0;
+    if (readMs > LOCAL_READ_TIMEOUT_MS / 2) console.warn(`[invoices] leitura local do PDF lenta: ${readMs} ms`);
     const { qr, issues } = readFiscalQr(content);
     const validQr = qr && !issues.some((i) => i.blocking) ? qr : null;
     const reading = readInvoice(content, this.smart.layouts);
@@ -85,6 +104,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       qrType: qr?.documentType ?? null,
       qrNotes: issues.filter((i) => !i.blocking && i.code === "qr_multiple_documents"),
       otherQrs: validQr ? otherFiscalQrs(content, validQr) : [],
+      timedOut: false,
     };
   }
 
@@ -126,7 +146,7 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     // 1. Leitor determinístico primeiro (QR fiscal + texto do PDF, sem IA). O QR diz o tipo do documento:
     //    pró-formas, orçamentos, guias e recibos não são faturas → recusados antes de guardar o ficheiro.
     const t0 = Date.now();
-    const { reading, qr, qrType, qrNotes, otherQrs } = await this.readLocally(command.fileBuffer, command.mimeType);
+    const { reading, qr, qrType, qrNotes, otherQrs, timedOut } = await this.readLocally(command.fileBuffer, command.mimeType);
     if (qrType && !(ACCEPTED_FISCAL_DOCUMENT_TYPES as readonly string[]).includes(qrType)) throw new NotAFiscalInvoiceError(qrType);
 
     // Orçamento diário de IA: sem leitura determinística, a leitura pela IA tem de caber no limite do dia
@@ -163,6 +183,9 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       }
     }
     lineNotes.push(...qrNotes.map((n) => ({ code: n.code, blocking: false, detail: n.detail })));
+    if (timedOut) {
+      lineNotes.push({ code: "local_read_timeout", blocking: false, detail: "A leitura do QR fiscal demorou demasiado — a fatura foi lida só pela IA. Confirme fornecedor, número e valores com o documento." });
+    }
     const readMs = Date.now() - t0;
 
     // 4. Um rascunho por fatura fiscal: a 1.ª com a leitura acima; num documento de pagamento com
