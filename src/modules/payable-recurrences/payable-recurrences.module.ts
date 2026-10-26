@@ -8,6 +8,7 @@ import { SupabaseInvoiceReadAdapter } from "./adapters/out/supabase-invoice-read
 import { SupabaseRecurrenceDocumentStorageAdapter } from "./adapters/out/supabase-document-storage.adapter.js";
 import { SupabaseBankMovementLinkReadAdapter } from "./adapters/out/supabase-bank-movement-link-read.adapter.js";
 import { SupabaseInvoiceAllocatedAmountReadAdapter } from "./adapters/out/supabase-invoice-allocated-amount-read.adapter.js";
+import { SupabaseEmployeeDirectoryReadAdapter } from "./adapters/out/supabase-employee-directory-read.adapter.js";
 
 // Use cases — recorrências
 import { CreateRecurrenceUseCase } from "./application/use-cases/create-recurrence.use-case.js";
@@ -17,6 +18,7 @@ import { ResumeRecurrenceUseCase } from "./application/use-cases/resume-recurren
 import { CloseRecurrenceUseCase } from "./application/use-cases/close-recurrence.use-case.js";
 import { ListRecurrencesUseCase } from "./application/use-cases/list-recurrences.use-case.js";
 import { GetRecurrenceUseCase } from "./application/use-cases/get-recurrence.use-case.js";
+import { ListRecurrenceEmployeesUseCase } from "./application/use-cases/list-recurrence-employees.use-case.js";
 
 // Use cases — ocorrências
 import { GenerateOccurrenceUseCase } from "./application/use-cases/generate-occurrence.use-case.js";
@@ -63,17 +65,19 @@ export function createPayableRecurrencesModule(): PayableRecurrencesModule {
   const documentStorage = new SupabaseRecurrenceDocumentStorageAdapter();
   const bankMovementLinkRead = new SupabaseBankMovementLinkReadAdapter(createScopedQuery);
   const invoiceAllocatedAmountRead = new SupabaseInvoiceAllocatedAmountReadAdapter(createScopedQuery);
+  const employeeDirectory = new SupabaseEmployeeDirectoryReadAdapter(createScopedQuery);
 
   // Controller
   const router = createRecurrenceRouter({
     // Recorrências
-    createRecurrence: new CreateRecurrenceUseCase(recurrenceRepo),
-    updateRecurrence: new UpdateRecurrenceUseCase(recurrenceRepo),
+    createRecurrence: new CreateRecurrenceUseCase(recurrenceRepo, employeeDirectory),
+    updateRecurrence: new UpdateRecurrenceUseCase(recurrenceRepo, employeeDirectory),
     pauseRecurrence: new PauseRecurrenceUseCase(recurrenceRepo),
     resumeRecurrence: new ResumeRecurrenceUseCase(recurrenceRepo),
     closeRecurrence: new CloseRecurrenceUseCase(recurrenceRepo),
     listRecurrences: new ListRecurrencesUseCase(recurrenceRepo),
     getRecurrence: new GetRecurrenceUseCase(recurrenceRepo),
+    listRecurrenceEmployees: new ListRecurrenceEmployeesUseCase(employeeDirectory),
     // Ocorrências
     generateOccurrence: new GenerateOccurrenceUseCase(recurrenceRepo, occurrenceRepo),
     listOccurrences: new ListOccurrencesUseCase(occurrenceRepo, bankMovementLinkRead, invoiceAllocatedAmountRead),

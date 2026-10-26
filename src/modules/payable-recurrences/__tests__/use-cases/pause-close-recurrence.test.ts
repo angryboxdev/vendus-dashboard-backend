@@ -4,6 +4,7 @@ import { PauseRecurrenceUseCase } from "../../application/use-cases/pause-recurr
 import { ResumeRecurrenceUseCase } from "../../application/use-cases/resume-recurrence.use-case.js";
 import { CloseRecurrenceUseCase } from "../../application/use-cases/close-recurrence.use-case.js";
 import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js";
+import { FakeEmployeeDirectoryRead } from "../fakes/fake-employee-directory-read.js";
 import { RecurrenceNotFoundError, RecurrenceClosedError, RecurrenceAlreadyPausedError } from "../../domain/errors.js";
 
 const organizationId = mintOrganizationId("org-a");
@@ -24,7 +25,7 @@ describe("Pause / Resume / Close recurrence use cases", () => {
     const repo = new FakeRecurrenceRepository();
     return {
       repo,
-      create: new CreateRecurrenceUseCase(repo),
+      create: new CreateRecurrenceUseCase(repo, new FakeEmployeeDirectoryRead()),
       pause: new PauseRecurrenceUseCase(repo),
       resume: new ResumeRecurrenceUseCase(repo),
       close: new CloseRecurrenceUseCase(repo),

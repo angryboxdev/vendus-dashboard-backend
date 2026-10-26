@@ -2,6 +2,7 @@ import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateRecurrenceUseCase } from "../../application/use-cases/create-recurrence.use-case.js";
 import { GenerateBatchOccurrencesUseCase } from "../../application/use-cases/generate-batch-occurrences.use-case.js";
 import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js";
+import { FakeEmployeeDirectoryRead } from "../fakes/fake-employee-directory-read.js";
 import { FakeOccurrenceRepository } from "../fakes/fake-occurrence-repository.js";
 
 const organizationId = mintOrganizationId("org-a");
@@ -12,7 +13,7 @@ function make() {
   return {
     recurrenceRepo,
     occurrenceRepo,
-    create: new CreateRecurrenceUseCase(recurrenceRepo),
+    create: new CreateRecurrenceUseCase(recurrenceRepo, new FakeEmployeeDirectoryRead()),
     batch: new GenerateBatchOccurrencesUseCase(recurrenceRepo, occurrenceRepo),
   };
 }

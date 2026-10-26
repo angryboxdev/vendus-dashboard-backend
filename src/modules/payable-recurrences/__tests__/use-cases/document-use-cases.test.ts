@@ -7,6 +7,7 @@ import { GenerateOccurrenceUseCase } from "../../application/use-cases/generate-
 import { UploadOccurrenceDocumentUseCase } from "../../application/use-cases/upload-occurrence-document.use-case.js";
 import { DeleteOccurrenceDocumentUseCase } from "../../application/use-cases/delete-occurrence-document.use-case.js";
 import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js";
+import { FakeEmployeeDirectoryRead } from "../fakes/fake-employee-directory-read.js";
 import { FakeOccurrenceRepository } from "../fakes/fake-occurrence-repository.js";
 import { FakeDocumentStorage } from "../fakes/fake-document-storage.js";
 import { RecurrenceNotFoundError, OccurrenceNotFoundError, RecurrenceClosedError } from "../../domain/errors.js";
@@ -34,7 +35,7 @@ function make() {
     recurrenceRepo,
     occurrenceRepo,
     storage,
-    createRec: new CreateRecurrenceUseCase(recurrenceRepo),
+    createRec: new CreateRecurrenceUseCase(recurrenceRepo, new FakeEmployeeDirectoryRead()),
     closeRec: new CloseRecurrenceUseCase(recurrenceRepo),
     generateOcc: new GenerateOccurrenceUseCase(recurrenceRepo, occurrenceRepo),
     uploadRec: new UploadRecurrenceDocumentUseCase(recurrenceRepo, storage),

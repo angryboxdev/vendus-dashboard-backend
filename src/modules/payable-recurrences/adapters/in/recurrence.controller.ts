@@ -8,6 +8,7 @@ import type {
   CloseRecurrencePort,
   ListRecurrencesPort,
   GetRecurrencePort,
+  ListRecurrenceEmployeesPort,
 } from "../../domain/ports/in/recurrence.ports.js";
 import type {
   GenerateOccurrencePort,
@@ -38,6 +39,7 @@ import {
   OccurrenceInvalidTransitionError,
   OccurrenceInvoiceRequiredError,
   InvoiceAlreadyLinkedError,
+  RecurrenceEmployeeNotFoundError,
 } from "../../domain/errors.js";
 
 interface RecurrencePorts {
@@ -48,6 +50,7 @@ interface RecurrencePorts {
   closeRecurrence: CloseRecurrencePort;
   listRecurrences: ListRecurrencesPort;
   getRecurrence: GetRecurrencePort;
+  listRecurrenceEmployees: ListRecurrenceEmployeesPort;
   generateOccurrence: GenerateOccurrencePort;
   listOccurrences: ListOccurrencesPort;
   getOccurrence: GetOccurrencePort;
@@ -68,7 +71,11 @@ interface RecurrencePorts {
 const upload = multer({ storage: multer.memoryStorage() });
 
 function handleError(res: import("express").Response, err: unknown): void {
-  if (err instanceof RecurrenceNotFoundError || err instanceof OccurrenceNotFoundError) {
+  if (
+    err instanceof RecurrenceNotFoundError ||
+    err instanceof OccurrenceNotFoundError ||
+    err instanceof RecurrenceEmployeeNotFoundError
+  ) {
     res.status(404).json({ error: (err as Error).message });
     return;
   }
@@ -100,6 +107,16 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
   const router = Router();
 
   // ── Occurrence routes (specific paths must come before /:id) ────────────────
+
+  // GET /payable-recurrences/employees — colaboradores do RH (id, nome, estado) para recorrências de salários
+  router.get("/payable-recurrences/employees", async (req, res) => {
+    try {
+      const employees = await ports.listRecurrenceEmployees.execute({ organizationId: req.auth!.orgId });
+      res.json(employees);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
 
   // GET /payable-recurrences/occurrences/linked-invoice-ids
   router.get("/payable-recurrences/occurrences/linked-invoice-ids", async (req, res) => {
