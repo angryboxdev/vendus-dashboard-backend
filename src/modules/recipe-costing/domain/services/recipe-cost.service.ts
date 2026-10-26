@@ -31,7 +31,7 @@ export function preparationFactor(preparation: PreparationDefinition, quantity: 
 }
 
 /** Artigos de stock (com quantidade por unidade de linha) que uma linha de receita consome. */
-function expandLine(
+export function expandLine(
   line: RecipeLine,
   preparations: Map<string, PreparationDefinition>,
 ): { stockItemId: string; quantity: number }[] {

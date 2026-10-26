@@ -9,6 +9,7 @@ import type { CostCenterCategoryReadPort } from "../../domain/ports/out/cost-cen
 import type { StockAiBudgetPort } from "../../domain/ports/out/ai-budget.port.js";
 import { confidentNameMatch, rankCandidates, suggestConversionFactor, type CatalogItem } from "../../domain/services/item-matching.service.js";
 import { invoiceLineToStock, invoiceQuantityUnit } from "../../domain/services/presentation-conversion.service.js";
+import { isDepositLine } from "../../domain/services/deposit-line.service.js";
 import { PurchasePresentation, type PurchasePresentationProps } from "../../domain/entities/purchase-presentation.js";
 import type { StockReviewAuditLogPort } from "../../domain/ports/out/stock-review-audit-log.port.js";
 import type { EntryRulesRepositoryPort } from "../../domain/ports/out/entry-rules-repository.port.js";
@@ -19,6 +20,8 @@ import { unitFactor } from "../../domain/services/presentation-conversion.servic
 
 /** Quem resolve as linhas com decisão já confirmada (visível na revisão como «associação confirmada»). */
 export const AUTO_RESOLVED_BY = "sistema · associação confirmada";
+/** Depósito de embalagem (latas/garrafas): devolvível, nunca entra no Stock. */
+export const DEPOSIT_RESOLVED_BY = "sistema · depósito de embalagem";
 
 /** EAN-8/12/13/14 com dígito de controlo válido. */
 export function isEan(code: string): boolean {
@@ -88,10 +91,18 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
       const forAi: { line: StockReviewLine; candidates: CatalogItem[] }[] = [];
       /** Linhas com decisão confirmada por pessoas (embalagem ou associação aprendida) — resolvem-se sozinhas. */
       const confirmed = new Set<string>();
+      /** Linhas de depósito de embalagem — fora do Stock sem perguntar (marcadas, corrigíveis). */
+      const deposits = new Set<string>();
 
       const presentations = supplierId && this.packaging ? await this.packaging.presentations.listActiveBySupplier(command.organizationId, supplierId) : [];
       const presByKey = new Map(presentations.map((pr) => [PurchasePresentation.matchKey(pr.toProps().supplierReference, normalizeDescription(pr.toProps().description)), pr] as const));
       for (const line of pending) {
+        if (isDepositLine(line.description)) {
+          updated.set(line.id, line.withSuggestion({ source: "learned", resolution: "no_stock_effect", stockItemId: null, conversionFactor: null, confidence: 1, packagingChanged: false, suggestedAt: now }));
+          confirmed.add(line.id);
+          deposits.add(line.id);
+          continue;
+        }
         // Embalagem confirmada pelo utilizador: artigo e fator vêm dela (fatura em sacos ou em kg).
         const pres = (line.supplierItemCode ? presByKey.get(PurchasePresentation.matchKey(line.supplierItemCode, "")) : undefined) ?? presByKey.get(PurchasePresentation.matchKey(null, normalizeDescription(line.description)));
         const presItem = pres ? byId.get(pres.stockItemId) : undefined;
@@ -197,7 +208,7 @@ export class SuggestReviewMappingsUseCase implements SuggestReviewMappingsPort {
         const line = updated.get(id)!;
         const sg = line.suggestion!;
         if (sg.resolution === "no_stock_effect") {
-          updated.set(id, line.resolveAsNoStockEffect(AUTO_RESOLVED_BY));
+          updated.set(id, line.resolveAsNoStockEffect(deposits.has(id) ? DEPOSIT_RESOLVED_BY : AUTO_RESOLVED_BY));
         } else if (sg.stockItemId && sg.conversionFactor) {
           const item = byId.get(sg.stockItemId)!;
           const check = validateConversion(line.purchaseUnit, item.baseUnit);

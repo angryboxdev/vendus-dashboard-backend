@@ -103,7 +103,7 @@ export class SavePurchasePresentationUseCase implements SavePurchasePresentation
 export class ListPurchasePresentationsUseCase implements ListPurchasePresentationsPort {
   constructor(private readonly repository: PurchasePresentationRepositoryPort) {}
 
-  async execute(organizationId: OrganizationId, supplierId: string): Promise<PurchasePresentationDTO[]> {
+  async execute(organizationId: OrganizationId, supplierId: string | null): Promise<PurchasePresentationDTO[]> {
     return (await this.repository.listActiveBySupplier(organizationId, supplierId)).map(toPurchasePresentationDTO);
   }
 }

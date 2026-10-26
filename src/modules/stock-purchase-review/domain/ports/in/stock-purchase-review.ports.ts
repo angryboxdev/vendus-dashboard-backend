@@ -57,6 +57,8 @@ export interface StockReviewLineDTO {
 export interface StockPurchaseReviewDTO {
   id: string;
   invoiceId: string;
+  /** PDF da fatura de origem (só na leitura do detalhe); `null` sem anexo. */
+  attachmentUrl?: string | null;
   status: StockPurchaseReviewStatus;
   version: number;
   decisionSource: DecisionSource;
@@ -404,7 +406,8 @@ export interface SavePurchasePresentationPort {
 }
 
 export interface ListPurchasePresentationsPort {
-  execute(organizationId: OrganizationId, supplierId: string): Promise<PurchasePresentationDTO[]>;
+  /** `supplierId = null` → todas as embalagens ativas da empresa (Reposição, V6). */
+  execute(organizationId: OrganizationId, supplierId: string | null): Promise<PurchasePresentationDTO[]>;
 }
 
 // ── Regras de entrada no Stock por tipo de artigo (V4 §2) ─────────────────
@@ -418,4 +421,24 @@ export interface SaveEntryRulesCommand {
 export interface EntryRulesPort {
   get(organizationId: OrganizationId): Promise<Record<string, "stock" | "no_stock" | "review">>;
   save(command: SaveEntryRulesCommand): Promise<Record<string, "stock" | "no_stock" | "review">>;
+}
+
+// ── Localização principal do Stock (task V5 §2.4) ─────────────────────────
+
+export interface StockSettingsDTO {
+  /** Loja das entradas de faturas; `null` = não configurada (ou deixou de estar ativa). */
+  defaultLocationId: string | null;
+  /** Lojas ativas, para escolher. */
+  locations: { id: string; name: string }[];
+}
+
+export interface SaveStockSettingsCommand {
+  organizationId: OrganizationId;
+  defaultLocationId: string | null;
+  actor: string;
+}
+
+export interface StockSettingsPort {
+  get(organizationId: OrganizationId): Promise<StockSettingsDTO>;
+  save(command: SaveStockSettingsCommand): Promise<StockSettingsDTO>;
 }

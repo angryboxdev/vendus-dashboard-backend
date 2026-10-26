@@ -166,6 +166,23 @@ estruturadas (ver Known gaps).
 
 ## Design decisions (ADR summary)
 
+### Localização principal do Stock (task V5 §2.4)
+
+`stock_settings` (uma linha por empresa, migração `20261117100000`) guarda a
+loja das entradas de faturas. `GET/PUT /stock-purchase-reviews/settings`
+(`StockSettingsUseCase`, auditado, só lojas ativas da empresa). Na confirmação
+(`resolveEntryLocation`): a loja indicada, a única loja ativa, ou a principal;
+com várias lojas e sem principal → `LocationRequiredError` (400) a pedir para a
+definir — nunca se escolhe uma loja ao acaso. A conciliação deixa de mostrar
+«Destino (loja)» e «Dividir por lojas»; os dados de loja por linha continuam
+suportados no servidor.
+
+### Notas de crédito não entram no Stock (task V5 §4.3)
+
+`RecordInvoiceFinalizedForStockUseCase` ignora documentos com valores negativos
+(nota de crédito/devolução): sem revisão, movimento nem preço de compra. Antes
+falhavam em silêncio (`purchase_quantity > 0`) e a varredura repetia.
+
 ### Unidade da fatura nas embalagens e travão de conversão
 
 Quando a fatura conta o conteúdo, a quantidade está na unidade que a própria
@@ -333,7 +350,7 @@ que mantêm a exceção estreita:
 ### Embalagem de compra (task «embalagens e conversões» P1/P2)
 
 - **Apresentação de compra** (`PurchasePresentation`, tabela `supplier_purchase_presentations`, migração `20261113100000`): por organização + fornecedor + referência do fornecedor (ou descrição normalizada) → artigo — **vem em saco/caixa/lata… (ou não), quanto tem cada embalagem** (1 saco = 2,5 kg), **se a fatura conta embalagens ou o conteúdo** (tomate: «4,000» sacos; mozzarella: «20,000» kg) e **encomenda mínima/incremento** em embalagens. Caixas/paletes logísticas e «Qt/Cx» não entram (decisão do utilizador: não têm significado). Origem, confiança, autor e **versões** (`superseded_at`): alterar cria outra e o passado (fatores usados, movimentos) não muda.
-- `PUT /stock-purchase-reviews/presentations` (`SavePurchasePresentationUseCase`): valida artigo ativo e que o conteúdo se converte na unidade base (kg→g sim, kg→L não — `InvalidPurchasePresentationError`); fecha a versão anterior, grava a nova, atualiza o mapeamento aprendido com o fator derivado e audita (`purchase_presentation`). `GET …/presentations?supplierId=` lista as ativas.
+- `PUT /stock-purchase-reviews/presentations` (`SavePurchasePresentationUseCase`): valida artigo ativo e que o conteúdo se converte na unidade base (kg→g sim, kg→L não — `InvalidPurchasePresentationError`); fecha a versão anterior, grava a nova, atualiza o mapeamento aprendido com o fator derivado e audita (`purchase_presentation`). `GET …/presentations?supplierId=` lista as ativas; sem `supplierId`, as ativas de todos os fornecedores (sugestão de reposição na lista de artigos, task V6).
 - **Contas** em `src/kernel/units/purchase-presentation.ts` (partilhadas com o Planeamento): `invoiceLineToStock` (fator, quantidade em unidade base, embalagens equivalentes, custo líquido por unidade base, por kg e por saco) e `orderForNeed` (arredonda para cima ao incremento, respeita o mínimo; 12 kg com saco de 2,5 kg → 5 sacos, excedente 0,5 kg). Só converte dentro da mesma dimensão.
 - **Na revisão**: cada linha traz `packaging` (`shared-packaging.ts`, em GET/resolver/sugestões) com a apresentação ativa e a pré-visualização; a proposta de conciliação usa a embalagem confirmada antes do histórico/nome/IA. Sem apresentação → `presentation: null` («Embalagem por configurar»).
 
