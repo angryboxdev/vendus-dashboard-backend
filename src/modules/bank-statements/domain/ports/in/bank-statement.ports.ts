@@ -8,6 +8,7 @@ import type {
 } from "../../entities/bank-movement.js";
 import type { StatementSourceType, StatementStatus } from "../../entities/bank-statement-import.js";
 import type { MonthFigures } from "../../services/account-month-stats.service.js";
+import type { MovementKind } from "../../services/movement-normalizer.service.js";
 import type { StatementAccountHints, StatementAccountResolution } from "../out/statement-account-resolver.port.js";
 
 // ─── Import ───────────────────────────────────────────────────────────────────
@@ -117,6 +118,9 @@ export interface BankMovementDto {
   bookingDate: Date;
   valueDate: Date;
   description: string;
+  /** V2 (F4): descrição legível e tipo do movimento, por regras (`normalizeMovement`), calculados na leitura. */
+  normalizedDescription: string;
+  movementKind: MovementKind;
   amount: number;
   balanceAfter: number;
   currency: string;
