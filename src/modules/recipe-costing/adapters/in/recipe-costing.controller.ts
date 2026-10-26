@@ -3,6 +3,7 @@ import type { GetRecipeCostingPort } from "../../domain/ports/in/get-recipe-cost
 import type { GetIngredientPriceHistoryPort } from "../../domain/ports/in/get-ingredient-price-history.port.js";
 import type { GetDishWeeklyCostPort } from "../../domain/ports/in/get-dish-weekly-cost.port.js";
 import type { GetDishesImpactPort, GetIngredientUsagePort, GetIngredientsCostOverviewPort } from "../../domain/ports/in/ingredient-insights.port.js";
+import { InvalidMenuCostingSettingsError, type GetMenuCostingSettingsPort, type SaveMenuCostingSettingsPort } from "../../domain/ports/in/menu-costing-settings.port.js";
 
 export class RecipeCostingController {
   readonly router: Router;
@@ -14,6 +15,8 @@ export class RecipeCostingController {
     private readonly getCostOverview: GetIngredientsCostOverviewPort,
     private readonly getIngredientUsage: GetIngredientUsagePort,
     private readonly getDishesImpact: GetDishesImpactPort,
+    private readonly getSettings: GetMenuCostingSettingsPort,
+    private readonly saveSettings: SaveMenuCostingSettingsPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -24,6 +27,28 @@ export class RecipeCostingController {
       try {
         res.json(await this.getRecipeCosting.execute({ organizationId: req.auth!.orgId }));
       } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    // Definições das Fichas técnicas (V7): taxa de IVA das vendas usada na margem dos pratos.
+    this.router.get("/recipe-costing/settings", async (req, res) => {
+      try {
+        res.json(await this.getSettings.execute({ organizationId: req.auth!.orgId }));
+      } catch (e) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    this.router.put("/recipe-costing/settings", async (req, res) => {
+      try {
+        const body = req.body as { salesVatRate?: unknown };
+        res.json(await this.saveSettings.execute({ organizationId: req.auth!.orgId, actor: req.auth!.email, salesVatRate: Number(body?.salesVatRate) }));
+      } catch (e) {
+        if (e instanceof InvalidMenuCostingSettingsError) {
+          res.status(400).json({ error: e.message });
+          return;
+        }
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
       }
     });

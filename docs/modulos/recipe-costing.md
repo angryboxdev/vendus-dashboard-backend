@@ -6,6 +6,8 @@
 Custo do prato (pizza) por tamanho a partir das fichas técnicas e do preço atual dos ingredientes — última compra importada; sem compra, preço manual. Alerta dos ingredientes sem preço.
 
 ## Estado atual
+Task V7 (2026-10-26, ramo `financeiro`, **por publicar**; migração `20261128100000_menu_xs_and_sales_vat` por aplicar): margem por prato/variante (IVA das vendas por empresa), variante XS (doces = ½ Pequena), custo do lote das preparações no relatório, `GET/PUT /recipe-costing/settings`. Frontend: página própria `/fichas-tecnicas` (Pratos | Preparações | Análise de custos).
+
 Task V6 (2026-10-26, ramo `financeiro`, **por commitar**): resumo de custos de todos os artigos (lista «Artigos e ingredientes», vista Custos), fichas que usam cada artigo (painel lateral) e «Impacto nas pizzas» (página de Pizzas). Sem migrações.
 
 Em produção desde 2026-10-25 (#120/#94). Frontend: secção «Custo das fichas técnicas» na página de Pizzas (`src/modules/recipe-costing` no frontend). Na ficha técnica («Ver receita»): custo de cada ingrediente/preparo por tamanho e custo total do prato (s/ IVA, com o PVP ao lado); botão «Inativar/Reativar» por pizza (legacy `PUT /api/pizzas/:id { is_active }`) — a pizza inativa sai do custo das fichas, mas a receita continua a descontar stock se for vendida.
@@ -24,4 +26,4 @@ Ver «Decisões de design» no README do módulo (a fatura é a fonte da verdade
 Em 2026-10-25, na organização com receitas: 45 ingredientes, 0 com preço de fatura, 34 manuais, 11 sem preço.
 
 ## Próximos trabalhos
-- Margem / food cost % (precisa de decidir a taxa de IVA da venda).
+- Variantes configuráveis além de XS/Pequena/Grande (exige mudar o enum `pizza_size`).

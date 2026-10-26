@@ -11,7 +11,7 @@ import type {
 import { weekEndIso, weeksUntil } from "./price-history.service.js";
 import { preparationFactor } from "./recipe-cost.service.js";
 
-const SIZE_ORDER = ["small", "large"];
+const SIZE_ORDER = ["xs", "small", "large"];
 const SOURCE_RANK: Record<WeeklyPriceSource, number> = { purchase: 0, carried: 1, manual: 2, none: 3 };
 const round4 = (n: number) => Math.round(n * 10000) / 10000;
 

@@ -8,6 +8,8 @@ import { GetIngredientPriceHistoryUseCase } from "./application/use-cases/get-in
 import { SupabaseDishWeeklyCostReadAdapter } from "./adapters/out/supabase-dish-weekly-cost-read.adapter.js";
 import { GetDishWeeklyCostUseCase } from "./application/use-cases/get-dish-weekly-cost.use-case.js";
 import { GetDishesImpactUseCase, GetIngredientUsageUseCase, GetIngredientsCostOverviewUseCase } from "./application/use-cases/ingredient-insights.use-cases.js";
+import { SupabaseMenuCostingSettingsRepository } from "./adapters/out/supabase-menu-costing-settings.repository.js";
+import { GetMenuCostingSettingsUseCase, SaveMenuCostingSettingsUseCase } from "./application/use-cases/menu-costing-settings.use-cases.js";
 
 export interface RecipeCostingModule {
   router: Router;
@@ -22,13 +24,16 @@ export function createRecipeCostingModule(): RecipeCostingModule {
   const purchases = new SupabasePurchaseObservationReadAdapter(createScopedQuery);
   const snapshots = new SupabaseRecipeCostingReadAdapter(createScopedQuery);
   const dishes = new SupabaseDishWeeklyCostReadAdapter(createScopedQuery);
+  const settings = new SupabaseMenuCostingSettingsRepository(createScopedQuery);
   const controller = new RecipeCostingController(
-    new GetRecipeCostingUseCase(snapshots),
+    new GetRecipeCostingUseCase(snapshots, settings),
     new GetIngredientPriceHistoryUseCase(purchases),
     new GetDishWeeklyCostUseCase(dishes, purchases),
     new GetIngredientsCostOverviewUseCase(purchases),
     new GetIngredientUsageUseCase(snapshots, purchases),
     new GetDishesImpactUseCase(dishes, purchases),
+    new GetMenuCostingSettingsUseCase(settings),
+    new SaveMenuCostingSettingsUseCase(settings),
   );
   return { router: controller.router };
 }

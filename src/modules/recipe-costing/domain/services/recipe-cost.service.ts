@@ -4,13 +4,16 @@ import type {
   DishSizeCost,
   IngredientCost,
   MissingPriceIngredient,
+  PreparationCost,
   PreparationDefinition,
   RecipeCostingReport,
   RecipeCostingSnapshot,
   RecipeLine,
 } from "../entities/recipe-costing.js";
+import { computeDishMargin, DEFAULT_SALES_VAT_RATE } from "./dish-margin.service.js";
 
-const SIZE_ORDER = ["small", "large"];
+/** XS (doces, metade da pequena) → Pequena → Grande. */
+const SIZE_ORDER = ["xs", "small", "large"];
 
 function roundCost(n: number): number {
   return Math.round(n * 10000) / 10000;
@@ -57,7 +60,7 @@ function sortSizes(sizes: Iterable<string>): string[] {
  * (s/ IVA, por unidade base). Um ingrediente sem preço não bloqueia o cálculo:
  * o tamanho fica `complete = false` e o ingrediente entra em `missingPrices`.
  */
-export function computeRecipeCosting(snapshot: RecipeCostingSnapshot): RecipeCostingReport {
+export function computeRecipeCosting(snapshot: RecipeCostingSnapshot, salesVatRate: number = DEFAULT_SALES_VAT_RATE): RecipeCostingReport {
   const preparations = new Map(snapshot.preparations.map((p) => [p.id, p]));
   const costs = new Map(snapshot.ingredients.map((c) => [c.stockItemId, c]));
   const usedIngredientIds = new Set<string>();
@@ -111,13 +114,18 @@ export function computeRecipeCosting(snapshot: RecipeCostingSnapshot): RecipeCos
         });
       }
       const price = dish.prices.find((p) => p.size === size);
+      const costWithoutVat = roundCost(total);
+      const salePrice = price ? price.price : null;
+      // Sem linhas nesta variante (só PVP) não há custo: nunca «completo», senão a margem seria 100%.
+      const complete = lineCosts.length > 0 && missingIds.size === 0 && lineCosts.every((l) => l.complete);
       return {
         size,
-        costWithoutVat: roundCost(total),
-        salePrice: price ? price.price : null,
-        complete: missingIds.size === 0,
+        costWithoutVat,
+        salePrice,
+        complete,
         missingStockItemIds: [...missingIds],
         lines: lineCosts,
+        margin: computeDishMargin({ costWithoutVat, complete, salePrice, salesVatRate }),
       };
     });
 
@@ -132,9 +140,24 @@ export function computeRecipeCosting(snapshot: RecipeCostingSnapshot): RecipeCos
   });
 
   const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, "pt");
+  const preparationCosts: PreparationCost[] = snapshot.preparations.map((p) => {
+    let batch = 0;
+    let complete = p.items.length > 0;
+    for (const item of p.items) {
+      const cost = costs.get(item.stockItemId);
+      if (!hasPrice(cost)) {
+        complete = false;
+        continue;
+      }
+      batch += item.quantity * cost.unitCostWithoutVat;
+    }
+    return { preparationId: p.id, name: p.name, yieldQty: p.yieldQty, useAsUnit: p.useAsUnit, itemCount: p.items.length, batchCostWithoutVat: roundCost(batch), complete };
+  });
   return {
+    salesVatRate,
     dishes,
     ingredients: snapshot.ingredients.filter((c) => usedIngredientIds.has(c.stockItemId)).sort(byName),
     missingPrices: [...missing.values()].sort(byName),
+    preparations: preparationCosts.sort(byName),
   };
 }
