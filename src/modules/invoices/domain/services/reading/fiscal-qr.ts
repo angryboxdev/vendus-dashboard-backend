@@ -105,3 +105,37 @@ export function checkQrTotals(qr: FiscalQr): { taxDiffCents: number; totalDiffCe
   const bases = bands.reduce((a, b) => a + b.baseCents, 0);
   return { taxDiffCents: qr.totalTaxCents - (vat + qr.stampDutyCents), totalDiffCents: qr.totalCents - (bases + qr.totalTaxCents) };
 }
+
+/**
+ * Documento de pagamento com várias faturas fiscais (ex.: águas: água/saneamento + resíduos de outro
+ * emitente) lançado como uma só fatura: identidade do 1.º QR; bases, IVA, não sujeito e totais de
+ * todos (espaços fiscais da mesma região somam-se). Só para conferir as linhas do documento inteiro.
+ */
+export function combineFiscalQrs(qrs: FiscalQr[]): FiscalQr {
+  const [first, ...rest] = qrs;
+  if (!first) throw new Error("combineFiscalQrs: sem QR");
+  if (!rest.length) return first;
+  const addBand = (a: FiscalQr["taxSpaces"][number]["reduced"], b: FiscalQr["taxSpaces"][number]["reduced"]) =>
+    a || b ? { baseCents: (a?.baseCents ?? 0) + (b?.baseCents ?? 0), vatCents: (a?.vatCents ?? 0) + (b?.vatCents ?? 0) } : null;
+  const spaces: FiscalQr["taxSpaces"] = [];
+  for (const s of qrs.flatMap((q) => q.taxSpaces)) {
+    const same = spaces.find((x) => x.region === s.region);
+    if (!same) spaces.push({ ...s });
+    else {
+      same.exemptBaseCents += s.exemptBaseCents;
+      same.reduced = addBand(same.reduced, s.reduced);
+      same.intermediate = addBand(same.intermediate, s.intermediate);
+      same.normal = addBand(same.normal, s.normal);
+    }
+  }
+  const sum = (f: (q: FiscalQr) => number) => qrs.reduce((a, q) => a + f(q), 0);
+  return {
+    ...first,
+    taxSpaces: spaces,
+    notSubjectCents: sum((q) => q.notSubjectCents),
+    stampDutyCents: sum((q) => q.stampDutyCents),
+    totalTaxCents: sum((q) => q.totalTaxCents),
+    totalCents: sum((q) => q.totalCents),
+    withholdingCents: sum((q) => q.withholdingCents),
+  };
+}
