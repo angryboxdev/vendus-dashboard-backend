@@ -1,6 +1,7 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateRecurrenceUseCase } from "../../application/use-cases/create-recurrence.use-case.js";
 import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js";
+import { FakeEmployeeDirectoryRead } from "../fakes/fake-employee-directory-read.js";
 
 const organizationId = mintOrganizationId("org-a");
 
@@ -18,7 +19,7 @@ const BASE_CMD = {
 describe("CreateRecurrenceUseCase", () => {
   function make() {
     const repo = new FakeRecurrenceRepository();
-    const useCase = new CreateRecurrenceUseCase(repo);
+    const useCase = new CreateRecurrenceUseCase(repo, new FakeEmployeeDirectoryRead());
     return { repo, useCase };
   }
 

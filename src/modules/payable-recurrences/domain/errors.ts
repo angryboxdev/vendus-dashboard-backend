@@ -60,3 +60,10 @@ export class InvoiceAlreadyLinkedError extends Error {
     this.name = "InvoiceAlreadyLinkedError";
   }
 }
+
+export class RecurrenceEmployeeNotFoundError extends Error {
+  constructor(employeeId: string) {
+    super(`Colaborador "${employeeId}" não encontrado`);
+    this.name = "RecurrenceEmployeeNotFoundError";
+  }
+}

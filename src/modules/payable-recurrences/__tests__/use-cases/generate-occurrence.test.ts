@@ -2,6 +2,7 @@ import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { CreateRecurrenceUseCase } from "../../application/use-cases/create-recurrence.use-case.js";
 import { GenerateOccurrenceUseCase } from "../../application/use-cases/generate-occurrence.use-case.js";
 import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js";
+import { FakeEmployeeDirectoryRead } from "../fakes/fake-employee-directory-read.js";
 import { FakeOccurrenceRepository } from "../fakes/fake-occurrence-repository.js";
 import { OccurrenceAlreadyExistsError, RecurrenceNotFoundError } from "../../domain/errors.js";
 
@@ -13,7 +14,7 @@ function make() {
   return {
     recurrenceRepo,
     occurrenceRepo,
-    create: new CreateRecurrenceUseCase(recurrenceRepo),
+    create: new CreateRecurrenceUseCase(recurrenceRepo, new FakeEmployeeDirectoryRead()),
     generate: new GenerateOccurrenceUseCase(recurrenceRepo, occurrenceRepo),
   };
 }

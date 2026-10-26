@@ -37,6 +37,8 @@ interface RecurrenceProps {
   name: string;
   supplierId: string | null;
   supplierName: string;
+  /** Colaborador (ficha `hr_employees`) a quem se paga — recorrências de salários. O nome fica em `supplierName`. */
+  employeeId: string | null;
   type: RecurrenceType;
   frequency: RecurrenceFrequency;
   costCenterId: string | null;
@@ -66,6 +68,8 @@ interface RecurrenceProps {
   documentUrl: string | null;
   /** Set when close() is called — mandatory finalization date (spec Task_Recorrencias_Conciliacao_AngryBox.md §10). Purely informational: generation is already blocked as soon as status !== "active". */
   closedAt: Date | null;
+  /** Set when pause() is called, cleared by resume() — shown in the «Histórico» view. */
+  pausedAt: Date | null;
   /** IVA da recorrência — usado para auto-preencher o drawer de conciliação (Justificar despesa → Contrato/Recorrência) quando o campo ainda estiver vazio. */
   vatRate: number | null;
   vatIncluded: boolean | null;
@@ -80,6 +84,7 @@ export class Recurrence {
   readonly name: string;
   readonly supplierId: string | null;
   readonly supplierName: string;
+  readonly employeeId: string | null;
   readonly type: RecurrenceType;
   readonly frequency: RecurrenceFrequency;
   readonly costCenterId: string | null;
@@ -96,6 +101,7 @@ export class Recurrence {
   readonly notes: string | null;
   readonly documentUrl: string | null;
   readonly closedAt: Date | null;
+  readonly pausedAt: Date | null;
   readonly vatRate: number | null;
   readonly vatIncluded: boolean | null;
   readonly createdAt: Date;
@@ -106,6 +112,7 @@ export class Recurrence {
     this.name = props.name;
     this.supplierId = props.supplierId;
     this.supplierName = props.supplierName;
+    this.employeeId = props.employeeId;
     this.type = props.type;
     this.frequency = props.frequency;
     this.costCenterId = props.costCenterId;
@@ -122,6 +129,7 @@ export class Recurrence {
     this.notes = props.notes;
     this.documentUrl = props.documentUrl;
     this.closedAt = props.closedAt;
+    this.pausedAt = props.pausedAt;
     this.vatRate = props.vatRate;
     this.vatIncluded = props.vatIncluded;
     this.createdAt = props.createdAt;
@@ -134,6 +142,7 @@ export class Recurrence {
     name: string;
     supplierId?: string | null;
     supplierName: string;
+    employeeId?: string | null;
     type: RecurrenceType;
     frequency?: RecurrenceFrequency;
     costCenterId?: string | null;
@@ -165,6 +174,7 @@ export class Recurrence {
       name: props.name.trim(),
       supplierId: props.supplierId ?? null,
       supplierName: props.supplierName.trim(),
+      employeeId: props.employeeId ?? null,
       type: props.type,
       frequency: props.frequency ?? "monthly",
       costCenterId: props.costCenterId ?? null,
@@ -181,6 +191,7 @@ export class Recurrence {
       notes: props.notes ?? null,
       documentUrl: null,
       closedAt: null,
+      pausedAt: null,
       vatRate: null,
       vatIncluded: null,
       createdAt: now,
@@ -194,16 +205,16 @@ export class Recurrence {
 
   // ── Transitions ──────────────────────────────────────────────────────────────
 
-  pause(): Recurrence {
+  pause(pausedAt: Date = new Date()): Recurrence {
     if (this.status === "closed") throw new RecurrenceClosedError(this.id);
     if (this.status === "paused") throw new RecurrenceAlreadyPausedError(this.id);
-    return new Recurrence({ ...this.toProps(), status: "paused", updatedAt: new Date() });
+    return new Recurrence({ ...this.toProps(), status: "paused", pausedAt, updatedAt: new Date() });
   }
 
   resume(): Recurrence {
     if (this.status === "closed") throw new RecurrenceClosedError(this.id);
     if (this.status !== "paused") throw new RecurrenceNotPausedError(this.id);
-    return new Recurrence({ ...this.toProps(), status: "active", updatedAt: new Date() });
+    return new Recurrence({ ...this.toProps(), status: "active", pausedAt: null, updatedAt: new Date() });
   }
 
   close(closedAt: Date): Recurrence {
@@ -215,6 +226,7 @@ export class Recurrence {
     name?: string;
     supplierId?: string | null;
     supplierName?: string;
+    employeeId?: string | null;
     costCenterId?: string | null;
     costCenterCategoryId?: string | null;
     category?: string | null;
@@ -234,6 +246,7 @@ export class Recurrence {
     if (data.name !== undefined) p.name = data.name.trim();
     if (data.supplierId !== undefined) p.supplierId = data.supplierId;
     if (data.supplierName !== undefined) p.supplierName = data.supplierName.trim();
+    if (data.employeeId !== undefined) p.employeeId = data.employeeId;
     if (data.costCenterId !== undefined) p.costCenterId = data.costCenterId;
     if (data.costCenterCategoryId !== undefined) p.costCenterCategoryId = data.costCenterCategoryId;
     if (data.category !== undefined) p.category = data.category;
@@ -298,6 +311,7 @@ export class Recurrence {
       name: this.name,
       supplierId: this.supplierId,
       supplierName: this.supplierName,
+      employeeId: this.employeeId,
       type: this.type,
       frequency: this.frequency,
       costCenterId: this.costCenterId,
@@ -314,6 +328,7 @@ export class Recurrence {
       notes: this.notes,
       documentUrl: this.documentUrl,
       closedAt: this.closedAt,
+      pausedAt: this.pausedAt,
       vatRate: this.vatRate,
       vatIncluded: this.vatIncluded,
       createdAt: this.createdAt,

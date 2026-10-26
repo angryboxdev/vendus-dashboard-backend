@@ -14,6 +14,7 @@ export interface RecurrenceDTO {
   name: string;
   supplierId: string | null;
   supplierName: string;
+  employeeId: string | null;
   type: RecurrenceType;
   frequency: RecurrenceFrequency;
   costCenterId: string | null;
@@ -30,6 +31,7 @@ export interface RecurrenceDTO {
   notes: string | null;
   documentUrl: string | null;
   closedAt: string | null; // YYYY-MM-DD
+  pausedAt: string | null; // YYYY-MM-DD
   vatRate: number | null;
   vatIncluded: boolean | null;
   createdAt: string;
@@ -43,6 +45,8 @@ export interface CreateRecurrenceCommand {
   name: string;
   supplierId?: string | null;
   supplierName: string;
+  /** Colaborador (recorrências de salários) — tem de existir na organização. */
+  employeeId?: string | null;
   type: RecurrenceType;
   frequency?: RecurrenceFrequency;
   costCenterId?: string | null;
@@ -64,6 +68,7 @@ export interface UpdateRecurrenceCommand {
   name?: string;
   supplierId?: string | null;
   supplierName?: string;
+  employeeId?: string | null;
   costCenterId?: string | null;
   costCenterCategoryId?: string | null;
   category?: string | null;
@@ -132,4 +137,21 @@ export interface ListRecurrencesPort {
 
 export interface GetRecurrencePort {
   execute(query: GetRecurrenceQuery): Promise<RecurrenceDTO>;
+}
+
+// ── Colaboradores (recorrências de salários) ────────────────────────────────────
+
+/** Só o necessário para escolher o colaborador no formulário (RGPD: sem outros dados da ficha). */
+export interface RecurrenceEmployeeDTO {
+  id: string;
+  fullName: string;
+  status: "active" | "inactive";
+}
+
+export interface ListRecurrenceEmployeesQuery {
+  organizationId: OrganizationId;
+}
+
+export interface ListRecurrenceEmployeesPort {
+  execute(query: ListRecurrenceEmployeesQuery): Promise<RecurrenceEmployeeDTO[]>;
 }

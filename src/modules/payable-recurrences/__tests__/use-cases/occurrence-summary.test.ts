@@ -5,6 +5,7 @@ import { LinkInvoiceToOccurrenceUseCase } from "../../application/use-cases/link
 import { GetRecurrenceSummaryUseCase } from "../../application/use-cases/get-summary.use-case.js";
 import { GetLinkedInvoiceIdsUseCase } from "../../application/use-cases/get-linked-invoice-ids.use-case.js";
 import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js";
+import { FakeEmployeeDirectoryRead } from "../fakes/fake-employee-directory-read.js";
 import { FakeOccurrenceRepository } from "../fakes/fake-occurrence-repository.js";
 import { FakeInvoiceRead } from "../fakes/fake-invoice-read.js";
 
@@ -41,7 +42,7 @@ function make() {
     recurrenceRepo,
     occurrenceRepo,
     invoiceRead,
-    create: new CreateRecurrenceUseCase(recurrenceRepo),
+    create: new CreateRecurrenceUseCase(recurrenceRepo, new FakeEmployeeDirectoryRead()),
     generate: new GenerateOccurrenceUseCase(recurrenceRepo, occurrenceRepo),
     link: new LinkInvoiceToOccurrenceUseCase(occurrenceRepo, invoiceRead),
     getSummary: new GetRecurrenceSummaryUseCase(occurrenceRepo),
