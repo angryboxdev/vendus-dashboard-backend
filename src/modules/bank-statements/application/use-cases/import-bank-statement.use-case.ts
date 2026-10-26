@@ -3,6 +3,8 @@ import { BankStatementImport } from "../../domain/entities/bank-statement-import
 import { BankMovement } from "../../domain/entities/bank-movement.js";
 import { ReconciliationCalculatorService } from "../../domain/services/reconciliation-calculator.service.js";
 import { selectNewMovements } from "../../domain/services/movement-dedup.service.js";
+import { AutoMatchingService } from "../../domain/services/auto-matching.service.js";
+import type { BankReconciliationRuleRepositoryPort } from "../../domain/ports/out/bank-reconciliation-rule-repository.port.js";
 import type { StatementAccountResolution, StatementAccountResolverPort } from "../../domain/ports/out/statement-account-resolver.port.js";
 import type { BankStatementImportRepositoryPort } from "../../domain/ports/out/bank-statement-import-repository.port.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
@@ -39,6 +41,8 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
     private readonly bankAccountRead?: BankAccountReadPort,
     /** V2 (F3): banco e conta encontrados ou criados a partir do extrato (`command.autoAccount`). */
     private readonly accountResolver?: StatementAccountResolverPort,
+    /** «Movimentos recorrentes»: os movimentos novos que batem com uma regra ficam logo conciliados. */
+    private readonly ruleRepo?: BankReconciliationRuleRepositoryPort,
   ) {}
 
   /** Movimentos já gravados da mesma conta no período do ficheiro (pela conta ligada; senão pelo nº de conta dos extratos). */
@@ -101,7 +105,7 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
     await this.statementRepo.save(organizationId, statement);
 
     // 3. Build movements, skipping duplicates
-    const toSave: BankMovement[] = [];
+    let toSave: BankMovement[] = [];
     let skippedDuplicates = 0;
     // Hashes já colocados em toSave nesta própria execução — existsByHash só vê
     // o que já está na BD, por isso duas linhas do MESMO ficheiro com o mesmo
@@ -158,6 +162,16 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
       );
     }
 
+    // «Movimentos recorrentes»: aplicados antes de gravar (sem escritas extra); só com a conta conhecida.
+    let autoClassifiedCount = 0;
+    if (this.ruleRepo && resolvedBankAccountId && toSave.length > 0) {
+      const rules = await this.ruleRepo.findAll(organizationId, true);
+      const matches = new AutoMatchingService().applyRules(rules, toSave);
+      const classified = new Map(matches.map(({ updated }) => [updated.id, updated]));
+      toSave = toSave.map((m) => classified.get(m.id) ?? m);
+      autoClassifiedCount = matches.length;
+    }
+
     if (toSave.length > 0) {
       await this.movementRepo.saveBulk(organizationId, toSave);
     }
@@ -182,6 +196,7 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
       accountNumber: updated.accountNumber,
       importedMovementsCount: updated.importedMovementsCount,
       skippedDuplicates,
+      autoClassifiedCount,
       calculatedClosingBalance: updated.calculatedClosingBalance,
       balanceDifference: updated.balanceDifference,
       reconciliationProgress: updated.reconciliationProgress,

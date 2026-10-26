@@ -104,6 +104,8 @@ interface BankMovementProps {
   vatIncluded: boolean | null;  // true = amount includes VAT — null = not applicable
   // Multi-entity reconciliation
   reconciliationAmountDiff: number | null; // cents: movement.amount - sum(entity_links.amount). null = not applicable
+  /** Regra («movimento recorrente») que classificou o movimento automaticamente; null = classificação manual ou nenhuma. */
+  classifiedByRuleId?: string | null;
 }
 
 export class BankMovement {
@@ -135,6 +137,7 @@ export class BankMovement {
   readonly vatRate: number | null;
   readonly vatIncluded: boolean | null;
   readonly reconciliationAmountDiff: number | null;
+  readonly classifiedByRuleId: string | null;
 
   /** Tolerance for considering a multi-entity reconciliation as fully matched (1€). */
   static readonly PARTIAL_TOLERANCE_CENTS = 100;
@@ -168,10 +171,23 @@ export class BankMovement {
     this.vatRate = props.vatRate;
     this.vatIncluded = props.vatIncluded;
     this.reconciliationAmountDiff = props.reconciliationAmountDiff;
+    this.classifiedByRuleId = props.classifiedByRuleId ?? null;
   }
 
   get isResolved(): boolean {
     return RESOLVED_STATUSES.has(this.reconciliationStatus);
+  }
+
+  /**
+   * true enquanto ninguém mexeu no movimento: débito por justificar ou crédito aceite automaticamente,
+   * sem justificação nem regra. Só estes recebem regras — nunca se sobrepõe uma classificação manual,
+   * uma conciliação com fatura, uma sugestão ou um «sem justificativa» escolhido pelo utilizador.
+   */
+  get isUntouched(): boolean {
+    if (this.justificationType !== null || this.classifiedByRuleId !== null || this.matchedEntityType !== null) return false;
+    return this.movementType === "debit"
+      ? this.reconciliationStatus === "saida_nao_justificada"
+      : this.reconciliationStatus === "conciliado_sem_fatura";
   }
 
   /**
@@ -266,7 +282,36 @@ export class BankMovement {
       supplierId: opts.supplierId ?? this.supplierId,
       vatRate: opts.vatRate ?? this.vatRate,
       vatIncluded: opts.vatIncluded ?? this.vatIncluded,
+      classifiedByRuleId: null,
     });
+  }
+
+  /** Classificação automática por um «movimento recorrente» (regra); fica registada a regra para se poder anular. */
+  classifyByRule(rule: {
+    id: string;
+    justificationType: JustificationType;
+    riskLevel: RiskLevel;
+    costCenterGroupId: string | null;
+    costCenterCategoryId: string | null;
+    supplierId: string | null;
+    vatRate: number | null;
+    vatIncluded: boolean | null;
+  }): BankMovement {
+    const classified = this.classify({
+      justificationType: rule.justificationType,
+      riskLevel: rule.riskLevel,
+      ...(rule.costCenterGroupId !== null && { costCenterGroupId: rule.costCenterGroupId }),
+      ...(rule.costCenterCategoryId !== null && { costCenterCategoryId: rule.costCenterCategoryId }),
+      ...(rule.supplierId !== null && { supplierId: rule.supplierId }),
+      ...(rule.vatRate !== null && { vatRate: rule.vatRate }),
+      ...(rule.vatIncluded !== null && { vatIncluded: rule.vatIncluded }),
+    });
+    return new BankMovement({ ...classified.toProps(), classifiedByRuleId: rule.id });
+  }
+
+  /** A regra deixou de existir: a classificação mantém-se, só se perde a ligação. */
+  detachRule(): BankMovement {
+    return new BankMovement({ ...this.toProps(), classifiedByRuleId: null });
   }
 
   /**
@@ -303,6 +348,7 @@ export class BankMovement {
       requiresDocument: true,
       confidenceScore: null,
       reconciliationAmountDiff: isPartial ? amountDiff : null,
+      classifiedByRuleId: null,
       updatedAt: new Date(),
     });
   }
@@ -319,6 +365,7 @@ export class BankMovement {
       riskLevel: "low",
       requiresDocument: false,
       notes: reason.trim(),
+      classifiedByRuleId: null,
       updatedAt: new Date(),
     });
   }
@@ -338,6 +385,7 @@ export class BankMovement {
       requiresDocument: false,
       confidenceScore: null,
       reconciliationAmountDiff: null,
+      classifiedByRuleId: null,
       updatedAt: new Date(),
     });
   }
@@ -372,6 +420,7 @@ export class BankMovement {
       vatRate: this.vatRate,
       vatIncluded: this.vatIncluded,
       reconciliationAmountDiff: this.reconciliationAmountDiff,
+      classifiedByRuleId: this.classifiedByRuleId,
     };
   }
 }

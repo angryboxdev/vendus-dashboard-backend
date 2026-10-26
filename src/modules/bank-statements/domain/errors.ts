@@ -12,6 +12,14 @@ export class MovementNotFoundError extends Error {
   }
 }
 
+/** Dados de um «movimento recorrente» (regra) inválidos — 400. */
+export class InvalidRuleError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidRuleError";
+  }
+}
+
 export class RuleNotFoundError extends Error {
   constructor(id: string) {
     super(`Reconciliation rule not found: ${id}`);

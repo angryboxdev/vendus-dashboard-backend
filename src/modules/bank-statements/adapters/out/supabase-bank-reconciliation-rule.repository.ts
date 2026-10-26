@@ -2,7 +2,33 @@ import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import {
   BankReconciliationRule,
+  DEFAULT_RULE_AMOUNT_TOLERANCE_CENTS,
 } from "../../domain/entities/bank-reconciliation-rule.js";
+
+/** Colunas comuns a insert e update. */
+function toRow(rule: BankReconciliationRule) {
+  return {
+    name: rule.name,
+    description_contains: rule.descriptionContains,
+    movement_type: rule.movementType,
+    bank_account_id: rule.bankAccountId,
+    amount_cents: rule.amountCents,
+    amount_tolerance_cents: rule.amountToleranceCents,
+    cost_center_group_id: rule.costCenterGroupId,
+    cost_center_category_id: rule.costCenterCategoryId,
+    supplier_id: rule.supplierId,
+    vat_rate: rule.vatRate,
+    vat_included: rule.vatIncluded,
+    justification_type: rule.justificationType,
+    requires_document: rule.requiresDocument,
+    affects_dre: rule.affectsDre,
+    affects_cashflow: rule.affectsCashflow,
+    affects_profitability: rule.affectsProfitability,
+    risk_level: rule.riskLevel,
+    is_active: rule.isActive,
+    updated_at: rule.updatedAt.toISOString(),
+  };
+}
 import type { JustificationType, MovementType, RiskLevel } from "../../domain/entities/bank-movement.js";
 import type { BankReconciliationRuleRepositoryPort } from "../../domain/ports/out/bank-reconciliation-rule-repository.port.js";
 
@@ -12,6 +38,12 @@ function toEntity(row: Record<string, unknown>): BankReconciliationRule {
     name: row.name as string,
     descriptionContains: row.description_contains as string,
     movementType: (row.movement_type as MovementType | null) ?? null,
+    bankAccountId: (row.bank_account_id as string | null) ?? null,
+    amountCents: row.amount_cents == null ? null : Number(row.amount_cents),
+    amountToleranceCents: row.amount_tolerance_cents == null ? DEFAULT_RULE_AMOUNT_TOLERANCE_CENTS : Number(row.amount_tolerance_cents),
+    supplierId: (row.supplier_id as string | null) ?? null,
+    vatRate: row.vat_rate == null ? null : Number(row.vat_rate),
+    vatIncluded: (row.vat_included as boolean | null) ?? null,
     costCenterGroupId: (row.cost_center_group_id as string | null) ?? null,
     costCenterCategoryId: (row.cost_center_category_id as string | null) ?? null,
     justificationType: row.justification_type as JustificationType,
@@ -34,20 +66,8 @@ export class SupabaseBankReconciliationRuleRepository
   async save(organizationId: OrganizationId, rule: BankReconciliationRule): Promise<void> {
     const { error } = await this.scopedQuery(organizationId).table("bank_reconciliation_rules").insert({
       id: rule.id,
-      name: rule.name,
-      description_contains: rule.descriptionContains,
-      movement_type: rule.movementType,
-      cost_center_group_id: rule.costCenterGroupId,
-      cost_center_category_id: rule.costCenterCategoryId,
-      justification_type: rule.justificationType,
-      requires_document: rule.requiresDocument,
-      affects_dre: rule.affectsDre,
-      affects_cashflow: rule.affectsCashflow,
-      affects_profitability: rule.affectsProfitability,
-      risk_level: rule.riskLevel,
-      is_active: rule.isActive,
+      ...toRow(rule),
       created_at: rule.createdAt.toISOString(),
-      updated_at: rule.updatedAt.toISOString(),
     });
     if (error) throw new Error(error.message);
   }
@@ -77,21 +97,7 @@ export class SupabaseBankReconciliationRuleRepository
   async update(organizationId: OrganizationId, rule: BankReconciliationRule): Promise<void> {
     const { error } = await this.scopedQuery(organizationId)
       .table("bank_reconciliation_rules")
-      .update({
-        name: rule.name,
-        description_contains: rule.descriptionContains,
-        movement_type: rule.movementType,
-        cost_center_group_id: rule.costCenterGroupId,
-        cost_center_category_id: rule.costCenterCategoryId,
-        justification_type: rule.justificationType,
-        requires_document: rule.requiresDocument,
-        affects_dre: rule.affectsDre,
-        affects_cashflow: rule.affectsCashflow,
-        affects_profitability: rule.affectsProfitability,
-        risk_level: rule.riskLevel,
-        is_active: rule.isActive,
-        updated_at: rule.updatedAt.toISOString(),
-      })
+      .update(toRow(rule))
       .eq("id", rule.id);
     if (error) throw new Error(error.message);
   }

@@ -44,6 +44,8 @@ export interface ImportBankStatementCommand {
 }
 
 export interface ImportBankStatementResult {
+  /** Movimentos novos conciliados logo na importação por «movimentos recorrentes» (regras). */
+  autoClassifiedCount?: number;
   /** V2 (F3): o que aconteceu ao banco/conta quando vieram do extrato (`autoAccount`). */
   accountResolution?: StatementAccountResolution | null;
   id: string;
@@ -142,6 +144,8 @@ export interface BankMovementDto {
   vatIncluded: boolean | null;
   entityLinks: EntityLinkDto[];
   reconciliationAmountDiff: number | null;
+  /** Regra («movimento recorrente») que o conciliou automaticamente; null = manual/nenhuma. */
+  classifiedByRuleId: string | null;
 }
 
 export interface BankStatementDetail extends BankStatementSummary {
@@ -317,9 +321,19 @@ export interface CreateReconciliationRuleCommand {
   name: string;
   descriptionContains: string;
   movementType?: MovementType | null;
+  /** Conta de origem («movimento recorrente» criado a partir de um movimento); null/omitido = todas as contas. */
+  bankAccountId?: string | null;
+  /** Valor fixo (cêntimos) ± margem; null/omitido = qualquer valor. */
+  amountCents?: number | null;
+  amountToleranceCents?: number;
   costCenterGroupId?: string | null;
   costCenterCategoryId?: string | null;
+  supplierId?: string | null;
+  vatRate?: number | null;
+  vatIncluded?: boolean | null;
   justificationType: JustificationType;
+  /** Aplica já aos movimentos intocados da conta (todos os meses importados). Só com bankAccountId. */
+  applyToExisting?: boolean;
   requiresDocument?: boolean;
   affectsDre?: boolean;
   affectsCashflow?: boolean;
@@ -332,8 +346,14 @@ export interface ReconciliationRuleDto {
   name: string;
   descriptionContains: string;
   movementType: MovementType | null;
+  bankAccountId: string | null;
+  amountCents: number | null;
+  amountToleranceCents: number;
   costCenterGroupId: string | null;
   costCenterCategoryId: string | null;
+  supplierId: string | null;
+  vatRate: number | null;
+  vatIncluded: boolean | null;
   justificationType: JustificationType;
   requiresDocument: boolean;
   affectsDre: boolean;
@@ -342,10 +362,42 @@ export interface ReconciliationRuleDto {
   riskLevel: RiskLevel;
   isActive: boolean;
   createdAt: Date;
+  /** Movimentos conciliados por esta regra (só na listagem). */
+  usage?: { movementsCount: number; lastBookingDate: string | null };
+}
+
+/** Resultado de criar/alterar uma regra: quantos movimentos já existentes ficaram conciliados por ela. */
+export interface ReconciliationRuleWriteResult extends ReconciliationRuleDto {
+  appliedCount: number;
 }
 
 export interface CreateReconciliationRulePort {
-  execute(command: CreateReconciliationRuleCommand): Promise<ReconciliationRuleDto>;
+  execute(command: CreateReconciliationRuleCommand): Promise<ReconciliationRuleWriteResult>;
+}
+
+// ─── Update rule ──────────────────────────────────────────────────────────────
+
+export interface UpdateReconciliationRuleCommand {
+  organizationId: OrganizationId;
+  id: string;
+  name?: string;
+  descriptionContains?: string;
+  /** null = deixa de ter valor fixo. */
+  amountCents?: number | null;
+  amountToleranceCents?: number;
+  costCenterGroupId?: string | null;
+  costCenterCategoryId?: string | null;
+  supplierId?: string | null;
+  vatRate?: number | null;
+  vatIncluded?: boolean | null;
+  justificationType?: JustificationType;
+  isActive?: boolean;
+  /** Depois de alterar, aplica aos movimentos intocados da conta da regra. */
+  applyToExisting?: boolean;
+}
+
+export interface UpdateReconciliationRulePort {
+  execute(command: UpdateReconciliationRuleCommand): Promise<ReconciliationRuleWriteResult>;
 }
 
 // ─── List rules ───────────────────────────────────────────────────────────────
