@@ -337,6 +337,21 @@ export function getDefaultPeriod(): { since: string; until: string } {
   return { since: day, until: day };
 }
 
+/**
+ * Demonstração do Stock: numa organização fictícia as vendas vêm do POS fictício e nunca da Vendus (a chave da
+ * Vendus é global — lê-la numa demo mostraria vendas reais). Ligado no `server.ts` ao módulo `stock-demo`;
+ * devolve `null` para organizações reais.
+ */
+export type DemoProductsSource = (
+  organizationId: OrganizationId,
+  since: string,
+  until: string
+) => Promise<{ title: string; reference: string; qty: number; category?: string }[] | null>;
+let demoProductsSource: DemoProductsSource | null = null;
+export function setDemoProductsSource(fn: DemoProductsSource): void {
+  demoProductsSource = fn;
+}
+
 export type GetIngredientConsumptionOptions = {
   /** Filtra autoconsumo Vendus por loja (GET /selfconsumption/?store_id=). */
   vendus_store_id?: number;
@@ -350,7 +365,8 @@ export async function getIngredientConsumption(
 ): Promise<IngredientConsumptionResponse> {
   const startedAt = Date.now();
 
-  const response = await buildMonthlySummary({
+  const demoProducts = demoProductsSource ? await demoProductsSource(organizationId, since, until) : null;
+  const response = demoProducts ? null : await buildMonthlySummary({
     since,
     until,
     type: "FS,FT,NC",
@@ -362,7 +378,7 @@ export async function getIngredientConsumption(
       : {}),
   });
 
-  const products = response.products_overall ?? [];
+  const products = demoProducts ?? response?.products_overall ?? [];
   const mappings = await getAllConsumptionMappingsMap(organizationId);
 
   const consumptionByStockId = new Map<string, number>();
@@ -453,7 +469,7 @@ export async function getIngredientConsumption(
     }
   }
 
-  const vsc = response.vendus_selfconsumption;
+  const vsc = response?.vendus_selfconsumption;
   const selfLines = extractProductLinesFromSelfConsumptionRecords(
     vsc?.records ?? []
   );
@@ -478,8 +494,8 @@ export async function getIngredientConsumption(
 
   return {
     period: {
-      since: response.period?.since ?? since,
-      until: response.period?.until ?? until,
+      since: response?.period?.since ?? since,
+      until: response?.period?.until ?? until,
       timezone: REPORT_TIMEZONE,
     },
     consumption: consumptionEntries,

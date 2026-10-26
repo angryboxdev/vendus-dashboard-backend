@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 826 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 828 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -768,6 +768,8 @@ Endpoints: 826 · pré-autenticação: 23 · não classificados: 0
 | POST | `/api/stock-count/sessions/:id/unscoped-item` | permission:stock.counts:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/stock-count/zones` | permission:stock.counts:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/stock-count/zones` | permission:stock.counts:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/stock-demo` | permission:stock.items:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/stock-demo/pos/sales` | permission:stock.items:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/stock-planning/alerts` | permission:stock.planning:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/stock-planning/alerts/:id` | permission:stock.planning:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/stock-planning/alerts/:id/acknowledge` | permission:stock.planning:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
