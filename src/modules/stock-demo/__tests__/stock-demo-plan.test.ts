@@ -73,6 +73,19 @@ describe("gerador da demonstração do Stock", () => {
     expect(costs.at(-1)! / costs[0]!).toBeGreaterThan(1.15);
   });
 
+  it("bebidas avulsas não são pratos: artigo vendável com PVP, ligado ao POS e com baixa de 1 un. por venda", () => {
+    const p = plans.hamburgueria;
+    expect(rows(p, "pizzas").map((d) => d.name)).not.toEqual(expect.arrayContaining(["Água", "Refrigerante"]));
+    const agua = rows(p, "stock_items").find((i) => i.name === "Água 50cl")!;
+    expect(agua).toMatchObject({ is_sellable: true, sale_price: 1.5 });
+    expect(rows(p, "vendus_product_mapping").find((m) => m.stock_item_id === agua.id)).toMatchObject({ target_type: "stock", match_value: "DEMO-ART-AGUA" });
+    const sold = rows(p, "sales_demand_actuals_daily").filter((d) => d.demand_source_type === "stock" && d.demand_source_ref === agua.id).reduce((s, d) => s + Number(d.quantity_sold), 0);
+    const consumed = -rows(p, "stock_movements").filter((m) => m.item_id === agua.id && m.type === "consumption").reduce((s, m) => s + Number(m.quantity), 0);
+    expect(sold).toBeGreaterThan(0);
+    expect(consumed).toBeCloseTo(sold, 6);
+    expect(rows(plans.bar, "pizzas").map((d) => d.name)).not.toContain("Cerveja garrafa");
+  });
+
   it("XS nas doces = metade da Individual; versões das fichas recuam ao início do histórico", () => {
     const p = plans.brasileira;
     const items = rows(p, "pizza_recipe_items");

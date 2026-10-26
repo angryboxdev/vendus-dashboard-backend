@@ -37,6 +37,8 @@ export interface IngredientDef {
   noCost?: boolean;
   /** A última entrega vem curta: o artigo fica abaixo do mínimo (alertas e reposição). */
   lowStock?: boolean;
+  /** PVP com IVA quando o artigo é vendido tal como vem (bebida avulsa): vende-se no POS sem ficha técnica. */
+  salePrice?: number;
 }
 
 export interface PreparationDef {

@@ -2,6 +2,7 @@ import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import {
   STOCK_DEMO_SCENARIO_LABELS,
   STOCK_DEMO_SCENARIOS,
+  demandSourceOf,
   type PosDailySale,
   type StockDemoLink,
   type StockDemoScenario,
@@ -95,9 +96,14 @@ export class DemoPosSalesUseCase implements DemoPosSalesPort {
   async dailyDemand(org: OrganizationId, date: string): Promise<DemoDemandRow[] | null> {
     const sales = await this.dailySales(org, date, date);
     if (!sales) return null;
-    const bySource = new Map<string, number>();
-    for (const s of sales) bySource.set(`${s.pizzaId}:${s.size}`, (bySource.get(`${s.pizzaId}:${s.size}`) ?? 0) + s.quantity);
-    return [...bySource.entries()].map(([ref, quantitySold]) => ({ demandSourceType: "pizza" as const, demandSourceRef: ref, saleDate: date, quantitySold }));
+    const bySource = new Map<string, DemoDemandRow>();
+    for (const s of sales) {
+      const { type, ref } = demandSourceOf(s);
+      const row = bySource.get(`${type}:${ref}`) ?? { demandSourceType: type, demandSourceRef: ref, saleDate: date, quantitySold: 0 };
+      row.quantitySold += s.quantity;
+      bySource.set(`${type}:${ref}`, row);
+    }
+    return [...bySource.values()];
   }
 }
 

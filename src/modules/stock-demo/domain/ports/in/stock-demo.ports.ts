@@ -17,7 +17,7 @@ export interface GetStockDemoStatusPort {
 
 /** Linha de procura por prato/variante num dia (mesmo formato das vendas reais do planeamento). */
 export interface DemoDemandRow {
-  demandSourceType: "pizza";
+  demandSourceType: "pizza" | "stock";
   demandSourceRef: string;
   saleDate: string;
   quantitySold: number;

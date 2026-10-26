@@ -57,7 +57,7 @@ export function simulateDailySales(
   sellable.forEach((p, i) => {
     const quantity = Math.round((revenue * weights[i]!) / total / p.priceCents);
     if (quantity <= 0) return;
-    out.push({ date, reference: p.reference, title: p.title, pizzaId: p.pizzaId, size: p.size, quantity, grossCents: quantity * p.priceCents });
+    out.push({ date, reference: p.reference, title: p.title, kind: p.kind, pizzaId: p.pizzaId, size: p.size, stockItemId: p.stockItemId, quantity, grossCents: quantity * p.priceCents });
   });
   return out;
 }

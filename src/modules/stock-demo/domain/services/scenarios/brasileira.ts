@@ -40,7 +40,7 @@ export const BRASILEIRA: ScenarioDef = {
     { key: "laranja", name: "Laranja", category: "Frescos", type: "ingredient", unit: "g", price: 1.2, vat: 6, supplier: "horta", pack: { unit: "saco", content: 10000, invoicedBy: "content" }, trend: "down" },
     { key: "mandioca", name: "Mandioca", category: "Frescos", type: "ingredient", unit: "g", price: 2.1, vat: 6, supplier: "horta", pack: { unit: "caixa", content: 5000, invoicedBy: "content" } },
     { key: "limao", name: "Limão", category: "Frescos", type: "ingredient", unit: "g", price: 2.3, vat: 6, supplier: "horta", pack: { unit: "saco", content: 2000, invoicedBy: "content" } },
-    { key: "guarana", name: "Guaraná lata 33cl", category: "Bebidas", type: "beverage", unit: "un", price: 0.55, vat: 23, supplier: "bebidas", pack: { unit: "pack", content: 24, invoicedBy: "package" } },
+    { key: "guarana", name: "Guaraná lata 33cl", category: "Bebidas", type: "beverage", unit: "un", price: 0.55, vat: 23, supplier: "bebidas", pack: { unit: "pack", content: 24, invoicedBy: "package" }, salePrice: 2.5 },
     { key: "cachaca", name: "Cachaça", category: "Bebidas", type: "beverage", unit: "ml", price: 14, vat: 23, supplier: "bebidas", pack: { unit: "garrafa", content: 700, invoicedBy: "package" } },
     { key: "caixa_take", name: "Caixa take-away", category: "Embalagens", type: "packaging", unit: "un", price: 0.18, vat: 23, supplier: "tropical", pack: { unit: "pack", content: 50, invoicedBy: "package" } },
     { key: "coentros", name: "Coentros", category: "Frescos", type: "ingredient", unit: "g", price: 9.5, vat: 6, manualOnly: true },
@@ -68,7 +68,6 @@ export const BRASILEIRA: ScenarioDef = {
     { key: "brigadeiro", name: "Brigadeiro", category: "sweeties", prices: { xs: 2.9, small: 4.5, large: 7.9 }, lines: [["p", "brigadeiro", 80, 160]] },
     { key: "pudim", name: "Pudim de leite", category: "sweeties", prices: { xs: 3.2, small: 4.9, large: 8.5 }, lines: [["i", "leite_cond", 200, 400], ["i", "leite", 250, 500], ["i", "ovos", 2, 4], ["i", "acucar", 60, 120]] },
     { key: "caipirinha", name: "Caipirinha", category: "specials", prices: { small: 7.5, large: 13.5 }, lines: [["i", "cachaca", 60, 120], ["i", "limao", 80, 160], ["i", "acucar", 25, 50]] },
-    { key: "guarana", name: "Guaraná", category: "classics", prices: { small: 2.5 }, lines: [["i", "guarana", 1, null]] },
     { key: "suco_laranja", name: "Sumo de laranja natural", category: "classics", prices: { small: 3.5, large: 6 }, lines: [["i", "laranja", 400, 800]] },
   ],
 };

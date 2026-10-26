@@ -110,6 +110,11 @@ Migração validada em PGlite (aplicar, reaplicar, unicidade, rollback, demo do 
   `stock_review_lines` + entradas (`purchase`); stock inicial; artigos «stock baixo» acabam a metade do mínimo;
   `sales_demand_actuals_daily`; `vendus_product_mapping` (referências do POS fictício); `menu_costing_settings`,
   `stock_settings`. Versões das fichas recuadas ao início do histórico.
+- Bebidas vendidas tal como vêm (água, refrigerante, cerveja em garrafa, guaraná) **não são pratos**: são artigos
+  vendáveis (`is_sellable`, `sale_price`) ligados ao POS por referência (`target_type = 'stock'`); cada venda dá baixa
+  de 1 unidade do artigo e a procura do planeamento é do artigo (`stock`). Só são pratos as bebidas com medida ou
+  preparação (imperial/caneca do barril, copo de vinho, taça de espumante, cocktails). Decisão do utilizador
+  (2026-10-26).
 - Unidades: linha da compra em cêntimos (por unidade base em cêntimos); movimento em euros por unidade base.
 - `POST /api/stock-demo/:scenario` (criar; já criado → 200) e `POST /api/stock-demo/:scenario/reset` (recomeçar até
   hoje), só Admin; depois de semear corre a previsão do planeamento. O seeder recusa organizações que não estejam
