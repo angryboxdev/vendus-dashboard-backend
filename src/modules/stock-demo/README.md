@@ -38,11 +38,12 @@ Admin                                   Mezza
 
 Liga a empresa real a uma organização fictícia por cenário, troca de organização nas rotas da Gestão de Stock
 (`X-Stock-Demo`) e fornece as vendas simuladas aos leitores de vendas do Stock. **Não** toca na demonstração do
-RH (módulo `demo-data`, ADR-0034) nem em mais nenhum módulo; a geração dos dados de cada cenário é a Fase 2.
+RH (módulo `demo-data`, ADR-0034) nem em mais nenhum módulo.
 
 ## Domain concepts
 
-- `StockDemoLink` — empresa real + cenário → organização fictícia (`is_demo = true`, `demo_of = null`), semente,
+- `StockDemoLink` — empresa real + cenário → organização fictícia (`is_demo = false`, `demo_of = null`,
+  `status = 'inactive'`; excluída dos crons pela tabela de ligação — ADR-0041), semente,
   vendas mensais alvo, nome e pista da chave do POS fictício.
 - `simulateDailySales` (puro, determinístico) — receita do dia = alvo mensal × 12 ÷ 365 × peso do dia da semana ×
   ruído ±8%; repartida por produto com um peso fixo (0,5–2,0) e ruído diário ±20%; quantidade = parte ÷ PVP.
@@ -99,7 +100,23 @@ RH (módulo `demo-data`, ADR-0034) nem em mais nenhum módulo; a geração dos d
 `npx jest --config jest.config.cjs src/modules/stock-demo` (fakes; inclui o adapter do planeamento).
 Migração validada em PGlite (aplicar, reaplicar, unicidade, rollback, demo do RH intacta).
 
+## Seeding (Fase 2)
+
+- Cenários em `domain/services/scenarios/` (Comida brasileira, Hamburgueria, Bar): fornecedores inventados, ~30
+  artigos, 3–7 preparações, 12–13 pratos (XS nas doces), PVP e IVA das vendas (bar 23%).
+- `buildStockDemoPlan` (puro): vendas de 90 dias → consumo pelas fichas → baixas diárias (`consumption`); compras
+  semanais por fornecedor (cobrem o consumo + reserva de 1,2× o mínimo, arredondadas à embalagem; tendência
+  `up/down/spike`, desconto do fornecedor) → `invoices` + `invoice_lines` + `stock_purchase_reviews` (applied) +
+  `stock_review_lines` + entradas (`purchase`); stock inicial; artigos «stock baixo» acabam a metade do mínimo;
+  `sales_demand_actuals_daily`; `vendus_product_mapping` (referências do POS fictício); `menu_costing_settings`,
+  `stock_settings`. Versões das fichas recuadas ao início do histórico.
+- Unidades: linha da compra em cêntimos (por unidade base em cêntimos); movimento em euros por unidade base.
+- `POST /api/stock-demo/:scenario` (criar; já criado → 200) e `POST /api/stock-demo/:scenario/reset` (recomeçar até
+  hoje), só Admin; depois de semear corre a previsão do planeamento. O seeder recusa organizações que não estejam
+  em `stock_demo_organizations`.
+- Validação: os 3 planos gravados contra todas as migrações em PGlite (sem erros, sem stock negativo).
+
 ## Known gaps / open debt
 
-- Criar e recomeçar cenários e o gerador de dados — Fase 2.
+- Contagens físicas fictícias não são geradas.
 - Botão e faixa no frontend — Fase 3.
