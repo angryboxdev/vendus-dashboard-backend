@@ -1,10 +1,10 @@
 # Matriz de autorização (perfil × endpoint)
 
-> Gerado por `npm run authz:matrix` em 2026-10-25. Não editar à mão.
+> Gerado por `npm run authz:matrix` em 2026-10-26. Não editar à mão.
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 815 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 819 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -729,6 +729,8 @@ Endpoints: 815 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/public/join/:code` | pré-auth | — | — | — | — | — |
 | POST | `/api/public/join/:code` | pré-auth | — | — | — | — | — |
 | GET | `/api/recipe-costing` | permission:stock.recipes:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/recipe-costing/dishes/:id/weekly` | permission:stock.recipes:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/recipe-costing/ingredients/:id/price-history` | permission:stock.items:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/reports/dre/custos-fixos` | permission:dre.fixed_costs:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/reports/dre/custos-fixos` | permission:dre.fixed_costs:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | DELETE | `/api/reports/dre/custos-fixos/:id` | permission:dre.fixed_costs:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
@@ -787,6 +789,8 @@ Endpoints: 815 · pré-autenticação: 23 · não classificados: 0
 | PUT | `/api/stock-purchase-reviews/entry-rules` | permission:stock.purchase_reviews:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/stock-purchase-reviews/presentations` | permission:stock.purchase_reviews:READ | ✔ | ✔ | ✖ | ✔ | ✖ |
 | PUT | `/api/stock-purchase-reviews/presentations` | permission:stock.purchase_reviews:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/stock-purchase-reviews/settings` | permission:stock.purchase_reviews:READ | ✔ | ✔ | ✖ | ✔ | ✖ |
+| PUT | `/api/stock-purchase-reviews/settings` | permission:stock.purchase_reviews:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/stock/categories` | permission:stock.items:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/stock/categories` | permission:stock.items:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | DELETE | `/api/stock/categories/:id` | permission:stock.items:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
