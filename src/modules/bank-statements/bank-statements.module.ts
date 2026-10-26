@@ -1,3 +1,8 @@
+import { BankAccountsStatementAccountAdapter } from "./adapters/out/bank-accounts-statement-account.adapter.js";
+import { PreviewStatementAccountUseCase } from "./application/use-cases/preview-statement-account.use-case.js";
+import type { ResolveStatementAccountPort } from "../bank-accounts/domain/ports/in/bank-accounts.ports.js";
+import { ReadStatementPdfUseCase } from "./application/use-cases/read-statement-pdf.use-case.js";
+import { PdfjsStatementTextAdapter } from "./adapters/out/pdfjs-statement-text.adapter.js";
 import type { Router } from "express";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 
@@ -66,7 +71,9 @@ import type { ListSuppliersPort } from "../financial-base/domain/ports/in/suppli
  * temporary fallback that used to query `bank_accounts` directly is gone
  * (see the module README's Ports section for the cross-module note).
  */
-export function createBankStatementsModule(bankAccountRead: BankAccountReadPort, listSuppliers: ListSuppliersPort): { router: Router } {
+export function createBankStatementsModule(bankAccountRead: BankAccountReadPort, listSuppliers: ListSuppliersPort, resolveStatementAccount?: ResolveStatementAccountPort): { router: Router } {
+  // V2 (F3): banco e conta encontrados ou criados a partir do extrato (módulo bank-accounts, D10).
+  const accountResolver = resolveStatementAccount ? new BankAccountsStatementAccountAdapter(resolveStatementAccount) : undefined;
   // Adapters out
   const statementRepo = new SupabaseBankStatementImportRepository(createScopedQuery);
   const movementRepo = new SupabaseBankMovementRepository(createScopedQuery);
@@ -81,7 +88,7 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
   const supplierNameRead = new FinancialBaseSupplierNameReadAdapter(listSuppliers);
 
   // Use cases
-  const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo, bankAccountRead);
+  const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo, bankAccountRead, accountResolver);
   const listStatements = new ListBankStatementsUseCase(statementRepo);
   const getStatement = new GetBankStatementUseCase(statementRepo, movementRepo, entityLinkRepo);
   const reconcileMovement = new ReconcileMovementUseCase(movementRepo, movementHint, invoiceRead, payableRead, entityLinkRepo, invoiceReconciliationWrite);
@@ -104,7 +111,7 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
   const documentStorage = new SupabaseBankDocumentStorageAdapter();
   const uploadMovementDocument = new UploadMovementDocumentUseCase(movementRepo, documentStorage);
   const linkStatementToAccount = new LinkStatementToAccountUseCase(statementRepo, bankAccountRead);
-  const getAccountCalendar = new GetAccountCalendarUseCase(movementRepo);
+  const getAccountCalendar = new GetAccountCalendarUseCase(movementRepo, statementRepo);
   const getAccountMonthDetail = new GetAccountMonthDetailUseCase(movementRepo, entityLinkRepo);
   const getMovementsLinkedToInvoice = new GetMovementsLinkedToInvoiceUseCase(entityLinkRepo, movementRepo);
   const getInvoiceOpenBalances = new GetInvoiceOpenBalancesUseCase(entityLinkRepo, invoiceRead);
@@ -148,6 +155,8 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
     getMonthlySuggestions,
     getGroupedSettlementSuggestions,
     confirmGroupedSettlement,
+    new ReadStatementPdfUseCase(new PdfjsStatementTextAdapter()),
+    accountResolver ? new PreviewStatementAccountUseCase(accountResolver) : undefined,
   );
 
   return { router: controller.router };

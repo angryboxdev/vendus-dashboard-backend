@@ -1,7 +1,7 @@
 # Módulo: bank-accounts
 
 > Status: ativo
-> Última atualização: 2026-08-28
+> Última atualização: 2026-10-26 (Conciliação bancária V2, F3: banco e conta criados a partir do primeiro extrato — ver «Decisões de design»). Antes: 2026-08-28.
 
 ---
 
@@ -196,6 +196,8 @@ este parâmetro (deixou de ter fallback próprio — ver README de
 bank-statements).
 
 ## Decisões de design (ADR resumido)
+
+**Banco e conta nascem do primeiro extrato (V2, F3, 2026-10-26)** — `ResolveStatementAccountUseCase` (porta `ResolveStatementAccountPort`, exposta como `resolveStatementAccount` e usada pelo bank-statements): procura em todas as contas à ordem da organização pelo IBAN / nº de conta com `matchesStatementAccount` (`domain/services/statement-account-match.ts` — IBAN sem espaços, nº de conta sem zeros à esquerda, nº de conta contido no IBAN; nunca um cartão), sem criar duplicados. Se não houver, reutiliza o banco (mesmo logótipo predefinido ou nome) ou cria-o com os dados do extrato (nome, logótipo, formato `millennium_bcp_pdf`, BIC, país) e cria a conta («corrente», IBAN, nº, nome a partir da designação do produto, ex.: «Conta Negocio Emp.»). Com `create: false` só diz o que faria (pré-visualização). A correspondência antiga (`findByAccountNumber`, texto exato) continua para os CSV/XLSX.
 
 **Logos como enum de string, não como ficheiro** — o logótipo é uma chave predefinida (ex: `"millennium_bcp"`). Os assets reais (SVG/PNG) vivem no frontend. O backend guarda apenas a chave, tornando a validação simples e evitando upload de imagens.
 

@@ -3,7 +3,12 @@ import multer from "multer";
 import {
   CsvStatementParser,
   ParseError,
+  type ParsedStatement,
 } from "../out/csv-statement-parser.adapter.js";
+import type { PreviewStatementAccountPort, ReadStatementPdfPort } from "../../domain/ports/in/statement-pdf.ports.js";
+import { statementAccountHints } from "../../domain/services/statement-pdf/statement-account-hints.js";
+import type { ParsedBankStatement } from "../../domain/services/statement-pdf/parsed-statement.js";
+import type { StatementSourceType } from "../../domain/entities/bank-statement-import.js";
 import { XlsxStatementParser } from "../out/xlsx-statement-parser.adapter.js";
 import {
   StatementNotFoundError,
@@ -15,6 +20,7 @@ import {
   EntityAlreadyReconciledError,
   DuplicateMovementError,
   StaleDocumentBalanceError,
+  StatementPdfNotRecognizedError,
 } from "../../domain/errors.js";
 import type { ImportBankStatementPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { ListBankStatementsPort } from "../../domain/ports/in/bank-statement.ports.js";
@@ -75,9 +81,25 @@ export class BankStatementController {
     private readonly getMonthlySuggestions: GetMonthlySuggestionsPort,
     private readonly getGroupedSettlementSuggestions: GetGroupedSettlementSuggestionsPort,
     private readonly confirmGroupedSettlement: ConfirmGroupedSettlementPort,
+    /** V2 (F2): extratos em PDF de modelos reconhecidos (Millennium BCP). */
+    private readonly readStatementPdf?: ReadStatementPdfPort,
+    /** V2 (F3): para que conta vai o extrato (existente ou a criar), na pré-visualização. */
+    private readonly previewStatementAccount?: PreviewStatementAccountPort,
   ) {
     this.router = Router();
     this.registerRoutes();
+  }
+
+  /** Lê o ficheiro enviado pelo formato: PDF (modelo reconhecido), XLSX ou CSV. */
+  private async readUpload(file: { buffer: Buffer; mimetype: string; originalname: string }): Promise<{ parsed: ParsedStatement; sourceType: StatementSourceType; pdf: ParsedBankStatement | null }> {
+    const name = file.originalname.toLowerCase();
+    if (file.mimetype === "application/pdf" || name.endsWith(".pdf")) {
+      if (!this.readStatementPdf) throw new StatementPdfNotRecognizedError("A importação de extratos em PDF não está disponível.");
+      const pdf = await this.readStatementPdf.execute(file.buffer);
+      return { parsed: pdf, sourceType: "pdf", pdf };
+    }
+    const isXlsx = file.mimetype.includes("spreadsheet") || file.mimetype.includes("excel") || name.endsWith(".xlsx") || name.endsWith(".xls");
+    return isXlsx ? { parsed: xlsxParser.parse(file.buffer), sourceType: "xlsx", pdf: null } : { parsed: csvParser.parse(file.buffer), sourceType: "csv", pdf: null };
   }
 
   private registerRoutes(): void {
@@ -89,20 +111,14 @@ export class BankStatementController {
     this.router.post(
       "/bank-statements/preview",
       upload.single("file"),
-      (req, res) => {
+      async (req, res) => {
         try {
           if (!req.file) {
             res.status(400).json({ error: "file is required" });
             return;
           }
-          const isXlsx =
-            req.file.mimetype.includes("spreadsheet") ||
-            req.file.mimetype.includes("excel") ||
-            req.file.originalname.toLowerCase().endsWith(".xlsx") ||
-            req.file.originalname.toLowerCase().endsWith(".xls");
-          const parsed = isXlsx
-            ? xlsxParser.parse(req.file.buffer)
-            : csvParser.parse(req.file.buffer);
+          const { parsed, pdf } = await this.readUpload(req.file);
+          const sum = (type: "credit" | "debit") => parsed.movements.filter((m) => m.movementType === type).reduce((s, m) => s + m.amount, 0);
 
           res.json({
             bankName: parsed.bankName,
@@ -112,9 +128,21 @@ export class BankStatementController {
             periodStart: parsed.periodStart?.toISOString().slice(0, 10) ?? null,
             periodEnd: parsed.periodEnd?.toISOString().slice(0, 10) ?? null,
             movementsCount: parsed.movements.length,
+            // V2: resumo para confirmar antes de gravar (o PDF traz mais metadados e a validação dos saldos).
+            inflowCents: sum("credit"),
+            outflowCents: sum("debit"),
+            template: pdf?.template ?? null,
+            iban: pdf?.iban ?? null,
+            currency: pdf?.currency ?? null,
+            statementNumber: pdf?.statementNumber ?? null,
+            accountLabel: pdf?.accountLabel ?? null,
+            issues: pdf?.issues ?? [],
+            canImport: !(pdf?.issues ?? []).some((i) => i.blocking),
+            // V2 (F3): conta existente ou banco/conta que vão ser criados ao importar.
+            accountResolution: pdf && this.previewStatementAccount ? await this.previewStatementAccount.execute(req.auth!.orgId, pdf) : null,
           });
         } catch (e) {
-          if (e instanceof ParseError) {
+          if (e instanceof ParseError || e instanceof StatementPdfNotRecognizedError) {
             res.status(422).json({ error: e.message });
             return;
           }
@@ -143,22 +171,28 @@ export class BankStatementController {
             movements: import("../../domain/ports/in/bank-statement.ports.js").ParsedMovement[];
           };
 
+          let sourceType: StatementSourceType = "manual";
+          let pdfCurrency: string | null = null;
+          let pdfStatement: ParsedBankStatement | null = null;
           if (req.file) {
-            const isXlsx =
-              req.file.mimetype.includes("spreadsheet") ||
-              req.file.mimetype.includes("excel") ||
-              req.file.originalname.toLowerCase().endsWith(".xlsx") ||
-              req.file.originalname.toLowerCase().endsWith(".xls");
-            parsed = isXlsx
-              ? xlsxParser.parse(req.file.buffer)
-              : csvParser.parse(req.file.buffer);
+            const read = await this.readUpload(req.file);
+            parsed = read.parsed;
+            sourceType = read.sourceType;
+            pdfCurrency = read.pdf?.currency ?? null;
+            pdfStatement = read.pdf;
+            // Extrato em PDF que não fecha (saldos, movimentos ilegíveis): nunca se grava com valores errados.
+            const blocking = (read.pdf?.issues ?? []).filter((i) => i.blocking);
+            if (blocking.length > 0) {
+              res.status(422).json({ error: `O extrato não pode ser importado: ${blocking.map((i) => i.message).join(" ")}`, issues: blocking });
+              return;
+            }
           }
 
           const body = req.body as Record<string, unknown>;
 
           const bankName = (body.bankName as string | undefined) ?? parsed.bankName;
           const accountNumber =
-            (body.accountNumber as string | undefined) ?? parsed.accountNumber;
+            (body.accountNumber as string | undefined) ?? parsed.accountNumber ?? pdfStatement?.iban ?? null;
           const openingBalance = body.openingBalance != null
             ? Math.round(Number(body.openingBalance))
             : parsed.openingBalance;
@@ -199,24 +233,19 @@ export class BankStatementController {
             accountNumber,
             periodStart,
             periodEnd,
-            currency: (body.currency as string | undefined) ?? "EUR",
-            sourceType: req.file
-              ? (req.file.mimetype.includes("spreadsheet") ||
-                 req.file.mimetype.includes("excel") ||
-                 req.file.originalname.toLowerCase().endsWith(".xlsx") ||
-                 req.file.originalname.toLowerCase().endsWith(".xls")
-                  ? "xlsx"
-                  : "csv")
-              : "manual",
+            currency: (body.currency as string | undefined) ?? pdfCurrency ?? "EUR",
+            sourceType,
             sourceFileName: req.file?.originalname ?? null,
             openingBalance,
             closingBalance,
             movements: parsed.movements,
+            // PDF reconhecido sem conta escolhida: banco e conta encontrados ou criados pelo próprio extrato.
+            ...(pdfStatement && !bankAccountId && { autoAccount: statementAccountHints(pdfStatement) }),
           });
 
           res.status(201).json(result);
         } catch (e) {
-          if (e instanceof ParseError) {
+          if (e instanceof ParseError || e instanceof StatementPdfNotRecognizedError) {
             res.status(422).json({ error: e.message });
             return;
           }

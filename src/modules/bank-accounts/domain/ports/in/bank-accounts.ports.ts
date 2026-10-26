@@ -193,3 +193,40 @@ export interface DeleteBankAccountCommand {
 export interface DeleteBankAccountPort {
   execute(command: DeleteBankAccountCommand): Promise<void>;
 }
+
+// ─── Resolve statement account (Conciliação bancária V2, F3) ──────────────────
+
+/**
+ * Banco e conta de um extrato importado: reutiliza os existentes (pelo IBAN / nº de conta, sem
+ * duplicados) ou, com `create`, cria-os a partir dos dados do próprio extrato.
+ */
+export interface ResolveStatementAccountCommand {
+  organizationId: OrganizationId;
+  bankName: string;
+  logoKey: BankLogoKey;
+  statementFormat: StatementFormat;
+  color: string;
+  country: string;
+  bic: string | null;
+  iban: string | null;
+  accountNumber: string | null;
+  accountLabel: string | null;
+  /** false = só ver o que aconteceria (pré-visualização). */
+  create: boolean;
+}
+
+export interface ResolveStatementAccountResult {
+  /** existing = conta já registada; created = criada agora; to_create = seria criada (create=false). */
+  status: "existing" | "created" | "to_create";
+  bankId: string | null;
+  bankName: string;
+  /** O banco também é novo (criado agora, ou a criar). */
+  bankIsNew: boolean;
+  accountId: string | null;
+  accountName: string;
+}
+
+export interface ResolveStatementAccountPort {
+  /** `null` quando o extrato não traz IBAN nem nº de conta (não há como identificar a conta). */
+  execute(command: ResolveStatementAccountCommand): Promise<ResolveStatementAccountResult | null>;
+}

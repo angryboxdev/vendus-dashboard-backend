@@ -3,6 +3,8 @@ import type { BankStatementImport, StatementStatus } from "../../entities/bank-s
 
 export interface BankStatementImportFilter {
   accountNumber?: string;
+  /** Extratos ligados a esta conta (vista anual: que meses têm extrato). */
+  bankAccountId?: string;
   status?: StatementStatus;
   from?: Date;
   to?: Date;

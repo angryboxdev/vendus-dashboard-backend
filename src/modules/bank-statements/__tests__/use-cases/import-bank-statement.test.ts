@@ -72,15 +72,34 @@ describe("ImportBankStatementUseCase", () => {
     expect(result.importedMovementsCount).toBe(0);
   });
 
-  it("deduplica movimentos repetidos dentro do MESMO ficheiro (regressão: violava a constraint UNIQUE no insert em lote)", async () => {
+  it("duas linhas iguais no MESMO ficheiro são dois movimentos (V2: antes perdia-se o 2.º) — sem violar a constraint UNIQUE", async () => {
     const repeated = baseCommand.movements[0]!; // "COM.MAN.CONTA", débito 500, 2026-07-01
-    const result = await useCase.execute({
-      ...baseCommand,
-      movements: [repeated, { ...repeated }, baseCommand.movements[1]!],
-    });
+    const movements = [repeated, { ...repeated }, baseCommand.movements[1]!];
+    const result = await useCase.execute({ ...baseCommand, movements });
 
-    expect(result.importedMovementsCount).toBe(2); // 1x "COM.MAN.CONTA" + 1x "TRANSFERENCIA RECEBIDA"
-    expect(result.skippedDuplicates).toBe(1);
+    expect(result.importedMovementsCount).toBe(3);
+    expect(result.skippedDuplicates).toBe(0);
+    // Reimportar o mesmo ficheiro não duplica nenhum (correspondência um-para-um).
+    const again = await useCase.execute({ ...baseCommand, movements });
+    expect(again.importedMovementsCount).toBe(0);
+    expect(again.skippedDuplicates).toBe(3);
+  });
+
+  it("dois créditos iguais no mesmo dia distinguem-se pelo saldo; reimportar não duplica", async () => {
+    const tpa = { bookingDate: new Date("2026-07-03T00:00:00.000Z"), valueDate: new Date("2026-07-03T00:00:00.000Z"), description: "CREDITO TPA", amount: 10_000, movementType: "credit" as const };
+    const movements = [{ ...tpa, balanceAfter: 209_500 }, { ...tpa, balanceAfter: 219_500 }];
+    expect((await useCase.execute({ ...baseCommand, movements })).importedMovementsCount).toBe(2);
+    const again = await useCase.execute({ ...baseCommand, movements });
+    expect(again.importedMovementsCount).toBe(0);
+    expect(again.skippedDuplicates).toBe(2);
+  });
+
+  it("o mesmo movimento noutro formato (descrição diferente, mesmo saldo) não é duplicado", async () => {
+    await useCase.execute(baseCommand);
+    const otherFormat = baseCommand.movements.map((m) => ({ ...m, description: `${m.description} (outro formato)` }));
+    const result = await useCase.execute({ ...baseCommand, sourceType: "xlsx", movements: otherFormat });
+    expect(result.importedMovementsCount).toBe(0);
+    expect(result.skippedDuplicates).toBe(2);
   });
 
   it("imports with zero movements when all are duplicates", async () => {

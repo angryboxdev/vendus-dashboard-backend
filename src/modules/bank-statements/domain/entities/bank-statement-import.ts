@@ -3,7 +3,7 @@ import {
   StatementBalanceDifferenceError,
 } from "../errors.js";
 
-export type StatementSourceType = "csv" | "xlsx" | "manual";
+export type StatementSourceType = "csv" | "xlsx" | "manual" | "pdf";
 export type StatementStatus = "draft" | "in_review" | "completed" | "closed";
 
 export const STATEMENT_STATUSES: StatementStatus[] = [
