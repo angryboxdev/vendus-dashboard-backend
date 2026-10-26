@@ -543,6 +543,10 @@ export interface MovementCandidate {
   openBalanceCents: number;  // unpaid balance = total - sum of existing allocations
   date: string;              // best available date (paid_at ?? due_date ?? invoice_date)
   confidence: number;
+  /** Fornecedor aprendido ou nome do fornecedor na descrição do movimento. */
+  nameMatched: boolean;
+  /** Total ou saldo em aberto a ≤ 1 € do movimento. */
+  amountMatched: boolean;
 }
 
 export interface FindMovementCandidatesQuery {

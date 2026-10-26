@@ -89,6 +89,27 @@ describe("GetMonthlySuggestionsUseCase", () => {
     expect(result.repeatJustifications).toHaveLength(0);
   });
 
+  it("não sugere uma fatura com o valor certo mas de outro fornecedor (nome tem de bater, ≥ 90%)", async () => {
+    const movement = makeMovement({ bookingDate: new Date("2026-08-10T00:00:00.000Z"), description: "TRF P/ OUTRA EMPRESA EXEMPLO" });
+    await movementRepo.saveBulk(organizationId, [movement]);
+    invoiceRead.setcandidates(organizationId, [makeInvoiceCandidate()]);
+
+    const result = await useCase.execute({ organizationId, bankAccountId: ACCOUNT_ID, year: 2026, month: 8 });
+
+    expect(result.entityMatches).toHaveLength(0);
+  });
+
+  it("não sugere repetir a classificação quando o valor é diferente (nome e valor têm de bater)", async () => {
+    const july = makeMovement({ bookingDate: new Date("2026-07-15T00:00:00.000Z"), description: "TRF P/ COLABORADOR EXEMPLO", amount: 90_000 })
+      .classify({ justificationType: "recibo_comprovativo" });
+    const august = makeMovement({ bookingDate: new Date("2026-08-15T00:00:00.000Z"), description: "TRF P/ COLABORADOR EXEMPLO", amount: 95_000 });
+    await movementRepo.saveBulk(organizationId, [july, august]);
+
+    const result = await useCase.execute({ organizationId, bankAccountId: ACCOUNT_ID, year: 2026, month: 8 });
+
+    expect(result.repeatJustifications).toHaveLength(0);
+  });
+
   it("sugere repetir a classificação de um movimento recorrente de um mês anterior (caso Gabriel Gomes)", async () => {
     const july = makeMovement({
       bookingDate: new Date("2026-07-15T00:00:00.000Z"),
@@ -213,7 +234,8 @@ describe("GetMonthlySuggestionsUseCase", () => {
       description: "PAGAMENTO EDP SA",
     });
     await movementRepo.saveBulk(organizationId, [july, august]);
-    invoiceRead.setcandidates(organizationId, [makeInvoiceCandidate()]);
+    // Fatura a ≤ 7 dias do movimento: nome + valor + data → sugestão forte (≥ 90%).
+    invoiceRead.setcandidates(organizationId, [makeInvoiceCandidate({ dueDate: "2026-08-12" })]);
 
     const result = await useCase.execute({ organizationId, bankAccountId: ACCOUNT_ID, year: 2026, month: 8 });
     expect(result.entityMatches).toHaveLength(1);
