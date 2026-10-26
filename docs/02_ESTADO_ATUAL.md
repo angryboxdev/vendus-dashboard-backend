@@ -1,6 +1,6 @@
 # Estado atual
 
-Atualizado: 2026-10-24 (leitor inteligente em produção: backend `ea7d2de`, frontend `abff2fa`). Antes: 2026-10-21 (verificado contra o repositório, os ramos e a produção; produção backend `89393ef`, frontend `dbeb18d`). Detalhe por módulo em `docs/modulos/`.
+Atualizado: 2026-10-26 (**Conciliação bancária V2 + leitor PDF Millennium** — task `TASK_MEZZA_CONCILIACAO_BANCARIA_V2_MILLENNIUM_PDF`, fases F1–F5, ramo `financeiro-bancos-v2` nos dois repositórios: F1 estados do mês/conciliação real/deduplicação pelo saldo; F2 leitor do «Extrato Combinado» Millennium BCP em PDF (cadeia de saldos validada); F3 banco e conta criados a partir do primeiro extrato; F4 descrição normalizada e tipo de movimento por regras (calculados na leitura); F5 nova UI — página Bancos com logótipos reais, vista da conta com resumo do mês corrente (setas mês a mês / ano), detalhe do mês em ecrã inteiro com painel lateral só ao selecionar movimento. Migração `20261126100000_bank_statement_source_pdf` + rollback). Antes: 2026-10-24 (leitor inteligente em produção: backend `ea7d2de`, frontend `abff2fa`). Antes: 2026-10-21 (verificado contra o repositório, os ramos e a produção; produção backend `89393ef`, frontend `dbeb18d`). Detalhe por módulo em `docs/modulos/`.
 
 ## Em produção (`origin/main` backend = `03b1c23`; frontend = `242c0ec`)
 - Todos os 51 módulos de `src/modules` (exceto `tasks`, módulo de referência não montado) + camada legada.
