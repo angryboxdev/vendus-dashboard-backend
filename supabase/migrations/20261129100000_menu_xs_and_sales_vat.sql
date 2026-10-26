@@ -1,6 +1,6 @@
 -- Fichas técnicas V7: (1) variante XS dos pratos (doces: metade da pequena) e (2) taxa de IVA das
 -- vendas por empresa, para a margem teórica dos pratos (PVP com IVA → PVP sem IVA − custo).
--- Idempotente. Rollback: docs/migrations/rollback/20261128100000_menu_xs_and_sales_vat.sql
+-- Idempotente. Rollback: docs/migrations/rollback/20261129100000_menu_xs_and_sales_vat.sql
 
 -- (1) Novo valor do enum usado por pizza_prices, pizza_recipe_items e vendus_product_mapping.
 -- Não é usado nesta migração (o Postgres não deixa usar um valor novo na mesma transação).

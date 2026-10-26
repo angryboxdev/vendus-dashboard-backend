@@ -55,7 +55,7 @@ Leitura e cálculo, sem escrita: `GET /api/recipe-costing` devolve o custo de ca
 ### Saída (dependências do domínio)
 
 - `RecipeCostingReadPort` — `loadSnapshot(org)`.
-- `MenuCostingSettingsRepositoryPort` — `menu_costing_settings` (uma linha por empresa; migração `20261128100000`).
+- `MenuCostingSettingsRepositoryPort` — `menu_costing_settings` (uma linha por empresa; migração `20261129100000`).
 - `PurchaseObservationReadPort` — compras confirmadas de um artigo (`listForItem`) ou de todos (`listAll`, paginado).
 - `DishWeeklyCostReadPort` — versões das fichas; `listPizzas` e `listLatestPizzaVersions` para o impacto.
 

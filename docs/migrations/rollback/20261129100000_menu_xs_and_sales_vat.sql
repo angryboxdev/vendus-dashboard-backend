@@ -1,4 +1,4 @@
--- Rollback de 20261128100000_menu_xs_and_sales_vat.sql.
+-- Rollback de 20261129100000_menu_xs_and_sales_vat.sql.
 -- (2) Remove as definições: a margem volta a usar a predefinição no código (ou o código anterior, sem margem).
 drop table if exists public.menu_costing_settings;
 
