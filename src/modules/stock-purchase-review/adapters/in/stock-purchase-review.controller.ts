@@ -17,6 +17,7 @@ import {
   StockImportNotValidatedError,
   InvalidPurchasePresentationError,
   InvalidEntryRulesError,
+  InvalidStockSettingsError,
 } from "../../domain/errors.js";
 import type {
   ListStockPurchaseReviewsPort,
@@ -27,6 +28,7 @@ import type {
   SavePurchasePresentationPort,
   ListPurchasePresentationsPort,
   EntryRulesPort,
+  StockSettingsPort,
   RestoreStockPurchaseReviewPort,
   SuggestLineMappingPort,
   ConfirmStockPurchaseReviewPort,
@@ -67,7 +69,8 @@ function handleError(e: unknown, res: import("express").Response): void {
     e instanceof LocationRequiredError ||
     e instanceof ReviewNotCancelledError ||
     e instanceof InvalidPurchasePresentationError ||
-    e instanceof InvalidEntryRulesError
+    e instanceof InvalidEntryRulesError ||
+    e instanceof InvalidStockSettingsError
   ) {
     res.status(400).json({ error: e.message });
     return;
@@ -92,6 +95,7 @@ export class StockPurchaseReviewController {
     private readonly savePurchasePresentation: SavePurchasePresentationPort,
     private readonly listPurchasePresentations: ListPurchasePresentationsPort,
     private readonly entryRules: EntryRulesPort,
+    private readonly stockSettings: StockSettingsPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -125,6 +129,28 @@ export class StockPurchaseReviewController {
           ...(search !== undefined && { search }),
         });
         res.json(result);
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+
+    // Localização principal do Stock (V5 §2.4, antes de «/:id»): GET; PUT { defaultLocationId }.
+    this.router.get("/stock-purchase-reviews/settings", async (req, res) => {
+      try {
+        res.json(await this.stockSettings.get(req.auth!.orgId));
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+
+    this.router.put("/stock-purchase-reviews/settings", async (req, res) => {
+      try {
+        const body = (req.body ?? {}) as { defaultLocationId?: unknown };
+        if (body.defaultLocationId !== null && typeof body.defaultLocationId !== "string") {
+          res.status(400).json({ error: "defaultLocationId é obrigatório (id da loja ou null)" });
+          return;
+        }
+        res.json(await this.stockSettings.save({ organizationId: req.auth!.orgId, defaultLocationId: body.defaultLocationId, actor: req.auth!.email }));
       } catch (e) {
         handleError(e, res);
       }

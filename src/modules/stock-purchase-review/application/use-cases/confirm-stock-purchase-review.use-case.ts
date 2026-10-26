@@ -1,5 +1,7 @@
 import { StockPurchaseReviewNotFoundError, StaleInvoiceSnapshotError, LocationRequiredError, DocumentNotReconciledError, StockImportNotValidatedError, SuspiciousConversionError } from "../../domain/errors.js";
 import type { StockCatalogWritePort } from "../../domain/ports/out/stock-catalog-write.port.js";
+import type { StockSettingsRepositoryPort } from "../../domain/ports/out/stock-settings-repository.port.js";
+import { resolveEntryLocation } from "./stock-settings.use-case.js";
 import { invoiceQuantityUnit, unitFactor } from "../../domain/services/presentation-conversion.service.js";
 import type { CostCenterCategoryReadPort } from "../../domain/ports/out/cost-center-category-read.port.js";
 import type { ReviewConference } from "../../domain/services/review-conference.service.js";
@@ -22,6 +24,8 @@ export class ConfirmStockPurchaseReviewUseCase implements ConfirmStockPurchaseRe
     private readonly categoryRead?: CostCenterCategoryReadPort,
     /** Unidade base dos artigos — travão de conversão (fatura em kg com 1 kg = 1 g). */
     private readonly catalog?: StockCatalogWritePort,
+    /** V5 §2.4: localização principal do Stock (entradas sem perguntar a loja). */
+    private readonly settings?: StockSettingsRepositoryPort,
   ) {}
 
   async execute(command: ConfirmStockPurchaseReviewCommand): Promise<StockPurchaseReviewDTO> {
@@ -77,14 +81,13 @@ export class ConfirmStockPurchaseReviewUseCase implements ConfirmStockPurchaseRe
     }
 
     // Resolve a loja para linhas sem `locationId` próprio (secção 46 — nunca decidido pelo Centro de Custo).
+    // V5 §2.4: a indicada, a única loja ativa ou a localização principal; com várias e sem principal recusa.
     let effectiveLocationId = command.locationId ?? review.locationId;
     if (!effectiveLocationId) {
       const activeLocations = await this.locationRead.listActive(command.organizationId);
-      if (activeLocations.length === 1) {
-        effectiveLocationId = activeLocations[0]!.id;
-      } else if (activeLocations.length > 1) {
-        throw new LocationRequiredError();
-      }
+      const defaultLocationId = activeLocations.length > 1 && this.settings ? await this.settings.getDefaultLocationId(command.organizationId) : null;
+      effectiveLocationId = resolveEntryLocation(null, activeLocations, defaultLocationId);
+      if (!effectiveLocationId && activeLocations.length > 1) throw new LocationRequiredError();
     }
 
     const effectiveDate = command.effectiveDate ?? review.toProps().invoiceDate;

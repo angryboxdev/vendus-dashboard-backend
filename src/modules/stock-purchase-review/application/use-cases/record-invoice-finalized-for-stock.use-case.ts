@@ -35,6 +35,12 @@ export class RecordInvoiceFinalizedForStockUseCase implements RecordInvoiceFinal
     if (command.lines.length === 0) {
       return;
     }
+    // Nota de crédito / devolução (valores negativos): não é uma compra. Não gera revisão, movimento
+    // nem observação de preço (task V5 §4.3) — a retificação do Stock faz-se ligada ao documento
+    // original. Antes falhava em silêncio na base (quantidade > 0) e a varredura repetia para sempre.
+    if ((command.totalWithVat ?? 0) < 0 || command.lines.some((l) => l.quantity <= 0 || l.totalWithVat < 0)) {
+      return;
+    }
 
     const categoryIds = [...new Set(command.lines.map((l) => l.costCenterCategoryId).filter((id): id is string => id !== null))];
     const categoryPolicies = await Promise.all(

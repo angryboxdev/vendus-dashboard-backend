@@ -3,6 +3,7 @@
  * e fator de conversão a partir da embalagem impressa na descrição. Só propõe —
  * quem confirma é sempre uma pessoa.
  */
+import { invoiceQuantityUnit } from "../../../../kernel/units/purchase-presentation.js";
 
 export interface CatalogItem {
   id: string;
@@ -120,6 +121,9 @@ export function suggestConversionFactor(description: string, purchaseUnit: strin
   const purchaseInfo = UNIT_INFO[purchase];
   // Comprado já numa unidade de medida (kg, L…): converte diretamente.
   if (baseInfo && purchaseInfo && baseInfo.dimension === purchaseInfo.dimension) return round(purchaseInfo.toBase / baseInfo.toBase);
+  // A fatura diz a unidade no fim da descrição («Q. Cheddar Ralado kg»): a quantidade já está em kg.
+  const invoiceInfo = UNIT_INFO[invoiceQuantityUnit(purchaseUnit, description) ?? ""];
+  if (baseInfo && invoiceInfo && baseInfo.dimension === invoiceInfo.dimension) return round(invoiceInfo.toBase / baseInfo.toBase);
   if (purchase === base) return 1;
   const pack = parsePackSize(description);
   if (!pack) return null;
