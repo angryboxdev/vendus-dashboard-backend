@@ -55,8 +55,10 @@ export class GetAccountMonthDetailUseCase implements GetAccountMonthDetailPort {
   ) {}
 
   async execute({ organizationId, bankAccountId, year, month }: GetAccountMonthDetailQuery): Promise<DaySlot[]> {
-    const from = new Date(year, month - 1, 1);       // first day of month
-    const to = new Date(year, month, 0);             // last day of month
+    // Datas em UTC, como as dos movimentos (meia-noite UTC): com a hora local, um servidor em Lisboa (UTC+1
+    // no verão) pedia «31 ago – 29 set» para setembro — mostrava o 31 de agosto e escondia o 30 de setembro.
+    const from = new Date(Date.UTC(year, month - 1, 1)); // first day of month
+    const to = new Date(Date.UTC(year, month, 0));       // last day of month
 
     const movements = await this.movementRepo.findByAccountAndPeriod(organizationId, bankAccountId, from, to);
     if (movements.length === 0) return [];

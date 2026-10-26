@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "@jest/globals";
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from "@jest/globals";
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { GetAccountCalendarUseCase } from "../../application/use-cases/get-account-calendar.use-case.js";
 import { FakeBankMovementRepository } from "../fakes/fake-bank-movement-repository.js";
@@ -104,5 +104,28 @@ describe("GetAccountCalendarUseCase — V2 (estado do extrato, conciliação rea
     await movementRepo.saveBulk(organizationId, [mov("2026-06-05", "debit", 300, 1_700), mov("2026-06-05", "credit", 1_000, 2_000), mov("2026-06-06", "debit", 200, 1_500)]);
     // ordem real: +1000 (1000→2000), −300 (→1700), −200 (→1500)
     expect(await month(6)).toMatchObject({ openingBalanceCents: 1_000, closingBalanceCents: 1_500 });
+  });
+});
+
+describe("datas do mês não dependem do fuso do servidor (regressão: setembro com o 31 de agosto, sem o 30)", () => {
+  const originalTz = process.env.TZ;
+  beforeAll(() => { process.env.TZ = "Europe/Lisbon"; });
+  afterAll(() => { process.env.TZ = originalTz; });
+
+  it("detalhe e calendário de setembro: entra o 30/09, não entra o 31/08", async () => {
+    const { GetAccountMonthDetailUseCase } = await import("../../application/use-cases/get-account-month-detail.use-case.js");
+    const { FakeBankMovementEntityLinkRepository } = await import("../fakes/fake-bank-movement-entity-link-repository.js");
+    const movementRepo = new FakeBankMovementRepository();
+    await movementRepo.saveBulk(organizationId, [
+      mov("2026-08-31", "credit", 152_365, 1_000_000),
+      mov("2026-09-01", "credit", 36_908, 1_036_908),
+      mov("2026-09-30", "credit", 9_464, 1_046_372),
+    ]);
+    const days = await new GetAccountMonthDetailUseCase(movementRepo, new FakeBankMovementEntityLinkRepository()).execute({ organizationId, bankAccountId: ACCOUNT_ID, year: 2026, month: 9 });
+    expect(days.map((d) => d.date)).toEqual(["2026-09-01", "2026-09-30"]);
+
+    const calendar = await new GetAccountCalendarUseCase(movementRepo).execute({ organizationId, bankAccountId: ACCOUNT_ID, year: 2026 });
+    expect(calendar.find((m) => m.month === 9)!.inflowCents).toBe(36_908 + 9_464);
+    expect(calendar.find((m) => m.month === 8)!.inflowCents).toBe(152_365);
   });
 });

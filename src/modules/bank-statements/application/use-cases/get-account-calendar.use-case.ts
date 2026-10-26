@@ -25,8 +25,9 @@ export class GetAccountCalendarUseCase implements GetAccountCalendarPort {
   ) {}
 
   async execute({ organizationId, bankAccountId, year }: GetAccountCalendarQuery): Promise<AccountMonthStat[]> {
-    const from = new Date(year, 0, 1);
-    const to = new Date(year, 11, 31);
+    // Datas em UTC, como as dos movimentos — não dependem do fuso do servidor.
+    const from = new Date(Date.UTC(year, 0, 1));
+    const to = new Date(Date.UTC(year, 11, 31));
     const [movements, statements] = await Promise.all([
       this.movementRepo.findByAccountAndPeriod(organizationId, bankAccountId, from, to),
       this.statementRepo ? this.statementRepo.findAll(organizationId, { bankAccountId }) : Promise.resolve([]),
@@ -34,7 +35,7 @@ export class GetAccountCalendarUseCase implements GetAccountCalendarPort {
 
     const byMonth = new Map<number, typeof movements>();
     for (const m of movements) {
-      const month = m.bookingDate.getMonth() + 1;
+      const month = m.bookingDate.getUTCMonth() + 1;
       byMonth.set(month, [...(byMonth.get(month) ?? []), m]);
     }
 
