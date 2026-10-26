@@ -6,7 +6,7 @@
 «Fluxo de caixa» do Mapa de rentabilidade, só a partir do banco: entradas contra saídas de todas as contas, resultado e margem, despesas por centro de custo e % das saídas justificada.
 
 ## Estado atual
-Ramo `financeiro-fluxo-caixa` nos dois repositórios (commits, sem push): F1 (backend: endpoint e testes), F2 (frontend: página «Fluxo de caixa» em `/dre/fluxo-caixa`) e F3 (painel «Para tratar»: a pagar / em atraso e faturas por rever, `GET /reports/dre/fluxo-caixa/para-tratar`, `finance.payables`). DRE F1 (backend) feita: `GET /reports/dre/resultado` (`dre.statement`) — receita do restaurante pelo Vendus e das plataformas pelas liquidações no banco, gastos pelas saídas do banco, tudo sem IVA; ajustes manuais; saldo do IVA. Próximo: DRE F2 (frontend).
+Ramo `financeiro-fluxo-caixa` nos dois repositórios (commits, sem push): F1 (backend: endpoint e testes), F2 (frontend: página «Fluxo de caixa» em `/dre/fluxo-caixa`) e F3 (painel «Para tratar»: a pagar / em atraso e faturas por rever, `GET /reports/dre/fluxo-caixa/para-tratar`, `finance.payables`). DRE F1 (backend) feita: `GET /reports/dre/resultado` (`dre.statement`) — receita do restaurante pelo Vendus e das plataformas pelas liquidações no banco, gastos pelas saídas do banco, tudo sem IVA; ajustes manuais; saldo do IVA. DRE F2 (frontend) feita: o item «Mapa» mostra esta DRE.
 
 ## Arquitetura
 - Código: `src/modules/cash-flow/`; composição: `cash-flow.module.ts`; documentação: `src/modules/cash-flow/README.md`.
@@ -22,4 +22,4 @@ Ver «Conceitos de domínio» e «Decisões de design» no README do módulo.
 Mês incompleto se faltar importar o extrato de alguma conta (sem aviso).
 
 ## Próximos trabalhos
-DRE F2 (frontend: página da DRE no Mapa).
+Validar a DRE e o fluxo de caixa com dados reais; push/PR.
