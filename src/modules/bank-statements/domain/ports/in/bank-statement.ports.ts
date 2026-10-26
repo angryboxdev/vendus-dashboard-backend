@@ -488,6 +488,8 @@ export interface LinkStatementToAccountPort {
 export interface AccountMonthStat extends MonthFigures {
   year: number;
   month: number; // 1–12
+  /** Há extrato mas não cobre o mês todo (os totais são só dos dias cobertos). */
+  partialPeriod: boolean;
   /** @deprecated use `reconciledPercent` (dava 100 sem movimentos). Mantido para o frontend anterior durante o deploy. */
   salesReconciledPercent: number; // 0–100
   /** @deprecated use `reconciledPercent` (dava 100 sem movimentos). */
@@ -543,6 +545,10 @@ export interface MovementCandidate {
   openBalanceCents: number;  // unpaid balance = total - sum of existing allocations
   date: string;              // best available date (paid_at ?? due_date ?? invoice_date)
   confidence: number;
+  /** Fornecedor aprendido ou nome do fornecedor na descrição do movimento. */
+  nameMatched: boolean;
+  /** Total ou saldo em aberto a ≤ 1 € do movimento. */
+  amountMatched: boolean;
 }
 
 export interface FindMovementCandidatesQuery {
@@ -655,6 +661,8 @@ export interface GroupedSettlementCombinationDto {
   netTotalCents: number;
   /** Always true — only true 0-cent-difference combinations are ever surfaced (see matcher service doc comment). */
   isExactMatch: true;
+  /** Presente quando a combinação é um documento de pagamento com várias faturas (ex.: águas + resíduos, emitentes diferentes). */
+  paymentGroupId?: string;
 }
 
 export interface GetGroupedSettlementSuggestionsQuery {

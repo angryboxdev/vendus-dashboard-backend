@@ -185,6 +185,40 @@ export class RecurrenceOccurrence {
    * Cancels this occurrence. Terminal states cannot be cancelled.
    * Result: cancelled
    */
+  /**
+   * Desfaz a associação a uma fatura (correção de uma associação errada, automática ou manual):
+   * volta ao estado inicial e o valor real desaparece. Só antes de paga.
+   */
+  unlinkInvoice(): RecurrenceOccurrence {
+    if (this.status !== "invoice_linked" || !this.invoiceId) {
+      throw new OccurrenceInvalidTransitionError(this.id, this.status, "unlink-invoice");
+    }
+    return new RecurrenceOccurrence({
+      ...this.toProps(),
+      invoiceId: null,
+      realAmountCents: null,
+      status: this.requireInvoice ? "awaiting_invoice" : "forecast",
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
+   * Documento de pagamento com várias faturas: a fatura de ligação foi apagada (passa a outra do
+   * documento) ou o documento mudou — o real passa a ser a soma das faturas que restam. Só antes de paga.
+   */
+  reanchorInvoice(invoiceId: string, realAmountCents: number): RecurrenceOccurrence {
+    if (this.status !== "invoice_linked") {
+      throw new OccurrenceInvalidTransitionError(this.id, this.status, "reanchor-invoice");
+    }
+    if (realAmountCents <= 0) throw new Error("realAmountCents must be greater than zero");
+    return new RecurrenceOccurrence({ ...this.toProps(), invoiceId, realAmountCents, updatedAt: new Date() });
+  }
+
+  /** Aceita uma fatura: ainda sem fatura e antes de paga/cancelada. */
+  isOpenForInvoice(): boolean {
+    return this.invoiceId === null && (this.status === "forecast" || this.status === "awaiting_invoice");
+  }
+
   cancel(): RecurrenceOccurrence {
     if (this.status === "cancelled" || this.status === "paid") {
       throw new OccurrenceInvalidTransitionError(this.id, this.status, "cancelled");
@@ -280,4 +314,16 @@ export function computeOccurrenceDisplayState(
   const dueDateOnly = new Date(due.getFullYear(), due.getMonth(), due.getDate());
   const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   return dueDateOnly < todayOnly ? "overdue" : "awaiting_payment";
+}
+
+/**
+ * Desvio da fatura face ao previsto a partir do qual a ocorrência fica com aviso
+ * («associa e avisa» — pedido do utilizador, 2026-10-26). A associação acontece na mesma.
+ */
+export const INVOICE_DEVIATION_WARNING_PERCENT = 20;
+
+/** (real − previsto) / previsto × 100, com 1 casa; null sem valor real. */
+export function invoiceDeviationPercent(o: Pick<RecurrenceOccurrence, "realAmountCents" | "estimatedAmountCents">): number | null {
+  if (o.realAmountCents === null || o.estimatedAmountCents <= 0) return null;
+  return Math.round(((o.realAmountCents - o.estimatedAmountCents) / o.estimatedAmountCents) * 1000) / 10;
 }

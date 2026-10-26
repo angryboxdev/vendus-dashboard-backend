@@ -17,16 +17,24 @@ export class LinkInvoiceToOccurrenceUseCase implements LinkInvoiceToOccurrencePo
     const invoice = await this.invoiceRead.findById(command.organizationId, command.invoiceId);
     if (!invoice) throw new Error(`Invoice "${command.invoiceId}" not found`);
 
-    // Enforce 1:1 — a invoice can only be linked to one occurrence
-    const existing = await this.occurrenceRepo.findAll(command.organizationId, { invoiceId: command.invoiceId });
-    const alreadyLinked = existing.find((o) => o.id !== command.occurrenceId);
-    if (alreadyLinked) throw new InvoiceAlreadyLinkedError(command.invoiceId);
+    // Documento de pagamento com várias faturas (ex.: águas + resíduos): a ocorrência fica ligada a
+    // esta fatura, mas conta o documento inteiro — um só pagamento, real = soma das faturas.
+    const group = (await this.invoiceRead.findPaymentGroupMembers(command.organizationId, [invoice.id])).get(invoice.id) ?? [];
+    const members = group.some((m) => m.id === invoice.id) ? group : [invoice];
 
-    let updated = occurrence.linkInvoice(invoice.id, invoice.totalWithVatCents);
+    // Enforce 1:1 — nenhuma fatura do documento pode já estar noutra ocorrência
+    for (const m of members) {
+      const existing = await this.occurrenceRepo.findAll(command.organizationId, { invoiceId: m.id });
+      if (existing.some((o) => o.id !== command.occurrenceId)) throw new InvoiceAlreadyLinkedError(m.id);
+    }
 
-    // Se a fatura já foi completamente paga, marcar a ocorrência como paga também
-    if (invoice.status === "paid" && invoice.paidAt) {
-      updated = updated.markPaid(new Date(invoice.paidAt));
+    const realAmountCents = members.reduce((sum, m) => sum + m.totalWithVatCents, 0);
+    let updated = occurrence.linkInvoice(invoice.id, realAmountCents);
+
+    // Se todas as faturas do documento já foram pagas, marcar a ocorrência como paga também
+    if (members.every((m) => m.status === "paid" && m.paidAt)) {
+      const lastPaidAt = members.map((m) => m.paidAt!).sort().at(-1)!;
+      updated = updated.markPaid(new Date(lastPaidAt));
     }
 
     await this.occurrenceRepo.update(command.organizationId, updated);

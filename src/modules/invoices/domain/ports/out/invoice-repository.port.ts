@@ -39,6 +39,10 @@ export interface InvoiceRepositoryPort {
   /** Documento (não cancelado) importado a partir do mesmo ficheiro (SHA-256). */
   findByFileHash(organizationId: OrganizationId, sha256: string): Promise<Invoice | null>;
   setFileHash(organizationId: OrganizationId, invoiceId: string, sha256: string): Promise<void>;
+  /** Documento de pagamento com várias faturas fiscais: marca-as com o mesmo grupo. */
+  setPaymentGroup(organizationId: OrganizationId, invoiceIds: string[], groupId: string): Promise<void>;
+  /** Faturas do mesmo documento de pagamento, pela ordem de criação. */
+  findByPaymentGroup(organizationId: OrganizationId, groupId: string): Promise<Invoice[]>;
   /**
    * Bloqueio otimista (F1 §1.4): incrementa a versão de forma atómica. Com
    * `expectedVersion`, só incrementa se ainda for essa; devolve a nova versão

@@ -30,6 +30,16 @@ export class FakeInvoiceMatchRead implements InvoiceMatchReadPort {
     );
   }
 
+  async findPaymentGroupDocuments(
+    organizationId: OrganizationId,
+    opts: { currency: string; dateFrom: string; dateTo: string },
+  ): Promise<InvoiceMatchCandidate[]> {
+    const inWindow = (d: string | null) => !!d && d >= opts.dateFrom && d <= opts.dateTo;
+    return (this.candidates.get(organizationId) ?? []).filter(
+      (c) => !!c.paymentGroupId && c.currency === opts.currency && (inWindow(c.dueDate) || inWindow(c.invoiceDate)),
+    );
+  }
+
   async findBySupplier(
     organizationId: OrganizationId,
     opts: { supplierId: string; currency: string; maxDate: string }

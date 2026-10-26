@@ -96,6 +96,8 @@ export interface InvoiceDTO {
   obligation: { kind: "tax_obligation" | "contribution_obligation"; paymentReference: string | null; mbEntity: string | null; period: string | null } | null;
   /** F3c: `stock` = importada no Stock; enquanto rascunho, «Aguardando lançamento no Financeiro». */
   importOrigin: "stock" | null;
+  /** Documento de pagamento com várias faturas fiscais (ex.: águas + resíduos) — as do mesmo documento partilham o id. */
+  paymentGroupId: string | null;
   createdAt: string;
   updatedAt: string;
   /** Versão atual — enviar como `expectedVersion` ao editar/confirmar (409 `version_conflict` se mudou). */
@@ -159,7 +161,7 @@ export interface AiExtractedLineDTO {
   meta?: LineReadingMeta;
   /** Categoria sugerida para a linha (subcategoria do catálogo da organização) — sugestão, nunca aplicada sem revisão. */
   suggestedCostCenterCategoryId?: string | null;
-  classificationSource?: "line_kind" | "history_code" | "history_description" | "keyword" | "ai" | "none";
+  classificationSource?: "line_kind" | "history_code" | "history_description" | "keyword" | "ai" | "supplier_default" | "recurrence" | "none";
   classificationEvidence?: string;
   /** Histórico em conflito: decisão humana. */
   classificationConflict?: boolean;
@@ -192,6 +194,8 @@ export interface InvoiceImportResultDTO {
   reading?: ImportReadingDTO;
   /** E3b: logótipo encontrado na fatura para um fornecedor ainda sem logótipo — só é usado se a pessoa confirmar. */
   logoSuggestion?: { url: string; width: number; height: number };
+  /** Documento de pagamento com várias faturas fiscais: os outros rascunhos criados do mesmo PDF (um por QR), para rever a seguir. */
+  siblings?: InvoiceImportResultDTO[];
 }
 
 export interface InvoiceAlertsDTO {

@@ -1,5 +1,6 @@
 import { MovementNotFoundError } from "../../domain/errors.js";
 import { normalizeBankDescription } from "../../domain/utils/bank-description.js";
+import { MIN_CANDIDATE_CONFIDENCE, scoreCandidate } from "../../domain/services/candidate-scoring.service.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
 import type { InvoiceMatchReadPort } from "../../domain/ports/out/invoice-match-read.port.js";
 import type { PayableEntryMatchReadPort } from "../../domain/ports/out/payable-entry-match-read.port.js";
@@ -11,68 +12,13 @@ import type {
   MovementCandidate,
 } from "../../domain/ports/in/bank-statement.ports.js";
 
-const HINT_MATCH_BOOST = 0.35;
-const SUPPLIER_NAME_BOOST = 0.2;
-const EXACT_AMOUNT_CONFIDENCE = 0.6;
-const DATE_CLOSE_BONUS = 0.15;
-const DATE_NEAR_BONUS = 0.05;
-const MIN_CONFIDENCE = 0.4;
 const TOLERANCE_PCT = 0.02;
 const TOLERANCE_MIN_CENTS = 100;
-
-function dateDiffDays(a: Date, b: Date): number {
-  return Math.abs((a.getTime() - b.getTime()) / 86_400_000);
-}
 
 function offsetDays(d: Date, days: number): string {
   const r = new Date(d);
   r.setUTCDate(r.getUTCDate() + days);
   return r.toISOString().slice(0, 10);
-}
-
-function scoreCandidate(opts: {
-  candidateAmount: number;
-  candidateDateStr: string | null;
-  candidateName: string;
-  candidateSupplierId: string | null;
-  movementAmount: number;
-  movementDate: Date;
-  movementDesc: string;
-  hintSupplierId: string | null;
-}): number {
-  let score = 0;
-
-  const amountDiff = Math.abs(opts.candidateAmount - opts.movementAmount);
-  if (amountDiff === 0) {
-    score += EXACT_AMOUNT_CONFIDENCE;
-  } else {
-    const pct = amountDiff / opts.movementAmount;
-    score += Math.max(0, EXACT_AMOUNT_CONFIDENCE * (1 - pct / TOLERANCE_PCT));
-  }
-
-  if (opts.candidateDateStr) {
-    const date = new Date(opts.candidateDateStr + "T00:00:00.000Z");
-    const diff = dateDiffDays(opts.movementDate, date);
-    if (diff <= 7) score += DATE_CLOSE_BONUS;
-    else if (diff <= 30) score += DATE_NEAR_BONUS;
-  }
-
-  // Hint match (stronger signal — confirmed by past reconciliation)
-  if (opts.hintSupplierId && opts.candidateSupplierId === opts.hintSupplierId) {
-    score += HINT_MATCH_BOOST;
-  } else {
-    // Fallback: supplier name substring in description
-    const desc = opts.movementDesc.toLowerCase();
-    const nameWords = opts.candidateName
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((w) => w.length > 3);
-    if (nameWords.some((w) => desc.includes(w))) {
-      score += SUPPLIER_NAME_BOOST;
-    }
-  }
-
-  return Math.min(1, score);
 }
 
 export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort {
@@ -183,8 +129,9 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
       const bestDate = inv.paidAt ?? inv.dueDate ?? inv.invoiceDate;
       // Extra invoices (matched by open balance) are scored by their open balance;
       // main candidates (matched by totalWithVat) are scored by their full total.
-      const confidence = scoreCandidate({
+      const score = scoreCandidate({
         candidateAmount: extraInvoiceIds.has(inv.id) ? openBalanceCents : inv.totalWithVat,
+        candidateOpenBalance: openBalanceCents,
         candidateDateStr: bestDate,
         candidateName: inv.supplierName,
         candidateSupplierId: inv.supplierId,
@@ -193,7 +140,7 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
         movementDesc: movement.description,
         hintSupplierId,
       });
-      if (confidence >= MIN_CONFIDENCE) {
+      if (score.confidence >= MIN_CANDIDATE_CONFIDENCE) {
         results.push({
           entityType: "invoice",
           entityId: inv.id,
@@ -202,7 +149,7 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
           amountCents: inv.totalWithVat,
           openBalanceCents,
           date: bestDate,
-          confidence,
+          ...score,
         });
       }
     }
@@ -214,8 +161,9 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
       const openBalanceCents = pe.amount - (allocByEntity.get(pe.id) ?? 0);
       if (openBalanceCents <= 0) continue; // fully paid, skip
 
-      const confidence = scoreCandidate({
+      const score = scoreCandidate({
         candidateAmount: pe.amount, // score by total
+        candidateOpenBalance: openBalanceCents,
         candidateDateStr: pe.dueDate,
         candidateName: pe.supplierName,
         candidateSupplierId: pe.supplierId,
@@ -224,7 +172,7 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
         movementDesc: movement.description,
         hintSupplierId,
       });
-      if (confidence >= MIN_CONFIDENCE) {
+      if (score.confidence >= MIN_CANDIDATE_CONFIDENCE) {
         results.push({
           entityType: "payable_entry",
           entityId: pe.id,
@@ -233,7 +181,7 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
           amountCents: pe.amount,
           openBalanceCents,
           date: pe.dueDate ?? "",
-          confidence,
+          ...score,
         });
       }
     }

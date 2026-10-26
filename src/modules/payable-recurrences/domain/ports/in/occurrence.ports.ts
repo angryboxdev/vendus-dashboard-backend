@@ -30,6 +30,10 @@ export interface OccurrenceDTO {
   differenceCents: number;
   /** Calculado ao vivo a partir de status + paidAmountCents + dueDate (ver computeOccurrenceDisplayState). */
   displayState: OccurrenceDisplayState;
+  /** (real − previsto) / previsto × 100 — só com fatura (valor real). */
+  invoiceDeviationPercent: number | null;
+  /** Desvio ≥ INVOICE_DEVIATION_WARNING_PERCENT: associada na mesma, mas a rever. */
+  invoiceDeviationWarning: boolean;
   createdAt: string;
   updatedAt: string;
 }

@@ -51,6 +51,14 @@ import { SetLineDetailModeUseCase } from "./application/use-cases/set-line-detai
 import { ListPayableDuplicatesUseCase } from "./application/use-cases/list-payable-duplicates.use-case.js";
 import { createInvoiceRouter } from "./adapters/in/invoice.controller.js";
 import { StockPurchaseReviewRoutingAdapter } from "./adapters/out/stock-purchase-review-routing.adapter.js";
+import { PayableRecurrencesLinkAdapter } from "./adapters/out/payable-recurrences-link.adapter.js";
+import { SupabaseRecurrenceCategoryHintAdapter } from "./adapters/out/supabase-recurrence-category-hint.adapter.js";
+import {
+  ConfirmImportedInvoiceWithRecurrenceLink,
+  CreateInvoiceWithRecurrenceLink,
+  DeleteInvoiceWithRecurrenceRelease,
+} from "./application/use-cases/recurrence-link.decorators.js";
+import type { AutoLinkInvoicePort, ReleaseInvoiceLinksPort } from "../payable-recurrences/domain/ports/in/invoice-link.ports.js";
 import type { SuggestStockRoutingPort } from "../stock-purchase-review/domain/ports/in/suggest-stock-routing.port.js";
 import { SupabaseInvoiceAuditAdapter } from "./adapters/out/supabase-invoice-audit.adapter.js";
 import { SupabaseIdempotencyStore } from "../../infra/http/supabase-idempotency.store.js";
@@ -105,6 +113,7 @@ export function createInvoicesModule(
   fiscalDocuments: FiscalDocumentsPort,
   suggestStockRouting: SuggestStockRoutingPort,
   updateSupplierPort: UpdateSupplierPort,
+  recurrenceLinks: { autoLinkInvoice: AutoLinkInvoicePort; releaseInvoiceLinks: ReleaseInvoiceLinksPort },
 ): InvoicesModule {
   const openaiApiKey = process.env.OPENAI_API_KEY;
   if (!openaiApiKey) throw new Error("OPENAI_API_KEY não configurado");
@@ -132,6 +141,7 @@ export function createInvoicesModule(
   const allocationRepo = new SupabaseInvoiceAllocationRepository(createScopedQuery);
   const audit = new SupabaseInvoiceAuditAdapter(createScopedQuery);
   const stockRouting = new StockPurchaseReviewRoutingAdapter(suggestStockRouting);
+  const recurrenceLink = new PayableRecurrencesLinkAdapter(recurrenceLinks.autoLinkInvoice, recurrenceLinks.releaseInvoiceLinks);
   const idempotencyStore = new SupabaseIdempotencyStore(createScopedQuery);
   // Orçamento diário de IA por organização (AI_DAILY_LIMIT_PER_ORG, omissão 300 chamadas/dia).
   const aiBudget = new SupabaseAiBudgetAdapter(createScopedQuery, aiDailyLimit());
@@ -166,6 +176,7 @@ export function createInvoicesModule(
       aiBudget,
     ),
     aiBudget,
+    recurrenceCategoryHint: new SupabaseRecurrenceCategoryHintAdapter(createScopedQuery),
   });
   const saveInvoiceDraft = new SaveInvoiceDraftUseCase(invoiceRepo, lineRepo, amountsWrite, categoryReader, allocationRepo, audit, stockLines);
 
@@ -176,7 +187,10 @@ export function createInvoicesModule(
     saveInvoiceDraft,
     replaceInvoiceAllocations: new ReplaceInvoiceAllocationsUseCase(invoiceRepo, categoryReader, allocationRepo, audit),
     suggestStockRouting: stockRouting,
-    createInvoice: new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit, stockRouting, categoryReader, allocationRepo),
+    createInvoice: new CreateInvoiceWithRecurrenceLink(
+      new CreateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit, stockRouting, categoryReader, allocationRepo),
+      recurrenceLink,
+    ),
     updateInvoice: new UpdateInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, supplierLookup, audit, allocationRepo),
     markInvoicePaid: new MarkInvoicePaidUseCase(invoiceRepo, payableWrite, occurrenceSync),
     setInvoiceStatus: new SetInvoiceStatusUseCase(invoiceRepo, payableWrite),
@@ -189,7 +203,11 @@ export function createInvoicesModule(
     listInvoices,
     listInvoiceLines,
     getInvoice,
-    deleteInvoice: new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, audit),
+    deleteInvoice: new DeleteInvoiceWithRecurrenceRelease(
+      new DeleteInvoiceUseCase(invoiceRepo, lineRepo, storage, payableWrite, reconciliationCleanup, stockReviewStatusRead, stockReviewDraftDelete, fiscal, audit),
+      recurrenceLink,
+      async (org, id) => (await invoiceRepo.findById(org, id))?.paymentGroupId ?? null,
+    ),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),
     importInvoice,
     importInvoiceKeepingLines: new ImportInvoiceKeepingLinesUseCase(importInvoice, saveInvoiceDraft, invoiceRepo),
@@ -198,7 +216,10 @@ export function createInvoicesModule(
     readPaymentDocument,
     createObligationDraft: new CreateObligationDraftUseCase(readPaymentDocument, storage, invoiceRepo, supplierLookup),
     linkObligation: new LinkObligationUseCase(readPaymentDocument, invoiceRepo, storage, audit),
-    confirmImportedInvoice: new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit, stockRouting, categoryReader, allocationRepo, stockLines, supplierLogos),
+    confirmImportedInvoice: new ConfirmImportedInvoiceWithRecurrenceLink(
+      new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit, stockRouting, categoryReader, allocationRepo, stockLines, supplierLogos),
+      recurrenceLink,
+    ),
     getInvoiceAlerts: new GetInvoiceAlertsUseCase(invoiceRepo),
     processDirectDebits,
   }, idempotencyStore);

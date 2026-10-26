@@ -1,7 +1,7 @@
 # Módulo: payable-recurrences
 
 > Status: ativo
-> Última atualização: 2026-10-26 (recorrências de salários com colaborador do RH — `employeeId`, `GET /payable-recurrences/employees`; data de pausa `pausedAt` para a vista «Histórico»; migração `20261128100000`)
+> Última atualização: 2026-10-26 (fatura → recorrência automática, sugestões, desassociar, aviso de desvio; documento de pagamento com várias faturas — ADR-0041)
 
 ---
 
@@ -255,6 +255,12 @@ Resumo aplicado aqui:
 - `GetRecurrenceSummaryPort` — retorna contagem de ocorrências por estado relevante (ex: `awaitingInvoiceCount`). `GetRecurrenceSummaryQuery = { organizationId }`.
 - `GetMonthlySummaryPort` — KPIs agregados cross-recorrência para um mês (spec §1/§6/§12): `activeRecurrencesCount`, `forecastedAmountCents` (Previsto), `paidAmountCents` (Pago), `pendingCount`/`pendingAmountCents` (por realizar, dentro do prazo), `overdueCount`/`overdueAmountCents` (vencidas), `paidVsForecastedPercent` (só quando não há nada pendente/vencido). Chama `ensureOccurrencesForPeriod` primeiro (ver D11) — as ocorrências do mês existem mesmo antes de agregar. `GetMonthlySummaryQuery = { organizationId, period }` (`period` = YYYY-MM).
 - `ListOccurrencesForPeriodPort` — lista as ocorrências de todas as recorrências para um mês (vista mensal), depois de garantir (`ensureOccurrencesForPeriod`) que existem. `ListOccurrencesForPeriodQuery = { organizationId, period }`.
+- **Fatura ↔ recorrência** (`domain/ports/in/invoice-link.ports.ts`, D15–D17):
+  - `AutoLinkInvoicePort` — chamado pelo módulo `invoices` (ligado em `src/server.ts`) depois de criar/confirmar uma fatura: um único candidato → associa (previsto passa a real); vários → `suggested`; nenhum → `none`.
+  - `GetInvoiceRecurrenceStatusPort` — para a fatura: a ocorrência associada (dela ou de outra fatura do documento) ou as sugestões, com desvio face ao previsto.
+  - `LinkInvoiceToRecurrencePort` — associar escolhendo recorrência + mês; gera a ocorrência desse mês se faltar.
+  - `UnlinkInvoiceFromOccurrencePort` — «Desassociar»: a ocorrência volta ao previsto.
+  - `ReleaseInvoiceLinksPort` — chamado pelo `invoices` ao apagar uma fatura: desfaz a associação não paga, ou passa-a a outra fatura do documento de pagamento.
 - `GetLinkedInvoiceIdsPort` — retorna todos os invoice IDs já vinculados a ocorrências (usado para filtrar faturas disponíveis no UI). `GetLinkedInvoiceIdsQuery = { organizationId }`.
 
 **Documentos (sem interface de port formal — use cases concretos injetados directamente):**
@@ -273,6 +279,7 @@ excepto `DocumentStoragePort.store`, onde é o último (ver secção acima).
 - `PayableEntryWritePort` — cross-módulo: `create(organizationId, data)`, cria conta a pagar em `payable_entries`.
 - `InvoiceReadPort` — cross-módulo: `findById(organizationId, id)`, ler dados mínimos de uma fatura para vincular.
 - `DocumentStoragePort` — `store(buffer, filename, mimeType, organizationId)`, `delete(url)` — armazenamento de ficheiros (contrato base, faturas mensais). `store` recebe `organizationId` como último parâmetro (ADR-0015); `recurrence-documents` não optou por prefixação (DB4), pelo que o wrapper recebe-a sem alterar o caminho.
+- `InvoiceReadPort` ganhou data de emissão, categoria/sub-categoria, tipo de documento e `paymentGroupId`, mais `findPaymentGroupMembers` (batch) e `findByPaymentGroup` — o documento de pagamento de cada fatura.
 - `EmployeeDirectoryReadPort` — cross-módulo: `findById(organizationId, id)`, `findAll(organizationId)` — leitura mínima (id, nome, estado) da ficha partilhada `hr_employees` (fica sempre — ADR-0040).
 - `BankMovementLinkReadPort` — cross-módulo: `findByOccurrenceIds(organizationId, occurrenceIds)`, devolve um `Map<occurrenceId, LinkedBankMovement[]>` (array — uma ocorrência pode ter mais de um movimento, pagamentos parciais) com data, montante e descrição de cada movimento bancário que justificou a ocorrência. O adapter concreto lê directamente `bank_movements` sem importar código de `bank-statements`.
 - `InvoiceAllocatedAmountReadPort` — cross-módulo: `findAllocatedAmounts(organizationId, invoiceIds)`, devolve um `Map<invoiceId, allocatedAmountCents>` somando `bank_movement_entity_links.allocated_amount_cents` por fatura (fluxo A — "Pago" vem do que já foi reconciliado no banco para a fatura, não do estado da fatura). O adapter lê `bank_movement_entity_links` directamente, sem importar código de `bank-statements`.
@@ -309,6 +316,9 @@ ticket 06).
 GET    /api/payable-recurrences                                          lista (filtros: status, type, supplierId)
 POST   /api/payable-recurrences                                          criar recorrência
 GET    /api/payable-recurrences/summary                                  resumo (awaitingInvoiceCount)
+GET    /api/payable-recurrences/invoice-links/:invoiceId                 fatura: recorrência associada ou sugestões
+POST   /api/payable-recurrences/invoice-links                            associar fatura a recorrência + mês (body: {invoiceId, recurrenceId, period})
+DELETE /api/payable-recurrences/occurrences/:occId/invoice               desassociar a fatura da ocorrência
 GET    /api/payable-recurrences/employees                                colaboradores do RH (id, nome, estado) para recorrências de salários
 GET    /api/payable-recurrences/summary/monthly?period=YYYY-MM           KPIs mensais cross-recorrência (Ativas, Previsto, Pago, Por realizar, Vencidas)
 GET    /api/payable-recurrences/occurrences?period=YYYY-MM               ocorrências de todas as recorrências nesse mês (vista mensal)
@@ -334,7 +344,7 @@ POST   /api/payable-recurrences/:id/occurrences/generate                 gerar p
 
 Todas as rotas requerem role `manager` (via `requireMinRole` no server.ts).
 
-**Ordem de registo importante:** rotas com segmentos fixos (`/employees`, `/summary`, `/summary/monthly`,
+**Ordem de registo importante:** rotas com segmentos fixos (`/invoice-links`, `/employees`, `/summary`, `/summary/monthly`,
 `/batch/generate`, `/occurrences` (bare, com `?period=`), `/occurrences/linked-invoice-ids`,
 `/occurrences/by-invoice/:invoiceId`, `/occurrences/:occId`) estão registadas antes de `/:id`
 para evitar que strings fixas sejam interpretadas como IDs.
@@ -464,6 +474,28 @@ pausada (`paused_at`) ou encerrada (`closed_at`). Guarda-se só a pausa atual (l
 retomar); um histórico completo de pausas/retomas exigiria uma tabela de eventos e não foi
 pedido.
 
+**D15 — Fatura lançada → recorrência: nunca pelo valor; associa só com um único candidato pelo fornecedor.**
+O previsto é estimado, por isso o valor nunca entra na escolha (só no aviso D16). Candidatos =
+recorrências ativas do mesmo fornecedor (de qualquer fatura do documento de pagamento); a
+sub-categoria e depois a categoria só desempatam (um filtro que deixasse zero candidatos é
+ignorado). Sem nenhuma pelo fornecedor (recorrência sem fornecedor, ou com outro), contam as de
+mesma categoria/sub-categoria **e** nome parecido (palavra significativa em comum, sem acentos e
+no singular — «Água» ↔ «Águas do Porto»; `matchedBy: "category_name"`) — essas **só sugerem**,
+nunca associam sozinhas (decisão do utilizador, 2026-10-26). Mês = o da emissão; se essa ocorrência já tem fatura, está paga/cancelada ou nem
+existe no âmbito, o anterior em aberto (ex.: luz de setembro faturada em outubro). Vários
+candidatos → sugestões na fatura, nunca adivinhar. Notas de crédito, rascunhos da IA e faturas
+sem fornecedor nunca se associam sozinhas. Ocorrências pagas não recebem fatura. Falhar aqui
+nunca falha o lançamento (decorador no `invoices`).
+
+**D16 — Desvio ≥ 20 %: associa e avisa (`invoiceDeviationWarning`), calculado ao vivo.**
+`INVOICE_DEVIATION_WARNING_PERCENT` no domínio; nada é persistido — só o DTO o expõe.
+
+**D17 — Documento de pagamento: a ocorrência conta o grupo (ADR-0041).**
+`occurrence.invoiceId` é a fatura «âncora»; real = soma das faturas do documento; «Pago» (fluxo
+A) = soma das alocações bancárias de todas; 1:1 verificado em todas as faturas do documento.
+Apagar a âncora passa a ligação a outra fatura do documento (`reanchorInvoice`); apagar outra
+recalcula o real; apagar a última volta ao previsto.
+
 ---
 
 ## Como testar
@@ -472,15 +504,14 @@ pedido.
 - Todos os módulos financeiros: `npx jest --testPathPattern="payable-recurrences|payable-entries" --no-coverage`.
 - Adapters Supabase: requerem instância real — testar manualmente contra ambiente de desenvolvimento.
 
-**Cobertura atual:** 18 suites, 203 testes, 0 falhos. Todos os use cases cobertos, incluindo `GetMonthlySummaryUseCase` e `ListOccurrencesForPeriodUseCase`. Inclui testes de enriquecimento `linkedBankMovements`/`paidAmountCents`/`displayState` via `FakeBankMovementLinkReadAdapter`/`FakeInvoiceAllocatedAmountReadAdapter` e testes de isolamento cross-organização (spec B2) nos fluxos de leitura/escrita por id.
+**Cobertura atual:** 22 suites, 230 testes, 0 falhos. Todos os use cases cobertos, incluindo `GetMonthlySummaryUseCase` e `ListOccurrencesForPeriodUseCase`. Inclui testes de enriquecimento `linkedBankMovements`/`paidAmountCents`/`displayState` via `FakeBankMovementLinkReadAdapter`/`FakeInvoiceAllocatedAmountReadAdapter` e testes de isolamento cross-organização (spec B2) nos fluxos de leitura/escrita por id.
 
 ---
 
 ## Pontos de atenção / dívidas conhecidas
 
-- **Vinculação inversa de fatura:** quando uma fatura é importada por IA/email, o
-  sistema não sugere automaticamente a recorrência correspondente. Requereria lógica
-  no módulo de importação de faturas (fora do scope deste módulo).
+- **Documento com faturas de recorrências diferentes:** se a água e os resíduos tiverem
+  recorrências próprias, o documento dá duas sugestões em vez de associação automática (D15).
 - **Bucket único para dois níveis:** `recurrence-documents` armazena tanto documentos
   base de recorrências como documentos de ocorrências. Se no futuro for necessário
   controlo de acesso diferenciado, poderá ser necessário separar em dois buckets.

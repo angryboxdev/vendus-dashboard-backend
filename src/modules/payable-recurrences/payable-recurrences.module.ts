@@ -39,11 +39,23 @@ import { GetRecurrenceSummaryUseCase } from "./application/use-cases/get-summary
 import { GetMonthlySummaryUseCase } from "./application/use-cases/get-monthly-summary.use-case.js";
 import { ListOccurrencesForPeriodUseCase } from "./application/use-cases/list-occurrences-for-period.use-case.js";
 
+// Use cases — fatura ↔ recorrência
+import { LinkInvoiceToRecurrenceUseCase } from "./application/use-cases/link-invoice-to-recurrence.use-case.js";
+import { AutoLinkInvoiceUseCase } from "./application/use-cases/auto-link-invoice.use-case.js";
+import { GetInvoiceRecurrenceStatusUseCase } from "./application/use-cases/get-invoice-recurrence-status.use-case.js";
+import { UnlinkInvoiceFromOccurrenceUseCase } from "./application/use-cases/unlink-invoice-from-occurrence.use-case.js";
+import { ReleaseInvoiceLinksUseCase } from "./application/use-cases/release-invoice-links.use-case.js";
+import type { AutoLinkInvoicePort, ReleaseInvoiceLinksPort } from "./domain/ports/in/invoice-link.ports.js";
+
 // Adapter in
 import { createRecurrenceRouter } from "./adapters/in/recurrence.controller.js";
 
 export interface PayableRecurrencesModule {
   router: Router;
+  /** Para o módulo invoices (ligado em server.ts): associar uma fatura lançada. */
+  autoLinkInvoice: AutoLinkInvoicePort;
+  /** Para o módulo invoices: fatura apagada → desfaz associações não pagas. */
+  releaseInvoiceLinks: ReleaseInvoiceLinksPort;
 }
 
 /**
@@ -67,6 +79,12 @@ export function createPayableRecurrencesModule(): PayableRecurrencesModule {
   const invoiceAllocatedAmountRead = new SupabaseInvoiceAllocatedAmountReadAdapter(createScopedQuery);
   const employeeDirectory = new SupabaseEmployeeDirectoryReadAdapter(createScopedQuery);
 
+  // Fatura ↔ recorrência
+  const linkInvoiceToOccurrence = new LinkInvoiceToOccurrenceUseCase(occurrenceRepo, invoiceRead);
+  const linkInvoiceToRecurrence = new LinkInvoiceToRecurrenceUseCase(recurrenceRepo, occurrenceRepo, linkInvoiceToOccurrence);
+  const autoLinkInvoice = new AutoLinkInvoiceUseCase(recurrenceRepo, occurrenceRepo, invoiceRead, linkInvoiceToRecurrence);
+  const releaseInvoiceLinks = new ReleaseInvoiceLinksUseCase(occurrenceRepo, invoiceRead);
+
   // Controller
   const router = createRecurrenceRouter({
     // Recorrências
@@ -80,12 +98,12 @@ export function createPayableRecurrencesModule(): PayableRecurrencesModule {
     listRecurrenceEmployees: new ListRecurrenceEmployeesUseCase(employeeDirectory),
     // Ocorrências
     generateOccurrence: new GenerateOccurrenceUseCase(recurrenceRepo, occurrenceRepo),
-    listOccurrences: new ListOccurrencesUseCase(occurrenceRepo, bankMovementLinkRead, invoiceAllocatedAmountRead),
-    getOccurrence: new GetOccurrenceUseCase(occurrenceRepo, bankMovementLinkRead, invoiceAllocatedAmountRead),
-    linkInvoiceToOccurrence: new LinkInvoiceToOccurrenceUseCase(occurrenceRepo, invoiceRead),
+    listOccurrences: new ListOccurrencesUseCase(occurrenceRepo, bankMovementLinkRead, invoiceAllocatedAmountRead, invoiceRead),
+    getOccurrence: new GetOccurrenceUseCase(occurrenceRepo, bankMovementLinkRead, invoiceAllocatedAmountRead, invoiceRead),
+    linkInvoiceToOccurrence,
     markOccurrenceAsPaid: new MarkOccurrenceAsPaidUseCase(occurrenceRepo),
     cancelOccurrence: new CancelOccurrenceUseCase(occurrenceRepo),
-    getLinkedInvoiceIds: new GetLinkedInvoiceIdsUseCase(occurrenceRepo),
+    getLinkedInvoiceIds: new GetLinkedInvoiceIdsUseCase(occurrenceRepo, invoiceRead),
     // Batch
     generateBatch: new GenerateBatchOccurrencesUseCase(recurrenceRepo, occurrenceRepo),
     // Documentos
@@ -99,14 +117,19 @@ export function createPayableRecurrencesModule(): PayableRecurrencesModule {
       occurrenceRepo,
       bankMovementLinkRead,
       invoiceAllocatedAmountRead,
+      invoiceRead,
     ),
     listOccurrencesForPeriod: new ListOccurrencesForPeriodUseCase(
       recurrenceRepo,
       occurrenceRepo,
       bankMovementLinkRead,
       invoiceAllocatedAmountRead,
+      invoiceRead,
     ),
+    getInvoiceRecurrenceStatus: new GetInvoiceRecurrenceStatusUseCase(recurrenceRepo, occurrenceRepo, invoiceRead),
+    linkInvoiceToRecurrence,
+    unlinkInvoiceFromOccurrence: new UnlinkInvoiceFromOccurrenceUseCase(occurrenceRepo),
   });
 
-  return { router };
+  return { router, autoLinkInvoice, releaseInvoiceLinks };
 }

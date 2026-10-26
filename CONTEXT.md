@@ -196,3 +196,23 @@ catalog entry is never the same as adding inventory), or
 `no_stock_effect` (service/fee/discount, still auditable and learnable).
 _Avoid_: "classificação" (used elsewhere for `invoices`' cost-center
 classification — a different concept, don't conflate the two).
+
+## Financeiro — documentos de pagamento e recorrências
+
+**Documento de pagamento (grupo de pagamento)**:
+Um PDF com várias faturas fiscais — cada uma com o seu QR, número e emitente — pagas num só
+débito (ex.: águas: água/saneamento da empresa das águas + resíduos de outra entidade). A
+importação cria uma fatura por QR e liga-as com o mesmo `invoices.payment_group_id`. Para a
+recorrência e para a conciliação o documento conta como **um pagamento** (real = soma; o débito
+concilia as faturas todas de uma vez); para a contabilidade continuam a ser faturas distintas,
+cada uma com o seu emitente e IVA. Ver ADR-0041.
+_Avoid_: «fatura agrupada», juntar as faturas numa só (mistura emitentes e IVA).
+
+**Associação fatura → recorrência**:
+Ao lançar uma fatura (criação manual ou confirmação da importação), o módulo
+`payable-recurrences` procura a ocorrência a que pertence: recorrências ativas do mesmo
+fornecedor (de qualquer fatura do documento de pagamento), desempate pela sub-categoria e
+categoria, mês da emissão ou o anterior em aberto; sem nenhuma pelo fornecedor, as de mesma
+categoria e nome parecido (só como sugestão). Nunca pelo valor — o previsto é estimado. Um único
+candidato pelo fornecedor → associa e o previsto passa a real; nos outros casos → sugestões na fatura. Desvio ≥ 20 % face ao previsto → associa e avisa.
+_Avoid_: «vincular» automático sem candidato único (nunca se adivinha entre recorrências).

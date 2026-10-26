@@ -1,7 +1,7 @@
 # Módulo: invoices
 
 > Status: ativo
-> Última atualização: 2026-09-30 (fix: crash ao mudar "Impacto no stock"/descartar linhas detalhadas/**eliminar fatura** contra uma revisão de stock existente — guard partilhado `shared-stock-review-guard.ts` aplicado agora também a `DeleteInvoiceUseCase` + bug do `stockReviewOverride` silenciosamente ignorado em `UpdateInvoiceUseCase`; ver "Decisões de design")
+> Última atualização: 2026-10-26 (QR em vetor noutras páginas e vários por página; linhas da IA conferidas com o QR; fornecedor por dica/nome com NIF ≠ QR recusado; documento de pagamento → uma fatura por QR com `payment_group_id`; associação automática à recorrência ao lançar — ADR-0041)
 
 ---
 
@@ -203,6 +203,8 @@ upload (ver "Decisões de design").
 - **`SupplierCreatePort`** — `create(organizationId, data)` para criar fornecedor durante confirmação de importação.
 - **`SupplierHintPort`** — `findByNormalizedName(organizationId, normalizedName)` + `save(organizationId, normalizedName, supplierId)`.
 - **`OrganizationIdentityReadPort`** *(cross-module)* — `getNif(organizationId)`. Usado só por `ImportInvoiceUseCase` para nunca aceitar o NIF da própria organização como fornecedor de uma fatura importada (ver "Decisões de design").
+- **`RecurrenceLinkPort`** *(cross-module, payable-recurrences)* — `autoLinkInvoice(org, invoiceId)` depois de criar/confirmar; `releaseInvoice(org, invoiceId, paymentGroupId)` depois de apagar. Implementado por `PayableRecurrencesLinkAdapter` (delega nos input ports do outro módulo, ligados em `src/server.ts`). Usado por decoradores (`application/use-cases/recurrence-link.decorators.ts`) à volta de criar, confirmar e apagar — uma falha nunca falha o caso de uso.
+- `InvoiceRepositoryPort` ganhou `setPaymentGroup(org, ids, groupId)` e `findByPaymentGroup(org, groupId)` (documento de pagamento).
 - **`OccurrenceSyncPort`** — `markPaidByInvoiceId(organizationId, invoiceId, paidAt)`.
 - **`InvoiceStockReviewStatusReadPort`** *(D10)* — `findForInvoice(organizationId, invoiceId)`: existe uma revisão de stock (módulo `stock-purchase-review`) para esta fatura, e em que estado. Usado só pelo guard de edição (ver "Decisões de design").
 - **`InvoiceStockReviewDraftDeletePort`** *(D10)* — `deleteDraft(organizationId, invoiceId, actor)`: pede ao módulo `stock-purchase-review` para apagar (hard delete) uma revisão ainda não aplicada, quando o utilizador confirma explicitamente. Nunca chamado sem confirmação explícita (ver guard).
@@ -238,13 +240,14 @@ módulo não importa `@supabase/supabase-js` em lado nenhum — só o folder
 - **`SupabaseSupplierLookupAdapter`** → tabela `suppliers` (NIF + defaults).
 - **`SupabaseSupplierHintAdapter`** → tabelas `supplier_import_hints` + `suppliers`.
 - **`SupabaseOrganizationIdentityReadAdapter`** → cross-module; lê só a coluna `nif` da tabela `organizations` directamente, sem importar código do módulo `financial-base`.
+- **`PayableRecurrencesLinkAdapter`** → delega em `AutoLinkInvoicePort`/`ReleaseInvoiceLinksPort` do módulo `payable-recurrences`.
 - **`SupabaseOccurrenceSyncAdapter`** → tabela `recurring_occurrences`, sem importar código do módulo `payable-recurrences`.
 - **`OpenAiExtractionAdapter`** → GPT-4o Vision, devolve JSON estruturado. Sem organização — não toca a base de dados. Desde F1 pede também os textos originais de quantidade/preço, descontos por linha, desconto global/rodapé e o quadro de IVA por taxa (taxa ausente = null, nunca 0).
 - **`SupabaseInvoiceReadingWriteAdapter`** → `invoices.fiscal_qr` / `reading_source` (migração `20261106100000`).
 - **`SupabaseCategoryCatalogAdapter` / `SupabaseConfirmedLineHistoryAdapter`** → catálogo `cost_center_groups`/`cost_center_categories` e linhas de faturas confirmadas do fornecedor (`invoice_lines.supplier_item_code`, descrição, subcategoria). Só leitura.
 - **`OpenAiLineCategoryAdapter`** → `OPENAI_MODEL_TEXT` (por omissão `gpt-4o-mini`), resposta com esquema JSON estrito cujo enum são os ids do catálogo; só descrições das linhas por resolver.
 - **`SupabaseObligationCandidatesAdapter`** → lê `invoices` e `payable_entries` (mesmo valor ou número com o mesmo prefixo) para a procura de obrigações já registadas. Só leitura.
-- **`PdfjsContentReaderAdapter`** → `pdfjs-dist` (vem com o `pdf-parse`; versão fixada em `overrides`) para o texto com posições e `jsqr` para os QR: primeiro nas imagens incorporadas, só sem QR fiscal assim rasteriza a 1.ª página (`pdf-to-img`). Nada sai do servidor. Máx. 30 páginas; espera por cada imagem limitada a 1,5 s (havia PDFs em que o pdfjs nunca a devolvia e a leitura ficava pendurada). `readBarcode` rasteriza só quando pedido (2×, 3×; 4× se ilegível).
+- **`PdfjsContentReaderAdapter`** → `pdfjs-dist` (vem com o `pdf-parse`; versão fixada em `overrides`) para o texto com posições e `jsqr` para os QR: primeiro nas imagens incorporadas, só sem QR fiscal assim rasteriza a 1.ª página (`pdf-to-img`). Nada sai do servidor. Sem QR fiscal nas imagens, rasteriza até 4 páginas e procura por janelas sobrepostas (½ × ⅓ da página) a 2× e depois 4× — QR em vetor, noutra página que não a 1.ª, ou vários na mesma página (documentos de pagamento das águas). Imagens partilhadas entre páginas («g_…») são lidas de `commonObjs` e cada imagem só uma vez — procurá-las em `objs` esperava 1,5 s por cada (documento das águas: 22 s → 2,4 s). A leitura local tem 20 s (`LOCAL_READ_TIMEOUT_MS`; o Render starter é lento); excedida, segue pela IA com o aviso `local_read_timeout` na revisão e um `console.warn` no log; falhas da rasterização também vão para o log. Máx. 30 páginas; espera por cada imagem limitada a 1,5 s (havia PDFs em que o pdfjs nunca a devolvia e a leitura ficava pendurada). `readBarcode` rasteriza só quando pedido (2×, 3×; 4× se ilegível).
 - **`FiscalDocumentsIdentityAdapter`** → delega no input port do módulo `fiscal-documents`.
 - **`SupabaseInvoiceAuditAdapter`** → tabela `invoice_audit_logs` (migração `20261030160000_invoice_version_audit`; RLS só select/insert).
 - **`SupabaseIdempotencyStore`** (infra partilhada, ADR-0022) → `Idempotency-Key` opcional em `POST /invoices`, `POST /invoices/import` e `POST /invoices/:id/confirm`.
@@ -358,6 +361,26 @@ módulo não importa `@supabase/supabase-js` em lado nenhum — só o folder
 - **Versão e auditoria (F1 §1.4)**: `invoices.version` (faturas antigas começam em 1). `UpdateInvoiceUseCase` e `ConfirmImportedInvoiceUseCase` aceitam `expectedVersion`; diferente da atual ou outra escrita a passar à frente (`claimVersion` condicional) → `InvoiceVersionConflictError` (409 `version_conflict`, `currentVersion`). Confirmar usa sempre a versão lida como esperada, por isso dois cliques/sessões a confirmar o mesmo rascunho nunca finalizam duas vezes. Criar, confirmar, editar e apagar gravam auditoria (autor da sessão, origem, antes/depois dos campos de valor/identidade, motivo — `reason` no corpo do PATCH ou `?reason=` no DELETE). A auditoria é escrita depois da operação e uma falha propaga (500) — preferimos um erro visível a uma alteração sem registo; com `Idempotency-Key` o cliente pode repetir em segurança. Ainda sem versão: marcar como paga, mudar estado e as operações de linha (fora do âmbito F1).
 - **Bug corrigido (F1)**: `CreateInvoiceUseCase` ignorava `documentType` (uma NC criada à mão ficava como fatura); agora é aplicado e, como no confirmar, nunca cria conta a pagar para uma nota de crédito.
 
+**Documento de pagamento com várias faturas fiscais (2026-10-26, ADR-0041).** Um PDF com N QR
+fiscais (ex.: águas: água/saneamento + resíduos, emitentes diferentes, um só débito) cria N
+rascunhos: a 1.ª fatura com a leitura normal; as outras a partir do seu QR (emitente pelo NIF,
+uma linha por taxa, mesmo prazo), sem nova chamada à IA. Os novos ficam com o mesmo
+`payment_group_id` (se gravar o grupo falhar, as faturas ficam). A resposta traz os outros em
+`siblings`; a importação em lote grava as linhas de cada um. O ficheiro só é apagado se todas as
+faturas já existiam.
+
+**Linhas conferidas com o QR (2026-10-26).** Fatura com QR lida pela IA: as linhas só ficam se
+fecharem ao cêntimo com as bases do QR (total e, quando dá, por taxa); senão ficam uma linha por
+taxa do QR (`enforceQrLines`, aviso `lines_replaced_by_qr`) — a fatura fecha sempre e pode ser
+confirmada.
+
+**IVA e categoria das linhas lidas do QR (2026-10-26).** Linhas por taxa do QR cujo IVA arredonda diferente do documento (emitente arredonda linha a linha; ≤ 1 cêntimo por taxa) trazem o aviso `vat_rounded_per_line` — a revisão aplica sozinha o ajuste de arredondamento. Linhas que nenhuma regra/histórico/IA classificou recebem a categoria por defeito do fornecedor (`supplier_default`) ou, sem ela, a sub-categoria das recorrências ativas desse fornecedor quando todas coincidem (`recurrence`, `RecurrenceCategoryHintPort` → `SupabaseRecurrenceCategoryHintAdapter`, lê `recurring_contracts`). A descrição das linhas do QR é estável, por isso o histórico aprende-a depois da primeira confirmação.
+
+**Fornecedor com QR (2026-10-26).** O NIF do emitente vem do QR (certificado): um fornecedor
+achado pela dica ou pela semelhança do nome com outro NIF é recusado (fica «fornecedor não
+encontrado»); se essa ficha tiver o NIF da própria empresa (o cliente da fatura), aviso
+`supplier_record_has_own_nif`.
+
 ## SQL — alterações às tabelas
 
 ```sql
@@ -420,6 +443,9 @@ adicionadas por `supabase/migrations/20260822150000_tenancy_schema_pass.sql`
 (spec B2's foundation), não por este ticket. Este ticket não altera o schema;
 apenas faz o código passar a escrever/ler através do `ScopedQuery` e a aceitar
 `locationId` nas escritas de linha.
+
+### `20261130110000_invoice_payment_group`
+`invoices.payment_group_id uuid` + índice `(org_id, payment_group_id)` parcial. Rollback em `docs/migrations/rollback/`.
 
 ## Como testar
 

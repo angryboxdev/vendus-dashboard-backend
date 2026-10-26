@@ -27,21 +27,54 @@ const sameNumber = (a: string, b: string) => {
 };
 const eur = (c: number) => (c / 100).toFixed(2).replace(".", ",");
 
-export function readFiscalQr(content: PdfContent): { qr: FiscalQr | null; issues: ReadingIssue[] } {
-  const candidates = content.qrCodes.filter((q) => looksLikeAtQr(q.text));
-  if (!candidates.length) return { qr: null, issues: [{ code: "qr_missing", blocking: false, detail: "Sem QR fiscal AT legível; identidade e totais lidos do texto." }] };
-  const parsed = parseAtQr(candidates[0]!.text);
-  if (!parsed.ok) return { qr: null, issues: [{ code: "qr_invalid", blocking: true, detail: `QR fiscal inválido (${parsed.reason}).` }] };
+/** Coerência dos totais de um QR já lido (com a correção do campo L repetido). */
+function checkedQr(parsedQr: FiscalQr): { qr: FiscalQr; issues: ReadingIssue[] } {
   const issues: ReadingIssue[] = [];
-  let qr = parsed.qr;
+  let qr = parsedQr;
   let { taxDiffCents, totalDiffCents } = checkQrTotals(qr);
   // Alguns emissores repetem o total no campo L («não sujeito»): sem esse L tudo fecha → ignora-se o L.
   if (!taxDiffCents && totalDiffCents && qr.notSubjectCents && totalDiffCents + qr.notSubjectCents === 0) {
     qr = { ...qr, notSubjectCents: 0 };
     ({ taxDiffCents, totalDiffCents } = checkQrTotals(qr));
-    issues.push({ code: "qr_totals_inconsistent", blocking: false, detail: `QR com o campo L (não sujeito) igual ao total (${eur(parsed.qr.notSubjectCents)} €) — ignorado; bases e IVA do QR fecham com o total.` });
+    issues.push({ code: "qr_totals_inconsistent", blocking: false, detail: `QR com o campo L (não sujeito) igual ao total (${eur(parsedQr.notSubjectCents)} €) — ignorado; bases e IVA do QR fecham com o total.` });
   }
   if (taxDiffCents || totalDiffCents) issues.push({ code: "qr_totals_inconsistent", blocking: true, detail: `QR incoerente: impostos ${eur(taxDiffCents)} €, total ${eur(totalDiffCents)} €.` });
+  return { qr, issues };
+}
+
+/**
+ * Documentos de pagamento (ex.: águas: água/saneamento + resíduos, dois emitentes) trazem mais de
+ * uma fatura fiscal, cada uma com o seu QR: as outras faturas válidas além da primeira, sem repetidos.
+ */
+export function otherFiscalQrs(content: PdfContent, first: FiscalQr): FiscalQr[] {
+  const out: FiscalQr[] = [];
+  for (const c of content.qrCodes.filter((q) => looksLikeAtQr(q.text)).slice(1)) {
+    const parsed = parseAtQr(c.text);
+    if (!parsed.ok) continue;
+    const { qr, issues } = checkedQr(parsed.qr);
+    if (issues.some((i) => i.blocking)) continue;
+    const same = (o: FiscalQr) => o.documentNumber === qr.documentNumber && o.issuerNif === qr.issuerNif;
+    if (same(first) || out.some(same)) continue;
+    out.push(qr);
+  }
+  return out;
+}
+
+export function readFiscalQr(content: PdfContent): { qr: FiscalQr | null; issues: ReadingIssue[] } {
+  const candidates = content.qrCodes.filter((q) => looksLikeAtQr(q.text));
+  if (!candidates.length) return { qr: null, issues: [{ code: "qr_missing", blocking: false, detail: "Sem QR fiscal AT legível; identidade e totais lidos do texto." }] };
+  const parsed = parseAtQr(candidates[0]!.text);
+  if (!parsed.ok) return { qr: null, issues: [{ code: "qr_invalid", blocking: true, detail: `QR fiscal inválido (${parsed.reason}).` }] };
+  const { qr, issues } = checkedQr(parsed.qr);
+  const others = otherFiscalQrs(content, qr);
+  if (others.length) {
+    const fmt = (q: FiscalQr) => `${q.documentNumber} (NIF ${q.issuerNif}, ${eur(q.totalCents)} €)`;
+    issues.unshift({
+      code: "qr_multiple_documents",
+      blocking: false,
+      detail: `O PDF traz ${others.length + 1} faturas fiscais: ${[qr, ...others].map(fmt).join(", ")}. Cada uma é lançada como fatura própria, ligadas ao mesmo pagamento.`,
+    });
+  }
   return { qr, issues };
 }
 

@@ -122,6 +122,27 @@ export class GetGroupedSettlementSuggestionsUseCase implements GetGroupedSettlem
       };
     }
 
+    // ── 2b. Documento de pagamento com várias faturas fiscais (ex.: águas: água/saneamento +
+    // resíduos, dois emitentes, um só débito). A procura por fornecedor nunca as junta; aqui
+    // sugerem-se as faturas do mesmo documento cuja soma em aberto bate exatamente com o movimento.
+    const documentCombinations = await this.paymentDocumentCombinations(organizationId, movementId, movement);
+    if (documentCombinations.length) {
+      const names = [...new Set(documentCombinations[0]!.docs.map((d) => d.entityLabel.split(" — ")[0]))];
+      return {
+        movementId,
+        movementAmountCents: movement.amount,
+        currency: movement.currency,
+        supplierId: null,
+        supplierName: names.join(" + "),
+        singleExactMatch: null,
+        primaryCombination: documentCombinations[0]!,
+        alternateCombinations: documentCombinations.slice(1),
+        eligibleDocuments: documentCombinations.flatMap((c) => c.docs),
+        totalEligibleBeforeCap: documentCombinations.reduce((n, c) => n + c.documentCount, 0),
+        candidatePoolCap: DEFAULT_MAX_CANDIDATES,
+      };
+    }
+
     if (!supplierId) {
       return emptyResult(null, null);
     }
@@ -227,4 +248,76 @@ export class GetGroupedSettlementSuggestionsUseCase implements GetGroupedSettlem
       candidatePoolCap: DEFAULT_MAX_CANDIDATES,
     };
   }
+
+  /**
+   * Documentos de pagamento (faturas com o mesmo `paymentGroupId`) cuja soma em aberto — sem as
+   * alocações deste próprio movimento, a mesma convenção do RPC — é exatamente o valor do
+   * movimento. Todas as faturas do documento têm de estar em aberto. Mais perto da data primeiro.
+   */
+  private async paymentDocumentCombinations(
+    organizationId: GetGroupedSettlementSuggestionsQuery["organizationId"],
+    movementId: string,
+    movement: { amount: number; currency: string; bookingDate: Date },
+  ): Promise<GroupedSettlementCombinationDto[]> {
+    const day = 86_400_000;
+    const movementTime = new Date(toYMD(movement.bookingDate) + "T00:00:00.000Z").getTime();
+    const docs = await this.invoiceRead.findPaymentGroupDocuments(organizationId, {
+      currency: movement.currency,
+      dateFrom: toYMD(new Date(movementTime - PAYMENT_DOCUMENT_WINDOW_DAYS * day)),
+      dateTo: toYMD(new Date(movementTime + PAYMENT_DOCUMENT_WINDOW_DAYS * day)),
+    });
+    if (!docs.length) return [];
+
+    const links = await this.linkRepo.findByEntityIds(organizationId, "invoice", docs.map((d) => d.id));
+    const alloc = new Map<string, number>();
+    for (const l of links) {
+      if (l.movementId === movementId) continue;
+      alloc.set(l.entityId, (alloc.get(l.entityId) ?? 0) + l.allocatedAmountCents);
+    }
+
+    const byGroup = new Map<string, InvoiceMatchCandidate[]>();
+    for (const d of docs) if (d.paymentGroupId) byGroup.set(d.paymentGroupId, [...(byGroup.get(d.paymentGroupId) ?? []), d]);
+
+    const combos: { combo: GroupedSettlementCombinationDto; distance: number }[] = [];
+    for (const [paymentGroupId, members] of byGroup) {
+      if (members.length < 2) continue;
+      const open = members.map((m) => ({ m, openBalanceCents: m.totalWithVat - (alloc.get(m.id) ?? 0) }));
+      if (open.some((o) => o.openBalanceCents <= 0)) continue;
+      const total = open.reduce((s, o) => s + o.openBalanceCents, 0);
+      if (total !== movement.amount) continue;
+      const docDtos: GroupedSettlementDocDto[] = open.map(({ m, openBalanceCents }) => {
+        const bestDate = m.dueDate ?? m.invoiceDate;
+        return {
+          entityId: m.id,
+          documentType: m.documentType,
+          entityLabel: `${m.supplierName} — ${m.invoiceNumber}`,
+          supplierId: m.supplierId,
+          openBalanceCents,
+          invoiceDate: m.invoiceDate,
+          dueDate: m.dueDate,
+          isOverdue: m.status === "overdue",
+          isBeforeMovementDate: new Date(bestDate + "T00:00:00.000Z").getTime() <= movementTime,
+        };
+      });
+      const bestDate = members[0]!.dueDate ?? members[0]!.invoiceDate;
+      combos.push({
+        combo: {
+          docs: docDtos,
+          documentCount: docDtos.length,
+          invoiceCount: docDtos.filter((d) => d.documentType === "invoice").length,
+          creditNoteCount: docDtos.filter((d) => d.documentType === "credit_note").length,
+          invoiceTotalCents: total,
+          creditNoteTotalCents: 0,
+          netTotalCents: total,
+          isExactMatch: true,
+          paymentGroupId,
+        },
+        distance: Math.abs(new Date(bestDate + "T00:00:00.000Z").getTime() - movementTime),
+      });
+    }
+    return combos.sort((a, b) => a.distance - b.distance).map((c) => c.combo);
+  }
 }
+
+/** Janela (dias, para cada lado do débito) em que se procuram documentos de pagamento. */
+const PAYMENT_DOCUMENT_WINDOW_DAYS = 45;

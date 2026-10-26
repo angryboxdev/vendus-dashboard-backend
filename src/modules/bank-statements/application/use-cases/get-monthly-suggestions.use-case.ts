@@ -1,4 +1,5 @@
 import { normalizeBankDescription } from "../../domain/utils/bank-description.js";
+import { AMOUNT_MATCH_TOLERANCE_CENTS, isStrongSuggestion } from "../../domain/services/candidate-scoring.service.js";
 import type { BankMovement } from "../../domain/entities/bank-movement.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
 import type {
@@ -98,7 +99,8 @@ export class GetMonthlySuggestionsUseCase implements GetMonthlySuggestionsPort {
     const claimedEntityIds = new Set<string>();
 
     pending.forEach((movement, i) => {
-      const best = candidatesByMovement[i]!.find((c) => !claimedEntityIds.has(c.entityId));
+      // Só sugestões fortes: nome E valor a bater e confiança ≥ 90% (decisão do utilizador).
+      const best = candidatesByMovement[i]!.find((c) => isStrongSuggestion(c) && !claimedEntityIds.has(c.entityId));
       if (best) {
         claimedEntityIds.add(best.entityId);
         entityMatches.push({
@@ -116,7 +118,9 @@ export class GetMonthlySuggestionsUseCase implements GetMonthlySuggestionsPort {
 
       const key = normalizeBankDescription(movement.description);
       const source = key ? recurringIndex.get(key) : undefined;
-      if (source && source.justificationType) {
+      // Repetir uma classificação: mesma descrição (nome) e mesmo valor (± 1 €). Valores que variam
+      // (taxas TPA…) ficam para os «movimentos recorrentes» (regras), que aceitam qualquer valor.
+      if (source && source.justificationType && Math.abs(source.amount - movement.amount) <= AMOUNT_MATCH_TOLERANCE_CENTS) {
         repeatJustifications.push({
           movementId: movement.id,
           sourceMovementId: source.id,

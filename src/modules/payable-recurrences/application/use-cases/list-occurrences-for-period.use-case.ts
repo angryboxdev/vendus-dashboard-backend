@@ -1,6 +1,7 @@
 import type { RecurrenceRepositoryPort } from "../../domain/ports/out/recurrence-repository.port.js";
 import type { OccurrenceRepositoryPort } from "../../domain/ports/out/occurrence-repository.port.js";
 import type { BankMovementLinkReadPort } from "../../domain/ports/out/bank-movement-link-read.port.js";
+import type { InvoiceReadPort } from "../../domain/ports/out/invoice-read.port.js";
 import type { InvoiceAllocatedAmountReadPort } from "../../domain/ports/out/invoice-allocated-amount-read.port.js";
 import type {
   ListOccurrencesForPeriodPort,
@@ -21,6 +22,7 @@ export class ListOccurrencesForPeriodUseCase implements ListOccurrencesForPeriod
     private readonly occurrenceRepo: OccurrenceRepositoryPort,
     private readonly bankMovementLinkRead: BankMovementLinkReadPort,
     private readonly invoiceAllocatedAmountRead: InvoiceAllocatedAmountReadPort,
+    private readonly invoiceRead: InvoiceReadPort | null = null,
   ) {}
 
   async execute(query: ListOccurrencesForPeriodQuery): Promise<OccurrenceDTO[]> {
@@ -37,6 +39,7 @@ export class ListOccurrencesForPeriodUseCase implements ListOccurrencesForPeriod
       this.bankMovementLinkRead,
       this.invoiceAllocatedAmountRead,
       organizationId,
+      this.invoiceRead,
     );
   }
 }
