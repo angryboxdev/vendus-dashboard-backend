@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 819 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 822 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -730,7 +730,10 @@ Endpoints: 819 · pré-autenticação: 23 · não classificados: 0
 | POST | `/api/public/join/:code` | pré-auth | — | — | — | — | — |
 | GET | `/api/recipe-costing` | permission:stock.recipes:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/recipe-costing/dishes/:id/weekly` | permission:stock.recipes:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/recipe-costing/dishes/impact` | permission:stock.recipes:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/recipe-costing/ingredients/:id/price-history` | permission:stock.items:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/recipe-costing/ingredients/:id/usage` | permission:stock.items:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/recipe-costing/ingredients/overview` | permission:stock.items:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/reports/dre/custos-fixos` | permission:dre.fixed_costs:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/reports/dre/custos-fixos` | permission:dre.fixed_costs:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | DELETE | `/api/reports/dre/custos-fixos/:id` | permission:dre.fixed_costs:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |

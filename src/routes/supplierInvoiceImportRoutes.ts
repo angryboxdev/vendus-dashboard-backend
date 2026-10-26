@@ -13,6 +13,23 @@ import type {
 
 export const supplierInvoiceImportRoutes = Router();
 
+/**
+ * Importador antigo do Stock DESLIGADO (task V6, «única fonte de verdade»): gravava custos noutra
+ * unidade e fora das Compras por rever. Criar e confirmar respondem 410; a leitura continua (histórico).
+ * A entrada de faturas no Stock faz-se só por «Importar fatura» / Compras por rever.
+ */
+const RETIRED = "O importador antigo do Stock foi desligado. Use «Importar fatura» em Inventário → Compras por rever.";
+supplierInvoiceImportRoutes.post("/stock/invoice-imports", (_req, res) => {
+  res.status(410).json({ error: RETIRED, code: "legacy_stock_import_retired" });
+});
+supplierInvoiceImportRoutes.post("/stock/invoice-imports/:id/confirm", (_req, res) => {
+  res.status(410).json({ error: RETIRED, code: "legacy_stock_import_retired" });
+});
+supplierInvoiceImportRoutes.patch("/stock/invoice-imports/:id", (_req, res) => {
+  res.status(410).json({ error: RETIRED, code: "legacy_stock_import_retired" });
+});
+// (Os handlers abaixo ficam por baixo destes e já não são alcançados; o serviço continua a servir a leitura.)
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 },

@@ -82,7 +82,7 @@ export function weeklyDishCost(input: WeeklyDishCostInput): WeeklyDishCost {
   };
 }
 
-function lineCost(line: RecipeLine, weekIndex: number, weekEnd: string, input: WeeklyDishCostInput): WeeklyLineCost {
+export function lineCost(line: RecipeLine, weekIndex: number, weekEnd: string, input: Pick<WeeklyDishCostInput, "ingredients" | "preparations">): WeeklyLineCost {
   const waste = 1 + (line.wasteFactor ?? 0);
   if (line.stockItemId) {
     const info = input.ingredients.get(line.stockItemId);

@@ -11,6 +11,19 @@ const num = (v: unknown): number | null => (v == null ? null : Number.isFinite(N
 /** Normaliza para ISO UTC («…Z»): o cálculo compara datas como texto. */
 const iso = (s: string) => new Date(s).toISOString();
 
+function toPizzaVersion(r: VersionRow): RecipeVersion {
+  return {
+    effectiveFrom: iso(r.effective_from),
+    lines: ((r.payload as PizzaPayload).lines ?? []).map((l) => ({
+      stockItemId: l.stock_item_id,
+      preparationId: l.preparation_id,
+      size: l.size,
+      quantity: Number(l.quantity),
+      wasteFactor: num(l.waste_factor),
+    })),
+  };
+}
+
 /** Lê `recipe_versions` (gravadas por triggers a cada alteração das fichas) e os artigos. */
 export class SupabaseDishWeeklyCostReadAdapter implements DishWeeklyCostReadPort {
   constructor(private readonly scopedQuery: ScopedQueryFactory) {}
@@ -29,16 +42,31 @@ export class SupabaseDishWeeklyCostReadAdapter implements DishWeeklyCostReadPort
       .eq("entity_id", pizzaId)
       .order("effective_from", { ascending: true });
     if (error) throw new Error(`Custo semanal: ${error.message}`);
-    return ((data ?? []) as unknown as VersionRow[]).map((r) => ({
-      effectiveFrom: iso(r.effective_from),
-      lines: ((r.payload as PizzaPayload).lines ?? []).map((l) => ({
-        stockItemId: l.stock_item_id,
-        preparationId: l.preparation_id,
-        size: l.size,
-        quantity: Number(l.quantity),
-        wasteFactor: num(l.waste_factor),
-      })),
-    }));
+    return ((data ?? []) as unknown as VersionRow[]).map(toPizzaVersion);
+  }
+
+  async listPizzas(organizationId: OrganizationId): Promise<{ id: string; name: string; category: string; isActive: boolean }[]> {
+    const { data, error } = await this.scopedQuery(organizationId).table("pizzas").select("id, name, category, is_active").order("name", { ascending: true });
+    if (error) throw new Error(`Impacto nas pizzas: ${error.message}`);
+    return ((data ?? []) as unknown as { id: string; name: string; category: string; is_active: boolean }[]).map((p) => ({ id: p.id, name: p.name, category: p.category, isActive: Boolean(p.is_active) }));
+  }
+
+  async listLatestPizzaVersions(organizationId: OrganizationId): Promise<Map<string, RecipeVersion>> {
+    const out = new Map<string, RecipeVersion>();
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await this.scopedQuery(organizationId)
+        .table("recipe_versions")
+        .select("entity_id, effective_from, payload")
+        .eq("kind", "pizza")
+        .order("effective_from", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`Impacto nas pizzas: ${error.message}`);
+      const rows = (data ?? []) as unknown as VersionRow[];
+      for (const r of rows) out.set(r.entity_id, toPizzaVersion(r)); // ordem crescente: fica a mais recente
+      if (rows.length < PAGE) return out;
+    }
   }
 
   async listPreparationVersions(organizationId: OrganizationId, preparationIds: string[]): Promise<Map<string, PreparationVersion[]>> {

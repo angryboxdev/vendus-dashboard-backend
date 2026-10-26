@@ -181,11 +181,8 @@ export class StockPurchaseReviewController {
     // Apresentações de compra (antes de «/:id»): GET ?supplierId= lista as ativas; PUT grava uma versão nova.
     this.router.get("/stock-purchase-reviews/presentations", async (req, res) => {
       try {
-        const supplierId = String((req.query as Record<string, string | undefined>).supplierId ?? "");
-        if (!supplierId) {
-          res.status(400).json({ error: "supplierId é obrigatório" });
-          return;
-        }
+        // Sem supplierId: todas as embalagens ativas da empresa (Reposição em «Artigos e ingredientes», V6).
+        const supplierId = String((req.query as Record<string, string | undefined>).supplierId ?? "") || null;
         res.json(await this.listPurchasePresentations.execute(req.auth!.orgId, supplierId));
       } catch (e) {
         handleError(e, res);

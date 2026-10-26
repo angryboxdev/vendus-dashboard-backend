@@ -199,11 +199,11 @@ export async function listStockItems(
       quantity: 0,
       lastFromMovement: { withVat: null, withoutVat: null },
     };
-    return rowToItem(
-      r,
-      quantity,
-      effectiveLastPurchaseCosts(r, lastFromMovement)
-    );
+    // V6: distinguir «sem movimentos» de «stock 0» (a lista não deve confundir os dois).
+    return {
+      ...rowToItem(r, quantity, effectiveLastPurchaseCosts(r, lastFromMovement)),
+      has_movements: qtyMap.has(r.id),
+    };
   });
 }
 

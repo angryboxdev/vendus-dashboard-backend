@@ -406,7 +406,8 @@ export interface SavePurchasePresentationPort {
 }
 
 export interface ListPurchasePresentationsPort {
-  execute(organizationId: OrganizationId, supplierId: string): Promise<PurchasePresentationDTO[]>;
+  /** `supplierId = null` → todas as embalagens ativas da empresa (Reposição, V6). */
+  execute(organizationId: OrganizationId, supplierId: string | null): Promise<PurchasePresentationDTO[]>;
 }
 
 // ── Regras de entrada no Stock por tipo de artigo (V4 §2) ─────────────────
