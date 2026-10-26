@@ -355,7 +355,12 @@ deleteDraftStockPurchaseReviewRef.current = stockPurchaseReviewModule.deleteDraf
 // não entra no ciclo de construção acima.
 // Demonstração do Stock (3 cenários fictícios; independente da do RH): numa organização fictícia as vendas
 // vêm do POS fictício «CaixaFlow POS» e nunca da Vendus (cuja chave é global).
-const stockDemoModule = createStockDemoModule();
+const stockDemoModule = createStockDemoModule({
+  // Ligado ao stockPlanningModule (construído logo a seguir); só corre depois do arranque.
+  runForecast: async (org) => {
+    await stockPlanningModule.runDailyForecast.execute({ organizationId: org });
+  },
+});
 setDemoProductsSource(async (org, since, until) => {
   const sales = await stockDemoModule.demoPosSales.dailySales(org, since, until);
   if (!sales) return null;

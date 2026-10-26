@@ -1,5 +1,6 @@
 import { mintOrganizationId, type OrganizationId } from "../../kernel/organization-id.js";
 import { getSupabaseServiceRole } from "./supabase-client.js";
+import { listStockDemoOrganizationIds } from "./stock-demo-organization.js";
 
 /**
  * The (org, location) pair listing unscoped door (spec C ticket 02).
@@ -22,6 +23,8 @@ export async function listOrganizationLocationPairs(): Promise<OrgLocationPairRo
   const demo = await supabase.from("organizations").select("id").eq("is_demo", true);
   if (demo.error) throw new Error(demo.error.message);
   const demoIds = new Set(((demo.data ?? []) as Record<string, unknown>[]).map((r) => String(r.id)));
+  // …nem os da demonstração do Stock (ADR-0041).
+  for (const id of await listStockDemoOrganizationIds()) demoIds.add(id);
 
   const { data, error } = await supabase
     .from("locations")

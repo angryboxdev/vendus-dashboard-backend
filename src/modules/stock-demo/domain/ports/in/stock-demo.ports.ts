@@ -38,3 +38,23 @@ export interface ResolveStockDemoPort {
 }
 
 export class StockDemoForbiddenError extends Error {}
+
+export interface StockDemoSeedResultDTO {
+  scenario: StockDemoScenario;
+  created: boolean;
+  summary: { items: number; suppliers: number; invoices: number; dishes: number; preparations: number; salesCents30d: number; movements: number } | null;
+  /** Previsão de reposição calculada (falhar a previsão não desfaz a demonstração). */
+  forecast: "ok" | "failed";
+}
+
+/** Criar um cenário (só Admin): organização fictícia + dados. Já criado → devolve sem mexer. */
+export interface CreateStockDemoPort {
+  execute(command: { realOrgId: OrganizationId; isAdmin: boolean; actor: string; scenario: StockDemoScenario }): Promise<StockDemoSeedResultDTO>;
+}
+
+/** Recomeçar um cenário (só Admin): apaga os dados da organização fictícia e volta a semear até hoje. */
+export interface ResetStockDemoPort {
+  execute(command: { realOrgId: OrganizationId; isAdmin: boolean; scenario: StockDemoScenario }): Promise<StockDemoSeedResultDTO>;
+}
+
+export class StockDemoNotCreatedError extends Error {}

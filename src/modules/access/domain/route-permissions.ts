@@ -95,6 +95,7 @@ export const ROUTE_RULES: RouteRule[] = [
   // Demonstração do Stock: estado dos cenários e vendas do POS fictício (Admin verificado no módulo).
   { pattern: /^\/api\/stock-demo$/, methods: GET, target: p("stock.items") },
   { pattern: /^\/api\/stock-demo\/pos\/sales$/, methods: GET, target: p("stock.items") },
+  { pattern: /^\/api\/stock-demo\/[^/]+(\/reset)?$/, methods: ["POST"], target: p("stock.items", "MANAGE") },
   // Histórico semanal do preço de compra no artigo (V5 §5) — «Artigos e ingredientes».
   { pattern: new RegExp(`^/api/recipe-costing/ingredients/${ID}/price-history$`), methods: GET, target: p("stock.items") },
   // Lista «Artigos e ingredientes» (V6): resumo de custos e fichas que usam o ingrediente.

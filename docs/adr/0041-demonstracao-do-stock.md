@@ -13,9 +13,12 @@ precisa de três demos por empresa e não pode alterar o RH. As vendas do Stock 
 
 ## Decisão
 
-1. Organizações fictícias do Stock são `is_demo = true` com `demo_of = null` (os crons e listagens já excluem
-   `is_demo`). A ligação empresa real → cenário vive numa tabela nova, `stock_demo_organizations`
-   (migração só aditiva). Nada do RH muda: nem o índice de `demo_of`, nem a procura da sua demo.
+1. Organizações fictícias do Stock são `is_demo = false`, `demo_of = null` e `status = 'inactive'`: a regra
+   existente `organizations_demo_consistency_ck` obriga `is_demo` a ter `demo_of`, que é único por empresa e já
+   pertence à demo do RH — não se altera. A ligação empresa real → cenário vive numa tabela nova,
+   `stock_demo_organizations` (migração só aditiva), e as duas listagens dos crons
+   (`organization-listing.ts`, `organization-location-listing.ts`) excluem as organizações dessa tabela.
+   Nada do RH muda: nem a regra, nem o índice de `demo_of`, nem a procura da sua demo.
 2. Modo Demonstração próprio (`X-Stock-Demo: <cenário>`), só nas rotas da Gestão de Stock, só Admin.
 3. Vendas: «CaixaFlow POS» — POS **fictício** (nome inventado para não sugerir integração com software real),
    com «API» simulada e determinística dentro do Mezza. Os leitores de vendas do Stock (planeamento e consumo de
@@ -26,3 +29,11 @@ precisa de três demos por empresa e não pode alterar o RH. As vendas do Stock 
 - Três organizações extra por empresa que use a demonstração; invisíveis fora do Stock em modo Demonstração.
 - Um ecrã novo do Stock que leia vendas tem de passar pela mesma fonte (documentado no README de `stock-demo`).
 - Rollback: remover `stock_demo_organizations`; as organizações fictícias ficam órfãs e invisíveis.
+
+## Semente dos cenários (Fase 2)
+
+Gerador puro e determinístico (`demo-plan.service.ts`): vendas do POS fictício (90 dias) → consumo pelas fichas →
+baixas diárias; compras semanais por fornecedor que cobrem o consumo (embalagem, tendência de preço, desconto),
+gravadas como faturas + compras aplicadas + entradas; versões das fichas recuadas ao início do histórico.
+Validado contra todas as migrações (PGlite). «Recomeçar» apaga só dados do Stock da organização fictícia (o seeder
+recusa organizações que não estejam em `stock_demo_organizations`).

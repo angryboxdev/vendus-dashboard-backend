@@ -42,7 +42,9 @@ Crons que percorrem organizações já excluem `is_demo = true` (`organization-l
 ### Fase 1 — infraestrutura (migração só aditiva)
 **Regra do utilizador (2026-10-26): só o Stock. O RH e qualquer outro módulo não sofrem alteração.**
 - **Sem tocar no RH**: `organizations_demo_of_uq`, `demo_of` e a procura da demo do RH ficam como estão. As
-  organizações do Stock são `is_demo = true` (os crons já as ignoram) com `demo_of = null`; a ligação
+  organizações do Stock são `is_demo = false`, `status = 'inactive'`, `demo_of = null` (a regra
+  `organizations_demo_consistency_ck` liga `is_demo` a `demo_of`, já usado pelo RH); os crons excluem-nas pela tabela
+  de ligação; a ligação
   empresa real → cenário vive numa **tabela nova do módulo**: `stock_demo_organizations (real_org_id, scenario,
   demo_org_id, seed, created_by, created_at)`, único `(real_org_id, scenario)`. Migração só cria esta tabela.
 - Novo módulo `stock-demo` (hexagonal): estado/criar/recomeçar por cenário (Admin, Idempotency-Key) e middleware
