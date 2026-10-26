@@ -132,7 +132,7 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
       const score = scoreCandidate({
         candidateAmount: extraInvoiceIds.has(inv.id) ? openBalanceCents : inv.totalWithVat,
         candidateOpenBalance: openBalanceCents,
-        candidateDateStr: bestDate,
+        candidateDates: [inv.paidAt, inv.dueDate, inv.invoiceDate],
         candidateName: inv.supplierName,
         candidateSupplierId: inv.supplierId,
         movementAmount: movement.amount,
@@ -164,7 +164,7 @@ export class FindMovementCandidatesUseCase implements FindMovementCandidatesPort
       const score = scoreCandidate({
         candidateAmount: pe.amount, // score by total
         candidateOpenBalance: openBalanceCents,
-        candidateDateStr: pe.dueDate,
+        candidateDates: [pe.dueDate],
         candidateName: pe.supplierName,
         candidateSupplierId: pe.supplierId,
         movementAmount: movement.amount,

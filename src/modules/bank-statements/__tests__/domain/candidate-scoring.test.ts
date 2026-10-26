@@ -5,7 +5,7 @@ import { isStrongSuggestion, scoreCandidate, supplierNameInDescription } from ".
 const base = {
   candidateAmount: 12_345,
   candidateOpenBalance: 12_345,
-  candidateDateStr: "2026-09-10",
+  candidateDates: ["2026-09-10"],
   candidateName: "Fornecedor Exemplo Lda",
   candidateSupplierId: "sup-1",
   movementAmount: 12_345,
@@ -45,14 +45,23 @@ describe("scoreCandidate / isStrongSuggestion", () => {
     expect(isStrongSuggestion(s)).toBe(false);
   });
 
-  it("name and amount but far date (< 90%) → not a suggestion", () => {
-    const s = scoreCandidate({ ...base, candidateDateStr: "2026-07-01" });
+  it("name and amount with a far date still count (80% ≥ 70%)", () => {
+    const s = scoreCandidate({ ...base, candidateDates: ["2026-07-01"] });
     expect(s.confidence).toBeCloseTo(0.8);
-    expect(isStrongSuggestion(s)).toBe(false);
+    expect(isStrongSuggestion(s)).toBe(true);
+  });
+
+  it("uses the date closest to the movement (card purchase: issued same day, due 30 days later)", () => {
+    const s = scoreCandidate({ ...base, candidateDates: [null, "2026-10-12", "2026-09-12"] });
+    expect(s.confidence).toBeCloseTo(0.95);
+  });
+
+  it("below 70% is never a suggestion, even with name and amount flags", () => {
+    expect(isStrongSuggestion({ confidence: 0.69, nameMatched: true, amountMatched: true })).toBe(false);
   });
 
   it("learned supplier counts as the name", () => {
-    const s = scoreCandidate({ ...base, movementDesc: "TRF 0099 REF X", hintSupplierId: "sup-1", candidateDateStr: "2026-08-20" });
+    const s = scoreCandidate({ ...base, movementDesc: "TRF 0099 REF X", hintSupplierId: "sup-1", candidateDates: ["2026-08-20"] });
     expect(s.nameMatched).toBe(true);
     expect(s.confidence).toBeCloseTo(1);
     expect(isStrongSuggestion(s)).toBe(true);
