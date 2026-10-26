@@ -54,6 +54,8 @@ export type StockItem = {
   updated_at?: string;
   /** Calculado: SUM(stock_movements.quantity) */
   current_quantity?: number;
+  /** Lista: o artigo tem pelo menos um movimento (V6: «sem movimentos» ≠ stock 0). */
+  has_movements?: boolean;
   last_purchase_unit_cost_with_vat?: number | null;
   last_purchase_unit_cost_without_vat?: number | null;
 };

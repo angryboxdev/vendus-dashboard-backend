@@ -47,22 +47,29 @@ Leitura e cálculo, sem escrita: `GET /api/recipe-costing` devolve o custo de ca
 ### Entrada (casos de uso)
 
 - `GetRecipeCostingPort` — relatório de custo da organização.
+- `GetIngredientsCostOverviewPort` — último custo, referência comparativa e série semanal de todos os artigos com compras confirmadas (task V6; `ingredient-overview.service.ts`).
+- `GetIngredientUsagePort` — fichas técnicas que usam o artigo, diretamente ou via preparo, com o custo da linha e o peso no prato (`ingredient-usage.service.ts`).
+- `GetDishesImpactPort` — custo atual de cada pizza face a há N semanas, com a diferença por ingrediente e o fator principal (`dish-impact.service.ts`).
 
 ### Saída (dependências do domínio)
 
 - `RecipeCostingReadPort` — `loadSnapshot(org)`.
+- `PurchaseObservationReadPort` — compras confirmadas de um artigo (`listForItem`) ou de todos (`listAll`, paginado).
+- `DishWeeklyCostReadPort` — versões das fichas; `listPizzas` e `listLatestPizzaVersions` para o impacto.
 
 ## Adapters
 
 ### Entrada
 
-- `RecipeCostingController` → `GET /api/recipe-costing` (permissão `stock.recipes`, READ) e `GET /api/recipe-costing/dishes/:id/weekly?weeks=12` (custo teórico semanal da pizza por tamanho; `stock.recipes`), e `GET /api/recipe-costing/ingredients/:id/price-history?weeks=26` (histórico semanal do preço de compra; permissão `stock.items`, READ — mostrado em «Artigos e ingredientes»).
+- `RecipeCostingController` → `GET /api/recipe-costing` (permissão `stock.recipes`, READ) e `GET /api/recipe-costing/dishes/:id/weekly?weeks=12` (custo teórico semanal da pizza por tamanho; `stock.recipes`), e `GET /api/recipe-costing/ingredients/:id/price-history?weeks=26` (histórico semanal do preço de compra; permissão `stock.items`, READ — mostrado em «Artigos e ingredientes»). Task V6: `GET /api/recipe-costing/ingredients/overview?weeks=12` e `GET /api/recipe-costing/ingredients/:id/usage` (`stock.items`, READ), `GET /api/recipe-costing/dishes/impact?compareWeeks=4` (1–52; `stock.recipes`, READ).
 
 ### Saída
 
 - `SupabaseRecipeCostingReadAdapter` → tabelas legacy `pizzas`, `pizza_prices`, `pizza_recipes` (só a ativa), `pizza_recipe_items`, `preparations`, `preparation_items`, `stock_items` e a RPC `get_stock_quantities_with_last_purchase`.
 
 ## Decisões de design
+
+- **Custos na lista de artigos e impacto nas pizzas (task V6).** «Último custo» = última compra confirmada (nunca o manual: sem compra → «Sem custo conhecido»; o manual aparece à parte como «Custo manual»). **Referência comparativa** = média ponderada das compras confirmadas nas 12 semanas anteriores à última compra (sem compras nesse intervalo → «Histórico insuficiente», sem variação). Impacto = **ficha técnica atual** aplicada aos preços de cada semana (reconstruído, assim rotulado — não é o custo histórico com a versão em vigor, que está no custo semanal V5); só é comparável com as duas semanas completas; a soma das diferenças por linha dá a variação. Sem margem (sem regra de IVA das vendas).
 
 - **Custo teórico semanal da pizza (task V5 §6).** Versões das fichas em `recipe_versions` (migração `20261118100000`), gravadas por **triggers** a cada alteração de `pizza_recipe_items`/`pizza_recipes`/`preparation_items`/`preparations` (rendimento/«usar como unidade»; só o nome não conta) — qualquer caminho de escrita, incluindo o legado. Uma versão por entidade e por transação; a migração grava a versão inicial («a partir de agora»). Cada semana usa a versão em vigor no fim da semana (e a dos preparos); antes da primeira versão: «sem versão histórica» (nunca se fabrica histórico). Preço do ingrediente na semana: média ponderada das compras → último preço transportado → custo manual (assinalado) → sem preço (semana «incompleta», nunca zero). Soma com precisão total, arredondamento só no fim. CMV teórico, não consumo; não mexe no Stock.
 

@@ -6,6 +6,9 @@
 export interface PurchaseObservation {
   /** Linha da revisão de Stock (identidade única da observação). */
   lineId: string;
+  /** Compra por rever de origem (para abrir o documento). */
+  reviewId?: string;
+  supplierId?: string | null;
   supplierName: string;
   invoiceNumber: string;
   /** Data da fatura (data económica da compra), YYYY-MM-DD. */
