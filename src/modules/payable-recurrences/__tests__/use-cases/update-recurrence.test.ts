@@ -3,6 +3,7 @@ import { CreateRecurrenceUseCase } from "../../application/use-cases/create-recu
 import { UpdateRecurrenceUseCase } from "../../application/use-cases/update-recurrence.use-case.js";
 import { CloseRecurrenceUseCase } from "../../application/use-cases/close-recurrence.use-case.js";
 import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js";
+import { FakeEmployeeDirectoryRead } from "../fakes/fake-employee-directory-read.js";
 import { RecurrenceNotFoundError, RecurrenceClosedError } from "../../domain/errors.js";
 
 const organizationId = mintOrganizationId("org-a");
@@ -22,8 +23,8 @@ function make() {
   const repo = new FakeRecurrenceRepository();
   return {
     repo,
-    create: new CreateRecurrenceUseCase(repo),
-    update: new UpdateRecurrenceUseCase(repo),
+    create: new CreateRecurrenceUseCase(repo, new FakeEmployeeDirectoryRead()),
+    update: new UpdateRecurrenceUseCase(repo, new FakeEmployeeDirectoryRead()),
     close: new CloseRecurrenceUseCase(repo),
   };
 }

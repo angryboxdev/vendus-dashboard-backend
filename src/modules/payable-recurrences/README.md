@@ -1,7 +1,7 @@
 # Módulo: payable-recurrences
 
 > Status: ativo
-> Última atualização: 2026-09-09 (`kiosk-pin-storage-prefix` ticket 03 — `DocumentStoragePort.store`/`objectStorage` ganham `organizationId`; `recurrence-documents` não opta por prefixação, ADR-0015 DB4)
+> Última atualização: 2026-10-26 (recorrências de salários com colaborador do RH — `employeeId`, `GET /payable-recurrences/employees`; data de pausa `pausedAt` para a vista «Histórico»; migração `20261128100000`)
 
 ---
 
@@ -132,6 +132,8 @@ Entidade principal. Representa o contrato/compromisso recorrente. Invariantes:
 - `autoCreatePayable` é sempre `false` quando `requireInvoice = true`.
 - Só transita `active → paused`, `paused → active`, `active | paused → closed`.
 - `closed` não pode ser editada, reaberta, nem ter documentos anexados.
+- `pausedAt` — data da pausa: `pause()` grava-a, `resume()` limpa-a; encerrar uma pausada mantém-na. Pausadas antes da migração `20261128100000` ficam sem data.
+- `employeeId` — colaborador do RH (`hr_employees`) a quem se paga (recorrências de salários). O nome do beneficiário continua em `supplierName` (D13).
 - Edição afeta apenas campos futuros — ocorrências já existentes não são retroativamente
   alteradas (invariante de negócio; aplicado pelo use case de geração).
 - `documentUrl` — URL do contrato/documento base, armazenado no bucket `recurrence-documents`.
@@ -239,6 +241,8 @@ Resumo aplicado aqui:
 - `CloseRecurrencePort` — encerra recorrência definitivamente; exige uma data de finalização (spec §10). `CloseRecurrenceCommand = { organizationId, id, closedAt }` (`closedAt` obrigatório, YYYY-MM-DD).
 - `ListRecurrencesPort` — lista com filtros opcionais (status, type, supplierId). `ListRecurrencesQuery = { organizationId, status?, type?, supplierId? }`.
 - `GetRecurrencePort` — detalhe de uma recorrência. `GetRecurrenceQuery = { organizationId, id }`.
+- `ListRecurrenceEmployeesPort` — colaboradores do RH (só `id`, `fullName`, `status`; ativos e inativos) para associar a uma recorrência de salários. `ListRecurrenceEmployeesQuery = { organizationId }`.
+- `CreateRecurrencePort`/`UpdateRecurrencePort` aceitam `employeeId`: tem de existir na organização (`RecurrenceEmployeeNotFoundError` → 404); sem `supplierName` escrito, o beneficiário passa a ser o nome do colaborador. Na edição só se valida quando o colaborador muda.
 
 **Ocorrências:**
 - `GenerateOccurrencePort` — gera ocorrência para um mês específico. Se `autoCreatePayable=true`, cria conta a pagar imediatamente. `GenerateOccurrenceCommand` inclui `organizationId`.
@@ -269,6 +273,7 @@ excepto `DocumentStoragePort.store`, onde é o último (ver secção acima).
 - `PayableEntryWritePort` — cross-módulo: `create(organizationId, data)`, cria conta a pagar em `payable_entries`.
 - `InvoiceReadPort` — cross-módulo: `findById(organizationId, id)`, ler dados mínimos de uma fatura para vincular.
 - `DocumentStoragePort` — `store(buffer, filename, mimeType, organizationId)`, `delete(url)` — armazenamento de ficheiros (contrato base, faturas mensais). `store` recebe `organizationId` como último parâmetro (ADR-0015); `recurrence-documents` não optou por prefixação (DB4), pelo que o wrapper recebe-a sem alterar o caminho.
+- `EmployeeDirectoryReadPort` — cross-módulo: `findById(organizationId, id)`, `findAll(organizationId)` — leitura mínima (id, nome, estado) da ficha partilhada `hr_employees` (fica sempre — ADR-0040).
 - `BankMovementLinkReadPort` — cross-módulo: `findByOccurrenceIds(organizationId, occurrenceIds)`, devolve um `Map<occurrenceId, LinkedBankMovement[]>` (array — uma ocorrência pode ter mais de um movimento, pagamentos parciais) com data, montante e descrição de cada movimento bancário que justificou a ocorrência. O adapter concreto lê directamente `bank_movements` sem importar código de `bank-statements`.
 - `InvoiceAllocatedAmountReadPort` — cross-módulo: `findAllocatedAmounts(organizationId, invoiceIds)`, devolve um `Map<invoiceId, allocatedAmountCents>` somando `bank_movement_entity_links.allocated_amount_cents` por fatura (fluxo A — "Pago" vem do que já foi reconciliado no banco para a fatura, não do estado da fatura). O adapter lê `bank_movement_entity_links` directamente, sem importar código de `bank-statements`.
 
@@ -292,6 +297,7 @@ ticket 06).
 - `SupabasePayableEntryWriteAdapter` → cross-módulo, acede directamente à tabela `payable_entries`, via `ScopedQueryFactory`.
 - `SupabaseInvoiceReadAdapter` → cross-módulo, acede directamente à tabela `invoices`, via `ScopedQueryFactory`.
 - `SupabaseRecurrenceDocumentStorageAdapter` → implementa `DocumentStoragePort` no bucket Supabase Storage `recurrence-documents`. Não recebe `SupabaseClient` nem `ScopedQueryFactory` no construtor: delega para o wrapper `objectStorage` de `src/infra/scoped-db/` (spec B2 ticket 01/D10) — esse folder é o único lugar em `src/**` autorizado a importar `@supabase/supabase-js`. `store()` passa `organizationId` ao wrapper (ADR-0015), mas este bucket não optou por prefixação (DB4) — o caminho fica igual.
+- `SupabaseEmployeeDirectoryReadAdapter` → cross-módulo; lê `hr_employees` (`id, full_name, status`, paginado) via `ScopedQueryFactory`, sem importar código do RH. Implementa `EmployeeDirectoryReadPort`.
 - `SupabaseBankMovementLinkReadAdapter` → cross-módulo; lê `bank_movements WHERE matched_entity_type = 'recurrence_occurrence' AND matched_entity_id IN (...)` via `ScopedQueryFactory`, sem importar código de `bank-statements`. Implementa `BankMovementLinkReadPort`.
 - `SupabaseInvoiceAllocatedAmountReadAdapter` → cross-módulo; lê `bank_movement_entity_links WHERE entity_type = 'invoice' AND entity_id IN (...)` via `ScopedQueryFactory`, sem importar código de `bank-statements`. Implementa `InvoiceAllocatedAmountReadPort`.
 
@@ -303,6 +309,7 @@ ticket 06).
 GET    /api/payable-recurrences                                          lista (filtros: status, type, supplierId)
 POST   /api/payable-recurrences                                          criar recorrência
 GET    /api/payable-recurrences/summary                                  resumo (awaitingInvoiceCount)
+GET    /api/payable-recurrences/employees                                colaboradores do RH (id, nome, estado) para recorrências de salários
 GET    /api/payable-recurrences/summary/monthly?period=YYYY-MM           KPIs mensais cross-recorrência (Ativas, Previsto, Pago, Por realizar, Vencidas)
 GET    /api/payable-recurrences/occurrences?period=YYYY-MM               ocorrências de todas as recorrências nesse mês (vista mensal)
 POST   /api/payable-recurrences/batch/generate                           gerar para todas as ativas (body: {year, month})
@@ -327,7 +334,7 @@ POST   /api/payable-recurrences/:id/occurrences/generate                 gerar p
 
 Todas as rotas requerem role `manager` (via `requireMinRole` no server.ts).
 
-**Ordem de registo importante:** rotas com segmentos fixos (`/summary`, `/summary/monthly`,
+**Ordem de registo importante:** rotas com segmentos fixos (`/employees`, `/summary`, `/summary/monthly`,
 `/batch/generate`, `/occurrences` (bare, com `?period=`), `/occurrences/linked-invoice-ids`,
 `/occurrences/by-invoice/:invoiceId`, `/occurrences/:occId`) estão registadas antes de `/:id`
 para evitar que strings fixas sejam interpretadas como IDs.
@@ -440,6 +447,23 @@ do previsto) — eliminando a ambiguidade sem inventar um novo limiar arbitrári
 em cêntimos). Se for "parcial", só a ligação do movimento é criada, e o estado computado
 (`partially_paid`) reflecte isso normalmente até chegar outro movimento.
 
+**D13 — Recorrência de salários: colaborador por `employee_id`, nome em `supplier_name`.**
+Uma recorrência de salários é uma por colaborador. Guarda-se `employee_id` (FK composta
+`(org_id, employee_id)` → `hr_employees`, `on delete set null (employee_id)`) e o nome do
+colaborador fica em `supplier_name`, como o de qualquer beneficiário — assim listas, vista
+mensal, conciliação e pesquisa continuam a funcionar sem junções nem código novo. O endpoint
+`GET /payable-recurrences/employees` existe neste módulo (e não se reutiliza o do RH) para
+que quem tem `finance.recurrences` consiga escolher o colaborador sem precisar de permissões
+do RH; devolve só id, nome e estado (RGPD — minimização). A UI (frontend) mostra o campo
+«Colaborador» quando a categoria escolhida (grupo ou sub-categoria do centro de custo) é de
+salários ou o tipo é «Pessoal».
+
+**D14 — `paused_at` em vez de um registo de eventos.**
+A vista «Histórico» precisa de saber quando cada recorrência começou (`start_date`), foi
+pausada (`paused_at`) ou encerrada (`closed_at`). Guarda-se só a pausa atual (limpa ao
+retomar); um histórico completo de pausas/retomas exigiria uma tabela de eventos e não foi
+pedido.
+
 ---
 
 ## Como testar
@@ -448,7 +472,7 @@ em cêntimos). Se for "parcial", só a ligação do movimento é criada, e o est
 - Todos os módulos financeiros: `npx jest --testPathPattern="payable-recurrences|payable-entries" --no-coverage`.
 - Adapters Supabase: requerem instância real — testar manualmente contra ambiente de desenvolvimento.
 
-**Cobertura atual:** 17 suites, 194 testes, 0 falhos. Todos os use cases cobertos, incluindo `GetMonthlySummaryUseCase` e `ListOccurrencesForPeriodUseCase`. Inclui testes de enriquecimento `linkedBankMovements`/`paidAmountCents`/`displayState` via `FakeBankMovementLinkReadAdapter`/`FakeInvoiceAllocatedAmountReadAdapter` e testes de isolamento cross-organização (spec B2) nos fluxos de leitura/escrita por id.
+**Cobertura atual:** 18 suites, 203 testes, 0 falhos. Todos os use cases cobertos, incluindo `GetMonthlySummaryUseCase` e `ListOccurrencesForPeriodUseCase`. Inclui testes de enriquecimento `linkedBankMovements`/`paidAmountCents`/`displayState` via `FakeBankMovementLinkReadAdapter`/`FakeInvoiceAllocatedAmountReadAdapter` e testes de isolamento cross-organização (spec B2) nos fluxos de leitura/escrita por id.
 
 ---
 

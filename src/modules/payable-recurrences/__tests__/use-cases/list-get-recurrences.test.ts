@@ -4,6 +4,7 @@ import { ListRecurrencesUseCase } from "../../application/use-cases/list-recurre
 import { GetRecurrenceUseCase } from "../../application/use-cases/get-recurrence.use-case.js";
 import { PauseRecurrenceUseCase } from "../../application/use-cases/pause-recurrence.use-case.js";
 import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js";
+import { FakeEmployeeDirectoryRead } from "../fakes/fake-employee-directory-read.js";
 import { RecurrenceNotFoundError } from "../../domain/errors.js";
 
 const organizationId = mintOrganizationId("org-a");
@@ -12,7 +13,7 @@ function make() {
   const repo = new FakeRecurrenceRepository();
   return {
     repo,
-    create: new CreateRecurrenceUseCase(repo),
+    create: new CreateRecurrenceUseCase(repo, new FakeEmployeeDirectoryRead()),
     list: new ListRecurrencesUseCase(repo),
     get: new GetRecurrenceUseCase(repo),
     pause: new PauseRecurrenceUseCase(repo),

@@ -10,7 +10,7 @@ Implementado (README: ativo). Sem trabalho em curso registado.
 
 ## Arquitetura
 - Código: `src/modules/payable-recurrences/` (domain, application, adapters); composição: `payable-recurrences.module.ts`; documentação detalhada: `src/modules/payable-recurrences/README.md`.
-- Endpoints (23, sob `/api`): `DELETE /payable-recurrences/:id/document`, `DELETE /payable-recurrences/occurrences/:occId`, `DELETE /payable-recurrences/occurrences/:occId/document`, `GET /payable-recurrences`, `GET /payable-recurrences/:id`, `GET /payable-recurrences/:id/occurrences`, `GET /payable-recurrences/occurrences`, `GET /payable-recurrences/occurrences/:occId`, `GET /payable-recurrences/occurrences/by-invoice/:invoiceId`, `GET /payable-recurrences/occurrences/linked-invoice-ids`, `GET /payable-recurrences/summary`, `GET /payable-recurrences/summary/monthly`, `PATCH /payable-recurrences/:id`, `PATCH /payable-recurrences/:id/close`, … — lista completa e permissões em `docs/matriz-autorizacao.md`.
+- Endpoints (24, sob `/api`): `DELETE /payable-recurrences/:id/document`, `DELETE /payable-recurrences/occurrences/:occId`, `DELETE /payable-recurrences/occurrences/:occId/document`, `GET /payable-recurrences`, `GET /payable-recurrences/:id`, `GET /payable-recurrences/:id/occurrences`, `GET /payable-recurrences/occurrences`, `GET /payable-recurrences/occurrences/:occId`, `GET /payable-recurrences/occurrences/by-invoice/:invoiceId`, `GET /payable-recurrences/occurrences/linked-invoice-ids`, `GET /payable-recurrences/summary`, `GET /payable-recurrences/summary/monthly`, `PATCH /payable-recurrences/:id`, `PATCH /payable-recurrences/:id/close`, … — lista completa e permissões em `docs/matriz-autorizacao.md`.
 
 ## Dependências
 Sem dependências diretas de outros módulos (integrações via portas no composition root / `src/server.ts`).
@@ -22,4 +22,4 @@ Ver «Decisões de design» no README do módulo.
 Ver «Pontos de atenção» no README do módulo.
 
 ## Próximos trabalhos
-Nenhum registado.
+- 2026-10-26 (ramo `financeiro-recorrencias`, por publicar, **com migração** `20261128100000_recurrences_employee_and_paused_at`): recorrências de salários ligadas ao colaborador do RH (`employee_id`, `GET /payable-recurrences/employees`) e data de pausa (`paused_at`) para a vista «Histórico». No frontend a aba abre na vista mensal e tem o seletor «Do mês | Histórico».
