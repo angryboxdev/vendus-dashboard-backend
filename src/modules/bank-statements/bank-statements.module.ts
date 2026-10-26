@@ -3,6 +3,8 @@ import { PreviewStatementAccountUseCase } from "./application/use-cases/preview-
 import type { ResolveStatementAccountPort } from "../bank-accounts/domain/ports/in/bank-accounts.ports.js";
 import { ReadStatementPdfUseCase } from "./application/use-cases/read-statement-pdf.use-case.js";
 import { PdfjsStatementTextAdapter } from "./adapters/out/pdfjs-statement-text.adapter.js";
+import { DescribeMovementUseCase } from "./application/use-cases/describe-movement.use-case.js";
+import type { DescribeMovementPort } from "./domain/ports/in/describe-movement.port.js";
 import type { Router } from "express";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 
@@ -72,7 +74,7 @@ import type { ListSuppliersPort } from "../financial-base/domain/ports/in/suppli
  * temporary fallback that used to query `bank_accounts` directly is gone
  * (see the module README's Ports section for the cross-module note).
  */
-export function createBankStatementsModule(bankAccountRead: BankAccountReadPort, listSuppliers: ListSuppliersPort, resolveStatementAccount?: ResolveStatementAccountPort): { router: Router } {
+export function createBankStatementsModule(bankAccountRead: BankAccountReadPort, listSuppliers: ListSuppliersPort, resolveStatementAccount?: ResolveStatementAccountPort): { router: Router; describeMovement: DescribeMovementPort } {
   // V2 (F3): banco e conta encontrados ou criados a partir do extrato (módulo bank-accounts, D10).
   const accountResolver = resolveStatementAccount ? new BankAccountsStatementAccountAdapter(resolveStatementAccount) : undefined;
   // Adapters out
@@ -162,5 +164,6 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
     updateRule,
   );
 
-  return { router: controller.router };
+  // Para o módulo cash-flow (ligado em server.ts): tipo genérico de um movimento.
+  return { router: controller.router, describeMovement: new DescribeMovementUseCase() };
 }

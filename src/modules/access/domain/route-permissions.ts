@@ -59,7 +59,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/air-menu(\/|$)/, target: p("sales.air_menu") },
 
   // ── DRE ──────────────────────────────────────────────────────────────
-  { pattern: /^\/api\/reports\/dre\/(receita-bruta|kpis)$/, target: p("dre.statement") },
+  { pattern: /^\/api\/reports\/dre\/(receita-bruta|kpis|fluxo-caixa)$/, target: p("dre.statement") },
   { pattern: /^\/api\/reports\/dre\/custos-fixos(\/|$)/, target: p("dre.fixed_costs") },
   { pattern: /^\/api\/reports\/dre\/custos-variaveis(\/|$)/, target: p("dre.variable_costs") },
 
