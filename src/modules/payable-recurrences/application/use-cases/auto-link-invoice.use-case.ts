@@ -33,8 +33,9 @@ export class AutoLinkInvoiceUseCase implements AutoLinkInvoicePort {
     if (already) return { outcome: "already_linked", occurrenceId: already.id, candidateCount: 0 };
 
     const candidates = await resolveInvoiceCandidates(query.organizationId, members, this.recurrenceRepo, this.occurrenceRepo);
-    if (candidates.length !== 1) {
-      return { outcome: candidates.length > 1 ? "suggested" : "none", occurrenceId: null, candidateCount: candidates.length };
+    // Associa sozinho só com um único candidato encontrado pelo fornecedor; por categoria + nome só sugere.
+    if (candidates.length !== 1 || candidates[0]!.matchedBy !== "supplier") {
+      return { outcome: candidates.length ? "suggested" : "none", occurrenceId: null, candidateCount: candidates.length };
     }
 
     const only = candidates[0]!;

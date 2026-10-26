@@ -212,6 +212,7 @@ _Avoid_: «fatura agrupada», juntar as faturas numa só (mistura emitentes e IV
 Ao lançar uma fatura (criação manual ou confirmação da importação), o módulo
 `payable-recurrences` procura a ocorrência a que pertence: recorrências ativas do mesmo
 fornecedor (de qualquer fatura do documento de pagamento), desempate pela sub-categoria e
-categoria, mês da emissão ou o anterior em aberto. Um único candidato → associa e o previsto
-passa a real; vários → sugestões na fatura. Desvio ≥ 20 % face ao previsto → associa e avisa.
+categoria, mês da emissão ou o anterior em aberto; sem nenhuma pelo fornecedor, as de mesma
+categoria e nome parecido (só como sugestão). Nunca pelo valor — o previsto é estimado. Um único
+candidato pelo fornecedor → associa e o previsto passa a real; nos outros casos → sugestões na fatura. Desvio ≥ 20 % face ao previsto → associa e avisa.
 _Avoid_: «vincular» automático sem candidato único (nunca se adivinha entre recorrências).
