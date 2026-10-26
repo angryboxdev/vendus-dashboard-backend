@@ -40,13 +40,10 @@ export class SupabasePurchasePresentationRepository implements PurchasePresentat
     return data ? toEntity(data as unknown as Record<string, unknown>) : null;
   }
 
-  async listActiveBySupplier(organizationId: OrganizationId, supplierId: string): Promise<PurchasePresentation[]> {
-    const { data, error } = await this.scopedQuery(organizationId)
-      .table("supplier_purchase_presentations")
-      .select("*")
-      .eq("supplier_id", supplierId)
-      .is("superseded_at", null)
-      .order("description", { ascending: true });
+  async listActiveBySupplier(organizationId: OrganizationId, supplierId: string | null): Promise<PurchasePresentation[]> {
+    let q = this.scopedQuery(organizationId).table("supplier_purchase_presentations").select("*").is("superseded_at", null);
+    if (supplierId) q = q.eq("supplier_id", supplierId);
+    const { data, error } = await q.order("description", { ascending: true });
     if (error) throw new Error(error.message);
     return ((data ?? []) as unknown as Record<string, unknown>[]).map(toEntity);
   }

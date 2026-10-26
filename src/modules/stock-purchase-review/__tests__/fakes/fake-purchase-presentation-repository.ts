@@ -8,8 +8,8 @@ export class FakePurchasePresentationRepository implements PurchasePresentationR
   async findActive(_o: OrganizationId, supplierId: string, matchKey: string) {
     return this.rows.find((r) => r.matchKey === matchKey && r.p.toProps().supplierId === supplierId && !r.p.toProps().supersededAt)?.p ?? null;
   }
-  async listActiveBySupplier(_o: OrganizationId, supplierId: string) {
-    return this.rows.filter((r) => r.p.toProps().supplierId === supplierId && !r.p.toProps().supersededAt).map((r) => r.p);
+  async listActiveBySupplier(_o: OrganizationId, supplierId: string | null) {
+    return this.rows.filter((r) => (supplierId === null || r.p.toProps().supplierId === supplierId) && !r.p.toProps().supersededAt).map((r) => r.p);
   }
   async history(_o: OrganizationId, supplierId: string, matchKey: string) {
     return this.rows.filter((r) => r.matchKey === matchKey && r.p.toProps().supplierId === supplierId).map((r) => r.p).reverse();

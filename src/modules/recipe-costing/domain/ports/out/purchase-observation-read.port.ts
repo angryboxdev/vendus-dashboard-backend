@@ -6,4 +6,6 @@ export interface PurchaseObservationReadPort {
   /** `null` quando o artigo não existe nesta empresa. */
   findItem(organizationId: OrganizationId, stockItemId: string): Promise<{ id: string; name: string; baseUnit: string } | null>;
   listForItem(organizationId: OrganizationId, stockItemId: string): Promise<PurchaseObservation[]>;
+  /** Todas as compras confirmadas da empresa, agrupadas por artigo. */
+  listAll(organizationId: OrganizationId): Promise<Map<string, PurchaseObservation[]>>;
 }
