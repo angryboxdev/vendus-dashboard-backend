@@ -1,6 +1,7 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { GetRecipeCostingUseCase } from "../../application/use-cases/get-recipe-costing.use-case.js";
 import { FakeRecipeCostingRead } from "../fakes/fake-recipe-costing-read.js";
+import { FakeMenuCostingSettings } from "../fakes/fake-menu-costing-settings.js";
 
 const ORG = mintOrganizationId("org-test");
 
@@ -17,7 +18,7 @@ describe("GetRecipeCostingUseCase", () => {
       }],
     };
 
-    const report = await new GetRecipeCostingUseCase(reader).execute({ organizationId: ORG });
+    const report = await new GetRecipeCostingUseCase(reader, new FakeMenuCostingSettings()).execute({ organizationId: ORG });
 
     expect(reader.calls).toEqual([ORG]);
     expect(report.dishes[0]!.sizes[0]).toMatchObject({ costWithoutVat: 0.5, salePrice: 8, complete: true });

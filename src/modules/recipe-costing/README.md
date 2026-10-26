@@ -47,6 +47,7 @@ Leitura e cálculo, sem escrita: `GET /api/recipe-costing` devolve o custo de ca
 ### Entrada (casos de uso)
 
 - `GetRecipeCostingPort` — relatório de custo da organização.
+- `GetMenuCostingSettingsPort` / `SaveMenuCostingSettingsPort` — taxa de IVA das vendas por empresa para a margem (V7; sem linha = 13%).
 - `GetIngredientsCostOverviewPort` — último custo, referência comparativa e série semanal de todos os artigos com compras confirmadas (task V6; `ingredient-overview.service.ts`).
 - `GetIngredientUsagePort` — fichas técnicas que usam o artigo, diretamente ou via preparo, com o custo da linha e o peso no prato (`ingredient-usage.service.ts`).
 - `GetDishesImpactPort` — custo atual de cada pizza face a há N semanas, com a diferença por ingrediente e o fator principal (`dish-impact.service.ts`).
@@ -54,6 +55,7 @@ Leitura e cálculo, sem escrita: `GET /api/recipe-costing` devolve o custo de ca
 ### Saída (dependências do domínio)
 
 - `RecipeCostingReadPort` — `loadSnapshot(org)`.
+- `MenuCostingSettingsRepositoryPort` — `menu_costing_settings` (uma linha por empresa; migração `20261129100000`).
 - `PurchaseObservationReadPort` — compras confirmadas de um artigo (`listForItem`) ou de todos (`listAll`, paginado).
 - `DishWeeklyCostReadPort` — versões das fichas; `listPizzas` e `listLatestPizzaVersions` para o impacto.
 
@@ -69,6 +71,8 @@ Leitura e cálculo, sem escrita: `GET /api/recipe-costing` devolve o custo de ca
 
 ## Decisões de design
 
+- **Margem e variante XS (task V7, decisão do utilizador 2026-10-26).** Substitui a decisão anterior de não mostrar margem. Por tamanho: `margin = { netSalePrice = PVP ÷ (1 + IVA), marginWithoutVat = netSalePrice − custo, marginRatio, foodCostRatio }`, **só com custo completo e PVP > 0** (nunca sobre custo parcial). IVA das vendas por empresa em `menu_costing_settings` (`GET/PUT /recipe-costing/settings`); sem linha vale 13% (taxa intermédia; a Vendus marca os pratos «INT») — validar com a contabilidade. Uma linha de preparação sem ingredientes deixa o tamanho parcial. Tamanhos `xs → small → large`; XS só nas doces e = metade da Pequena (regra aplicada ao gravar, no frontend). O relatório inclui `preparations` (custo do lote) para a lista de Preparações sem um pedido por preparação.
+
 - **Custos na lista de artigos e impacto nas pizzas (task V6).** «Último custo» = última compra confirmada (nunca o manual: sem compra → «Sem custo conhecido»; o manual aparece à parte como «Custo manual»). **Referência comparativa** = média ponderada das compras confirmadas nas 12 semanas anteriores à última compra (sem compras nesse intervalo → «Histórico insuficiente», sem variação). Impacto = **ficha técnica atual** aplicada aos preços de cada semana (reconstruído, assim rotulado — não é o custo histórico com a versão em vigor, que está no custo semanal V5); só é comparável com as duas semanas completas; a soma das diferenças por linha dá a variação. Sem margem (sem regra de IVA das vendas).
 
 - **Custo teórico semanal da pizza (task V5 §6).** Versões das fichas em `recipe_versions` (migração `20261118100000`), gravadas por **triggers** a cada alteração de `pizza_recipe_items`/`pizza_recipes`/`preparation_items`/`preparations` (rendimento/«usar como unidade»; só o nome não conta) — qualquer caminho de escrita, incluindo o legado. Uma versão por entidade e por transação; a migração grava a versão inicial («a partir de agora»). Cada semana usa a versão em vigor no fim da semana (e a dos preparos); antes da primeira versão: «sem versão histórica» (nunca se fabrica histórico). Preço do ingrediente na semana: média ponderada das compras → último preço transportado → custo manual (assinalado) → sem preço (semana «incompleta», nunca zero). Soma com precisão total, arredondamento só no fim. CMV teórico, não consumo; não mexe no Stock.
@@ -77,7 +81,7 @@ Leitura e cálculo, sem escrita: `GET /api/recipe-costing` devolve o custo de ca
 
 - **A fatura manda.** Mesma precedência do catálogo (`stockItemService.effectiveLastPurchaseCosts`): último movimento `purchase` com custo; só sem compra se usa o manual. Um preço manual não apaga nem bloqueia a fatura seguinte — fica guardado mas deixa de contar.
 - **Calculado a cada leitura**, sem tabela nem cache: o custo acompanha sozinho cada fatura confirmada, sem jobs nem migração.
-- **Custo s/ IVA.** O PVP vem como está em `pizza_prices`; não se calcula margem/percentagem por agora, para não misturar bases de IVA (a taxa de IVA da venda não está modelada).
+- **Custo s/ IVA.** O PVP vem como está em `pizza_prices` (com IVA); a margem converte-o para s/ IVA com a taxa da empresa (ver V7 acima).
 - **Perda incluída no custo** (`waste_factor`), ao contrário do consumo de stock, que não a aplica.
 - Último preço (não média ponderada), igual ao resto do Stock.
 
