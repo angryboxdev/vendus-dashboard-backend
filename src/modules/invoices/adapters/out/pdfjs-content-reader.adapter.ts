@@ -8,11 +8,17 @@ import { scanCode128 } from "./barcode/code128.js";
 /**
  * Lê o PDF localmente: texto nativo com posições (pdfjs, já trazido pelo `pdf-parse`)
  * e QR codes (jsqr) — primeiro nas imagens incorporadas; só se não houver QR
- * fiscal assim, rasteriza a 1.ª página. Nada sai do servidor.
+ * fiscal assim, rasteriza as páginas e procura por janelas (QR em vetor, noutra
+ * página que não a 1.ª, ou vários no mesmo documento). Nada sai do servidor.
  */
 
 type ImageData = { width: number; height: number; data: Uint8Array | Uint8ClampedArray; kind?: number };
-type JsQr = (data: Uint8ClampedArray, width: number, height: number) => { data: string } | null;
+type JsQr = (
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  options?: { inversionAttempts?: "dontInvert" | "onlyInvert" | "attemptBoth" | "invertFirst" },
+) => { data: string } | null;
 
 // jsqr é CommonJS com `exports.default`: em ESM o default chega embrulhado.
 const jsqrExport = jsqrModule as unknown as JsQr | { default: JsQr };
@@ -20,6 +26,14 @@ const jsQR: JsQr = typeof jsqrExport === "function" ? jsqrExport : jsqrExport.de
 
 const MAX_PAGES = 30;
 const IMAGE_TIMEOUT_MS = 1500;
+/** Páginas rasterizadas à procura de QR em vetor (documentos de pagamento trazem as faturas no fim). */
+const MAX_RASTER_PAGES = 4;
+/**
+ * Escalas tentadas por ordem: numa página inteira o jsqr perde-se com tabelas e logótipos à volta,
+ * e cada escala falha em documentos diferentes (ex.: documento de pagamento das águas lê a 2 e a 4,
+ * não a 3) — por isso janelas e mais de uma escala.
+ */
+const RASTER_SCALES = [2, 4] as const;
 
 function toRgba(img: ImageData): Uint8ClampedArray {
   const { width: w, height: h, data, kind } = img;
@@ -134,8 +148,7 @@ export class PdfjsContentReaderAdapter implements PdfContentReaderPort {
         }
       }
       if (!content.qrCodes.some((q) => q.text.startsWith("A:"))) {
-        const rendered = await this.qrFromRenderedFirstPage(fileBuffer);
-        if (rendered) content.qrCodes.push({ page: 1, text: rendered });
+        content.qrCodes.push(...(await this.qrsFromRenderedPages(fileBuffer)));
       }
       return content;
     } finally {
@@ -253,21 +266,43 @@ export class PdfjsContentReaderAdapter implements PdfContentReaderPort {
     }
   }
 
-  /** QR desenhado em vetor (sem imagem): rasterizar só a 1.ª página. */
-  private async qrFromRenderedFirstPage(buffer: Buffer): Promise<string | null> {
+  /**
+   * QR desenhado em vetor (sem imagem): rasteriza até MAX_RASTER_PAGES páginas e procura em janelas
+   * sobrepostas (½ da largura × ⅓ da altura, passo de metade) — cada janela tem um só QR e pouco
+   * ruído à volta, e assim apanham-se vários QR na mesma página. Para na primeira escala que encontre
+   * QR fiscais; devolve-os sem repetidos, pela ordem da página (cima → baixo, esquerda → direita).
+   */
+  private async qrsFromRenderedPages(buffer: Buffer): Promise<{ page: number; text: string }[]> {
     try {
       const { createCanvas, loadImage } = await import("@napi-rs/canvas");
-      for await (const png of await pdfToImg(buffer, { scale: 3 })) {
-        const image = await loadImage(png as Buffer);
-        const canvas = createCanvas(image.width, image.height);
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(image, 0, 0);
-        const { data, width, height } = ctx.getImageData(0, 0, image.width, image.height);
-        return jsQR(data, width, height)?.data ?? null;
+      for (const scale of RASTER_SCALES) {
+        const found: { page: number; text: string }[] = [];
+        let page = 0;
+        for await (const png of await pdfToImg(buffer, { scale })) {
+          if (++page > MAX_RASTER_PAGES) break;
+          const image = await loadImage(png as Buffer);
+          const { width: W, height: H } = image;
+          const canvas = createCanvas(W, H);
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(image, 0, 0);
+          const tw = Math.round(W / 2);
+          const th = Math.round(H / 3);
+          for (let y = 0; y < H; y += Math.round(th / 2)) {
+            for (let x = 0; x < W; x += Math.round(tw / 2)) {
+              const w = Math.min(tw, W - x);
+              const h = Math.min(th, H - y);
+              if (w < 21 || h < 21) continue;
+              const { data } = ctx.getImageData(x, y, w, h);
+              const text = jsQR(data, w, h, { inversionAttempts: "dontInvert" })?.data;
+              if (text && !found.some((q) => q.text === text)) found.push({ page, text });
+            }
+          }
+        }
+        if (found.some((q) => q.text.startsWith("A:"))) return found;
       }
     } catch {
-      return null;
+      return [];
     }
-    return null;
+    return [];
   }
 }

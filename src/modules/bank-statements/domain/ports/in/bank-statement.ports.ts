@@ -659,6 +659,8 @@ export interface GroupedSettlementCombinationDto {
   netTotalCents: number;
   /** Always true — only true 0-cent-difference combinations are ever surfaced (see matcher service doc comment). */
   isExactMatch: true;
+  /** Presente quando a combinação é um documento de pagamento com várias faturas (ex.: águas + resíduos, emitentes diferentes). */
+  paymentGroupId?: string;
 }
 
 export interface GetGroupedSettlementSuggestionsQuery {

@@ -23,6 +23,11 @@ import type {
   ListOccurrencesForPeriodPort,
 } from "../../domain/ports/in/occurrence.ports.js";
 import type { GenerateBatchOccurrencesPort } from "../../domain/ports/in/batch.ports.js";
+import type {
+  GetInvoiceRecurrenceStatusPort,
+  LinkInvoiceToRecurrencePort,
+  UnlinkInvoiceFromOccurrencePort,
+} from "../../domain/ports/in/invoice-link.ports.js";
 import type { UploadRecurrenceDocumentUseCase } from "../../application/use-cases/upload-recurrence-document.use-case.js";
 import type { DeleteRecurrenceDocumentUseCase } from "../../application/use-cases/delete-recurrence-document.use-case.js";
 import type { UploadOccurrenceDocumentUseCase } from "../../application/use-cases/upload-occurrence-document.use-case.js";
@@ -66,6 +71,9 @@ interface RecurrencePorts {
   getRecurrenceSummary: GetRecurrenceSummaryPort;
   getMonthlySummary: GetMonthlySummaryPort;
   listOccurrencesForPeriod: ListOccurrencesForPeriodPort;
+  getInvoiceRecurrenceStatus: GetInvoiceRecurrenceStatusPort;
+  linkInvoiceToRecurrence: LinkInvoiceToRecurrencePort;
+  unlinkInvoiceFromOccurrence: UnlinkInvoiceFromOccurrencePort;
 }
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -113,6 +121,52 @@ export function createRecurrenceRouter(ports: RecurrencePorts): Router {
     try {
       const employees = await ports.listRecurrenceEmployees.execute({ organizationId: req.auth!.orgId });
       res.json(employees);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // GET /payable-recurrences/invoice-links/:invoiceId — associação da fatura ou sugestões
+  router.get("/payable-recurrences/invoice-links/:invoiceId", async (req, res) => {
+    try {
+      const status = await ports.getInvoiceRecurrenceStatus.execute({
+        organizationId: req.auth!.orgId,
+        invoiceId: req.params.invoiceId,
+      });
+      res.json(status);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // POST /payable-recurrences/invoice-links — body: { invoiceId, recurrenceId, period }
+  router.post("/payable-recurrences/invoice-links", async (req, res) => {
+    try {
+      const { invoiceId, recurrenceId, period } = req.body as { invoiceId?: unknown; recurrenceId?: unknown; period?: unknown };
+      if (typeof invoiceId !== "string" || typeof recurrenceId !== "string" || typeof period !== "string") {
+        res.status(400).json({ error: "invoiceId, recurrenceId e period (YYYY-MM) são obrigatórios" });
+        return;
+      }
+      const occ = await ports.linkInvoiceToRecurrence.execute({
+        organizationId: req.auth!.orgId,
+        invoiceId,
+        recurrenceId,
+        period,
+      });
+      res.status(201).json(occ);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // DELETE /payable-recurrences/occurrences/:occId/invoice — «Desassociar»
+  router.delete("/payable-recurrences/occurrences/:occId/invoice", async (req, res) => {
+    try {
+      const occ = await ports.unlinkInvoiceFromOccurrence.execute({
+        organizationId: req.auth!.orgId,
+        occurrenceId: req.params.occId,
+      });
+      res.json(occ);
     } catch (err) {
       handleError(res, err);
     }

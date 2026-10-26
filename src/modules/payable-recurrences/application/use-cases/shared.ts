@@ -1,6 +1,11 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { Recurrence } from "../../domain/entities/recurrence.js";
-import { RecurrenceOccurrence, computeOccurrenceDisplayState } from "../../domain/entities/recurrence-occurrence.js";
+import {
+  RecurrenceOccurrence,
+  computeOccurrenceDisplayState,
+  invoiceDeviationPercent,
+  INVOICE_DEVIATION_WARNING_PERCENT,
+} from "../../domain/entities/recurrence-occurrence.js";
 import type { RecurrenceDTO } from "../../domain/ports/in/recurrence.ports.js";
 import type { OccurrenceDTO } from "../../domain/ports/in/occurrence.ports.js";
 import type { BankMovementLinkReadPort, LinkedBankMovement } from "../../domain/ports/out/bank-movement-link-read.port.js";
@@ -9,6 +14,7 @@ import type { RecurrenceRepositoryPort } from "../../domain/ports/out/recurrence
 import type { OccurrenceRepositoryPort } from "../../domain/ports/out/occurrence-repository.port.js";
 import { OccurrenceGeneratorService } from "../../domain/services/occurrence-generator.service.js";
 import type { EmployeeDirectoryReadPort, RecurrenceEmployee } from "../../domain/ports/out/employee-directory-read.port.js";
+import type { InvoiceReadPort, InvoiceSnapshot } from "../../domain/ports/out/invoice-read.port.js";
 import { RecurrenceEmployeeNotFoundError } from "../../domain/errors.js";
 
 /** Serializes a Date to YYYY-MM-DD using local time (avoids UTC offset shifting the day). */
@@ -79,6 +85,7 @@ export function toOccurrenceDTO(
   const paidAmountCents = o.invoiceId
     ? (opts.allocatedInvoiceAmountCents ?? 0)
     : linkedBankMovements.reduce((sum, m) => sum + m.amountCents, 0);
+  const deviation = invoiceDeviationPercent(o);
 
   return {
     id: o.id,
@@ -101,6 +108,8 @@ export function toOccurrenceDTO(
     paidAmountCents,
     differenceCents: paidAmountCents - o.effectiveAmountCents,
     displayState: computeOccurrenceDisplayState(o, paidAmountCents),
+    invoiceDeviationPercent: deviation,
+    invoiceDeviationWarning: deviation !== null && Math.abs(deviation) >= INVOICE_DEVIATION_WARNING_PERCENT,
     createdAt: o.createdAt.toISOString(),
     updatedAt: o.updatedAt.toISOString(),
   };
@@ -118,21 +127,30 @@ export async function enrichOccurrencesWithPayments(
   bankMovementLinkRead: BankMovementLinkReadPort,
   invoiceAllocatedAmountRead: InvoiceAllocatedAmountReadPort,
   organizationId: OrganizationId,
+  /** Com ela, «Pago» de uma ocorrência ligada a um documento de pagamento soma as faturas todas do documento. */
+  invoiceRead: InvoiceReadPort | null = null,
 ): Promise<OccurrenceDTO[]> {
   if (occurrences.length === 0) return [];
 
   const occurrenceIds = occurrences.map((o) => o.id);
   const invoiceIds = occurrences.map((o) => o.invoiceId).filter((id): id is string => id != null);
+  const groups = invoiceRead && invoiceIds.length
+    ? await invoiceRead.findPaymentGroupMembers(organizationId, invoiceIds)
+    : new Map<string, InvoiceSnapshot[]>();
+  const membersOf = (id: string) => groups.get(id)?.map((m) => m.id) ?? [id];
+  const allInvoiceIds = [...new Set(invoiceIds.flatMap(membersOf))];
 
   const [bankLinks, allocatedAmounts] = await Promise.all([
     bankMovementLinkRead.findByOccurrenceIds(organizationId, occurrenceIds),
-    invoiceAllocatedAmountRead.findAllocatedAmounts(organizationId, invoiceIds),
+    invoiceAllocatedAmountRead.findAllocatedAmounts(organizationId, allInvoiceIds),
   ]);
 
   return occurrences.map((o) =>
     toOccurrenceDTO(o, {
       linkedBankMovements: bankLinks.get(o.id) ?? [],
-      allocatedInvoiceAmountCents: o.invoiceId ? (allocatedAmounts.get(o.invoiceId) ?? 0) : undefined,
+      allocatedInvoiceAmountCents: o.invoiceId
+        ? membersOf(o.invoiceId).reduce((sum, id) => sum + (allocatedAmounts.get(id) ?? 0), 0)
+        : undefined,
     }),
   );
 }

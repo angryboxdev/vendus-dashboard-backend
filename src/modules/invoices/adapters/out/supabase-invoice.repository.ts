@@ -52,6 +52,7 @@ function toEntity(row: Record<string, unknown>): Invoice {
     stockReviewOverride: ((row.stock_review_override as string | null) ?? "auto") as StockReviewOverride,
     stockReviewOverrideReason: (row.stock_review_override_reason as string | null) ?? null,
     importOrigin: row.import_origin === "stock" ? "stock" : null,
+    paymentGroupId: (row.payment_group_id as string | null) ?? null,
     obligation:
       row.document_kind === "tax_obligation" || row.document_kind === "contribution_obligation"
         ? { kind: row.document_kind, paymentReference: (row.payment_reference as string | null) ?? null, mbEntity: (row.mb_entity as string | null) ?? null, period: (row.obligation_period as string | null) ?? null }
@@ -239,6 +240,22 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
     if (error) throw new Error(error.message);
     const row = ((data ?? []) as unknown as Record<string, unknown>[])[0];
     return row ? toEntity(row) : null;
+  }
+
+  async setPaymentGroup(organizationId: OrganizationId, invoiceIds: string[], groupId: string): Promise<void> {
+    if (!invoiceIds.length) return;
+    const { error } = await this.scopedQuery(organizationId).table("invoices").update({ payment_group_id: groupId }).in("id", invoiceIds);
+    if (error) throw new Error(error.message);
+  }
+
+  async findByPaymentGroup(organizationId: OrganizationId, groupId: string): Promise<Invoice[]> {
+    const { data, error } = await this.scopedQuery(organizationId)
+      .table("invoices")
+      .select("*")
+      .eq("payment_group_id", groupId)
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map(toEntity);
   }
 
   async setFileHash(organizationId: OrganizationId, invoiceId: string, sha256: string): Promise<void> {

@@ -22,4 +22,5 @@ Ver «Decisões de design» no README do módulo.
 Ver «Pontos de atenção» no README do módulo.
 
 ## Próximos trabalhos
+- 2026-10-26 (ramo `financeiro-faturas-recorrencias`): liquidação agrupada sugere o documento de pagamento inteiro (faturas de emitentes diferentes com o mesmo `payment_group_id`, soma exata) — ADR-0041.
 Nenhum registado.

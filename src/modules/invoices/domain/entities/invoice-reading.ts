@@ -112,6 +112,8 @@ export type ReadingIssueCode =
   | "qr_missing"
   | "qr_invalid"
   | "qr_totals_inconsistent"
+  /** O PDF traz mais de uma fatura fiscal (documento de pagamento) — lida a primeira. */
+  | "qr_multiple_documents"
   | "qr_header_mismatch"
   | "qr_vat_table_mismatch"
   | "layout_unknown"
