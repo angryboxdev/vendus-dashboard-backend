@@ -204,3 +204,26 @@ describe("Associar à mão, desassociar e fatura apagada", () => {
     expect(linked?.occurrence.invoiceDeviationWarning).toBe(true);
   });
 });
+
+describe("Sem o mesmo fornecedor — categoria + nome só sugere", () => {
+  it("recorrência «Energia» sem fornecedor, mesma sub-categoria: sugere, não associa sozinho", async () => {
+    const s = make();
+    await s.create.execute({ ...BASE_REC, supplierId: null, supplierName: "Energia loja", costCenterId: "g-util", costCenterCategoryId: "c-luz" });
+    s.invoiceRead.seed(organizationId, { ...BASE_INV, supplierId: "sup-novo", supplierName: "Energia Exemplo Lda", costCenterGroupId: "g-util", costCenterCategoryId: "c-luz" });
+
+    const result = await s.auto.execute({ organizationId, invoiceId: "inv-1" });
+    expect(result).toEqual({ outcome: "suggested", occurrenceId: null, candidateCount: 1 });
+
+    const status = await s.status.execute({ organizationId, invoiceId: "inv-1" });
+    expect(status.candidates.map((c) => [c.recurrenceName, c.matchedBy, c.period])).toEqual([["Energia", "category_name", "2026-10"]]);
+  });
+
+  it("pelo fornecedor continua a associar sozinho", async () => {
+    const s = make();
+    await s.create.execute(BASE_REC);
+    s.invoiceRead.seed(organizationId, BASE_INV);
+    const status0 = await s.status.execute({ organizationId, invoiceId: "inv-1" });
+    expect(status0.candidates[0]?.matchedBy).toBe("supplier");
+    expect((await s.auto.execute({ organizationId, invoiceId: "inv-1" })).outcome).toBe("linked");
+  });
+});

@@ -474,10 +474,14 @@ pausada (`paused_at`) ou encerrada (`closed_at`). Guarda-se só a pausa atual (l
 retomar); um histórico completo de pausas/retomas exigiria uma tabela de eventos e não foi
 pedido.
 
-**D15 — Fatura lançada → recorrência: associa só com um único candidato.**
-Candidatos = recorrências ativas do fornecedor (de qualquer fatura do documento de pagamento);
-a sub-categoria e depois a categoria só desempatam (um filtro que deixasse zero candidatos é
-ignorado). Mês = o da emissão; se essa ocorrência já tem fatura, está paga/cancelada ou nem
+**D15 — Fatura lançada → recorrência: nunca pelo valor; associa só com um único candidato pelo fornecedor.**
+O previsto é estimado, por isso o valor nunca entra na escolha (só no aviso D16). Candidatos =
+recorrências ativas do mesmo fornecedor (de qualquer fatura do documento de pagamento); a
+sub-categoria e depois a categoria só desempatam (um filtro que deixasse zero candidatos é
+ignorado). Sem nenhuma pelo fornecedor (recorrência sem fornecedor, ou com outro), contam as de
+mesma categoria/sub-categoria **e** nome parecido (palavra significativa em comum, sem acentos e
+no singular — «Água» ↔ «Águas do Porto»; `matchedBy: "category_name"`) — essas **só sugerem**,
+nunca associam sozinhas (decisão do utilizador, 2026-10-26). Mês = o da emissão; se essa ocorrência já tem fatura, está paga/cancelada ou nem
 existe no âmbito, o anterior em aberto (ex.: luz de setembro faturada em outubro). Vários
 candidatos → sugestões na fatura, nunca adivinhar. Notas de crédito, rascunhos da IA e faturas
 sem fornecedor nunca se associam sozinhas. Ocorrências pagas não recebem fatura. Falhar aqui

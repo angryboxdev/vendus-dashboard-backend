@@ -5,6 +5,8 @@ import type { OccurrenceDTO } from "./occurrence.ports.js";
 export interface InvoiceRecurrenceCandidateDTO {
   recurrenceId: string;
   recurrenceName: string;
+  /** `supplier` = mesmo fornecedor; `category_name` = mesma categoria e nome parecido (só sugestão). */
+  matchedBy: "supplier" | "category_name";
   supplierName: string;
   period: string; // YYYY-MM
   /** null = a ocorrência desse mês ainda não existe (é gerada ao associar). */

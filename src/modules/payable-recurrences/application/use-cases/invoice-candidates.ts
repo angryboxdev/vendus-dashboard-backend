@@ -5,12 +5,19 @@ import type { InvoiceSnapshot } from "../../domain/ports/out/invoice-read.port.j
 import type { RecurrenceRepositoryPort } from "../../domain/ports/out/recurrence-repository.port.js";
 import type { OccurrenceRepositoryPort } from "../../domain/ports/out/occurrence-repository.port.js";
 import { OccurrenceGeneratorService } from "../../domain/services/occurrence-generator.service.js";
-import { candidateMonthsForInvoice, matchRecurrencesForInvoice } from "../../domain/services/invoice-recurrence-matcher.js";
+import {
+  candidateMonthsForInvoice,
+  matchRecurrencesForInvoice,
+  type RecurrenceMatch,
+  type RecurrenceMatchKind,
+} from "../../domain/services/invoice-recurrence-matcher.js";
 
 const generator = new OccurrenceGeneratorService();
 
 export interface ResolvedInvoiceCandidate {
   recurrence: Recurrence;
+  /** `supplier` pode associar sozinho; `category_name` só sugere. */
+  matchedBy: RecurrenceMatchKind;
   year: number;
   month: number;
   period: string;
@@ -58,26 +65,32 @@ export async function resolveInvoiceCandidates(
 ): Promise<ResolvedInvoiceCandidate[]> {
   if (!members.length) return [];
   const active = await recurrenceRepo.findAll(organizationId, { status: "active" });
-  const matched: Recurrence[] = [];
+  const all: RecurrenceMatch[] = [];
   for (const m of members) {
-    for (const r of matchRecurrencesForInvoice(m, active)) if (!matched.some((x) => x.id === r.id)) matched.push(r);
+    for (const match of matchRecurrencesForInvoice(m, active)) {
+      const prev = all.find((x) => x.recurrence.id === match.recurrence.id);
+      if (!prev) all.push(match);
+      else if (match.matchedBy === "supplier") prev.matchedBy = "supplier";
+    }
   }
+  // Se alguma fatura do documento encontrou recorrências pelo fornecedor, as de categoria + nome não contam.
+  const matched = all.some((x) => x.matchedBy === "supplier") ? all.filter((x) => x.matchedBy === "supplier") : all;
   const months = candidateMonthsForInvoice(members[0]!.invoiceDate);
 
   const out: ResolvedInvoiceCandidate[] = [];
-  for (const recurrence of matched) {
+  for (const { recurrence, matchedBy } of matched) {
     for (const { year, month } of months) {
       const period = generator.toPeriod(year, month);
       const existing = await occurrenceRepo.findByRecurrenceAndPeriod(organizationId, recurrence.id, period);
       if (existing) {
         if (existing.isOpenForInvoice()) {
-          out.push({ recurrence, year, month, period, occurrence: existing });
+          out.push({ recurrence, matchedBy, year, month, period, occurrence: existing });
           break;
         }
         continue;
       }
       if (generator.generateForMonth(recurrence, year, month)) {
-        out.push({ recurrence, year, month, period, occurrence: null });
+        out.push({ recurrence, matchedBy, year, month, period, occurrence: null });
         break;
       }
     }

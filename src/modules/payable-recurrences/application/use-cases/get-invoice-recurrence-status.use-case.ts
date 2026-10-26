@@ -34,7 +34,7 @@ export class GetInvoiceRecurrenceStatusUseCase implements GetInvoiceRecurrenceSt
       return { linked: { occurrence: toOccurrenceDTO(linkedOcc), recurrenceName: rec?.name ?? "—" }, candidates: [] };
     }
 
-    if (!invoice || invoice.documentType === "credit_note" || !members.some((m) => m.supplierId)) return { linked: null, candidates: [] };
+    if (!invoice || invoice.documentType === "credit_note") return { linked: null, candidates: [] };
 
     const documentTotal = members.reduce((sum, m) => sum + m.totalWithVatCents, 0);
     const resolved = await resolveInvoiceCandidates(query.organizationId, members, this.recurrenceRepo, this.occurrenceRepo);
@@ -45,6 +45,7 @@ export class GetInvoiceRecurrenceStatusUseCase implements GetInvoiceRecurrenceSt
         return {
           recurrenceId: c.recurrence.id,
           recurrenceName: c.recurrence.name,
+          matchedBy: c.matchedBy,
           supplierName: c.recurrence.supplierName,
           period: c.period,
           occurrenceId: c.occurrence?.id ?? null,
