@@ -36,6 +36,9 @@ export class FakeBankStatementImportRepository
     if (filter?.accountNumber) {
       results = results.filter((s) => s.accountNumber === filter.accountNumber);
     }
+    if (filter?.bankAccountId) {
+      results = results.filter((s) => s.bankAccountId === filter.bankAccountId);
+    }
     if (filter?.status) {
       results = results.filter((s) => s.status === filter.status);
     }

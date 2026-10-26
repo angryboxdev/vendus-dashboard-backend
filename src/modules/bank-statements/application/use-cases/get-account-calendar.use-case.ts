@@ -1,67 +1,62 @@
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
+import type { BankStatementImportRepositoryPort } from "../../domain/ports/out/bank-statement-import-repository.port.js";
 import type {
   AccountMonthStat,
   GetAccountCalendarPort,
   GetAccountCalendarQuery,
 } from "../../domain/ports/in/bank-statement.ports.js";
 import { RESOLVED_STATUSES } from "../../domain/entities/bank-movement.js";
+import { computeMonthFigures, periodCoversMonth } from "../../domain/services/account-month-stats.service.js";
 
-/** Ratio of resolved movements as a 0–100 percent. 100 when there's nothing to reconcile (division by zero would otherwise be meaningless, and an empty checklist is trivially "done"). */
-function resolvedPercent(resolved: number, total: number): number {
+/** @deprecated Só para os campos antigos (`salesReconciledPercent`/`expensesReconciledPercent`): 100 quando não há nada. */
+function legacyResolvedPercent(resolved: number, total: number): number {
   return total > 0 ? Math.round((resolved / total) * 100) : 100;
 }
 
+/**
+ * Vista anual da conta: os 12 meses, cada um com estado do extrato («Sem extrato» quando nenhum extrato
+ * importado cobre o mês e não há movimentos), conciliação real (nunca 100% num mês vazio) e fluxo de
+ * caixa pelos movimentos importados (entradas, saídas, resultado, saldo inicial/final).
+ */
 export class GetAccountCalendarUseCase implements GetAccountCalendarPort {
-  constructor(private readonly movementRepo: BankMovementRepositoryPort) {}
+  constructor(
+    private readonly movementRepo: BankMovementRepositoryPort,
+    private readonly statementRepo?: Pick<BankStatementImportRepositoryPort, "findAll">,
+  ) {}
 
   async execute({ organizationId, bankAccountId, year }: GetAccountCalendarQuery): Promise<AccountMonthStat[]> {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1; // 1–12
+    const from = new Date(year, 0, 1);
+    const to = new Date(year, 11, 31);
+    const [movements, statements] = await Promise.all([
+      this.movementRepo.findByAccountAndPeriod(organizationId, bankAccountId, from, to),
+      this.statementRepo ? this.statementRepo.findAll(organizationId, { bankAccountId }) : Promise.resolve([]),
+    ]);
 
-    const from = new Date(year, 0, 1);  // Jan 1
-    const to = new Date(year, 11, 31);  // Dec 31
-    const movements = await this.movementRepo.findByAccountAndPeriod(organizationId, bankAccountId, from, to);
-
-    // Group by month
     const byMonth = new Map<number, typeof movements>();
     for (const m of movements) {
       const month = m.bookingDate.getMonth() + 1;
-      const arr = byMonth.get(month) ?? [];
-      arr.push(m);
-      byMonth.set(month, arr);
+      byMonth.set(month, [...(byMonth.get(month) ?? []), m]);
     }
 
-    const maxMonth = year === currentYear ? currentMonth : 12;
     const result: AccountMonthStat[] = [];
-
-    for (let month = 1; month <= maxMonth; month++) {
+    for (let month = 1; month <= 12; month++) {
       const monthMovements = byMonth.get(month) ?? [];
-      const totalMovements = monthMovements.length;
-      const reconciledMovements = monthMovements.filter((m) =>
-        RESOLVED_STATUSES.has(m.reconciliationStatus)
-      ).length;
+      const covered = statements.some((s) => periodCoversMonth({ start: s.periodStart, end: s.periodEnd }, year, month));
+      const figures = computeMonthFigures(monthMovements, covered);
 
       const credits = monthMovements.filter((m) => m.movementType === "credit");
       const debits = monthMovements.filter((m) => m.movementType === "debit");
-      const reconciledCredits = credits.filter((m) => RESOLVED_STATUSES.has(m.reconciliationStatus)).length;
-      const reconciledDebits = debits.filter((m) => RESOLVED_STATUSES.has(m.reconciliationStatus)).length;
-      const totalCreditCents = credits.reduce((s, m) => s + m.amount, 0);
-      const totalDebitCents = debits.reduce((s, m) => s + m.amount, 0);
-
       result.push({
         year,
         month,
-        totalMovements,
-        reconciledMovements,
-        salesReconciledPercent: resolvedPercent(reconciledCredits, credits.length),
-        expensesReconciledPercent: resolvedPercent(reconciledDebits, debits.length),
-        totalCreditCents,
-        totalDebitCents,
-        balanceCents: totalCreditCents - totalDebitCents,
+        ...figures,
+        salesReconciledPercent: legacyResolvedPercent(credits.filter((m) => RESOLVED_STATUSES.has(m.reconciliationStatus)).length, credits.length),
+        expensesReconciledPercent: legacyResolvedPercent(debits.filter((m) => RESOLVED_STATUSES.has(m.reconciliationStatus)).length, debits.length),
+        totalCreditCents: figures.inflowCents,
+        totalDebitCents: figures.outflowCents,
+        balanceCents: figures.netCents,
       });
     }
-
     return result;
   }
 }

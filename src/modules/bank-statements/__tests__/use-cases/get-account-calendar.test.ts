@@ -45,15 +45,9 @@ describe("GetAccountCalendarUseCase", () => {
     useCase = new GetAccountCalendarUseCase(movementRepo);
   });
 
-  it("returns an entry for each month up to current month for current year", async () => {
-    const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth() + 1;
-
-    const result = await useCase.execute({ organizationId, bankAccountId: ACCOUNT_ID, year: currentYear });
-
-    expect(result).toHaveLength(currentMonth);
-    expect(result[0].month).toBe(1);
-    expect(result[result.length - 1].month).toBe(currentMonth);
+  it("devolve sempre os 12 meses (V2: os meses futuros aparecem como «Sem extrato»)", async () => {
+    const result = await useCase.execute({ organizationId, bankAccountId: ACCOUNT_ID, year: new Date().getFullYear() });
+    expect(result.map((m) => m.month)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   });
 
   it("returns 12 months for past years", async () => {

@@ -7,6 +7,7 @@ import type {
   RiskLevel,
 } from "../../entities/bank-movement.js";
 import type { StatementSourceType, StatementStatus } from "../../entities/bank-statement-import.js";
+import type { MonthFigures } from "../../services/account-month-stats.service.js";
 
 // ─── Import ───────────────────────────────────────────────────────────────────
 
@@ -416,18 +417,23 @@ export interface LinkStatementToAccountPort {
 
 // ─── Account calendar ─────────────────────────────────────────────────────────
 
-export interface AccountMonthStat {
+/**
+ * Um mês da vista anual (task «Conciliação bancária V2»): vêm sempre os 12 meses. Estado do extrato e da
+ * conciliação independentes; fluxo de caixa pelos movimentos importados, não pela conciliação.
+ */
+export interface AccountMonthStat extends MonthFigures {
   year: number;
   month: number; // 1–12
-  totalMovements: number;
-  reconciledMovements: number;
-  /** Credits (vendas) resolvidos / total de créditos do mês. 100 quando não há créditos — hoje quase sempre 100%, pois os créditos ficam auto-resolvidos na importação (`conciliado_sem_fatura`). */
+  /** @deprecated use `reconciledPercent` (dava 100 sem movimentos). Mantido para o frontend anterior durante o deploy. */
   salesReconciledPercent: number; // 0–100
-  /** Débitos (despesas) resolvidos / total de débitos do mês — o sinal real de trabalho pendente. 100 quando não há débitos. */
+  /** @deprecated use `reconciledPercent` (dava 100 sem movimentos). */
   expensesReconciledPercent: number; // 0–100
-  totalCreditCents: number; // soma dos créditos do mês ("entrou")
-  totalDebitCents: number; // soma dos débitos do mês ("saiu")
-  balanceCents: number; // totalCreditCents - totalDebitCents
+  /** @deprecated = `inflowCents`. */
+  totalCreditCents: number;
+  /** @deprecated = `outflowCents`. */
+  totalDebitCents: number;
+  /** @deprecated = `netCents`. */
+  balanceCents: number;
 }
 
 export interface GetAccountCalendarQuery {

@@ -104,7 +104,7 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
   const documentStorage = new SupabaseBankDocumentStorageAdapter();
   const uploadMovementDocument = new UploadMovementDocumentUseCase(movementRepo, documentStorage);
   const linkStatementToAccount = new LinkStatementToAccountUseCase(statementRepo, bankAccountRead);
-  const getAccountCalendar = new GetAccountCalendarUseCase(movementRepo);
+  const getAccountCalendar = new GetAccountCalendarUseCase(movementRepo, statementRepo);
   const getAccountMonthDetail = new GetAccountMonthDetailUseCase(movementRepo, entityLinkRepo);
   const getMovementsLinkedToInvoice = new GetMovementsLinkedToInvoiceUseCase(entityLinkRepo, movementRepo);
   const getInvoiceOpenBalances = new GetInvoiceOpenBalancesUseCase(entityLinkRepo, invoiceRead);

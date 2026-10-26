@@ -1,7 +1,7 @@
 # Módulo: bank-statements
 
 > Status: ativo
-> Última atualização: 2026-09-30 ("Liquidação agrupada" — um movimento liquida N faturas/NC do mesmo fornecedor numa transação atómica; ver secção dedicada abaixo)
+> Última atualização: 2026-10-26 (task «Conciliação bancária V2», fase F1: estados do mês, conciliação sobre movimentos conciliáveis, fluxo de caixa mensal/anual e deduplicação pelo saldo; ver «Decisões de design»). Antes: 2026-09-30 ("Liquidação agrupada").
 
 ---
 
@@ -17,9 +17,11 @@ Sem este módulo, o gestor não tem visibilidade sobre se o saldo do banco coinc
 ```
 Gestor Financeiro
 ────────────────────────────────────────────────────────────
-1. Entra na conta bancária → vê calendário anual com 12 cartões de mês
-2. Cada cartão mostra: % de cobertura (dias com movimentos / dias do mês)
-   e % de conciliação (movimentos resolvidos / total de movimentos)
+1. Entra na conta bancária → vê o resumo do ano (entradas, saídas, resultado,
+   meses importados, conciliação) e 12 cartões de mês
+2. Cada cartão mostra o estado do mês (Sem extrato / Importado / Parcial /
+   Conciliado), movimentos, entradas, saídas, resultado e — só com extrato —
+   a % de conciliação (resolvidos / conciliáveis)
 3. Importa extrato (CSV ou XLSX) de qualquer mês ou período:
    - Sistema detecta banco, conta, período, saldos e movimentos
    - Movimentos duplicados (já importados) são ignorados automaticamente
@@ -82,8 +84,9 @@ Gestor Financeiro
 - **Conciliação faseada** — pagamento de uma única fatura distribuído por vários movimentos bancários em momentos diferentes (ex: adiantamento de 30% em Julho e restante em Agosto). Cada movimento é conciliado separadamente, indicando quanto paga desta fatura; o sistema soma todas as alocações para calcular o saldo em aberto e o estado da fatura.
 - **Estado de conciliação da fatura** — classificação automática do grau de cobertura bancária de uma fatura: sem estado (nenhum movimento alocado), "Parcialmente conciliada" (parte do valor está coberta por movimentos bancários) ou "Conciliada" (total coberto, dentro de tolerância de 1€). O estado é recalculado pelo sistema sempre que um movimento é conciliado ou a conciliação é anulada — o gestor nunca precisa de o actualizar manualmente.
 - **Anular conciliação / Anular justificação** — acção que desfaz a conciliação ou a justificação de um movimento: remove todas as ligações (se existirem) e repõe o movimento como pendente ("Saída não justificada"). Para movimentos conciliados com faturas, recalcula o estado de conciliação de cada fatura afectada. Permite corrigir erros de classificação sem perda de dados.
-- **Calendário mensal** — a visão principal de uma conta bancária: um cartão por mês do ano, mostrando o grau de cobertura e de conciliação. O gestor navega pelo calendário para perceber rapidamente que meses estão completos e quais precisam de atenção.
-- **Cobertura** — percentagem de dias do mês que têm pelo menos um movimento bancário registado (ex: 18/31 dias = 58%). Indica se o extrato desse mês foi importado. Um mês com 0% de cobertura não tem extrato ainda.
+- **Calendário mensal** — a visão principal de uma conta bancária: um cartão por mês do ano (sempre os 12), com o estado do extrato, o fluxo de caixa e a conciliação. O gestor navega pelo calendário para perceber rapidamente que meses estão completos e quais precisam de atenção.
+- **Mês com extrato** — há um extrato importado cujo período toca o mês, ou movimentos importados nele. Sem extrato o mês é «Sem extrato»: sem percentagem nem valores.
+- **Movimento conciliável** — todos os importados exceto os créditos aceites automaticamente na importação (`conciliado_sem_fatura` sem justificação nem documento). É a base da % de conciliação.
 - **Slot de dia** — agrupamento de todos os movimentos de uma conta numa data de lançamento específica, independentemente do extrato de que vieram. Permite conciliar dia a dia mesmo que tenham sido importados extratos sobrepostos (ex: extrato de 1–17 e extrato de 15–30 do mesmo mês — os dias 15–17 aparecem num único slot sem duplicados).
 
 ---
@@ -362,6 +365,12 @@ POST   /api/bank-statements/movements/:movId/grouped-settlement              "Li
 ---
 
 ## Decisões de design (ADR resumido)
+
+**Extrato importado ≠ conciliado (V2, F1, 2026-10-26)** — `computeMonthFigures` (`domain/services/account-month-stats.service.ts`): estado `no_statement | imported | partial | reconciled`; `reconciledPercent` é `null` sem extrato ou sem movimentos (antes, `resolvedPercent` devolvia 100 com zero movimentos e os meses vazios apareciam a verde). Fluxo de caixa (entradas, saídas, resultado) pelos movimentos importados, independente da conciliação. Saldo inicial/final do mês pela cadeia «saldo antes → saldo depois» (não depende da ordem dentro do dia). O calendário devolve sempre os 12 meses; os campos antigos (`salesReconciledPercent`…) ficam como `@deprecated` só para o frontend anterior durante o deploy.
+
+**Créditos aceites automaticamente não contam para a %** — os créditos nascem `conciliado_sem_fatura`; contá-los fazia um mês acabado de importar nunca estar a 0% (cenário 4 da task). Um crédito justificado ou ligado a documento volta a contar.
+
+**Deduplicação um-para-um pelo saldo (V2, F1)** — `selectNewMovements` (`movement-dedup.service.ts`) compara com os movimentos já gravados da mesma conta no período do ficheiro: primeiro data + valor + tipo + saldo após o movimento (quando o ficheiro traz saldos), depois data + valor + tipo + descrição normalizada. Antes, o hash `conta|data|descrição|valor|tipo` tratava o 2.º movimento igual do mesmo dia (dois créditos TPA iguais) como duplicado e perdia-o, e o mesmo movimento vindo de XLSX e PDF (descrições diferentes) duplicava. O `deduplication_hash` passa a ser só um identificador único (inclui o extrato e a ordem de repetição); movimentos antigos mantêm o hash antigo. Limite: ficheiros sem saldos comparam pela descrição — formatos diferentes sem saldos podem duplicar.
 
 **Amounts em cents inteiros** — consistência com o resto do sistema financeiro; evita erros de ponto flutuante.
 

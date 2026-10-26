@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { BankStatementImport } from "../../domain/entities/bank-statement-import.js";
 import { BankMovement } from "../../domain/entities/bank-movement.js";
 import { ReconciliationCalculatorService } from "../../domain/services/reconciliation-calculator.service.js";
+import { selectNewMovements } from "../../domain/services/movement-dedup.service.js";
 import type { BankStatementImportRepositoryPort } from "../../domain/ports/out/bank-statement-import-repository.port.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
 import type { BankAccountReadPort } from "../../domain/ports/out/bank-account-read.port.js";
@@ -36,6 +37,24 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
     private readonly movementRepo: BankMovementRepositoryPort,
     private readonly bankAccountRead?: BankAccountReadPort
   ) {}
+
+  /** Movimentos já gravados da mesma conta no período do ficheiro (pela conta ligada; senão pelo nº de conta dos extratos). */
+  private async existingMovements(
+    organizationId: ImportBankStatementCommand["organizationId"],
+    bankAccountId: string | null,
+    accountNumber: string,
+    incoming: { bookingDate: Date }[],
+  ): Promise<BankMovement[]> {
+    if (incoming.length === 0) return [];
+    const times = incoming.map((m) => m.bookingDate.getTime());
+    const from = new Date(Math.min(...times));
+    const to = new Date(Math.max(...times));
+    const inRange = (m: BankMovement) => m.bookingDate.getTime() >= from.getTime() && m.bookingDate.getTime() <= to.getTime();
+    if (bankAccountId) return (await this.movementRepo.findByAccountAndPeriod(organizationId, bankAccountId, from, to)).filter(inRange);
+    const statements = await this.statementRepo.findAll(organizationId, { accountNumber });
+    const lists = await Promise.all(statements.map((s) => this.movementRepo.findByStatementId(organizationId, s.id)));
+    return lists.flat().filter(inRange);
+  }
 
   async execute(command: ImportBankStatementCommand): Promise<ImportBankStatementResult> {
     const { organizationId } = command;
@@ -94,24 +113,19 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
         })()
       : command.movements;
 
-    for (const raw of resolvedMovements) {
-      const hash = buildDeduplicationHash(
-        command.accountNumber,
-        raw.bookingDate,
-        raw.description,
-        raw.amount,
-        raw.movementType
-      );
+    // Duplicados contra o que já está gravado da mesma conta, um-para-um e pelo saldo após o movimento
+    // quando o ficheiro o traz (ver `selectNewMovements`). Dois movimentos iguais no mesmo ficheiro
+    // são dois movimentos — já não se perde o segundo.
+    const existing = await this.existingMovements(organizationId, resolvedBankAccountId, command.accountNumber, resolvedMovements);
+    const { fresh, duplicates } = selectNewMovements(resolvedMovements, existing, !allBalancesZero);
+    skippedDuplicates += duplicates;
 
-      if (seenHashes.has(hash)) {
-        skippedDuplicates++;
-        continue;
-      }
-
-      const exists = await this.movementRepo.existsByHash(organizationId, hash);
-      if (exists) {
-        skippedDuplicates++;
-        continue;
+    for (const raw of fresh) {
+      // O hash já não decide duplicados (fá-lo a correspondência acima); só tem de ser único: inclui o
+      // extrato e a ordem de repetição dentro dele.
+      let hash = buildDeduplicationHash(command.accountNumber, raw.bookingDate, `${raw.description}|${raw.balanceAfter}|${statement.id}`, raw.amount, raw.movementType);
+      for (let n = 1; seenHashes.has(hash); n++) {
+        hash = buildDeduplicationHash(command.accountNumber, raw.bookingDate, `${raw.description}|${raw.balanceAfter}|${statement.id}|${n}`, raw.amount, raw.movementType);
       }
 
       seenHashes.add(hash);
