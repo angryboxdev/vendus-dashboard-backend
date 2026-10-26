@@ -16,6 +16,8 @@ import { CreateBankAccountUseCase } from "./application/use-cases/create-bank-ac
 import { GetBankAccountUseCase } from "./application/use-cases/get-bank-account.use-case.js";
 import { UpdateBankAccountUseCase } from "./application/use-cases/update-bank-account.use-case.js";
 import { DeleteBankAccountUseCase } from "./application/use-cases/delete-bank-account.use-case.js";
+import { ResolveStatementAccountUseCase } from "./application/use-cases/resolve-statement-account.use-case.js";
+import type { ResolveStatementAccountPort } from "./domain/ports/in/bank-accounts.ports.js";
 
 // Adapter in
 import { BankAccountsController } from "./adapters/in/bank-accounts.controller.js";
@@ -44,6 +46,8 @@ import { BankAccountsController } from "./adapters/in/bank-accounts.controller.j
 export function createBankAccountsModule(): {
   router: Router;
   accountRepo: BankAccountRepositoryPort;
+  /** bank-statements (Conciliação V2, F3): banco e conta encontrados ou criados a partir do extrato. */
+  resolveStatementAccount: ResolveStatementAccountPort;
 } {
   // Adapters out
   const bankRepo = new SupabaseBankRepository(createScopedQuery);
@@ -73,5 +77,5 @@ export function createBankAccountsModule(): {
     deleteBankAccount
   );
 
-  return { router: controller.router, accountRepo };
+  return { router: controller.router, accountRepo, resolveStatementAccount: new ResolveStatementAccountUseCase(bankRepo, accountRepo) };
 }

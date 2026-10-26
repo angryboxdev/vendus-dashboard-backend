@@ -83,6 +83,7 @@ export class SupabaseBankStatementImportRepository
       .order("period_start", { ascending: false });
 
     if (filter?.accountNumber) q = q.eq("account_number", filter.accountNumber);
+    if (filter?.bankAccountId) q = q.eq("bank_account_id", filter.bankAccountId);
     if (filter?.status) q = q.eq("status", filter.status);
     if (filter?.from) q = q.gte("period_start", filter.from.toISOString().slice(0, 10));
     if (filter?.to) q = q.lte("period_end", filter.to.toISOString().slice(0, 10));

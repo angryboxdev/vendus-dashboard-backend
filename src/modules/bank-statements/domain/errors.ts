@@ -84,3 +84,14 @@ export class StaleDocumentBalanceError extends Error {
     this.entityIds = entityIds;
   }
 }
+
+/**
+ * Extrato em PDF que não se consegue ler: ficheiro danificado ou layout de um banco ainda sem
+ * modelo (task V2 §4.3 — por agora só o «Extrato Combinado» do Millennium BCP).
+ */
+export class StatementPdfNotRecognizedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StatementPdfNotRecognizedError";
+  }
+}

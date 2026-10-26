@@ -58,6 +58,23 @@ describe("GetAccountMonthDetailUseCase", () => {
     expect(result[1].totalMovements).toBe(1);
   });
 
+  it("V2 (F4): cada movimento traz a descrição normalizada e o tipo", async () => {
+    const m = BankMovement.create({
+      bankAccountId: ACCOUNT_ID,
+      statementImportId: "stmt-1",
+      bookingDate: new Date("2025-03-02T00:00:00.000Z"),
+      valueDate: new Date("2025-03-02T00:00:00.000Z"),
+      description: "CREDITO TPA BCP 1234567 MOV N 5",
+      amount: 5000,
+      balanceAfter: 15000,
+      movementType: "credit",
+      deduplicationHash: "tpa-1",
+    });
+    await movementRepo.saveBulk(organizationId, [m]);
+    const [day] = await useCase.execute({ organizationId, bankAccountId: ACCOUNT_ID, year: 2025, month: 3 });
+    expect(day!.movements[0]).toMatchObject({ description: "CREDITO TPA BCP 1234567 MOV N 5", normalizedDescription: "Vendas TPA (terminal 1234567)", movementKind: "sales" });
+  });
+
   it("returns days in chronological order", async () => {
     await movementRepo.saveBulk(organizationId, [
       makeMovement("2025-03-20"),

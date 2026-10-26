@@ -1,3 +1,4 @@
+import { normalizedFields } from "../../domain/services/movement-normalizer.service.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
 import type { BankMovementEntityLinkRepositoryPort, BankMovementEntityLink } from "../../domain/ports/out/bank-movement-entity-link-repository.port.js";
 import type {
@@ -14,6 +15,7 @@ function toMovementDto(m: BankMovement, links: BankMovementEntityLink[]): BankMo
     bookingDate: m.bookingDate,
     valueDate: m.valueDate,
     description: m.description,
+    ...normalizedFields(m),
     amount: m.amount,
     balanceAfter: m.balanceAfter,
     currency: m.currency,

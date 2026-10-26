@@ -39,6 +39,7 @@ export const BANK_LOGO_KEYS: BankLogoKey[] = [
 
 export type StatementFormat =
   | "millennium_bcp_csv"
+  | "millennium_bcp_pdf"
   | "generic_xlsx"
   | "generic_csv"
   | "cgd_csv"
@@ -47,6 +48,7 @@ export type StatementFormat =
 
 export const STATEMENT_FORMATS: StatementFormat[] = [
   "millennium_bcp_csv",
+  "millennium_bcp_pdf",
   "generic_xlsx",
   "generic_csv",
   "cgd_csv",

@@ -1,3 +1,4 @@
+import { normalizedFields } from "../../domain/services/movement-normalizer.service.js";
 import { ReconciliationCalculatorService } from "../../domain/services/reconciliation-calculator.service.js";
 import type { BankStatementImportRepositoryPort } from "../../domain/ports/out/bank-statement-import-repository.port.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
@@ -16,6 +17,7 @@ function toMovementDto(m: BankMovement, links: BankMovementEntityLink[], compute
     bookingDate: m.bookingDate,
     valueDate: m.valueDate,
     description: m.description,
+    ...normalizedFields(m),
     amount: m.amount,
     balanceAfter: computedBalanceAfter,
     currency: m.currency,
