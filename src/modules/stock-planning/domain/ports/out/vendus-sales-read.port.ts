@@ -22,3 +22,11 @@ export interface VendusSalesReadPort {
   /** Um dia civil; devolve uma linha por fonte de procura com venda nesse dia (nunca inventa dias sem venda). */
   fetchDailyActuals(organizationId: OrganizationId, locationId: string, date: string): Promise<DemandActualRow[]>;
 }
+
+/**
+ * Vendas de uma organização de demonstração do Stock (POS fictício), ligado no `server.ts` ao módulo
+ * `stock-demo`. `null` = a organização não é uma demo do Stock.
+ */
+export interface DemoSalesSourcePort {
+  dailyDemand(organizationId: OrganizationId, date: string): Promise<DemandActualRow[] | null>;
+}

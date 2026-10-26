@@ -92,6 +92,9 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/recipe-costing$/, target: p("stock.recipes") },
   // Definições das Fichas técnicas (V7): IVA das vendas para a margem — ler READ, gravar MANAGE.
   { pattern: /^\/api\/recipe-costing\/settings$/, target: p("stock.recipes") },
+  // Demonstração do Stock: estado dos cenários e vendas do POS fictício (Admin verificado no módulo).
+  { pattern: /^\/api\/stock-demo$/, methods: GET, target: p("stock.items") },
+  { pattern: /^\/api\/stock-demo\/pos\/sales$/, methods: GET, target: p("stock.items") },
   // Histórico semanal do preço de compra no artigo (V5 §5) — «Artigos e ingredientes».
   { pattern: new RegExp(`^/api/recipe-costing/ingredients/${ID}/price-history$`), methods: GET, target: p("stock.items") },
   // Lista «Artigos e ingredientes» (V6): resumo de custos e fichas que usam o ingrediente.
