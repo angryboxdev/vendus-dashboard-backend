@@ -3,6 +3,7 @@ import type { BankMovement } from "../../domain/entities/bank-movement.js";
 import type {
   BankMovementFilter,
   BankMovementRepositoryPort,
+  RuleUsage,
 } from "../../domain/ports/out/bank-movement-repository.port.js";
 
 function key(organizationId: OrganizationId, id: string): string {
@@ -74,6 +75,25 @@ export class FakeBankMovementRepository implements BankMovementRepositoryPort {
           m.bookingDate <= to
       )
       .map(([, m]) => m);
+  }
+
+  async detachRule(organizationId: OrganizationId, ruleId: string): Promise<void> {
+    for (const [k, m] of this.store) {
+      if (k.startsWith(`${organizationId}:`) && m.classifiedByRuleId === ruleId) this.store.set(k, m.detachRule());
+    }
+  }
+
+  async ruleUsage(organizationId: OrganizationId): Promise<RuleUsage[]> {
+    const byRule = new Map<string, RuleUsage>();
+    for (const [k, m] of this.store) {
+      if (!k.startsWith(`${organizationId}:`) || !m.classifiedByRuleId) continue;
+      const day = m.bookingDate.toISOString().slice(0, 10);
+      const u = byRule.get(m.classifiedByRuleId) ?? { ruleId: m.classifiedByRuleId, movementsCount: 0, lastBookingDate: null };
+      u.movementsCount += 1;
+      if (!u.lastBookingDate || day > u.lastBookingDate) u.lastBookingDate = day;
+      byRule.set(u.ruleId, u);
+    }
+    return [...byRule.values()];
   }
 
   async existsByHash(organizationId: OrganizationId, deduplicationHash: string): Promise<boolean> {

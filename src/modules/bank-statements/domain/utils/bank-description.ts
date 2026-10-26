@@ -87,6 +87,19 @@ export function normalizeBankDescription(desc: string): string {
 }
 
 /**
+ * Texto de comparação dos «movimentos recorrentes» (regras): a descrição normalizada sem nenhuma
+ * palavra com dígitos — referências curtas, n.º de movimento, terminais e valores mudam todos os
+ * meses ("CREDITO TPA BCP 1234567 MOV N 92" → "tpa bcp mov";
+ * "MDB9880 WWW.AMAZON* 70.24EUR" → "www amazon"). Aplicado aos dois lados (regra e movimento).
+ */
+export function recurringMatchText(desc: string): string {
+  return normalizeBankDescription(desc)
+    .split(" ")
+    .filter((t) => t && !/\d/.test(t))
+    .join(" ");
+}
+
+/**
  * Verifica se o nome de um fornecedor "aparece" numa descrição bancária já
  * normalizada — mesma heurística (palavra com mais de 3 caracteres, match
  * por substring) já usada em `find-movement-candidates.use-case.ts`/

@@ -29,6 +29,7 @@ import { SuggestMatchesUseCase } from "./application/use-cases/suggest-matches.u
 import { CreateReconciliationRuleUseCase } from "./application/use-cases/create-reconciliation-rule.use-case.js";
 import { ListReconciliationRulesUseCase } from "./application/use-cases/list-reconciliation-rules.use-case.js";
 import { DeleteReconciliationRuleUseCase } from "./application/use-cases/delete-reconciliation-rule.use-case.js";
+import { UpdateReconciliationRuleUseCase } from "./application/use-cases/update-reconciliation-rule.use-case.js";
 import { CloseStatementUseCase } from "./application/use-cases/close-statement.use-case.js";
 import { DeleteBankStatementUseCase } from "./application/use-cases/delete-bank-statement.use-case.js";
 import { UpdateStatementBalancesUseCase } from "./application/use-cases/update-statement-balances.use-case.js";
@@ -88,7 +89,7 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
   const supplierNameRead = new FinancialBaseSupplierNameReadAdapter(listSuppliers);
 
   // Use cases
-  const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo, bankAccountRead, accountResolver);
+  const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo, bankAccountRead, accountResolver, ruleRepo);
   const listStatements = new ListBankStatementsUseCase(statementRepo);
   const getStatement = new GetBankStatementUseCase(statementRepo, movementRepo, entityLinkRepo);
   const reconcileMovement = new ReconcileMovementUseCase(movementRepo, movementHint, invoiceRead, payableRead, entityLinkRepo, invoiceReconciliationWrite);
@@ -101,9 +102,10 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
     payableRead,
     movementHint,
   );
-  const createRule = new CreateReconciliationRuleUseCase(ruleRepo);
-  const listRules = new ListReconciliationRulesUseCase(ruleRepo);
-  const deleteRule = new DeleteReconciliationRuleUseCase(ruleRepo);
+  const createRule = new CreateReconciliationRuleUseCase(ruleRepo, { movementRepo, statementRepo });
+  const updateRule = new UpdateReconciliationRuleUseCase(ruleRepo, { movementRepo, statementRepo });
+  const listRules = new ListReconciliationRulesUseCase(ruleRepo, movementRepo);
+  const deleteRule = new DeleteReconciliationRuleUseCase(ruleRepo, movementRepo);
   const closeStatement = new CloseStatementUseCase(statementRepo, movementRepo);
   const deleteStatement = new DeleteBankStatementUseCase(statementRepo);
   const updateBalances = new UpdateStatementBalancesUseCase(statementRepo);
@@ -157,6 +159,7 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
     confirmGroupedSettlement,
     new ReadStatementPdfUseCase(new PdfjsStatementTextAdapter()),
     accountResolver ? new PreviewStatementAccountUseCase(accountResolver) : undefined,
+    updateRule,
   );
 
   return { router: controller.router };

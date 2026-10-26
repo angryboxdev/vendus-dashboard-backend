@@ -44,6 +44,7 @@ function toMovementDto(m: BankMovement, links: BankMovementEntityLink[]): BankMo
       entityLabel: l.entityLabel,
     })),
     reconciliationAmountDiff: m.reconciliationAmountDiff,
+    classifiedByRuleId: m.classifiedByRuleId,
   };
 }
 

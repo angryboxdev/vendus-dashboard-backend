@@ -14,6 +14,7 @@ import {
   StatementNotFoundError,
   MovementNotFoundError,
   RuleNotFoundError,
+  InvalidRuleError,
   StatementAlreadyClosedError,
   StatementBalanceDifferenceError,
   BlockingMovementsError,
@@ -32,6 +33,47 @@ import type { SuggestMatchesPort } from "../../domain/ports/in/bank-statement.po
 import type { CreateReconciliationRulePort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { ListReconciliationRulesPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { DeleteReconciliationRulePort } from "../../domain/ports/in/bank-statement.ports.js";
+import type { UpdateReconciliationRulePort } from "../../domain/ports/in/bank-statement.ports.js";
+
+type RuleOptionalFields = {
+  amountCents?: number | null;
+  amountToleranceCents?: number;
+  supplierId?: string | null;
+  vatRate?: number | null;
+  vatIncluded?: boolean | null;
+};
+
+/**
+ * Campos opcionais de um «movimento recorrente» (valor fixo, fornecedor, IVA). Devolve a mensagem de erro
+ * (400) ou só os campos presentes no corpo (null = limpar).
+ */
+function parseRuleFields(body: Record<string, unknown>): string | RuleOptionalFields {
+  const out: RuleOptionalFields = {};
+  const isCents = (v: unknown) => typeof v === "number" && Number.isInteger(v) && v >= 0;
+  if (body.amountCents !== undefined) {
+    if (body.amountCents !== null && !isCents(body.amountCents)) return "amountCents must be a non-negative integer or null";
+    out.amountCents = body.amountCents as number | null;
+  }
+  if (body.amountToleranceCents !== undefined) {
+    if (!isCents(body.amountToleranceCents)) return "amountToleranceCents must be a non-negative integer";
+    out.amountToleranceCents = body.amountToleranceCents as number;
+  }
+  if (body.supplierId !== undefined) {
+    if (body.supplierId !== null && typeof body.supplierId !== "string") return "supplierId must be a string or null";
+    out.supplierId = body.supplierId as string | null;
+  }
+  if (body.vatRate !== undefined) {
+    if (body.vatRate !== null && (typeof body.vatRate !== "number" || body.vatRate < 0 || body.vatRate > 100)) {
+      return "vatRate must be between 0 and 100 or null";
+    }
+    out.vatRate = body.vatRate as number | null;
+  }
+  if (body.vatIncluded !== undefined) {
+    if (body.vatIncluded !== null && typeof body.vatIncluded !== "boolean") return "vatIncluded must be a boolean or null";
+    out.vatIncluded = body.vatIncluded as boolean | null;
+  }
+  return out;
+}
 import type { CloseStatementPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { DeleteBankStatementPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { UpdateStatementBalancesPort } from "../../domain/ports/in/bank-statement.ports.js";
@@ -85,6 +127,8 @@ export class BankStatementController {
     private readonly readStatementPdf?: ReadStatementPdfPort,
     /** V2 (F3): para que conta vai o extrato (existente ou a criar), na pré-visualização. */
     private readonly previewStatementAccount?: PreviewStatementAccountPort,
+    /** «Movimentos recorrentes»: alterar, pausar ou reativar uma regra. */
+    private readonly updateRule?: UpdateReconciliationRulePort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -728,6 +772,11 @@ export class BankStatementController {
           });
           return;
         }
+        const fields = parseRuleFields(body);
+        if (typeof fields === "string") {
+          res.status(400).json({ error: fields });
+          return;
+        }
         const ruleCmd: import("../../domain/ports/in/bank-statement.ports.js").CreateReconciliationRuleCommand = {
           organizationId: req.auth!.orgId,
           name: body.name as string,
@@ -736,6 +785,9 @@ export class BankStatementController {
           movementType: (body.movementType as import("../../domain/entities/bank-movement.js").MovementType | undefined) ?? null,
           costCenterGroupId: (body.costCenterGroupId as string | undefined) ?? null,
           costCenterCategoryId: (body.costCenterCategoryId as string | undefined) ?? null,
+          ...fields,
+          ...(typeof body.bankAccountId === "string" && { bankAccountId: body.bankAccountId }),
+          ...(body.applyToExisting === true && { applyToExisting: true }),
         };
         if (body.requiresDocument !== undefined) ruleCmd.requiresDocument = body.requiresDocument as boolean;
         if (body.affectsDre !== undefined) ruleCmd.affectsDre = body.affectsDre as boolean;
@@ -745,6 +797,58 @@ export class BankStatementController {
         const rule = await this.createRule.execute(ruleCmd);
         res.status(201).json(rule);
       } catch (e) {
+        if (e instanceof InvalidRuleError) {
+          res.status(400).json({ error: e.message });
+          return;
+        }
+        res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
+      }
+    });
+
+    /**
+     * PATCH /bank-statements/rules/:ruleId
+     * Body: campos a alterar, isActive (pausar/reativar) e applyToExisting.
+     */
+    this.router.patch("/bank-statements/rules/:ruleId", async (req, res) => {
+      if (!this.updateRule) {
+        res.status(501).json({ error: "Not available" });
+        return;
+      }
+      try {
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const fields = parseRuleFields(body);
+        if (typeof fields === "string") {
+          res.status(400).json({ error: fields });
+          return;
+        }
+        if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
+          res.status(400).json({ error: "isActive must be a boolean" });
+          return;
+        }
+        const result = await this.updateRule.execute({
+          organizationId: req.auth!.orgId,
+          id: req.params["ruleId"]!,
+          ...fields,
+          ...(typeof body.name === "string" && { name: body.name }),
+          ...(typeof body.descriptionContains === "string" && { descriptionContains: body.descriptionContains }),
+          ...(typeof body.justificationType === "string" && {
+            justificationType: body.justificationType as import("../../domain/entities/bank-movement.js").JustificationType,
+          }),
+          ...(body.costCenterGroupId !== undefined && { costCenterGroupId: (body.costCenterGroupId as string | null) ?? null }),
+          ...(body.costCenterCategoryId !== undefined && { costCenterCategoryId: (body.costCenterCategoryId as string | null) ?? null }),
+          ...(typeof body.isActive === "boolean" && { isActive: body.isActive }),
+          ...(body.applyToExisting === true && { applyToExisting: true }),
+        });
+        res.json(result);
+      } catch (e) {
+        if (e instanceof RuleNotFoundError) {
+          res.status(404).json({ error: e.message });
+          return;
+        }
+        if (e instanceof InvalidRuleError) {
+          res.status(400).json({ error: e.message });
+          return;
+        }
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });
       }
     });
