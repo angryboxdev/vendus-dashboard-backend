@@ -13,6 +13,8 @@ import { SupabaseForecastFeedbackRepository } from "./adapters/out/supabase-fore
 import { SupabaseRecommendationReviewRepository } from "./adapters/out/supabase-recommendation-review.repository.js";
 import { LegacyRecipeConsumptionAdapter } from "./adapters/out/legacy-recipe-consumption.adapter.js";
 import { LegacyVendusSalesReadAdapter } from "./adapters/out/legacy-vendus-sales-read.adapter.js";
+import { DemoAwareSalesReadAdapter } from "./adapters/out/demo-aware-sales-read.adapter.js";
+import type { DemoSalesSourcePort } from "./domain/ports/out/vendus-sales-read.port.js";
 import { StockQuantityReadAdapter } from "./adapters/out/stock-quantity-read.adapter.js";
 import { StockItemPlanningReadAdapter } from "./adapters/out/stock-item-planning-read.adapter.js";
 import { SupplierDeliveryScheduleReadAdapter } from "./adapters/out/supplier-delivery-schedule-read.adapter.js";
@@ -63,7 +65,13 @@ export interface StockPlanningModule {
  * construção em `server.ts` não impõe ciclo nenhum: só precisa de
  * `financialBaseModule`/`locationsModule` já existirem.
  */
-export function createStockPlanningModule(listLocationsPort: ListLocationsPort, getSupplierPort: GetSupplierPort, listSupplierDeliverySchedulesPort: ListSupplierDeliverySchedulesPort): StockPlanningModule {
+export function createStockPlanningModule(
+  listLocationsPort: ListLocationsPort,
+  getSupplierPort: GetSupplierPort,
+  listSupplierDeliverySchedulesPort: ListSupplierDeliverySchedulesPort,
+  /** Demonstração do Stock: numa demo as vendas vêm do POS fictício, nunca da Vendus. */
+  demoSales?: DemoSalesSourcePort,
+): StockPlanningModule {
   const demandActualsRepo = new SupabaseDemandActualsRepository(createScopedQuery);
   const forecastRunRepo = new SupabaseForecastRunRepository(createScopedQuery);
   const planningAlertRepo = new SupabasePlanningAlertRepository(createScopedQuery);
@@ -71,7 +79,7 @@ export function createStockPlanningModule(listLocationsPort: ListLocationsPort, 
   const recommendationReviewRepo = new SupabaseRecommendationReviewRepository(createScopedQuery);
 
   const recipeConsumption = new LegacyRecipeConsumptionAdapter();
-  const vendusSalesRead = new LegacyVendusSalesReadAdapter();
+  const vendusSalesRead = demoSales ? new DemoAwareSalesReadAdapter(new LegacyVendusSalesReadAdapter(), demoSales) : new LegacyVendusSalesReadAdapter();
   const stockQuantityRead = new StockQuantityReadAdapter(createScopedQuery);
   const stockItemPlanningRead = new StockItemPlanningReadAdapter(createScopedQuery);
   const learnedMappingRead = new LearnedMappingReadAdapter(createScopedQuery);

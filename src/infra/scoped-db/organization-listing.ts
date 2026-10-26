@@ -1,5 +1,6 @@
 import { mintOrganizationId, type OrganizationId } from "../../kernel/organization-id.js";
 import { getSupabaseServiceRole } from "./supabase-client.js";
+import { listStockDemoOrganizationIds } from "./stock-demo-organization.js";
 
 /**
  * The organization-listing unscoped door (spec C ticket 02). Both crons this
@@ -26,8 +27,10 @@ export async function listOrganizations(): Promise<OrganizationRow[]> {
     .eq("is_demo", false)
     .order("name", { ascending: true });
   if (error) throw new Error(error.message);
+  // As organizações fictícias da demonstração do Stock também nunca entram nos crons (ADR-0041).
+  const stockDemoIds = await listStockDemoOrganizationIds();
 
-  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+  return ((data ?? []) as Record<string, unknown>[]).filter((row) => !stockDemoIds.has(String(row.id))).map((row) => ({
     organizationId: mintOrganizationId(row.id as string),
     name: row.name as string,
   }));

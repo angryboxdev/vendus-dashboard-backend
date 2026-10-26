@@ -59,6 +59,8 @@ import type {
 import { createStockCountModule } from "./modules/stock-count/stock-count.module.js";
 import { createRecipeCostingModule } from "./modules/recipe-costing/recipe-costing.module.js";
 import { createStockPlanningModule } from "./modules/stock-planning/stock-planning.module.js";
+import { createStockDemoModule } from "./modules/stock-demo/stock-demo.module.js";
+import { setDemoProductsSource } from "./services/ingredientConsumptionService.js";
 import { createSalesDeclarationModule } from "./modules/sales-declaration/sales-declaration.module.js";
 import { correlationId } from "./infra/http/correlation.js";
 import { createSettingsModule } from "./modules/settings/settings.module.js";
@@ -351,10 +353,30 @@ deleteDraftStockPurchaseReviewRef.current = stockPurchaseReviewModule.deleteDraf
 // stockPurchaseReviewModule/stockCountModule (lê as suas tabelas
 // partilhadas diretamente via ScopedQuery, ver README do módulo), por isso
 // não entra no ciclo de construção acima.
+// Demonstração do Stock (3 cenários fictícios; independente da do RH): numa organização fictícia as vendas
+// vêm do POS fictício «CaixaFlow POS» e nunca da Vendus (cuja chave é global).
+const stockDemoModule = createStockDemoModule({
+  // Ligado ao stockPlanningModule (construído logo a seguir); só corre depois do arranque.
+  runForecast: async (org) => {
+    await stockPlanningModule.runDailyForecast.execute({ organizationId: org });
+  },
+});
+setDemoProductsSource(async (org, since, until) => {
+  const sales = await stockDemoModule.demoPosSales.dailySales(org, since, until);
+  if (!sales) return null;
+  const byRef = new Map<string, { title: string; reference: string; qty: number; category: string }>();
+  for (const s of sales) {
+    const row = byRef.get(s.reference) ?? { title: s.title, reference: s.reference, qty: 0, category: "pizza" };
+    row.qty += s.quantity;
+    byRef.set(s.reference, row);
+  }
+  return [...byRef.values()];
+});
 const stockPlanningModule = createStockPlanningModule(
   locationsModule.listLocations,
   financialBaseModule.getSupplier,
   financialBaseModule.listSupplierDeliverySchedules,
+  stockDemoModule.demoPosSales,
 );
 
 // RH (hexagonal) — construído aqui, antes do cron interno, para expor a
@@ -611,6 +633,9 @@ const demoOrgModule = createDemoOrgModule({
 });
 app.use(demoOrgModule.demoContext);
 app.use("/api", demoOrgModule.router);
+// Demonstração do Stock: X-Stock-Demo troca para a organização fictícia só nas rotas da Gestão de Stock.
+app.use(stockDemoModule.stockDemoContext);
+app.use("/api", stockDemoModule.router);
 // Rotas do Portal (/api/me/*) logo aqui: as montagens seguintes com
 // requireMinRole(...) no próprio mount correm para todo o /api e recusariam
 // o colaborador antes de chegar a elas.
