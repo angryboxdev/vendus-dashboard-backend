@@ -16,6 +16,7 @@ function toSnapshot(invoice: InvoiceDTO): InvoiceSnapshot {
     subtotalWithoutVat: invoice.subtotalWithoutVat,
     totalVat: invoice.totalVat,
     totalWithVat: invoice.totalWithVat,
+    attachmentUrl: invoice.attachmentUrl ?? null,
     lines: (invoice.lines ?? []).map((l) => ({
       id: l.id,
       description: l.description,

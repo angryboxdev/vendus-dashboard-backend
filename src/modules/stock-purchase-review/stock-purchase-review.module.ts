@@ -38,6 +38,8 @@ import { SupabaseStockAiBudgetAdapter } from "./adapters/out/supabase-ai-budget.
 import { SupabasePurchasePresentationRepository } from "./adapters/out/supabase-purchase-presentation.repository.js";
 import { SupabaseEntryRulesRepository } from "./adapters/out/supabase-entry-rules.repository.js";
 import { EntryRulesUseCase } from "./application/use-cases/entry-rules.use-case.js";
+import { SupabaseStockSettingsRepository } from "./adapters/out/supabase-stock-settings.repository.js";
+import { StockSettingsUseCase } from "./application/use-cases/stock-settings.use-case.js";
 import { ListPurchasePresentationsUseCase, SavePurchasePresentationUseCase } from "./application/use-cases/purchase-presentations.use-case.js";
 
 /** Limite diário de chamadas à IA por organização (mesma variável do leitor de faturas). */
@@ -93,6 +95,7 @@ export function createStockPurchaseReviewModule(
   const presentations = new SupabasePurchasePresentationRepository(createScopedQuery);
   const packaging = { presentations, catalog: stockCatalogWrite };
   const entryRules = new SupabaseEntryRulesRepository(createScopedQuery);
+  const stockSettings = new SupabaseStockSettingsRepository(createScopedQuery);
   // Conciliação por IA (F3b): sem chave ou com STOCK_MATCH_AI=off fica só histórico + nome.
   const openaiApiKey = process.env.OPENAI_API_KEY;
   const itemMatchAi =
@@ -105,11 +108,11 @@ export function createStockPurchaseReviewModule(
 
   const controller = new StockPurchaseReviewController(
     new ListStockPurchaseReviewsUseCase(reviewRepository),
-    new GetStockPurchaseReviewUseCase(reviewRepository, categoryRead, packaging),
+    new GetStockPurchaseReviewUseCase(reviewRepository, categoryRead, packaging, invoiceRead),
     new ResolveReviewLineUseCase(reviewRepository, stockCatalogWrite, learnedMapping, auditLog, locationRead, categoryRead, packaging),
     new DecideUnresolvedReviewUseCase(reviewRepository, auditLog),
     new SuggestLineMappingUseCase(reviewRepository, learnedMapping),
-    new ConfirmStockPurchaseReviewUseCase(reviewRepository, stockMovementWrite, invoiceRead, locationRead, auditLog, categoryRead, stockCatalogWrite),
+    new ConfirmStockPurchaseReviewUseCase(reviewRepository, stockMovementWrite, invoiceRead, locationRead, auditLog, categoryRead, stockCatalogWrite, stockSettings),
     new CancelStockPurchaseReviewUseCase(reviewRepository, auditLog),
     new CancelEmptyStockPurchaseReviewsUseCase(reviewRepository, auditLog),
     new SuggestReviewMappingsUseCase(reviewRepository, learnedMapping, stockCatalogWrite, itemMatchAi, categoryRead, new SupabaseStockAiBudgetAdapter(createScopedQuery, aiDailyLimit()), packaging, auditLog, entryRules),
@@ -117,6 +120,7 @@ export function createStockPurchaseReviewModule(
     new SavePurchasePresentationUseCase(presentations, stockCatalogWrite, learnedMapping, auditLog),
     new ListPurchasePresentationsUseCase(presentations),
     new EntryRulesUseCase(entryRules, auditLog),
+    new StockSettingsUseCase(stockSettings, locationRead, auditLog),
   );
 
   return {
