@@ -67,6 +67,24 @@ function setup(
   return () => useCase.execute({ organizationId: ORG, fileBuffer: Buffer.from("pdf"), filename: "aguas.pdf", mimeType: "application/pdf" });
 }
 
+function setupWithHint(suppliersSeed: SupplierSummary[], forSupplier: (o: unknown, id: string) => Promise<{ categoryId: string; recurrenceName: string } | null>) {
+  const ai = new FakeAiExtractionPort();
+  ai.setResult({ supplierName: "Águas Exemplo do Porto", supplierNif: "508000000", totalWithVat: 5998, confidence: 0.95, lines: [] });
+  const lookup = new FakeSupplierLookupPort();
+  lookup.seed(suppliersSeed);
+  const identity = new FakeOrganizationIdentityRead();
+  identity.seedNif(OWN_NIF);
+  const smart: SmartReadingDeps = {
+    pdf: { read: async () => content, readBarcode: async () => ({ status: "absent" }), extractLogo: async () => null },
+    layouts: [new MakroLayout()],
+    readingWrite: { save: async () => undefined },
+    classifyLines: null,
+    recurrenceCategoryHint: { forSupplier: forSupplier as never },
+  };
+  const useCase = new ImportInvoiceUseCase(new FakeInvoiceRepository(), new FakeDocumentStoragePort(), ai, lookup, new FakeSupplierHintPort(), identity, new FakeFiscalIdentityPort(), smart);
+  return () => useCase.execute({ organizationId: ORG, fileBuffer: Buffer.from("pdf"), filename: "aguas.pdf", mimeType: "application/pdf" });
+}
+
 describe("ImportInvoiceUseCase — fatura com QR lida pela IA (documento de pagamento das águas)", () => {
   test("identidade e totais do QR; linhas que não fecham dão lugar às bases do QR; aviso das 2 faturas", async () => {
     const r = await setup([], null)();
@@ -140,5 +158,19 @@ describe("ImportInvoiceUseCase — fatura com QR lida pela IA (documento de paga
   test("sem fornecedor reconhecido não se inventa categoria", async () => {
     const r = await setup([], null, content, { categoryId: "c-agua", recurrenceName: "Água" })();
     expect(r.extractedLines[0]!.suggestedCostCenterCategoryId).toBeUndefined();
+  });
+
+  test("fatura lida só do QR: nome do fornecedor vem da ficha encontrada pelo NIF", async () => {
+    const r = await setup([supplier("sup-residuos", "Resíduos Exemplo", "599999994")], null)();
+    expect(r.siblings![0]!.invoice).toMatchObject({ supplierId: "sup-residuos", supplierName: "Resíduos Exemplo" });
+  });
+
+  test("fatura dos resíduos sem recorrência própria (nem ficha): usa a recorrência do mesmo documento", async () => {
+    const hint = async (_o: unknown, id: string) => (id === "sup-aguas" ? { categoryId: "c-agua", recurrenceName: "Água" } : null);
+    const r = await setupWithHint([supplier("sup-aguas", "Águas Exemplo", "599999993")], hint)();
+    const waste = r.siblings![0]!;
+    expect(waste.invoice.supplierId).toBeNull();
+    expect(waste.extractedLines[0]).toMatchObject({ suggestedCostCenterCategoryId: "c-agua", classificationSource: "recurrence" });
+    expect(waste.extractedLines[0]!.classificationEvidence).toContain("mesmo documento de pagamento");
   });
 });
