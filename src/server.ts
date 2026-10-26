@@ -1746,12 +1746,16 @@ const bankStatementsModule = createBankStatementsModule(bankAccountsModule.accou
 app.use("/api", bankStatementsModule.router);
 
 // Cash flow module (hexagonal) — «Fluxo de caixa» do Mapa de rentabilidade: entradas vs saídas do
-// banco. Recebe portas de bank-statements, payable-entries e invoices (D10).
-const cashFlowModule = createCashFlowModule(
-  bankStatementsModule.describeMovement,
-  payableEntriesModule.getPayableSummary,
-  invoicesModule.getInvoiceAlerts,
-);
+// banco, e DRE pela conciliação bancária. Recebe portas de bank-statements, payable-entries,
+// invoices, vendus e air-menu (D10).
+const cashFlowModule = createCashFlowModule({
+  describeMovement: bankStatementsModule.describeMovement,
+  getPayableSummary: payableEntriesModule.getPayableSummary,
+  getInvoiceAlerts: invoicesModule.getInvoiceAlerts,
+  vendusGetSummary: vendusModule.getSummary,
+  airMenuGetSummary: airMenuModule.getSummary,
+  airMenuEnterpriseId: ENV.AIRMENU_SALES_SUMMARY_ENTERPRISE_ID,
+});
 app.use("/api", cashFlowModule.router);
 
 // Air Menu: rota protegida (módulo já instanciado acima)

@@ -12,9 +12,17 @@ export interface ExpenseShare {
   groupId: string | null;
   categoryId: string | null;
   amountCents: number;
+  /** Parte sem IVA deste valor (da fatura ou do IVA posto no movimento); null = IVA desconhecido. */
+  netRatio: number | null;
 }
 
-const UNKNOWN: CategoryWeight = { groupId: null, categoryId: null, weight: 1 };
+const UNKNOWN: CategoryWeight = { groupId: null, categoryId: null, weight: 1, netRatio: null };
+
+/** IVA posto no próprio movimento: 23 % incluído → 100/123; «não incluído» → todo o valor é base. */
+function movementNetRatio(m: BankDebit): number | null {
+  if (m.vatRate === null || m.vatRate < 0) return null;
+  return m.vatIncluded === false ? 1 : 100 / (100 + m.vatRate);
+}
 
 /** Uma saída usa a categoria do próprio movimento antes da dos documentos conciliados. */
 function hasOwnCategory(m: BankDebit): boolean {
@@ -42,12 +50,16 @@ export function collectExpenseReferences(debits: BankDebit[]): ExpenseReferences
  * «Por artigo» → linhas (sem categoria na linha → a do cabeçalho); «Única» → cabeçalho.
  */
 export function invoiceSplit(inv: InvoiceCategoryData): CategoryWeight[] {
-  const header: CategoryWeight = { groupId: inv.groupId, categoryId: inv.categoryId, weight: 1 };
+  const header: CategoryWeight = { groupId: inv.groupId, categoryId: inv.categoryId, weight: 1, netRatio: inv.netRatio };
+  // Sem IVA próprio (repartições), a parte usa o rácio da fatura.
+  const withRatio = (p: CategoryWeight): CategoryWeight => ({ ...p, netRatio: p.netRatio ?? inv.netRatio });
   const parts =
     inv.mode === "by_values"
-      ? inv.allocations
+      ? inv.allocations.map(withRatio)
       : inv.mode === "detailed"
-        ? inv.lines.map((l) => (l.groupId === null && l.categoryId === null ? { ...header, weight: l.weight } : l))
+        ? inv.lines.map((l) =>
+            withRatio(l.groupId === null && l.categoryId === null ? { ...header, weight: l.weight, netRatio: l.netRatio ?? null } : l),
+          )
         : [];
   const usable = parts.filter((p) => p.weight > 0);
   return usable.length > 0 ? usable : [header];
@@ -62,12 +74,12 @@ function entitySplit(entityType: string, entityId: string, sources: ExpenseSourc
   if (entityType === "payable_entry") {
     const p = sources.payables.get(entityId);
     if (!p) return [UNKNOWN];
-    return fromInvoice(p.invoiceId) ?? [{ groupId: p.groupId, categoryId: null, weight: 1 }];
+    return fromInvoice(p.invoiceId) ?? [{ groupId: p.groupId, categoryId: null, weight: 1, netRatio: null }];
   }
   if (entityType === "recurrence_occurrence") {
     const o = sources.occurrences.get(entityId);
     if (!o) return [UNKNOWN];
-    return fromInvoice(o.invoiceId) ?? [{ groupId: o.groupId, categoryId: o.categoryId, weight: 1 }];
+    return fromInvoice(o.invoiceId) ?? [{ groupId: o.groupId, categoryId: o.categoryId, weight: 1, netRatio: null }];
   }
   return [UNKNOWN];
 }
@@ -88,13 +100,14 @@ export function distribute(total: number, weights: number[]): number[] {
  * Categoria(s) de uma saída, por prioridade: 1) a do movimento (manual ou regra recorrente);
  * 2) a dos documentos conciliados (faturas, contas a pagar), na proporção do valor ligado a cada um;
  * 3) a da ocorrência de recorrência / documento associado; 4) nenhuma.
+ * Cada parte leva também a fração sem IVA, para a DRE.
  * O grupo sai sempre da categoria quando esta é conhecida; um grupo que não está no catálogo
  * (ex.: centro de custo antigo) conta como sem categoria.
  */
 export function categorizeDebit(m: BankDebit, sources: ExpenseSources, catalog: CostCenterCatalog): ExpenseShare[] {
   let weights: CategoryWeight[];
   if (hasOwnCategory(m)) {
-    weights = [{ groupId: m.groupId, categoryId: m.categoryId, weight: 1 }];
+    weights = [{ groupId: m.groupId, categoryId: m.categoryId, weight: 1, netRatio: movementNetRatio(m) }];
   } else if (m.links.length > 0) {
     weights = m.links.flatMap((l) => {
       const split = entitySplit(l.entityType, l.entityId, sources);
@@ -113,6 +126,6 @@ export function categorizeDebit(m: BankDebit, sources: ExpenseSources, catalog: 
   return weights.map((w, i) => {
     const categoryGroup = w.categoryId ? groupOf.get(w.categoryId) : undefined;
     const groupId = categoryGroup ?? (w.groupId && knownGroups.has(w.groupId) ? w.groupId : null);
-    return { groupId, categoryId: categoryGroup ? w.categoryId : null, amountCents: amounts[i]! };
+    return { groupId, categoryId: categoryGroup ? w.categoryId : null, amountCents: amounts[i]!, netRatio: w.netRatio ?? null };
   });
 }

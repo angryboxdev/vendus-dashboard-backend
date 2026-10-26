@@ -10,7 +10,7 @@ import type {
 const PAGE_SIZE = 1000;
 const IN_CHUNK = 200;
 const COLUMNS =
-  "id, booking_date, amount, description, reconciliation_status, justification_type, matched_entity_type, matched_entity_id, cost_center_group_id, cost_center_category_id";
+  "id, booking_date, amount, description, reconciliation_status, justification_type, matched_entity_type, matched_entity_id, cost_center_group_id, cost_center_category_id, vat_rate, vat_included";
 
 interface MovementRow {
   id: string;
@@ -23,6 +23,8 @@ interface MovementRow {
   matched_entity_id: string | null;
   cost_center_group_id: string | null;
   cost_center_category_id: string | null;
+  vat_rate: number | string | null;
+  vat_included: boolean | null;
 }
 
 interface LinkRow {
@@ -51,6 +53,8 @@ export class SupabaseBankMovementReadAdapter implements BankMovementReadPort {
       matchedEntityId: r.matched_entity_id,
       groupId: r.cost_center_group_id,
       categoryId: r.cost_center_category_id,
+      vatRate: r.vat_rate === null || r.vat_rate === undefined ? null : Number(r.vat_rate),
+      vatIncluded: r.vat_included,
       links: links.get(r.id) ?? [],
     }));
   }

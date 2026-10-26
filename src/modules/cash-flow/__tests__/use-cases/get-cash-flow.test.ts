@@ -18,7 +18,7 @@ function storedDebit(overrides: Partial<StoredBankDebit>): StoredBankDebit {
 }
 
 function storedCredit(overrides: Partial<StoredBankCredit>): StoredBankCredit {
-  const { kind: _kind, ...base } = credit();
+  const { kind: _kind, platform: _platform, ...base } = credit();
   return { ...base, description: "CREDITO TPA 123", ...overrides };
 }
 
@@ -54,7 +54,10 @@ function useCase(debits: StoredBankDebit[], credits: StoredBankCredit[] = [], so
     expenseSources,
     { load: async () => catalog },
     {
-      kindOf: (d, type) => (type === "credit" ? (d.startsWith("CREDITO TPA") ? "sales" : "transfer_in") : d.startsWith("TRF P/") ? "transfer_out" : "to_review"),
+      describe: (d, type) => ({
+        kind: type === "credit" ? (d.startsWith("CREDITO TPA") ? "sales" : "transfer_in") : d.startsWith("TRF P/") ? "transfer_out" : "to_review",
+        platform: null,
+      }),
     },
     () => "2026-10-16",
   );
@@ -73,7 +76,7 @@ describe("GetCashFlowUseCase", () => {
 
   it("transferência enviada conciliada com a fatura de salários passa a contar em Pessoal · Salários", async () => {
     const sources = emptySources();
-    sources.invoices.set("inv-sal", { mode: "simple", groupId: null, categoryId: "c-sal", allocations: [], lines: [] });
+    sources.invoices.set("inv-sal", { mode: "simple", netRatio: null, groupId: null, categoryId: "c-sal", allocations: [], lines: [] });
     const debits = [
       storedDebit({
         id: "m1",

@@ -59,7 +59,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/air-menu(\/|$)/, target: p("sales.air_menu") },
 
   // ── DRE ──────────────────────────────────────────────────────────────
-  { pattern: /^\/api\/reports\/dre\/(receita-bruta|kpis|fluxo-caixa)$/, target: p("dre.statement") },
+  { pattern: /^\/api\/reports\/dre\/(receita-bruta|kpis|fluxo-caixa|resultado)$/, target: p("dre.statement") },
   // «Para tratar» do fluxo de caixa: totais das contas a pagar e faturas por rever — só quem vê Contas a pagar.
   { pattern: /^\/api\/reports\/dre\/fluxo-caixa\/para-tratar$/, target: p("finance.payables") },
   { pattern: /^\/api\/reports\/dre\/custos-fixos(\/|$)/, target: p("dre.fixed_costs") },

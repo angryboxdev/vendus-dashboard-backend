@@ -16,6 +16,13 @@ interface InvoiceRow {
   line_detail_mode: string | null;
   cost_center_group_id: string | null;
   cost_center_category_id: string | null;
+  subtotal_without_vat: number | string | null;
+  total_with_vat: number | string | null;
+}
+
+/** Sem IVA ÷ com IVA; null quando não há total (não se sabe o IVA). */
+function ratio(net: number, gross: number): number | null {
+  return gross > 0 && net >= 0 ? Math.min(1, net / gross) : null;
 }
 
 /**
@@ -60,7 +67,11 @@ export class SupabaseExpenseSourceReadAdapter implements ExpenseSourceReadPort {
 
   private async invoices(organizationId: OrganizationId, ids: string[]): Promise<Map<string, InvoiceCategoryData>> {
     const rows = await this.select<InvoiceRow>(
-      organizationId, "invoices", "id, line_detail_mode, cost_center_group_id, cost_center_category_id", "id", ids,
+      organizationId,
+      "invoices",
+      "id, line_detail_mode, cost_center_group_id, cost_center_category_id, subtotal_without_vat, total_with_vat",
+      "id",
+      ids,
     );
     const byValues = rows.filter((r) => r.line_detail_mode === "by_values").map((r) => r.id);
     const detailed = rows.filter((r) => r.line_detail_mode === "detailed").map((r) => r.id);
@@ -88,6 +99,7 @@ export class SupabaseExpenseSourceReadAdapter implements ExpenseSourceReadPort {
       groupId: l.cost_center_id,
       categoryId: l.cost_center_category_id,
       weight: Math.abs(Number(l.total_with_vat) - Number(l.vat_amount)),
+      netRatio: ratio(Math.abs(Number(l.total_with_vat) - Number(l.vat_amount)), Math.abs(Number(l.total_with_vat))),
     }));
 
     return new Map(
@@ -97,6 +109,7 @@ export class SupabaseExpenseSourceReadAdapter implements ExpenseSourceReadPort {
           mode: r.line_detail_mode === "by_values" || r.line_detail_mode === "detailed" ? r.line_detail_mode : "simple",
           groupId: r.cost_center_group_id,
           categoryId: r.cost_center_category_id,
+          netRatio: ratio(Math.abs(Number(r.subtotal_without_vat ?? 0)), Math.abs(Number(r.total_with_vat ?? 0))),
           allocations: allocations.get(r.id) ?? [],
           lines: lines.get(r.id) ?? [],
         },

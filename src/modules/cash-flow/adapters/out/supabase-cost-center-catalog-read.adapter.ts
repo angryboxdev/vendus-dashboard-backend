@@ -10,13 +10,13 @@ export class SupabaseCostCenterCatalogReadAdapter implements CostCenterCatalogRe
   async load(organizationId: OrganizationId): Promise<CostCenterCatalog> {
     const [groups, categories] = await Promise.all([
       this.scopedQuery(organizationId).table("cost_center_groups").select("id, code, name, sort_order"),
-      this.scopedQuery(organizationId).table("cost_center_categories").select("id, group_id, code, name"),
+      this.scopedQuery(organizationId).table("cost_center_categories").select("id, group_id, code, name, financial_type"),
     ]);
     if (groups.error) throw new Error(groups.error.message);
     if (categories.error) throw new Error(categories.error.message);
 
     type GroupRow = { id: string; code: string; name: string; sort_order: number | null };
-    type CategoryRow = { id: string; group_id: string; code: string; name: string };
+    type CategoryRow = { id: string; group_id: string; code: string; name: string; financial_type: string | null };
     return {
       groups: ((groups.data ?? []) as unknown as GroupRow[]).map((g) => ({
         id: g.id,
@@ -29,6 +29,7 @@ export class SupabaseCostCenterCatalogReadAdapter implements CostCenterCatalogRe
         groupId: c.group_id,
         code: c.code,
         name: c.name,
+        financialType: c.financial_type ?? "",
       })),
     };
   }

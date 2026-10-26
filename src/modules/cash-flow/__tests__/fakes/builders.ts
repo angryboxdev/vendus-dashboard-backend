@@ -8,10 +8,10 @@ export const catalog: CostCenterCatalog = {
     { id: "g-fdr", code: "FDR", name: "Fora da DRE", sortOrder: 9 },
   ],
   categories: [
-    { id: "c-sal", groupId: "g-pes", code: "PES.01", name: "Salários" },
-    { id: "c-enc", groupId: "g-pes", code: "PES.02", name: "Encargos" },
-    { id: "c-ing", groupId: "g-opd", code: "OPD.01", name: "Ingredientes" },
-    { id: "c-iva", groupId: "g-fdr", code: "FDR.03", name: "IVA" },
+    { id: "c-sal", groupId: "g-pes", code: "PES.01", name: "Salários", financialType: "personnel" },
+    { id: "c-enc", groupId: "g-pes", code: "PES.02", name: "Encargos", financialType: "personnel" },
+    { id: "c-ing", groupId: "g-opd", code: "OPD.01", name: "Ingredientes", financialType: "cmv" },
+    { id: "c-iva", groupId: "g-fdr", code: "FDR.03", name: "IVA", financialType: "off_dre" },
   ],
 };
 
@@ -27,6 +27,8 @@ export function debit(overrides: Partial<BankDebit> = {}): BankDebit {
     matchedEntityId: null,
     groupId: null,
     categoryId: null,
+    vatRate: null,
+    vatIncluded: null,
     links: [],
     ...overrides,
   };
@@ -38,6 +40,7 @@ export function credit(overrides: Partial<BankCredit> = {}): BankCredit {
     date: "2026-10-05",
     amountCents: 10_000,
     kind: "sales",
+    platform: null,
     reconciliationStatus: "conciliado_sem_fatura",
     justificationType: null,
     ...overrides,

@@ -3,6 +3,8 @@ import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import type { DescribeMovementPort } from "../bank-statements/domain/ports/in/describe-movement.port.js";
 import type { GetPayableSummaryPort } from "../payable-entries/domain/ports/in/payable-entry.ports.js";
 import type { GetInvoiceAlertsPort } from "../invoices/domain/ports/in/invoice.ports.js";
+import type { GetSummaryPort as VendusGetSummaryPort } from "../vendus/domain/ports/in/get-summary.port.js";
+import type { GetSummaryPort as AirMenuGetSummaryPort } from "../air-menu/domain/ports/in/get-summary.port.js";
 
 import { SupabaseBankMovementReadAdapter } from "./adapters/out/supabase-bank-movement-read.adapter.js";
 import { SupabaseExpenseSourceReadAdapter } from "./adapters/out/supabase-expense-source-read.adapter.js";
@@ -10,35 +12,53 @@ import { SupabaseCostCenterCatalogReadAdapter } from "./adapters/out/supabase-co
 import { BankStatementsMovementKindAdapter } from "./adapters/out/bank-statements-movement-kind.adapter.js";
 import { PayableEntriesSummaryAdapter } from "./adapters/out/payable-entries-summary.adapter.js";
 import { InvoiceAlertsToReviewAdapter } from "./adapters/out/invoice-alerts-to-review.adapter.js";
+import { VendusRestaurantSalesAdapter } from "./adapters/out/vendus-restaurant-sales.adapter.js";
+import { AirMenuPlatformSalesAdapter } from "./adapters/out/air-menu-platform-sales.adapter.js";
+import { SupabaseManualAdjustmentsReadAdapter } from "./adapters/out/supabase-manual-adjustments-read.adapter.js";
 import { GetCashFlowUseCase } from "./application/use-cases/get-cash-flow.use-case.js";
 import { GetCashFlowToHandleUseCase } from "./application/use-cases/get-cash-flow-to-handle.use-case.js";
+import { GetDreUseCase } from "./application/use-cases/get-dre.use-case.js";
 import { CashFlowController } from "./adapters/in/cash-flow.controller.js";
 
 export interface CashFlowModule {
   router: Router;
 }
 
+export interface CashFlowModuleDeps {
+  describeMovement: DescribeMovementPort;
+  getPayableSummary: GetPayableSummaryPort;
+  getInvoiceAlerts: GetInvoiceAlertsPort;
+  vendusGetSummary: VendusGetSummaryPort;
+  airMenuGetSummary: AirMenuGetSummaryPort;
+  /** Mesmo enterprise do AirMenu usado no Resumo de Vendas. */
+  airMenuEnterpriseId: string;
+}
+
 /**
- * Composition root do módulo cash-flow — «Fluxo de caixa» do Mapa de rentabilidade, só a partir do
- * banco. Instanciado em `server.ts` DEPOIS de `bank-statements`, `payable-entries` e `invoices`,
- * para receber as suas portas de entrada (D10): tipo genérico dos movimentos, resumo das contas a
- * pagar e alertas das faturas. As tabelas do banco, das faturas e dos centros de custo são só lidas
- * (nunca escritas) pelos adapters daqui.
+ * Composition root do módulo cash-flow — «Fluxo de caixa» e «DRE» do Mapa de rentabilidade, a partir
+ * da conciliação bancária. Instanciado em `server.ts` DEPOIS de `bank-statements`, `payable-entries`,
+ * `invoices`, `vendus` e `air-menu`, para receber as suas portas de entrada (D10). As tabelas do
+ * banco, das faturas, dos centros de custo e dos ajustes manuais são só lidas (nunca escritas).
  */
-export function createCashFlowModule(
-  describeMovement: DescribeMovementPort,
-  getPayableSummary: GetPayableSummaryPort,
-  getInvoiceAlerts: GetInvoiceAlertsPort,
-): CashFlowModule {
-  const getCashFlow = new GetCashFlowUseCase(
-    new SupabaseBankMovementReadAdapter(createScopedQuery),
-    new SupabaseExpenseSourceReadAdapter(createScopedQuery),
-    new SupabaseCostCenterCatalogReadAdapter(createScopedQuery),
-    new BankStatementsMovementKindAdapter(describeMovement),
-  );
+export function createCashFlowModule(deps: CashFlowModuleDeps): CashFlowModule {
+  const bankMovements = new SupabaseBankMovementReadAdapter(createScopedQuery);
+  const expenseSources = new SupabaseExpenseSourceReadAdapter(createScopedQuery);
+  const catalog = new SupabaseCostCenterCatalogReadAdapter(createScopedQuery);
+  const movementKind = new BankStatementsMovementKindAdapter(deps.describeMovement);
+
+  const getCashFlow = new GetCashFlowUseCase(bankMovements, expenseSources, catalog, movementKind);
   const getToHandle = new GetCashFlowToHandleUseCase(
-    new PayableEntriesSummaryAdapter(getPayableSummary),
-    new InvoiceAlertsToReviewAdapter(getInvoiceAlerts),
+    new PayableEntriesSummaryAdapter(deps.getPayableSummary),
+    new InvoiceAlertsToReviewAdapter(deps.getInvoiceAlerts),
   );
-  return { router: new CashFlowController(getCashFlow, getToHandle).router };
+  const getDre = new GetDreUseCase(
+    bankMovements,
+    expenseSources,
+    catalog,
+    movementKind,
+    new VendusRestaurantSalesAdapter(deps.vendusGetSummary),
+    new AirMenuPlatformSalesAdapter(deps.airMenuGetSummary, deps.airMenuEnterpriseId),
+    new SupabaseManualAdjustmentsReadAdapter(createScopedQuery),
+  );
+  return { router: new CashFlowController(getCashFlow, getToHandle, getDre).router };
 }

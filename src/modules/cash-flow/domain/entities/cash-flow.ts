@@ -12,6 +12,8 @@ export interface BankCredit {
   amountCents: number;
   /** Tipo genérico do banco (ex.: «sales», «transfer_in»). */
   kind: string;
+  /** Liquidação de uma plataforma de entrega (uber_eats, glovo, bolt_food), já sem comissão; senão null. */
+  platform: string | null;
   reconciliationStatus: string;
   justificationType: string | null;
 }
@@ -32,6 +34,10 @@ export interface BankDebit {
   /** Categoria posta no próprio movimento (classificação manual ou regra recorrente). */
   groupId: string | null;
   categoryId: string | null;
+  /** IVA posto no movimento ao justificá-lo sem fatura (percentagem, ex.: 23); null = não indicado. */
+  vatRate: number | null;
+  /** O valor do movimento inclui esse IVA (por omissão, sim). */
+  vatIncluded: boolean | null;
   /** Ligações a faturas / contas a pagar (conciliação com um ou vários documentos). */
   links: BankDebitLink[];
 }
@@ -48,12 +54,16 @@ export interface CategoryWeight {
   groupId: string | null;
   categoryId: string | null;
   weight: number;
+  /** Parte sem IVA do valor pago (ex.: 100/123); null = IVA desconhecido. */
+  netRatio?: number | null;
 }
 
 export interface InvoiceCategoryData {
   mode: "simple" | "detailed" | "by_values";
   groupId: string | null;
   categoryId: string | null;
+  /** Total sem IVA ÷ total com IVA da fatura; null sem total. */
+  netRatio: number | null;
   /** Repartições do modo «Por valores». */
   allocations: CategoryWeight[];
   /** Linhas do modo «Por artigo». */
@@ -85,6 +95,8 @@ export interface CostCenterCategoryInfo {
   groupId: string;
   code: string;
   name: string;
+  /** cmv, personnel, fixed_opex, financial, fiscal… (decide, p. ex., se tem IVA). */
+  financialType: string;
 }
 
 export interface CostCenterCatalog {

@@ -41,8 +41,8 @@ export class GetCashFlowUseCase implements GetCashFlowPort {
       this.bankMovements.listCredits(organizationId, from, to),
     ]);
     return {
-      debits: debits.map(({ description, ...d }) => ({ ...d, kind: this.movementKind.kindOf(description, "debit") })),
-      credits: credits.map(({ description, ...c }) => ({ ...c, kind: this.movementKind.kindOf(description, "credit") })),
+      debits: debits.map(({ description, ...d }) => ({ ...d, kind: this.movementKind.describe(description, "debit").kind })),
+      credits: credits.map(({ description, ...c }) => ({ ...c, ...this.movementKind.describe(description, "credit") })),
     };
   }
 }

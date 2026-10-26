@@ -40,14 +40,14 @@ export interface BuildCashFlowInput {
   catalog: CostCenterCatalog;
 }
 
-interface CountedDebit {
+export interface CountedDebit {
   debit: BankDebit;
   shares: ExpenseShare[];
   amountCents: number;
 }
 
 /** Transferências internas e empréstimos não são entradas nem saídas da operação. */
-function isExcluded(m: BankDebit | BankCredit): boolean {
+export function isExcluded(m: BankDebit | BankCredit): boolean {
   return (
     m.reconciliationStatus === "transferencia_interna" ||
     (m.justificationType !== null && EXCLUDED_JUSTIFICATIONS.has(m.justificationType)) ||
@@ -56,7 +56,7 @@ function isExcluded(m: BankDebit | BankCredit): boolean {
 }
 
 /** Saídas que contam como despesa, já repartidas por categoria (sem o grupo fora da DRE). */
-function countedDebits(debits: BankDebit[], sources: ExpenseSources, catalog: CostCenterCatalog): CountedDebit[] {
+export function countedDebits(debits: BankDebit[], sources: ExpenseSources, catalog: CostCenterCatalog): CountedDebit[] {
   const outOfDre = new Set(catalog.groups.filter((g) => g.code === OUT_OF_DRE_GROUP_CODE).map((g) => g.id));
   const out: CountedDebit[] = [];
   for (const debit of debits) {

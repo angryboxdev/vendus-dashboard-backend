@@ -5,7 +5,8 @@ import type { MovementKindPort } from "../../domain/ports/out/movement-kind.port
 export class BankStatementsMovementKindAdapter implements MovementKindPort {
   constructor(private readonly describeMovement: DescribeMovementPort) {}
 
-  kindOf(description: string, movementType: "debit" | "credit"): string {
-    return this.describeMovement.describe(description, movementType).kind;
+  describe(description: string, movementType: "debit" | "credit"): { kind: string; platform: string | null } {
+    const n = this.describeMovement.describe(description, movementType);
+    return { kind: n.kind, platform: n.platform ?? null };
   }
 }

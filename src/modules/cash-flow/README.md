@@ -1,7 +1,7 @@
 # Módulo: cash-flow
 
 > Status: active
-> Última atualização: 2026-10-26 (F1 fluxo de caixa só a partir do banco; F3 «Para tratar»)
+> Última atualização: 2026-10-26 (fluxo de caixa só a partir do banco; «Para tratar»; DRE F1 pela conciliação bancária)
 
 ---
 
@@ -65,9 +65,21 @@ não altera movimentos, faturas nem categorias. A conciliação e a classificaç
 
 - **Para tratar** (estado atual, não depende do mês): contas a pagar em aberto e em atraso (resumo de `payable-entries`) e faturas por rever (`pendingReviewCount` dos alertas de `invoices`).
 
+### DRE (pela conciliação bancária)
+
+Decisões do utilizador (2026-10-26): a DRE parte da conciliação bancária, tudo **sem IVA**.
+
+- **Receita:** restaurante = Vendus (canais salão/take-away/Eatz, sem o antigo «apps»), sem IVA. Plataformas = liquidações da Uber/Glovo/Bolt no banco (já sem comissão; o leitor do extrato marca a `platform`), sem IVA pela taxa das vendas do AirMenu no período. Mostra também o vendido no AirMenu sem IVA e a diferença (comissões e acertos, estimativa). Sem vendas no AirMenu → a liquidação conta pelo total (`platformsVatKnown: false`).
+- **Gastos:** as mesmas saídas e categorias do fluxo de caixa (mesmas exclusões). Sem IVA por: categoria sem IVA (tipos financeiros `personnel`, `financial`, `fiscal`; grupo isento se todas as suas categorias o forem) → tudo; fatura conciliada → rácio sem IVA da fatura (linhas «Por artigo» com o seu; repartições com o da fatura), na parte ligada a ela; IVA posto no movimento → 100/(100+taxa) (ou tudo, se «não incluído»); senão conta pelo valor total como **«IVA por confirmar»**. Conciliar com a fatura altera logo o valor (calculado na leitura).
+- **Ajustes manuais:** custos fixos e variáveis lançados à mão nas páginas antigas do Mapa (`dre_custos_fixos` / `dre_custos_variaveis`, `valor_sem_iva`), somados.
+- **Resultado** = receita − gastos − ajustes; **margem** = resultado ÷ receita.
+- **IVA:** das vendas (Vendus + AirMenu) − dedutível conhecido dos gastos = estimativa a entregar.
+
 ## Portas
 
 ### Entrada (casos de uso)
+
+- `GetDrePort` — DRE do mês (`{ organizationId, year, month }`).
 
 - `GetCashFlowPort` — relatório do mês (`{ organizationId, year, month }`).
 - `GetCashFlowToHandlePort` — painel «Para tratar» (`{ organizationId }`).
@@ -80,12 +92,15 @@ não altera movimentos, faturas nem categorias. A conciliação e a classificaç
 - `MovementKindPort` — tipo genérico de um movimento a partir do descritivo do banco.
 - `PayablesSummaryReadPort` — total a pagar em aberto e em atraso (cêntimos).
 - `InvoicesToReviewReadPort` — número de faturas por rever.
+- `RestaurantSalesReadPort` — vendas do restaurante (sem IVA + IVA) num intervalo.
+- `PlatformSalesReadPort` — vendas das plataformas (AirMenu) num intervalo.
+- `ManualAdjustmentsReadPort` — custos fixos/variáveis lançados à mão no mês.
 
 ## Adapters
 
 ### Entrada
 
-- `CashFlowController` → `GET /reports/dre/fluxo-caixa` (permissão `dre.statement`, READ) e `GET /reports/dre/fluxo-caixa/para-tratar` (permissão `finance.payables`, READ).
+- `CashFlowController` → `GET /reports/dre/fluxo-caixa` e `GET /reports/dre/resultado` (permissão `dre.statement`, READ) e `GET /reports/dre/fluxo-caixa/para-tratar` (permissão `finance.payables`, READ).
 
 ### Saída
 
@@ -95,6 +110,9 @@ não altera movimentos, faturas nem categorias. A conciliação e a classificaç
 - `BankStatementsMovementKindAdapter` → `DescribeMovementPort` do módulo `bank-statements`.
 - `PayableEntriesSummaryAdapter` → `GetPayableSummaryPort` do módulo `payable-entries`.
 - `InvoiceAlertsToReviewAdapter` → `GetInvoiceAlertsPort` do módulo `invoices`.
+- `VendusRestaurantSalesAdapter` → `GetSummaryPort` do módulo `vendus` (euros → cêntimos; sem o canal «apps»).
+- `AirMenuPlatformSalesAdapter` → `GetSummaryPort` do módulo `air-menu` (enterprise do Resumo de Vendas, datas em Europe/Lisbon; indisponível → zeros).
+- `SupabaseManualAdjustmentsReadAdapter` → `dre_custos_fixos`, `dre_custos_variaveis` (só leitura).
 
 ## Decisões de design
 
@@ -112,6 +130,9 @@ não altera movimentos, faturas nem categorias. A conciliação e a classificaç
 - Adapters: sem testes de integração (precisam da stack Supabase local).
 
 ## Lacunas conhecidas
+
+- DRE: o IVA das liquidações das plataformas usa a taxa média das vendas do AirMenu (a comissão também tem IVA, que não é separado); a liquidação pode cair no mês seguinte ao da venda. As vendas do Vendus/AirMenu são pedidas ao vivo (sem cache) — pode demorar alguns segundos.
+- DRE: categorias com IVA variável (seguros, rendas) só ficam certas com fatura conciliada ou IVA posto no movimento.
 
 - O mês só está completo quando todos os extratos das contas estão importados; não há aviso de contas em falta.
 - Contas a pagar só têm grupo (sem categoria): sem fatura, ficam no grupo sem detalhe.

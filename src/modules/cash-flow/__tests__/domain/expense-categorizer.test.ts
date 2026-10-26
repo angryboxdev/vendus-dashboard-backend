@@ -16,10 +16,10 @@ describe("distribute", () => {
 
 describe("invoiceSplit", () => {
   it("«Por valores» usa as repartições; «Por artigo» as linhas (sem categoria → cabeçalho); «Única» o cabeçalho", () => {
-    const header = { groupId: null, categoryId: "c-ing" };
+    const header = { groupId: null, categoryId: "c-ing", netRatio: null };
     expect(
       invoiceSplit({ mode: "by_values", ...header, allocations: [{ groupId: null, categoryId: "c-sal", weight: 300 }], lines: [] }),
-    ).toEqual([{ groupId: null, categoryId: "c-sal", weight: 300 }]);
+    ).toEqual([{ groupId: null, categoryId: "c-sal", weight: 300, netRatio: null }]);
     expect(
       invoiceSplit({
         mode: "detailed",
@@ -31,8 +31,8 @@ describe("invoiceSplit", () => {
         ],
       }),
     ).toEqual([
-      { groupId: null, categoryId: "c-enc", weight: 100 },
-      { groupId: null, categoryId: "c-ing", weight: 50 },
+      { groupId: null, categoryId: "c-enc", weight: 100, netRatio: null },
+      { groupId: null, categoryId: "c-ing", weight: 50, netRatio: null },
     ]);
     expect(invoiceSplit({ mode: "simple", ...header, allocations: [], lines: [] })).toEqual([{ ...header, weight: 1 }]);
   });
@@ -40,20 +40,20 @@ describe("invoiceSplit", () => {
 
 describe("categorizeDebit", () => {
   it("sem nada: fica sem categoria (vai para o tipo genérico do banco)", () => {
-    expect(categorizeDebit(debit(), emptySources(), catalog)).toEqual([{ groupId: null, categoryId: null, amountCents: 10_000 }]);
+    expect(categorizeDebit(debit(), emptySources(), catalog)).toEqual([{ groupId: null, categoryId: null, amountCents: 10_000, netRatio: null }]);
   });
 
   it("a categoria do próprio movimento ganha a tudo e o grupo sai da categoria", () => {
     const sources = emptySources();
-    sources.invoices.set("inv1", { mode: "simple", groupId: null, categoryId: "c-ing", allocations: [], lines: [] });
+    sources.invoices.set("inv1", { mode: "simple", netRatio: null, groupId: null, categoryId: "c-ing", allocations: [], lines: [] });
     const m = debit({ categoryId: "c-sal", links: [{ entityType: "invoice", entityId: "inv1", amountCents: 10_000 }] });
-    expect(categorizeDebit(m, sources, catalog)).toEqual([{ groupId: "g-pes", categoryId: "c-sal", amountCents: 10_000 }]);
+    expect(categorizeDebit(m, sources, catalog)).toEqual([{ groupId: "g-pes", categoryId: "c-sal", amountCents: 10_000, netRatio: null }]);
   });
 
   it("transferência enviada conciliada com faturas: reparte na proporção do valor ligado a cada uma", () => {
     const sources = emptySources();
-    sources.invoices.set("sal", { mode: "simple", groupId: null, categoryId: "c-sal", allocations: [], lines: [] });
-    sources.invoices.set("enc", { mode: "simple", groupId: null, categoryId: "c-enc", allocations: [], lines: [] });
+    sources.invoices.set("sal", { mode: "simple", netRatio: null, groupId: null, categoryId: "c-sal", allocations: [], lines: [] });
+    sources.invoices.set("enc", { mode: "simple", netRatio: null, groupId: null, categoryId: "c-enc", allocations: [], lines: [] });
     const m = debit({
       reconciliationStatus: "conciliado_com_fatura",
       links: [
@@ -62,14 +62,14 @@ describe("categorizeDebit", () => {
       ],
     });
     expect(categorizeDebit(m, sources, catalog)).toEqual([
-      { groupId: "g-pes", categoryId: "c-sal", amountCents: 7_500 },
-      { groupId: "g-pes", categoryId: "c-enc", amountCents: 2_500 },
+      { groupId: "g-pes", categoryId: "c-sal", amountCents: 7_500, netRatio: null },
+      { groupId: "g-pes", categoryId: "c-enc", amountCents: 2_500, netRatio: null },
     ]);
   });
 
   it("conta a pagar: usa a fatura dela, senão o grupo; ocorrência de recorrência: a categoria do contrato", () => {
     const sources = emptySources();
-    sources.invoices.set("inv1", { mode: "simple", groupId: null, categoryId: "c-ing", allocations: [], lines: [] });
+    sources.invoices.set("inv1", { mode: "simple", netRatio: null, groupId: null, categoryId: "c-ing", allocations: [], lines: [] });
     sources.payables.set("p1", { invoiceId: "inv1", groupId: null });
     sources.payables.set("p2", { invoiceId: null, groupId: "g-pes" });
     sources.occurrences.set("o1", { invoiceId: null, groupId: null, categoryId: "c-enc" });
@@ -87,6 +87,39 @@ describe("categorizeDebit", () => {
     sources.payables.set("p1", { invoiceId: null, groupId: "centro-antigo" });
     const m = debit({ matchedEntityType: "payable_entry", matchedEntityId: "p1" });
     expect(categorizeDebit(m, sources, catalog)[0]).toMatchObject({ groupId: null, categoryId: null });
+  });
+});
+
+describe("categorizeDebit — parte sem IVA", () => {
+  it("fatura conciliada: rácio da fatura (repartições herdam; linhas usam o seu); IVA no movimento: 100/(100+taxa)", () => {
+    const sources = emptySources();
+    sources.invoices.set("inv", {
+      mode: "by_values",
+      netRatio: 100 / 123,
+      groupId: null,
+      categoryId: null,
+      allocations: [{ groupId: null, categoryId: "c-ing", weight: 100 }],
+      lines: [],
+    });
+    const viaInvoice = debit({ amountCents: 12_300, links: [{ entityType: "invoice", entityId: "inv", amountCents: 12_300 }] });
+    expect(categorizeDebit(viaInvoice, sources, catalog)[0]!.netRatio).toBeCloseTo(100 / 123);
+
+    const ownVat = debit({ categoryId: "c-ing", vatRate: 23, vatIncluded: true });
+    expect(categorizeDebit(ownVat, emptySources(), catalog)[0]!.netRatio).toBeCloseTo(100 / 123);
+    const vatNotIncluded = debit({ categoryId: "c-ing", vatRate: 23, vatIncluded: false });
+    expect(categorizeDebit(vatNotIncluded, emptySources(), catalog)[0]!.netRatio).toBe(1);
+
+    const detailed = emptySources();
+    detailed.invoices.set("d", {
+      mode: "detailed",
+      netRatio: 0.85,
+      groupId: null,
+      categoryId: "c-ing",
+      allocations: [],
+      lines: [{ groupId: null, categoryId: "c-ing", weight: 100, netRatio: 100 / 106 }],
+    });
+    const viaLines = debit({ amountCents: 10_600, links: [{ entityType: "invoice", entityId: "d", amountCents: 10_600 }] });
+    expect(categorizeDebit(viaLines, detailed, catalog)[0]!.netRatio).toBeCloseTo(100 / 106);
   });
 });
 

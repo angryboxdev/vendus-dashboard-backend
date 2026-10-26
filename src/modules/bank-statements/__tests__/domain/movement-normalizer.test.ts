@@ -16,7 +16,7 @@ describe("normalizeMovement", () => {
     ["OPDE DEVOL COM. PACOT PACOTE M EMPRESA", "credit", "Devolução de comissão bancária", "reversal"],
     ["REVER PT18100002 Generali Tra 70636451021", "credit", "Reversão de débito direto — Generali Tra", "reversal"],
   ] as const)("%s (%s) → %s · %s", (desc, type, normalized, kind) => {
-    expect(normalizeMovement(desc, type)).toEqual({ normalizedDescription: normalized, kind });
+    expect(normalizeMovement(desc, type)).toMatchObject({ normalizedDescription: normalized, kind });
   });
 
   it.each([
@@ -44,5 +44,13 @@ describe("normalizeMovement", () => {
     ["LEV NUM MTM9492", "Levantamento em numerário", "internal_transfer"],
   ] as const)("%s (débito) → %s · %s", (desc, normalized, kind) => {
     expect(normalizeMovement(desc, "debit")).toEqual({ normalizedDescription: normalized, kind });
+  });
+
+  it("marca as liquidações das plataformas de entrega (Uber, Glovo, Bolt) e não as do TPA/Stripe", () => {
+    expect(normalizeMovement("STICHTING CUSTODIAN UBER PAYMENTS", "credit").platform).toBe("uber_eats");
+    expect(normalizeMovement("TRF. P/O GlovoApp", "credit").platform).toBe("glovo");
+    expect(normalizeMovement("BOLT OPERATIONS OU", "credit").platform).toBe("bolt_food");
+    expect(normalizeMovement("STRIPE", "credit").platform).toBeUndefined();
+    expect(normalizeMovement("CREDITO TPA BCP 1234567 MOV N 92", "credit").platform).toBeUndefined();
   });
 });
