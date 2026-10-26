@@ -55,7 +55,8 @@ export function dishImpact(input: DishImpactInput): DishSizeImpact[] {
   const preps = new Map<string, PreparationVersion[]>(input.preparations.map((p) => [p.id, [{ effectiveFrom: EPOCH, definition: p }]]));
   const ctx = { preparations: preps, ingredients: input.ingredients };
   const far = "9999-12-31T00:00:00.000Z";
-  const sizes = [...new Set(input.lines.map((l) => l.size))].sort((a, b) => (a === "small" ? -1 : b === "small" ? 1 : a.localeCompare(b)));
+  const rank = (x: string) => { const i = ["xs", "small", "large"].indexOf(x); return i === -1 ? 3 : i; };
+  const sizes = [...new Set(input.lines.map((l) => l.size))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
   return sizes.map((size) => {
     const lines = input.lines.filter((l) => l.size === size).map((l): ImpactLine => {
       const now = lineCost(l, input.nowIndex, far, ctx);

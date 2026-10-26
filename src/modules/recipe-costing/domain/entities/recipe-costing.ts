@@ -64,6 +64,17 @@ export interface DishLineCost {
   complete: boolean;
 }
 
+/** Margem teórica s/ IVA de um tamanho (PVP sem IVA − custo). Só com custo completo e PVP. */
+export interface DishMargin {
+  /** PVP sem IVA, à taxa das vendas da empresa. */
+  netSalePrice: number;
+  marginWithoutVat: number;
+  /** Margem ÷ PVP sem IVA (0,7 = 70%). */
+  marginRatio: number;
+  /** Custo ÷ PVP sem IVA (CMV teórico). */
+  foodCostRatio: number;
+}
+
 export interface DishSizeCost {
   size: string;
   /** Custo s/ IVA do prato neste tamanho; parcial quando `complete = false`. */
@@ -75,6 +86,8 @@ export interface DishSizeCost {
   missingStockItemIds: string[];
   /** Custo de cada linha da ficha, pela ordem da receita. */
   lines: DishLineCost[];
+  /** `null` sem PVP ou com custo parcial (nunca uma margem sobre custo subavaliado). */
+  margin: DishMargin | null;
 }
 
 export interface DishCosting {
@@ -94,9 +107,24 @@ export interface MissingPriceIngredient {
   usedIn: { pizzaId: string; name: string }[];
 }
 
+/** Custo de um lote de cada preparação (V7), com a mesma fonte de preços dos pratos. */
+export interface PreparationCost {
+  preparationId: string;
+  name: string;
+  yieldQty: number;
+  useAsUnit: boolean;
+  itemCount: number;
+  batchCostWithoutVat: number;
+  /** `false` sem ingredientes ou com algum ingrediente sem preço. */
+  complete: boolean;
+}
+
 export interface RecipeCostingReport {
+  /** Taxa de IVA das vendas (%) usada para a margem. */
+  salesVatRate: number;
   dishes: DishCosting[];
   /** Ingredientes usados nas receitas ativas, com o custo atual e a origem. */
   ingredients: IngredientCost[];
   missingPrices: MissingPriceIngredient[];
+  preparations: PreparationCost[];
 }

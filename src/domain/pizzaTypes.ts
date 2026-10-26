@@ -2,7 +2,8 @@
 export type PizzaCategory = "classics" | "specials" | "sweeties";
 
 /** Tamanho (preço e receita) */
-export type PizzaSize = "small" | "large";
+/** XS = doces, metade da pequena (V7). */
+export type PizzaSize = "xs" | "small" | "large";
 
 export type Pizza = {
   id: string;

@@ -23,7 +23,7 @@ function rowToPrice(row: Row): PizzaPrice {
   return p;
 }
 
-const SIZES: PizzaSize[] = ["small", "large"];
+const SIZES: PizzaSize[] = ["xs", "small", "large"];
 export function validatePizzaSize(s: string): s is PizzaSize {
   return SIZES.includes(s as PizzaSize);
 }
