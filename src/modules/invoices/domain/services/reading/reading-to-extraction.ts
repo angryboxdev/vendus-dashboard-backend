@@ -1,4 +1,4 @@
-import { parseDecimal, toCents } from "../../../../../kernel/money/decimal.js";
+import { dec, parseDecimal, pctOfCents, toCents } from "../../../../../kernel/money/decimal.js";
 import type { AiExtractedLine, AiExtractionResult } from "../../entities/ai-extraction-result.js";
 import type { FiscalQr, InvoiceReading } from "../../entities/invoice-reading.js";
 import { qrBands } from "./fiscal-qr.js";
@@ -70,6 +70,28 @@ export function qrRateLines(qr: FiscalQr): AiExtractedLine[] {
       totalWithVat: v.baseCents + v.vatCents,
     };
   });
+}
+
+/**
+ * Linhas por taxa do QR: o emitente arredonda o IVA linha a linha (ex.: águas 25,02 + 5,06 + …
+ * a 6 % = 3,39 €), mas base × taxa da linha única dá outro cêntimo (56,59 × 6 % = 3,40 €). Com
+ * diferença de no máximo 1 cêntimo por taxa, devolve o aviso `vat_rounded_per_line` — a revisão
+ * aplica sozinha o ajuste de arredondamento e a fatura fecha com o documento.
+ */
+export function qrPerLineVatRoundingNote(qr: FiscalQr): { code: "vat_rounded_per_line"; blocking: false; detail: string } | null {
+  let diff = 0;
+  for (const v of qrVatRows(qr)) {
+    if (v.code === null || Number(v.rate) === 0) continue;
+    const d = v.vatCents - pctOfCents(v.baseCents, dec(v.rate));
+    if (Math.abs(d) > LINE_TOLERANCE_CENTS) return null;
+    diff += d;
+  }
+  if (!diff) return null;
+  return {
+    code: "vat_rounded_per_line",
+    blocking: false,
+    detail: `IVA arredondado linha a linha pelo emitente (${eur(diff)} € face ao cálculo por taxa) — aplicar o ajuste de arredondamento.`,
+  };
 }
 
 /**

@@ -31,7 +31,17 @@ export interface LineToClassify {
   description: string;
 }
 
-export type ClassificationSource = "line_kind" | "history_code" | "history_description" | "keyword" | "ai" | "none";
+export type ClassificationSource =
+  | "line_kind"
+  | "history_code"
+  | "history_description"
+  | "keyword"
+  | "ai"
+  /** Sem regra/histórico/IA: categoria por defeito da ficha do fornecedor. */
+  | "supplier_default"
+  /** Sem regra/histórico/IA nem categoria do fornecedor: sub-categoria das recorrências deste fornecedor. */
+  | "recurrence"
+  | "none";
 
 export interface LineClassification {
   index: number;

@@ -25,13 +25,16 @@ import type { LineClassification } from "../../domain/services/classification/li
 import { readInvoice } from "../../domain/services/reading/invoice-reader.service.js";
 import { readingToExtraction } from "../../domain/services/reading/reading-to-extraction.js";
 import { sanitizeExtractedLines } from "../../domain/services/extracted-lines.service.js";
-import { applyQrToExtraction, enforceQrLines } from "../../domain/services/reading/reading-to-extraction.js";
+import { applyQrToExtraction, enforceQrLines, qrPerLineVatRoundingNote } from "../../domain/services/reading/reading-to-extraction.js";
 import { otherFiscalQrs, readFiscalQr } from "../../domain/services/reading/invoice-reader.service.js";
 import { ACCEPTED_FISCAL_DOCUMENT_TYPES, AiBudgetExceededError, NotAFiscalInvoiceError } from "../../domain/errors.js";
 import type { AiBudgetPort } from "../../domain/ports/out/ai-budget.port.js";
+import type { RecurrenceCategoryHintPort } from "../../domain/ports/out/recurrence-category-hint.port.js";
 import type { FiscalQr, ReadingIssue } from "../../domain/entities/invoice-reading.js";
 
 const AI_CONFIDENCE_REVIEW_THRESHOLD = 0.7;
+/** Linhas criadas a partir do QR fiscal (`qrRateLines`). */
+const QR_LINE = /\(QR fiscal\)$/;
 const VALUE_DISCREPANCY_MARGIN_CENTS = 2;
 /**
  * Limite da leitura local (texto + QR). Generoso: ler o QR evita uma chamada à IA (que também
@@ -51,6 +54,8 @@ export interface SmartReadingDeps {
   classifyLines: ClassifyInvoiceLinesPort | null;
   /** Orçamento diário de IA por organização (sem ele, sem limite). */
   aiBudget?: AiBudgetPort | null;
+  /** Sub-categoria das recorrências do fornecedor — recurso para linhas sem classificação. */
+  recurrenceCategoryHint?: RecurrenceCategoryHintPort | null;
 }
 
 export class ImportInvoiceUseCase implements ImportInvoicePort {
@@ -124,6 +129,53 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     }
   }
 
+  /**
+   * Linhas que nenhuma regra/histórico/IA classificou (ex.: linhas lidas do QR fiscal, sem descrição
+   * útil): categoria por defeito do fornecedor ou, sem ela, a sub-categoria das recorrências deste
+   * fornecedor. Linhas em conflito ficam para rever. Nunca faz falhar a importação.
+   */
+  private async withCategoryFallback(
+    organizationId: ImportInvoiceCommand["organizationId"],
+    supplier: SupplierSummary | null,
+    extraction: AiExtractionResult,
+    classifications: LineClassification[],
+    /** Fornecedores das outras faturas do mesmo documento de pagamento (ex.: resíduos → recorrência «Água»). */
+    documentSupplierIds: string[] = [],
+  ): Promise<LineClassification[]> {
+    // Sem fornecedor reconhecido só vale a recorrência do mesmo documento de pagamento (ex.: resíduos de
+    // um emitente ainda por criar no cadastro, no documento das águas).
+    if ((!supplier && !documentSupplierIds.length) || !extraction.lines.length) return classifications;
+    const unresolved = extraction.lines
+      .map((l, index) => ({ l, index }))
+      .filter(({ l, index }) => {
+        const c = classifications.find((x) => x.index === index);
+        if (!c) return true;
+        // Linhas do QR não têm descrição útil: um palpite da IA não vale mais do que a categoria do
+        // fornecedor ou da recorrência (o histórico, esse, vale — é a escolha confirmada antes).
+        if (c.source === "ai" && QR_LINE.test(l.description)) return true;
+        return c.categoryId === null && !c.conflict;
+      })
+      .map(({ index }) => index);
+    if (!unresolved.length) return classifications;
+
+    let fallback: { categoryId: string; source: "supplier_default" | "recurrence"; evidence: string } | null = null;
+    if (supplier?.defaultCostCenterCategoryId) {
+      fallback = { categoryId: supplier.defaultCostCenterCategoryId, source: "supplier_default", evidence: `Categoria por defeito do fornecedor ${supplier.name}.` };
+    } else if (this.smart?.recurrenceCategoryHint) {
+      const ids = supplier ? [supplier.id, ...documentSupplierIds.filter((id) => id !== supplier.id)] : documentSupplierIds;
+      for (const supplierId of ids) {
+        const hint = await this.smart.recurrenceCategoryHint.forSupplier(organizationId, supplierId).catch(() => null);
+        if (!hint) continue;
+        const why = supplierId === supplier?.id ? "deste fornecedor" : "do mesmo documento de pagamento";
+        fallback = { categoryId: hint.categoryId, source: "recurrence", evidence: `Categoria da recorrência «${hint.recurrenceName}» ${why}.` };
+        break;
+      }
+    }
+    if (!fallback) return classifications;
+    const filled = unresolved.map((index) => ({ index, ...fallback! }));
+    return [...classifications.filter((c) => !unresolved.includes(c.index)), ...filled];
+  }
+
   /** Categoria sugerida por linha; nunca faz falhar a importação. */
   private async classify(organizationId: ImportInvoiceCommand["organizationId"], supplierId: string | null, extraction: AiExtractionResult): Promise<LineClassification[]> {
     if (!this.smart?.classifyLines || extraction.lines.length === 0) return [];
@@ -179,7 +231,11 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       if (qr) {
         const enforced = enforceQrLines(extraction, qr);
         extraction = enforced.extraction;
-        if (enforced.note) lineNotes = [{ code: "lines_replaced_by_qr", blocking: false, detail: enforced.note }];
+        if (enforced.note) {
+          lineNotes = [{ code: "lines_replaced_by_qr", blocking: false, detail: enforced.note }];
+          const rounding = qrPerLineVatRoundingNote(qr);
+          if (rounding) lineNotes.push(rounding);
+        }
       }
     }
     lineNotes.push(...qrNotes.map((n) => ({ code: n.code, blocking: false, detail: n.detail })));
@@ -200,7 +256,8 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
         other,
       ).extraction;
       const note = { code: "read_from_qr", blocking: false, detail: `Fatura ${other.documentNumber} lida do QR fiscal do mesmo documento de pagamento (sem IA) — confirme o fornecedor e classifique.` };
-      siblings.push(await this.buildDraft(command, { extraction: fromQr, reading: null, qr: other, lineNotes: [note], fileUrl, sha256, readMs, primary: false }));
+      const rounding = qrPerLineVatRoundingNote(other);
+      siblings.push(await this.buildDraft(command, { extraction: fromQr, reading: null, qr: other, lineNotes: rounding ? [note, rounding] : [note], fileUrl, sha256, readMs, primary: false, documentSupplierIds: primary.invoice.supplierId ? [primary.invoice.supplierId] : [] }));
     }
     if (!siblings.length) {
       if (primary.reused) await this.storage.delete(fileUrl).catch(() => undefined);
@@ -239,6 +296,8 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       readMs: number;
       /** A 1.ª fatura do PDF: fica com o hash do ficheiro, a IA (se houve) e o logótipo. */
       primary: boolean;
+      /** Fornecedores das outras faturas do mesmo documento de pagamento (categoria de recurso). */
+      documentSupplierIds?: string[];
     },
   ): Promise<InvoiceImportResultDTO> {
     const { extraction, reading, qr, lineNotes, fileUrl, sha256, readMs } = ctx;
@@ -388,7 +447,8 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     const source = command.mimeType === "application/pdf" ? "pdf_import" : "image_import";
     const finalInvoice = Invoice.createFromImport({
       supplierId: supplierMatch?.id ?? null,
-      supplierName: supplierName ?? "Fornecedor desconhecido",
+      // Faturas lidas só do QR não trazem o nome do emitente: vale o da ficha encontrada pelo NIF.
+      supplierName: supplierName ?? supplierMatch?.name ?? "Fornecedor desconhecido",
       supplierNifSnapshot: supplierNif ?? null,
       invoiceNumber: extraction.invoiceNumber ?? "",
       invoiceDate: extraction.issueDate ?? new Date(),
@@ -413,7 +473,13 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
       // Evidência da leitura: se falhar, a importação continua (o rascunho já está gravado).
       await this.smart.readingWrite.save(command.organizationId, finalInvoice.id, { fiscalQr: (reading?.qr ?? qr)?.fields ?? null, source: reading || !ctx.primary ? "deterministic" : "ai" }).catch(() => undefined);
     }
-    const classifications = await this.classify(command.organizationId, supplierMatch?.id ?? null, extraction);
+    const classifications = await this.withCategoryFallback(
+      command.organizationId,
+      supplierMatch,
+      extraction,
+      await this.classify(command.organizationId, supplierMatch?.id ?? null, extraction),
+      ctx.documentSupplierIds ?? [],
+    );
     const logoSuggestion = !ctx.primary || supplierMatch?.logoUrl ? null : await this.suggestLogo(command);
     const byIndex = new Map(classifications.map((c) => [c.index, c]));
 
