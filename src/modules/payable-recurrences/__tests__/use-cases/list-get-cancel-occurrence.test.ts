@@ -5,6 +5,7 @@ import { ListOccurrencesUseCase } from "../../application/use-cases/list-occurre
 import { GetOccurrenceUseCase } from "../../application/use-cases/get-occurrence.use-case.js";
 import { CancelOccurrenceUseCase } from "../../application/use-cases/cancel-occurrence.use-case.js";
 import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js";
+import { FakeEmployeeDirectoryRead } from "../fakes/fake-employee-directory-read.js";
 import { FakeOccurrenceRepository } from "../fakes/fake-occurrence-repository.js";
 import { FakeBankMovementLinkReadAdapter } from "../fakes/fake-bank-movement-link-read.js";
 import { FakeInvoiceAllocatedAmountReadAdapter } from "../fakes/fake-invoice-allocated-amount-read.js";
@@ -45,7 +46,7 @@ function make() {
     recurrenceRepo,
     occurrenceRepo,
     bankMovementLinkRead,
-    create: new CreateRecurrenceUseCase(recurrenceRepo),
+    create: new CreateRecurrenceUseCase(recurrenceRepo, new FakeEmployeeDirectoryRead()),
     generate: new GenerateOccurrenceUseCase(recurrenceRepo, occurrenceRepo),
     list: new ListOccurrencesUseCase(occurrenceRepo, bankMovementLinkRead, invoiceAllocatedAmountRead),
     get: new GetOccurrenceUseCase(occurrenceRepo, bankMovementLinkRead, invoiceAllocatedAmountRead),

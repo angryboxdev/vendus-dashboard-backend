@@ -7,6 +7,7 @@ import { PauseRecurrenceUseCase } from "../../application/use-cases/pause-recurr
 import { RecurrenceOccurrence } from "../../domain/entities/recurrence-occurrence.js";
 import { GetMonthlySummaryUseCase } from "../../application/use-cases/get-monthly-summary.use-case.js";
 import { FakeRecurrenceRepository } from "../fakes/fake-recurrence-repository.js";
+import { FakeEmployeeDirectoryRead } from "../fakes/fake-employee-directory-read.js";
 import { FakeOccurrenceRepository } from "../fakes/fake-occurrence-repository.js";
 import { FakeBankMovementLinkReadAdapter } from "../fakes/fake-bank-movement-link-read.js";
 import { FakeInvoiceAllocatedAmountReadAdapter } from "../fakes/fake-invoice-allocated-amount-read.js";
@@ -41,7 +42,7 @@ function make() {
     occurrenceRepo,
     bankLinkRead,
     invoiceAllocatedAmountRead,
-    create: new CreateRecurrenceUseCase(recurrenceRepo),
+    create: new CreateRecurrenceUseCase(recurrenceRepo, new FakeEmployeeDirectoryRead()),
     generate: new GenerateOccurrenceUseCase(recurrenceRepo, occurrenceRepo),
     markPaid: new MarkOccurrenceAsPaidUseCase(occurrenceRepo),
     pause: new PauseRecurrenceUseCase(recurrenceRepo),

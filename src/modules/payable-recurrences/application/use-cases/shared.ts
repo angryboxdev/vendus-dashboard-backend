@@ -8,6 +8,8 @@ import type { InvoiceAllocatedAmountReadPort } from "../../domain/ports/out/invo
 import type { RecurrenceRepositoryPort } from "../../domain/ports/out/recurrence-repository.port.js";
 import type { OccurrenceRepositoryPort } from "../../domain/ports/out/occurrence-repository.port.js";
 import { OccurrenceGeneratorService } from "../../domain/services/occurrence-generator.service.js";
+import type { EmployeeDirectoryReadPort, RecurrenceEmployee } from "../../domain/ports/out/employee-directory-read.port.js";
+import { RecurrenceEmployeeNotFoundError } from "../../domain/errors.js";
 
 /** Serializes a Date to YYYY-MM-DD using local time (avoids UTC offset shifting the day). */
 function toLocalDateString(date: Date): string {
@@ -29,6 +31,7 @@ export function toRecurrenceDTO(r: Recurrence): RecurrenceDTO {
     name: r.name,
     supplierId: r.supplierId,
     supplierName: r.supplierName,
+    employeeId: r.employeeId,
     type: r.type,
     frequency: r.frequency,
     costCenterId: r.costCenterId,
@@ -45,6 +48,7 @@ export function toRecurrenceDTO(r: Recurrence): RecurrenceDTO {
     notes: r.notes,
     documentUrl: r.documentUrl,
     closedAt: r.closedAt ? toLocalDateString(r.closedAt) : null,
+    pausedAt: r.pausedAt ? toLocalDateString(r.pausedAt) : null,
     vatRate: r.vatRate,
     vatIncluded: r.vatIncluded,
     createdAt: r.createdAt.toISOString(),
@@ -177,4 +181,15 @@ export async function ensureOccurrencesForPeriod(
   }
 
   return { generated, skippedAlreadyExists, skippedOutOfScope };
+}
+
+/** Colaborador associado a uma recorrência de salários — tem de existir na organização. */
+export async function resolveEmployeePayee(
+  employees: EmployeeDirectoryReadPort,
+  organizationId: OrganizationId,
+  employeeId: string,
+): Promise<RecurrenceEmployee> {
+  const employee = await employees.findById(organizationId, employeeId);
+  if (!employee) throw new RecurrenceEmployeeNotFoundError(employeeId);
+  return employee;
 }
