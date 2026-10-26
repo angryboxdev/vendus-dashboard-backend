@@ -2,7 +2,7 @@
 -- nenhuma tabela existente nem a demonstração do RH (organizations.demo_of e o seu índice ficam como estão).
 -- As organizações fictícias do Stock são organizations.is_demo = true com demo_of = null; a ligação
 -- empresa real → cenário vive aqui. Idempotente.
--- Rollback: docs/migrations/rollback/20261130100000_stock_demo_organizations.sql
+-- Rollback: docs/migrations/rollback/20261201100000_stock_demo_organizations.sql
 
 create table if not exists public.stock_demo_organizations (
   id uuid primary key default gen_random_uuid(),

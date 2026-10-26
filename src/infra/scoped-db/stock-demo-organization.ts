@@ -50,7 +50,7 @@ export async function createStockDemoOrganization(input: { name: string; nif: st
 /** Ids das organizações fictícias do Stock (para os crons as excluírem). */
 export async function listStockDemoOrganizationIds(): Promise<Set<string>> {
   const { data, error } = await client().from("stock_demo_organizations").select("demo_org_id");
-  // Antes da migração 20261130100000 a tabela não existe: sem demos do Stock, os crons seguem iguais.
+  // Antes da migração 20261201100000 a tabela não existe: sem demos do Stock, os crons seguem iguais.
   if (error) {
     if (/does not exist|42P01|schema cache/i.test(`${error.code ?? ""} ${error.message}`)) return new Set();
     throw new Error(error.message);
