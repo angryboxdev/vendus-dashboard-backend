@@ -288,6 +288,46 @@ export async function createStockItem(
   );
 }
 
+/**
+ * A unidade de stock é a régua de tudo o que já foi gravado do artigo (movimentos, contagens, compras,
+ * receitas, preparos, conversões aprendidas). Mudá-la sem reescrever esse histórico estraga as
+ * quantidades (ex.: 7000 g passam a ler-se 7000 kg) — por isso fica bloqueada a partir do 1.º uso.
+ * Os preços já se mostram por kg/l; as faturas em kg convertem-se sozinhas.
+ */
+export class StockItemBaseUnitLockedError extends Error {
+  constructor(name: string, from: string, to: string) {
+    super(
+      `Não é possível mudar a unidade de «${name}» de ${from} para ${to}: o artigo já tem movimentos, compras ou receitas registados em ${from}. ` +
+        `Os preços já aparecem por kg/l e as faturas em kg convertem-se sozinhas. Para usar outra unidade, crie um artigo novo.`,
+    );
+    this.name = "StockItemBaseUnitLockedError";
+  }
+}
+
+/** Mudar a unidade só é permitido enquanto o artigo não tiver nada registado nessa unidade. */
+export function isBaseUnitChangeBlocked(currentUnit: string, nextUnit: string, usedSomewhere: boolean): boolean {
+  return currentUnit !== nextUnit && usedSomewhere;
+}
+
+async function assertBaseUnitChangeAllowed(organizationId: OrganizationId, id: string, nextUnit: string): Promise<void> {
+  const db = createScopedQuery(organizationId);
+  const { data } = await db.table("stock_items").select("name, base_unit").eq("id", id).maybeSingle();
+  const current = data as unknown as { name: string; base_unit: string } | null;
+  if (!current || current.base_unit === nextUnit) return;
+  const used = async (table: "stock_movements" | "stock_review_lines" | "pizza_recipe_items" | "preparation_items", column: string) => {
+    const { count, error } = await db.table(table).select("id", { count: "exact", head: true }).eq(column, id);
+    if (error) throw new Error(`Verificar uso do artigo: ${error.message}`);
+    return (count ?? 0) > 0;
+  };
+  const checks = await Promise.all([
+    used("stock_movements", "item_id"),
+    used("stock_review_lines", "stock_item_id"),
+    used("pizza_recipe_items", "stock_item_id"),
+    used("preparation_items", "stock_item_id"),
+  ]);
+  if (isBaseUnitChangeBlocked(current.base_unit, nextUnit, checks.some(Boolean))) throw new StockItemBaseUnitLockedError(current.name, current.base_unit, nextUnit);
+}
+
 export async function updateStockItem(
   organizationId: OrganizationId,
   id: string,
@@ -297,6 +337,7 @@ export async function updateStockItem(
     throw new Error(`type inválido: ${body.type}`);
   if (body.base_unit != null && !validateBaseUnit(body.base_unit))
     throw new Error(`base_unit inválido: ${body.base_unit}`);
+  if (body.base_unit != null) await assertBaseUnitChangeAllowed(organizationId, id, body.base_unit);
   const updates: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };

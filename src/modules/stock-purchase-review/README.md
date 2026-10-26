@@ -166,6 +166,23 @@ estruturadas (ver Known gaps).
 
 ## Design decisions (ADR summary)
 
+### Localização principal do Stock (task V5 §2.4)
+
+`stock_settings` (uma linha por empresa, migração `20261117100000`) guarda a
+loja das entradas de faturas. `GET/PUT /stock-purchase-reviews/settings`
+(`StockSettingsUseCase`, auditado, só lojas ativas da empresa). Na confirmação
+(`resolveEntryLocation`): a loja indicada, a única loja ativa, ou a principal;
+com várias lojas e sem principal → `LocationRequiredError` (400) a pedir para a
+definir — nunca se escolhe uma loja ao acaso. A conciliação deixa de mostrar
+«Destino (loja)» e «Dividir por lojas»; os dados de loja por linha continuam
+suportados no servidor.
+
+### Notas de crédito não entram no Stock (task V5 §4.3)
+
+`RecordInvoiceFinalizedForStockUseCase` ignora documentos com valores negativos
+(nota de crédito/devolução): sem revisão, movimento nem preço de compra. Antes
+falhavam em silêncio (`purchase_quantity > 0`) e a varredura repetia.
+
 ### Unidade da fatura nas embalagens e travão de conversão
 
 Quando a fatura conta o conteúdo, a quantidade está na unidade que a própria

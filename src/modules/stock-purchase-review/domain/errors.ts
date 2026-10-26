@@ -71,7 +71,7 @@ export class CancellationReasonRequiredError extends Error {
 /** Mais que uma loja ativa e a linha não tem loja própria (custo da organização inteira) — exige escolha explícita no confirm. */
 export class LocationRequiredError extends Error {
   constructor() {
-    super("Há mais que uma loja ativa — é preciso indicar a loja para esta linha antes de confirmar");
+    super("Há várias lojas ativas e nenhuma localização principal do Stock — defina-a uma vez nas regras do Stock (engrenagem em «Artigos e ingredientes») antes de confirmar");
     this.name = "LocationRequiredError";
   }
 }
@@ -133,6 +133,13 @@ export class InvalidPurchasePresentationError extends Error {
 }
 
 /** Regras de entrada no Stock inválidas (tipo de artigo ou modo). */
+export class InvalidStockSettingsError extends Error {
+  constructor(reason: string) {
+    super(`Definições do Stock inválidas: ${reason}`);
+    this.name = "InvalidStockSettingsError";
+  }
+}
+
 export class InvalidEntryRulesError extends Error {
   constructor(reason: string) {
     super(`Regras de entrada no Stock inválidas: ${reason}`);

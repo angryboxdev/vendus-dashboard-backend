@@ -23,6 +23,7 @@ import {
   getStockItem,
   listStockItems,
   updateStockItem,
+  StockItemBaseUnitLockedError,
   validateBaseUnit,
   validateItemType,
 } from "../services/stockItemService.js";
@@ -209,6 +210,10 @@ stockRoutes.put("/stock/items/:id", async (req, res) => {
     const item = await updateStockItem(req.auth!.orgId, id, body);
     res.json(item);
   } catch (e: unknown) {
+    if (e instanceof StockItemBaseUnitLockedError) {
+      res.status(409).json({ error: e.message, code: "base_unit_locked" });
+      return;
+    }
     const message = e instanceof Error ? e.message : "Erro ao atualizar item";
     res.status(500).json({ error: message });
   }

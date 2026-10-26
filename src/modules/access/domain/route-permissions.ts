@@ -90,6 +90,10 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/stock-planning(\/|$)/, target: p("stock.planning") },
   { pattern: /^\/api\/(pizzas|preparations)(\/|$)/, target: p("stock.recipes") },
   { pattern: /^\/api\/recipe-costing$/, target: p("stock.recipes") },
+  // Histórico semanal do preço de compra no artigo (V5 §5) — «Artigos e ingredientes».
+  { pattern: new RegExp(`^/api/recipe-costing/ingredients/${ID}/price-history$`), methods: GET, target: p("stock.items") },
+  // Custo teórico semanal de uma pizza (V5 §6) — «Fichas técnicas».
+  { pattern: new RegExp(`^/api/recipe-costing/dishes/${ID}/weekly$`), methods: GET, target: p("stock.recipes") },
 
   // ── CRM ──────────────────────────────────────────────────────────────
   { pattern: /^\/api\/crm\/contacts(\/|$)/, target: p("crm.contacts") },

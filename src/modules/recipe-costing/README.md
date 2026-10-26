@@ -56,13 +56,17 @@ Leitura e cálculo, sem escrita: `GET /api/recipe-costing` devolve o custo de ca
 
 ### Entrada
 
-- `RecipeCostingController` → `GET /api/recipe-costing` (permissão `stock.recipes`, READ).
+- `RecipeCostingController` → `GET /api/recipe-costing` (permissão `stock.recipes`, READ) e `GET /api/recipe-costing/dishes/:id/weekly?weeks=12` (custo teórico semanal da pizza por tamanho; `stock.recipes`), e `GET /api/recipe-costing/ingredients/:id/price-history?weeks=26` (histórico semanal do preço de compra; permissão `stock.items`, READ — mostrado em «Artigos e ingredientes»).
 
 ### Saída
 
 - `SupabaseRecipeCostingReadAdapter` → tabelas legacy `pizzas`, `pizza_prices`, `pizza_recipes` (só a ativa), `pizza_recipe_items`, `preparations`, `preparation_items`, `stock_items` e a RPC `get_stock_quantities_with_last_purchase`.
 
 ## Decisões de design
+
+- **Custo teórico semanal da pizza (task V5 §6).** Versões das fichas em `recipe_versions` (migração `20261118100000`), gravadas por **triggers** a cada alteração de `pizza_recipe_items`/`pizza_recipes`/`preparation_items`/`preparations` (rendimento/«usar como unidade»; só o nome não conta) — qualquer caminho de escrita, incluindo o legado. Uma versão por entidade e por transação; a migração grava a versão inicial («a partir de agora»). Cada semana usa a versão em vigor no fim da semana (e a dos preparos); antes da primeira versão: «sem versão histórica» (nunca se fabrica histórico). Preço do ingrediente na semana: média ponderada das compras → último preço transportado → custo manual (assinalado) → sem preço (semana «incompleta», nunca zero). Soma com precisão total, arredondamento só no fim. CMV teórico, não consumo; não mexe no Stock.
+
+- **Histórico semanal do preço de compra (task V5 §5).** Fonte: linhas de compra confirmadas para o Stock (`stock_review_lines` de revisões `applied`) — o mesmo evento que gera os movimentos, com bruto, IVA e desconto da linha; sem tabela nova. Data = data da fatura; semana ISO 8601. Por semana: média **ponderada** pela quantidade (custo total ÷ quantidade total). Semana sem compra: «sem nova compra» e o último preço só como referência transportada (assinalada); sem compras nenhumas: indisponível, nunca zero. Fora: movimentos manuais e o importador antigo do Stock (custos noutra unidade) e notas de crédito (não geram revisão).
 
 - **A fatura manda.** Mesma precedência do catálogo (`stockItemService.effectiveLastPurchaseCosts`): último movimento `purchase` com custo; só sem compra se usa o manual. Um preço manual não apaga nem bloqueia a fatura seguinte — fica guardado mas deixa de contar.
 - **Calculado a cada leitura**, sem tabela nem cache: o custo acompanha sozinho cada fatura confirmada, sem jobs nem migração.

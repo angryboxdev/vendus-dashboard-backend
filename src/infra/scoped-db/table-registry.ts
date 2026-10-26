@@ -86,6 +86,10 @@ export const TABLE_REGISTRY = {
   supplier_purchase_presentations: { organizationColumn: "org_id", locationBearing: false },
   // Regras de entrada no Stock por tipo de artigo (20261114100000_stock_entry_rules).
   stock_entry_rules: { organizationColumn: "org_id", locationBearing: false },
+  // Localização principal do Stock por empresa (20261117100000_stock_settings_default_location).
+  stock_settings: { organizationColumn: "org_id", locationBearing: false },
+  // Versões das fichas técnicas, gravadas por triggers (20261118100000_recipe_versions).
+  recipe_versions: { organizationColumn: "org_id", locationBearing: false },
   stock_review_audit_logs: { organizationColumn: "org_id", locationBearing: false },
 
   // Módulo Stock — Contagem Física de Stock 2.0.

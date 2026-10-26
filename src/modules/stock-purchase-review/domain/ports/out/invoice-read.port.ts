@@ -25,6 +25,8 @@ export interface InvoiceSnapshot {
   subtotalWithoutVat: number;
   totalVat: number;
   totalWithVat: number;
+  /** PDF da fatura (V5: «Ver PDF» na conciliação); `null` sem anexo. */
+  attachmentUrl?: string | null;
   lines: InvoiceLineSnapshot[];
 }
 
