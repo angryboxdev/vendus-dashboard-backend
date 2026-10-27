@@ -114,6 +114,14 @@ describe("Assiduidade — casos de uso (Fase 4)", () => {
     expect(days[0]!.workedSeconds).toBe(9 * 3600);
   });
 
+  test("a vista dos dias traz o horário previsto (ações rápidas «Cumpriu horário»)", async () => {
+    const { uc, ctx, event } = setup();
+    ctx.plan = (date) => (date === "2026-10-09" ? { theoreticalMinutes: 480, plannedStart: "09:00", plannedEnd: "17:00", nightSchedule: false, excused: false } : { theoreticalMinutes: 0, plannedStart: null, plannedEnd: null, nightSchedule: false, excused: false });
+    event("2026-10-09T09:20:00");
+    const { days } = await uc.days(ORG, "e1", "2026-10-09", "2026-10-10");
+    expect(days.map((d) => [d.plannedStart, d.plannedEnd])).toEqual([["09:00", "17:00"], [null, null]]);
+  });
+
   test("ninguém corrige o próprio registo", async () => {
     const { uc, event } = setup();
     event("2026-10-09T09:00:00");

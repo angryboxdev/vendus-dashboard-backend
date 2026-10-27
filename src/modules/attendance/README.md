@@ -44,6 +44,7 @@ horas (Fase 6), que vai ler os ajustes daqui.
 ### Input (use cases)
 
 - `AttendanceUseCases` — picar (RE-9), estado e dias, revisões (RE-10), recusa (RE-11), pedidos de correção, incidentes, ajustes, recálculo (fila).
+  - `days` devolve por dia também `plannedStart`/`plannedEnd` (horário previsto, "HH:MM"), usados pelas ações rápidas da conferência no frontend («Cumpriu horário» / «Atrasou» / «Justificar» / «Faltou», 2026-10-27) — feitas com as revisões e a resolução de incidentes já existentes.
 
 ### Output (domain dependencies)
 

@@ -78,6 +78,9 @@ const view = (e: ClockEvent): EventView => ({ id: e.id, employeeId: e.employeeId
 export interface DayView extends DayResult {
   /** Versão gravada atual (null = ainda não gravado ou dia em curso). */
   version: number | null;
+  /** Horário previsto "HH:MM" (fixo) — para as ações rápidas da conferência. */
+  plannedStart: string | null;
+  plannedEnd: string | null;
 }
 
 export class AttendanceUseCases {
@@ -378,7 +381,12 @@ export class AttendanceUseCases {
       const d = localDate(iso, c.tz);
       return d >= from && d <= to;
     };
-    const days: DayView[] = c.days.map((d) => ({ ...d, version: current.find((x) => x.workDate === d.workDate)?.version ?? null }));
+    const days: DayView[] = c.days.map((d) => ({
+      ...d,
+      version: current.find((x) => x.workDate === d.workDate)?.version ?? null,
+      plannedStart: c.plans.get(d.workDate)?.plannedStart ?? null,
+      plannedEnd: c.plans.get(d.workDate)?.plannedEnd ?? null,
+    }));
     return {
       employeeId,
       timeZone: c.tz,
