@@ -40,7 +40,7 @@ async function setup(requireInvoice = false) {
 describe("Pagamento de ocorrências pela conciliação bancária", () => {
   it("movimento ligado → paga com a data do movimento (mesmo com valor diferente: a diferença vem dos movimentos)", async () => {
     const { occurrenceRepo, occ, settle } = await setup();
-    expect(await settle.execute({ organizationId, occurrenceId: occ.id, movementId: "mov-1", paidAt: "2026-09-01", bankAccountId: "acc-1" })).toBe(true);
+    expect(await settle.execute({ organizationId, occurrenceId: occ.id, movementId: "mov-1", paidAt: "2026-09-01", bankAccountId: "acc-1" })).toBe("paid");
     const saved = (await occurrenceRepo.findById(organizationId, occ.id))!;
     expect(saved.status).toBe("paid");
     expect(saved.paidAt!.toISOString().slice(0, 10)).toBe("2026-09-01");
@@ -51,7 +51,13 @@ describe("Pagamento de ocorrências pela conciliação bancária", () => {
   it("já paga: não mexe", async () => {
     const { occ, settle } = await setup();
     await settle.execute({ organizationId, occurrenceId: occ.id, movementId: "mov-1", paidAt: "2026-09-01", bankAccountId: null });
-    expect(await settle.execute({ organizationId, occurrenceId: occ.id, movementId: "mov-2", paidAt: "2026-09-02", bankAccountId: null })).toBe(false);
+    expect(await settle.execute({ organizationId, occurrenceId: occ.id, movementId: "mov-2", paidAt: "2026-09-02", bankAccountId: null })).toBe("already_paid");
+  });
+
+  it("recorrência que exige fatura: não paga pela ocorrência — o movimento concilia-se com a fatura", async () => {
+    const { occurrenceRepo, occ, settle } = await setup(true);
+    expect(await settle.execute({ organizationId, occurrenceId: occ.id, movementId: "mov-1", paidAt: "2026-09-01", bankAccountId: null })).toBe("invoice_required");
+    expect((await occurrenceRepo.findById(organizationId, occ.id))!.status).not.toBe("paid");
   });
 
   it("desconciliar o movimento que a pagou → volta a por pagar", async () => {

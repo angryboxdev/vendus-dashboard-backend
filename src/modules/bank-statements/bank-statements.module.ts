@@ -130,7 +130,7 @@ export function createBankStatementsModule(
   const listRules = new ListReconciliationRulesUseCase(ruleRepo, movementRepo);
   const deleteRule = new DeleteReconciliationRuleUseCase(ruleRepo, movementRepo);
   const closeStatement = new CloseStatementUseCase(statementRepo, movementRepo);
-  const deleteStatement = new DeleteBankStatementUseCase(statementRepo, { movementRepo, linkRepo: entityLinkRepo, invoiceRead, invoiceReconciliationWrite });
+  const deleteStatement = new DeleteBankStatementUseCase(statementRepo, { movementRepo, linkRepo: entityLinkRepo, invoiceRead, invoiceReconciliationWrite, ...(occurrencePayment && { occurrencePayment }) });
   const updateBalances = new UpdateStatementBalancesUseCase(statementRepo);
   const findMovementCandidates = new FindMovementCandidatesUseCase(movementRepo, invoiceRead, payableRead, movementHint, entityLinkRepo);
   const documentStorage = new SupabaseBankDocumentStorageAdapter();

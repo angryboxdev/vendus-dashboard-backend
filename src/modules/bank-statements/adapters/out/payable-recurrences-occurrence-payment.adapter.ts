@@ -1,5 +1,6 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { OccurrencePaymentPort } from "../../domain/ports/out/occurrence-payment.port.js";
+import { OccurrenceRequiresInvoiceError } from "../../domain/errors.js";
 import type {
   ReopenOccurrenceFromBankPort,
   SettleOccurrenceFromBankPort,
@@ -13,7 +14,8 @@ export class PayableRecurrencesOccurrencePaymentAdapter implements OccurrencePay
   ) {}
 
   async settle(organizationId: OrganizationId, input: { occurrenceId: string; movementId: string; paidAt: string; bankAccountId: string | null }): Promise<void> {
-    await this.settleFromBank.execute({ organizationId, ...input });
+    const result = await this.settleFromBank.execute({ organizationId, ...input });
+    if (result === "invoice_required") throw new OccurrenceRequiresInvoiceError(input.occurrenceId);
   }
 
   async reopen(organizationId: OrganizationId, input: { occurrenceId: string; movementId: string }): Promise<void> {
