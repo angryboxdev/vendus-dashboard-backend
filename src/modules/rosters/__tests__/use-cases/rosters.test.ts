@@ -279,6 +279,61 @@ describe("Escalas — limpar pendentes da semana e repor (desfazer)", () => {
   });
 });
 
+describe("Escalas — copiar a semana para a seguinte", () => {
+  test("copia turnos e folgas (rascunho e publicados) para +7 dias, em rascunho; uma auditoria", async () => {
+    const { uc, repo, audit } = setup();
+    const { roster, manha, tarde } = await rosterWithTemplates(uc);
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-19", manha.id));
+    await uc.publish(ORG, BOSS, roster.id, { reason: null, confirm: true });
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-20", tarde.id));
+    await uc.addShift(ORG, BOSS, roster.id, { employeeId: "e2", workDate: "2026-10-25", kind: "day_off", templateId: null, segments: [] });
+    const removed = await uc.addShift(ORG, BOSS, roster.id, shift("e2", "2026-10-21", manha.id));
+    await uc.deleteShift(ORG, BOSS, removed.shift.id, { reason: null, confirm: false });
+
+    const r = await uc.copyWeek(ORG, BOSS, roster.id, { from: "2026-10-19" });
+    expect(r.created).toBe(3);
+    const copies = repo.shifts.filter((s) => s.workDate >= "2026-10-26" && !s.deleted);
+    expect(copies.map((s) => [s.employeeId, s.workDate, s.kind, s.templateId]).sort()).toEqual([
+      ["e1", "2026-10-26", "shift", manha.id],
+      ["e1", "2026-10-27", "shift", tarde.id],
+      ["e2", "2026-11-01", "day_off", null],
+    ]);
+    expect(copies.every((s) => s.dirty && s.published === null && s.rosterId === roster.id)).toBe(true);
+    expect(audit.actions.filter((e) => e.action === "rosters.shift.copy_week")).toHaveLength(1);
+  });
+
+  test("não mexe em dias já preenchidos; sobreposição noutra escala e fora do âmbito saltam (o resto copia)", async () => {
+    const { uc, repo } = setup();
+    const { roster, manha, tarde } = await rosterWithTemplates(uc);
+    const other = await uc.createRoster(ORG, BOSS, { name: "Loja Braga", targetType: "location", targetId: "22222222-2222-4222-8222-222222222222" });
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-19", manha.id));
+    await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-20", manha.id));
+    await uc.addShift(ORG, BOSS, roster.id, shift("e2", "2026-10-19", manha.id));
+    await uc.addShift(ORG, BOSS, roster.id, shift("e3", "2026-10-19", manha.id));
+    // Semana seguinte: e1 já tem turno a 26 nesta escala; e2 tem turno à mesma hora noutra escala.
+    const kept = await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-26", tarde.id));
+    await uc.addShift(ORG, BOSS, other.id, shift("e2", "2026-10-26", manha.id));
+
+    const r = await uc.copyWeek(ORG, BOSS, roster.id, { from: "2026-10-19" }, async (e) => e !== "e3");
+    expect(r.created).toBe(1);
+    expect(r.skipped).toMatchObject({ existing: 1, outOfScope: 1 });
+    expect(r.skipped.overlap.map((v) => [v.employeeId, v.workDate, v.rule])).toEqual([["e2", "2026-10-26", "overlap"]]);
+    const mine = repo.shifts.filter((s) => s.rosterId === roster.id && s.workDate >= "2026-10-26" && !s.deleted);
+    expect(mine.map((s) => [s.employeeId, s.workDate]).sort()).toEqual([
+      ["e1", "2026-10-26"],
+      ["e1", "2026-10-27"],
+    ]);
+    expect(repo.shifts.find((s) => s.id === kept.shift.id)!.templateId).toBe(tarde.id);
+  });
+
+  test("semana vazia não cria nada; data inválida é 400", async () => {
+    const { uc } = setup();
+    const { roster } = await rosterWithTemplates(uc);
+    expect(await uc.copyWeek(ORG, BOSS, roster.id, { from: "2026-10-19" })).toMatchObject({ created: 0, skipped: { existing: 0, outOfScope: 0, overlap: [] } });
+    await expect(uc.copyWeek(ORG, BOSS, roster.id, { from: "19-10-2026" })).rejects.toBeInstanceOf(RosterValidationError);
+  });
+});
+
 describe("Escalas — lote e disponibilidade (Assistente Mezza)", () => {
   test("addShifts: vários horários numa operação; sobreposição recusa o lote inteiro; um registo de auditoria", async () => {
     const { uc, repo, audit } = setup();
