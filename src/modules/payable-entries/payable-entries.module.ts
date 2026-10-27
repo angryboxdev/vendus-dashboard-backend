@@ -12,9 +12,12 @@ import { DeletePayableEntryUseCase } from "./application/use-cases/delete-payabl
 import { GetPayableSummaryUseCase } from "./application/use-cases/get-payable-summary.use-case.js";
 import { GetPayableCalendarUseCase } from "./application/use-cases/get-payable-calendar.use-case.js";
 import { createPayableEntryRouter } from "./adapters/in/payable-entry.controller.js";
+import type { GetPayableSummaryPort } from "./domain/ports/in/payable-entry.ports.js";
 
 export interface PayableEntriesModule {
   router: Router;
+  /** Módulo cash-flow (D10): valor a pagar e em atraso no painel «Para tratar». */
+  getPayableSummary: GetPayableSummaryPort;
 }
 
 /**
@@ -32,6 +35,7 @@ export function createPayableEntriesModule(): PayableEntriesModule {
   // Adapters de saída
   const payableRepo = new SupabasePayableEntryRepository(createScopedQuery);
   const invoiceRead = new SupabaseInvoiceReadAdapter(createScopedQuery);
+  const getPayableSummary = new GetPayableSummaryUseCase(payableRepo);
 
   // Use cases
   const router = createPayableEntryRouter({
@@ -42,9 +46,9 @@ export function createPayableEntriesModule(): PayableEntriesModule {
     listPayableEntries: new ListPayableEntriesUseCase(payableRepo),
     getPayableEntry: new GetPayableEntryUseCase(payableRepo),
     deletePayableEntry: new DeletePayableEntryUseCase(payableRepo),
-    getPayableSummary: new GetPayableSummaryUseCase(payableRepo),
+    getPayableSummary,
     getPayableCalendar: new GetPayableCalendarUseCase(payableRepo),
   });
 
-  return { router };
+  return { router, getPayableSummary };
 }

@@ -35,6 +35,7 @@ function toEntity(row: Record<string, unknown>): Recurrence {
     pausedAt: row.paused_at ? new Date(row.paused_at as string) : null,
     vatRate: (row.vat_rate as number | null) ?? null,
     vatIncluded: (row.vat_included as boolean | null) ?? null,
+    paymentPeriodOffset: row.payment_period_offset === -1 ? -1 : 0,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   });
@@ -66,6 +67,7 @@ function toRow(r: Recurrence): Record<string, unknown> {
     paused_at: r.pausedAt ? r.pausedAt.toISOString().slice(0, 10) : null,
     vat_rate: r.vatRate,
     vat_included: r.vatIncluded,
+    payment_period_offset: r.paymentPeriodOffset,
     created_at: r.createdAt.toISOString(),
     updated_at: r.updatedAt.toISOString(),
   };

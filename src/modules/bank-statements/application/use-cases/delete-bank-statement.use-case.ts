@@ -4,6 +4,7 @@ import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-mov
 import type { BankMovementEntityLinkRepositoryPort } from "../../domain/ports/out/bank-movement-entity-link-repository.port.js";
 import type { InvoiceMatchReadPort } from "../../domain/ports/out/invoice-match-read.port.js";
 import type { InvoiceReconciliationWritePort } from "../../domain/ports/out/invoice-reconciliation-write.port.js";
+import type { OccurrencePaymentPort } from "../../domain/ports/out/occurrence-payment.port.js";
 import { StatementNotFoundError } from "../../domain/errors.js";
 
 /** O que é preciso para devolver as faturas ao estado certo quando os movimentos do extrato desaparecem. */
@@ -12,6 +13,8 @@ export interface StatementDeletionDeps {
   linkRepo: BankMovementEntityLinkRepositoryPort;
   invoiceRead: InvoiceMatchReadPort;
   invoiceReconciliationWrite: InvoiceReconciliationWritePort;
+  /** Recorrências pagas por movimentos do extrato voltam a «por pagar» (só as que esses movimentos pagaram). */
+  occurrencePayment?: OccurrencePaymentPort;
 }
 
 /**
@@ -42,6 +45,14 @@ export class DeleteBankStatementUseCase implements DeleteBankStatementPort {
     const { movementRepo, linkRepo } = this.deps!;
     const movements = await movementRepo.findByStatementId(organizationId, statementImportId);
     if (movements.length === 0) return [];
+    const { occurrencePayment } = this.deps!;
+    if (occurrencePayment) {
+      for (const m of movements) {
+        if (m.matchedEntityType === "recurrence_occurrence" && m.matchedEntityId) {
+          await occurrencePayment.reopen(organizationId, { occurrenceId: m.matchedEntityId, movementId: m.id });
+        }
+      }
+    }
     const links = await linkRepo.findByMovementIds(organizationId, movements.map((m) => m.id));
     const linkedMovementIds = [...new Set(links.map((l) => l.movementId))];
     for (const id of linkedMovementIds) await linkRepo.deleteByMovementId(organizationId, id);

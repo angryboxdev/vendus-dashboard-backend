@@ -85,37 +85,58 @@ function setupWithHint(suppliersSeed: SupplierSummary[], forSupplier: (o: unknow
   return () => useCase.execute({ organizationId: ORG, fileBuffer: Buffer.from("pdf"), filename: "aguas.pdf", mimeType: "application/pdf" });
 }
 
+function setupClassified(suppliersSeed: SupplierSummary[], classifyLines: SmartReadingDeps["classifyLines"], hint: { categoryId: string; recurrenceName: string } | null) {
+  const ai = new FakeAiExtractionPort();
+  // Linhas que fecham com o QR (ficam as da IA, com descrição real).
+  ai.setResult({ supplierName: "Águas Exemplo", supplierNif: "599999993", totalWithVat: 5998, confidence: 0.95, lines: [
+    { description: "Consumo de água", quantity: 1, unitPriceWithoutVat: 5000, vatRate: 6, vatAmount: null, totalWithoutVat: 5000, totalWithVat: null },
+    { description: "Saneamento", quantity: 1, unitPriceWithoutVat: 659, vatRate: 6, vatAmount: null, totalWithoutVat: 659, totalWithVat: null },
+  ] });
+  const lookup = new FakeSupplierLookupPort();
+  lookup.seed(suppliersSeed);
+  const identity = new FakeOrganizationIdentityRead();
+  identity.seedNif(OWN_NIF);
+  const smart: SmartReadingDeps = {
+    pdf: { read: async () => ({ ...content, qrCodes: [content.qrCodes[0]!] }), readBarcode: async () => ({ status: "absent" }), extractLogo: async () => null },
+    layouts: [new MakroLayout()],
+    readingWrite: { save: async () => undefined },
+    classifyLines,
+    recurrenceCategoryHint: { forSupplier: async () => hint },
+  };
+  const useCase = new ImportInvoiceUseCase(new FakeInvoiceRepository(), new FakeDocumentStoragePort(), ai, lookup, new FakeSupplierHintPort(), identity, new FakeFiscalIdentityPort(), smart);
+  return () => useCase.execute({ organizationId: ORG, fileBuffer: Buffer.from("pdf"), filename: "aguas.pdf", mimeType: "application/pdf" });
+}
+
 describe("ImportInvoiceUseCase — fatura com QR lida pela IA (documento de pagamento das águas)", () => {
-  test("identidade e totais do QR; linhas que não fecham dão lugar às bases do QR; aviso das 2 faturas", async () => {
+  test("documento com 2 QR: uma só fatura com a identidade do 1.º e a soma dos dois (90,03 €), uma linha por taxa", async () => {
     const r = await setup([], null)();
-    expect(r.invoice).toMatchObject({ invoiceNumber: "900001", subtotalWithoutVat: 5659, totalVat: 339, totalWithVat: 5998, supplierId: null });
-    expect(r.extractedLines).toHaveLength(1);
-    expect(r.extractedLines[0]).toMatchObject({ description: "Valor à taxa de IVA 6 % (QR fiscal)", vatRate: 6, totalWithoutVat: 5659 });
+    expect(r.siblings).toBeUndefined();
+    expect(r.invoice).toMatchObject({ invoiceNumber: "900001", subtotalWithoutVat: 8664, totalVat: 339, totalWithVat: 9003, supplierId: null });
+    expect(r.extractedLines.map((l) => [l.description, l.vatRate, l.totalWithoutVat])).toEqual([
+      ["Valor à taxa de IVA 6 % (QR fiscal)", 6, 5659],
+      ["Valor não sujeito a IVA (QR fiscal)", 0, 3005],
+    ]);
+    expect(r.extractedAmounts?.vatSummary).toEqual([{ rate: 6, baseCents: 5659, vatCents: 339 }, { rate: 0, baseCents: 3005, vatCents: 0 }]);
     const codes = r.reading?.issues.map((i) => i.code);
     expect(codes).toEqual(expect.arrayContaining(["lines_replaced_by_qr", "qr_multiple_documents"]));
   });
 
-  test("documento com 2 QR: 2 rascunhos (um por QR) no mesmo grupo de pagamento, uma só chamada à IA", async () => {
-    const run = setup([supplier("sup-residuos", "Resíduos Exemplo", "599999994")], null);
-    const r = await run();
-    expect(r.siblings).toHaveLength(1);
-    const waste = r.siblings![0]!;
-    expect(waste.invoice).toMatchObject({ invoiceNumber: "900002", supplierId: "sup-residuos", totalWithVat: 3005, totalVat: 0, subtotalWithoutVat: 3005 });
-    expect(waste.extractedLines).toEqual([expect.objectContaining({ description: "Valor não sujeito a IVA (QR fiscal)", totalWithoutVat: 3005 })]);
-    expect(waste.reading).toMatchObject({ source: "deterministic", aiCalls: 0, qrRead: true });
-    expect(waste.reading?.issues.map((i) => i.code)).toEqual(["read_from_qr"]);
-    // O prazo do débito é o mesmo documento de pagamento.
-    expect(waste.invoice.dueDate).toBe(r.invoice.dueDate);
-    expect(r.invoice.paymentGroupId).toBeTruthy();
-    expect(waste.invoice.paymentGroupId).toBe(r.invoice.paymentGroupId);
-    expect(r.invoice.id).not.toBe(waste.invoice.id);
+  test("lançada na empresa das águas; a fatura dos resíduos fica nas notas (número, emitente, NIF, valor)", async () => {
+    const r = await setup([supplier("sup-aguas", "Águas Exemplo", "599999993"), supplier("sup-residuos", "Resíduos Exemplo", "599999994")], null)();
+    expect(r.invoice.supplierId).toBe("sup-aguas");
+    expect(r.invoice.notes).toContain("Inclui a fatura 900002 de Resíduos Exemplo (NIF 599999994, 30,05 €)");
+  });
+
+  test("emitente dos resíduos sem ficha: as notas dizem «outro emitente» com o NIF", async () => {
+    const r = await setup([supplier("sup-aguas", "Águas Exemplo", "599999993")], null)();
+    expect(r.invoice.notes).toContain("900002 de outro emitente (NIF 599999994, 30,05 €)");
   });
 
   test("um só QR: um rascunho, sem grupo de pagamento", async () => {
     const one = { ...content, qrCodes: [content.qrCodes[0]!] };
     const r = await setup([], null, one)();
     expect(r.siblings).toBeUndefined();
-    expect(r.invoice.paymentGroupId).toBeNull();
+    expect(r.invoice).toMatchObject({ totalWithVat: 5998, notes: null });
   });
 
   test("fornecedor certo pelo NIF do QR, mesmo com uma dica antiga para outro fornecedor", async () => {
@@ -160,17 +181,44 @@ describe("ImportInvoiceUseCase — fatura com QR lida pela IA (documento de paga
     expect(r.extractedLines[0]!.suggestedCostCenterCategoryId).toBeUndefined();
   });
 
-  test("fatura lida só do QR: nome do fornecedor vem da ficha encontrada pelo NIF", async () => {
-    const r = await setup([supplier("sup-residuos", "Resíduos Exemplo", "599999994")], null)();
-    expect(r.siblings![0]!.invoice).toMatchObject({ supplierId: "sup-residuos", supplierName: "Resíduos Exemplo" });
-  });
-
-  test("fatura dos resíduos sem recorrência própria (nem ficha): usa a recorrência do mesmo documento", async () => {
+  test("linhas de água e de resíduos ficam com a categoria da recorrência da empresa das águas", async () => {
     const hint = async (_o: unknown, id: string) => (id === "sup-aguas" ? { categoryId: "c-agua", recurrenceName: "Água" } : null);
     const r = await setupWithHint([supplier("sup-aguas", "Águas Exemplo", "599999993")], hint)();
-    const waste = r.siblings![0]!;
-    expect(waste.invoice.supplierId).toBeNull();
-    expect(waste.extractedLines[0]).toMatchObject({ suggestedCostCenterCategoryId: "c-agua", classificationSource: "recurrence" });
-    expect(waste.extractedLines[0]!.classificationEvidence).toContain("mesmo documento de pagamento");
+    expect(r.extractedLines.map((l) => [l.suggestedCostCenterCategoryId, l.classificationSource])).toEqual([
+      ["c-agua", "recurrence"],
+      ["c-agua", "recurrence"],
+    ]);
+  });
+
+  test("recorrência do fornecedor vale mais do que palavras-chave e IA, mas não do que o histórico", async () => {
+    const classifyLines = {
+      execute: async () => ({
+        classifications: [
+          { index: 0, categoryId: "c-bebidas", source: "keyword" as const, evidence: "«água» → Bebidas" },
+          { index: 1, categoryId: "c-bebidas", source: "ai" as const, evidence: "IA" },
+        ],
+        metrics: { lines: 2, deterministic: 1, aiRequested: 1, aiResolved: 1, aiError: false },
+      }),
+    };
+    const run = setupClassified([supplier("sup-aguas", "Águas Exemplo", "599999993")], classifyLines, { categoryId: "c-agua", recurrenceName: "Água" });
+    const r = await run();
+    expect(r.extractedLines.map((l) => [l.suggestedCostCenterCategoryId, l.classificationSource])).toEqual([
+      ["c-agua", "recurrence"],
+      ["c-agua", "recurrence"],
+    ]);
+
+    const fromHistory = { execute: async () => ({ classifications: [0, 1].map((index) => ({ index, categoryId: "c-escolhida", source: "history_description" as const, evidence: "h" })), metrics: { lines: 2, deterministic: 2, aiRequested: 0, aiResolved: 0, aiError: false } }) };
+    const r2 = await setupClassified([supplier("sup-aguas", "Águas Exemplo", "599999993")], fromHistory, { categoryId: "c-agua", recurrenceName: "Água" })();
+    expect(r2.extractedLines.map((l) => l.classificationSource)).toEqual(["history_description", "history_description"]);
+  });
+
+  test("categoria por defeito do fornecedor não se sobrepõe a palavras-chave (só preenche o que falta)", async () => {
+    const classifyLines = { execute: async () => ({ classifications: [{ index: 0, categoryId: "c-bebidas", source: "keyword" as const, evidence: "k" }], metrics: { lines: 2, deterministic: 1, aiRequested: 0, aiResolved: 0, aiError: false } }) };
+    const withDefault = { ...supplier("sup-aguas", "Águas Exemplo", "599999993"), defaultCostCenterCategoryId: "c-agua" };
+    const r = await setupClassified([withDefault], classifyLines, null)();
+    expect(r.extractedLines.map((l) => [l.suggestedCostCenterCategoryId, l.classificationSource])).toEqual([
+      ["c-bebidas", "keyword"],
+      ["c-agua", "supplier_default"],
+    ]);
   });
 });

@@ -1,3 +1,5 @@
+import type { ReopenInvoiceFromBankPort, SettleInvoiceFromBankPort } from "./domain/ports/in/bank-payment.ports.js";
+import { ReopenInvoiceFromBankUseCase, SettleInvoiceFromBankUseCase } from "./application/use-cases/invoice-bank-payment.use-cases.js";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import { SupabaseInvoiceRepository } from "./adapters/out/supabase-invoice.repository.js";
 import { SupabaseInvoiceLineRepository } from "./adapters/out/supabase-invoice-line.repository.js";
@@ -43,6 +45,8 @@ import { SupabaseCategoryCatalogAdapter, SupabaseConfirmedLineHistoryAdapter } f
 import { OpenAiLineCategoryAdapter } from "./adapters/out/openai-line-category.adapter.js";
 import { ClassifyInvoiceLinesUseCase } from "./application/use-cases/classify-invoice-lines.use-case.js";
 import { MakroLayout } from "./domain/services/reading/makro-layout.js";
+import { TaxCodeLinesLayout } from "./domain/services/reading/tax-code-lines-layout.js";
+import { RateLinesLayout } from "./domain/services/reading/rate-lines-layout.js";
 import { GenericQrLayout } from "./domain/services/reading/generic-qr-layout.js";
 import { ConfirmImportedInvoiceUseCase } from "./application/use-cases/confirm-imported-invoice.use-case.js";
 import { GetInvoiceAlertsUseCase } from "./application/use-cases/get-invoice-alerts.use-case.js";
@@ -80,7 +84,7 @@ import type {
   GetStockPurchaseReviewStatusPort,
   DeleteDraftStockPurchaseReviewPort,
 } from "../stock-purchase-review/domain/ports/in/stock-purchase-review.ports.js";
-import type { ProcessDirectDebitsPort, ListInvoicesPort, ListInvoiceLinesPort, GetInvoicePort } from "./domain/ports/in/invoice.ports.js";
+import type { ProcessDirectDebitsPort, ListInvoicesPort, ListInvoiceLinesPort, GetInvoicePort, GetInvoiceAlertsPort } from "./domain/ports/in/invoice.ports.js";
 import type { Router } from "express";
 
 export interface InvoicesModule {
@@ -91,6 +95,11 @@ export interface InvoicesModule {
   listInvoiceLines: ListInvoiceLinesPort;
   /** Módulo Stock — Compra por rever (D10): revalidação antes de confirmar e varredura de recuperação. */
   getInvoice: GetInvoicePort;
+  /** Módulo cash-flow (D10): faturas por rever no painel «Para tratar». */
+  getInvoiceAlerts: GetInvoiceAlertsPort;
+  /** Módulo bank-statements: fatura conciliada por inteiro → paga (conta a pagar e ocorrência acompanham); anulada → reabre. */
+  settleInvoiceFromBank: SettleInvoiceFromBankPort;
+  reopenInvoiceFromBank: ReopenInvoiceFromBankPort;
 }
 
 /**
@@ -161,13 +170,15 @@ export function createInvoicesModule(
   const listInvoices = new ListInvoicesUseCase(invoiceRepo, categoryReader, allocationRepo, lineRepo);
   const listInvoiceLines = new ListInvoiceLinesUseCase(lineRepo, invoiceRepo);
   const getInvoice = new GetInvoiceUseCase(invoiceRepo, lineRepo, categoryReader, allocationRepo, amountsWrite);
+  const getInvoiceAlerts = new GetInvoiceAlertsUseCase(invoiceRepo);
 
   // Leitor inteligente (E3): QR + texto do PDF antes da IA; categoria sugerida por linha
   // (IA só no que as regras não resolvem; INVOICE_LINE_AI=off desliga essa parte).
   const importInvoice = new ImportInvoiceUseCase(invoiceRepo, storage, aiExtraction, supplierLookup, supplierHint, organizationIdentityRead, fiscal, {
     pdf: pdfReader,
     // Layouts específicos primeiro; o genérico serve qualquer fatura com QR fiscal (só se reconciliar).
-    layouts: [new MakroLayout(), new GenericQrLayout()],
+    // Linhas com código de IVA no fim (ex.: documento de pagamento das águas, 2 faturas fiscais) antes do genérico.
+    layouts: [new MakroLayout(), new TaxCodeLinesLayout(), new RateLinesLayout(), new GenericQrLayout()],
     readingWrite: new SupabaseInvoiceReadingWriteAdapter(createScopedQuery),
     classifyLines: new ClassifyInvoiceLinesUseCase(
       new SupabaseCategoryCatalogAdapter(createScopedQuery),
@@ -220,11 +231,20 @@ export function createInvoicesModule(
       new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit, stockRouting, categoryReader, allocationRepo, stockLines, supplierLogos),
       recurrenceLink,
     ),
-    getInvoiceAlerts: new GetInvoiceAlertsUseCase(invoiceRepo),
+    getInvoiceAlerts,
     processDirectDebits,
   }, idempotencyStore);
 
-  return { router, processDirectDebits, listInvoices, listInvoiceLines, getInvoice };
+  return {
+    router,
+    processDirectDebits,
+    listInvoices,
+    listInvoiceLines,
+    getInvoice,
+    getInvoiceAlerts,
+    settleInvoiceFromBank: new SettleInvoiceFromBankUseCase(invoiceRepo, payableWrite, occurrenceSync),
+    reopenInvoiceFromBank: new ReopenInvoiceFromBankUseCase(invoiceRepo, payableWrite, occurrenceSync),
+  };
 }
 
 /** Limite diário de chamadas à IA por organização (todas as funcionalidades). */

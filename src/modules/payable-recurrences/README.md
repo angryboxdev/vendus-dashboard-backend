@@ -457,6 +457,8 @@ do previsto) — eliminando a ambiguidade sem inventar um novo limiar arbitrári
 em cêntimos). Se for "parcial", só a ligação do movimento é criada, e o estado computado
 (`partially_paid`) reflecte isso normalmente até chegar outro movimento.
 
+**D14 — Pagamento pela conciliação bancária (2026-10-27).** `SettleOccurrenceFromBankPort` / `ReopenOccurrenceFromBankPort` (para o bank-statements): um movimento ligado a uma ocorrência deixa-a `paid` (data do movimento, `transfer`, conta do movimento) mesmo com valor diferente do previsto — decisão do utilizador; a diferença continua visível pelos movimentos ligados (`paidAmountCents`/`differenceCents`). A nota do pagamento guarda o id do movimento e só esse movimento a pode reabrir (`reopenPayment`: volta a fatura ligada / à espera de fatura / previsão); pagamentos marcados à mão nunca são desfeitos. Resultado explícito (`paid` / `already_paid` / `skipped` / `invoice_required`). **Ocorrência com fatura associada ou que exige fatura → `invoice_required`** (correção 2026-10-27): o movimento concilia-se com a fatura, que paga a ocorrência em cadeia; pagar só a ocorrência deixava a fatura e a conta a pagar em aberto (risco de pagamento duplicado). O bank-statements recusa a classificação (409) sem gravar nada.
+
 **D13 — Recorrência de salários: colaborador por `employee_id`, nome em `supplier_name`.**
 Uma recorrência de salários é uma por colaborador. Guarda-se `employee_id` (FK composta
 `(org_id, employee_id)` → `hr_employees`, `on delete set null (employee_id)`) e o nome do
@@ -467,6 +469,8 @@ que quem tem `finance.recurrences` consiga escolher o colaborador sem precisar d
 do RH; devolve só id, nome e estado (RGPD — minimização). A UI (frontend) mostra o campo
 «Colaborador» quando a categoria escolhida (grupo ou sub-categoria do centro de custo) é de
 salários ou o tipo é «Pessoal».
+
+**D15b — A que mês se refere o pagamento + conciliação automática (2026-10-27).** `Recurrence.paymentPeriodOffset` (coluna `payment_period_offset`, migração `20261202100000`): 0 = o próprio mês (renda), -1 = o mês anterior (salário de setembro pago em outubro). `SettleRecurrenceFromBankPort` (para os «Movimentos recorrentes» do bank-statements): ocorrência do mês do movimento + offset, gerada se faltar (respeita período/estado da recorrência; corrida na `uq_recurrence_period` → relê) → paga com a marca do movimento. **Só esse mês, nunca outro** — um segundo pagamento no mesmo mês (adiantamento) não vai pagar o mês seguinte por engano; fica por conciliar. Mês pago à mão e sem movimento → `linked` (o movimento passa a comprovativo, sem mexer no pagamento). Recorrências que exigem fatura e ocorrências com fatura → `not_applicable` (vão pela fatura). `GetRecurrenceForBankRulePort` dá o resumo para validar a regra.
 
 **D14 — `paused_at` em vez de um registo de eventos.**
 A vista «Histórico» precisa de saber quando cada recorrência começou (`start_date`), foi

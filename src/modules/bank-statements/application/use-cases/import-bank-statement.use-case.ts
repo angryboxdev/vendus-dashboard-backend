@@ -1,3 +1,4 @@
+import { linkRuleRecurrences, reopenSettled, type RecurrenceLinkingDeps } from "./rule-recurrence-linking.js";
 import { createHash } from "node:crypto";
 import { BankStatementImport } from "../../domain/entities/bank-statement-import.js";
 import { BankMovement } from "../../domain/entities/bank-movement.js";
@@ -43,6 +44,8 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
     private readonly accountResolver?: StatementAccountResolverPort,
     /** «Movimentos recorrentes»: os movimentos novos que batem com uma regra ficam logo conciliados. */
     private readonly ruleRepo?: BankReconciliationRuleRepositoryPort,
+    /** Regras ligadas a recorrências (rendas, salários): ligam o movimento à ocorrência do mês. */
+    private readonly recurrenceLinking?: RecurrenceLinkingDeps,
   ) {}
 
   /** Movimentos já gravados da mesma conta no período do ficheiro (pela conta ligada; senão pelo nº de conta dos extratos). */
@@ -164,16 +167,23 @@ export class ImportBankStatementUseCase implements ImportBankStatementPort {
 
     // «Movimentos recorrentes»: aplicados antes de gravar (sem escritas extra); só com a conta conhecida.
     let autoClassifiedCount = 0;
+    let settled: Awaited<ReturnType<typeof linkRuleRecurrences>>["settled"] = [];
     if (this.ruleRepo && resolvedBankAccountId && toSave.length > 0) {
       const rules = await this.ruleRepo.findAll(organizationId, true);
-      const matches = new AutoMatchingService().applyRules(rules, toSave);
-      const classified = new Map(matches.map(({ updated }) => [updated.id, updated]));
+      const linked = await linkRuleRecurrences(organizationId, new AutoMatchingService().applyRules(rules, toSave), this.recurrenceLinking);
+      const classified = new Map(linked.matches.map(({ updated }) => [updated.id, updated]));
       toSave = toSave.map((m) => classified.get(m.id) ?? m);
-      autoClassifiedCount = matches.length;
+      autoClassifiedCount = linked.matches.length;
+      settled = linked.settled;
     }
 
     if (toSave.length > 0) {
-      await this.movementRepo.saveBulk(organizationId, toSave);
+      try {
+        await this.movementRepo.saveBulk(organizationId, toSave);
+      } catch (e) {
+        await reopenSettled(organizationId, settled, this.recurrenceLinking);
+        throw e;
+      }
     }
 
     // 4. Compute stats and update statement

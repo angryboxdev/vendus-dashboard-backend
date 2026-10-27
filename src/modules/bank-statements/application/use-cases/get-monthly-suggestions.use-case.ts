@@ -1,5 +1,6 @@
 import { normalizeBankDescription } from "../../domain/utils/bank-description.js";
-import { AMOUNT_MATCH_TOLERANCE_CENTS, isStrongSuggestion } from "../../domain/services/candidate-scoring.service.js";
+import { AMOUNT_MATCH_TOLERANCE_CENTS, isStrongSuggestion, scoreCandidate, type CandidateScore } from "../../domain/services/candidate-scoring.service.js";
+import type { OccurrenceMatchCandidate, OccurrenceMatchReadPort } from "../../domain/ports/out/occurrence-match-read.port.js";
 import type { BankMovement } from "../../domain/entities/bank-movement.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
 import type {
@@ -7,6 +8,7 @@ import type {
   GetMonthlySuggestionsPort,
   GetMonthlySuggestionsQuery,
   MonthlyEntityMatchSuggestion,
+  MonthlyOccurrenceMatchSuggestion,
   MonthlySuggestions,
   RepeatJustificationSuggestion,
 } from "../../domain/ports/in/bank-statement.ports.js";
@@ -63,10 +65,42 @@ function buildRecurringJustificationIndex(history: BankMovement[]): Map<string, 
   return latestByDescription;
 }
 
+const DAY_MS = 86_400_000;
+
+/** A melhor ocorrência para um movimento: nome (beneficiário ou nome da recorrência) e valor previsto. */
+function bestOccurrence(
+  movement: BankMovement,
+  occurrences: OccurrenceMatchCandidate[],
+  claimed: ReadonlySet<string>,
+): { occurrence: OccurrenceMatchCandidate; score: CandidateScore } | null {
+  let best: { occurrence: OccurrenceMatchCandidate; score: CandidateScore } | null = null;
+  for (const o of occurrences) {
+    // Só previsões sem fatura: as que têm/exigem fatura concilia-se pela fatura (que paga a ocorrência em cadeia).
+    if (claimed.has(o.id) || o.status !== "forecast") continue;
+    const base = {
+      candidateAmount: o.effectiveAmountCents,
+      candidateOpenBalance: o.effectiveAmountCents,
+      candidateDates: [o.dueDate],
+      candidateSupplierId: o.supplierId,
+      movementAmount: movement.amount,
+      movementDate: movement.bookingDate,
+      movementDesc: movement.description,
+      hintSupplierId: null,
+    };
+    const byPayee = scoreCandidate({ ...base, candidateName: o.supplierName });
+    const score = byPayee.nameMatched ? byPayee : scoreCandidate({ ...base, candidateName: o.recurrenceName });
+    if (!isStrongSuggestion(score)) continue;
+    if (!best || score.confidence > best.score.confidence) best = { occurrence: o, score };
+  }
+  return best;
+}
+
 export class GetMonthlySuggestionsUseCase implements GetMonthlySuggestionsPort {
   constructor(
     private readonly movementRepo: BankMovementRepositoryPort,
     private readonly findMovementCandidates: FindMovementCandidatesPort,
+    /** Recorrências sem fatura (salários, rendas…): sugeridas por nome e valor, como as faturas. */
+    private readonly occurrenceRead?: OccurrenceMatchReadPort,
   ) {}
 
   async execute(query: GetMonthlySuggestionsQuery): Promise<MonthlySuggestions> {
@@ -76,7 +110,7 @@ export class GetMonthlySuggestionsUseCase implements GetMonthlySuggestionsPort {
     const monthMovements = await this.movementRepo.findByAccountAndPeriod(organizationId, bankAccountId, from, to);
     const pending = monthMovements.filter((m) => !m.isResolved);
     if (pending.length === 0) {
-      return { entityMatches: [], repeatJustifications: [] };
+      return { entityMatches: [], occurrenceMatches: [], repeatJustifications: [] };
     }
 
     const history = await this.movementRepo.findByAccountAndPeriod(
@@ -94,9 +128,20 @@ export class GetMonthlySuggestionsUseCase implements GetMonthlySuggestionsPort {
       pending.map((movement) => this.findMovementCandidates.execute({ organizationId, movementId: movement.id })),
     );
 
+    // Uma só leitura das ocorrências à volta do mês (±30 dias do vencimento).
+    const occurrences = this.occurrenceRead
+      ? await this.occurrenceRead.search(organizationId, {
+          dateFrom: new Date(from.getTime() - 30 * DAY_MS).toISOString().slice(0, 10),
+          dateTo: new Date(to.getTime() + 30 * DAY_MS).toISOString().slice(0, 10),
+          limit: 500,
+        })
+      : [];
+
     const entityMatches: MonthlyEntityMatchSuggestion[] = [];
+    const occurrenceMatches: MonthlyOccurrenceMatchSuggestion[] = [];
     const repeatJustifications: RepeatJustificationSuggestion[] = [];
     const claimedEntityIds = new Set<string>();
+    const claimedOccurrenceIds = new Set<string>();
 
     pending.forEach((movement, i) => {
       // Só sugestões fortes: nome E valor a bater e confiança ≥ 90% (decisão do utilizador).
@@ -114,6 +159,28 @@ export class GetMonthlySuggestionsUseCase implements GetMonthlySuggestionsPort {
           confidence: best.confidence,
         });
         return; // an entity match takes priority over repeating a past classification
+      }
+
+      // Recorrência sem fatura (salário, renda…): conciliar deixa a ocorrência paga.
+      const occ = movement.movementType === "debit" ? bestOccurrence(movement, occurrences, claimedOccurrenceIds) : null;
+      if (occ) {
+        claimedOccurrenceIds.add(occ.occurrence.id);
+        const o = occ.occurrence;
+        occurrenceMatches.push({
+          movementId: movement.id,
+          occurrenceId: o.id,
+          recurrenceName: o.recurrenceName,
+          supplierName: o.supplierName,
+          period: o.period,
+          amountCents: o.effectiveAmountCents,
+          confidence: occ.score.confidence,
+          supplierId: o.supplierId,
+          costCenterGroupId: o.costCenterGroupId,
+          costCenterCategoryId: o.costCenterCategoryId,
+          vatRate: o.vatRate,
+          vatIncluded: o.vatIncluded,
+        });
+        return;
       }
 
       const key = normalizeBankDescription(movement.description);
@@ -138,6 +205,6 @@ export class GetMonthlySuggestionsUseCase implements GetMonthlySuggestionsPort {
       }
     });
 
-    return { entityMatches, repeatJustifications };
+    return { entityMatches, occurrenceMatches, repeatJustifications };
   }
 }

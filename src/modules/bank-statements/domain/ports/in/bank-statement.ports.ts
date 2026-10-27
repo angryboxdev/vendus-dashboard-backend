@@ -298,8 +298,26 @@ export interface RepeatJustificationSuggestion {
   vatIncluded: boolean | null;
 }
 
+/** Ocorrência de recorrência sem fatura (salário, renda, seguro…) que bate com o movimento (nome e valor). */
+export interface MonthlyOccurrenceMatchSuggestion {
+  movementId: string;
+  occurrenceId: string;
+  recurrenceName: string;
+  supplierName: string;
+  period: string; // YYYY-MM
+  amountCents: number; // valor previsto (real ?? estimado)
+  confidence: number;
+  supplierId: string | null;
+  costCenterGroupId: string | null;
+  costCenterCategoryId: string | null;
+  vatRate: number | null;
+  vatIncluded: boolean | null;
+}
+
 export interface MonthlySuggestions {
   entityMatches: MonthlyEntityMatchSuggestion[];
+  /** Recorrências sem fatura — conciliar deixa a ocorrência paga. */
+  occurrenceMatches: MonthlyOccurrenceMatchSuggestion[];
   repeatJustifications: RepeatJustificationSuggestion[];
 }
 
@@ -331,6 +349,8 @@ export interface CreateReconciliationRuleCommand {
   supplierId?: string | null;
   vatRate?: number | null;
   vatIncluded?: boolean | null;
+  /** Recorrência sem fatura (renda, salário): cada movimento paga a ocorrência do mês. Exige «contrato_recorrencia» e conta. */
+  recurrenceId?: string | null;
   justificationType: JustificationType;
   /** Aplica já aos movimentos intocados da conta (todos os meses importados). Só com bankAccountId. */
   applyToExisting?: boolean;
@@ -354,6 +374,7 @@ export interface ReconciliationRuleDto {
   supplierId: string | null;
   vatRate: number | null;
   vatIncluded: boolean | null;
+  recurrenceId: string | null;
   justificationType: JustificationType;
   requiresDocument: boolean;
   affectsDre: boolean;
@@ -390,6 +411,8 @@ export interface UpdateReconciliationRuleCommand {
   supplierId?: string | null;
   vatRate?: number | null;
   vatIncluded?: boolean | null;
+  /** null = deixa de estar ligada a uma recorrência. */
+  recurrenceId?: string | null;
   justificationType?: JustificationType;
   isActive?: boolean;
   /** Depois de alterar, aplica aos movimentos intocados da conta da regra. */

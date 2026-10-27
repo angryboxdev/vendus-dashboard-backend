@@ -1,3 +1,6 @@
+/** Marca na nota de pagamento de uma fatura paga pela conciliação bancária (permite desfazer só essas). */
+export const BANK_PAYMENT_NOTE = "Pago pela conciliação bancária";
+
 export type InvoiceStatus =
   | "draft_ai"
   | "pending_review"
@@ -349,6 +352,8 @@ export class Invoice {
     financialType?: string | null;
     currency?: string;
     obligation?: InvoiceObligation | null;
+    /** Ex.: documento de pagamento com várias faturas fiscais lançado como uma só — as outras ficam aqui. */
+    notes?: string | null;
   }): Invoice {
     const now = new Date();
     const documentType = props.documentType ?? "invoice";
@@ -374,7 +379,7 @@ export class Invoice {
       paymentMethod: null,
       paymentNotes: null,
       competenceDate: null,
-      notes: null,
+      notes: props.notes ?? null,
       attachmentUrl: props.attachmentUrl ?? null,
       source: props.source,
       aiExtractionStatus: "done",
@@ -479,6 +484,43 @@ export class Invoice {
       paymentBankAccountId: bankAccountId ?? this.paymentBankAccountId,
       paymentMethod: paymentMethod !== undefined ? paymentMethod : this.paymentMethod,
       paymentNotes: paymentNotes !== undefined ? paymentNotes : this.paymentNotes,
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
+   * Paga pela conciliação bancária: estado «paga», data do movimento e a marca `BANK_PAYMENT_NOTE` (só os
+   * pagamentos com esta marca podem ser desfeitos ao anular a conciliação). Ao contrário de `markPaid`,
+   * não mexe no estado de conciliação (quem concilia é que o define).
+   */
+  markPaidByBank(paidAt: Date, bankAccountId: string | null): Invoice {
+    if (this.status === "cancelled") throw new Error(`Cannot mark a cancelled invoice as paid: ${this.id}`);
+    return new Invoice({
+      ...this.toProps(),
+      status: "paid",
+      paidAt,
+      paymentBankAccountId: bankAccountId ?? this.paymentBankAccountId,
+      paymentMethod: "transfer",
+      paymentNotes: BANK_PAYMENT_NOTE,
+      updatedAt: new Date(),
+    });
+  }
+
+  /** `true` quando foi a conciliação bancária a deixá-la paga (e por isso a pode desfazer). */
+  get isPaidByBank(): boolean {
+    return this.status === "paid" && this.paymentNotes === BANK_PAYMENT_NOTE;
+  }
+
+  /** Desfaz um pagamento feito pela conciliação: volta a «por pagar» (ou «vencida», se o prazo já passou). */
+  reopenBankPayment(today: Date = new Date()): Invoice {
+    if (!this.isPaidByBank) throw new Error(`Invoice ${this.id} was not paid by bank reconciliation`);
+    const overdue = this.dueDate !== null && this.dueDate.getTime() < Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+    return new Invoice({
+      ...this.toProps(),
+      status: overdue ? "overdue" : "pending",
+      paidAt: null,
+      paymentMethod: null,
+      paymentNotes: null,
       updatedAt: new Date(),
     });
   }

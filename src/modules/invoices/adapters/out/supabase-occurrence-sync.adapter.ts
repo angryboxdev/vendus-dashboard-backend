@@ -22,4 +22,13 @@ export class SupabaseOccurrenceSyncAdapter implements OccurrenceSyncPort {
 
     if (error) throw new Error(error.message);
   }
+
+  async reopenByInvoiceId(organizationId: OrganizationId, invoiceId: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("recurring_occurrences")
+      .update({ status: "invoice_linked", paid_at: null })
+      .eq("invoice_id", invoiceId)
+      .eq("status", "paid");
+    if (error) throw new Error(error.message);
+  }
 }

@@ -201,7 +201,7 @@ export class ReconcileMovementUseCase implements ReconcileMovementPort {
           if (totalAllocated === 0) {
             await this.invoiceReconciliationWrite.markUnreconciled(organizationId, invoiceId);
           } else if (totalAllocated >= invoiceTotalWithVat - 1) {
-            await this.invoiceReconciliationWrite.markReconciled(organizationId, invoiceId, movement.bookingDate);
+            await this.invoiceReconciliationWrite.markReconciled(organizationId, invoiceId, movement.bookingDate, movement.bankAccountId);
           } else {
             await this.invoiceReconciliationWrite.markPartiallyReconciled(organizationId, invoiceId);
           }

@@ -9,6 +9,7 @@ import type {
   ApplyAutoRulesPort,
   ApplyAutoRulesResult,
 } from "../../domain/ports/in/bank-statement.ports.js";
+import { linkRuleRecurrences, reopenSettled, type RecurrenceLinkingDeps } from "./rule-recurrence-linking.js";
 
 export class ApplyAutoRulesUseCase implements ApplyAutoRulesPort {
   private readonly matcher = new AutoMatchingService();
@@ -17,7 +18,9 @@ export class ApplyAutoRulesUseCase implements ApplyAutoRulesPort {
   constructor(
     private readonly statementRepo: BankStatementImportRepositoryPort,
     private readonly movementRepo: BankMovementRepositoryPort,
-    private readonly ruleRepo: BankReconciliationRuleRepositoryPort
+    private readonly ruleRepo: BankReconciliationRuleRepositoryPort,
+    /** Regras ligadas a recorrências (rendas, salários): ligam o movimento à ocorrência do mês. */
+    private readonly recurrenceLinking?: RecurrenceLinkingDeps,
   ) {}
 
   async execute(command: ApplyAutoRulesCommand): Promise<ApplyAutoRulesResult> {
@@ -30,11 +33,17 @@ export class ApplyAutoRulesUseCase implements ApplyAutoRulesPort {
       this.movementRepo.findByStatementId(organizationId, statementImportId),
     ]);
 
-    const matches = this.matcher.applyRules(rules, movements);
+    const linked = await linkRuleRecurrences(organizationId, this.matcher.applyRules(rules, movements), this.recurrenceLinking);
+    const matches = linked.matches;
 
     // Persist each matched movement
-    for (const { updated } of matches) {
-      await this.movementRepo.update(organizationId, updated);
+    try {
+      for (const { updated } of matches) {
+        await this.movementRepo.update(organizationId, updated);
+      }
+    } catch (e) {
+      await reopenSettled(organizationId, linked.settled, this.recurrenceLinking);
+      throw e;
     }
 
     // Recompute progress using all movements (with applied updates in-memory)

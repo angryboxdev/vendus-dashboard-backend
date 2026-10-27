@@ -7,6 +7,7 @@ import type {
 } from "../../domain/ports/in/bank-statement.ports.js";
 import { applyRulesToAccount } from "./apply-rules-to-account.js";
 import { ruleToDto, type RuleBackfillDeps } from "./create-reconciliation-rule.use-case.js";
+import { assertRecurrenceRule } from "./rule-recurrence-validation.js";
 
 /**
  * Altera, pausa ou reativa um «movimento recorrente». Os movimentos já conciliados pela regra ficam como
@@ -26,6 +27,14 @@ export class UpdateReconciliationRuleUseCase implements UpdateReconciliationRule
     let rule = current.edit(changes);
     if (isActive === true && !rule.isActive) rule = rule.activate();
     if (isActive === false && rule.isActive) rule = rule.deactivate();
+    if (rule.isActive) {
+      await assertRecurrenceRule(organizationId, rule, {
+        ruleRepo: this.ruleRepo,
+        movementRepo: this.backfill.movementRepo,
+        target: this.backfill.recurrenceLinking?.target,
+        occurrenceRead: this.backfill.occurrenceRead,
+      });
+    }
     await this.ruleRepo.update(organizationId, rule);
 
     const appliedCount =

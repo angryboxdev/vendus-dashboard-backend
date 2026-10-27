@@ -1,7 +1,7 @@
 import { computeDocumentAmounts, distribute } from "../../../../../kernel/money/document-amounts.js";
 import { dec, decToString, parseDecimal, pctOfCents, type Dec } from "../../../../../kernel/money/decimal.js";
 import type { FiscalQr, InvoiceReading, PdfContent, ReadingIssue, ReadLine } from "../../entities/invoice-reading.js";
-import { checkQrTotals, looksLikeAtQr, parseAtQr, qrBands } from "./fiscal-qr.js";
+import { checkQrTotals, combineFiscalQrs, looksLikeAtQr, parseAtQr, qrBands } from "./fiscal-qr.js";
 import type { InvoiceLayout, LayoutResult } from "./invoice-layout.js";
 
 /**
@@ -72,14 +72,37 @@ export function readFiscalQr(content: PdfContent): { qr: FiscalQr | null; issues
     issues.unshift({
       code: "qr_multiple_documents",
       blocking: false,
-      detail: `O PDF traz ${others.length + 1} faturas fiscais: ${[qr, ...others].map(fmt).join(", ")}. Cada uma é lançada como fatura própria, ligadas ao mesmo pagamento.`,
+      detail: `O PDF traz ${others.length + 1} faturas fiscais: ${[qr, ...others].map(fmt).join(", ")}. Lançadas como uma só fatura (soma), no emitente da 1.ª; as outras ficam nas notas.`,
     });
   }
   return { qr, issues };
 }
 
+/**
+ * Leitura determinística. Os layouts são tentados por ordem: o primeiro que reconhece o documento
+ * lê-o; se for estrito e não fechar ao cêntimo, tenta-se o seguinte que também o reconheça (ex.: o
+ * leitor de linhas com código de IVA não pode tirar a vez ao genérico numa fatura que ele não fecha).
+ */
 export function readInvoice(content: PdfContent, layouts: InvoiceLayout[]): InvoiceReading {
-  const { qr, issues } = readFiscalQr(content);
+  let first: InvoiceReading | null = null;
+  let start = 0;
+  while (start < layouts.length) {
+    const r = readWithFirstDetecting(content, layouts.slice(start));
+    if (!r.layout) return first ?? r;
+    first ??= r;
+    const at = layouts.findIndex((l, i) => i >= start && l.id === r.layout);
+    if (r.status === "ready" || !layouts[at]?.strict) return r;
+    start = at + 1;
+  }
+  return first ?? readWithFirstDetecting(content, []);
+}
+
+function readWithFirstDetecting(content: PdfContent, layouts: InvoiceLayout[]): InvoiceReading {
+  const { qr: firstQr, issues } = readFiscalQr(content);
+  // Documento de pagamento com várias faturas fiscais (águas + resíduos): lançado como uma só, as
+  // linhas do documento inteiro conferem-se com a soma dos QR (identidade do 1.º).
+  const others = firstQr ? otherFiscalQrs(content, firstQr) : [];
+  const qr = others.length ? combineFiscalQrs([firstQr!, ...others]) : firstQr;
   const layout = layouts.find((l) => l.detect(content, qr)) ?? null;
   const emptyTotals = { grossCents: 0, discountCents: 0, netCents: 0, vatCents: 0, totalCents: qr?.totalCents ?? null, depositsCents: 0, productUnits: "0", depositUnits: "0" };
   const qrHeader = { supplierName: null, dueDate: null, issuerNif: qr?.issuerNif ?? null, buyerNif: qr?.buyerNif ?? null, documentType: qr?.documentType ?? null, documentNumber: qr?.documentNumber ?? null, atcud: qr?.atcud ?? null, issueDate: qr?.issueDate ?? null };

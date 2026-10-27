@@ -182,6 +182,23 @@ export class RecurrenceOccurrence {
   }
 
   /**
+   * Desfaz um pagamento (o movimento bancário que o pagou foi desconciliado): volta ao estado anterior
+   * ao pagamento — fatura ligada, à espera de fatura ou previsão — e limpa os dados do pagamento.
+   */
+  reopenPayment(): RecurrenceOccurrence {
+    if (this.status !== "paid") throw new OccurrenceInvalidTransitionError(this.id, this.status, "reopen-payment");
+    return new RecurrenceOccurrence({
+      ...this.toProps(),
+      status: this.invoiceId ? "invoice_linked" : this.requireInvoice ? "awaiting_invoice" : "forecast",
+      paidAt: null,
+      paymentMethod: null,
+      paymentBankAccountId: null,
+      paymentNotes: null,
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
    * Cancels this occurrence. Terminal states cannot be cancelled.
    * Result: cancelled
    */

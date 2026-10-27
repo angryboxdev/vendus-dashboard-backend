@@ -9,11 +9,19 @@ export interface KeywordRule {
   categoryCode: string;
   label: string;
   pattern: RegExp;
+  /**
+   * Regra de serviço: uma linha que bate identifica a fatura toda (ex.: eletricidade) — as outras
+   * linhas sem decisão do mesmo documento recebem a mesma subcategoria («Acesso às redes», «mFRR»…).
+   */
+  wholeDocument?: true;
+  /** Não propagar ao documento se alguma linha bater aqui (ex.: fatura dual luz + gás). */
+  unlessDocument?: RegExp;
 }
 
 export const KEYWORD_RULES: KeywordRule[] = [
   // Subcategoria proposta (por aprovar); enquanto não existir no catálogo, a regra não se aplica.
   { categoryCode: "EST.08", label: "controlo de pragas", pattern: /\b(DESRATIZ\w*|DESBARATIZ\w*|DESINFESTA\w*|CONTROLO DE PRAGAS|PRAGAS|INSETO COLADORES?)\b/ },
+  { categoryCode: "EST.02", label: "eletricidade", pattern: /\b(KVA|POTENCIA CONTRATADA|ELETRICIDADE|ELECTRICIDADE)\b/, wholeDocument: true, unlessDocument: /\bGAS NATURAL\b/ },
   { categoryCode: "FDR.05", label: "depósito/caução", pattern: /\b(DEPOSITO|VASILHAME|TARA RETORNAVEL)\b/ },
   { categoryCode: "OPD.09", label: "consumível (pilhas, etiquetas, gás)", pattern: /\b(PILHAS?|BATERIAS?|ETIQUETAS?|ETIQ|\d*ETI\d+X\d+|ROLOS? TERMIC\w*|PAPEL TERMIC\w*|R TERM|ROLOS? TERM|GAS MACARICO|ISQUEIROS?|FOSFOROS|LAMPADAS?|FITA ADESIVA)\b/ },
   { categoryCode: "OPD.08", label: "limpeza e higiene", pattern: /\b(LIXIVIA|DETERG\w*|LOICA|DESINF\w*|LIMPA|LIMPEZA|LAVA ?TUDO|TIRA GORDURAS|DESENGORD\w*|DESENTUP\w*|DESTOP|SACOS? (DO )?LIXO|LIXO|MULTIUSOS|PAPEL HIGIENICO|ESFREG\w*|ESPONJAS?|MR ?PROPER|CIF|SONASOL|FAIRY|SABONETE|GEL (DE )?MAOS|ALCOOL GEL|LUVAS?|TOALHAS? (DE )?MAOS?|TOAL MAO|AMBIENTADOR|GLADE)\b/ },

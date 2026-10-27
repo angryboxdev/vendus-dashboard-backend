@@ -10,6 +10,8 @@ export interface PdfWord {
   x: number;
   y: number;
   width: number;
+  /** Texto rodado (ex.: rótulo vertical na margem «DETALHE FATURA») — intercala-se com as linhas. */
+  rotated?: boolean;
 }
 
 export interface PdfPageContent {

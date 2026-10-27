@@ -29,3 +29,14 @@ um só valor previsto e a conciliação só sabia juntar faturas do **mesmo** fo
   sugestões em vez de associação automática.
 - A importação a partir do Stock (`import-invoice-for-stock`) continua a tratar só a 1.ª fatura;
   as outras ficam como rascunhos no Financeiro.
+
+## Revisão (2026-10-26, mesmo dia)
+
+O utilizador preferiu **lançar tudo na empresa das águas**: um documento de pagamento com vários QR
+passa a ser **uma só fatura** no emitente do 1.º QR (número, NIF e data dele), com a **soma** de todos
+(o total do débito) e uma linha por taxa (ex.: água/saneamento 6 % + resíduos não sujeito). As outras
+faturas fiscais ficam nas **notas** (número, emitente, NIF, valor). A importação deixa de criar faturas
+irmãs; o `payment_group_id`, a recorrência do grupo e a sugestão do documento na conciliação ficam
+para documentos antigos já separados (sem uso nos novos). A identidade fiscal só regista a 1.ª fatura.
+
+Ainda no mesmo dia: o documento passa a ser lido **linha a linha** sem IA (`TaxCodeLinesLayout`, 9 linhas no caso das águas), conferido com a soma dos QR; as linhas por taxa do QR ficam só como último recurso.

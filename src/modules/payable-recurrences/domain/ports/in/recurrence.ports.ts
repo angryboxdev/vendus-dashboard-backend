@@ -4,6 +4,7 @@ import type {
   RecurrenceFrequency,
   RecurrenceStatus,
   PaymentMethod,
+  PaymentPeriodOffset,
 } from "../../entities/recurrence.js";
 import type { RecurrenceFilter } from "../out/recurrence-repository.port.js";
 
@@ -34,6 +35,8 @@ export interface RecurrenceDTO {
   pausedAt: string | null; // YYYY-MM-DD
   vatRate: number | null;
   vatIncluded: boolean | null;
+  /** 0 = o pagamento refere-se ao próprio mês; -1 = ao mês anterior (salários). */
+  paymentPeriodOffset: PaymentPeriodOffset;
   createdAt: string;
   updatedAt: string;
 }
@@ -60,6 +63,7 @@ export interface CreateRecurrenceCommand {
   autoCreatePayable?: boolean;
   requireInvoice?: boolean;
   notes?: string | null;
+  paymentPeriodOffset?: PaymentPeriodOffset;
 }
 
 export interface UpdateRecurrenceCommand {
@@ -81,6 +85,7 @@ export interface UpdateRecurrenceCommand {
   notes?: string | null;
   vatRate?: number | null;
   vatIncluded?: boolean | null;
+  paymentPeriodOffset?: PaymentPeriodOffset;
 }
 
 export interface PauseRecurrenceCommand {

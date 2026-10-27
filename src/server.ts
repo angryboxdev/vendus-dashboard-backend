@@ -47,6 +47,7 @@ import { createDocumentsModule } from "./modules/documents/documents.module.js";
 import { createCalendarModule } from "./modules/calendar/calendar.module.js";
 import { createLocationCredentialsModule } from "./modules/location-credentials/location-credentials.module.js";
 import { createSalesSummaryModule } from "./modules/sales-summary/sales-summary.module.js";
+import { createCashFlowModule } from "./modules/cash-flow/cash-flow.module.js";
 import { createHrModule } from "./modules/hr/hr.module.js";
 import { createAccountingModule } from "./modules/accounting/accounting.module.js";
 import type { SuggestStockRoutingPort } from "./modules/stock-purchase-review/domain/ports/in/suggest-stock-routing.port.js";
@@ -1741,8 +1742,29 @@ const bankAccountsModule = createBankAccountsModule();
 app.use("/api", bankAccountsModule.router);
 
 // Bank statements module (hexagonal) — receives bank account read port for auto-linking
-const bankStatementsModule = createBankStatementsModule(bankAccountsModule.accountRepo, financialBaseModule.listSuppliers, bankAccountsModule.resolveStatementAccount);
+const bankStatementsModule = createBankStatementsModule(bankAccountsModule.accountRepo, financialBaseModule.listSuppliers, bankAccountsModule.resolveStatementAccount, {
+  settle: payableRecurrencesModule.settleOccurrenceFromBank,
+  reopen: payableRecurrencesModule.reopenOccurrenceFromBank,
+  settleRecurrence: payableRecurrencesModule.settleRecurrenceFromBank,
+  getRecurrence: payableRecurrencesModule.getRecurrenceForBankRule,
+}, {
+  settle: invoicesModule.settleInvoiceFromBank,
+  reopen: invoicesModule.reopenInvoiceFromBank,
+});
 app.use("/api", bankStatementsModule.router);
+
+// Cash flow module (hexagonal) — «Fluxo de caixa» do Mapa de rentabilidade: entradas vs saídas do
+// banco, e DRE pela conciliação bancária. Recebe portas de bank-statements, payable-entries,
+// invoices, vendus e air-menu (D10).
+const cashFlowModule = createCashFlowModule({
+  describeMovement: bankStatementsModule.describeMovement,
+  getPayableSummary: payableEntriesModule.getPayableSummary,
+  getInvoiceAlerts: invoicesModule.getInvoiceAlerts,
+  vendusGetSummary: vendusModule.getSummary,
+  airMenuGetSummary: airMenuModule.getSummary,
+  airMenuEnterpriseId: ENV.AIRMENU_SALES_SUMMARY_ENTERPRISE_ID,
+});
+app.use("/api", cashFlowModule.router);
 
 // Air Menu: rota protegida (módulo já instanciado acima)
 app.use("/api", airMenuModule.router);

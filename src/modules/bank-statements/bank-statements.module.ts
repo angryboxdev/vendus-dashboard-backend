@@ -1,8 +1,17 @@
+import { PayableRecurrencesOccurrencePaymentAdapter } from "./adapters/out/payable-recurrences-occurrence-payment.adapter.js";
+import type { ReopenOccurrenceFromBankPort, SettleOccurrenceFromBankPort } from "../payable-recurrences/domain/ports/in/bank-payment.ports.js";
+import type { ReopenInvoiceFromBankPort, SettleInvoiceFromBankPort } from "../invoices/domain/ports/in/bank-payment.ports.js";
+import type { GetRecurrenceForBankRulePort, SettleRecurrenceFromBankPort } from "../payable-recurrences/domain/ports/in/bank-payment.ports.js";
+import { PayableRecurrencesRuleTargetAdapter } from "./adapters/out/payable-recurrences-rule-target.adapter.js";
+import { InvoicesInvoicePaymentAdapter } from "./adapters/out/invoices-invoice-payment.adapter.js";
+import { GroupedSettlementPaymentCascadeWrite, InvoicePaymentCascadeWrite } from "./adapters/out/invoice-payment-cascade.decorators.js";
 import { BankAccountsStatementAccountAdapter } from "./adapters/out/bank-accounts-statement-account.adapter.js";
 import { PreviewStatementAccountUseCase } from "./application/use-cases/preview-statement-account.use-case.js";
 import type { ResolveStatementAccountPort } from "../bank-accounts/domain/ports/in/bank-accounts.ports.js";
 import { ReadStatementPdfUseCase } from "./application/use-cases/read-statement-pdf.use-case.js";
 import { PdfjsStatementTextAdapter } from "./adapters/out/pdfjs-statement-text.adapter.js";
+import { DescribeMovementUseCase } from "./application/use-cases/describe-movement.use-case.js";
+import type { DescribeMovementPort } from "./domain/ports/in/describe-movement.port.js";
 import type { Router } from "express";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 
@@ -72,7 +81,21 @@ import type { ListSuppliersPort } from "../financial-base/domain/ports/in/suppli
  * temporary fallback that used to query `bank_accounts` directly is gone
  * (see the module README's Ports section for the cross-module note).
  */
-export function createBankStatementsModule(bankAccountRead: BankAccountReadPort, listSuppliers: ListSuppliersPort, resolveStatementAccount?: ResolveStatementAccountPort): { router: Router } {
+export function createBankStatementsModule(
+  bankAccountRead: BankAccountReadPort,
+  listSuppliers: ListSuppliersPort,
+  resolveStatementAccount?: ResolveStatementAccountPort,
+  /** Portas do módulo payable-recurrences: pagar/reabrir a ocorrência ligada a um movimento. */
+  recurrencePayment?: {
+    settle: SettleOccurrenceFromBankPort;
+    reopen: ReopenOccurrenceFromBankPort;
+    /** «Movimentos recorrentes» ligados a uma recorrência (rendas, salários). */
+    settleRecurrence?: SettleRecurrenceFromBankPort;
+    getRecurrence?: GetRecurrenceForBankRulePort;
+  },
+  /** Portas do módulo invoices: fatura conciliada por inteiro → paga em cadeia; anulada → reabre. */
+  invoicePayment?: { settle: SettleInvoiceFromBankPort; reopen: ReopenInvoiceFromBankPort },
+): { router: Router; describeMovement: DescribeMovementPort } {
   // V2 (F3): banco e conta encontrados ou criados a partir do extrato (módulo bank-accounts, D10).
   const accountResolver = resolveStatementAccount ? new BankAccountsStatementAccountAdapter(resolveStatementAccount) : undefined;
   // Adapters out
@@ -83,18 +106,31 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
   const payableRead = new SupabasePayableEntryMatchReadAdapter(createScopedQuery);
   const movementHint = new SupabaseMovementMatchHintAdapter(createScopedQuery);
   const entityLinkRepo = new SupabaseBankMovementEntityLinkRepository(createScopedQuery);
-  const invoiceReconciliationWrite = new SupabaseInvoiceReconciliationWriteAdapter(createScopedQuery);
+  const invoicePaymentAdapter = invoicePayment ? new InvoicesInvoicePaymentAdapter(invoicePayment.settle, invoicePayment.reopen) : undefined;
+  const baseInvoiceReconciliationWrite = new SupabaseInvoiceReconciliationWriteAdapter(createScopedQuery);
+  const invoiceReconciliationWrite = invoicePaymentAdapter
+    ? new InvoicePaymentCascadeWrite(baseInvoiceReconciliationWrite, invoiceRead, invoicePaymentAdapter)
+    : baseInvoiceReconciliationWrite;
   const occurrenceRead = new SupabaseOccurrenceMatchReadAdapter(createScopedQuery);
-  const groupedSettlementWrite = new SupabaseGroupedSettlementWriteAdapter(createScopedQuery);
+  const baseGroupedSettlementWrite = new SupabaseGroupedSettlementWriteAdapter(createScopedQuery);
   const supplierNameRead = new FinancialBaseSupplierNameReadAdapter(listSuppliers);
 
   // Use cases
-  const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo, bankAccountRead, accountResolver, ruleRepo);
   const listStatements = new ListBankStatementsUseCase(statementRepo);
   const getStatement = new GetBankStatementUseCase(statementRepo, movementRepo, entityLinkRepo);
   const reconcileMovement = new ReconcileMovementUseCase(movementRepo, movementHint, invoiceRead, payableRead, entityLinkRepo, invoiceReconciliationWrite);
-  const classifyMovement = new ClassifyMovementUseCase(movementRepo);
-  const applyAutoRules = new ApplyAutoRulesUseCase(statementRepo, movementRepo, ruleRepo);
+  // Recorrências (payable-recurrences, ligado em server.ts): movimento ligado a uma ocorrência → paga.
+  const occurrencePayment = recurrencePayment
+    ? new PayableRecurrencesOccurrencePaymentAdapter(recurrencePayment.settle, recurrencePayment.reopen)
+    : undefined;
+  // Regras ligadas a recorrências: a regra paga a ocorrência do mês (rendas, salários).
+  const recurrenceLinking =
+    occurrencePayment && recurrencePayment?.settleRecurrence && recurrencePayment.getRecurrence
+      ? { target: new PayableRecurrencesRuleTargetAdapter(recurrencePayment.getRecurrence, recurrencePayment.settleRecurrence), occurrencePayment }
+      : undefined;
+  const classifyMovement = new ClassifyMovementUseCase(movementRepo, occurrencePayment);
+  const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo, bankAccountRead, accountResolver, ruleRepo, recurrenceLinking);
+  const applyAutoRules = new ApplyAutoRulesUseCase(statementRepo, movementRepo, ruleRepo, recurrenceLinking);
   const suggestMatches = new SuggestMatchesUseCase(
     statementRepo,
     movementRepo,
@@ -102,12 +138,13 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
     payableRead,
     movementHint,
   );
-  const createRule = new CreateReconciliationRuleUseCase(ruleRepo, { movementRepo, statementRepo });
-  const updateRule = new UpdateReconciliationRuleUseCase(ruleRepo, { movementRepo, statementRepo });
+  const ruleBackfill = { movementRepo, statementRepo, occurrenceRead, ...(recurrenceLinking && { recurrenceLinking }) };
+  const createRule = new CreateReconciliationRuleUseCase(ruleRepo, ruleBackfill);
+  const updateRule = new UpdateReconciliationRuleUseCase(ruleRepo, ruleBackfill);
   const listRules = new ListReconciliationRulesUseCase(ruleRepo, movementRepo);
   const deleteRule = new DeleteReconciliationRuleUseCase(ruleRepo, movementRepo);
   const closeStatement = new CloseStatementUseCase(statementRepo, movementRepo);
-  const deleteStatement = new DeleteBankStatementUseCase(statementRepo, { movementRepo, linkRepo: entityLinkRepo, invoiceRead, invoiceReconciliationWrite });
+  const deleteStatement = new DeleteBankStatementUseCase(statementRepo, { movementRepo, linkRepo: entityLinkRepo, invoiceRead, invoiceReconciliationWrite, ...(occurrencePayment && { occurrencePayment }) });
   const updateBalances = new UpdateStatementBalancesUseCase(statementRepo);
   const findMovementCandidates = new FindMovementCandidatesUseCase(movementRepo, invoiceRead, payableRead, movementHint, entityLinkRepo);
   const documentStorage = new SupabaseBankDocumentStorageAdapter();
@@ -117,9 +154,9 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
   const getAccountMonthDetail = new GetAccountMonthDetailUseCase(movementRepo, entityLinkRepo);
   const getMovementsLinkedToInvoice = new GetMovementsLinkedToInvoiceUseCase(entityLinkRepo, movementRepo);
   const getInvoiceOpenBalances = new GetInvoiceOpenBalancesUseCase(entityLinkRepo, invoiceRead);
-  const unreconcileMovement = new UnreconcileMovementUseCase(movementRepo, entityLinkRepo, invoiceRead, invoiceReconciliationWrite);
+  const unreconcileMovement = new UnreconcileMovementUseCase(movementRepo, entityLinkRepo, invoiceRead, invoiceReconciliationWrite, occurrencePayment);
   const searchOccurrenceCandidates = new SearchOccurrenceCandidatesUseCase(occurrenceRead);
-  const getMonthlySuggestions = new GetMonthlySuggestionsUseCase(movementRepo, findMovementCandidates);
+  const getMonthlySuggestions = new GetMonthlySuggestionsUseCase(movementRepo, findMovementCandidates, occurrenceRead);
   const getGroupedSettlementSuggestions = new GetGroupedSettlementSuggestionsUseCase(
     movementRepo,
     findMovementCandidates,
@@ -128,6 +165,9 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
     entityLinkRepo,
     supplierNameRead,
   );
+  const groupedSettlementWrite = invoicePaymentAdapter
+    ? new GroupedSettlementPaymentCascadeWrite(baseGroupedSettlementWrite, invoiceRead, movementRepo, entityLinkRepo, invoicePaymentAdapter)
+    : baseGroupedSettlementWrite;
   const confirmGroupedSettlement = new ConfirmGroupedSettlementUseCase(groupedSettlementWrite);
 
   // Adapter in
@@ -162,5 +202,6 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
     updateRule,
   );
 
-  return { router: controller.router };
+  // Para o módulo cash-flow (ligado em server.ts): tipo genérico de um movimento.
+  return { router: controller.router, describeMovement: new DescribeMovementUseCase() };
 }

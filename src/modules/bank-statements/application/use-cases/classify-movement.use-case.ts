@@ -1,16 +1,22 @@
 import { MovementNotFoundError } from "../../domain/errors.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
+import type { OccurrencePaymentPort } from "../../domain/ports/out/occurrence-payment.port.js";
 import type {
   ClassifyMovementCommand,
   ClassifyMovementPort,
 } from "../../domain/ports/in/bank-statement.ports.js";
 
 export class ClassifyMovementUseCase implements ClassifyMovementPort {
-  constructor(private readonly movementRepo: BankMovementRepositoryPort) {}
+  constructor(
+    private readonly movementRepo: BankMovementRepositoryPort,
+    /** Recorrências: o movimento ligado a uma ocorrência deixa-a paga; mudar de ocorrência reabre a anterior. */
+    private readonly occurrencePayment?: OccurrencePaymentPort,
+  ) {}
 
   async execute(command: ClassifyMovementCommand): Promise<void> {
     const movement = await this.movementRepo.findById(command.organizationId, command.movementId);
     if (!movement) throw new MovementNotFoundError(command.movementId);
+    const previousOccurrence = movement.matchedEntityType === "recurrence_occurrence" ? movement.matchedEntityId : null;
 
     const updated = movement.classify({
       justificationType: command.justificationType,
@@ -26,6 +32,29 @@ export class ClassifyMovementUseCase implements ClassifyMovementPort {
       ...(command.vatIncluded !== undefined && { vatIncluded: command.vatIncluded }),
     });
 
-    await this.movementRepo.update(command.organizationId, updated);
+    if (!this.occurrencePayment) {
+      await this.movementRepo.update(command.organizationId, updated);
+      return;
+    }
+    const currentOccurrence =
+      updated.justificationType === "contrato_recorrencia" && updated.matchedEntityType === "recurrence_occurrence" ? updated.matchedEntityId : null;
+    // Primeiro a ocorrência: se tiver fatura, recusa (OccurrenceRequiresInvoiceError) sem gravar nada.
+    if (currentOccurrence) {
+      await this.occurrencePayment.settle(command.organizationId, {
+        occurrenceId: currentOccurrence,
+        movementId: updated.id,
+        paidAt: updated.bookingDate.toISOString().slice(0, 10),
+        bankAccountId: updated.bankAccountId,
+      });
+    }
+    try {
+      await this.movementRepo.update(command.organizationId, updated);
+    } catch (e) {
+      if (currentOccurrence) await this.occurrencePayment.reopen(command.organizationId, { occurrenceId: currentOccurrence, movementId: updated.id });
+      throw e;
+    }
+    if (previousOccurrence && previousOccurrence !== currentOccurrence) {
+      await this.occurrencePayment.reopen(command.organizationId, { occurrenceId: previousOccurrence, movementId: updated.id });
+    }
   }
 }

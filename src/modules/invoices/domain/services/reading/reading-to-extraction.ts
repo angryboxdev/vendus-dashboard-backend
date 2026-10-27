@@ -5,14 +5,37 @@ import { qrBands } from "./fiscal-qr.js";
 import { qrVatRows } from "./qr-rates.js";
 
 /**
+ * Um documento pode trazer vários QR fiscais (documento de pagamento das águas: água/saneamento +
+ * resíduos). Lançado como uma só fatura (decisão do utilizador, 2026-10-26), o documento vale a
+ * soma dos QR: identidade do 1.º, bases/IVA/total de todos.
+ */
+export type QrSet = FiscalQr | FiscalQr[];
+const qrList = (q: QrSet): FiscalQr[] => (Array.isArray(q) ? q : [q]);
+const bandsOf = (q: QrSet) => qrList(q).flatMap((x) => qrBands(x));
+
+/** Quadro de IVA por taxa de todos os QR (mesma natureza + taxa somam-se). */
+function vatRowsOf(q: QrSet, hints: string[] = []) {
+  const out: ReturnType<typeof qrVatRows> = [];
+  for (const row of qrList(q).flatMap((x) => qrVatRows(x, hints))) {
+    const same = row.code === null ? undefined : out.find((o) => o.code !== null && o.kind === row.kind && o.rate === row.rate);
+    if (same) {
+      same.baseCents += row.baseCents;
+      same.vatCents += row.vatCents;
+    } else out.push({ ...row });
+  }
+  return out;
+}
+
+/**
  * Fatura com QR fiscal lida pela IA (layout sem leitor determinístico): emitente,
  * número, data, tipo, bases, IVA e total passam a vir do QR — a IA só contribui
  * com o que o QR não tem (nome, prazo, linhas). O quadro de IVA só é substituído
- * quando todas as taxas do QR são identificáveis.
+ * quando todas as taxas do QR são identificáveis. Com vários QR: identidade do 1.º, valores de todos.
  */
-export function applyQrToExtraction(e: AiExtractionResult, qr: FiscalQr): AiExtractionResult {
-  const bands = qrBands(qr);
-  const vat = qrVatRows(qr, e.lines.map((l) => (l.vatRate == null ? "" : String(l.vatRate))));
+export function applyQrToExtraction(e: AiExtractionResult, q: QrSet): AiExtractionResult {
+  const qrs = qrList(q);
+  const qr = qrs[0]!;
+  const vat = vatRowsOf(qrs, e.lines.map((l) => (l.vatRate == null ? "" : String(l.vatRate))));
   const allRates = vat.every((v) => v.code !== null);
   return {
     ...e,
@@ -20,9 +43,9 @@ export function applyQrToExtraction(e: AiExtractionResult, qr: FiscalQr): AiExtr
     invoiceNumber: qr.documentNumber,
     issueDate: qr.issueDate ? new Date(`${qr.issueDate}T00:00:00Z`) : e.issueDate,
     documentType: qr.documentType === "NC" ? "credit_note" : "invoice",
-    subtotalWithoutVat: bands.reduce((a, b) => a + b.baseCents, 0),
-    vatAmount: qr.totalTaxCents,
-    totalWithVat: qr.totalCents,
+    subtotalWithoutVat: bandsOf(qrs).reduce((a, b) => a + b.baseCents, 0),
+    vatAmount: qrs.reduce((a, x) => a + x.totalTaxCents, 0),
+    totalWithVat: qrs.reduce((a, x) => a + x.totalCents, 0),
     amounts: {
       globalDiscountPct: e.amounts?.globalDiscountPct ?? null,
       globalDiscountAmount: e.amounts?.globalDiscountAmount ?? null,
@@ -41,13 +64,13 @@ const eur = (c: number) => (c / 100).toFixed(2).replace(".", ",");
  * As linhas lidas pela IA fecham com o QR? A soma dos líquidos tem de dar a base total do
  * QR e, quando todas as taxas (do QR e das linhas) são conhecidas, a base de cada taxa.
  */
-export function linesReconcileWithQr(lines: AiExtractedLine[], qr: FiscalQr): boolean {
+export function linesReconcileWithQr(lines: AiExtractedLine[], q: QrSet): boolean {
   if (!lines.length) return false;
   const nets = lines.map(lineNet);
   if (nets.some((n) => n === null)) return false;
-  const base = qrBands(qr).reduce((a, b) => a + b.baseCents, 0);
+  const base = bandsOf(q).reduce((a, b) => a + b.baseCents, 0);
   if (Math.abs((nets as number[]).reduce((a, n) => a + n, 0) - base) > LINE_TOLERANCE_CENTS) return false;
-  const vat = qrVatRows(qr, lines.map((l) => (l.vatRate == null ? "" : String(l.vatRate))));
+  const vat = vatRowsOf(q, lines.map((l) => (l.vatRate == null ? "" : String(l.vatRate))));
   if (vat.some((v) => v.code === null) || lines.some((l) => l.vatRate == null)) return true;
   return vat.every((v) => {
     const sum = lines.reduce((a, l, i) => (Number(l.vatRate) === Number(v.rate) ? a + nets[i]! : a), 0);
@@ -56,8 +79,8 @@ export function linesReconcileWithQr(lines: AiExtractedLine[], qr: FiscalQr): bo
 }
 
 /** Uma linha por taxa do QR — sempre certa ao cêntimo; o utilizador classifica-a na revisão. */
-export function qrRateLines(qr: FiscalQr): AiExtractedLine[] {
-  return qrVatRows(qr).map((v) => {
+export function qrRateLines(q: QrSet): AiExtractedLine[] {
+  return vatRowsOf(q).map((v) => {
     const label =
       v.kind === "exempt" ? "Valor isento de IVA" : v.kind === "not_subject" ? "Valor não sujeito a IVA" : `Valor à taxa de IVA ${v.rate} %`;
     return {
@@ -78,9 +101,9 @@ export function qrRateLines(qr: FiscalQr): AiExtractedLine[] {
  * diferença de no máximo 1 cêntimo por taxa, devolve o aviso `vat_rounded_per_line` — a revisão
  * aplica sozinha o ajuste de arredondamento e a fatura fecha com o documento.
  */
-export function qrPerLineVatRoundingNote(qr: FiscalQr): { code: "vat_rounded_per_line"; blocking: false; detail: string } | null {
+export function qrPerLineVatRoundingNote(q: QrSet): { code: "vat_rounded_per_line"; blocking: false; detail: string } | null {
   let diff = 0;
-  for (const v of qrVatRows(qr)) {
+  for (const v of vatRowsOf(q)) {
     if (v.code === null || Number(v.rate) === 0) continue;
     const d = v.vatCents - pctOfCents(v.baseCents, dec(v.rate));
     if (Math.abs(d) > LINE_TOLERANCE_CENTS) return null;
@@ -100,12 +123,12 @@ export function qrPerLineVatRoundingNote(qr: FiscalQr): { code: "vat_rounded_per
  * página, criou uma linha «IVA» e leu 13 m³ como 13000), ficam as linhas por taxa do QR: a fatura
  * fecha sempre com o documento e pode ser confirmada.
  */
-export function enforceQrLines(e: AiExtractionResult, qr: FiscalQr): { extraction: AiExtractionResult; note: string | null } {
-  if (linesReconcileWithQr(e.lines, qr)) return { extraction: e, note: null };
+export function enforceQrLines(e: AiExtractionResult, q: QrSet): { extraction: AiExtractionResult; note: string | null } {
+  if (linesReconcileWithQr(e.lines, q)) return { extraction: e, note: null };
   const aiNet = e.lines.reduce((a, l) => a + (lineNet(l) ?? 0), 0);
-  const base = qrBands(qr).reduce((a, b) => a + b.baseCents, 0);
+  const base = bandsOf(q).reduce((a, b) => a + b.baseCents, 0);
   return {
-    extraction: { ...e, lines: qrRateLines(qr) },
+    extraction: { ...e, lines: qrRateLines(q) },
     note: `As linhas lidas não fechavam com o QR fiscal (${eur(aiNet)} € vs. base ${eur(base)} €); ficaram as bases do QR por taxa de IVA — classifique-as na revisão.`,
   };
 }

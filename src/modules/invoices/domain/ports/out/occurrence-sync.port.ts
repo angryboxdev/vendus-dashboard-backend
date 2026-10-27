@@ -9,4 +9,6 @@ import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 export interface OccurrenceSyncPort {
   /** Marca como paga a ocorrência vinculada a esta fatura, se existir e não estiver já paga/reconciliada/cancelada. */
   markPaidByInvoiceId(organizationId: OrganizationId, invoiceId: string, paidAt: Date): Promise<void>;
+  /** Desfaz: a ocorrência paga ligada a esta fatura volta a «invoice_linked» (conciliação anulada). */
+  reopenByInvoiceId(organizationId: OrganizationId, invoiceId: string): Promise<void>;
 }
