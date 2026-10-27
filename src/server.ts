@@ -18,6 +18,8 @@ import { createCashClosingsModule } from "./modules/cash-closings/cash-closings.
 import { createKdsModule } from "./modules/kds/kds.module.js";
 import { createFinancialBaseModule } from "./modules/financial-base/financial-base.module.js";
 import { createInvoicesModule } from "./modules/invoices/invoices.module.js";
+import { createInvoiceEmailIntakeModule } from "./modules/invoice-email-intake/invoice-email-intake.module.js";
+import { RESEND_WEBHOOK_MAX_BODY } from "./modules/invoice-email-intake/adapters/in/resend-webhook.controller.js";
 import { createFiscalDocumentsModule } from "./modules/fiscal-documents/fiscal-documents.module.js";
 import { createPayableEntriesModule } from "./modules/payable-entries/payable-entries.module.js";
 import { createPayableRecurrencesModule } from "./modules/payable-recurrences/payable-recurrences.module.js";
@@ -132,6 +134,17 @@ app.use(cors(corsOptions));
 // Respostas JSON comprimidas (gzip/br): o painel e a Visão geral de 100+ pessoas pesam muito menos.
 // Fluxos (text/event-stream, ex.: pedidos AirMenu) ficam de fora — comprimir atrasava cada evento.
 app.use(compression({ filter: (req, res) => !String(res.getHeader("Content-Type") ?? "").includes("text/event-stream") && compression.filter(req, res) }));
+// Faturas por email: o webhook da Resend precisa do corpo ORIGINAL para verificar a assinatura, por isso fica
+// antes do express.json (e da autenticação — é público, protegido pela assinatura). Os handlers chegam mais
+// abaixo, quando o módulo é montado; até lá (ou sem configuração) responde 503.
+let resendWebhookHandler: ((req: express.Request, res: express.Response) => Promise<void>) | null = null;
+app.post("/api/webhooks/resend", express.raw({ type: "*/*", limit: RESEND_WEBHOOK_MAX_BODY }), (req, res) => {
+  if (!resendWebhookHandler) {
+    res.status(503).json({ error: "not_configured" });
+    return;
+  }
+  void resendWebhookHandler(req, res);
+});
 app.use(express.json());
 // GET: leituras idênticas à base dentro do mesmo pedido vão uma vez (request-memo.ts).
 app.use((req, _res, next) => (req.method === "GET" ? runWithRequestMemo(next) : next()));
@@ -1691,6 +1704,20 @@ app.use("/api", crmRoutes);
 // Financial base module (hexagonal) — instantiated above, before requireAuth
 app.use("/api", financialBaseModule.router);
 
+// Faturas por email (Resend Inbound): PDF recebido → mesmo import das faturas («Por rever») ou Compras por rever.
+const invoiceEmailIntakeModule = createInvoiceEmailIntakeModule(
+  {
+    resendApiKey: ENV.RESEND_API_KEY,
+    webhookSecret: ENV.RESEND_WEBHOOK_SECRET,
+    domain: ENV.INBOUND_EMAIL_DOMAIN,
+    allowedOrganizationIds: ENV.INBOUND_EMAIL_ALLOWED_ORGS,
+  },
+  invoicesModule.importInvoiceFromEmail,
+);
+resendWebhookHandler = invoiceEmailIntakeModule.webhookHandler;
+// Antes do router das faturas: «/invoices/email-intake» seria apanhado por «/invoices/:id».
+app.use("/api", invoiceEmailIntakeModule.router);
+
 // Invoices module (hexagonal) — instantiated above, before requireAuth
 app.use("/api", invoicesModule.router);
 app.use("/api", fiscalDocumentsRouter);
@@ -1795,6 +1822,14 @@ app.use(problemHandler);
 app.listen(ENV.PORT, () => {
   console.log(`Backend running on http://localhost:${ENV.PORT}`);
 });
+
+// Faturas por email: novas tentativas dos anexos com falha passageira (e dos que ficaram a meio) a cada 10 min.
+if (invoiceEmailIntakeModule.configured) {
+  void import("node-cron").then(({ default: cron }) => {
+    cron.schedule("*/10 * * * *", () => void invoiceEmailIntakeModule.retryPending(), { timezone: "Europe/Lisbon" });
+    console.log("[cron] faturas-email: novas tentativas a cada 10 min");
+  });
+}
 
 if (ENV.ENABLE_DAILY_CONSUMPTION_CRON) {
   void import("node-cron").then(({ default: cron }) => {

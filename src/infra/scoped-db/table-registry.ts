@@ -183,6 +183,11 @@ export const TABLE_REGISTRY = {
   // allocated to one store), not absent.
   invoice_lines: { organizationColumn: "org_id", locationBearing: true },
   invoices: { organizationColumn: "org_id", locationBearing: false },
+  // Faturas por email (migração 20261203100000). inbound_email_events NÃO entra: é técnica, sem org_id
+  // (idempotência antes de se saber a empresa) e só se lê/escreve em inbound-email-store.ts.
+  invoice_inbound_addresses: { organizationColumn: "org_id", locationBearing: false },
+  invoice_email_intake_settings: { organizationColumn: "org_id", locationBearing: false },
+  invoice_inbound_attachments: { organizationColumn: "org_id", locationBearing: false },
   // spec E ticket 01: pairing codes and location tokens, both keyed by
   // (org_id, location_id) — see supabase/migrations/20260903072439_create_location_credentials_tables.sql.
   location_tokens: { organizationColumn: "org_id", locationBearing: true },

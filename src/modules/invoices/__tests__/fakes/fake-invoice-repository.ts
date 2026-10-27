@@ -67,6 +67,12 @@ export class FakeInvoiceRepository implements InvoiceRepositoryPort {
     }
     return null;
   }
+  /** invoiceId → origem (a entidade não muda; os testes leem daqui). */
+  intakeSources = new Map<string, "email">();
+  async setIntakeSource(_organizationId: OrganizationId, invoiceId: string, source: "email"): Promise<void> {
+    this.intakeSources.set(invoiceId, source);
+  }
+
   async setFileHash(_organizationId: OrganizationId, invoiceId: string, sha256: string): Promise<void> {
     this.hashes.set(invoiceId, sha256);
   }

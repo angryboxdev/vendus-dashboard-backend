@@ -199,6 +199,19 @@ export class ScopedQuery {
     });
   }
 
+  /**
+   * Módulo `invoice-email-intake` — «Gerar novo endereço»: desativa o endereço ativo e cria o novo numa só
+   * transação (lock por empresa). Ver `20261203100000_invoice_email_intake.sql`.
+   */
+  rotateInvoiceInboundAddress(localPart: string, actor: string, reason: string | null) {
+    return this.client.rpc("fn_rotate_invoice_inbound_address", {
+      p_org_id: this.organizationId,
+      p_local_part: localPart,
+      p_actor: actor,
+      p_reason: reason,
+    });
+  }
+
   table<T extends TableName>(name: T) {
     const entry = TABLE_REGISTRY[name];
     const organizationId = this.organizationId;

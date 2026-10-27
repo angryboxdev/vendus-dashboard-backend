@@ -26,5 +26,8 @@ Ver «Pontos de atenção» no README do módulo.
 - Plano de Cobertura opcional por empresa (`time_tracking.roster.coverage_enabled`, desligado por omissão) — migração `20261103100000_novo_rh_coverage_rules` (aplicar depois da das áreas; rollback na ordem inversa).
 - Nenhuma das migrações foi aplicada em produção.
 
+## Copiar a semana para a seguinte (em produção 2026-10-27)
+- `POST /:id/copy-week` — rascunho, dias preenchidos intocados, sobreposições e fora do âmbito saltam (ver README, Decisões). Sem migração.
+
 ## Próximos trabalhos
 PR para `main` (backend primeiro, com as duas migrações) só com aprovação.

@@ -146,6 +146,11 @@ export function createRostersRouter(
     for (const e of employeeIds) await scope(req, e, s(b.from));
     res.status(201).json(await run(() => uc.assignBulk(org(req), actorOf(req), id(req), { employeeIds, from: s(b.from), to: s(b.to), weekdays: strArr(b.weekdays), kind: s(b.kind) === "day_off" ? "day_off" : "shift", templateId: optS(b.templateId), areaId: optS(b.areaId) })));
   });
+  // Copiar a semana visível para a seguinte (rascunho); quem está fora do âmbito do gestor salta.
+  r.post(`${R}/:id/copy-week`, async (req, res) => {
+    const from = s(body(req).from);
+    res.status(201).json(await run(() => uc.copyWeek(org(req), actorOf(req), id(req), { from }, (e) => canSeeEmployee(req, e, from))));
+  });
   r.post(`${R}/:id/clear-pending`, async (req, res) => {
     const b = body(req);
     await scope(req, s(b.employeeId), s(b.from));
