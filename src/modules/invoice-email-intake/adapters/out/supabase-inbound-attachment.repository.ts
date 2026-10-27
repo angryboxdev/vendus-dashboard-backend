@@ -75,13 +75,15 @@ export class SupabaseInboundAttachmentRepository implements InboundAttachmentRep
   }
 
   async claim(organizationId: OrganizationId, a: InboundAttachment, now: Date): Promise<InboundAttachment | null> {
-    // Condicional ao estado e à hora de alteração lidos: se outro processo mudou o registo, não apanha nada.
+    // Condicional ao estado e ao nº de tentativas lidos (cada reserva incrementa-o): se outro processo o apanhou,
+    // não apanha nada. Não pela hora de alteração: a base guarda microssegundos e o Date só milissegundos —
+    // a comparação nunca batia e os anexos ficavam para sempre «Recebido» (corrigido 2026-10-27).
     const { data, error } = await this.scopedQuery(organizationId)
       .table(TABLE)
       .update({ status: "processing", locked_at: now.toISOString(), attempts: a.attempts + 1, updated_at: now.toISOString() })
       .eq("id", a.id)
       .eq("status", a.status)
-      .eq("updated_at", a.updatedAt.toISOString())
+      .eq("attempts", a.attempts)
       .select("*")
       .maybeSingle();
     if (error) throw new Error(error.message);
