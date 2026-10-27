@@ -1,3 +1,5 @@
+import { PayableRecurrencesOccurrencePaymentAdapter } from "./adapters/out/payable-recurrences-occurrence-payment.adapter.js";
+import type { ReopenOccurrenceFromBankPort, SettleOccurrenceFromBankPort } from "../payable-recurrences/domain/ports/in/bank-payment.ports.js";
 import { BankAccountsStatementAccountAdapter } from "./adapters/out/bank-accounts-statement-account.adapter.js";
 import { PreviewStatementAccountUseCase } from "./application/use-cases/preview-statement-account.use-case.js";
 import type { ResolveStatementAccountPort } from "../bank-accounts/domain/ports/in/bank-accounts.ports.js";
@@ -74,7 +76,13 @@ import type { ListSuppliersPort } from "../financial-base/domain/ports/in/suppli
  * temporary fallback that used to query `bank_accounts` directly is gone
  * (see the module README's Ports section for the cross-module note).
  */
-export function createBankStatementsModule(bankAccountRead: BankAccountReadPort, listSuppliers: ListSuppliersPort, resolveStatementAccount?: ResolveStatementAccountPort): { router: Router; describeMovement: DescribeMovementPort } {
+export function createBankStatementsModule(
+  bankAccountRead: BankAccountReadPort,
+  listSuppliers: ListSuppliersPort,
+  resolveStatementAccount?: ResolveStatementAccountPort,
+  /** Portas do módulo payable-recurrences: pagar/reabrir a ocorrência ligada a um movimento. */
+  recurrencePayment?: { settle: SettleOccurrenceFromBankPort; reopen: ReopenOccurrenceFromBankPort },
+): { router: Router; describeMovement: DescribeMovementPort } {
   // V2 (F3): banco e conta encontrados ou criados a partir do extrato (módulo bank-accounts, D10).
   const accountResolver = resolveStatementAccount ? new BankAccountsStatementAccountAdapter(resolveStatementAccount) : undefined;
   // Adapters out
@@ -95,7 +103,11 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
   const listStatements = new ListBankStatementsUseCase(statementRepo);
   const getStatement = new GetBankStatementUseCase(statementRepo, movementRepo, entityLinkRepo);
   const reconcileMovement = new ReconcileMovementUseCase(movementRepo, movementHint, invoiceRead, payableRead, entityLinkRepo, invoiceReconciliationWrite);
-  const classifyMovement = new ClassifyMovementUseCase(movementRepo);
+  // Recorrências (payable-recurrences, ligado em server.ts): movimento ligado a uma ocorrência → paga.
+  const occurrencePayment = recurrencePayment
+    ? new PayableRecurrencesOccurrencePaymentAdapter(recurrencePayment.settle, recurrencePayment.reopen)
+    : undefined;
+  const classifyMovement = new ClassifyMovementUseCase(movementRepo, occurrencePayment);
   const applyAutoRules = new ApplyAutoRulesUseCase(statementRepo, movementRepo, ruleRepo);
   const suggestMatches = new SuggestMatchesUseCase(
     statementRepo,
@@ -119,9 +131,9 @@ export function createBankStatementsModule(bankAccountRead: BankAccountReadPort,
   const getAccountMonthDetail = new GetAccountMonthDetailUseCase(movementRepo, entityLinkRepo);
   const getMovementsLinkedToInvoice = new GetMovementsLinkedToInvoiceUseCase(entityLinkRepo, movementRepo);
   const getInvoiceOpenBalances = new GetInvoiceOpenBalancesUseCase(entityLinkRepo, invoiceRead);
-  const unreconcileMovement = new UnreconcileMovementUseCase(movementRepo, entityLinkRepo, invoiceRead, invoiceReconciliationWrite);
+  const unreconcileMovement = new UnreconcileMovementUseCase(movementRepo, entityLinkRepo, invoiceRead, invoiceReconciliationWrite, occurrencePayment);
   const searchOccurrenceCandidates = new SearchOccurrenceCandidatesUseCase(occurrenceRead);
-  const getMonthlySuggestions = new GetMonthlySuggestionsUseCase(movementRepo, findMovementCandidates);
+  const getMonthlySuggestions = new GetMonthlySuggestionsUseCase(movementRepo, findMovementCandidates, occurrenceRead);
   const getGroupedSettlementSuggestions = new GetGroupedSettlementSuggestionsUseCase(
     movementRepo,
     findMovementCandidates,

@@ -298,8 +298,26 @@ export interface RepeatJustificationSuggestion {
   vatIncluded: boolean | null;
 }
 
+/** Ocorrência de recorrência sem fatura (salário, renda, seguro…) que bate com o movimento (nome e valor). */
+export interface MonthlyOccurrenceMatchSuggestion {
+  movementId: string;
+  occurrenceId: string;
+  recurrenceName: string;
+  supplierName: string;
+  period: string; // YYYY-MM
+  amountCents: number; // valor previsto (real ?? estimado)
+  confidence: number;
+  supplierId: string | null;
+  costCenterGroupId: string | null;
+  costCenterCategoryId: string | null;
+  vatRate: number | null;
+  vatIncluded: boolean | null;
+}
+
 export interface MonthlySuggestions {
   entityMatches: MonthlyEntityMatchSuggestion[];
+  /** Recorrências sem fatura — conciliar deixa a ocorrência paga. */
+  occurrenceMatches: MonthlyOccurrenceMatchSuggestion[];
   repeatJustifications: RepeatJustificationSuggestion[];
 }
 

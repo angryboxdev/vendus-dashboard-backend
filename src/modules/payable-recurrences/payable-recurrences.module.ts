@@ -1,3 +1,5 @@
+import type { ReopenOccurrenceFromBankPort, SettleOccurrenceFromBankPort } from "./domain/ports/in/bank-payment.ports.js";
+import { ReopenOccurrenceFromBankUseCase, SettleOccurrenceFromBankUseCase } from "./application/use-cases/occurrence-bank-payment.use-cases.js";
 import type { Router } from "express";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 
@@ -56,6 +58,9 @@ export interface PayableRecurrencesModule {
   autoLinkInvoice: AutoLinkInvoicePort;
   /** Para o módulo invoices: fatura apagada → desfaz associações não pagas. */
   releaseInvoiceLinks: ReleaseInvoiceLinksPort;
+  /** Para o módulo bank-statements: movimento ligado a uma ocorrência → paga; desconciliado → reabre. */
+  settleOccurrenceFromBank: SettleOccurrenceFromBankPort;
+  reopenOccurrenceFromBank: ReopenOccurrenceFromBankPort;
 }
 
 /**
@@ -131,5 +136,11 @@ export function createPayableRecurrencesModule(): PayableRecurrencesModule {
     unlinkInvoiceFromOccurrence: new UnlinkInvoiceFromOccurrenceUseCase(occurrenceRepo),
   });
 
-  return { router, autoLinkInvoice, releaseInvoiceLinks };
+  return {
+    router,
+    autoLinkInvoice,
+    releaseInvoiceLinks,
+    settleOccurrenceFromBank: new SettleOccurrenceFromBankUseCase(occurrenceRepo),
+    reopenOccurrenceFromBank: new ReopenOccurrenceFromBankUseCase(occurrenceRepo),
+  };
 }
