@@ -93,6 +93,7 @@ export class CashFlowController {
     /**
      * GET /reports/dre/resultado?year=&month=
      * DRE a partir da conciliação bancária: receita e gastos sem IVA, ajustes manuais e saldo do IVA.
+     * `restaurante=0`: sem as vendas do Vendus (rápido; o Mapa mostra os custos enquanto as vendas carregam).
      */
     this.router.get("/reports/dre/resultado", async (req, res) => {
       try {
@@ -100,6 +101,7 @@ export class CashFlowController {
           organizationId: req.auth!.orgId,
           year: Number(req.query["year"]),
           month: Number(req.query["month"]),
+          withRestaurantSales: req.query["restaurante"] !== "0",
         });
         res.json(result);
       } catch (e: unknown) {

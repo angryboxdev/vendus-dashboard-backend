@@ -104,6 +104,11 @@ export interface DreExpenses {
 
 export interface DreReport {
   period: { year: number; month: number; from: string; to: string; isCurrentMonth: boolean };
+  /**
+   * false = pedido rápido sem as vendas do restaurante (Vendus): a receita do restaurante vem a zero e
+   * o resultado, a margem e o IVA das vendas não estão completos (`resultCents` / `marginPct` = null).
+   */
+  restaurantSalesLoaded: boolean;
   /** Parâmetros usados (taxas do delivery, IVA teórico, marketing) e de onde vêm. */
   parameters: ResolvedDreParameters;
   revenue: DreRevenue;
@@ -111,7 +116,7 @@ export interface DreReport {
   expenses: DreExpenses;
   manualAdjustments: ManualAdjustments & { totalCents: number };
   /** Receita − custos das plataformas − gastos − ajustes manuais (sem IVA). */
-  resultCents: number;
+  resultCents: number | null;
   /** Resultado ÷ receita, %, 1 casa decimal; null sem receita. */
   marginPct: number | null;
   vat: {

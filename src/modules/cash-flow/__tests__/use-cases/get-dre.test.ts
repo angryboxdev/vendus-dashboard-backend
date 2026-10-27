@@ -61,4 +61,12 @@ describe("GetDreUseCase", () => {
     const { uc } = useCase([], []);
     await expect(uc.execute({ organizationId, year: 2026, month: 12 })).rejects.toBeInstanceOf(InvalidCashFlowPeriodError);
   });
+
+  it("withRestaurantSales: false não pede as vendas ao Vendus", async () => {
+    const { uc, calls } = useCase([], []);
+    const report = await uc.execute({ organizationId, year: 2026, month: 10, withRestaurantSales: false });
+    expect(calls.restaurant).toEqual([]);
+    expect(report).toMatchObject({ restaurantSalesLoaded: false, resultCents: null });
+    expect(report.revenue.restaurantNetCents).toBe(0);
+  });
 });

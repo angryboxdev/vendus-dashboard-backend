@@ -127,4 +127,19 @@ describe("buildDreReport", () => {
     expect(report.expenses.totalNetCents).toBe(0);
     expect(report.revenue.platformsReceivedCents).toBe(0);
   });
+
+  it("pedido rápido sem as vendas do restaurante: custos e plataformas completos, resultado e margem a null", () => {
+    const report = buildDreReport(
+      input({
+        restaurantSalesLoaded: false,
+        debits: [debit({ amountCents: 95_000, categoryId: "c-sal" })],
+        credits: [credit({ amountCents: 63_100, platform: "uber_eats" })],
+      }),
+    );
+    expect(report.restaurantSalesLoaded).toBe(false);
+    expect(report.expenses.totalNetCents).toBe(95_000);
+    expect(report.revenue.platformsNetCents).toBe(86_957);
+    expect(report.resultCents).toBeNull();
+    expect(report.marginPct).toBeNull();
+  });
 });

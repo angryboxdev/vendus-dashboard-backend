@@ -14,6 +14,9 @@ import { resolveDreParameters } from "../../domain/services/dre-parameters.servi
 import { buildDreReport } from "../../domain/services/dre-report.service.js";
 import { collectExpenseReferences } from "../../domain/services/expense-categorizer.service.js";
 
+/** Sem as vendas do restaurante (pedido rápido): receita do restaurante a zero, assinalada no relatório. */
+const NO_RESTAURANT_SALES = { netCents: 0, vatCents: 0, byPaymentGrossCents: { card: 0, cash: 0, other: 0 } };
+
 export class GetDreUseCase implements GetDrePort {
   constructor(
     private readonly bankMovements: BankMovementReadPort,
@@ -28,14 +31,19 @@ export class GetDreUseCase implements GetDrePort {
     private readonly today: () => string = () => new Date().toISOString().slice(0, 10),
   ) {}
 
-  async execute({ organizationId, year, month }: { organizationId: OrganizationId; year: number; month: number }): Promise<DreReport> {
+  async execute({
+    organizationId,
+    year,
+    month,
+    withRestaurantSales = true,
+  }: { organizationId: OrganizationId; year: number; month: number; withRestaurantSales?: boolean }): Promise<DreReport> {
     const { from, to, isCurrentMonth } = cashFlowPeriod(year, month, this.today());
 
     const [catalog, storedDebits, storedCredits, restaurant, stored, categoryNetRatios, manual] = await Promise.all([
       this.catalog.load(organizationId),
       this.bankMovements.listDebits(organizationId, from, to),
       this.bankMovements.listCredits(organizationId, from, to),
-      this.restaurantSales.sales(organizationId, from, to),
+      withRestaurantSales ? this.restaurantSales.sales(organizationId, from, to) : Promise.resolve(NO_RESTAURANT_SALES),
       this.parameters.forMonth(organizationId, year, month),
       this.categoryVatRatios.recentNetRatios(organizationId, to, CATEGORY_VAT_SAMPLE),
       this.manualAdjustments.forMonth(organizationId, year, month),
@@ -51,6 +59,7 @@ export class GetDreUseCase implements GetDrePort {
       sources,
       catalog,
       restaurant,
+      restaurantSalesLoaded: withRestaurantSales,
       parameters: resolveDreParameters(stored.own, stored.previous),
       categoryNetRatios,
       manual,

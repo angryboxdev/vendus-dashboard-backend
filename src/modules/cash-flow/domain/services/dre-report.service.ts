@@ -24,6 +24,8 @@ export interface BuildDreInput {
   sources: ExpenseSources;
   catalog: CostCenterCatalog;
   restaurant: RestaurantSales;
+  /** false: sem as vendas do restaurante (pedido rápido) — resultado e margem ficam null. */
+  restaurantSalesLoaded?: boolean;
   parameters: ResolvedDreParameters;
   /** Rácio sem IVA ÷ com IVA das últimas faturas de cada categoria (IVA estimado). */
   categoryNetRatios: Map<string, number>;
@@ -180,6 +182,7 @@ function platforms(credits: BankCredit[], p: ResolvedDreParameters): DrePlatform
  * banco categorizadas como no fluxo de caixa) e ajustes manuais, tudo sem IVA; e o saldo do IVA.
  */
 export function buildDreReport(input: BuildDreInput): DreReport {
+  const loaded = input.restaurantSalesLoaded ?? true;
   const byPlatform = platforms(input.credits, input.parameters);
   const sumP = (f: (p: DrePlatformRevenue) => number) => byPlatform.reduce((a, p) => a + f(p), 0);
   const platformsNetCents = sumP((p) => p.netCents);
@@ -205,13 +208,14 @@ export function buildDreReport(input: BuildDreInput): DreReport {
   const purchasesVat = exp.vatCents + sumP((p) => p.commissionVatCents + p.marketingVatCents);
   return {
     period: input.period,
+    restaurantSalesLoaded: loaded,
     parameters: input.parameters,
     revenue,
     platformCosts,
     expenses: exp,
     manualAdjustments: { ...input.manual, totalCents: manualTotal },
-    resultCents,
-    marginPct: pct(resultCents, revenue.totalNetCents),
+    resultCents: loaded ? resultCents : null,
+    marginPct: loaded ? pct(resultCents, revenue.totalNetCents) : null,
     vat: {
       salesCents: salesVat,
       purchasesCents: purchasesVat,
