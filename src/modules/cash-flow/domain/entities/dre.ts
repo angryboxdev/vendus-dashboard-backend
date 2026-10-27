@@ -1,7 +1,9 @@
+import type { ResolvedDreParameters } from "./dre-parameters.js";
+
 /**
- * DRE do mês a partir da conciliação bancária (decisão do utilizador, 2026-10-26): receita do
- * restaurante pelo Vendus, das plataformas pelo que liquidam no banco (já sem comissão), gastos pelas
- * saídas do banco — tudo sem IVA. Valores em cêntimos.
+ * DRE do mês a partir da conciliação bancária (decisões do utilizador, 2026-10-26/27): receita do
+ * restaurante pelo Vendus, das plataformas reconstituída em bruto a partir do que liquidam no banco,
+ * gastos pelas saídas do banco — tudo sem IVA. Valores em cêntimos.
  */
 
 /** Vendas de um período (sem IVA e o IVA liquidado), em cêntimos. */
@@ -10,31 +12,54 @@ export interface SalesFigures {
   vatCents: number;
 }
 
+/** Vendas do restaurante com o bruto por classe de pagamento (para separar a receita). */
+export interface RestaurantSales extends SalesFigures {
+  byPaymentGrossCents: { card: number; cash: number; other: number };
+}
+
 export interface ManualAdjustments {
   fixedCents: number;
   variableCents: number;
 }
 
+/** Uma plataforma: o que liquidou no banco e a venda reconstituída (ver `platformGross`). */
 export interface DrePlatformRevenue {
   platform: string;
-  /** Liquidado no banco (com IVA, já sem comissão). */
+  /** Liquidado no banco (já sem comissão nem marketing). */
   receivedCents: number;
+  /** Marketing lançado à mão, sem IVA. */
+  marketingNetCents: number;
+  /** Venda reconstituída, com IVA. */
+  grossCents: number;
+  /** Venda sem IVA (receita da DRE). */
   netCents: number;
+  salesVatCents: number;
+  commissionNetCents: number;
+  commissionVatCents: number;
+  marketingVatCents: number;
+  /** Venda sem IVA − comissão − marketing: o que sobra para o produto e o resto. */
+  contributionCents: number;
+  /** Contribuição ÷ venda sem IVA, %; null sem venda. */
+  contributionPct: number | null;
 }
 
 export interface DreRevenue {
   /** Restaurante (Vendus: salão, take-away, Eatz), sem IVA. */
   restaurantNetCents: number;
-  /** Plataformas: liquidações no banco sem IVA. */
+  /** Restaurante repartido pela classe de pagamento (proporção do bruto). */
+  restaurantByPayment: { cardNetCents: number; cashNetCents: number; otherNetCents: number };
+  /** Plataformas: venda reconstituída com IVA, sem IVA, e o liquidado no banco. */
+  platformsGrossCents: number;
   platformsNetCents: number;
   platformsReceivedCents: number;
-  /** Vendido nas plataformas (AirMenu), sem IVA — para comparar com o recebido. */
-  platformsSoldNetCents: number;
-  /** Vendido sem IVA − recebido sem IVA: comissões e acertos das plataformas (estimativa). */
-  platformsCommissionEstimateCents: number;
-  /** false quando não há vendas do AirMenu para tirar o IVA: as liquidações contam pelo valor total. */
-  platformsVatKnown: boolean;
   byPlatform: DrePlatformRevenue[];
+  totalNetCents: number;
+}
+
+/** Comissões e marketing das plataformas, sem IVA — retidos na liquidação, entram como gasto. */
+export interface DrePlatformCosts {
+  commissionNetCents: number;
+  marketingNetCents: number;
   totalNetCents: number;
 }
 
@@ -55,7 +80,10 @@ export interface DreExpenseCategory {
   name: string | null;
   movementKind: string | null;
   netCents: number;
+  /** IVA dedutível (real + estimado). */
   vatCents: number;
+  /** Parte do IVA estimada (média das faturas da categoria ou IVA teórico). */
+  estimatedVatCents: number;
   /** Parte contada pelo valor total por não se saber o IVA. */
   pendingVatCents: number;
   children: DreExpenseChild[];
@@ -63,8 +91,10 @@ export interface DreExpenseCategory {
 
 export interface DreExpenses {
   totalNetCents: number;
-  /** IVA dedutível conhecido (das faturas ou do IVA posto no movimento). */
+  /** IVA dedutível: real (faturas, IVA no movimento) + estimado. */
   vatCents: number;
+  /** Parte estimada do IVA: média das últimas faturas da categoria, ou IVA teórico. */
+  estimatedVatCents: number;
   /** Gastos contados pelo valor total por falta de IVA («IVA por confirmar»). */
   pendingVatCents: number;
   /** Gastos ainda sem categoria (pelo tipo do banco). */
@@ -74,18 +104,23 @@ export interface DreExpenses {
 
 export interface DreReport {
   period: { year: number; month: number; from: string; to: string; isCurrentMonth: boolean };
+  /** Parâmetros usados (taxas do delivery, IVA teórico, marketing) e de onde vêm. */
+  parameters: ResolvedDreParameters;
   revenue: DreRevenue;
+  platformCosts: DrePlatformCosts;
   expenses: DreExpenses;
   manualAdjustments: ManualAdjustments & { totalCents: number };
-  /** Receita − gastos − ajustes manuais (sem IVA). */
+  /** Receita − custos das plataformas − gastos − ajustes manuais (sem IVA). */
   resultCents: number;
   /** Resultado ÷ receita, %, 1 casa decimal; null sem receita. */
   marginPct: number | null;
   vat: {
-    /** IVA liquidado nas vendas (Vendus + AirMenu). */
+    /** IVA liquidado nas vendas (Vendus + plataformas reconstituídas). */
     salesCents: number;
-    /** IVA dedutível conhecido dos gastos. */
+    /** IVA dedutível dos gastos e das comissões/marketing das plataformas (real + estimado). */
     purchasesCents: number;
+    /** Parte estimada de `purchasesCents`. */
+    purchasesEstimatedCents: number;
     /** Vendas − compras: estimativa do IVA a entregar (negativo = a recuperar). */
     balanceCents: number;
   };

@@ -6,7 +6,7 @@
 Custo do prato (pizza) por tamanho a partir das fichas técnicas e do preço atual dos ingredientes — última compra importada; sem compra, preço manual. Alerta dos ingredientes sem preço.
 
 ## Estado atual
-Task V7 (2026-10-26, ramo `financeiro`, **por publicar**; migração `20261129100000_menu_xs_and_sales_vat` por aplicar): margem por prato/variante (IVA das vendas por empresa), variante XS (doces = ½ Pequena), custo do lote das preparações no relatório, `GET/PUT /recipe-costing/settings`. Frontend: página própria `/fichas-tecnicas` (Pratos | Preparações | Análise de custos).
+Task V7 (2026-10-26, **em produção**: #134 / #109; migração `20261129100000_menu_xs_and_sales_vat` aplicada): margem por prato/variante (IVA das vendas por empresa), variante XS (doces = ½ Pequena), custo do lote das preparações no relatório, `GET/PUT /recipe-costing/settings`. Frontend: página própria `/fichas-tecnicas` (Pratos | Preparações | Análise de custos).
 
 Task V6 (2026-10-26, ramo `financeiro`, **por commitar**): resumo de custos de todos os artigos (lista «Artigos e ingredientes», vista Custos), fichas que usam cada artigo (painel lateral) e «Impacto nas pizzas» (página de Pizzas). Sem migrações.
 

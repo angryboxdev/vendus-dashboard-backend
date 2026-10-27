@@ -1782,14 +1782,12 @@ app.use("/api", bankStatementsModule.router);
 
 // Cash flow module (hexagonal) — «Fluxo de caixa» do Mapa de rentabilidade: entradas vs saídas do
 // banco, e DRE pela conciliação bancária. Recebe portas de bank-statements, payable-entries,
-// invoices, vendus e air-menu (D10).
+// invoices e vendus (D10). As plataformas entram pelas liquidações no banco (sem AirMenu).
 const cashFlowModule = createCashFlowModule({
   describeMovement: bankStatementsModule.describeMovement,
   getPayableSummary: payableEntriesModule.getPayableSummary,
   getInvoiceAlerts: invoicesModule.getInvoiceAlerts,
   vendusGetSummary: vendusModule.getSummary,
-  airMenuGetSummary: airMenuModule.getSummary,
-  airMenuEnterpriseId: ENV.AIRMENU_SALES_SUMMARY_ENTERPRISE_ID,
 });
 app.use("/api", cashFlowModule.router);
 
