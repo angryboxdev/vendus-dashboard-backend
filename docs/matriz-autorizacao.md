@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 844 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 845 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -760,6 +760,7 @@ Endpoints: 844 · pré-autenticação: 23 · não classificados: 0
 | PUT | `/api/reports/dre/parametros` | permission:dre.statement:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/reports/dre/receita-bruta` | permission:dre.statement:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/reports/dre/resultado` | permission:dre.statement:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
+| GET | `/api/reports/dre/vendas-restaurante` | permission:dre.statement:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/reports/ingredient-consumption` | permission:stock.movements:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/reports/monthly-summary` | permission:sales.dashboard:READ | ✔ | ✔ | ✖ | ✔ | ✖ |
 | POST | `/api/sales-declaration/export` | permission:sales.dashboard:READ | ✔ | ✔ | ✖ | ✔ | ✖ |

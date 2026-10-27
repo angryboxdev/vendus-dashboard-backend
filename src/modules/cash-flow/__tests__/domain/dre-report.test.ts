@@ -142,4 +142,34 @@ describe("buildDreReport", () => {
     expect(report.resultCents).toBeNull();
     expect(report.marginPct).toBeNull();
   });
+
+  it("arruma os gastos pelas linhas da DRE (CMV, pessoal, por classificar…) e tira o CAPEX do resultado", () => {
+    const capexCatalog = {
+      ...catalog,
+      groups: [...catalog.groups, { id: "g-cap", code: "CAP", name: "Investimentos", sortOrder: 5 }],
+      categories: [...catalog.categories, { id: "c-eq", groupId: "g-cap", code: "CAP.01", name: "Equipamentos", financialType: "capex" }],
+    };
+    const report = buildDreReport(
+      input({
+        catalog: capexCatalog,
+        restaurant: { netCents: 100_000, vatCents: 0, byPaymentGrossCents: noPayments },
+        categoryNetRatios: new Map([["c-ing", 1], ["c-eq", 1]]),
+        debits: [
+          debit({ id: "a", amountCents: 20_000, categoryId: "c-ing" }),
+          debit({ id: "b", amountCents: 30_000, categoryId: "c-sal" }),
+          debit({ id: "c", amountCents: 5_000, kind: "card_purchase" }),
+          debit({ id: "d", amountCents: 40_000, categoryId: "c-eq" }),
+        ],
+      }),
+    );
+    expect(report.expenses.sections.map((s) => [s.key, s.netCents])).toEqual([
+      ["cmv", 20_000],
+      ["personnel", 30_000],
+      ["unclassified", 5_000],
+      ["capex", 40_000],
+    ]);
+    expect(report.expenses.sections.find((s) => s.key === "unclassified")!.items[0]).toMatchObject({ movementKind: "card_purchase", name: null });
+    expect(report.expenses.capexNetCents).toBe(40_000);
+    expect(report.resultCents).toBe(100_000 - 20_000 - 30_000 - 5_000);
+  });
 });

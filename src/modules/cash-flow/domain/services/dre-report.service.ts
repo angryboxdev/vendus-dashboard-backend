@@ -1,6 +1,9 @@
 import type { BankCredit, BankDebit, CostCenterCatalog, ExpenseSources } from "../entities/cash-flow.js";
 import type {
   DreExpenseCategory,
+  DreExpenseSection,
+  DreSectionItem,
+  DreSectionKey,
   DreExpenses,
   DrePlatformCosts,
   DrePlatformRevenue,
@@ -132,6 +135,7 @@ function expenses(input: BuildDreInput): DreExpenses {
     .map((c) => ({ ...c, children: c.children.sort((a, b) => b.netCents - a.netCents) }))
     .sort((a, b) => b.netCents - a.netCents);
   const sum = (f: (s: NetShare) => number) => shares.reduce((a, s) => a + f(s), 0);
+  const sections = dreSections(shares, catalog);
   return {
     totalNetCents: sum((s) => s.netCents),
     vatCents: sum((s) => s.vatCents),
@@ -139,13 +143,65 @@ function expenses(input: BuildDreInput): DreExpenses {
     pendingVatCents: sum((s) => s.pendingVatCents),
     unclassifiedCents: sum((s) => (s.share.groupId ? 0 : s.netCents)),
     categories,
+    sections,
+    capexNetCents: sections.find((s) => s.key === "capex")?.netCents ?? 0,
   };
+}
+
+/** Tipo financeiro da categoria → linha da DRE. */
+const SECTION_BY_TYPE: Record<string, DreSectionKey> = {
+  cmv: "cmv",
+  variable_cost: "variable",
+  personnel: "personnel",
+  fixed_opex: "structure",
+  administrative: "administrative",
+  marketing: "marketing",
+  financial: "financial",
+  capex: "capex",
+};
+const SECTION_ORDER: DreSectionKey[] = ["cmv", "variable", "personnel", "structure", "administrative", "marketing", "other", "unclassified", "financial", "capex"];
+
+/**
+ * Gastos pelas linhas da DRE: pela categoria; sem categoria, pelo grupo quando todas as suas categorias
+ * são do mesmo tipo (senão «outros»); sem grupo, «por classificar» pelo tipo genérico do banco.
+ */
+function dreSections(shares: NetShare[], catalog: CostCenterCatalog): DreExpenseSection[] {
+  const cats = new Map(catalog.categories.map((c) => [c.id, c]));
+  const groups = new Map(catalog.groups.map((g) => [g.id, g]));
+  const groupSection = (groupId: string): DreSectionKey => {
+    const types = new Set(catalog.categories.filter((c) => c.groupId === groupId).map((c) => SECTION_BY_TYPE[c.financialType] ?? "other"));
+    return types.size === 1 ? [...types][0]! : "other";
+  };
+  const bySection = new Map<DreSectionKey, Map<string, DreSectionItem>>();
+  for (const s of shares) {
+    const { categoryId, groupId } = s.share;
+    const cat = categoryId ? cats.get(categoryId) : undefined;
+    const key: DreSectionKey = cat ? (SECTION_BY_TYPE[cat.financialType] ?? "other") : groupId ? groupSection(groupId) : "unclassified";
+    const itemKey = cat ? cat.id : groupId ? `${groupId}:none` : `kind:${s.kind}`;
+    const items = bySection.get(key) ?? new Map<string, DreSectionItem>();
+    bySection.set(key, items);
+    const g = groupId ? groups.get(groupId) : undefined;
+    const item = items.get(itemKey) ?? {
+      key: itemKey,
+      categoryId: cat?.id ?? null,
+      code: cat?.code ?? g?.code ?? null,
+      name: cat?.name ?? g?.name ?? null,
+      movementKind: groupId ? null : s.kind,
+      netCents: 0,
+    };
+    item.netCents += s.netCents;
+    items.set(itemKey, item);
+  }
+  return SECTION_ORDER.filter((k) => bySection.has(k)).map((key) => {
+    const items = [...bySection.get(key)!.values()].sort((a, b) => b.netCents - a.netCents);
+    return { key, netCents: items.reduce((a, i) => a + i.netCents, 0), items };
+  });
 }
 
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : null);
 
 /** Restaurante sem IVA repartido pela classe de pagamento, na proporção do bruto. */
-function restaurantByPayment(r: RestaurantSales): DreRevenue["restaurantByPayment"] {
+export function restaurantByPayment(r: RestaurantSales): DreRevenue["restaurantByPayment"] {
   const { card, cash, other } = r.byPaymentGrossCents;
   const total = card + cash + other;
   if (total <= 0) return { cardNetCents: 0, cashNetCents: 0, otherNetCents: r.netCents };
@@ -202,7 +258,8 @@ export function buildDreReport(input: BuildDreInput): DreReport {
   };
   const exp = expenses(input);
   const manualTotal = input.manual.fixedCents + input.manual.variableCents;
-  const resultCents = revenue.totalNetCents - platformCosts.totalNetCents - exp.totalNetCents - manualTotal;
+  // CAPEX é investimento: aparece na DRE, mas fora do resultado.
+  const resultCents = revenue.totalNetCents - platformCosts.totalNetCents - (exp.totalNetCents - exp.capexNetCents) - manualTotal;
 
   const salesVat = input.restaurant.vatCents + sumP((p) => p.salesVatCents);
   const purchasesVat = exp.vatCents + sumP((p) => p.commissionVatCents + p.marketingVatCents);

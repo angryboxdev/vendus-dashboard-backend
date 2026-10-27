@@ -21,6 +21,7 @@ import { GetCashFlowToHandleUseCase } from "./application/use-cases/get-cash-flo
 import { GetDreUseCase } from "./application/use-cases/get-dre.use-case.js";
 import { GetSalesReconciliationUseCase } from "./application/use-cases/get-sales-reconciliation.use-case.js";
 import { GetDreParametersUseCase, SaveDreParametersUseCase } from "./application/use-cases/dre-parameters.use-case.js";
+import { GetDreRestaurantSalesUseCase } from "./application/use-cases/get-dre-restaurant-sales.use-case.js";
 import { CashFlowController } from "./adapters/in/cash-flow.controller.js";
 
 export interface CashFlowModule {
@@ -53,12 +54,13 @@ export function createCashFlowModule(deps: CashFlowModuleDeps): CashFlowModule {
     new PayableEntriesSummaryAdapter(deps.getPayableSummary),
     new InvoiceAlertsToReviewAdapter(deps.getInvoiceAlerts),
   );
+  const restaurantSales = new VendusRestaurantSalesAdapter(deps.vendusGetSummary);
   const getDre = new GetDreUseCase(
     bankMovements,
     expenseSources,
     catalog,
     movementKind,
-    new VendusRestaurantSalesAdapter(deps.vendusGetSummary),
+    restaurantSales,
     parameters,
     new SupabaseCategoryVatRatioReadAdapter(createScopedQuery),
     new SupabaseManualAdjustmentsReadAdapter(createScopedQuery),
@@ -76,6 +78,7 @@ export function createCashFlowModule(deps: CashFlowModuleDeps): CashFlowModule {
     getSalesReconciliation,
     new GetDreParametersUseCase(parameters),
     new SaveDreParametersUseCase(parameters),
+    new GetDreRestaurantSalesUseCase(restaurantSales),
   );
   return { router: controller.router };
 }

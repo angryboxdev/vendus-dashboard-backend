@@ -89,6 +89,40 @@ export interface DreExpenseCategory {
   children: DreExpenseChild[];
 }
 
+/**
+ * Linha da DRE onde um gasto entra, pelo tipo financeiro da categoria: CMV, custos variáveis, pessoal,
+ * estrutura, administrativo, marketing, financeiro, CAPEX (fora do resultado), outros (grupo misto sem
+ * categoria) e por classificar (sem categoria).
+ */
+export type DreSectionKey =
+  | "cmv"
+  | "variable"
+  | "personnel"
+  | "structure"
+  | "administrative"
+  | "marketing"
+  | "financial"
+  | "capex"
+  | "other"
+  | "unclassified";
+
+export interface DreSectionItem {
+  key: string;
+  categoryId: string | null;
+  code: string | null;
+  /** Nome da categoria (ou do grupo, sem categoria); null nas saídas por classificar. */
+  name: string | null;
+  /** Tipo genérico do banco, nas saídas por classificar. */
+  movementKind: string | null;
+  netCents: number;
+}
+
+export interface DreExpenseSection {
+  key: DreSectionKey;
+  netCents: number;
+  items: DreSectionItem[];
+}
+
 export interface DreExpenses {
   totalNetCents: number;
   /** IVA dedutível: real (faturas, IVA no movimento) + estimado. */
@@ -100,6 +134,10 @@ export interface DreExpenses {
   /** Gastos ainda sem categoria (pelo tipo do banco). */
   unclassifiedCents: number;
   categories: DreExpenseCategory[];
+  /** Os mesmos gastos arrumados pelas linhas da DRE (só as com valor, pela ordem da DRE). */
+  sections: DreExpenseSection[];
+  /** Investimentos (CAPEX): incluídos em `totalNetCents`, mas fora do resultado. */
+  capexNetCents: number;
 }
 
 export interface DreReport {
@@ -129,4 +167,12 @@ export interface DreReport {
     /** Vendas − compras: estimativa do IVA a entregar (negativo = a recuperar). */
     balanceCents: number;
   };
+}
+
+/** Só as vendas do restaurante do mês (Vendus), sem IVA — a parte lenta da DRE, pedida à parte. */
+export interface DreRestaurantSales {
+  period: DreReport["period"];
+  netCents: number;
+  vatCents: number;
+  byPayment: DreRevenue["restaurantByPayment"];
 }
