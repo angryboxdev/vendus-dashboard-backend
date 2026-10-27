@@ -303,13 +303,27 @@ describe("Faturas por email — endereço e ecrã", () => {
     s.addresses.seed(ORG_A, "abcdefghjkmnpqrs");
     s.addresses.seed(ORG_B, "bbbbbbbbbbbbbbbb");
     await s.receive.execute(email({ webhookId: "m-b", emailId: "e-b", recipients: [`bbbbbbbbbbbbbbbb@${DOMAIN}`] }));
-    const get = new GetEmailIntakeUseCase(s.addresses, s.attachments, s.events, s.settings, config, () => new Date("2026-10-27T12:00:00Z"));
+    const get = new GetEmailIntakeUseCase(s.addresses, s.attachments, s.events, s.settings, config, { existing: async () => new Set<string>() }, () => new Date("2026-10-27T12:00:00Z"));
     const a = await get.execute({ organizationId: ORG_A });
     expect(a.address?.email).toBe(`abcdefghjkmnpqrs@${DOMAIN}`);
     expect(a.recent).toHaveLength(0);
     const b = await get.execute({ organizationId: ORG_B });
     expect(b.recent).toHaveLength(1);
     expect(b.counts.pending).toBe(1);
+  });
+
+  it("histórico: fatura ainda existente → link; eliminada → «Fatura eliminada» (o registo fica)", async () => {
+    const s = setup();
+    s.addresses.seed(ORG_A, "abcdefghjkmnpqrs");
+    await s.receive.execute(email({ attachments: [pdf("a1", "ok.pdf"), pdf("a2", "apagada.pdf")] }));
+    s.resend.addEmail("email-1", [{ id: "a1", filename: "ok.pdf" }, { id: "a2", filename: "apagada.pdf" }]);
+    await s.process.execute({ organizationId: ORG_A });
+    const get = new GetEmailIntakeUseCase(s.addresses, s.attachments, s.events, s.settings, config, { existing: async () => new Set(["inv-1"]) }, () => new Date("2026-10-27T12:00:00Z"));
+    const r = await get.execute({ organizationId: ORG_A });
+    expect(r.recent.map((a) => [a.filename, a.invoiceId, a.invoiceDeleted])).toEqual([
+      ["apagada.pdf", "inv-2", true],
+      ["ok.pdf", "inv-1", false],
+    ]);
   });
 
   it("destino por empresa: Faturas por defeito, Stock quando escolhido", async () => {

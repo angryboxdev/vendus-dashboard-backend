@@ -85,6 +85,11 @@ export interface InvoiceIntakePort {
   import(organizationId: OrganizationId, file: { bytes: Buffer; filename: string }, destination: IntakeDestination): Promise<InvoiceIntakeResult>;
 }
 
+/** Que faturas ainda existem (histórico: «Abrir fatura» ou «Fatura eliminada»). */
+export interface InvoiceExistencePort {
+  existing(organizationId: OrganizationId, invoiceIds: string[]): Promise<Set<string>>;
+}
+
 /** Bytes aleatórios de uma fonte criptográfica (para o identificador do endereço). */
 export interface RandomBytesPort {
   bytes(length: number): Uint8Array;

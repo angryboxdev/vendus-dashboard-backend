@@ -120,6 +120,8 @@ de faturas nem fila de revisão próprios.
 - **Documento de cobrança AT/SS** recebido por email → rejeitado com indicação para importar à mão (o import
   manual trata-o à parte).
 - **Piloto**: `INBOUND_EMAIL_ALLOWED_ORGS` limita que empresas geram endereço.
+- **Histórico com a fatura** (2026-10-27): cada PDF do histórico traz `invoiceId` e `invoiceDeleted` (`InvoiceExistencePort` → `SupabaseInvoiceExistenceAdapter`, só ids da tabela `invoices` da empresa). O registo da receção nunca se apaga; se a fatura for eliminada, o ecrã mostra «Fatura eliminada» em vez do link.
+- **Reserva do anexo pelo nº de tentativas** (correção 2026-10-27): a condição por `updated_at` nunca batia (a base guarda microssegundos, o `Date` milissegundos).
 
 ## Como testar
 
