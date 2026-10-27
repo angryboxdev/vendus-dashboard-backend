@@ -88,7 +88,7 @@ export function classifyLinesDeterministic(input: {
     return `${c.groupName} › ${c.name}`;
   };
 
-  return input.lines.map((l): LineClassification => {
+  const perLine = input.lines.map((l): LineClassification => {
     if (l.kind === "deposit" && byCode.has(DEPOSIT_CODE)) {
       return { index: l.index, categoryId: byCode.get(DEPOSIT_CODE)!.id, source: "line_kind", evidence: "Linha de depósito/caução do documento." };
     }
@@ -112,4 +112,17 @@ export function classifyLinesDeterministic(input: {
     if (notes.length) return { index: l.index, categoryId: null, source: "none", evidence: `Sem decisão: ${notes.join("; ")}.`, conflict: true };
     return { index: l.index, categoryId: null, source: "none", evidence: "Sem regra nem histórico para esta descrição." };
   });
+
+  // Regra de serviço (ex.: eletricidade): uma linha inequívoca classifica as restantes sem decisão do documento.
+  const descs = input.lines.map((l) => normalizeDescription(l.description));
+  for (const r of rules) {
+    const cat = r.wholeDocument ? byCode.get(r.categoryCode) : undefined;
+    if (!cat || (r.unlessDocument && descs.some((d) => r.unlessDocument!.test(d)))) continue;
+    const hit = input.lines.find((_, i) => r.pattern.test(descs[i]!));
+    if (!hit) continue;
+    return perLine.map((c) =>
+      c.source === "none" && !c.conflict ? { ...c, categoryId: cat.id, source: "keyword", evidence: `Fatura de ${r.label} (linha «${hit.description}») → ${label(cat.id)}.` } : c,
+    );
+  }
+  return perLine;
 }

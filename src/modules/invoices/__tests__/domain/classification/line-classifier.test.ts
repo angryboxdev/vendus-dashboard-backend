@@ -77,3 +77,33 @@ describe("classificação por linha (determinística)", () => {
     expect(normalizeDescription("Açúcar pó  #Icing.3kg")).toBe("ACUCAR PO ICING 3KG");
   });
 });
+
+describe("regra de serviço: fatura de eletricidade", () => {
+  const withEnergy = [...catalog, cat("c-ene", "EST.02", "Energia")];
+  const runEnergy = (lines: LineToClassify[], history: { supplierCode: string | null; description: string; categoryId: string }[] = []) =>
+    classifyLinesDeterministic({ lines, catalog: withEnergy, history });
+
+  test("uma linha inequívoca (kVA / Potência Contratada / Eletricidade) classifica as restantes do documento", () => {
+    const r = runEnergy([
+      line(0, "20,7 kVA - Potência Contratada"),
+      line(1, "Acesso às redes em Simples"),
+      line(2, "Consumo medido em Simples"),
+      line(3, "Contribuição AudioVisual 2,85 € x 12 meses /"),
+      line(4, "mFRR"),
+    ]);
+    expect(r.map((c) => c.categoryId)).toEqual(["c-ene", "c-ene", "c-ene", "c-ene", "c-ene"]);
+    expect(r.every((c) => c.source === "keyword")).toBe(true);
+    expect(r[4]!.evidence).toContain("eletricidade");
+  });
+
+  test("histórico confirmado vale mais do que a regra de serviço", () => {
+    const r = runEnergy([line(0, "Potência Contratada"), line(1, "Taxa X")], [{ supplierCode: null, description: "Taxa X", categoryId: "c-con" }]);
+    expect(r.map((c) => c.categoryId)).toEqual(["c-ene", "c-con"]);
+  });
+
+  test("sem linha inequívoca, ou fatura dual com gás natural → não propaga", () => {
+    expect(runEnergy([line(0, "Acesso às redes"), line(1, "Termo fixo")]).map((c) => c.categoryId)).toEqual([null, null]);
+    const dual = runEnergy([line(0, "Potência Contratada"), line(1, "Gás Natural - termo fixo"), line(2, "Acesso às redes")]);
+    expect(dual.map((c) => c.categoryId)).toEqual(["c-ene", null, null]);
+  });
+});
