@@ -121,10 +121,14 @@ export class PdfjsContentReaderAdapter implements PdfContentReaderPort {
         const text = await page.getTextContent();
         for (const item of text.items) {
           if (!("str" in item) || !item.str.trim()) continue;
-          const [, , , , x0, y] = item.transform as number[];
+          const [, b, c, , x0, y] = item.transform as number[];
           const charWidth = item.str.length ? item.width / item.str.length : 0;
+          // Texto rodado (rótulo vertical na margem): marcado para os leitores de linhas o ignorarem.
+          const rotated = Math.abs(b!) > 1e-6 || Math.abs(c!) > 1e-6;
           // Um item pode trazer várias palavras ("0 D", "+ 165632"): separar com a posição de cada uma.
-          for (const m of item.str.matchAll(/\S+/g)) words.push({ text: m[0], x: x0! + m.index! * charWidth, y: y!, width: m[0].length * charWidth });
+          for (const m of item.str.matchAll(/\S+/g)) {
+            words.push({ text: m[0], x: x0! + m.index! * charWidth, y: y!, width: m[0].length * charWidth, ...(rotated && { rotated: true }) });
+          }
         }
         content.pages.push({ number: p, width: viewport.width, height: viewport.height, words });
 
