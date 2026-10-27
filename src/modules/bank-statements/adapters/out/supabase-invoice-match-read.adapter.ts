@@ -26,6 +26,7 @@ export class SupabaseInvoiceMatchReadAdapter implements InvoiceMatchReadPort {
       currency: (row.currency as string | null) ?? "EUR",
       documentType: (row.document_type as "invoice" | "credit_note" | null) ?? "invoice",
       paymentGroupId: (row.payment_group_id as string | null | undefined) ?? null,
+      ...(typeof row.reconciliation_status === "string" && { reconciliationStatus: row.reconciliation_status }),
     };
   }
 
@@ -53,7 +54,7 @@ export class SupabaseInvoiceMatchReadAdapter implements InvoiceMatchReadPort {
     if (ids.length === 0) return [];
     const { data, error } = await this.scopedQuery(organizationId)
       .table("invoices")
-      .select("id, supplier_id, supplier_name, invoice_number, total_with_vat, invoice_date, due_date, paid_at, status, currency, document_type")
+      .select("id, supplier_id, supplier_name, invoice_number, total_with_vat, invoice_date, due_date, paid_at, status, currency, document_type, reconciliation_status")
       .in("id", ids);
     if (error) throw new Error(error.message);
     return (data ?? []).map((row) => this.mapRow(row as unknown as Record<string, unknown>));

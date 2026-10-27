@@ -56,7 +56,7 @@ export class UnreconcileMovementUseCase implements UnreconcileMovementPort {
           if (totalAllocated === 0) {
             await this.invoiceReconciliationWrite.markUnreconciled(organizationId, invoiceId);
           } else if (totalAllocated >= inv.totalWithVat - 1) {
-            await this.invoiceReconciliationWrite.markReconciled(organizationId, invoiceId, movement.bookingDate);
+            await this.invoiceReconciliationWrite.markReconciled(organizationId, invoiceId, movement.bookingDate, movement.bankAccountId);
           } else {
             await this.invoiceReconciliationWrite.markPartiallyReconciled(organizationId, invoiceId);
           }

@@ -19,6 +19,8 @@ export interface InvoiceMatchCandidate {
   documentType: "invoice" | "credit_note";
   /** Documento de pagamento com várias faturas fiscais (ex.: águas + resíduos, emitentes diferentes, um débito). */
   paymentGroupId?: string | null;
+  /** Só preenchido por `findByIds` («reconciled», «partially_reconciled», «pending_reconciliation»…). */
+  reconciliationStatus?: string;
 }
 
 export interface InvoiceMatchReadPort {

@@ -66,6 +66,15 @@ export class SupabasePayableEntryWriteAdapter implements PayableEntryWritePort {
     if (error) throw new Error(error.message);
   }
 
+  async reopenByInvoiceId(organizationId: OrganizationId, invoiceId: string): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId)
+      .table("payable_entries")
+      .update({ status: "pending", paid_at: null, updated_at: new Date().toISOString() })
+      .eq("invoice_id", invoiceId)
+      .eq("status", "paid");
+    if (error) throw new Error(error.message);
+  }
+
   async cancelByInvoiceId(organizationId: OrganizationId, invoiceId: string): Promise<void> {
     const { error } = await this.scopedQuery(organizationId)
       .table("payable_entries")

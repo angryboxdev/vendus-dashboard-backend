@@ -1745,6 +1745,9 @@ app.use("/api", bankAccountsModule.router);
 const bankStatementsModule = createBankStatementsModule(bankAccountsModule.accountRepo, financialBaseModule.listSuppliers, bankAccountsModule.resolveStatementAccount, {
   settle: payableRecurrencesModule.settleOccurrenceFromBank,
   reopen: payableRecurrencesModule.reopenOccurrenceFromBank,
+}, {
+  settle: invoicesModule.settleInvoiceFromBank,
+  reopen: invoicesModule.reopenInvoiceFromBank,
 });
 app.use("/api", bankStatementsModule.router);
 
