@@ -4,6 +4,7 @@ import type {
   ReopenOccurrenceFromBankPort,
   SettleOccurrenceFromBankCommand,
   SettleOccurrenceFromBankPort,
+  SettleOccurrenceFromBankResult,
 } from "../../domain/ports/in/bank-payment.ports.js";
 
 /** Marca no pagamento qual foi o movimento — é por ela que se sabe se o pode desfazer. */
@@ -12,15 +13,15 @@ export const bankPaymentNote = (movementId: string) => `Pago pela conciliação 
 export class SettleOccurrenceFromBankUseCase implements SettleOccurrenceFromBankPort {
   constructor(private readonly occurrenceRepo: OccurrenceRepositoryPort) {}
 
-  async execute(command: SettleOccurrenceFromBankCommand): Promise<boolean> {
+  async execute(command: SettleOccurrenceFromBankCommand): Promise<SettleOccurrenceFromBankResult> {
     const occurrence = await this.occurrenceRepo.findById(command.organizationId, command.occurrenceId);
-    if (!occurrence) return false;
-    if (occurrence.status === "paid" || occurrence.status === "cancelled") return false;
-    // Fatura obrigatória e ainda sem fatura: fica ligada ao movimento mas só passa a paga com a fatura.
-    if (occurrence.requireInvoice && occurrence.status !== "invoice_linked") return false;
+    if (!occurrence || occurrence.status === "cancelled") return "skipped";
+    if (occurrence.status === "paid") return "already_paid";
+    // Com fatura (ou à espera dela): o movimento concilia-se com a fatura, que paga a ocorrência em cadeia.
+    if (occurrence.invoiceId !== null || occurrence.requireInvoice) return "invoice_required";
     const paid = occurrence.markPaid(new Date(`${command.paidAt}T00:00:00.000Z`), "transfer", command.bankAccountId, bankPaymentNote(command.movementId));
     await this.occurrenceRepo.update(command.organizationId, paid);
-    return true;
+    return "paid";
   }
 }
 

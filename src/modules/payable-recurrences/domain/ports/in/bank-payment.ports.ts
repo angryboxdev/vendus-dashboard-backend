@@ -15,9 +15,17 @@ export interface SettleOccurrenceFromBankCommand {
   bankAccountId: string | null;
 }
 
+/**
+ * - `paid`: ficou paga agora.
+ * - `already_paid`: já estava paga (ex.: segundo movimento do mesmo mês — fica ligado e soma ao real).
+ * - `skipped`: não existe ou está cancelada.
+ * - `invoice_required`: tem fatura associada ou exige fatura — o movimento concilia-se com a FATURA (que paga a
+ *   ocorrência em cadeia); ligá-lo à ocorrência deixaria a fatura e a conta a pagar em aberto (pagamento duplicado).
+ */
+export type SettleOccurrenceFromBankResult = "paid" | "already_paid" | "skipped" | "invoice_required";
+
 export interface SettleOccurrenceFromBankPort {
-  /** `true` se ficou paga agora; `false` se já estava paga, cancelada ou precisa de fatura primeiro. */
-  execute(command: SettleOccurrenceFromBankCommand): Promise<boolean>;
+  execute(command: SettleOccurrenceFromBankCommand): Promise<SettleOccurrenceFromBankResult>;
 }
 
 export interface ReopenOccurrenceFromBankCommand {

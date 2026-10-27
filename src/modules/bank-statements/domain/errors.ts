@@ -103,3 +103,14 @@ export class StatementPdfNotRecognizedError extends Error {
     this.name = "StatementPdfNotRecognizedError";
   }
 }
+
+/** A ocorrência escolhida tem (ou exige) fatura: o movimento concilia-se com a fatura, não com a ocorrência. */
+export class OccurrenceRequiresInvoiceError extends Error {
+  constructor(readonly occurrenceId: string) {
+    super(
+      "Esta recorrência tem (ou exige) fatura: concilie o movimento com a fatura em «Justificar com documentos» — " +
+        "a recorrência fica paga em cadeia. Ligá-lo só à recorrência deixaria a fatura por pagar.",
+    );
+    this.name = "OccurrenceRequiresInvoiceError";
+  }
+}

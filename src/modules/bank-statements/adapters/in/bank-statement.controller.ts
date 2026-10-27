@@ -21,6 +21,7 @@ import {
   EntityAlreadyReconciledError,
   DuplicateMovementError,
   StaleDocumentBalanceError,
+  OccurrenceRequiresInvoiceError,
   StatementPdfNotRecognizedError,
 } from "../../domain/errors.js";
 import type { ImportBankStatementPort } from "../../domain/ports/in/bank-statement.ports.js";
@@ -694,6 +695,10 @@ export class BankStatementController {
       } catch (e) {
         if (e instanceof MovementNotFoundError) {
           res.status(404).json({ error: e.message });
+          return;
+        }
+        if (e instanceof OccurrenceRequiresInvoiceError) {
+          res.status(409).json({ error: e.message, code: "occurrence_requires_invoice" });
           return;
         }
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });

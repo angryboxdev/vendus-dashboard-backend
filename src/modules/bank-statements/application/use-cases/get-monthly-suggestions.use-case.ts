@@ -75,7 +75,8 @@ function bestOccurrence(
 ): { occurrence: OccurrenceMatchCandidate; score: CandidateScore } | null {
   let best: { occurrence: OccurrenceMatchCandidate; score: CandidateScore } | null = null;
   for (const o of occurrences) {
-    if (claimed.has(o.id) || o.status === "paid") continue;
+    // Só previsões sem fatura: as que têm/exigem fatura concilia-se pela fatura (que paga a ocorrência em cadeia).
+    if (claimed.has(o.id) || o.status !== "forecast") continue;
     const base = {
       candidateAmount: o.effectiveAmountCents,
       candidateOpenBalance: o.effectiveAmountCents,

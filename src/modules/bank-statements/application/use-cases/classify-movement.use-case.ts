@@ -32,14 +32,13 @@ export class ClassifyMovementUseCase implements ClassifyMovementPort {
       ...(command.vatIncluded !== undefined && { vatIncluded: command.vatIncluded }),
     });
 
-    await this.movementRepo.update(command.organizationId, updated);
-
-    if (!this.occurrencePayment) return;
+    if (!this.occurrencePayment) {
+      await this.movementRepo.update(command.organizationId, updated);
+      return;
+    }
     const currentOccurrence =
       updated.justificationType === "contrato_recorrencia" && updated.matchedEntityType === "recurrence_occurrence" ? updated.matchedEntityId : null;
-    if (previousOccurrence && previousOccurrence !== currentOccurrence) {
-      await this.occurrencePayment.reopen(command.organizationId, { occurrenceId: previousOccurrence, movementId: updated.id });
-    }
+    // Primeiro a ocorrência: se tiver fatura, recusa (OccurrenceRequiresInvoiceError) sem gravar nada.
     if (currentOccurrence) {
       await this.occurrencePayment.settle(command.organizationId, {
         occurrenceId: currentOccurrence,
@@ -47,6 +46,15 @@ export class ClassifyMovementUseCase implements ClassifyMovementPort {
         paidAt: updated.bookingDate.toISOString().slice(0, 10),
         bankAccountId: updated.bankAccountId,
       });
+    }
+    try {
+      await this.movementRepo.update(command.organizationId, updated);
+    } catch (e) {
+      if (currentOccurrence) await this.occurrencePayment.reopen(command.organizationId, { occurrenceId: currentOccurrence, movementId: updated.id });
+      throw e;
+    }
+    if (previousOccurrence && previousOccurrence !== currentOccurrence) {
+      await this.occurrencePayment.reopen(command.organizationId, { occurrenceId: previousOccurrence, movementId: updated.id });
     }
   }
 }
