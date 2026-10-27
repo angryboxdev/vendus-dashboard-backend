@@ -23,22 +23,28 @@ export type MovementKind =
 /** Plataforma de entrega que fez a liquidação (só em créditos de vendas). */
 export type DeliveryPlatform = "uber_eats" | "glovo" | "bolt_food";
 
+/** Venda do restaurante que entra no banco: «card» = liquidação do TPA, «cash» = depósito. */
+export type RestaurantSaleChannel = "card" | "cash";
+
 export interface NormalizedMovement {
   normalizedDescription: string;
   kind: MovementKind;
   /** Liquidação de uma plataforma de entrega (já sem a comissão da plataforma). */
   platform?: DeliveryPlatform;
+  /** Venda do restaurante (TPA ou depósito) — para conferir com o Vendus. */
+  restaurantSale?: RestaurantSaleChannel;
 }
 
 const UTILITIES = /\b(EDP|GALP|ENDESA|IBERDROLA|GOLD ?ENERGY|GOLDENERGY|AGUAS|ÁGUAS|EPAL|INDAQUA|SMAS|NOS|MEO|VODAFONE|NOWO|DIGI)\b/i;
 const INSURANCE = /\b(GENERALI|FIDELIDADE|ALLIANZ|AGEAS|TRANQUILIDADE|OCIDENTAL|ZURICH|MAPFRE|LIBERTY|LUSITANIA|CA SEGUROS|SEGUROS?)\b/i;
 const STATE = /\b(PAG\.?\s?DUC|PAG\.?\s?IGCP|AUTORIDADE TRIBUTARIA|SEG(URANCA)? SOCIAL|TAXA SOCIAL UNICA|INSTITUTO (DE )?GESTAO|INSTITUTO (DOS )?REGISTOS|IGFSS|FINANCAS|PORTAL DAS FINANCAS)\b/i;
-const SALES_PLATFORMS: [RegExp, string, DeliveryPlatform?][] = [
-  [/UBER\s+PAYMENTS|STICHTING CUSTODIAN UBER/i, "Uber Eats", "uber_eats"],
-  [/\bBOLT OPERATIONS\b/i, "Bolt", "bolt_food"],
-  [/^STRIPE\b/i, "Stripe"],
-  [/\bGLOVO(APP)?\b/i, "Glovo", "glovo"],
-  [/\bUNICRE\b/i, "Unicre"],
+/** Entradas de vendas por contraparte (nomes decididos pelo utilizador, 2026-10-27). */
+const SALES_PLATFORMS: [RegExp, string, DeliveryPlatform | null, RestaurantSaleChannel?][] = [
+  [/UBER\s+PAYMENTS|STICHTING CUSTODIAN UBER/i, "Venda plataforma Uber", "uber_eats"],
+  [/\bBOLT OPERATIONS\b/i, "Venda plataforma Bolt", "bolt_food"],
+  [/^STRIPE\b/i, "Recebimento Stripe", null],
+  [/\bGLOVO(APP)?\b/i, "Venda plataforma Glovo", "glovo"],
+  [/\bUNICRE\b/i, "Venda restaurante cartão (Unicre)", null, "card"],
 ];
 
 const squash = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -70,11 +76,16 @@ export function normalizeMovement(description: string, type: MovementType): Norm
   // ── Entradas ──
   if (type === "credit") {
     const tpa = /^CREDITO TPA\b.*?(\d{5,})/.exec(up);
-    if (tpa || /^CREDITO TPA\b/.test(up)) return { normalizedDescription: tpa ? `Vendas TPA (terminal ${tpa[1]})` : "Vendas TPA", kind: "sales" };
-    for (const [re, name, platform] of SALES_PLATFORMS) {
-      if (re.test(d)) return { normalizedDescription: `Recebimento ${name}`, kind: "sales", ...(platform ? { platform } : {}) };
+    if (tpa || /^CREDITO TPA\b/.test(up)) {
+      return { normalizedDescription: tpa ? `Venda restaurante cartão (terminal ${tpa[1]})` : "Venda restaurante cartão", kind: "sales", restaurantSale: "card" };
     }
-    if (/^DEP(OSITO)?\b/.test(up)) return { normalizedDescription: /\bNUM/.test(up) ? "Depósito em numerário" : "Depósito", kind: "deposit" };
+    for (const [re, name, platform, restaurantSale] of SALES_PLATFORMS) {
+      if (re.test(d)) return { normalizedDescription: name, kind: "sales", ...(platform ? { platform } : {}), ...(restaurantSale ? { restaurantSale } : {}) };
+    }
+    // Todos os depósitos contam como venda do restaurante em dinheiro (decisão do utilizador, 2026-10-27)
+    if (/^DEP(OSITO)?\b/.test(up)) {
+      return { normalizedDescription: /\bNUM/.test(up) ? "Venda restaurante dinheiro (depósito em numerário)" : "Venda restaurante dinheiro (depósito)", kind: "deposit", restaurantSale: "cash" };
+    }
     if (/^TRF\.?\s*(DE|P\/O)\b/.test(up)) return { normalizedDescription: `Transferência de ${titleCase(counterpart(d.replace(/^TRF\.?\s*(DE|P\/O)\s*/i, "")))}`, kind: "transfer_in" };
     return { normalizedDescription: titleCase(counterpart(d)), kind: "to_review" };
   }

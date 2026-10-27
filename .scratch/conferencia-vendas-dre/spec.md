@@ -43,7 +43,7 @@ sobre a venda com ou sem IVA e se o marketing leva IVA. Validar com o contabilis
 
 1. **F1 — Vendus por método de pagamento** ✅ (sem migração) — `analytics.byPaymentMethod` e
    `analytics.dailyPayments` em `GET /api/vendus/summary`; tipo espelhado no frontend.
-2. **F2 — Conferência Vendus × banco** — vista diária: cartão vendido × crédito TPA (cada crédito
+2. **F2 — Conferência Vendus × banco** ✅ backend (sem migração; `GET /api/reports/dre/conferencia-vendas`) — vista diária: cartão vendido × crédito TPA (cada crédito
    cobre os dias desde o anterior; diferença, taxa implícita vs 1%); numerário vendido × depósitos.
    Novos nomes das entradas do banco.
 3. **F3 — Parâmetros mensais + DRE** (migração) — tabela de parâmetros por mês (IVA delivery,
@@ -55,6 +55,6 @@ sobre a venda com ou sem IVA e se o marketing leva IVA. Validar com o contabilis
 
 1. A comissão incide sobre a venda com ou sem IVA?
 2. O marketing é lançado sem IVA (a plataforma acrescenta 23%)?
-3. Contam como «venda restaurante dinheiro» todos os depósitos ou só os «em numerário»?
-4. Unicre e Stripe (hoje reconhecidos como vendas): Unicre = cartão? Stripe = ?
+3. ~~Depósitos~~ → todos contam como «venda restaurante dinheiro» (frase do utilizador; confirmar).
+4. Unicre → tratada como cartão (adquirente TPA; confirmar). Stripe → fica «Recebimento Stripe», fora da conferência.
 5. Nomes reais dos métodos de pagamento no Vendus (para confirmar a classificação da F1).

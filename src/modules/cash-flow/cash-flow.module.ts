@@ -18,6 +18,8 @@ import { SupabaseManualAdjustmentsReadAdapter } from "./adapters/out/supabase-ma
 import { GetCashFlowUseCase } from "./application/use-cases/get-cash-flow.use-case.js";
 import { GetCashFlowToHandleUseCase } from "./application/use-cases/get-cash-flow-to-handle.use-case.js";
 import { GetDreUseCase } from "./application/use-cases/get-dre.use-case.js";
+import { GetSalesReconciliationUseCase } from "./application/use-cases/get-sales-reconciliation.use-case.js";
+import { VendusDailyPaymentsAdapter } from "./adapters/out/vendus-daily-payments.adapter.js";
 import { CashFlowController } from "./adapters/in/cash-flow.controller.js";
 
 export interface CashFlowModule {
@@ -60,5 +62,10 @@ export function createCashFlowModule(deps: CashFlowModuleDeps): CashFlowModule {
     new AirMenuPlatformSalesAdapter(deps.airMenuGetSummary, deps.airMenuEnterpriseId),
     new SupabaseManualAdjustmentsReadAdapter(createScopedQuery),
   );
-  return { router: new CashFlowController(getCashFlow, getToHandle, getDre).router };
+  const getSalesReconciliation = new GetSalesReconciliationUseCase(
+    bankMovements,
+    movementKind,
+    new VendusDailyPaymentsAdapter(deps.vendusGetSummary),
+  );
+  return { router: new CashFlowController(getCashFlow, getToHandle, getDre, getSalesReconciliation).router };
 }

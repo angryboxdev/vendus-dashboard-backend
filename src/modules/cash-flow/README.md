@@ -1,7 +1,7 @@
 # Módulo: cash-flow
 
 > Status: active
-> Última atualização: 2026-10-26 (fluxo de caixa só a partir do banco; «Para tratar»; DRE F1 pela conciliação bancária)
+> Última atualização: 2026-10-27 (conferência de vendas Vendus × banco: cartão ↔ TPA, numerário ↔ depósitos). Antes: 2026-10-26 (fluxo de caixa só a partir do banco; «Para tratar»; DRE F1 pela conciliação bancária)
 
 ---
 
@@ -75,11 +75,24 @@ Decisões do utilizador (2026-10-26): a DRE parte da conciliação bancária, tu
 - **Resultado** = receita − gastos − ajustes; **margem** = resultado ÷ receita.
 - **IVA:** das vendas (Vendus + AirMenu) − dedutível conhecido dos gastos = estimativa a entregar.
 
+### Conferência de vendas (Vendus × banco)
+
+Decisões do utilizador (2026-10-27; spec `.scratch/conferencia-vendas-dre/spec.md`): a venda do
+restaurante tem competência no Vendus; o banco serve para conferir, e um dia de diferença é normal.
+
+- **Entradas do restaurante no banco** (`restaurantSale` do leitor do extrato): «Venda restaurante cartão» = créditos TPA e Unicre; «Venda restaurante dinheiro» = todos os depósitos.
+- **Cartão — liquidações:** os créditos TPA somam-se por dia; cada um cobre as vendas em cartão do Vendus desde o dia do crédito anterior até à véspera do seu (venda em D, crédito em D+1; o crédito de segunda junta o fim de semana). Taxa implícita = (vendido − recebido) ÷ vendido; «ok» se a ±0,5 p.p. da taxa esperada (1%), senão «check»; crédito sem vendas → «no_sales». Uma liquidação conta no mês do seu **último dia de venda** (o crédito de dia 1 paga o mês anterior).
+- **Janela:** vendas desde 7 dias antes do mês; créditos até 7 dias depois do fim (sem passar de hoje). O primeiro crédito da janela não tem anterior — cobre desde o início da janela.
+- **Por liquidar:** vendas em cartão depois do último crédito, até ao fim do período.
+- **Numerário:** vendido no mês × depositado no mês (positivo = por depositar); cada depósito mostra o numerário vendido desde o depósito anterior até à véspera.
+- **Fora:** créditos excluídos do fluxo de caixa (transferências internas, empréstimos); Eatz, Apps e outros métodos do Vendus (MB Way…).
+
 ## Portas
 
 ### Entrada (casos de uso)
 
 - `GetDrePort` — DRE do mês (`{ organizationId, year, month }`).
+- `GetSalesReconciliationPort` — conferência de vendas do mês (`{ organizationId, year, month }`).
 
 - `GetCashFlowPort` — relatório do mês (`{ organizationId, year, month }`).
 - `GetCashFlowToHandlePort` — painel «Para tratar» (`{ organizationId }`).
@@ -95,12 +108,13 @@ Decisões do utilizador (2026-10-26): a DRE parte da conciliação bancária, tu
 - `RestaurantSalesReadPort` — vendas do restaurante (sem IVA + IVA) num intervalo.
 - `PlatformSalesReadPort` — vendas das plataformas (AirMenu) num intervalo.
 - `ManualAdjustmentsReadPort` — custos fixos/variáveis lançados à mão no mês.
+- `RestaurantDailyPaymentsReadPort` — vendas do restaurante por dia em cartão e numerário (Vendus).
 
 ## Adapters
 
 ### Entrada
 
-- `CashFlowController` → `GET /reports/dre/fluxo-caixa` e `GET /reports/dre/resultado` (permissão `dre.statement`, READ) e `GET /reports/dre/fluxo-caixa/para-tratar` (permissão `finance.payables`, READ).
+- `CashFlowController` → `GET /reports/dre/fluxo-caixa`, `GET /reports/dre/resultado` e `GET /reports/dre/conferencia-vendas` (permissão `dre.statement`, READ) e `GET /reports/dre/fluxo-caixa/para-tratar` (permissão `finance.payables`, READ).
 
 ### Saída
 
@@ -113,6 +127,7 @@ Decisões do utilizador (2026-10-26): a DRE parte da conciliação bancária, tu
 - `VendusRestaurantSalesAdapter` → `GetSummaryPort` do módulo `vendus` (euros → cêntimos; sem o canal «apps»).
 - `AirMenuPlatformSalesAdapter` → `GetSummaryPort` do módulo `air-menu` (enterprise do Resumo de Vendas, datas em Europe/Lisbon; indisponível → zeros).
 - `SupabaseManualAdjustmentsReadAdapter` → `dre_custos_fixos`, `dre_custos_variaveis` (só leitura).
+- `VendusDailyPaymentsAdapter` → `GetSummaryPort` do módulo `vendus` (`analytics.dailyPayments`, euros → cêntimos; Eatz, Apps e outros métodos ficam de fora).
 
 ## Decisões de design
 

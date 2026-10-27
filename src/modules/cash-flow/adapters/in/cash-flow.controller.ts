@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { GetCashFlowPort } from "../../domain/ports/in/get-cash-flow.port.js";
 import type { GetCashFlowToHandlePort } from "../../domain/ports/in/get-cash-flow-to-handle.port.js";
 import type { GetDrePort } from "../../domain/ports/in/get-dre.port.js";
+import type { GetSalesReconciliationPort } from "../../domain/ports/in/get-sales-reconciliation.port.js";
 import { InvalidCashFlowPeriodError } from "../../domain/errors.js";
 
 export class CashFlowController {
@@ -11,12 +12,35 @@ export class CashFlowController {
     private readonly getCashFlow: GetCashFlowPort,
     private readonly getToHandle: GetCashFlowToHandlePort,
     private readonly getDre: GetDrePort,
+    private readonly getSalesReconciliation: GetSalesReconciliationPort,
   ) {
     this.router = Router();
     this.registerRoutes();
   }
 
   private registerRoutes(): void {
+    /**
+     * GET /reports/dre/conferencia-vendas?year=&month=
+     * Vendas do restaurante no Vendus × banco: cartão ↔ créditos TPA (taxa implícita), numerário ↔ depósitos.
+     */
+    this.router.get("/reports/dre/conferencia-vendas", async (req, res) => {
+      try {
+        const result = await this.getSalesReconciliation.execute({
+          organizationId: req.auth!.orgId,
+          year: Number(req.query["year"]),
+          month: Number(req.query["month"]),
+        });
+        res.json(result);
+      } catch (e: unknown) {
+        if (e instanceof InvalidCashFlowPeriodError) {
+          res.status(400).json({ error: e.message });
+          return;
+        }
+        const msg = e instanceof Error ? e.message : "Internal error";
+        res.status(500).json({ error: msg });
+      }
+    });
+
     /**
      * GET /reports/dre/resultado?year=&month=
      * DRE a partir da conciliação bancária: receita e gastos sem IVA, ajustes manuais e saldo do IVA.

@@ -4,13 +4,13 @@ import { normalizeMovement } from "../../domain/services/movement-normalizer.ser
 // Descritivos no formato do Millennium BCP (referências e nomes fictícios).
 describe("normalizeMovement", () => {
   it.each([
-    ["CREDITO TPA BCP 1234567 MOV N 92", "credit", "Vendas TPA (terminal 1234567)", "sales"],
-    ["STICHTING CUSTODIAN UBER PAYMENTS", "credit", "Recebimento Uber Eats", "sales"],
-    ["BOLT OPERATIONS OU", "credit", "Recebimento Bolt", "sales"],
+    ["CREDITO TPA BCP 1234567 MOV N 92", "credit", "Venda restaurante cartão (terminal 1234567)", "sales"],
+    ["STICHTING CUSTODIAN UBER PAYMENTS", "credit", "Venda plataforma Uber", "sales"],
+    ["BOLT OPERATIONS OU", "credit", "Venda plataforma Bolt", "sales"],
     ["STRIPE", "credit", "Recebimento Stripe", "sales"],
-    ["TRF. P/O GlovoApp", "credit", "Recebimento Glovo", "sales"],
-    ["TRF. P/O UNICRE", "credit", "Recebimento Unicre", "sales"],
-    ["DEP NUM MTM12345", "credit", "Depósito em numerário", "deposit"],
+    ["TRF. P/O GlovoApp", "credit", "Venda plataforma Glovo", "sales"],
+    ["TRF. P/O UNICRE", "credit", "Venda restaurante cartão (Unicre)", "sales"],
+    ["DEP NUM MTM12345", "credit", "Venda restaurante dinheiro (depósito em numerário)", "deposit"],
     ["TRF DE CLIENTE EXEMPLO LDA", "credit", "Transferência de Cliente Exemplo Lda", "transfer_in"],
     ["DEVOL PAG SERV ENT/REF 50470/000000123", "credit", "Devolução — Pag Serv Ent/Ref", "reversal"],
     ["OPDE DEVOL COM. PACOT PACOTE M EMPRESA", "credit", "Devolução de comissão bancária", "reversal"],
@@ -52,5 +52,14 @@ describe("normalizeMovement", () => {
     expect(normalizeMovement("BOLT OPERATIONS OU", "credit").platform).toBe("bolt_food");
     expect(normalizeMovement("STRIPE", "credit").platform).toBeUndefined();
     expect(normalizeMovement("CREDITO TPA BCP 1234567 MOV N 92", "credit").platform).toBeUndefined();
+  });
+
+  it("marca as vendas do restaurante: TPA e Unicre = cartão, depósitos = dinheiro", () => {
+    expect(normalizeMovement("CREDITO TPA BCP 1234567 MOV N 92", "credit").restaurantSale).toBe("card");
+    expect(normalizeMovement("TRF. P/O UNICRE", "credit").restaurantSale).toBe("card");
+    expect(normalizeMovement("DEP NUM MTM12345", "credit").restaurantSale).toBe("cash");
+    expect(normalizeMovement("DEPOSITO 12345", "credit")).toMatchObject({ normalizedDescription: "Venda restaurante dinheiro (depósito)", restaurantSale: "cash" });
+    expect(normalizeMovement("STICHTING CUSTODIAN UBER PAYMENTS", "credit").restaurantSale).toBeUndefined();
+    expect(normalizeMovement("STRIPE", "credit").restaurantSale).toBeUndefined();
   });
 });

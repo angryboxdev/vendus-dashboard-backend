@@ -14,6 +14,8 @@ export interface BankCredit {
   kind: string;
   /** Liquidação de uma plataforma de entrega (uber_eats, glovo, bolt_food), já sem comissão; senão null. */
   platform: string | null;
+  /** Venda do restaurante: «card» = liquidação TPA, «cash» = depósito; senão null/ausente. */
+  restaurantSale?: "card" | "cash" | null;
   reconciliationStatus: string;
   justificationType: string | null;
 }

@@ -72,7 +72,7 @@ describe("GetAccountMonthDetailUseCase", () => {
     });
     await movementRepo.saveBulk(organizationId, [m]);
     const [day] = await useCase.execute({ organizationId, bankAccountId: ACCOUNT_ID, year: 2025, month: 3 });
-    expect(day!.movements[0]).toMatchObject({ description: "CREDITO TPA BCP 1234567 MOV N 5", normalizedDescription: "Vendas TPA (terminal 1234567)", movementKind: "sales" });
+    expect(day!.movements[0]).toMatchObject({ description: "CREDITO TPA BCP 1234567 MOV N 5", normalizedDescription: "Venda restaurante cartão (terminal 1234567)", movementKind: "sales" });
   });
 
   it("returns days in chronological order", async () => {
