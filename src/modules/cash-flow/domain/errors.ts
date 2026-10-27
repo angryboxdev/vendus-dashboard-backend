@@ -4,3 +4,10 @@ export class InvalidCashFlowPeriodError extends Error {
     this.name = "InvalidCashFlowPeriodError";
   }
 }
+
+export class InvalidDreParametersError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidDreParametersError";
+  }
+}

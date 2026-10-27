@@ -21,7 +21,7 @@ faturado.
   mostra o **bruto** primeiro.
 - **Marketing das plataformas:** valor lançado à mão por plataforma e mês.
 - **AirMenu:** deixa de ser usado na DRE (o delivery reconstitui-se pelo banco).
-- **IVA dos gastos:** real (fatura conciliada) → média do fornecedor (ex.: últimas 10 da Makro) →
+- **IVA dos gastos:** real (fatura conciliada) → média das últimas 10 faturas da **categoria** (ex.: Ingredientes ≈ Makro; a saída sem fatura não tem fornecedor) →
   teórico pela categoria (serviços 23%) → por confirmar.
 
 ## Fórmula do delivery (por plataforma e mês)
@@ -46,7 +46,7 @@ sobre a venda com ou sem IVA e se o marketing leva IVA. Validar com o contabilis
 2. **F2 — Conferência Vendus × banco** ✅ backend (sem migração; `GET /api/reports/dre/conferencia-vendas`) — vista diária: cartão vendido × crédito TPA (cada crédito
    cobre os dias desde o anterior; diferença, taxa implícita vs 1%); numerário vendido × depósitos.
    Novos nomes das entradas do banco.
-3. **F3 — Parâmetros mensais + DRE** (migração) — tabela de parâmetros por mês (IVA delivery,
+3. **F3 — Parâmetros mensais + DRE** ✅ (migração `20261204100000_dre_monthly_parameters`, por aplicar; `GET|PUT /api/reports/dre/parametros`; base da comissão e IVA do marketing ficaram parâmetros) — tabela de parâmetros por mês (IVA delivery,
    comissão, IVA comissão, taxa TPA, IVA teórico de serviços) e marketing manual por plataforma;
    delivery em bruto sem AirMenu; receita separada por linha; IVA dos gastos por prioridade.
 4. **F4 — Frontend** — conferência, lançamento de parâmetros/marketing, DRE com margem por plataforma.

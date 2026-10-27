@@ -1,7 +1,7 @@
 # Módulo: cash-flow
 
 > Status: active
-> Última atualização: 2026-10-27 (conferência de vendas Vendus × banco: cartão ↔ TPA, numerário ↔ depósitos). Antes: 2026-10-26 (fluxo de caixa só a partir do banco; «Para tratar»; DRE F1 pela conciliação bancária)
+> Última atualização: 2026-10-27 (DRE: delivery em bruto sem AirMenu, parâmetros mensais, IVA estimado dos gastos; conferência de vendas Vendus × banco). Antes: 2026-10-26 (fluxo de caixa só a partir do banco; «Para tratar»; DRE F1 pela conciliação bancária)
 
 ---
 
@@ -67,13 +67,17 @@ não altera movimentos, faturas nem categorias. A conciliação e a classificaç
 
 ### DRE (pela conciliação bancária)
 
-Decisões do utilizador (2026-10-26): a DRE parte da conciliação bancária, tudo **sem IVA**.
+Decisões do utilizador (2026-10-26, revistas a 2026-10-27): a DRE parte da conciliação bancária,
+tudo **sem IVA**; o objetivo é saber se a empresa dá lucro. Sem AirMenu.
 
-- **Receita:** restaurante = Vendus (canais salão/take-away/Eatz, sem o antigo «apps»), sem IVA. Plataformas = liquidações da Uber/Glovo/Bolt no banco (já sem comissão; o leitor do extrato marca a `platform`), sem IVA pela taxa das vendas do AirMenu no período. Mostra também o vendido no AirMenu sem IVA e a diferença (comissões e acertos, estimativa). Sem vendas no AirMenu → a liquidação conta pelo total (`platformsVatKnown: false`).
-- **Gastos:** as mesmas saídas e categorias do fluxo de caixa (mesmas exclusões). Sem IVA por: categoria sem IVA (tipos financeiros `personnel`, `financial`, `fiscal`; grupo isento se todas as suas categorias o forem) → tudo; fatura conciliada → rácio sem IVA da fatura (linhas «Por artigo» com o seu; repartições com o da fatura), na parte ligada a ela; IVA posto no movimento → 100/(100+taxa) (ou tudo, se «não incluído»); senão conta pelo valor total como **«IVA por confirmar»**. Conciliar com a fatura altera logo o valor (calculado na leitura).
+- **Receita — restaurante:** Vendus (canais salão/take-away/Eatz, sem o antigo «apps»), com o IVA exato dos documentos; repartida em «Venda restaurante cartão / dinheiro / outros» na proporção do bruto por classe de pagamento (`restaurantByPayment`).
+- **Receita — plataformas, em bruto** (`platformGross`): a plataforma liquida no banco já sem a comissão (com IVA por cima) e sem o marketing (com IVA). Com R = recebido, M = marketing sem IVA (lançado à mão), c = comissão, t = IVA da comissão, v = IVA médio das vendas, m = IVA do marketing: G = (R + M·(1+m)) ÷ (1 − k), k = c·(1+t) (comissão sobre a venda com IVA) ou c·(1+t)/(1+v) (sem IVA). Receita = G ÷ (1+v). Por plataforma mostra também a **margem** (venda sem IVA − comissão − marketing). Exemplo: R = 631 € → G = 1000 €, receita 869,57 €, comissão 300 € (+69 € IVA). Uma plataforma só com marketing lançado também aparece.
+- **Custos das plataformas:** comissão e marketing sem IVA — linha própria, abatida no resultado; o IVA deles conta como dedutível.
+- **Parâmetros mensais** (`dre_monthly_parameters`; `GET|PUT /reports/dre/parametros`): IVA médio do delivery (15), comissão (30), IVA da comissão (23), comissão sobre a venda com IVA (sim), IVA do marketing (23), taxa do TPA (1, usada na conferência), IVA teórico dos gastos (23) e marketing por plataforma. Mês sem linha → herda as taxas do último mês com linha (sem o marketing); sem nenhuma → valores de omissão (`source`). A base da comissão e o IVA do marketing ficaram parâmetros por confirmar com um extrato real da Uber.
+- **Gastos:** as mesmas saídas e categorias do fluxo de caixa (mesmas exclusões). Sem IVA, pelo melhor que se sabe: (1) categoria sem IVA (tipos financeiros `personnel`, `financial`, `fiscal`; grupo isento se todas as suas categorias o forem) → tudo; (2) **real** — fatura conciliada (linhas «Por artigo» com o seu; repartições com o da fatura), na parte ligada a ela, ou IVA posto no movimento; (3) **estimado** — rácio das últimas 10 faturas da categoria (ex.: Ingredientes ≈ Makro; ponderado pelo valor, sem rascunhos nem anuladas) ou, sem histórico, o IVA teórico do mês para qualquer saída com categoria/grupo; (4) sem categoria → valor total, **«IVA por confirmar»**. Conciliar com a fatura altera logo o valor (calculado na leitura).
 - **Ajustes manuais:** custos fixos e variáveis lançados à mão nas páginas antigas do Mapa (`dre_custos_fixos` / `dre_custos_variaveis`, `valor_sem_iva`), somados.
-- **Resultado** = receita − gastos − ajustes; **margem** = resultado ÷ receita.
-- **IVA:** das vendas (Vendus + AirMenu) − dedutível conhecido dos gastos = estimativa a entregar.
+- **Resultado** = receita − custos das plataformas − gastos − ajustes; **margem** = resultado ÷ receita.
+- **IVA:** das vendas (Vendus + plataformas reconstituídas) − dedutível (gastos real + estimado, comissões e marketing) = estimativa a entregar; `purchasesEstimatedCents` diz quanto é estimado.
 
 ### Conferência de vendas (Vendus × banco)
 
@@ -93,6 +97,7 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 
 - `GetDrePort` — DRE do mês (`{ organizationId, year, month }`).
 - `GetSalesReconciliationPort` — conferência de vendas do mês (`{ organizationId, year, month }`).
+- `GetDreParametersPort` / `SaveDreParametersPort` — parâmetros mensais da DRE (ler resolvidos; gravar validados).
 
 - `GetCashFlowPort` — relatório do mês (`{ organizationId, year, month }`).
 - `GetCashFlowToHandlePort` — painel «Para tratar» (`{ organizationId }`).
@@ -105,8 +110,9 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 - `MovementKindPort` — tipo genérico de um movimento a partir do descritivo do banco.
 - `PayablesSummaryReadPort` — total a pagar em aberto e em atraso (cêntimos).
 - `InvoicesToReviewReadPort` — número de faturas por rever.
-- `RestaurantSalesReadPort` — vendas do restaurante (sem IVA + IVA) num intervalo.
-- `PlatformSalesReadPort` — vendas das plataformas (AirMenu) num intervalo.
+- `RestaurantSalesReadPort` — vendas do restaurante (sem IVA + IVA, bruto por classe de pagamento) num intervalo.
+- `DreParametersRepositoryPort` — parâmetros do mês e do último mês anterior com valores; gravar.
+- `CategoryVatRatioReadPort` — rácio sem IVA das últimas faturas de cada categoria.
 - `ManualAdjustmentsReadPort` — custos fixos/variáveis lançados à mão no mês.
 - `RestaurantDailyPaymentsReadPort` — vendas do restaurante por dia em cartão e numerário (Vendus).
 
@@ -114,7 +120,7 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 
 ### Entrada
 
-- `CashFlowController` → `GET /reports/dre/fluxo-caixa`, `GET /reports/dre/resultado` e `GET /reports/dre/conferencia-vendas` (permissão `dre.statement`, READ) e `GET /reports/dre/fluxo-caixa/para-tratar` (permissão `finance.payables`, READ).
+- `CashFlowController` → `GET /reports/dre/fluxo-caixa`, `GET /reports/dre/resultado`, `GET /reports/dre/conferencia-vendas` e `GET /reports/dre/parametros` (permissão `dre.statement`, READ), `PUT /reports/dre/parametros` (`dre.statement`, MANAGE) e `GET /reports/dre/fluxo-caixa/para-tratar` (permissão `finance.payables`, READ).
 
 ### Saída
 
@@ -124,9 +130,10 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 - `BankStatementsMovementKindAdapter` → `DescribeMovementPort` do módulo `bank-statements`.
 - `PayableEntriesSummaryAdapter` → `GetPayableSummaryPort` do módulo `payable-entries`.
 - `InvoiceAlertsToReviewAdapter` → `GetInvoiceAlertsPort` do módulo `invoices`.
-- `VendusRestaurantSalesAdapter` → `GetSummaryPort` do módulo `vendus` (euros → cêntimos; sem o canal «apps»).
-- `AirMenuPlatformSalesAdapter` → `GetSummaryPort` do módulo `air-menu` (enterprise do Resumo de Vendas, datas em Europe/Lisbon; indisponível → zeros).
+- `VendusRestaurantSalesAdapter` → `GetSummaryPort` do módulo `vendus` (euros → cêntimos; sem o canal «apps»; bruto por classe de `byPaymentMethod`).
 - `SupabaseManualAdjustmentsReadAdapter` → `dre_custos_fixos`, `dre_custos_variaveis` (só leitura).
+- `SupabaseDreParametersRepository` → `dre_monthly_parameters` (a única tabela que este módulo escreve).
+- `SupabaseCategoryVatRatioReadAdapter` → `invoices` (cabeçalho, só leitura; até 2000 mais recentes).
 - `VendusDailyPaymentsAdapter` → `GetSummaryPort` do módulo `vendus` (`analytics.dailyPayments`, euros → cêntimos; Eatz, Apps e outros métodos ficam de fora).
 
 ## Decisões de design
@@ -137,6 +144,8 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 - **Categoria calculada na leitura, não gravada no movimento.** Conciliar uma saída muda logo a categoria no relatório, vale para os meses já conciliados e não exige migração. Desfazer uma conciliação também se reflete sem sincronização.
 - **Leitura direta das tabelas de outros módulos (só leitura).** É uma vista de relatório que cruza banco, faturas, recorrências e catálogo; ler por portas de entrada exigiria quatro portas novas só para isto. Segue o precedente de `payable-recurrences` (lê `bank_movements`). Nunca escreve nessas tabelas.
 - **Tipo genérico pelo `bank-statements`.** As regras do descritivo vivem num só sítio (`normalizeMovement`); este módulo recebe-as pela porta `DescribeMovementPort` e devolve só a chave (`transfer_out`, `sales`…). O nome legível fica no frontend (`MOVEMENT_KIND_LABELS`).
+- **Delivery em bruto pelo banco, sem AirMenu (decisão do utilizador, 2026-10-27).** O AirMenu deixa de alimentar a DRE: o banco é a fonte do que entra e as taxas (comissão, IVA) são parâmetros do mês, editáveis. O bruto é uma reconstituição — fica tão certo quanto as taxas; quando a fatura de comissão da plataforma for conciliada, o real pode substituir a estimativa (ainda não feito).
+- **IVA estimado em vez de um botão «teórico / aproximado».** Cada saída conta sempre pelo melhor IVA disponível (real → média da categoria → teórico → por confirmar) e o relatório diz quanto é estimado; não há modos a alternar.
 - **% justificada por valor, não por número de movimentos** (ao contrário de `reconciledPercent` em `bank-statements`): uma saída grande por explicar pesa mais do que muitas pequenas.
 
 ## Como testar
@@ -146,8 +155,9 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 
 ## Lacunas conhecidas
 
-- DRE: o IVA das liquidações das plataformas usa a taxa média das vendas do AirMenu (a comissão também tem IVA, que não é separado); a liquidação pode cair no mês seguinte ao da venda. As vendas do Vendus/AirMenu são pedidas ao vivo (sem cache) — pode demorar alguns segundos.
-- DRE: categorias com IVA variável (seguros, rendas) só ficam certas com fatura conciliada ou IVA posto no movimento.
+- DRE: o bruto das plataformas depende das taxas do mês (comissão sobre a venda com/sem IVA e IVA do marketing por confirmar com um extrato real); a liquidação pode cair no mês seguinte ao da venda. As vendas do Vendus são pedidas ao vivo (sem cache) — pode demorar alguns segundos.
+- DRE: o IVA teórico aplica-se a qualquer saída com categoria sem faturas na categoria — categorias com IVA diferente (seguros, rendas isentas) ficam certas só com fatura conciliada ou IVA posto no movimento.
+- Ainda sem ecrã para editar os parâmetros nem para a conferência de vendas (F4).
 
 - O mês só está completo quando todos os extratos das contas estão importados; não há aviso de contas em falta.
 - Contas a pagar só têm grupo (sem categoria): sem fatura, ficam no grupo sem detalhe.

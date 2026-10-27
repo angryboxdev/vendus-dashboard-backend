@@ -13,7 +13,7 @@ Ramo `financeiro-fluxo-caixa` nos dois repositórios (commits, sem push): F1 (ba
 - Endpoints (sob `/api`): `GET /reports/dre/fluxo-caixa?year&month`, `GET /reports/dre/resultado?year&month` e `GET /reports/dre/conferencia-vendas?year&month` — permissão `dre.statement`; `GET /reports/dre/fluxo-caixa/para-tratar` — permissão `finance.payables`.
 
 ## Dependências
-Portas de [bank-statements](bank-statements.md) (`DescribeMovementPort`), [payable-entries](payable-entries.md) (`GetPayableSummaryPort`) e [invoices](invoices.md) (`GetInvoiceAlertsPort`), [vendus](vendus.md) e [air-menu](air-menu.md) (`GetSummaryPort`). Lê (só leitura) tabelas de bank-statements, invoices, payable-entries, payable-recurrences e financial-base.
+Portas de [bank-statements](bank-statements.md) (`DescribeMovementPort`), [payable-entries](payable-entries.md) (`GetPayableSummaryPort`) e [invoices](invoices.md) (`GetInvoiceAlertsPort`), [vendus](vendus.md) (`GetSummaryPort`; o AirMenu deixou de entrar na DRE em 2026-10-27). Lê (só leitura) tabelas de bank-statements, invoices, payable-entries, payable-recurrences e financial-base; escreve só `dre_monthly_parameters`.
 
 ## Regras de negócio
 Ver «Conceitos de domínio» e «Decisões de design» no README do módulo.
@@ -22,4 +22,4 @@ Ver «Conceitos de domínio» e «Decisões de design» no README do módulo.
 Mês incompleto se faltar importar o extrato de alguma conta (sem aviso).
 
 ## Próximos trabalhos
-Validar a DRE e o fluxo de caixa com dados reais; push/PR. Conferência de vendas (F2 de `.scratch/conferencia-vendas-dre/spec.md`, ramo `financeiro-conferencia-vendas`): backend feito; falta o ecrã (F4) e a F3 (parâmetros mensais + delivery em bruto na DRE).
+Validar a DRE e o fluxo de caixa com dados reais; push/PR. Conferência de vendas (F2 de `.scratch/conferencia-vendas-dre/spec.md`, ramo `financeiro-conferencia-vendas`): backend feito; F3 feita (parâmetros mensais `dre_monthly_parameters` — migração por aplicar; delivery em bruto na DRE sem AirMenu; IVA estimado dos gastos); falta o ecrã da conferência e dos parâmetros (F4).

@@ -2,14 +2,17 @@ import type { BankCredit, BankDebit, CostCenterCatalog, ExpenseSources } from ".
 import type {
   DreExpenseCategory,
   DreExpenses,
+  DrePlatformCosts,
   DrePlatformRevenue,
   DreReport,
   DreRevenue,
   ManualAdjustments,
-  SalesFigures,
+  RestaurantSales,
 } from "../entities/dre.js";
+import { DELIVERY_PLATFORMS, type DeliveryPlatformKey, type ResolvedDreParameters } from "../entities/dre-parameters.js";
 import { countedDebits, isExcluded } from "./cash-flow-report.service.js";
 import type { ExpenseShare } from "./expense-categorizer.service.js";
+import { platformGross } from "./platform-gross.service.js";
 
 /** Tipos financeiros que nunca têm IVA (salários e encargos, taxas bancárias, impostos). */
 const VAT_EXEMPT_TYPES = new Set(["personnel", "financial", "fiscal"]);
@@ -20,9 +23,10 @@ export interface BuildDreInput {
   credits: BankCredit[];
   sources: ExpenseSources;
   catalog: CostCenterCatalog;
-  restaurant: SalesFigures;
-  /** Vendas das plataformas no AirMenu (sem IVA + IVA) — dão a taxa de IVA das liquidações. */
-  platformsSold: SalesFigures;
+  restaurant: RestaurantSales;
+  parameters: ResolvedDreParameters;
+  /** Rácio sem IVA ÷ com IVA das últimas faturas de cada categoria (IVA estimado). */
+  categoryNetRatios: Map<string, number>;
   manual: ManualAdjustments;
 }
 
@@ -31,6 +35,7 @@ interface NetShare {
   kind: string;
   netCents: number;
   vatCents: number;
+  estimatedVatCents: number;
   pendingVatCents: number;
 }
 
@@ -49,22 +54,37 @@ function exemptions(catalog: CostCenterCatalog) {
 }
 
 /**
- * Sem IVA de uma parte da saída: categoria sem IVA → tudo; IVA conhecido (fatura conciliada ou IVA
- * posto no movimento) → a fração sem IVA; senão conta pelo valor total, como «IVA por confirmar».
+ * Sem IVA de uma parte da saída, pelo melhor que se sabe:
+ *  1. categoria sem IVA → tudo;
+ *  2. IVA real (fatura conciliada ou IVA posto no movimento) → a fração sem IVA;
+ *  3. estimado: média das últimas faturas da categoria; senão, com categoria/grupo, o IVA teórico;
+ *  4. sem categoria → conta pelo valor total, como «IVA por confirmar».
  */
-function toNet(share: ExpenseShare, exempt: boolean): Omit<NetShare, "share" | "kind"> {
-  if (exempt) return { netCents: share.amountCents, vatCents: 0, pendingVatCents: 0 };
+function toNet(share: ExpenseShare, exempt: boolean, ratios: Map<string, number>, defaultVatPct: number): Omit<NetShare, "share" | "kind"> {
+  const none = { estimatedVatCents: 0, pendingVatCents: 0 };
+  if (exempt) return { netCents: share.amountCents, vatCents: 0, ...none };
   if (share.netRatio !== null) {
     const netCents = Math.round(share.amountCents * share.netRatio);
-    return { netCents, vatCents: share.amountCents - netCents, pendingVatCents: 0 };
+    return { netCents, vatCents: share.amountCents - netCents, ...none };
   }
-  return { netCents: share.amountCents, vatCents: 0, pendingVatCents: share.amountCents };
+  const estimate = (share.categoryId ? ratios.get(share.categoryId) : undefined) ?? (share.groupId ? 100 / (100 + defaultVatPct) : null);
+  if (estimate !== null) {
+    const netCents = Math.round(share.amountCents * estimate);
+    const vatCents = share.amountCents - netCents;
+    return { netCents, vatCents, estimatedVatCents: vatCents, pendingVatCents: 0 };
+  }
+  return { netCents: share.amountCents, vatCents: 0, estimatedVatCents: 0, pendingVatCents: share.amountCents };
 }
 
-function expenses(debits: BankDebit[], sources: ExpenseSources, catalog: CostCenterCatalog): DreExpenses {
+function expenses(input: BuildDreInput): DreExpenses {
+  const { debits, sources, catalog } = input;
   const isExempt = exemptions(catalog);
   const shares: NetShare[] = countedDebits(debits, sources, catalog).flatMap((c) =>
-    c.shares.map((share) => ({ share, kind: c.debit.kind, ...toNet(share, isExempt(share)) })),
+    c.shares.map((share) => ({
+      share,
+      kind: c.debit.kind,
+      ...toNet(share, isExempt(share), input.categoryNetRatios, input.parameters.expenseDefaultVatPct),
+    })),
   );
 
   const groups = new Map(catalog.groups.map((g) => [g.id, g]));
@@ -84,6 +104,7 @@ function expenses(debits: BankDebit[], sources: ExpenseSources, catalog: CostCen
         movementKind: s.share.groupId ? null : s.kind,
         netCents: 0,
         vatCents: 0,
+        estimatedVatCents: 0,
         pendingVatCents: 0,
         children: [],
       };
@@ -91,6 +112,7 @@ function expenses(debits: BankDebit[], sources: ExpenseSources, catalog: CostCen
     }
     cat.netCents += s.netCents;
     cat.vatCents += s.vatCents;
+    cat.estimatedVatCents += s.estimatedVatCents;
     cat.pendingVatCents += s.pendingVatCents;
     if (!s.share.groupId) continue;
     const ck = s.share.categoryId ?? `${s.share.groupId}:none`;
@@ -111,60 +133,90 @@ function expenses(debits: BankDebit[], sources: ExpenseSources, catalog: CostCen
   return {
     totalNetCents: sum((s) => s.netCents),
     vatCents: sum((s) => s.vatCents),
+    estimatedVatCents: sum((s) => s.estimatedVatCents),
     pendingVatCents: sum((s) => s.pendingVatCents),
     unclassifiedCents: sum((s) => (s.share.groupId ? 0 : s.netCents)),
     categories,
   };
 }
 
-/**
- * Plataformas pelo que liquidam no banco (já sem comissão), sem IVA pela taxa das vendas do AirMenu
- * no período; a diferença para o vendido (AirMenu sem IVA) é a estimativa de comissões e acertos.
- */
-function revenue(credits: BankCredit[], restaurant: SalesFigures, sold: SalesFigures): DreRevenue {
-  const soldGross = sold.netCents + sold.vatCents;
-  const netRatio = soldGross > 0 ? sold.netCents / soldGross : null;
-  const byPlatform = new Map<string, DrePlatformRevenue>();
-  for (const c of credits) {
-    if (!c.platform || isExcluded(c)) continue;
-    const p = byPlatform.get(c.platform) ?? { platform: c.platform, receivedCents: 0, netCents: 0 };
-    p.receivedCents += c.amountCents;
-    byPlatform.set(c.platform, p);
-  }
-  for (const p of byPlatform.values()) p.netCents = netRatio === null ? p.receivedCents : Math.round(p.receivedCents * netRatio);
+const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : null);
 
-  const platforms = [...byPlatform.values()].sort((a, b) => b.receivedCents - a.receivedCents);
-  const platformsNetCents = platforms.reduce((a, p) => a + p.netCents, 0);
-  return {
-    restaurantNetCents: restaurant.netCents,
-    platformsNetCents,
-    platformsReceivedCents: platforms.reduce((a, p) => a + p.receivedCents, 0),
-    platformsSoldNetCents: sold.netCents,
-    platformsCommissionEstimateCents: Math.max(0, sold.netCents - platformsNetCents),
-    platformsVatKnown: netRatio !== null,
-    byPlatform: platforms,
-    totalNetCents: restaurant.netCents + platformsNetCents,
-  };
+/** Restaurante sem IVA repartido pela classe de pagamento, na proporção do bruto. */
+function restaurantByPayment(r: RestaurantSales): DreRevenue["restaurantByPayment"] {
+  const { card, cash, other } = r.byPaymentGrossCents;
+  const total = card + cash + other;
+  if (total <= 0) return { cardNetCents: 0, cashNetCents: 0, otherNetCents: r.netCents };
+  const cardNetCents = Math.round((r.netCents * card) / total);
+  const cashNetCents = Math.round((r.netCents * cash) / total);
+  return { cardNetCents, cashNetCents, otherNetCents: r.netCents - cardNetCents - cashNetCents };
 }
 
 /**
- * DRE do mês a partir da conciliação bancária: receita (restaurante pelo Vendus; plataformas pelas
- * liquidações no banco), gastos (saídas do banco categorizadas como no fluxo de caixa) e ajustes
- * manuais, tudo sem IVA; e o saldo do IVA (vendas − compras).
+ * Plataformas reconstituídas em bruto a partir do que liquidam no banco (já sem comissão nem marketing)
+ * e do marketing lançado à mão — ver `platformGross`. Uma plataforma só com marketing também aparece.
+ */
+function platforms(credits: BankCredit[], p: ResolvedDreParameters): DrePlatformRevenue[] {
+  const received = new Map<string, number>();
+  for (const c of credits) {
+    if (!c.platform || isExcluded(c)) continue;
+    received.set(c.platform, (received.get(c.platform) ?? 0) + c.amountCents);
+  }
+  const keys = new Set<string>([...received.keys(), ...DELIVERY_PLATFORMS.filter((k) => p.marketingNetCents[k] > 0)]);
+  return [...keys]
+    .map((platform) => {
+      const receivedCents = received.get(platform) ?? 0;
+      const marketingNetCents = p.marketingNetCents[platform as DeliveryPlatformKey] ?? 0;
+      const g = platformGross(receivedCents, marketingNetCents, p);
+      const contributionCents = g.netCents - g.commissionNetCents - marketingNetCents;
+      return { platform, receivedCents, marketingNetCents, ...g, contributionCents, contributionPct: pct(contributionCents, g.netCents) };
+    })
+    .sort((a, b) => b.grossCents - a.grossCents);
+}
+
+/**
+ * DRE do mês a partir da conciliação bancária: receita (restaurante pelo Vendus; plataformas em bruto,
+ * reconstituídas das liquidações), custos das plataformas (comissão e marketing), gastos (saídas do
+ * banco categorizadas como no fluxo de caixa) e ajustes manuais, tudo sem IVA; e o saldo do IVA.
  */
 export function buildDreReport(input: BuildDreInput): DreReport {
-  const rev = revenue(input.credits, input.restaurant, input.platformsSold);
-  const exp = expenses(input.debits, input.sources, input.catalog);
+  const byPlatform = platforms(input.credits, input.parameters);
+  const sumP = (f: (p: DrePlatformRevenue) => number) => byPlatform.reduce((a, p) => a + f(p), 0);
+  const platformsNetCents = sumP((p) => p.netCents);
+  const revenue: DreRevenue = {
+    restaurantNetCents: input.restaurant.netCents,
+    restaurantByPayment: restaurantByPayment(input.restaurant),
+    platformsGrossCents: sumP((p) => p.grossCents),
+    platformsNetCents,
+    platformsReceivedCents: sumP((p) => p.receivedCents),
+    byPlatform,
+    totalNetCents: input.restaurant.netCents + platformsNetCents,
+  };
+  const platformCosts: DrePlatformCosts = {
+    commissionNetCents: sumP((p) => p.commissionNetCents),
+    marketingNetCents: sumP((p) => p.marketingNetCents),
+    totalNetCents: sumP((p) => p.commissionNetCents + p.marketingNetCents),
+  };
+  const exp = expenses(input);
   const manualTotal = input.manual.fixedCents + input.manual.variableCents;
-  const resultCents = rev.totalNetCents - exp.totalNetCents - manualTotal;
-  const salesVat = input.restaurant.vatCents + input.platformsSold.vatCents;
+  const resultCents = revenue.totalNetCents - platformCosts.totalNetCents - exp.totalNetCents - manualTotal;
+
+  const salesVat = input.restaurant.vatCents + sumP((p) => p.salesVatCents);
+  const purchasesVat = exp.vatCents + sumP((p) => p.commissionVatCents + p.marketingVatCents);
   return {
     period: input.period,
-    revenue: rev,
+    parameters: input.parameters,
+    revenue,
+    platformCosts,
     expenses: exp,
     manualAdjustments: { ...input.manual, totalCents: manualTotal },
     resultCents,
-    marginPct: rev.totalNetCents > 0 ? Math.round((resultCents / rev.totalNetCents) * 1000) / 10 : null,
-    vat: { salesCents: salesVat, purchasesCents: exp.vatCents, balanceCents: salesVat - exp.vatCents },
+    marginPct: pct(resultCents, revenue.totalNetCents),
+    vat: {
+      salesCents: salesVat,
+      purchasesCents: purchasesVat,
+      purchasesEstimatedCents: exp.estimatedVatCents,
+      balanceCents: salesVat - purchasesVat,
+    },
   };
 }

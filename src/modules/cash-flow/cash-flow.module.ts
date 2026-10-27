@@ -4,7 +4,6 @@ import type { DescribeMovementPort } from "../bank-statements/domain/ports/in/de
 import type { GetPayableSummaryPort } from "../payable-entries/domain/ports/in/payable-entry.ports.js";
 import type { GetInvoiceAlertsPort } from "../invoices/domain/ports/in/invoice.ports.js";
 import type { GetSummaryPort as VendusGetSummaryPort } from "../vendus/domain/ports/in/get-summary.port.js";
-import type { GetSummaryPort as AirMenuGetSummaryPort } from "../air-menu/domain/ports/in/get-summary.port.js";
 
 import { SupabaseBankMovementReadAdapter } from "./adapters/out/supabase-bank-movement-read.adapter.js";
 import { SupabaseExpenseSourceReadAdapter } from "./adapters/out/supabase-expense-source-read.adapter.js";
@@ -13,13 +12,15 @@ import { BankStatementsMovementKindAdapter } from "./adapters/out/bank-statement
 import { PayableEntriesSummaryAdapter } from "./adapters/out/payable-entries-summary.adapter.js";
 import { InvoiceAlertsToReviewAdapter } from "./adapters/out/invoice-alerts-to-review.adapter.js";
 import { VendusRestaurantSalesAdapter } from "./adapters/out/vendus-restaurant-sales.adapter.js";
-import { AirMenuPlatformSalesAdapter } from "./adapters/out/air-menu-platform-sales.adapter.js";
+import { VendusDailyPaymentsAdapter } from "./adapters/out/vendus-daily-payments.adapter.js";
 import { SupabaseManualAdjustmentsReadAdapter } from "./adapters/out/supabase-manual-adjustments-read.adapter.js";
+import { SupabaseDreParametersRepository } from "./adapters/out/supabase-dre-parameters.repository.js";
+import { SupabaseCategoryVatRatioReadAdapter } from "./adapters/out/supabase-category-vat-ratio-read.adapter.js";
 import { GetCashFlowUseCase } from "./application/use-cases/get-cash-flow.use-case.js";
 import { GetCashFlowToHandleUseCase } from "./application/use-cases/get-cash-flow-to-handle.use-case.js";
 import { GetDreUseCase } from "./application/use-cases/get-dre.use-case.js";
 import { GetSalesReconciliationUseCase } from "./application/use-cases/get-sales-reconciliation.use-case.js";
-import { VendusDailyPaymentsAdapter } from "./adapters/out/vendus-daily-payments.adapter.js";
+import { GetDreParametersUseCase, SaveDreParametersUseCase } from "./application/use-cases/dre-parameters.use-case.js";
 import { CashFlowController } from "./adapters/in/cash-flow.controller.js";
 
 export interface CashFlowModule {
@@ -31,22 +32,21 @@ export interface CashFlowModuleDeps {
   getPayableSummary: GetPayableSummaryPort;
   getInvoiceAlerts: GetInvoiceAlertsPort;
   vendusGetSummary: VendusGetSummaryPort;
-  airMenuGetSummary: AirMenuGetSummaryPort;
-  /** Mesmo enterprise do AirMenu usado no Resumo de Vendas. */
-  airMenuEnterpriseId: string;
 }
 
 /**
- * Composition root do módulo cash-flow — «Fluxo de caixa» e «DRE» do Mapa de rentabilidade, a partir
- * da conciliação bancária. Instanciado em `server.ts` DEPOIS de `bank-statements`, `payable-entries`,
- * `invoices`, `vendus` e `air-menu`, para receber as suas portas de entrada (D10). As tabelas do
- * banco, das faturas, dos centros de custo e dos ajustes manuais são só lidas (nunca escritas).
+ * Composition root do módulo cash-flow — «Fluxo de caixa», «DRE» e «Conferência de vendas» do Mapa de
+ * rentabilidade, a partir da conciliação bancária. Instanciado em `server.ts` DEPOIS de
+ * `bank-statements`, `payable-entries`, `invoices` e `vendus`, para receber as suas portas de entrada
+ * (D10). As tabelas do banco, das faturas, dos centros de custo e dos ajustes manuais são só lidas;
+ * escreve só os parâmetros mensais da DRE (`dre_monthly_parameters`).
  */
 export function createCashFlowModule(deps: CashFlowModuleDeps): CashFlowModule {
   const bankMovements = new SupabaseBankMovementReadAdapter(createScopedQuery);
   const expenseSources = new SupabaseExpenseSourceReadAdapter(createScopedQuery);
   const catalog = new SupabaseCostCenterCatalogReadAdapter(createScopedQuery);
   const movementKind = new BankStatementsMovementKindAdapter(deps.describeMovement);
+  const parameters = new SupabaseDreParametersRepository(createScopedQuery);
 
   const getCashFlow = new GetCashFlowUseCase(bankMovements, expenseSources, catalog, movementKind);
   const getToHandle = new GetCashFlowToHandleUseCase(
@@ -59,13 +59,23 @@ export function createCashFlowModule(deps: CashFlowModuleDeps): CashFlowModule {
     catalog,
     movementKind,
     new VendusRestaurantSalesAdapter(deps.vendusGetSummary),
-    new AirMenuPlatformSalesAdapter(deps.airMenuGetSummary, deps.airMenuEnterpriseId),
+    parameters,
+    new SupabaseCategoryVatRatioReadAdapter(createScopedQuery),
     new SupabaseManualAdjustmentsReadAdapter(createScopedQuery),
   );
   const getSalesReconciliation = new GetSalesReconciliationUseCase(
     bankMovements,
     movementKind,
     new VendusDailyPaymentsAdapter(deps.vendusGetSummary),
+    parameters,
   );
-  return { router: new CashFlowController(getCashFlow, getToHandle, getDre, getSalesReconciliation).router };
+  const controller = new CashFlowController(
+    getCashFlow,
+    getToHandle,
+    getDre,
+    getSalesReconciliation,
+    new GetDreParametersUseCase(parameters),
+    new SaveDreParametersUseCase(parameters),
+  );
+  return { router: controller.router };
 }

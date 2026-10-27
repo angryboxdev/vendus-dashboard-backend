@@ -2,6 +2,7 @@ import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { GetSalesReconciliationUseCase } from "../../application/use-cases/get-sales-reconciliation.use-case.js";
 import type { StoredBankCredit } from "../../domain/ports/out/bank-movement-read.port.js";
 import { InvalidCashFlowPeriodError } from "../../domain/errors.js";
+import { DEFAULT_DRE_PARAMETERS } from "../../domain/entities/dre-parameters.js";
 
 const organizationId = mintOrganizationId("org-a");
 
@@ -17,6 +18,10 @@ function useCase(credits: StoredBankCredit[], today: string) {
     },
     {
       dailyPayments: async (_o, from, to) => (calls.sales!.push([from, to]), [{ date: "2026-09-30", cardCents: 10_000, cashCents: 0 }]),
+    },
+    {
+      forMonth: async () => ({ own: { ...DEFAULT_DRE_PARAMETERS, cardFeePct: 1.5 }, previous: null }),
+      save: async () => undefined,
     },
     () => today,
   );
@@ -36,6 +41,7 @@ describe("GetSalesReconciliationUseCase", () => {
     expect(calls.sales).toEqual([["2026-08-25", "2026-09-30"]]);
     expect(calls.credits).toEqual([["2026-08-25", "2026-10-07"]]);
     expect(r.card).toMatchObject({ soldCents: 10_000, receivedCents: 9_900, impliedFeePct: 1 });
+    expect(r.expectedCardFeePct).toBe(1.5);
   });
 
   it("mês corrente: os créditos param em hoje", async () => {
