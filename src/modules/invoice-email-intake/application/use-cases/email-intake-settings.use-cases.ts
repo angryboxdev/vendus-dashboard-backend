@@ -14,6 +14,7 @@ import type {
   InboundAttachmentRepositoryPort,
   InboundEventStorePort,
   IntakeSettingsRepositoryPort,
+  InvoiceExistencePort,
   RandomBytesPort,
 } from "../../domain/ports/out/email-intake.out-ports.js";
 
@@ -32,6 +33,7 @@ export class GetEmailIntakeUseCase implements GetEmailIntakePort {
     private readonly events: InboundEventStorePort,
     private readonly settings: IntakeSettingsRepositoryPort,
     private readonly config: EmailIntakeConfig,
+    private readonly invoices: InvoiceExistencePort,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -44,6 +46,8 @@ export class GetEmailIntakeUseCase implements GetEmailIntakePort {
       this.events.countWithoutPdf(organizationId, since),
       this.settings.getDestination(organizationId),
     ]);
+    const invoiceIds = [...new Set(recent.flatMap((a) => (a.invoiceId ? [a.invoiceId] : [])))];
+    const stillThere = invoiceIds.length > 0 ? await this.invoices.existing(organizationId, invoiceIds) : new Set<string>();
     const domain = this.config.domain;
     const active = all.find((a) => a.status === "active");
     return {
@@ -74,6 +78,7 @@ export class GetEmailIntakeUseCase implements GetEmailIntakePort {
         status: a.status,
         retrying: a.status === "read_error" && a.nextAttemptAt !== null,
         invoiceId: a.invoiceId,
+        invoiceDeleted: a.invoiceId !== null && !stillThere.has(a.invoiceId),
         message: a.errorMessage,
       })),
     };

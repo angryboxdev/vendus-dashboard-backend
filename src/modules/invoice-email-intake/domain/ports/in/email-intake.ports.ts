@@ -52,6 +52,8 @@ export interface EmailIntakeAttachmentDTO {
   /** Ainda vai ser tentado de novo (falha passageira). */
   retrying: boolean;
   invoiceId: string | null;
+  /** A fatura criada (ou a existente, num duplicado) já foi eliminada — o histórico mantém-se, sem link. */
+  invoiceDeleted: boolean;
   message: string | null;
 }
 
