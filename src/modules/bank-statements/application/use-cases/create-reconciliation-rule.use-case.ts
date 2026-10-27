@@ -9,6 +9,9 @@ import type {
   ReconciliationRuleWriteResult,
 } from "../../domain/ports/in/bank-statement.ports.js";
 import { applyRulesToAccount } from "./apply-rules-to-account.js";
+import type { RecurrenceLinkingDeps } from "./rule-recurrence-linking.js";
+import { assertRecurrenceRule } from "./rule-recurrence-validation.js";
+import type { OccurrenceMatchReadPort } from "../../domain/ports/out/occurrence-match-read.port.js";
 
 function toDto(r: BankReconciliationRule): ReconciliationRuleDto {
   return {
@@ -24,6 +27,7 @@ function toDto(r: BankReconciliationRule): ReconciliationRuleDto {
     supplierId: r.supplierId,
     vatRate: r.vatRate,
     vatIncluded: r.vatIncluded,
+    recurrenceId: r.recurrenceId,
     justificationType: r.justificationType,
     requiresDocument: r.requiresDocument,
     affectsDre: r.affectsDre,
@@ -39,6 +43,9 @@ function toDto(r: BankReconciliationRule): ReconciliationRuleDto {
 export interface RuleBackfillDeps {
   movementRepo: BankMovementRepositoryPort;
   statementRepo: BankStatementImportRepositoryPort;
+  /** Regras ligadas a recorrências (rendas, salários): ligar à ocorrência e validar a regra. */
+  recurrenceLinking?: RecurrenceLinkingDeps;
+  occurrenceRead?: OccurrenceMatchReadPort;
 }
 
 export class CreateReconciliationRuleUseCase implements CreateReconciliationRulePort {
@@ -50,6 +57,12 @@ export class CreateReconciliationRuleUseCase implements CreateReconciliationRule
   async execute(command: CreateReconciliationRuleCommand): Promise<ReconciliationRuleWriteResult> {
     const { organizationId, applyToExisting, ...props } = command;
     const rule = BankReconciliationRule.create(props);
+    await assertRecurrenceRule(organizationId, rule, {
+      ruleRepo: this.ruleRepo,
+      movementRepo: this.backfill?.movementRepo,
+      target: this.backfill?.recurrenceLinking?.target,
+      occurrenceRead: this.backfill?.occurrenceRead,
+    });
     await this.ruleRepo.save(organizationId, rule);
 
     const appliedCount =

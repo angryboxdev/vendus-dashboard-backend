@@ -1,6 +1,8 @@
 import { PayableRecurrencesOccurrencePaymentAdapter } from "./adapters/out/payable-recurrences-occurrence-payment.adapter.js";
 import type { ReopenOccurrenceFromBankPort, SettleOccurrenceFromBankPort } from "../payable-recurrences/domain/ports/in/bank-payment.ports.js";
 import type { ReopenInvoiceFromBankPort, SettleInvoiceFromBankPort } from "../invoices/domain/ports/in/bank-payment.ports.js";
+import type { GetRecurrenceForBankRulePort, SettleRecurrenceFromBankPort } from "../payable-recurrences/domain/ports/in/bank-payment.ports.js";
+import { PayableRecurrencesRuleTargetAdapter } from "./adapters/out/payable-recurrences-rule-target.adapter.js";
 import { InvoicesInvoicePaymentAdapter } from "./adapters/out/invoices-invoice-payment.adapter.js";
 import { GroupedSettlementPaymentCascadeWrite, InvoicePaymentCascadeWrite } from "./adapters/out/invoice-payment-cascade.decorators.js";
 import { BankAccountsStatementAccountAdapter } from "./adapters/out/bank-accounts-statement-account.adapter.js";
@@ -84,7 +86,13 @@ export function createBankStatementsModule(
   listSuppliers: ListSuppliersPort,
   resolveStatementAccount?: ResolveStatementAccountPort,
   /** Portas do módulo payable-recurrences: pagar/reabrir a ocorrência ligada a um movimento. */
-  recurrencePayment?: { settle: SettleOccurrenceFromBankPort; reopen: ReopenOccurrenceFromBankPort },
+  recurrencePayment?: {
+    settle: SettleOccurrenceFromBankPort;
+    reopen: ReopenOccurrenceFromBankPort;
+    /** «Movimentos recorrentes» ligados a uma recorrência (rendas, salários). */
+    settleRecurrence?: SettleRecurrenceFromBankPort;
+    getRecurrence?: GetRecurrenceForBankRulePort;
+  },
   /** Portas do módulo invoices: fatura conciliada por inteiro → paga em cadeia; anulada → reabre. */
   invoicePayment?: { settle: SettleInvoiceFromBankPort; reopen: ReopenInvoiceFromBankPort },
 ): { router: Router; describeMovement: DescribeMovementPort } {
@@ -108,7 +116,6 @@ export function createBankStatementsModule(
   const supplierNameRead = new FinancialBaseSupplierNameReadAdapter(listSuppliers);
 
   // Use cases
-  const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo, bankAccountRead, accountResolver, ruleRepo);
   const listStatements = new ListBankStatementsUseCase(statementRepo);
   const getStatement = new GetBankStatementUseCase(statementRepo, movementRepo, entityLinkRepo);
   const reconcileMovement = new ReconcileMovementUseCase(movementRepo, movementHint, invoiceRead, payableRead, entityLinkRepo, invoiceReconciliationWrite);
@@ -116,8 +123,14 @@ export function createBankStatementsModule(
   const occurrencePayment = recurrencePayment
     ? new PayableRecurrencesOccurrencePaymentAdapter(recurrencePayment.settle, recurrencePayment.reopen)
     : undefined;
+  // Regras ligadas a recorrências: a regra paga a ocorrência do mês (rendas, salários).
+  const recurrenceLinking =
+    occurrencePayment && recurrencePayment?.settleRecurrence && recurrencePayment.getRecurrence
+      ? { target: new PayableRecurrencesRuleTargetAdapter(recurrencePayment.getRecurrence, recurrencePayment.settleRecurrence), occurrencePayment }
+      : undefined;
   const classifyMovement = new ClassifyMovementUseCase(movementRepo, occurrencePayment);
-  const applyAutoRules = new ApplyAutoRulesUseCase(statementRepo, movementRepo, ruleRepo);
+  const importStatement = new ImportBankStatementUseCase(statementRepo, movementRepo, bankAccountRead, accountResolver, ruleRepo, recurrenceLinking);
+  const applyAutoRules = new ApplyAutoRulesUseCase(statementRepo, movementRepo, ruleRepo, recurrenceLinking);
   const suggestMatches = new SuggestMatchesUseCase(
     statementRepo,
     movementRepo,
@@ -125,8 +138,9 @@ export function createBankStatementsModule(
     payableRead,
     movementHint,
   );
-  const createRule = new CreateReconciliationRuleUseCase(ruleRepo, { movementRepo, statementRepo });
-  const updateRule = new UpdateReconciliationRuleUseCase(ruleRepo, { movementRepo, statementRepo });
+  const ruleBackfill = { movementRepo, statementRepo, occurrenceRead, ...(recurrenceLinking && { recurrenceLinking }) };
+  const createRule = new CreateReconciliationRuleUseCase(ruleRepo, ruleBackfill);
+  const updateRule = new UpdateReconciliationRuleUseCase(ruleRepo, ruleBackfill);
   const listRules = new ListReconciliationRulesUseCase(ruleRepo, movementRepo);
   const deleteRule = new DeleteReconciliationRuleUseCase(ruleRepo, movementRepo);
   const closeStatement = new CloseStatementUseCase(statementRepo, movementRepo);

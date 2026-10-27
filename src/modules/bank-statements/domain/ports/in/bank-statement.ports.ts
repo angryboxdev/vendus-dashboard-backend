@@ -349,6 +349,8 @@ export interface CreateReconciliationRuleCommand {
   supplierId?: string | null;
   vatRate?: number | null;
   vatIncluded?: boolean | null;
+  /** Recorrência sem fatura (renda, salário): cada movimento paga a ocorrência do mês. Exige «contrato_recorrencia» e conta. */
+  recurrenceId?: string | null;
   justificationType: JustificationType;
   /** Aplica já aos movimentos intocados da conta (todos os meses importados). Só com bankAccountId. */
   applyToExisting?: boolean;
@@ -372,6 +374,7 @@ export interface ReconciliationRuleDto {
   supplierId: string | null;
   vatRate: number | null;
   vatIncluded: boolean | null;
+  recurrenceId: string | null;
   justificationType: JustificationType;
   requiresDocument: boolean;
   affectsDre: boolean;
@@ -408,6 +411,8 @@ export interface UpdateReconciliationRuleCommand {
   supplierId?: string | null;
   vatRate?: number | null;
   vatIncluded?: boolean | null;
+  /** null = deixa de estar ligada a uma recorrência. */
+  recurrenceId?: string | null;
   justificationType?: JustificationType;
   isActive?: boolean;
   /** Depois de alterar, aplica aos movimentos intocados da conta da regra. */
