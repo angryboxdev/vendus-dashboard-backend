@@ -52,6 +52,7 @@ function toEntity(row: Record<string, unknown>): Invoice {
     stockReviewOverride: ((row.stock_review_override as string | null) ?? "auto") as StockReviewOverride,
     stockReviewOverrideReason: (row.stock_review_override_reason as string | null) ?? null,
     importOrigin: row.import_origin === "stock" ? "stock" : null,
+    intakeSource: row.intake_source === "email" ? "email" : null,
     paymentGroupId: (row.payment_group_id as string | null) ?? null,
     obligation:
       row.document_kind === "tax_obligation" || row.document_kind === "contribution_obligation"
@@ -256,6 +257,11 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
     return ((data ?? []) as unknown as Record<string, unknown>[]).map(toEntity);
+  }
+
+  async setIntakeSource(organizationId: OrganizationId, invoiceId: string, source: "email"): Promise<void> {
+    const { error } = await this.scopedQuery(organizationId).table("invoices").update({ intake_source: source }).eq("id", invoiceId);
+    if (error) throw new Error(error.message);
   }
 
   async setFileHash(organizationId: OrganizationId, invoiceId: string, sha256: string): Promise<void> {

@@ -1,3 +1,5 @@
+import { ImportInvoiceFromEmailUseCase } from "./application/use-cases/import-invoice-from-email.use-case.js";
+import type { ImportInvoiceFromEmailPort } from "./domain/ports/in/email-import.ports.js";
 import type { ReopenInvoiceFromBankPort, SettleInvoiceFromBankPort } from "./domain/ports/in/bank-payment.ports.js";
 import { ReopenInvoiceFromBankUseCase, SettleInvoiceFromBankUseCase } from "./application/use-cases/invoice-bank-payment.use-cases.js";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
@@ -100,6 +102,8 @@ export interface InvoicesModule {
   /** Módulo bank-statements: fatura conciliada por inteiro → paga (conta a pagar e ocorrência acompanham); anulada → reabre. */
   settleInvoiceFromBank: SettleInvoiceFromBankPort;
   reopenInvoiceFromBank: ReopenInvoiceFromBankPort;
+  /** Módulo invoice-email-intake: PDF recebido por email → mesmo import (rascunho «Por rever» ou Compras por rever). */
+  importInvoiceFromEmail: ImportInvoiceFromEmailPort;
 }
 
 /**
@@ -191,6 +195,9 @@ export function createInvoicesModule(
   });
   const saveInvoiceDraft = new SaveInvoiceDraftUseCase(invoiceRepo, lineRepo, amountsWrite, categoryReader, allocationRepo, audit, stockLines);
 
+  const importInvoiceKeepingLines = new ImportInvoiceKeepingLinesUseCase(importInvoice, saveInvoiceDraft, invoiceRepo);
+  const importInvoiceForStock = new ImportInvoiceForStockUseCase(importInvoice, saveInvoiceDraft, invoiceRepo, lineRepo, storage, stockReviewStatusRead, stockDecisionNotify, fiscal, supplierLookup);
+
   const router = createInvoiceRouter({
     listPayableDuplicates: new ListPayableDuplicatesUseCase(payableWrite),
     listInvoiceAllocations: new ListInvoiceAllocationsUseCase(allocationRepo, invoiceRepo),
@@ -221,9 +228,9 @@ export function createInvoicesModule(
     ),
     suggestLineClassification: new SuggestLineClassificationUseCase(ruleRepo),
     importInvoice,
-    importInvoiceKeepingLines: new ImportInvoiceKeepingLinesUseCase(importInvoice, saveInvoiceDraft, invoiceRepo),
+    importInvoiceKeepingLines,
     fillSupplierLogos: supplierLogos,
-    importInvoiceForStock: new ImportInvoiceForStockUseCase(importInvoice, saveInvoiceDraft, invoiceRepo, lineRepo, storage, stockReviewStatusRead, stockDecisionNotify, fiscal, supplierLookup),
+    importInvoiceForStock,
     readPaymentDocument,
     createObligationDraft: new CreateObligationDraftUseCase(readPaymentDocument, storage, invoiceRepo, supplierLookup),
     linkObligation: new LinkObligationUseCase(readPaymentDocument, invoiceRepo, storage, audit),
@@ -244,6 +251,7 @@ export function createInvoicesModule(
     getInvoiceAlerts,
     settleInvoiceFromBank: new SettleInvoiceFromBankUseCase(invoiceRepo, payableWrite, occurrenceSync),
     reopenInvoiceFromBank: new ReopenInvoiceFromBankUseCase(invoiceRepo, payableWrite, occurrenceSync),
+    importInvoiceFromEmail: new ImportInvoiceFromEmailUseCase(importInvoiceKeepingLines, invoiceRepo, readPaymentDocument, importInvoiceForStock),
   };
 }
 

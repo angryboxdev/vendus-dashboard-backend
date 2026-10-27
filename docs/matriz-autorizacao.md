@@ -1,10 +1,10 @@
 # Matriz de autorização (perfil × endpoint)
 
-> Gerado por `npm run authz:matrix` em 2026-10-26. Não editar à mão.
+> Gerado por `npm run authz:matrix` em 2026-10-27. Não editar à mão.
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 836 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 840 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -305,6 +305,8 @@ Endpoints: 836 · pré-autenticação: 23 · não classificados: 0
 | PATCH | `/api/invoices/:invoiceId/lines/:lineId/deductibility` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/alerts` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/allocations` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
+| POST | `/api/invoices/email-intake/address` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
+| PATCH | `/api/invoices/email-intake/settings` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/invoices/import` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/invoices/import-for-stock` | permission:stock.purchase_reviews:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/invoices/integrity/payable-duplicates` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
@@ -802,6 +804,8 @@ Endpoints: 836 · pré-autenticação: 23 · não classificados: 0
 | POST | `/api/stock-purchase-reviews/:id/restore` | permission:stock.purchase_reviews:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/stock-purchase-reviews/:id/suggestions` | permission:stock.purchase_reviews:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/stock-purchase-reviews/cancel-empty` | permission:stock.purchase_reviews:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| POST | `/api/stock-purchase-reviews/email-intake/address` | permission:stock.purchase_reviews:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| PATCH | `/api/stock-purchase-reviews/email-intake/settings` | permission:stock.purchase_reviews:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/stock-purchase-reviews/entry-rules` | permission:stock.purchase_reviews:READ | ✔ | ✔ | ✖ | ✔ | ✖ |
 | PUT | `/api/stock-purchase-reviews/entry-rules` | permission:stock.purchase_reviews:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/stock-purchase-reviews/presentations` | permission:stock.purchase_reviews:READ | ✔ | ✔ | ✖ | ✔ | ✖ |

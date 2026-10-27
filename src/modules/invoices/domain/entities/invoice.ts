@@ -111,6 +111,8 @@ interface InvoiceProps {
   obligation?: InvoiceObligation | null;
   /** F3c: `stock` = importada diretamente no Stock (rascunho aguarda lançamento no Financeiro). */
   importOrigin?: "stock" | null;
+  /** Faturas por email: `email` = recebida por email. Gravada à parte (`setIntakeSource`). */
+  intakeSource?: "email" | null;
   /** Documento de pagamento com várias faturas fiscais (ex.: águas + resíduos): as faturas do mesmo documento partilham este id. Gravado à parte (`setPaymentGroup`). */
   paymentGroupId?: string | null;
   createdAt: Date;
@@ -210,6 +212,7 @@ export class Invoice {
   readonly stockReviewOverrideReason: string | null;
   readonly obligation: InvoiceObligation | null;
   readonly importOrigin: "stock" | null;
+  readonly intakeSource: "email" | null;
   readonly paymentGroupId: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -254,6 +257,7 @@ export class Invoice {
     this.stockReviewOverrideReason = props.stockReviewOverrideReason;
     this.obligation = props.obligation ?? null;
     this.importOrigin = props.importOrigin ?? null;
+    this.intakeSource = props.intakeSource ?? null;
     this.paymentGroupId = props.paymentGroupId ?? null;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
@@ -606,6 +610,7 @@ export class Invoice {
       stockReviewOverrideReason: this.stockReviewOverrideReason,
       obligation: this.obligation,
       importOrigin: this.importOrigin,
+      intakeSource: this.intakeSource,
       paymentGroupId: this.paymentGroupId,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
