@@ -9,10 +9,14 @@ import type {
   VendusTopProduct,
   VendusProductChannelBreakdown,
   VendusTemporalPoint,
+  VendusPaymentKind,
+  VendusPaymentMethodStats,
+  VendusDailyPayments,
 } from "../entities/vendus-analytics.js";
 import type { VendusCategory } from "../entities/vendus-product.js";
 import { detectCategory } from "./category-detector.service.js";
 import { normalizeProductTitle } from "./product-title-normalizer.js";
+import { classifyPayment, type VendusPaymentIds } from "./payment-method-classifier.service.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -57,12 +61,14 @@ function dayLabel(d: Date): string {
  * @param catalog   Map de produtos keyed por reference normalizado
  * @param startDate Início do período (para temporal distribution)
  * @param endDate   Fim do período (para temporal distribution)
+ * @param paymentIds IDs dos métodos Eatz/Apps (classificação dos pagamentos; sem eles, pelo título)
  */
 export function computeVendusAnalytics(
   documents: VendusDetailedDocument[],
   catalog: Map<string, VendusProduct>,
   startDate: Date,
   endDate: Date,
+  paymentIds?: VendusPaymentIds,
 ): VendusAnalytics {
   // Accumulators
   const channelMap = new Map<"salao" | "eatz" | "apps", {
@@ -81,6 +87,9 @@ export function computeVendusAnalytics(
   const vatRateMap = new Map<number, { grossCents: number; vatCents: number }>();
   const topProductMap = new Map<string, VendusTopProduct & { grossCents: number; quantitySold: number; byChannel: { salao: number; take_away: number; eatz: number; apps: number } }>();
   const temporalMap = new Map<string, VendusTemporalPoint>();
+  const paymentMethodMap = new Map<string, { paymentId: number; title: string; kind: VendusPaymentKind; documentCount: number; cents: number }>();
+  const dailyPaymentsMap = new Map<string, Record<VendusPaymentKind, number>>();
+  const emptyDay = (): Record<VendusPaymentKind, number> => ({ cash: 0, card: 0, eatz: 0, apps: 0, other: 0 });
 
   let totalDocuments = 0;
   let totalCreditNotes = 0;
@@ -103,6 +112,10 @@ export function computeVendusAnalytics(
       temporalMap.set(label, { period: label, documentCount: 0, grossRevenue: 0 });
       cursor.setDate(cursor.getDate() + 1);
     }
+  }
+  // Dias em UTC: since/until chegam como 'YYYY-MM-DD' (meia-noite UTC), tal como doc.date
+  for (const cursor = new Date(startDate); cursor <= endDate; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    dailyPaymentsMap.set(dayLabel(cursor), emptyDay());
   }
 
   for (const doc of documents) {
@@ -144,6 +157,31 @@ export function computeVendusAnalytics(
     if (temporal) {
       if (isInvoice) temporal.documentCount++;
       temporal.grossRevenue += round2(docGross * sign);
+    }
+
+    // Payment methods — repartidos pelo total do documento (com troco, os pagamentos somam mais)
+    if (sign !== 0) {
+      const payments = doc.payments ?? [];
+      const paidCents = payments.reduce((a, p) => a + Math.round(toNum(p.amount) * 100), 0);
+      const docCents = Math.round(docGross * 100);
+      const dayKey = doc.date.slice(0, 10);
+      const day = dailyPaymentsMap.get(dayKey) ?? emptyDay();
+      dailyPaymentsMap.set(dayKey, day);
+      let allocated = 0;
+      payments.forEach((p, i) => {
+        const raw = Math.round(toNum(p.amount) * 100);
+        const cents = i === payments.length - 1
+          ? docCents - allocated
+          : paidCents > 0 ? Math.round((raw / paidCents) * docCents) : 0;
+        allocated += cents;
+        const kind = classifyPayment(p, paymentIds);
+        const key = `${p.id}|${p.title}`;
+        const acc = paymentMethodMap.get(key) ?? { paymentId: p.id, title: p.title, kind, documentCount: 0, cents: 0 };
+        if (isInvoice) acc.documentCount++;
+        acc.cents += cents * sign;
+        paymentMethodMap.set(key, acc);
+        day[kind] += cents * sign;
+      });
     }
 
     // VAT breakdown — use document-level taxes (fiscally accurate, includes doc-level discounts)
@@ -273,6 +311,23 @@ export function computeVendusAnalytics(
     }))
     .sort((a, b) => b.grossRevenue - a.grossRevenue);
 
+  // Build byPaymentMethod / dailyPayments
+  const byPaymentMethod: VendusPaymentMethodStats[] = Array.from(paymentMethodMap.values())
+    .map(({ cents, ...p }) => ({ ...p, amount: round2(cents / 100) }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const dailyPayments: VendusDailyPayments[] = Array.from(dailyPaymentsMap.entries())
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([date, d]) => ({
+      date,
+      cash: round2(d.cash / 100),
+      card: round2(d.card / 100),
+      eatz: round2(d.eatz / 100),
+      apps: round2(d.apps / 100),
+      other: round2(d.other / 100),
+      total: round2((d.cash + d.card + d.eatz + d.apps + d.other) / 100),
+    }));
+
   return {
     summary,
     byChannel,
@@ -288,5 +343,7 @@ export function computeVendusAnalytics(
       ...t,
       grossRevenue: round2(t.grossRevenue),
     })),
+    byPaymentMethod,
+    dailyPayments,
   };
 }

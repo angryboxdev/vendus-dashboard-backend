@@ -1,7 +1,7 @@
 # Módulo: vendus
 
 > Status: ativo
-> Última atualização: 2026-09-05
+> Última atualização: 2026-10-27 (totais por método de pagamento para conferir com o banco)
 
 ---
 
@@ -87,6 +87,23 @@ caso contrário                         →  'salao'
 ```
 
 `take_away` é agrupado com `salao` em `byChannel` (contabilizado em `takeAwayCount`), mas mantido como canal separado em `productsByChannel`. `apps` só é incluído em `byChannel` se houver documentos com esse canal no período — caso contrário é omitido do array. Em `productsByChannel`, o campo `byChannel.apps` está sempre presente (pode ser 0).
+
+### Métodos de pagamento (conferência com o banco)
+
+`analytics.byPaymentMethod` (total por método, com o título da Vendus) e `analytics.dailyPayments`
+(por dia: `cash`, `card`, `eatz`, `apps`, `other`) servem para conferir com o banco — cartão ↔
+créditos TPA, numerário ↔ depósitos. Classe do método (`classifyPayment`):
+
+```
+ID do método Eatz / Apps                    →  'eatz' / 'apps'
+título «Numerário», «Dinheiro»…             →  'cash'
+título «MB Way»                             →  'other' (não liquida pelo TPA)
+título «Multibanco», «TPA», «Cartão», «Visa» →  'card'
+caso contrário                              →  'other'
+```
+
+Cada documento conta pelo seu total bruto, repartido pelos pagamentos na proporção dos valores
+(com troco, o numerário entregue soma mais do que a fatura). NC subtraem; o dia é a data do documento.
 
 ### Filtro de NC
 
@@ -223,6 +240,7 @@ Ver "Decisões de design" abaixo para o porquê do singleton em
 - **Normalização de títulos pizza (`product-title-normalizer.ts`)**: os produtos pizza são configurados no Vendus com sufixo de tamanho em parênteses — `"Honey Peperoni (Individual)"` / `"Chicken & Cheese (Grande)"`. A função `normalizeProductTitle` converte `(Individual)` → `S` e `(Grande)` → `L`, para exibição consistente com o AirMenu. É aplicada em três sítios: `analytics-calculator.service.ts` (topProducts / productsByChannel), `GetSummaryUseCase` (items nos documents devolvidos ao frontend), e `GetDocumentDetailUseCase` (items no detalhe do documento). A detecção de categoria (`detectCategory`) usa o título raw antes da normalização — não é afectada.
 - **Channel por payment method, não por preço**: a detecção de canal anterior (comparação de preço unitário com price groups) foi substituída pela presença do método de pagamento. Ordem de prioridade: Apps (`VENDUS_APPS_PAYMENT_ID`) → Eatz (`VENDUS_EATZ_PAYMENT_ID`) → embalagem → salão. Mais simples, mais robusta, sem necessidade de `legacy_prices`.
 - **Canal `apps` condicional**: o canal `apps` representa faturação histórica de plataformas externas (Glovo/Uber Eats/Bolt) directamente no Vendus, antes da integração AirMenu. Só aparece em `byChannel` quando existem documentos com esse canal — meses sem Apps não mostram a linha na UI.
+- **Numerário/cartão pelo título do método, não por ID** (2026-10-27): só os métodos Eatz e Apps têm ID configurado por location; os restantes classificam-se pelo título. O título original segue em `byPaymentMethod`, por isso um método que caia em `other` vê-se logo. Se algum título falhar, acrescentar à regra em `payment-method-classifier.service.ts` (ou passar a configurar IDs por location).
 - **`VENDUS_CATEGORY_MAP` como constante de domínio**: os IDs de categoria Vendus são estáveis por instalação. Mantidos em `vendus-product.ts` com comentário. Alternativa (env/config) considerada mas rejeitada por complexidade desnecessária.
 - **`price-map.json` deixa de ser lido pelo novo módulo**: `price_group_ids` migram para env vars (`VENDUS_PRICE_GROUP_SALAO`, `VENDUS_PRICE_GROUP_EATZ`). `legacy_prices` removidos (obsoletos com o novo channel detection). O ficheiro é mantido para os módulos legados que ainda o usam.
 - **Dois endpoints distintos**: `/analytics/current` (rápido, list docs) vs `/summary` (completo, detail docs + channel). Evita N+1 no dashboard principal.

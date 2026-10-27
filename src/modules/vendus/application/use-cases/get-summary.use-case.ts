@@ -88,6 +88,7 @@ export class GetSummaryUseCase implements GetSummaryPort {
       catalog,
       new Date(since),
       new Date(until),
+      { eatz: this.eatzPaymentId, apps: this.appsPaymentId },
     );
 
     return { documents, analytics };

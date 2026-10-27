@@ -86,6 +86,35 @@ export interface VendusTemporalPoint {
   grossRevenue: number;
 }
 
+// ─── By payment method ───────────────────────────────────────────────────────
+
+/**
+ * Classe do método de pagamento — para conferir com o banco:
+ * 'card' ↔ créditos TPA, 'cash' ↔ depósitos em numerário.
+ */
+export type VendusPaymentKind = "cash" | "card" | "eatz" | "apps" | "other";
+
+/** Total por método de pagamento (título da Vendus). NC subtraem. */
+export interface VendusPaymentMethodStats {
+  paymentId: number;
+  title: string;
+  kind: VendusPaymentKind;
+  /** Documentos (FS/FT) com este método. */
+  documentCount: number;
+  amount: number;
+}
+
+/** Totais de um dia (data do documento, 'YYYY-MM-DD') por classe de pagamento. NC subtraem. */
+export interface VendusDailyPayments {
+  date: string;
+  cash: number;
+  card: number;
+  eatz: number;
+  apps: number;
+  other: number;
+  total: number;
+}
+
 // ─── Full analytics ───────────────────────────────────────────────────────────
 
 export interface VendusAnalytics {
@@ -100,6 +129,10 @@ export interface VendusAnalytics {
   topProducts: VendusTopProduct[];
   productsByChannel: VendusProductChannelBreakdown[];
   temporalDistribution: VendusTemporalPoint[];
+  /** Totais por método de pagamento, do maior para o menor. */
+  byPaymentMethod: VendusPaymentMethodStats[];
+  /** Totais diários por classe de pagamento (todos os dias do período, por ordem). */
+  dailyPayments: VendusDailyPayments[];
 }
 
 // ─── Analytics current (fast — list docs only) ────────────────────────────────

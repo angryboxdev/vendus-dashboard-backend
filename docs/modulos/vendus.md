@@ -6,7 +6,7 @@
 Integração com o sistema de faturação Vendus — POS onde todas as vendas e consumos internos do negócio são registados. Serve dois propósitos distintos no dashboard: 1. Faturação de clientes — consultar documentos fiscais emitidos (salão, eatz/delivery, take-away) com breakdowns por canal, categoria, IVA e produto, e obter KPIs históricos de faturação. 2. Autoconsumo de funcionários — consultar o que os fu
 
 ## Estado atual
-Implementado (README: ativo). Sem trabalho em curso registado.
+Implementado (README: ativo). 2026-10-27: totais por método de pagamento (`byPaymentMethod`, `dailyPayments`) para a conferência com o banco — ramo `financeiro-conferencia-vendas` (`.scratch/conferencia-vendas-dre/spec.md`).
 
 ## Arquitetura
 - Código: `src/modules/vendus/` (domain, application, adapters); composição: `vendus.module.ts`; documentação detalhada: `src/modules/vendus/README.md`.

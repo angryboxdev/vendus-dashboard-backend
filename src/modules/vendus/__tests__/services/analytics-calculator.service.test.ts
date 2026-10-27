@@ -214,4 +214,60 @@ describe("computeVendusAnalytics", () => {
       expect(productsByChannel[1]!.reference).toBe("A");
     });
   });
+
+  describe("byPaymentMethod / dailyPayments", () => {
+    const IDS = { eatz: EATZ_ID, apps: 1 };
+    const week = [new Date("2026-08-01"), new Date("2026-08-03")] as const;
+    const day = new Date("2026-08-01");
+
+    it("soma por método e por dia (cartão, numerário, Eatz)", () => {
+      const docs = [
+        makeDoc({ id: 1, date: "2026-08-01", amount_gross: "20.00", payments: [{ id: 10, title: "Multibanco", amount: "20.00" }] }),
+        makeDoc({ id: 2, date: "2026-08-01", amount_gross: "12.50", payments: [{ id: 11, title: "Numerário", amount: "12.50" }] }),
+        makeDoc({ id: 3, date: "2026-08-02", amount_gross: "15.00", channel: "eatz", payments: [{ id: EATZ_ID, title: "Eatz", amount: "15.00" }] }),
+      ];
+      const r = computeVendusAnalytics(docs, emptyMap, week[0], week[1], IDS);
+
+      expect(r.byPaymentMethod).toEqual([
+        { paymentId: 10, title: "Multibanco", kind: "card", documentCount: 1, amount: 20 },
+        { paymentId: EATZ_ID, title: "Eatz", kind: "eatz", documentCount: 1, amount: 15 },
+        { paymentId: 11, title: "Numerário", kind: "cash", documentCount: 1, amount: 12.5 },
+      ]);
+      expect(r.dailyPayments).toEqual([
+        { date: "2026-08-01", cash: 12.5, card: 20, eatz: 0, apps: 0, other: 0, total: 32.5 },
+        { date: "2026-08-02", cash: 0, card: 0, eatz: 15, apps: 0, other: 0, total: 15 },
+        { date: "2026-08-03", cash: 0, card: 0, eatz: 0, apps: 0, other: 0, total: 0 },
+      ]);
+    });
+
+    it("com troco, o numerário conta pelo total do documento", () => {
+      const docs = [makeDoc({ id: 1, amount_gross: "37.80", payments: [{ id: 11, title: "Numerário", amount: "50.00" }] })];
+      const r = computeVendusAnalytics(docs, emptyMap, day, day, IDS);
+      expect(r.byPaymentMethod[0]!.amount).toBe(37.8);
+      expect(r.dailyPayments[0]!.cash).toBe(37.8);
+    });
+
+    it("pagamento misto reparte o total na proporção dos pagamentos", () => {
+      const docs = [makeDoc({
+        id: 1,
+        amount_gross: "30.00",
+        payments: [
+          { id: 10, title: "Multibanco", amount: "20.00" },
+          { id: 11, title: "Numerário", amount: "20.00" },
+        ],
+      })];
+      const r = computeVendusAnalytics(docs, emptyMap, day, day, IDS);
+      expect(r.dailyPayments[0]).toMatchObject({ card: 15, cash: 15, total: 30 });
+    });
+
+    it("nota de crédito subtrai no método e no dia", () => {
+      const docs = [
+        makeDoc({ id: 1, amount_gross: "20.00", payments: [{ id: 10, title: "Multibanco", amount: "20.00" }] }),
+        makeDoc({ id: 2, type: "NC", amount_gross: "5.00", payments: [{ id: 10, title: "Multibanco", amount: "5.00" }] }),
+      ];
+      const r = computeVendusAnalytics(docs, emptyMap, day, day, IDS);
+      expect(r.byPaymentMethod).toEqual([{ paymentId: 10, title: "Multibanco", kind: "card", documentCount: 1, amount: 15 }]);
+      expect(r.dailyPayments[0]!.card).toBe(15);
+    });
+  });
 });
