@@ -3,11 +3,13 @@ import type { OrganizationId } from "../../kernel/organization-id.js";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import type { VendusGatewayPort } from "./domain/ports/out/vendus-gateway.port.js";
 import { VendusHttpGateway } from "./adapters/out/vendus-http.gateway.js";
+import { CachingVendusGateway } from "./adapters/out/caching-vendus.gateway.js";
 import { VendusProductCatalogAdapter } from "./adapters/out/vendus-product-catalog.adapter.js";
 import { SupabaseAnalyticsCacheAdapter } from "./adapters/out/supabase-analytics-cache.adapter.js";
 import { SupabaseVendusCredentialsAdapter } from "./adapters/out/supabase-vendus-credentials.adapter.js";
 import { SupabaseVendusLocationConfigAdapter } from "./adapters/out/supabase-vendus-location-config.adapter.js";
 import { GetSummaryUseCase } from "./application/use-cases/get-summary.use-case.js";
+import { CachedGetSummaryUseCase } from "./application/use-cases/cached-get-summary.use-case.js";
 import { GetAnalyticsCurrentUseCase } from "./application/use-cases/get-analytics-current.use-case.js";
 import { GetAnalyticsHistoricalUseCase } from "./application/use-cases/get-analytics-historical.use-case.js";
 import { GetDocumentDetailUseCase } from "./application/use-cases/get-document-detail.use-case.js";
@@ -50,7 +52,8 @@ export function createVendusModule(config: VendusModuleConfig): {
   gateway: VendusGatewayPort;
 } {
   // Adapters de saída
-  const gateway = new VendusHttpGateway();
+  // Detalhe dos documentos guardado em memória (documentos fiscais não mudam) — ver CachingVendusGateway.
+  const gateway = new CachingVendusGateway(new VendusHttpGateway());
   const productCatalog = new VendusProductCatalogAdapter(
     config.salaoPriceGroupId,
     config.eatzPriceGroupId,
@@ -58,13 +61,14 @@ export function createVendusModule(config: VendusModuleConfig): {
   const analyticsCache = new SupabaseAnalyticsCacheAdapter(createScopedQuery);
 
   // Use cases
-  const getSummary = new GetSummaryUseCase(
+  // Períodos fechados ficam em memória (não mudam) — ver CachedGetSummaryUseCase.
+  const getSummary = new CachedGetSummaryUseCase(new GetSummaryUseCase(
     gateway,
     productCatalog,
     config.eatzPaymentId,
     config.appsPaymentId,
     config.concurrency,
-  );
+  ));
   const getAnalyticsCurrent = new GetAnalyticsCurrentUseCase(gateway);
   const getAnalyticsHistorical = new GetAnalyticsHistoricalUseCase(
     gateway,
