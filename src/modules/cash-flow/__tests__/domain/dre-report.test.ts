@@ -15,7 +15,6 @@ function input(overrides: Partial<BuildDreInput> = {}): BuildDreInput {
     restaurant: { netCents: 0, vatCents: 0, byPaymentGrossCents: noPayments },
     parameters: resolveDreParameters(null, null),
     categoryNetRatios: new Map(),
-    manual: { fixedCents: 0, variableCents: 0 },
     ...overrides,
   };
 }
@@ -99,7 +98,7 @@ describe("buildDreReport", () => {
     expect(report.platformCosts.marketingNetCents).toBe(15_000);
   });
 
-  it("resultado, margem, ajustes manuais e saldo do IVA (vendas − compras, com o IVA da comissão)", () => {
+  it("resultado, margem e saldo do IVA (vendas − compras, com o IVA da comissão)", () => {
     const sources = emptySources();
     sources.invoices.set("f", { mode: "simple", netRatio: 100 / 123, groupId: null, categoryId: "c-ing", allocations: [], lines: [] });
     const report = buildDreReport(
@@ -108,12 +107,10 @@ describe("buildDreReport", () => {
         restaurant: { netCents: 100_000, vatCents: 13_000, byPaymentGrossCents: noPayments },
         debits: [debit({ amountCents: 24_600, links: [{ entityType: "invoice", entityId: "f", amountCents: 24_600 }] })],
         credits: [credit({ amountCents: 63_100, platform: "glovo" })],
-        manual: { fixedCents: 10_000, variableCents: 5_000 },
       }),
     );
-    expect(report.manualAdjustments).toEqual({ fixedCents: 10_000, variableCents: 5_000, totalCents: 15_000 });
-    expect(report.resultCents).toBe(100_000 + 86_957 - 30_000 - 20_000 - 15_000);
-    expect(report.marginPct).toBe(65.2);
+    expect(report.resultCents).toBe(100_000 + 86_957 - 30_000 - 20_000);
+    expect(report.marginPct).toBe(73.3);
     expect(report.vat).toEqual({ salesCents: 13_000 + 13_043, purchasesCents: 4_600 + 6_900, purchasesEstimatedCents: 0, balanceCents: 26_043 - 11_500 });
   });
 
@@ -171,5 +168,26 @@ describe("buildDreReport", () => {
     expect(report.expenses.sections.find((s) => s.key === "unclassified")!.items[0]).toMatchObject({ movementKind: "card_purchase", name: null });
     expect(report.expenses.capexNetCents).toBe(40_000);
     expect(report.resultCents).toBe(100_000 - 20_000 - 30_000 - 5_000);
+  });
+
+  it("sem fatura nem categoria: vencimentos → pessoal, energia → estrutura, seguros → administrativo, taxas → financeiro; o resto fica pelo extrato", () => {
+    const report = buildDreReport(
+      input({
+        debits: [
+          debit({ id: "a", amountCents: 1_000, kind: "payroll" }),
+          debit({ id: "b", amountCents: 2_000, kind: "utilities" }),
+          debit({ id: "c", amountCents: 3_000, kind: "insurance" }),
+          debit({ id: "d", amountCents: 4_000, kind: "bank_fee" }),
+          debit({ id: "e", amountCents: 5_000, kind: "transfer_out" }),
+        ],
+      }),
+    );
+    expect(report.expenses.sections.map((s) => [s.key, s.netCents, s.items.map((i) => i.movementKind)])).toEqual([
+      ["personnel", 1_000, ["payroll"]],
+      ["structure", 2_000, ["utilities"]],
+      ["administrative", 3_000, ["insurance"]],
+      ["unclassified", 5_000, ["transfer_out"]],
+      ["financial", 4_000, ["bank_fee"]],
+    ]);
   });
 });

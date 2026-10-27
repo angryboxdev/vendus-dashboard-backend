@@ -13,7 +13,6 @@ import { PayableEntriesSummaryAdapter } from "./adapters/out/payable-entries-sum
 import { InvoiceAlertsToReviewAdapter } from "./adapters/out/invoice-alerts-to-review.adapter.js";
 import { VendusRestaurantSalesAdapter } from "./adapters/out/vendus-restaurant-sales.adapter.js";
 import { VendusDailyPaymentsAdapter } from "./adapters/out/vendus-daily-payments.adapter.js";
-import { SupabaseManualAdjustmentsReadAdapter } from "./adapters/out/supabase-manual-adjustments-read.adapter.js";
 import { SupabaseDreParametersRepository } from "./adapters/out/supabase-dre-parameters.repository.js";
 import { SupabaseCategoryVatRatioReadAdapter } from "./adapters/out/supabase-category-vat-ratio-read.adapter.js";
 import { GetCashFlowUseCase } from "./application/use-cases/get-cash-flow.use-case.js";
@@ -63,7 +62,6 @@ export function createCashFlowModule(deps: CashFlowModuleDeps): CashFlowModule {
     restaurantSales,
     parameters,
     new SupabaseCategoryVatRatioReadAdapter(createScopedQuery),
-    new SupabaseManualAdjustmentsReadAdapter(createScopedQuery),
   );
   const getSalesReconciliation = new GetSalesReconciliationUseCase(
     bankMovements,

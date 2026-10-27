@@ -9,7 +9,6 @@ import type {
   DrePlatformRevenue,
   DreReport,
   DreRevenue,
-  ManualAdjustments,
   RestaurantSales,
 } from "../entities/dre.js";
 import { DELIVERY_PLATFORMS, type DeliveryPlatformKey, type ResolvedDreParameters } from "../entities/dre-parameters.js";
@@ -32,7 +31,6 @@ export interface BuildDreInput {
   parameters: ResolvedDreParameters;
   /** Rácio sem IVA ÷ com IVA das últimas faturas de cada categoria (IVA estimado). */
   categoryNetRatios: Map<string, number>;
-  manual: ManualAdjustments;
 }
 
 interface NetShare {
@@ -159,11 +157,22 @@ const SECTION_BY_TYPE: Record<string, DreSectionKey> = {
   financial: "financial",
   capex: "capex",
 };
+/**
+ * Sem fatura nem categoria, a saída fica com a classificação genérica do extrato (decisão do
+ * utilizador, 2026-10-27): os tipos inequívocos vão para a sua linha; o resto («Outros gastos pelo
+ * extrato»: transferências, compras com cartão, Estado…) fica em `unclassified`, pelo tipo do banco.
+ */
+const SECTION_BY_MOVEMENT_KIND: Record<string, DreSectionKey> = {
+  payroll: "personnel",
+  utilities: "structure",
+  insurance: "administrative",
+  bank_fee: "financial",
+};
 const SECTION_ORDER: DreSectionKey[] = ["cmv", "variable", "personnel", "structure", "administrative", "marketing", "other", "unclassified", "financial", "capex"];
 
 /**
  * Gastos pelas linhas da DRE: pela categoria; sem categoria, pelo grupo quando todas as suas categorias
- * são do mesmo tipo (senão «outros»); sem grupo, «por classificar» pelo tipo genérico do banco.
+ * são do mesmo tipo (senão «outros»); sem grupo, pelo tipo genérico do extrato (`SECTION_BY_MOVEMENT_KIND`).
  */
 function dreSections(shares: NetShare[], catalog: CostCenterCatalog): DreExpenseSection[] {
   const cats = new Map(catalog.categories.map((c) => [c.id, c]));
@@ -176,7 +185,11 @@ function dreSections(shares: NetShare[], catalog: CostCenterCatalog): DreExpense
   for (const s of shares) {
     const { categoryId, groupId } = s.share;
     const cat = categoryId ? cats.get(categoryId) : undefined;
-    const key: DreSectionKey = cat ? (SECTION_BY_TYPE[cat.financialType] ?? "other") : groupId ? groupSection(groupId) : "unclassified";
+    const key: DreSectionKey = cat
+      ? (SECTION_BY_TYPE[cat.financialType] ?? "other")
+      : groupId
+        ? groupSection(groupId)
+        : (SECTION_BY_MOVEMENT_KIND[s.kind] ?? "unclassified");
     const itemKey = cat ? cat.id : groupId ? `${groupId}:none` : `kind:${s.kind}`;
     const items = bySection.get(key) ?? new Map<string, DreSectionItem>();
     bySection.set(key, items);
@@ -257,9 +270,8 @@ export function buildDreReport(input: BuildDreInput): DreReport {
     totalNetCents: sumP((p) => p.commissionNetCents + p.marketingNetCents),
   };
   const exp = expenses(input);
-  const manualTotal = input.manual.fixedCents + input.manual.variableCents;
   // CAPEX é investimento: aparece na DRE, mas fora do resultado.
-  const resultCents = revenue.totalNetCents - platformCosts.totalNetCents - (exp.totalNetCents - exp.capexNetCents) - manualTotal;
+  const resultCents = revenue.totalNetCents - platformCosts.totalNetCents - (exp.totalNetCents - exp.capexNetCents);
 
   const salesVat = input.restaurant.vatCents + sumP((p) => p.salesVatCents);
   const purchasesVat = exp.vatCents + sumP((p) => p.commissionVatCents + p.marketingVatCents);
@@ -270,7 +282,6 @@ export function buildDreReport(input: BuildDreInput): DreReport {
     revenue,
     platformCosts,
     expenses: exp,
-    manualAdjustments: { ...input.manual, totalCents: manualTotal },
     resultCents: loaded ? resultCents : null,
     marginPct: loaded ? pct(resultCents, revenue.totalNetCents) : null,
     vat: {

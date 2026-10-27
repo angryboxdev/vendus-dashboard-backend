@@ -8,7 +8,7 @@ import { catalog, credit, debit, emptySources } from "../fakes/builders.js";
 const organizationId = mintOrganizationId("org-a");
 
 function useCase(debits: StoredBankDebit[], credits: StoredBankCredit[]) {
-  const calls: Record<string, unknown[]> = { restaurant: [], parameters: [], ratios: [], manual: [] };
+  const calls: Record<string, unknown[]> = { restaurant: [], parameters: [], ratios: [] };
   const sources = emptySources();
   sources.invoices.set("makro", { mode: "simple", netRatio: 100 / 123, groupId: null, categoryId: "c-ing", allocations: [], lines: [] });
   const uc = new GetDreUseCase(
@@ -32,7 +32,6 @@ function useCase(debits: StoredBankDebit[], credits: StoredBankCredit[]) {
       save: async () => undefined,
     },
     { recentNetRatios: async (_o, until, sample) => (calls.ratios!.push([until, sample]), new Map()) },
-    { forMonth: async (_o, y, m) => (calls.manual!.push([y, m]), { fixedCents: 1_000, variableCents: 0 }) },
     () => "2026-10-16",
   );
   return { uc, calls };
@@ -49,12 +48,11 @@ describe("GetDreUseCase", () => {
     expect(calls.restaurant).toEqual([["2026-10-01", "2026-10-16"]]);
     expect(calls.parameters).toEqual([[2026, 10]]);
     expect(calls.ratios).toEqual([["2026-10-16", 10]]);
-    expect(calls.manual).toEqual([[2026, 10]]);
     expect(report.period).toEqual({ year: 2026, month: 10, from: "2026-10-01", to: "2026-10-16", isCurrentMonth: true });
     expect(report.parameters.source).toBe("inherited");
     expect(report.revenue).toMatchObject({ restaurantNetCents: 200_000, platformsReceivedCents: 63_100, platformsGrossCents: 100_000, platformsNetCents: 86_957 });
     expect(report.expenses).toMatchObject({ totalNetCents: 10_000, vatCents: 2_300 });
-    expect(report.resultCents).toBe(200_000 + 86_957 - 30_000 - 10_000 - 1_000);
+    expect(report.resultCents).toBe(200_000 + 86_957 - 30_000 - 10_000);
   });
 
   it("mês futuro é recusado", async () => {

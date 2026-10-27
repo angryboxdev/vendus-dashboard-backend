@@ -17,11 +17,6 @@ export interface RestaurantSales extends SalesFigures {
   byPaymentGrossCents: { card: number; cash: number; other: number };
 }
 
-export interface ManualAdjustments {
-  fixedCents: number;
-  variableCents: number;
-}
-
 /** Uma plataforma: o que liquidou no banco e a venda reconstituída (ver `platformGross`). */
 export interface DrePlatformRevenue {
   platform: string;
@@ -152,8 +147,7 @@ export interface DreReport {
   revenue: DreRevenue;
   platformCosts: DrePlatformCosts;
   expenses: DreExpenses;
-  manualAdjustments: ManualAdjustments & { totalCents: number };
-  /** Receita − custos das plataformas − gastos − ajustes manuais (sem IVA). */
+  /** Receita − custos das plataformas − gastos do banco, sem o CAPEX (sem IVA). */
   resultCents: number | null;
   /** Resultado ÷ receita, %, 1 casa decimal; null sem receita. */
   marginPct: number | null;
