@@ -11,6 +11,7 @@ import { InfraInboundEmailStoreAdapter } from "./adapters/out/infra-inbound-emai
 import { ResendReceivingAdapter } from "./adapters/out/resend-receiving.adapter.js";
 import { InvoicesIntakeAdapter } from "./adapters/out/invoices-intake.adapter.js";
 import { NodeRandomBytesAdapter } from "./adapters/out/node-random-bytes.adapter.js";
+import { SupabaseInvoiceExistenceAdapter } from "./adapters/out/supabase-invoice-existence.adapter.js";
 import { ReceiveInboundEmailUseCase } from "./application/use-cases/receive-inbound-email.use-case.js";
 import { ProcessInboundAttachmentsUseCase } from "./application/use-cases/process-inbound-attachments.use-case.js";
 import {
@@ -58,7 +59,7 @@ export function createInvoiceEmailIntakeModule(env: EmailIntakeEnv, importFromEm
   const process: ProcessInboundAttachmentsPort = new ProcessInboundAttachmentsUseCase(attachments, resend, new InvoicesIntakeAdapter(importFromEmail));
 
   const router = createEmailIntakeRouter({
-    getEmailIntake: new GetEmailIntakeUseCase(addresses, attachments, store, settings, config),
+    getEmailIntake: new GetEmailIntakeUseCase(addresses, attachments, store, settings, config, new SupabaseInvoiceExistenceAdapter(createScopedQuery)),
     rotateAddress: new RotateInboundAddressUseCase(addresses, new NodeRandomBytesAdapter(), config),
     setDestination: new SetEmailIntakeDestinationUseCase(settings),
   });
