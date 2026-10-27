@@ -96,6 +96,8 @@ export interface InvoiceDTO {
   obligation: { kind: "tax_obligation" | "contribution_obligation"; paymentReference: string | null; mbEntity: string | null; period: string | null } | null;
   /** F3c: `stock` = importada no Stock; enquanto rascunho, «Aguardando lançamento no Financeiro». */
   importOrigin: "stock" | null;
+  /** Faturas por email: `email` = recebida por email (selo «Email» na lista e na revisão). */
+  intakeSource: "email" | null;
   /** Documento de pagamento com várias faturas fiscais (ex.: águas + resíduos) — as do mesmo documento partilham o id. */
   paymentGroupId: string | null;
   createdAt: string;

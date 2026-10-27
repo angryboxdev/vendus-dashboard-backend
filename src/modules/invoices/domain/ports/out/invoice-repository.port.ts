@@ -39,6 +39,8 @@ export interface InvoiceRepositoryPort {
   /** Documento (não cancelado) importado a partir do mesmo ficheiro (SHA-256). */
   findByFileHash(organizationId: OrganizationId, sha256: string): Promise<Invoice | null>;
   setFileHash(organizationId: OrganizationId, invoiceId: string, sha256: string): Promise<void>;
+  /** Faturas por email: marca a origem (a coluna só é escrita aqui). */
+  setIntakeSource(organizationId: OrganizationId, invoiceId: string, source: "email"): Promise<void>;
   /** Documento de pagamento com várias faturas fiscais: marca-as com o mesmo grupo. */
   setPaymentGroup(organizationId: OrganizationId, invoiceIds: string[], groupId: string): Promise<void>;
   /** Faturas do mesmo documento de pagamento, pela ordem de criação. */

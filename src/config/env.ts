@@ -116,6 +116,20 @@ export const ENV = {
   AIRMENU_WEBHOOK_SECRET: process.env.AIRMENU_WEBHOOK_SECRET ?? null,
 
   /**
+   * Faturas por email (Resend Inbound). Só com os três definidos a funcionalidade liga; sem eles o webhook
+   * responde 503 e o ecrã diz «não configurado». Valores só no Render / .env local — nunca no código.
+   *  - RESEND_API_KEY: chave da API (permissão para ler os emails recebidos).
+   *  - RESEND_WEBHOOK_SECRET: segredo de assinatura do webhook (`whsec_…`, na página do webhook na Resend).
+   *  - INBOUND_EMAIL_DOMAIN: domínio dos endereços (teste: o `….resend.app` da conta; depois o domínio do Mezza).
+   *  - INBOUND_EMAIL_ALLOWED_ORGS: piloto — ids das empresas (separados por vírgula) que podem gerar endereço;
+   *    vazio = todas.
+   */
+  RESEND_API_KEY: process.env.RESEND_API_KEY || null,
+  RESEND_WEBHOOK_SECRET: process.env.RESEND_WEBHOOK_SECRET || null,
+  INBOUND_EMAIL_DOMAIN: process.env.INBOUND_EMAIL_DOMAIN || null,
+  INBOUND_EMAIL_ALLOWED_ORGS: (process.env.INBOUND_EMAIL_ALLOWED_ORGS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+
+  /**
    * URL pública deste servidor para registar o webhook na AirMenu.
    * Ex: https://meu-servidor.com/api/air-menu/webhook/receive
    * Opcional — apenas necessário ao chamar POST /api/air-menu/webhook/register.

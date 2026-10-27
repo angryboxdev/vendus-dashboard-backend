@@ -141,6 +141,7 @@ export function toInvoiceDTO(
     stockReviewOverrideReason: invoice.stockReviewOverrideReason,
     obligation: invoice.obligation,
     importOrigin: invoice.importOrigin,
+    intakeSource: invoice.intakeSource,
     paymentGroupId: invoice.paymentGroupId,
     createdAt: invoice.createdAt.toISOString(),
     updatedAt: invoice.updatedAt.toISOString(),
