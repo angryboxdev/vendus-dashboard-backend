@@ -1,7 +1,7 @@
 # Module: rosters
 
 > Status: active
-> Last updated: 2026-10-19
+> Last updated: 2026-10-27
 
 ---
 
@@ -58,7 +58,7 @@ time-base (`plannedDays`) e pede o recálculo da assiduidade a cada publicação
 
 ### Input
 
-- `createRostersRouter` → `/api/novo-rh/rosters/*` (inclui `GET /summary?from&to`: visão macro — escalas ativas com pessoas no período, por publicar e última publicação); `POST /:id/clear-pending` (limpar numa só instrução os turnos nunca publicados de um colaborador no período; devolve os retirados) e `POST /:id/shifts/restore` (repor turnos pendentes retirados — o "desfazer" do ecrã; com a regra de sobreposição) (`hr.schedules`, Idempotency-Key obrigatório) e `/api/me/roster*` (os meus turnos publicados, trocas).
+- `createRostersRouter` → `/api/novo-rh/rosters/*` (inclui `GET /summary?from&to`: visão macro — escalas ativas com pessoas no período, por publicar e última publicação); `POST /:id/clear-pending` (limpar numa só instrução os turnos nunca publicados de um colaborador no período; devolve os retirados) `POST /:id/copy-week` (`{ from }` — copiar a semana para a seguinte; ver Decisões) e `POST /:id/shifts/restore` (repor turnos pendentes retirados — o "desfazer" do ecrã; com a regra de sobreposição) (`hr.schedules`, Idempotency-Key obrigatório) e `/api/me/roster*` (os meus turnos publicados, trocas).
 - Áreas: `GET/POST /areas`, `PATCH /areas/:id`; `areaId` em criar, em massa e `PATCH /shifts/:id`.
 - Cobertura: `GET/PUT /coverage/status` (ligar/desligar nas Escalas), `GET/POST /coverage/rules`, `PATCH/DELETE /coverage/rules/:id` (DELETE devolve 200 `{ deleted: true }`) (desligado → 409 `invalid_state`), `GET /:id/coverage?from&to`.
 
@@ -78,6 +78,7 @@ time-base (`plannedDays`) e pede o recálculo da assiduidade a cada publicação
 - **Seletor e sobreposição** (2026-10-19): `overlapViolations` é o serviço central de disponibilidade (criar, atribuir em massa, alterar, mudar de colaborador, repor/desfazer e o Assistente): compara com os turnos planeados do colaborador em TODAS as escalas (rascunho e publicado, dias vizinhos por causa dos noturnos), ignora o próprio turno, e devolve o turno incompatível (`conflict`: escala, horário, publicado/rascunho) e o troço (`overlap`). O motor (`evaluate`) compara com o intervalo anterior que acaba mais tarde (não só o vizinho), usa as regras de cada colaborador e o foco inclui o dia seguinte. Faixas de repartidos em ordem cronológica (`segmentRanges`: a faixa depois da meia-noite é do dia seguinte) e sem se sobreporem. Depois de gravar volta a verificar (gestores em simultâneo: desfaz e recusa); folgas não duplicam. `check`/`publish` aceitam `from`/`to` (a semana visível); `GET /rosters/:id/candidates` alimenta o seletor (pertenças ao centro/grupo e turnos noutras escalas). Sem fuso nem hora de verão (hora de parede, ADR-0030).
 - **Áreas de trabalho** (2026-10-19): por centro, nome único entre as ativas (sem maiúsculas/espaços), ordem definida, desativar não apaga (os turnos antigos mantêm a área). A área de um turno tem de estar ativa e ser do centro da escala (escala de grupo: qualquer centro); manter a área atual é sempre permitido; folga nunca tem área. Mudar a área de um turno publicado é uma alteração como as outras (motivo, versão nova, aviso). O estado publicado (JSONB) leva `areaId`.
 - **Plano de Cobertura** (2026-10-19): funcionalidade da empresa (`time_tracking.roster.coverage_enabled`, desligada por omissão; liga-se/desliga-se nas Escalas — `PUT /coverage/status` grava o parâmetro no perfil geral a partir de hoje, com motivo e auditoria — ou em Configurações → Funcionalidades; desligar não apaga as regras; o valor é o do perfil geral — exceções por centro/pessoa são ignoradas). Regras por centro (`areaId` null = centro inteiro) ou área, dia da semana (1–7) **ou** data (exceção que substitui as semanais desse dia e âmbito); fim ≤ início passa a meia-noite; regras sobrepostas nunca se somam (vale o maior mínimo). Contam os turnos das escalas do centro e, de escalas de grupo, os que têm uma área do centro; cada pessoa uma vez; folgas e ausências aprovadas não contam. Dia/âmbito sem regra = «Não configurado». Escala de grupo não tem cobertura. Só informa — a publicação nunca é bloqueada.
+- **Copiar a semana para a seguinte** (2026-10-27, pedido do utilizador): `copyWeek` copia os turnos e folgas da semana (`from` … +6) desta escala para +7 dias, em rascunho, no estado planeado (rascunho ou publicado; retirados não). Nunca mexe num dia da semana seguinte que já tenha algo nesta escala. **Não é tudo-ou-nada** (ao contrário da atribuição em massa): o que se sobrepõe a um turno noutra escala salta (`skipped.overlap`, com a violação), tal como quem está fora do âmbito do gestor (`skipped.outOfScope`); o resto é copiado. Mantém o modelo e o horário do turno de origem; uma área que deixou de ser válida fica «Sem área». Uma auditoria `rosters.shift.copy_week`. `overlapsEach` dá a sobreposição por candidato (base de `overlapViolations`).
 
 ## How to test
 
@@ -86,6 +87,6 @@ time-base (`plannedDays`) e pede o recálculo da assiduidade a cada publicação
 ## Known gaps / open debt
 
 - Regras em hora de parede (sem ajuste da mudança de hora).
-- Sem "copiar planeamento", disponibilidade dos colaboradores, nem criação automática de escalas por centro/grupo.
+- Copiar planeamento só semana a semana (para a seguinte); sem disponibilidade dos colaboradores, nem criação automática de escalas por centro/grupo.
 - As escalas e turnos do RH atual não são migrados.
 - Cobertura: turnos de escalas de grupo sem área não contam para nenhum centro; o mínimo é por pessoas (sem competências/cargos).
