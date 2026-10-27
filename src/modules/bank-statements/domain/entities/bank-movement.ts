@@ -296,10 +296,11 @@ export class BankMovement {
     supplierId: string | null;
     vatRate: number | null;
     vatIncluded: boolean | null;
-  }): BankMovement {
+  }, occurrenceId?: string): BankMovement {
     const classified = this.classify({
       justificationType: rule.justificationType,
       riskLevel: rule.riskLevel,
+      ...(occurrenceId !== undefined && { matchedEntityType: "recurrence_occurrence" as const, matchedEntityId: occurrenceId }),
       ...(rule.costCenterGroupId !== null && { costCenterGroupId: rule.costCenterGroupId }),
       ...(rule.costCenterCategoryId !== null && { costCenterCategoryId: rule.costCenterCategoryId }),
       ...(rule.supplierId !== null && { supplierId: rule.supplierId }),

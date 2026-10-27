@@ -34,6 +34,7 @@ export class CreateRecurrenceUseCase implements CreateRecurrencePort {
       ...(command.autoCreatePayable !== undefined && { autoCreatePayable: command.autoCreatePayable }),
       ...(command.requireInvoice !== undefined && { requireInvoice: command.requireInvoice }),
       ...(command.notes !== undefined && { notes: command.notes }),
+      ...(command.paymentPeriodOffset !== undefined && { paymentPeriodOffset: command.paymentPeriodOffset }),
     });
 
     await this.repo.save(command.organizationId, recurrence);

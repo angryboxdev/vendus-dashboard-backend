@@ -23,6 +23,8 @@ interface BankReconciliationRuleProps {
   supplierId: string | null;
   vatRate: number | null;
   vatIncluded: boolean | null;
+  /** Recorrência sem fatura (renda, salário): cada movimento fica ligado à ocorrência do mês, que fica paga. */
+  recurrenceId: string | null;
   justificationType: JustificationType;
   requiresDocument: boolean;
   affectsDre: boolean;
@@ -47,6 +49,7 @@ export type BankReconciliationRuleChanges = Partial<
     | "supplierId"
     | "vatRate"
     | "vatIncluded"
+    | "recurrenceId"
     | "justificationType"
   >
 >;
@@ -60,6 +63,12 @@ function validate(props: BankReconciliationRuleProps): void {
   }
   if (!Number.isInteger(props.amountToleranceCents) || props.amountToleranceCents < 0) {
     throw new InvalidRuleError("amountToleranceCents must be a non-negative integer");
+  }
+  if (props.recurrenceId !== null && props.justificationType !== "contrato_recorrencia") {
+    throw new InvalidRuleError("Uma regra ligada a uma recorrência tem de usar a justificação «Contrato / Recorrência».");
+  }
+  if (props.recurrenceId !== null && props.bankAccountId === null) {
+    throw new InvalidRuleError("Uma regra ligada a uma recorrência tem de ser de uma conta bancária.");
   }
 }
 
@@ -76,6 +85,7 @@ export class BankReconciliationRule {
   readonly supplierId: string | null;
   readonly vatRate: number | null;
   readonly vatIncluded: boolean | null;
+  readonly recurrenceId: string | null;
   readonly justificationType: JustificationType;
   readonly requiresDocument: boolean;
   readonly affectsDre: boolean;
@@ -99,6 +109,7 @@ export class BankReconciliationRule {
     this.supplierId = props.supplierId;
     this.vatRate = props.vatRate;
     this.vatIncluded = props.vatIncluded;
+    this.recurrenceId = props.recurrenceId;
     this.justificationType = props.justificationType;
     this.requiresDocument = props.requiresDocument;
     this.affectsDre = props.affectsDre;
@@ -122,6 +133,7 @@ export class BankReconciliationRule {
     supplierId?: string | null;
     vatRate?: number | null;
     vatIncluded?: boolean | null;
+    recurrenceId?: string | null;
     justificationType: JustificationType;
     requiresDocument?: boolean;
     affectsDre?: boolean;
@@ -146,6 +158,7 @@ export class BankReconciliationRule {
       supplierId: props.supplierId ?? null,
       vatRate: props.vatRate ?? null,
       vatIncluded: props.vatIncluded ?? null,
+      recurrenceId: props.recurrenceId ?? null,
       justificationType: props.justificationType,
       requiresDocument: props.requiresDocument ?? false,
       affectsDre: props.affectsDre ?? true,
@@ -163,7 +176,7 @@ export class BankReconciliationRule {
   static reconstitute(
     props: Omit<
       BankReconciliationRuleProps,
-      "bankAccountId" | "amountCents" | "amountToleranceCents" | "supplierId" | "vatRate" | "vatIncluded"
+      "bankAccountId" | "amountCents" | "amountToleranceCents" | "supplierId" | "vatRate" | "vatIncluded" | "recurrenceId"
     > &
       Partial<BankReconciliationRuleProps>,
   ): BankReconciliationRule {
@@ -175,6 +188,7 @@ export class BankReconciliationRule {
       supplierId: props.supplierId ?? null,
       vatRate: props.vatRate ?? null,
       vatIncluded: props.vatIncluded ?? null,
+      recurrenceId: props.recurrenceId ?? null,
     });
   }
 
@@ -221,6 +235,7 @@ export class BankReconciliationRule {
       supplierId: this.supplierId,
       vatRate: this.vatRate,
       vatIncluded: this.vatIncluded,
+      recurrenceId: this.recurrenceId,
       justificationType: this.justificationType,
       requiresDocument: this.requiresDocument,
       affectsDre: this.affectsDre,

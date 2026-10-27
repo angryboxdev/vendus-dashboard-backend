@@ -30,6 +30,16 @@ export type PaymentMethod =
 
 export type RecurrenceStatus = "active" | "paused" | "closed";
 
+/**
+ * A que mês se refere um pagamento feito num mês: 0 = o próprio mês (renda), -1 = o mês anterior
+ * (salário de setembro pago em outubro). Usado pela conciliação automática dos «Movimentos recorrentes».
+ */
+export type PaymentPeriodOffset = 0 | -1;
+
+export function isPaymentPeriodOffset(v: unknown): v is PaymentPeriodOffset {
+  return v === 0 || v === -1;
+}
+
 // ── Internal props ─────────────────────────────────────────────────────────────
 
 interface RecurrenceProps {
@@ -73,6 +83,7 @@ interface RecurrenceProps {
   /** IVA da recorrência — usado para auto-preencher o drawer de conciliação (Justificar despesa → Contrato/Recorrência) quando o campo ainda estiver vazio. */
   vatRate: number | null;
   vatIncluded: boolean | null;
+  paymentPeriodOffset: PaymentPeriodOffset;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -104,6 +115,7 @@ export class Recurrence {
   readonly pausedAt: Date | null;
   readonly vatRate: number | null;
   readonly vatIncluded: boolean | null;
+  readonly paymentPeriodOffset: PaymentPeriodOffset;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 
@@ -132,6 +144,7 @@ export class Recurrence {
     this.pausedAt = props.pausedAt;
     this.vatRate = props.vatRate;
     this.vatIncluded = props.vatIncluded;
+    this.paymentPeriodOffset = props.paymentPeriodOffset;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
   }
@@ -156,8 +169,12 @@ export class Recurrence {
     autoCreatePayable?: boolean;
     requireInvoice?: boolean;
     notes?: string | null;
+    paymentPeriodOffset?: PaymentPeriodOffset;
   }): Recurrence {
     Recurrence.validate(props);
+    if (props.paymentPeriodOffset !== undefined && !isPaymentPeriodOffset(props.paymentPeriodOffset)) {
+      throw new Error("paymentPeriodOffset must be 0 or -1");
+    }
 
     // variable_invoice and fiscal always require an invoice
     const requireInvoice =
@@ -194,6 +211,7 @@ export class Recurrence {
       pausedAt: null,
       vatRate: null,
       vatIncluded: null,
+      paymentPeriodOffset: props.paymentPeriodOffset ?? 0,
       createdAt: now,
       updatedAt: now,
     });
@@ -239,8 +257,12 @@ export class Recurrence {
     notes?: string | null;
     vatRate?: number | null;
     vatIncluded?: boolean | null;
+    paymentPeriodOffset?: PaymentPeriodOffset;
   }): Recurrence {
     if (this.status === "closed") throw new RecurrenceClosedError(this.id);
+    if (data.paymentPeriodOffset !== undefined && !isPaymentPeriodOffset(data.paymentPeriodOffset)) {
+      throw new Error("paymentPeriodOffset must be 0 or -1");
+    }
 
     const p = this.toProps();
     if (data.name !== undefined) p.name = data.name.trim();
@@ -263,6 +285,7 @@ export class Recurrence {
     if (data.notes !== undefined) p.notes = data.notes;
     if (data.vatRate !== undefined) p.vatRate = data.vatRate;
     if (data.vatIncluded !== undefined) p.vatIncluded = data.vatIncluded;
+    if (data.paymentPeriodOffset !== undefined) p.paymentPeriodOffset = data.paymentPeriodOffset;
 
     // requireInvoice and autoCreatePayable: only update if type allows it
     const newRequireInvoice =
@@ -331,6 +354,7 @@ export class Recurrence {
       pausedAt: this.pausedAt,
       vatRate: this.vatRate,
       vatIncluded: this.vatIncluded,
+      paymentPeriodOffset: this.paymentPeriodOffset,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };

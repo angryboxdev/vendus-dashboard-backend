@@ -57,6 +57,7 @@ export function toRecurrenceDTO(r: Recurrence): RecurrenceDTO {
     pausedAt: r.pausedAt ? toLocalDateString(r.pausedAt) : null,
     vatRate: r.vatRate,
     vatIncluded: r.vatIncluded,
+    paymentPeriodOffset: r.paymentPeriodOffset,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };

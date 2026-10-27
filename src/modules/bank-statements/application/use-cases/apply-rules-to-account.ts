@@ -3,6 +3,7 @@ import type { BankReconciliationRule } from "../../domain/entities/bank-reconcil
 import { AutoMatchingService } from "../../domain/services/auto-matching.service.js";
 import type { BankMovementRepositoryPort } from "../../domain/ports/out/bank-movement-repository.port.js";
 import type { BankStatementImportRepositoryPort } from "../../domain/ports/out/bank-statement-import-repository.port.js";
+import { linkRuleRecurrences, reopenSettled, type RecurrenceLinkingDeps } from "./rule-recurrence-linking.js";
 
 /** Cobre todo o histórico de uma conta (datas de movimento). */
 const ALL_HISTORY_FROM = new Date("2000-01-01T00:00:00.000Z");
@@ -16,7 +17,7 @@ const UPDATE_BATCH = 20;
  * de ano calculam a conciliação pelos movimentos. Devolve quantos movimentos ficaram conciliados.
  */
 export async function applyRulesToAccount(
-  deps: { movementRepo: BankMovementRepositoryPort; statementRepo: BankStatementImportRepositoryPort },
+  deps: { movementRepo: BankMovementRepositoryPort; statementRepo: BankStatementImportRepositoryPort; recurrenceLinking?: RecurrenceLinkingDeps },
   organizationId: OrganizationId,
   bankAccountId: string,
   rules: BankReconciliationRule[],
@@ -29,10 +30,17 @@ export async function applyRulesToAccount(
   const statementIds = [...new Set(matches.map((m) => m.updated.statementImportId))];
   const statements = await Promise.all(statementIds.map((id) => deps.statementRepo.findById(organizationId, id)));
   const closed = new Set(statements.filter((s) => s?.status === "closed").map((s) => s!.id));
-  const toUpdate = matches.map((m) => m.updated).filter((m) => !closed.has(m.statementImportId));
+  const open = matches.filter((m) => !closed.has(m.updated.statementImportId));
+  const linked = await linkRuleRecurrences(organizationId, open, deps.recurrenceLinking);
+  const toUpdate = linked.matches.map((m) => m.updated);
 
-  for (let i = 0; i < toUpdate.length; i += UPDATE_BATCH) {
-    await Promise.all(toUpdate.slice(i, i + UPDATE_BATCH).map((m) => deps.movementRepo.update(organizationId, m)));
+  try {
+    for (let i = 0; i < toUpdate.length; i += UPDATE_BATCH) {
+      await Promise.all(toUpdate.slice(i, i + UPDATE_BATCH).map((m) => deps.movementRepo.update(organizationId, m)));
+    }
+  } catch (e) {
+    await reopenSettled(organizationId, linked.settled, deps.recurrenceLinking);
+    throw e;
   }
   return toUpdate.length;
 }

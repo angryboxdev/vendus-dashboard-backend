@@ -28,6 +28,48 @@ export interface SettleOccurrenceFromBankPort {
   execute(command: SettleOccurrenceFromBankCommand): Promise<SettleOccurrenceFromBankResult>;
 }
 
+/**
+ * «Movimento recorrente» ligado a uma recorrência (conciliação automática de rendas e salários): escolhe a
+ * ocorrência do mês a que o pagamento se refere (mês do movimento + `paymentPeriodOffset`), gerando-a se
+ * ainda não existir, e deixa-a paga. Só esse mês — nunca outro: um segundo pagamento no mesmo mês (ex.:
+ * adiantamento) não vai pagar o mês seguinte por engano; fica «Por conciliar» para decidir à mão.
+ */
+export interface SettleRecurrenceFromBankCommand {
+  organizationId: OrganizationId;
+  recurrenceId: string;
+  movementId: string;
+  /** Data do movimento (YYYY-MM-DD). */
+  paidAt: string;
+  bankAccountId: string | null;
+}
+
+/**
+ * - `paid`: a ocorrência estava em aberto e ficou paga por este movimento.
+ * - `linked`: já estava paga à mão e sem nenhum movimento — o movimento liga-se sem mexer no pagamento.
+ * - `not_applicable`: recorrência inexistente/com fatura, mês fora do período, ocorrência cancelada, com
+ *   fatura ou já paga por outro movimento → o movimento fica «Por conciliar».
+ */
+export type SettleRecurrenceFromBankResult =
+  | { result: "paid" | "linked"; occurrenceId: string; period: string }
+  | { result: "not_applicable"; reason: "not_found" | "invoice_required" | "no_occurrence" | "not_open" };
+
+export interface SettleRecurrenceFromBankPort {
+  execute(command: SettleRecurrenceFromBankCommand): Promise<SettleRecurrenceFromBankResult>;
+}
+
+/** Resumo de uma recorrência para validar uma regra que a liga («Movimentos recorrentes»). */
+export interface RecurrenceForBankRuleDTO {
+  id: string;
+  name: string;
+  status: "active" | "paused" | "closed";
+  requireInvoice: boolean;
+  paymentPeriodOffset: 0 | -1;
+}
+
+export interface GetRecurrenceForBankRulePort {
+  execute(command: { organizationId: OrganizationId; recurrenceId: string }): Promise<RecurrenceForBankRuleDTO | null>;
+}
+
 export interface ReopenOccurrenceFromBankCommand {
   organizationId: OrganizationId;
   occurrenceId: string;
