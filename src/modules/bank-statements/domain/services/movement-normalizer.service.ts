@@ -20,19 +20,24 @@ export type MovementKind =
   | "reversal"
   | "to_review";
 
+/** Plataforma de entrega que fez a liquidação (só em créditos de vendas). */
+export type DeliveryPlatform = "uber_eats" | "glovo" | "bolt_food";
+
 export interface NormalizedMovement {
   normalizedDescription: string;
   kind: MovementKind;
+  /** Liquidação de uma plataforma de entrega (já sem a comissão da plataforma). */
+  platform?: DeliveryPlatform;
 }
 
 const UTILITIES = /\b(EDP|GALP|ENDESA|IBERDROLA|GOLD ?ENERGY|GOLDENERGY|AGUAS|ÁGUAS|EPAL|INDAQUA|SMAS|NOS|MEO|VODAFONE|NOWO|DIGI)\b/i;
 const INSURANCE = /\b(GENERALI|FIDELIDADE|ALLIANZ|AGEAS|TRANQUILIDADE|OCIDENTAL|ZURICH|MAPFRE|LIBERTY|LUSITANIA|CA SEGUROS|SEGUROS?)\b/i;
 const STATE = /\b(PAG\.?\s?DUC|PAG\.?\s?IGCP|AUTORIDADE TRIBUTARIA|SEG(URANCA)? SOCIAL|TAXA SOCIAL UNICA|INSTITUTO (DE )?GESTAO|INSTITUTO (DOS )?REGISTOS|IGFSS|FINANCAS|PORTAL DAS FINANCAS)\b/i;
-const SALES_PLATFORMS: [RegExp, string][] = [
-  [/UBER\s+PAYMENTS|STICHTING CUSTODIAN UBER/i, "Uber Eats"],
-  [/\bBOLT OPERATIONS\b/i, "Bolt"],
+const SALES_PLATFORMS: [RegExp, string, DeliveryPlatform?][] = [
+  [/UBER\s+PAYMENTS|STICHTING CUSTODIAN UBER/i, "Uber Eats", "uber_eats"],
+  [/\bBOLT OPERATIONS\b/i, "Bolt", "bolt_food"],
   [/^STRIPE\b/i, "Stripe"],
-  [/\bGLOVO(APP)?\b/i, "Glovo"],
+  [/\bGLOVO(APP)?\b/i, "Glovo", "glovo"],
   [/\bUNICRE\b/i, "Unicre"],
 ];
 
@@ -66,7 +71,9 @@ export function normalizeMovement(description: string, type: MovementType): Norm
   if (type === "credit") {
     const tpa = /^CREDITO TPA\b.*?(\d{5,})/.exec(up);
     if (tpa || /^CREDITO TPA\b/.test(up)) return { normalizedDescription: tpa ? `Vendas TPA (terminal ${tpa[1]})` : "Vendas TPA", kind: "sales" };
-    for (const [re, name] of SALES_PLATFORMS) if (re.test(d)) return { normalizedDescription: `Recebimento ${name}`, kind: "sales" };
+    for (const [re, name, platform] of SALES_PLATFORMS) {
+      if (re.test(d)) return { normalizedDescription: `Recebimento ${name}`, kind: "sales", ...(platform ? { platform } : {}) };
+    }
     if (/^DEP(OSITO)?\b/.test(up)) return { normalizedDescription: /\bNUM/.test(up) ? "Depósito em numerário" : "Depósito", kind: "deposit" };
     if (/^TRF\.?\s*(DE|P\/O)\b/.test(up)) return { normalizedDescription: `Transferência de ${titleCase(counterpart(d.replace(/^TRF\.?\s*(DE|P\/O)\s*/i, "")))}`, kind: "transfer_in" };
     return { normalizedDescription: titleCase(counterpart(d)), kind: "to_review" };

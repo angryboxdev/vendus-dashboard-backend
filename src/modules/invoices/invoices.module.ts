@@ -81,7 +81,7 @@ import type {
   GetStockPurchaseReviewStatusPort,
   DeleteDraftStockPurchaseReviewPort,
 } from "../stock-purchase-review/domain/ports/in/stock-purchase-review.ports.js";
-import type { ProcessDirectDebitsPort, ListInvoicesPort, ListInvoiceLinesPort, GetInvoicePort } from "./domain/ports/in/invoice.ports.js";
+import type { ProcessDirectDebitsPort, ListInvoicesPort, ListInvoiceLinesPort, GetInvoicePort, GetInvoiceAlertsPort } from "./domain/ports/in/invoice.ports.js";
 import type { Router } from "express";
 
 export interface InvoicesModule {
@@ -92,6 +92,8 @@ export interface InvoicesModule {
   listInvoiceLines: ListInvoiceLinesPort;
   /** Módulo Stock — Compra por rever (D10): revalidação antes de confirmar e varredura de recuperação. */
   getInvoice: GetInvoicePort;
+  /** Módulo cash-flow (D10): faturas por rever no painel «Para tratar». */
+  getInvoiceAlerts: GetInvoiceAlertsPort;
 }
 
 /**
@@ -162,6 +164,7 @@ export function createInvoicesModule(
   const listInvoices = new ListInvoicesUseCase(invoiceRepo, categoryReader, allocationRepo, lineRepo);
   const listInvoiceLines = new ListInvoiceLinesUseCase(lineRepo, invoiceRepo);
   const getInvoice = new GetInvoiceUseCase(invoiceRepo, lineRepo, categoryReader, allocationRepo, amountsWrite);
+  const getInvoiceAlerts = new GetInvoiceAlertsUseCase(invoiceRepo);
 
   // Leitor inteligente (E3): QR + texto do PDF antes da IA; categoria sugerida por linha
   // (IA só no que as regras não resolvem; INVOICE_LINE_AI=off desliga essa parte).
@@ -222,11 +225,11 @@ export function createInvoicesModule(
       new ConfirmImportedInvoiceUseCase(invoiceRepo, lineRepo, payableWrite, supplierCreate, supplierHint, stockDecisionNotify, fiscal, supplierLookup, amountsWrite, audit, stockRouting, categoryReader, allocationRepo, stockLines, supplierLogos),
       recurrenceLink,
     ),
-    getInvoiceAlerts: new GetInvoiceAlertsUseCase(invoiceRepo),
+    getInvoiceAlerts,
     processDirectDebits,
   }, idempotencyStore);
 
-  return { router, processDirectDebits, listInvoices, listInvoiceLines, getInvoice };
+  return { router, processDirectDebits, listInvoices, listInvoiceLines, getInvoice, getInvoiceAlerts };
 }
 
 /** Limite diário de chamadas à IA por organização (todas as funcionalidades). */

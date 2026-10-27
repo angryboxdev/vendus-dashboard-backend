@@ -167,6 +167,7 @@ upload (ver "Decisões de design").
 
 ### Entrada (use cases)
 
+- `GetInvoiceAlertsPort` também é devolvido pelo composition root (`getInvoiceAlerts`, 2026-10-26) para o módulo `cash-flow` mostrar as faturas por rever (`pendingReviewCount`) no painel «Para tratar».
 - `CreateInvoiceUseCase` — criação manual com linhas opcionais; cria payable entry se dueDate presente.
 - `UpdateInvoiceUseCase` — actualiza campos do cabeçalho (inclui novos campos de classificação financeira, incluindo `stockReviewOverride`/`stockReviewOverrideReason`). Quando `invoiceNumber` muda: (1) valida duplicado por NIF (se disponível) ou por `supplierId`; (2) propaga o novo número ao payable entry (`renumberByInvoiceId`) e aos links de conciliação bancária (`renumberLinksForInvoice`). Quando `stockReviewOverride` muda, corre primeiro o guard partilhado contra revisão de stock órfã (ver "Decisões de design").
 - `MarkInvoicePaidUseCase` — transita para `paid` + `reconciliationStatus=pending_reconciliation`; aceita `bankAccountId`, `paymentMethod` e `paymentNotes` opcionais; sincroniza payable entry.
