@@ -457,6 +457,8 @@ do previsto) — eliminando a ambiguidade sem inventar um novo limiar arbitrári
 em cêntimos). Se for "parcial", só a ligação do movimento é criada, e o estado computado
 (`partially_paid`) reflecte isso normalmente até chegar outro movimento.
 
+**D14 — Pagamento pela conciliação bancária (2026-10-27).** `SettleOccurrenceFromBankPort` / `ReopenOccurrenceFromBankPort` (para o bank-statements): um movimento ligado a uma ocorrência deixa-a `paid` (data do movimento, `transfer`, conta do movimento) mesmo com valor diferente do previsto — decisão do utilizador; a diferença continua visível pelos movimentos ligados (`paidAmountCents`/`differenceCents`). A nota do pagamento guarda o id do movimento e só esse movimento a pode reabrir (`reopenPayment`: volta a fatura ligada / à espera de fatura / previsão); pagamentos marcados à mão nunca são desfeitos. Com fatura obrigatória e ainda sem fatura não fica paga (só ligada).
+
 **D13 — Recorrência de salários: colaborador por `employee_id`, nome em `supplier_name`.**
 Uma recorrência de salários é uma por colaborador. Guarda-se `employee_id` (FK composta
 `(org_id, employee_id)` → `hr_employees`, `on delete set null (employee_id)`) e o nome do

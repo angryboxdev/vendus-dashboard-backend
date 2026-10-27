@@ -30,6 +30,11 @@ export class FakePayableEntryWrite implements PayableEntryWritePort {
     this.markedPaid.push({ invoiceId, paidAt });
   }
 
+  readonly reopened: string[] = [];
+  async reopenByInvoiceId(_organizationId: OrganizationId, invoiceId: string): Promise<void> {
+    this.reopened.push(invoiceId);
+  }
+
   async cancelByInvoiceId(_organizationId: OrganizationId, invoiceId: string): Promise<void> {
     this.cancelled.push(invoiceId);
   }

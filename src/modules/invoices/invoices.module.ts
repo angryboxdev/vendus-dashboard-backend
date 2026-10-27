@@ -1,3 +1,5 @@
+import type { ReopenInvoiceFromBankPort, SettleInvoiceFromBankPort } from "./domain/ports/in/bank-payment.ports.js";
+import { ReopenInvoiceFromBankUseCase, SettleInvoiceFromBankUseCase } from "./application/use-cases/invoice-bank-payment.use-cases.js";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import { SupabaseInvoiceRepository } from "./adapters/out/supabase-invoice.repository.js";
 import { SupabaseInvoiceLineRepository } from "./adapters/out/supabase-invoice-line.repository.js";
@@ -95,6 +97,9 @@ export interface InvoicesModule {
   getInvoice: GetInvoicePort;
   /** Módulo cash-flow (D10): faturas por rever no painel «Para tratar». */
   getInvoiceAlerts: GetInvoiceAlertsPort;
+  /** Módulo bank-statements: fatura conciliada por inteiro → paga (conta a pagar e ocorrência acompanham); anulada → reabre. */
+  settleInvoiceFromBank: SettleInvoiceFromBankPort;
+  reopenInvoiceFromBank: ReopenInvoiceFromBankPort;
 }
 
 /**
@@ -230,7 +235,16 @@ export function createInvoicesModule(
     processDirectDebits,
   }, idempotencyStore);
 
-  return { router, processDirectDebits, listInvoices, listInvoiceLines, getInvoice, getInvoiceAlerts };
+  return {
+    router,
+    processDirectDebits,
+    listInvoices,
+    listInvoiceLines,
+    getInvoice,
+    getInvoiceAlerts,
+    settleInvoiceFromBank: new SettleInvoiceFromBankUseCase(invoiceRepo, payableWrite, occurrenceSync),
+    reopenInvoiceFromBank: new ReopenInvoiceFromBankUseCase(invoiceRepo, payableWrite, occurrenceSync),
+  };
 }
 
 /** Limite diário de chamadas à IA por organização (todas as funcionalidades). */

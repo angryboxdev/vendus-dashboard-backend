@@ -1742,7 +1742,13 @@ const bankAccountsModule = createBankAccountsModule();
 app.use("/api", bankAccountsModule.router);
 
 // Bank statements module (hexagonal) — receives bank account read port for auto-linking
-const bankStatementsModule = createBankStatementsModule(bankAccountsModule.accountRepo, financialBaseModule.listSuppliers, bankAccountsModule.resolveStatementAccount);
+const bankStatementsModule = createBankStatementsModule(bankAccountsModule.accountRepo, financialBaseModule.listSuppliers, bankAccountsModule.resolveStatementAccount, {
+  settle: payableRecurrencesModule.settleOccurrenceFromBank,
+  reopen: payableRecurrencesModule.reopenOccurrenceFromBank,
+}, {
+  settle: invoicesModule.settleInvoiceFromBank,
+  reopen: invoicesModule.reopenInvoiceFromBank,
+});
 app.use("/api", bankStatementsModule.router);
 
 // Cash flow module (hexagonal) — «Fluxo de caixa» do Mapa de rentabilidade: entradas vs saídas do

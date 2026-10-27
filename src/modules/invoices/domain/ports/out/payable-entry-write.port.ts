@@ -27,6 +27,9 @@ export interface PayableEntryWritePort {
   /** Marca como pago o payable ligado a esta fatura, se existir. */
   markPaidByInvoiceId(organizationId: OrganizationId, invoiceId: string, paidAt: Date): Promise<void>;
 
+  /** Desfaz o pagamento do payable ligado a esta fatura (conciliação anulada): volta a «pending». */
+  reopenByInvoiceId(organizationId: OrganizationId, invoiceId: string): Promise<void>;
+
   /** Cancela o payable ligado a esta fatura, se existir e não estiver pago. */
   cancelByInvoiceId(organizationId: OrganizationId, invoiceId: string): Promise<void>;
 

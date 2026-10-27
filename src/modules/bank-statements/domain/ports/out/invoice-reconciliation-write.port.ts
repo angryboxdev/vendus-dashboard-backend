@@ -5,7 +5,7 @@ export interface InvoiceReconciliationWritePort {
    * Marca a fatura como totalmente conciliada e, se ainda não estiver paga,
    * marca-a como paga com a data do movimento bancário.
    */
-  markReconciled(organizationId: OrganizationId, invoiceId: string, movementDate: Date): Promise<void>;
+  markReconciled(organizationId: OrganizationId, invoiceId: string, movementDate: Date, bankAccountId?: string | null): Promise<void>;
 
   /**
    * Marca a fatura como parcialmente conciliada (tem links mas não cobre o total).

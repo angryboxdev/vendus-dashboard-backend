@@ -4,6 +4,7 @@ import type { BankMovementEntityLinkRepositoryPort } from "../../domain/ports/ou
 import type { InvoiceMatchReadPort } from "../../domain/ports/out/invoice-match-read.port.js";
 import type { InvoiceReconciliationWritePort } from "../../domain/ports/out/invoice-reconciliation-write.port.js";
 import type { UnreconcileMovementCommand, UnreconcileMovementPort } from "../../domain/ports/in/bank-statement.ports.js";
+import type { OccurrencePaymentPort } from "../../domain/ports/out/occurrence-payment.port.js";
 
 export class UnreconcileMovementUseCase implements UnreconcileMovementPort {
   constructor(
@@ -11,6 +12,8 @@ export class UnreconcileMovementUseCase implements UnreconcileMovementPort {
     private readonly linkRepo: BankMovementEntityLinkRepositoryPort,
     private readonly invoiceRead: InvoiceMatchReadPort,
     private readonly invoiceReconciliationWrite: InvoiceReconciliationWritePort,
+    /** Recorrências: a ocorrência paga por este movimento volta a «por pagar». */
+    private readonly occurrencePayment?: OccurrencePaymentPort,
   ) {}
 
   async execute(command: UnreconcileMovementCommand): Promise<void> {
@@ -27,6 +30,9 @@ export class UnreconcileMovementUseCase implements UnreconcileMovementPort {
     // Delete all entity links and reset the movement
     await this.linkRepo.deleteByMovementId(organizationId, movementId);
     await this.movementRepo.update(organizationId, movement.unreconcile());
+    if (this.occurrencePayment && movement.matchedEntityType === "recurrence_occurrence" && movement.matchedEntityId) {
+      await this.occurrencePayment.reopen(organizationId, { occurrenceId: movement.matchedEntityId, movementId: movement.id });
+    }
 
     // Recompute reconciliation status for previously linked invoices
     if (affectedInvoiceIds.length > 0) {
@@ -50,7 +56,7 @@ export class UnreconcileMovementUseCase implements UnreconcileMovementPort {
           if (totalAllocated === 0) {
             await this.invoiceReconciliationWrite.markUnreconciled(organizationId, invoiceId);
           } else if (totalAllocated >= inv.totalWithVat - 1) {
-            await this.invoiceReconciliationWrite.markReconciled(organizationId, invoiceId, movement.bookingDate);
+            await this.invoiceReconciliationWrite.markReconciled(organizationId, invoiceId, movement.bookingDate, movement.bankAccountId);
           } else {
             await this.invoiceReconciliationWrite.markPartiallyReconciled(organizationId, invoiceId);
           }
