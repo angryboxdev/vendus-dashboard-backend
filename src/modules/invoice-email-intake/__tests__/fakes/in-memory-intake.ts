@@ -126,7 +126,8 @@ export class FakeAttachmentRepo implements InboundAttachmentRepositoryPort {
 
   async claim(organizationId: OrganizationId, a: InboundAttachment, now: Date) {
     const r = this.rows.find((x) => x.id === a.id && x.organizationId === organizationId);
-    if (!r || r.status !== a.status || r.updatedAt.getTime() !== a.updatedAt.getTime()) return null;
+    // Como o adapter real: condicional ao estado e ao nº de tentativas.
+    if (!r || r.status !== a.status || r.attempts !== a.attempts) return null;
     Object.assign(r, { status: "processing", lockedAt: now, attempts: a.attempts + 1, updatedAt: this.stamp() });
     return { ...r };
   }
