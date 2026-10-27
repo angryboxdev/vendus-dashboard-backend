@@ -75,8 +75,9 @@ tudo **sem IVA**; o objetivo é saber se a empresa dá lucro. Sem AirMenu.
 - **Custos das plataformas:** comissão e marketing sem IVA — linha própria, abatida no resultado; o IVA deles conta como dedutível.
 - **Parâmetros mensais** (`dre_monthly_parameters`; `GET|PUT /reports/dre/parametros`): IVA médio do delivery (15), comissão (30), IVA da comissão (23), comissão sobre a venda com IVA (sim), IVA do marketing (23), taxa do TPA (1, usada na conferência), IVA teórico dos gastos (23) e marketing por plataforma. Mês sem linha → herda as taxas do último mês com linha (sem o marketing); sem nenhuma → valores de omissão (`source`). A base da comissão e o IVA do marketing ficaram parâmetros por confirmar com um extrato real da Uber.
 - **Gastos:** as mesmas saídas e categorias do fluxo de caixa (mesmas exclusões). Sem IVA, pelo melhor que se sabe: (1) categoria sem IVA (tipos financeiros `personnel`, `financial`, `fiscal`; grupo isento se todas as suas categorias o forem) → tudo; (2) **real** — fatura conciliada (linhas «Por artigo» com o seu; repartições com o da fatura), na parte ligada a ela, ou IVA posto no movimento; (3) **estimado** — rácio das últimas 10 faturas da categoria (ex.: Ingredientes ≈ Makro; ponderado pelo valor, sem rascunhos nem anuladas) ou, sem histórico, o IVA teórico do mês para qualquer saída com categoria/grupo; (4) sem categoria → valor total, **«IVA por confirmar»**. Conciliar com a fatura altera logo o valor (calculado na leitura).
-- **Ajustes manuais:** custos fixos e variáveis lançados à mão nas páginas antigas do Mapa (`dre_custos_fixos` / `dre_custos_variaveis`, `valor_sem_iva`), somados.
-- **Resultado** = receita − custos das plataformas − gastos − ajustes; **margem** = resultado ÷ receita.
+- **Só o extrato bancário (decisão do utilizador, 2026-10-27).** Os custos fixos/variáveis lançados à mão (`dre_custos_fixos` / `dre_custos_variaveis`) deixaram de entrar: duplicavam pagamentos do banco (os fixos foram apagados, com cópia). Gastos pelas **linhas da DRE** (`expenses.sections`): com fatura conciliada (ou categoria no movimento), o tipo financeiro da categoria — CMV, custos variáveis, pessoal, estrutura, administrativo, marketing, financeiro, CAPEX; sem fatura, a classificação genérica do extrato (`SECTION_BY_MOVEMENT_KIND`: vencimentos → pessoal, energia/água/telecom → estrutura, seguros → administrativo, taxas bancárias → financeiro; o resto em «Outros gastos pelo extrato», pelo tipo do banco). **CAPEX** aparece mas fica fora do resultado.
+- **Resultado** = receita − custos das plataformas − gastos (sem CAPEX); **margem** = resultado ÷ receita. A cascata (receita bruta → líquida → lucro bruto → margem de contribuição → resultado operacional → lucro líquido) é montada no frontend com as secções.
+- **Vendas do restaurante à parte** (`GET /reports/dre/vendas-restaurante`, `GetDreRestaurantSalesPort`): só o Vendus do mês (sem IVA, por cartão/dinheiro/outros) — o Mapa pede-o em paralelo com a DRE rápida e mostra cada parte quando chega.
 - **Pedido rápido** (`?restaurante=0`, `withRestaurantSales: false`): sem as vendas do Vendus (≈ 4 s em vez de até um minuto); `restaurantSalesLoaded: false`, `resultCents` e `marginPct` = null. O Mapa pede os dois em paralelo e mostra os custos enquanto as vendas carregam.
 - **IVA:** das vendas (Vendus + plataformas reconstituídas) − dedutível (gastos real + estimado, comissões e marketing) = estimativa a entregar; `purchasesEstimatedCents` diz quanto é estimado.
 
@@ -99,6 +100,7 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 - `GetDrePort` — DRE do mês (`{ organizationId, year, month }`).
 - `GetSalesReconciliationPort` — conferência de vendas do mês (`{ organizationId, year, month }`).
 - `GetDreParametersPort` / `SaveDreParametersPort` — parâmetros mensais da DRE (ler resolvidos; gravar validados).
+- `GetDreRestaurantSalesPort` — só as vendas do restaurante do mês (Vendus) para a DRE.
 
 - `GetCashFlowPort` — relatório do mês (`{ organizationId, year, month }`).
 - `GetCashFlowToHandlePort` — painel «Para tratar» (`{ organizationId }`).
@@ -114,14 +116,13 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 - `RestaurantSalesReadPort` — vendas do restaurante (sem IVA + IVA, bruto por classe de pagamento) num intervalo.
 - `DreParametersRepositoryPort` — parâmetros do mês e do último mês anterior com valores; gravar.
 - `CategoryVatRatioReadPort` — rácio sem IVA das últimas faturas de cada categoria.
-- `ManualAdjustmentsReadPort` — custos fixos/variáveis lançados à mão no mês.
 - `RestaurantDailyPaymentsReadPort` — vendas do restaurante por dia em cartão e numerário (Vendus).
 
 ## Adapters
 
 ### Entrada
 
-- `CashFlowController` → `GET /reports/dre/fluxo-caixa`, `GET /reports/dre/resultado`, `GET /reports/dre/conferencia-vendas` e `GET /reports/dre/parametros` (permissão `dre.statement`, READ), `PUT /reports/dre/parametros` (`dre.statement`, MANAGE) e `GET /reports/dre/fluxo-caixa/para-tratar` (permissão `finance.payables`, READ).
+- `CashFlowController` → `GET /reports/dre/fluxo-caixa`, `GET /reports/dre/resultado`, `GET /reports/dre/conferencia-vendas`, `GET /reports/dre/vendas-restaurante` e `GET /reports/dre/parametros` (permissão `dre.statement`, READ), `PUT /reports/dre/parametros` (`dre.statement`, MANAGE) e `GET /reports/dre/fluxo-caixa/para-tratar` (permissão `finance.payables`, READ).
 
 ### Saída
 
@@ -132,7 +133,6 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 - `PayableEntriesSummaryAdapter` → `GetPayableSummaryPort` do módulo `payable-entries`.
 - `InvoiceAlertsToReviewAdapter` → `GetInvoiceAlertsPort` do módulo `invoices`.
 - `VendusRestaurantSalesAdapter` → `GetSummaryPort` do módulo `vendus` (euros → cêntimos; sem o canal «apps»; bruto por classe de `byPaymentMethod`).
-- `SupabaseManualAdjustmentsReadAdapter` → `dre_custos_fixos`, `dre_custos_variaveis` (só leitura).
 - `SupabaseDreParametersRepository` → `dre_monthly_parameters` (a única tabela que este módulo escreve).
 - `SupabaseCategoryVatRatioReadAdapter` → `invoices` (cabeçalho, só leitura; até 2000 mais recentes).
 - `VendusDailyPaymentsAdapter` → `GetSummaryPort` do módulo `vendus` (`analytics.dailyPayments`, euros → cêntimos; Eatz, Apps e outros métodos ficam de fora).
