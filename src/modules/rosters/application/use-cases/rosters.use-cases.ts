@@ -343,17 +343,27 @@ export class RostersUseCases {
    * (`ignoreId`) nunca conta. Devolve o turno incompatível e o troço sobreposto.
    */
   async overlapViolations(org: OrganizationId, candidates: (ShiftState & { ignoreId?: string; rosterId?: string })[]): Promise<Violation[]> {
+    return (await this.overlapsEach(org, candidates)).filter((v): v is Violation => !!v);
+  }
+
+  /** Como `overlapViolations`, mas uma posição por candidato (null = sem sobreposição; folgas nunca têm). */
+  private async overlapsEach(org: OrganizationId, candidates: (ShiftState & { ignoreId?: string; rosterId?: string })[]): Promise<(Violation | null)[]> {
     const live = candidates.filter((c) => c.kind === "shift");
-    if (!live.length) return [];
+    if (!live.length) return candidates.map(() => null);
     const dates = live.map((c) => c.workDate).sort();
     const existing = await this.repo.listShifts(org, { employeeIds: [...new Set(live.map((c) => c.employeeId))], from: plusDays(dates[0]!, -1), to: plusDays(dates.at(-1)!, 1) });
     const ignore = new Set(live.map((c) => c.ignoreId).filter((x): x is string => !!x));
     const pool: CountedShift[] = existing.filter((s) => !s.deleted && !ignore.has(s.id)).map(planned);
     const names = new Map((await this.repo.listRosters(org)).map((r) => [r.id, r.name]));
-    const violations: Violation[] = [];
-    for (const c of live) {
+    const violations: (Violation | null)[] = [];
+    for (const c of candidates) {
+      if (c.kind !== "shift") {
+        violations.push(null);
+        continue;
+      }
       const hit = findOverlap(c, pool);
-      if (hit) {
+      if (!hit) violations.push(null);
+      else {
         const o = hit.other;
         const where = o.id ? ` na escala «${(o.rosterId && names.get(o.rosterId)) || "—"}»` : " neste mesmo pedido";
         violations.push({
@@ -517,6 +527,53 @@ export class RostersUseCases {
     await this.recheckAfterInsert(org, actor, created);
     await this.log(org, actor.email, "rosters.shift.bulk", "roster", rosterId, null, { count: created.length, ...input });
     return { created: created.length, warnings: await this.violationsFor(org, new Set(created.map((c) => c.id)), created) };
+  }
+
+  /**
+   * Copiar a semana (`from` … +6) desta escala para a seguinte (+7 dias), em
+   * rascunho: turnos e folgas no estado planeado (rascunho ou publicado).
+   * Nunca mexe num dia da semana seguinte que já tenha algo nesta escala.
+   * Ao contrário da atribuição em massa não é tudo-ou-nada: o que se
+   * sobrepõe a outro turno (noutra escala) ou está fora do âmbito
+   * (`canCopy`) salta e vem na resposta; o resto é copiado. Uma área que
+   * entretanto deixou de ser válida fica «Sem área».
+   */
+  async copyWeek(org: OrganizationId, actor: Actor, rosterId: string, input: { from: string }, canCopy: (employeeId: string) => Promise<boolean> = async () => true) {
+    const roster = await this.roster(org, rosterId);
+    if (!DATE.test(input.from) || !DateTime.fromISO(input.from, { zone: "utc" }).isValid) throw new RosterValidationError("Data inválida.", "from");
+    const to = plusDays(input.from, 6);
+    const [source, target] = await Promise.all([
+      this.repo.listShifts(org, { rosterId, from: input.from, to }),
+      this.repo.listShifts(org, { rosterId, from: plusDays(input.from, 7), to: plusDays(to, 7) }),
+    ]);
+    const key = (employeeId: string, workDate: string) => `${employeeId}|${workDate}`;
+    const filled = new Set(target.filter((s) => !s.deleted).map((s) => key(s.employeeId, s.workDate)));
+    const areas = new Set((await this.repo.listAreas(org)).filter((a) => a.active && (roster.targetType !== "location" || a.locationId === roster.targetId)).map((a) => a.id));
+    const allowed = new Map<string, boolean>();
+    const skipped = { existing: 0, outOfScope: 0, overlap: [] as Violation[] };
+    const rows: (ShiftState & { rosterId: string })[] = [];
+    for (const s of source.filter((x) => !x.deleted)) {
+      const workDate = plusDays(s.workDate, 7);
+      if (filled.has(key(s.employeeId, workDate))) {
+        skipped.existing++;
+        continue;
+      }
+      if (!allowed.has(s.employeeId)) allowed.set(s.employeeId, await canCopy(s.employeeId));
+      if (!allowed.get(s.employeeId)) {
+        skipped.outOfScope++;
+        continue;
+      }
+      const areaId = s.kind === "shift" && s.areaId && areas.has(s.areaId) ? s.areaId : null;
+      rows.push({ rosterId, employeeId: s.employeeId, workDate, kind: s.kind, segments: s.segments, templateId: s.templateId, onCall: s.onCall, areaId });
+    }
+    if (rows.length > MAX_BULK) throw new RosterValidationError(`No máximo ${MAX_BULK} turnos de uma vez.`, "from");
+    const overlaps = await this.overlapsEach(org, rows);
+    skipped.overlap = overlaps.filter((v): v is Violation => !!v);
+    const free = rows.filter((_, i) => !overlaps[i]);
+    const created = free.length ? await this.repo.insertShifts(org, free, actor.email) : [];
+    await this.recheckAfterInsert(org, actor, created);
+    await this.log(org, actor.email, "rosters.shift.copy_week", "roster", rosterId, null, { from: input.from, to: plusDays(to, 7), count: created.length, skipped: { existing: skipped.existing, outOfScope: skipped.outOfScope, overlap: skipped.overlap.length } });
+    return { created: created.length, skipped, warnings: await this.violationsFor(org, new Set(created.map((c) => c.id)), created) };
   }
 
   /**

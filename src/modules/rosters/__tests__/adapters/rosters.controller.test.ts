@@ -93,6 +93,17 @@ describe("API /api/novo-rh/rosters", () => {
     expect((await restored.json()).restored).toHaveLength(2);
   });
 
+  test("POST /:id/copy-week copia a semana para a seguinte; data inválida é 400", async () => {
+    const roster = await (await send("POST", "", { name: "Loja", targetType: "location", targetId: "11111111-1111-4111-8111-111111111111" })).json();
+    await send("POST", `/${roster.id}/shifts`, { employeeId: "e1", workDate: "2026-10-19", segments: [{ start: "10:00", end: "14:00" }] });
+    const copied = await send("POST", `/${roster.id}/copy-week`, { from: "2026-10-19" });
+    expect(copied.status).toBe(201);
+    expect(await copied.json()).toMatchObject({ created: 1, skipped: { existing: 0, outOfScope: 0, overlap: [] } });
+    const next = await (await fetch(`${base}/${roster.id}/shifts?from=2026-10-26&to=2026-11-01`)).json();
+    expect(next.shifts.map((x: { workDate: string }) => x.workDate)).toEqual(["2026-10-26"]);
+    expect((await send("POST", `/${roster.id}/copy-week`, { from: "x" })).status).toBe(400);
+  });
+
   test("Plano de Cobertura: estado, regras (desligado → 409) e cobertura da escala", async () => {
     const PORTO = "11111111-1111-4111-8111-111111111111";
     cov.on = false;
