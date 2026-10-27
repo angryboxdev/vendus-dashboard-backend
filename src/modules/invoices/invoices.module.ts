@@ -46,6 +46,7 @@ import { OpenAiLineCategoryAdapter } from "./adapters/out/openai-line-category.a
 import { ClassifyInvoiceLinesUseCase } from "./application/use-cases/classify-invoice-lines.use-case.js";
 import { MakroLayout } from "./domain/services/reading/makro-layout.js";
 import { TaxCodeLinesLayout } from "./domain/services/reading/tax-code-lines-layout.js";
+import { RateLinesLayout } from "./domain/services/reading/rate-lines-layout.js";
 import { GenericQrLayout } from "./domain/services/reading/generic-qr-layout.js";
 import { ConfirmImportedInvoiceUseCase } from "./application/use-cases/confirm-imported-invoice.use-case.js";
 import { GetInvoiceAlertsUseCase } from "./application/use-cases/get-invoice-alerts.use-case.js";
@@ -177,7 +178,7 @@ export function createInvoicesModule(
     pdf: pdfReader,
     // Layouts específicos primeiro; o genérico serve qualquer fatura com QR fiscal (só se reconciliar).
     // Linhas com código de IVA no fim (ex.: documento de pagamento das águas, 2 faturas fiscais) antes do genérico.
-    layouts: [new MakroLayout(), new TaxCodeLinesLayout(), new GenericQrLayout()],
+    layouts: [new MakroLayout(), new TaxCodeLinesLayout(), new RateLinesLayout(), new GenericQrLayout()],
     readingWrite: new SupabaseInvoiceReadingWriteAdapter(createScopedQuery),
     classifyLines: new ClassifyInvoiceLinesUseCase(
       new SupabaseCategoryCatalogAdapter(createScopedQuery),

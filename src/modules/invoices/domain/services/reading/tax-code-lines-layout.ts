@@ -1,6 +1,7 @@
 import { parseDecimal, toCents } from "../../../../../kernel/money/decimal.js";
 import type { FiscalQr, PdfContent, ReadingIssue, ReadVatRow } from "../../entities/invoice-reading.js";
 import type { InvoiceLayout, LayoutLine, LayoutResult } from "./invoice-layout.js";
+import { dueDateOf } from "./due-date.js";
 import { pageRows, type PdfRow } from "./pdf-rows.js";
 
 /**
@@ -74,31 +75,6 @@ function lineOf(r: PdfRow, index: number): LayoutLine | null {
     notes: [],
     rawText: ws.join(" "),
   };
-}
-
-const DUE_LABEL = /(d[ée]bito a partir de|data limite( de pagamento)?|data de vencimento|pagar at[ée])/i;
-const PT_DATE = /^(\d{2})[/-](\d{2})[/-](\d{4})$/;
-
-/** Prazo/débito impresso perto da etiqueta (mesma linha ou a seguinte, ~mesma coluna), como YYYY-MM-DD. */
-function dueDateOf(content: PdfContent): string | null {
-  for (const page of content.pages) {
-    const rows = pageRows(page);
-    for (let i = 0; i < rows.length; i++) {
-      const text = rows[i]!.words.map((w) => w.text).join(" ");
-      const label = DUE_LABEL.exec(text);
-      if (!label) continue;
-      const x0 = rows[i]!.words[0]!.x;
-      const candidates = [rows[i]!.words, rows[i + 1]?.words.filter((w) => Math.abs(w.x - x0) < 80) ?? []];
-      for (const ws of candidates) {
-        for (const w of ws) {
-          if (DATE.test(w.text)) return w.text;
-          const pt = PT_DATE.exec(w.text);
-          if (pt) return `${pt[3]}-${pt[2]}-${pt[1]}`;
-        }
-      }
-    }
-  }
-  return null;
 }
 
 export class TaxCodeLinesLayout implements InvoiceLayout {
