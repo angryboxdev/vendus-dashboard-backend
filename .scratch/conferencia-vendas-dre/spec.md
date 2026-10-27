@@ -46,10 +46,10 @@ sobre a venda com ou sem IVA e se o marketing leva IVA. Validar com o contabilis
 2. **F2 — Conferência Vendus × banco** ✅ backend (sem migração; `GET /api/reports/dre/conferencia-vendas`) — vista diária: cartão vendido × crédito TPA (cada crédito
    cobre os dias desde o anterior; diferença, taxa implícita vs 1%); numerário vendido × depósitos.
    Novos nomes das entradas do banco.
-3. **F3 — Parâmetros mensais + DRE** ✅ (migração `20261204100000_dre_monthly_parameters`, por aplicar; `GET|PUT /api/reports/dre/parametros`; base da comissão e IVA do marketing ficaram parâmetros) — tabela de parâmetros por mês (IVA delivery,
+3. **F3 — Parâmetros mensais + DRE** ✅ (migração `20261204100000_dre_monthly_parameters`, aplicada em produção 2026-10-27; `GET|PUT /api/reports/dre/parametros`; base da comissão e IVA do marketing ficaram parâmetros) — tabela de parâmetros por mês (IVA delivery,
    comissão, IVA comissão, taxa TPA, IVA teórico de serviços) e marketing manual por plataforma;
    delivery em bruto sem AirMenu; receita separada por linha; IVA dos gastos por prioridade.
-4. **F4 — Frontend** — conferência, lançamento de parâmetros/marketing, DRE com margem por plataforma.
+4. **F4 — Frontend** ✅ — página «Conferência de vendas», painel «Parâmetros do mês» no Mapa, DRE com margem por plataforma.
 
 ## Perguntas em aberto
 

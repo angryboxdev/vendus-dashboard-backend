@@ -22,4 +22,4 @@ Ver «Conceitos de domínio» e «Decisões de design» no README do módulo.
 Mês incompleto se faltar importar o extrato de alguma conta (sem aviso).
 
 ## Próximos trabalhos
-Validar a DRE e o fluxo de caixa com dados reais; push/PR. Conferência de vendas (F2 de `.scratch/conferencia-vendas-dre/spec.md`, ramo `financeiro-conferencia-vendas`): backend feito; F3 feita (parâmetros mensais `dre_monthly_parameters` — migração por aplicar; delivery em bruto na DRE sem AirMenu; IVA estimado dos gastos); falta o ecrã da conferência e dos parâmetros (F4).
+Validar a DRE e o fluxo de caixa com dados reais; push/PR. Conferência de vendas (F2 de `.scratch/conferencia-vendas-dre/spec.md`, ramo `financeiro-conferencia-vendas`): backend feito; F3 feita (parâmetros mensais `dre_monthly_parameters` — migração aplicada em produção 2026-10-27; delivery em bruto na DRE sem AirMenu; IVA estimado dos gastos); F4 feita (ecrãs da conferência e dos parâmetros); falta validar com dados reais e PR.
