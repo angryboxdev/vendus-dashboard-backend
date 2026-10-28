@@ -1,4 +1,5 @@
-import type { DreReport } from "../../domain/entities/dre.js";
+import type { DreEntries, DreReport } from "../../domain/entities/dre.js";
+import type { GetDreEntriesPort } from "../../domain/ports/in/get-dre-entries.port.js";
 import type { GetDrePort } from "../../domain/ports/in/get-dre.port.js";
 import type { BankMovementReadPort } from "../../domain/ports/out/bank-movement-read.port.js";
 import { CATEGORY_VAT_SAMPLE, type CategoryVatRatioReadPort } from "../../domain/ports/out/category-vat-ratio-read.port.js";
@@ -8,48 +9,50 @@ import type { ExpenseSourceReadPort } from "../../domain/ports/out/expense-sourc
 import type { MovementKindPort } from "../../domain/ports/out/movement-kind.port.js";
 import type { RestaurantSalesReadPort } from "../../domain/ports/out/restaurant-sales-read.port.js";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
-import { cashFlowPeriod } from "../../domain/services/cash-flow-period.js";
+import { cashFlowPeriod, drePaymentsWindow } from "../../domain/services/cash-flow-period.js";
 import { resolveDreParameters } from "../../domain/services/dre-parameters.service.js";
-import { buildDreReport } from "../../domain/services/dre-report.service.js";
+import { buildDreEntries, buildDreReport, type BuildDreInput } from "../../domain/services/dre-report.service.js";
 import { collectExpenseReferences } from "../../domain/services/expense-categorizer.service.js";
 
 /** Sem as vendas do restaurante (pedido rápido): receita do restaurante a zero, assinalada no relatório. */
 const NO_RESTAURANT_SALES = { netCents: 0, vatCents: 0, byPaymentGrossCents: { card: 0, cash: 0, other: 0 } };
 
-export class GetDreUseCase implements GetDrePort {
+type DreQuery = { organizationId: OrganizationId; year: number; month: number };
+
+/** Junta o que a DRE precisa: pagamentos da janela (competência), entradas do mês, documentos, catálogo, taxas. */
+class DreInputLoader {
   constructor(
     private readonly bankMovements: BankMovementReadPort,
     private readonly expenseSources: ExpenseSourceReadPort,
     private readonly catalog: CostCenterCatalogReadPort,
     private readonly movementKind: MovementKindPort,
-    private readonly restaurantSales: RestaurantSalesReadPort,
+    private readonly restaurantSales: RestaurantSalesReadPort | null,
     private readonly parameters: DreParametersRepositoryPort,
     private readonly categoryVatRatios: CategoryVatRatioReadPort,
-    /** Hoje, YYYY-MM-DD (injetado para os testes). */
-    private readonly today: () => string = () => new Date().toISOString().slice(0, 10),
+    private readonly today: () => string,
   ) {}
 
-  async execute({
-    organizationId,
-    year,
-    month,
-    withRestaurantSales = true,
-  }: { organizationId: OrganizationId; year: number; month: number; withRestaurantSales?: boolean }): Promise<DreReport> {
-    const { from, to, isCurrentMonth } = cashFlowPeriod(year, month, this.today());
+  async load({ organizationId, year, month }: DreQuery, withRestaurantSales: boolean): Promise<BuildDreInput> {
+    const today = this.today();
+    const { from, to, isCurrentMonth } = cashFlowPeriod(year, month, today);
+    const window = drePaymentsWindow(year, month, today);
 
     const [catalog, storedDebits, storedCredits, restaurant, stored, categoryNetRatios] = await Promise.all([
       this.catalog.load(organizationId),
-      this.bankMovements.listDebits(organizationId, from, to),
+      this.bankMovements.listDebits(organizationId, window.from, window.to),
       this.bankMovements.listCredits(organizationId, from, to),
-      withRestaurantSales ? this.restaurantSales.sales(organizationId, from, to) : Promise.resolve(NO_RESTAURANT_SALES),
+      withRestaurantSales && this.restaurantSales ? this.restaurantSales.sales(organizationId, from, to) : Promise.resolve(NO_RESTAURANT_SALES),
       this.parameters.forMonth(organizationId, year, month),
       this.categoryVatRatios.recentNetRatios(organizationId, to, CATEGORY_VAT_SAMPLE),
     ]);
-    const debits = storedDebits.map(({ description, ...d }) => ({ ...d, kind: this.movementKind.describe(description, "debit").kind }));
+    const debits = storedDebits.map(({ description, ...d }) => {
+      const n = this.movementKind.describe(description, "debit");
+      return { ...d, kind: n.kind, label: n.label ?? description };
+    });
     const credits = storedCredits.map(({ description, ...c }) => ({ ...c, ...this.movementKind.describe(description, "credit") }));
-    const sources = await this.expenseSources.load(organizationId, collectExpenseReferences(debits));
+    const sources = await this.expenseSources.load(organizationId, collectExpenseReferences(debits, { withOwnCategory: true }));
 
-    return buildDreReport({
+    return {
       period: { year, month, from, to, isCurrentMonth },
       debits,
       credits,
@@ -59,6 +62,51 @@ export class GetDreUseCase implements GetDrePort {
       restaurantSalesLoaded: withRestaurantSales,
       parameters: resolveDreParameters(stored.own, stored.previous),
       categoryNetRatios,
-    });
+    };
+  }
+}
+
+export class GetDreUseCase implements GetDrePort {
+  private readonly loader: DreInputLoader;
+
+  constructor(
+    bankMovements: BankMovementReadPort,
+    expenseSources: ExpenseSourceReadPort,
+    catalog: CostCenterCatalogReadPort,
+    movementKind: MovementKindPort,
+    restaurantSales: RestaurantSalesReadPort,
+    parameters: DreParametersRepositoryPort,
+    categoryVatRatios: CategoryVatRatioReadPort,
+    /** Hoje, YYYY-MM-DD (injetado para os testes). */
+    today: () => string = () => new Date().toISOString().slice(0, 10),
+  ) {
+    this.loader = new DreInputLoader(bankMovements, expenseSources, catalog, movementKind, restaurantSales, parameters, categoryVatRatios, today);
+  }
+
+  async execute({ withRestaurantSales = true, ...query }: DreQuery & { withRestaurantSales?: boolean }): Promise<DreReport> {
+    return buildDreReport(await this.loader.load(query, withRestaurantSales));
+  }
+}
+
+/** Os pagamentos por trás de cada rubrica da DRE (sem as vendas do Vendus, que não são precisas). */
+export class GetDreEntriesUseCase implements GetDreEntriesPort {
+  private readonly loader: DreInputLoader;
+
+  constructor(
+    bankMovements: BankMovementReadPort,
+    expenseSources: ExpenseSourceReadPort,
+    catalog: CostCenterCatalogReadPort,
+    movementKind: MovementKindPort,
+    parameters: DreParametersRepositoryPort,
+    categoryVatRatios: CategoryVatRatioReadPort,
+    /** Hoje, YYYY-MM-DD (injetado para os testes). */
+    today: () => string = () => new Date().toISOString().slice(0, 10),
+  ) {
+    this.loader = new DreInputLoader(bankMovements, expenseSources, catalog, movementKind, null, parameters, categoryVatRatios, today);
+  }
+
+  async execute(query: DreQuery): Promise<DreEntries> {
+    const input = await this.loader.load(query, false);
+    return { period: input.period, entries: buildDreEntries(input) };
   }
 }

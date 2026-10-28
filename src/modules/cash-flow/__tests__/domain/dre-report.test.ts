@@ -1,4 +1,4 @@
-import { buildDreReport, type BuildDreInput } from "../../domain/services/dre-report.service.js";
+import { buildDreEntries, buildDreReport, type BuildDreInput } from "../../domain/services/dre-report.service.js";
 import { resolveDreParameters } from "../../domain/services/dre-parameters.service.js";
 import { DEFAULT_DRE_PARAMETERS } from "../../domain/entities/dre-parameters.js";
 import { countedDebits } from "../../domain/services/cash-flow-report.service.js";
@@ -233,5 +233,77 @@ describe("buildDreReport", () => {
     const loan = { justificationType: "emprestimo_financiamento", reconciliationStatus: "justificado" } as const;
     const debits = [debit({ id: "juros", amountCents: 3_000, categoryId: "c-sal", ...loan })];
     expect(countedDebits(debits, emptySources(), catalog)).toEqual([]);
+  });
+
+  it("competência: conta no mês da fatura (ou no mês da recorrência), não no do pagamento", () => {
+    const sources = emptySources();
+    sources.invoices.set("out", { mode: "simple", netRatio: 1, groupId: null, categoryId: "c-ing", allocations: [], lines: [], date: "2026-10-30" });
+    sources.invoices.set("set", { mode: "simple", netRatio: 1, groupId: null, categoryId: "c-ing", allocations: [], lines: [], date: "2026-09-30" });
+    sources.occurrences.set("sal-out", { invoiceId: null, groupId: "g-pes", categoryId: "c-sal", period: "2026-10", label: "Salários" });
+    const report = buildDreReport(
+      input({
+        sources,
+        debits: [
+          // fatura de outubro paga em novembro → outubro
+          debit({ id: "a", date: "2026-11-10", amountCents: 1_000, links: [{ entityType: "invoice", entityId: "out", amountCents: 1_000 }] }),
+          // fatura de setembro paga em outubro → setembro (fora)
+          debit({ id: "b", date: "2026-10-05", amountCents: 2_000, links: [{ entityType: "invoice", entityId: "set", amountCents: 2_000 }] }),
+          // salários de outubro pagos a 3 de novembro → outubro
+          debit({ id: "c", date: "2026-11-03", amountCents: 30_000, matchedEntityType: "recurrence_occurrence", matchedEntityId: "sal-out" }),
+          // sem documento: pela data do pagamento
+          debit({ id: "d", date: "2026-10-20", amountCents: 400, categoryId: "c-sal" }),
+          debit({ id: "e", date: "2026-11-02", amountCents: 999, categoryId: "c-sal" }),
+        ],
+      }),
+    );
+    expect(report.expenses.totalNetCents).toBe(1_000 + 30_000 + 400);
+  });
+
+  it("fora da operação: retiradas de sócios e capital de empréstimos num bloco à parte, fora do resultado; o IVA não aparece", () => {
+    const offCatalog = {
+      ...catalog,
+      // Como no catálogo predefinido: IVA (FDR.03) é «fiscal».
+      categories: [
+        ...catalog.categories.map((c) => (c.id === "c-iva" ? { ...c, financialType: "fiscal" } : c)),
+        { id: "c-ret", groupId: "g-fdr", code: "FDR.01", name: "Retirada de sócios", financialType: "off_dre" },
+      ],
+    };
+    const report = buildDreReport(
+      input({
+        catalog: offCatalog,
+        restaurant: { netCents: 100_000, vatCents: 0, byPaymentGrossCents: noPayments },
+        debits: [
+          debit({ id: "a", amountCents: 20_000, categoryId: "c-ret" }),
+          debit({ id: "b", amountCents: 50_000, justificationType: "emprestimo_financiamento", reconciliationStatus: "justificado" }),
+          debit({ id: "c", amountCents: 7_000, categoryId: "c-iva" }),
+          debit({ id: "d", amountCents: 9_000, justificationType: "transferencia_interna", reconciliationStatus: "transferencia_interna" }),
+        ],
+      }),
+    );
+    expect(report.expenses.totalNetCents).toBe(0);
+    expect(report.resultCents).toBe(100_000);
+    expect(report.expenses.offOperation).toEqual({
+      totalCents: 70_000,
+      items: [
+        { key: "loan", categoryId: null, code: null, name: "Empréstimos (capital)", movementKind: null, netCents: 50_000 },
+        { key: "c-ret", categoryId: "c-ret", code: "FDR.01", name: "Retirada de sócios", movementKind: null, netCents: 20_000 },
+      ],
+    });
+  });
+
+  it("pagamentos: uma entrada por parte, com a rubrica onde entra e a base do IVA, por data", () => {
+    const entries = buildDreEntries(
+      input({
+        debits: [
+          debit({ id: "a", date: "2026-10-03", amountCents: 12_300, categoryId: "c-ing", label: "Compra com cartão — Mercado" }),
+          debit({ id: "b", date: "2026-10-01", amountCents: 4_000, kind: "card_purchase" }),
+        ],
+      }),
+    );
+    expect(entries.map((e) => [e.movementId, e.section, e.itemKey, e.basis, e.vatBasis, e.netCents])).toEqual([
+      ["b", "unclassified", "kind:card_purchase", "extract", "pending", 4_000],
+      ["a", "cmv", "c-ing", "movement", "estimated", 10_000],
+    ]);
+    expect(entries[1]!.description).toBe("Compra com cartão — Mercado");
   });
 });

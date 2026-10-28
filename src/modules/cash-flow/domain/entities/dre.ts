@@ -145,6 +145,48 @@ export interface DreExpenses {
   sections: DreExpenseSection[];
   /** Investimentos (CAPEX): incluídos em `totalNetCents`, mas fora do resultado. */
   capexNetCents: number;
+  /** Saídas fora da operação (não entram em `totalNetCents` nem no resultado). */
+  offOperation: DreOffOperation;
+}
+
+/**
+ * Fora da operação: o grupo «Fora da DRE» (retiradas de sócios, capital de empréstimos, cauções), pelo
+ * valor pago. Sem as transferências internas nem o IVA (tem o seu painel). O CAPEX fica na sua linha.
+ */
+export interface DreOffOperation {
+  totalCents: number;
+  items: DreSectionItem[];
+}
+
+/** De onde vem o valor sem IVA de um pagamento: isento, IVA real, estimado ou por confirmar. */
+export type DreVatBasis = "exempt" | "real" | "estimated" | "pending";
+
+/** Um pagamento (ou parte dele) por trás de uma rubrica da DRE — para conferir. */
+export interface DreEntry {
+  section: DreSectionKey | "off_operation";
+  /** `DreSectionItem.key` da rubrica. */
+  itemKey: string;
+  movementId: string;
+  /** Data do pagamento no banco. */
+  paidOn: string;
+  /** Data que decide o mês: a do documento conciliado, senão a do pagamento. */
+  competenceDate: string;
+  /** Descrição legível do extrato. */
+  description: string | null;
+  /** Fornecedor e número da fatura (ou nome do contrato recorrente). */
+  document: string | null;
+  /** De onde vem a categoria: o próprio movimento, o documento conciliado ou só o tipo do extrato. */
+  basis: "movement" | "document" | "extract";
+  /** Parte do pagamento, com IVA. */
+  grossCents: number;
+  netCents: number;
+  vatBasis: DreVatBasis;
+}
+
+/** Pagamentos da DRE do mês — contrato de `GET /reports/dre/pagamentos`. */
+export interface DreEntries {
+  period: DreReport["period"];
+  entries: DreEntry[];
 }
 
 export interface DreReport {

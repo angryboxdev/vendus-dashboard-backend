@@ -62,6 +62,8 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/reports\/dre\/(receita-bruta|kpis|fluxo-caixa|resultado|conferencia-vendas|parametros|vendas-restaurante)$/, target: p("dre.statement") },
   // «Para tratar» do fluxo de caixa: totais das contas a pagar e faturas por rever — só quem vê Contas a pagar.
   { pattern: /^\/api\/reports\/dre\/fluxo-caixa\/para-tratar$/, target: p("finance.payables") },
+  // Pagamentos por trás de cada rubrica da DRE: mostra o descritivo dos movimentos — só quem vê Bancos.
+  { pattern: /^\/api\/reports\/dre\/pagamentos$/, target: p("finance.banking", "READ") },
   { pattern: /^\/api\/reports\/dre\/custos-fixos(\/|$)/, target: p("dre.fixed_costs") },
   { pattern: /^\/api\/reports\/dre\/custos-variaveis(\/|$)/, target: p("dre.variable_costs") },
 

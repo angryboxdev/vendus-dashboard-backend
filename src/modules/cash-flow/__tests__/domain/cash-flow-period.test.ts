@@ -1,4 +1,4 @@
-import { cashFlowPeriod, daysBetween } from "../../domain/services/cash-flow-period.js";
+import { cashFlowPeriod, daysBetween, drePaymentsWindow } from "../../domain/services/cash-flow-period.js";
 import { InvalidCashFlowPeriodError } from "../../domain/errors.js";
 
 describe("cashFlowPeriod", () => {
@@ -31,5 +31,12 @@ describe("cashFlowPeriod", () => {
 
   it("daysBetween inclui os extremos", () => {
     expect(daysBetween("2026-02-27", "2026-03-01")).toEqual(["2026-02-27", "2026-02-28", "2026-03-01"]);
+  });
+});
+
+describe("drePaymentsWindow", () => {
+  it("do mês anterior até 3 meses depois, sem passar de hoje; atravessa o ano", () => {
+    expect(drePaymentsWindow(2026, 9, "2026-10-16")).toEqual({ from: "2026-08-01", to: "2026-10-16" });
+    expect(drePaymentsWindow(2026, 1, "2027-06-01")).toEqual({ from: "2025-12-01", to: "2026-04-30" });
   });
 });

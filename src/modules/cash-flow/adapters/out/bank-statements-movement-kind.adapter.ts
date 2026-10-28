@@ -5,8 +5,11 @@ import type { MovementKindPort } from "../../domain/ports/out/movement-kind.port
 export class BankStatementsMovementKindAdapter implements MovementKindPort {
   constructor(private readonly describeMovement: DescribeMovementPort) {}
 
-  describe(description: string, movementType: "debit" | "credit"): { kind: string; platform: string | null; restaurantSale: "card" | "cash" | null } {
+  describe(
+    description: string,
+    movementType: "debit" | "credit",
+  ): { kind: string; platform: string | null; restaurantSale: "card" | "cash" | null; label: string } {
     const n = this.describeMovement.describe(description, movementType);
-    return { kind: n.kind, platform: n.platform ?? null, restaurantSale: n.restaurantSale ?? null };
+    return { kind: n.kind, platform: n.platform ?? null, restaurantSale: n.restaurantSale ?? null, label: n.normalizedDescription };
   }
 }

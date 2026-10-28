@@ -5,6 +5,7 @@ import type { GetDrePort } from "../../domain/ports/in/get-dre.port.js";
 import type { GetSalesReconciliationPort } from "../../domain/ports/in/get-sales-reconciliation.port.js";
 import type { GetDreParametersPort, SaveDreParametersPort } from "../../domain/ports/in/dre-parameters.port.js";
 import type { GetDreRestaurantSalesPort } from "../../domain/ports/in/get-dre-restaurant-sales.port.js";
+import type { GetDreEntriesPort } from "../../domain/ports/in/get-dre-entries.port.js";
 import type { DreParameters } from "../../domain/entities/dre-parameters.js";
 import { InvalidCashFlowPeriodError, InvalidDreParametersError } from "../../domain/errors.js";
 
@@ -19,6 +20,7 @@ export class CashFlowController {
     private readonly getDreParameters: GetDreParametersPort,
     private readonly saveDreParameters: SaveDreParametersPort,
     private readonly getDreRestaurantSales: GetDreRestaurantSalesPort,
+    private readonly getDreEntries: GetDreEntriesPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -128,6 +130,28 @@ export class CashFlowController {
           withRestaurantSales: req.query["restaurante"] !== "0",
         });
         res.json(result);
+      } catch (e: unknown) {
+        if (e instanceof InvalidCashFlowPeriodError) {
+          res.status(400).json({ error: e.message });
+          return;
+        }
+        const msg = e instanceof Error ? e.message : "Internal error";
+        res.status(500).json({ error: msg });
+      }
+    });
+
+    /**
+     * GET /reports/dre/pagamentos?year=&month=
+     * Os pagamentos por trás de cada rubrica da DRE (descrição do extrato, documento, data do pagamento
+     * e da competência). Permissão de Bancos (`finance.banking`): mostra o descritivo dos movimentos.
+     */
+    this.router.get("/reports/dre/pagamentos", async (req, res) => {
+      try {
+        res.json(await this.getDreEntries.execute({
+          organizationId: req.auth!.orgId,
+          year: Number(req.query["year"]),
+          month: Number(req.query["month"]),
+        }));
       } catch (e: unknown) {
         if (e instanceof InvalidCashFlowPeriodError) {
           res.status(400).json({ error: e.message });

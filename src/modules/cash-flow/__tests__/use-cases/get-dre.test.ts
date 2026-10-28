@@ -1,5 +1,5 @@
 import { mintOrganizationId } from "../../../../kernel/organization-id.js";
-import { GetDreUseCase } from "../../application/use-cases/get-dre.use-case.js";
+import { GetDreEntriesUseCase, GetDreUseCase } from "../../application/use-cases/get-dre.use-case.js";
 import type { StoredBankCredit, StoredBankDebit } from "../../domain/ports/out/bank-movement-read.port.js";
 import { DEFAULT_DRE_PARAMETERS } from "../../domain/entities/dre-parameters.js";
 import { InvalidCashFlowPeriodError } from "../../domain/errors.js";
@@ -11,6 +11,7 @@ function useCase(debits: StoredBankDebit[], credits: StoredBankCredit[]) {
   const calls: Record<string, unknown[]> = { restaurant: [], parameters: [], ratios: [] };
   const sources = emptySources();
   sources.invoices.set("makro", { mode: "simple", netRatio: 100 / 123, groupId: null, categoryId: "c-ing", allocations: [], lines: [] });
+  sources.invoices.set("makro-set", { mode: "simple", netRatio: 100 / 123, groupId: null, categoryId: "c-ing", allocations: [], lines: [], date: "2026-09-28", label: "Fornecedor Teste · FT 9" });
   const uc = new GetDreUseCase(
     {
       listDebits: async (_o, from, to) => debits.filter((d) => d.date >= from && d.date <= to),
@@ -34,7 +35,19 @@ function useCase(debits: StoredBankDebit[], credits: StoredBankCredit[]) {
     { recentNetRatios: async (_o, until, sample) => (calls.ratios!.push([until, sample]), new Map()) },
     () => "2026-10-16",
   );
-  return { uc, calls };
+  const entries = new GetDreEntriesUseCase(
+    {
+      listDebits: async (_o, from, to) => ((calls.debitWindow = [from, to]), debits.filter((d) => d.date >= from && d.date <= to)),
+      listCredits: async () => [],
+    },
+    { load: async () => sources },
+    { load: async () => catalog },
+    { describe: (d) => ({ kind: "transfer_out", platform: null, label: `Legível: ${d}` }) },
+    { forMonth: async () => ({ own: null, previous: null }), save: async () => undefined },
+    { recentNetRatios: async () => new Map() },
+    () => "2026-10-16",
+  );
+  return { uc, calls, entries };
 }
 
 describe("GetDreUseCase", () => {
@@ -68,5 +81,41 @@ describe("GetDreUseCase", () => {
     expect(calls.restaurant).toEqual([]);
     expect(report).toMatchObject({ restaurantSalesLoaded: false, resultCents: null });
     expect(report.revenue.restaurantNetCents).toBe(0);
+  });
+
+  it("mês fechado pela data da fatura: o pagamento de outubro de uma fatura de setembro conta em setembro", async () => {
+    const { kind: _k, ...paid } = debit({ id: "m-out", date: "2026-10-05", amountCents: 12_300, links: [{ entityType: "invoice", entityId: "makro-set", amountCents: 12_300 }] });
+    const { kind: _k2, ...plain } = debit({ id: "m-set", date: "2026-09-10", amountCents: 5_000 });
+    const { uc } = useCase([{ ...paid, description: "TRF P/ FORNECEDOR" }, { ...plain, description: "TRF P/ OUTRO" }], []);
+
+    const september = await uc.execute({ organizationId, year: 2026, month: 9, withRestaurantSales: false });
+    expect(september.expenses.totalNetCents).toBe(10_000 + 5_000);
+
+    const october = await uc.execute({ organizationId, year: 2026, month: 10, withRestaurantSales: false });
+    expect(october.expenses.totalNetCents).toBe(0);
+  });
+
+  it("pagamentos da DRE: rubrica, descrição do extrato, documento e as duas datas", async () => {
+    const { kind: _k, ...paid } = debit({ id: "m-out", date: "2026-10-05", amountCents: 12_300, links: [{ entityType: "invoice", entityId: "makro-set", amountCents: 12_300 }] });
+    const { entries, calls } = useCase([{ ...paid, description: "TRF P/ FORNECEDOR" }], []);
+
+    const r = await entries.execute({ organizationId, year: 2026, month: 9 });
+    // Pagamentos lidos de agosto até hoje (mês + 3 meses, sem passar de hoje)
+    expect(calls.debitWindow).toEqual(["2026-08-01", "2026-10-16"]);
+    expect(r.entries).toEqual([
+      {
+        section: "cmv",
+        itemKey: "c-ing",
+        movementId: "m-out",
+        paidOn: "2026-10-05",
+        competenceDate: "2026-09-28",
+        description: "Legível: TRF P/ FORNECEDOR",
+        document: "Fornecedor Teste · FT 9",
+        basis: "document",
+        grossCents: 12_300,
+        netCents: 10_000,
+        vatBasis: "real",
+      },
+    ]);
   });
 });

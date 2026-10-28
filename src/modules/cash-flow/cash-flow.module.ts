@@ -17,7 +17,7 @@ import { SupabaseDreParametersRepository } from "./adapters/out/supabase-dre-par
 import { SupabaseCategoryVatRatioReadAdapter } from "./adapters/out/supabase-category-vat-ratio-read.adapter.js";
 import { GetCashFlowUseCase } from "./application/use-cases/get-cash-flow.use-case.js";
 import { GetCashFlowToHandleUseCase } from "./application/use-cases/get-cash-flow-to-handle.use-case.js";
-import { GetDreUseCase } from "./application/use-cases/get-dre.use-case.js";
+import { GetDreEntriesUseCase, GetDreUseCase } from "./application/use-cases/get-dre.use-case.js";
 import { GetSalesReconciliationUseCase } from "./application/use-cases/get-sales-reconciliation.use-case.js";
 import { GetDreParametersUseCase, SaveDreParametersUseCase } from "./application/use-cases/dre-parameters.use-case.js";
 import { GetDreRestaurantSalesUseCase } from "./application/use-cases/get-dre-restaurant-sales.use-case.js";
@@ -47,6 +47,7 @@ export function createCashFlowModule(deps: CashFlowModuleDeps): CashFlowModule {
   const catalog = new SupabaseCostCenterCatalogReadAdapter(createScopedQuery);
   const movementKind = new BankStatementsMovementKindAdapter(deps.describeMovement);
   const parameters = new SupabaseDreParametersRepository(createScopedQuery);
+  const categoryVatRatios = new SupabaseCategoryVatRatioReadAdapter(createScopedQuery);
 
   const getCashFlow = new GetCashFlowUseCase(bankMovements, expenseSources, catalog, movementKind);
   const getToHandle = new GetCashFlowToHandleUseCase(
@@ -61,7 +62,7 @@ export function createCashFlowModule(deps: CashFlowModuleDeps): CashFlowModule {
     movementKind,
     restaurantSales,
     parameters,
-    new SupabaseCategoryVatRatioReadAdapter(createScopedQuery),
+    categoryVatRatios,
   );
   const getSalesReconciliation = new GetSalesReconciliationUseCase(
     bankMovements,
@@ -77,6 +78,7 @@ export function createCashFlowModule(deps: CashFlowModuleDeps): CashFlowModule {
     new GetDreParametersUseCase(parameters),
     new SaveDreParametersUseCase(parameters),
     new GetDreRestaurantSalesUseCase(restaurantSales, parameters),
+    new GetDreEntriesUseCase(bankMovements, expenseSources, catalog, movementKind, parameters, categoryVatRatios),
   );
   return { router: controller.router };
 }
