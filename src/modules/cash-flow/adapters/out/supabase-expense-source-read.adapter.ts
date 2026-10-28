@@ -6,8 +6,10 @@ import type {
   ExpenseReferences,
   ExpenseSources,
   InvoiceCategoryData,
+  UnpaidInvoice,
 } from "../../domain/entities/cash-flow.js";
 import type { ExpenseSourceReadPort } from "../../domain/ports/out/expense-source-read.port.js";
+import type { UnpaidInvoicesReadPort } from "../../domain/ports/out/unpaid-invoices-read.port.js";
 
 const IN_CHUNK = 200;
 
@@ -29,12 +31,38 @@ function ratio(net: number, gross: number): number | null {
   return gross > 0 && net >= 0 ? Math.min(1, net / gross) : null;
 }
 
+/** Estados de uma fatura válida ainda não paga. */
+const UNPAID_STATUSES = ["pending", "overdue"];
+
 /**
  * Leitura (só leitura) da categoria dos documentos conciliados: faturas (cabeçalho, linhas,
- * repartições), contas a pagar e ocorrências de recorrência → contrato.
+ * repartições), contas a pagar e ocorrências de recorrência → contrato; e as faturas do mês por pagar.
  */
-export class SupabaseExpenseSourceReadAdapter implements ExpenseSourceReadPort {
+export class SupabaseExpenseSourceReadAdapter implements ExpenseSourceReadPort, UnpaidInvoicesReadPort {
   constructor(private readonly scopedQuery: ScopedQueryFactory) {}
+
+  /** Por pagar e sem movimento conciliado, com competência (`competence_date`, senão `invoice_date`) no intervalo. */
+  async unpaidInvoices(organizationId: OrganizationId, from: string, to: string): Promise<UnpaidInvoice[]> {
+    const base = () =>
+      this.scopedQuery(organizationId)
+        .table("invoices")
+        .select("id, total_with_vat")
+        .in("status", UNPAID_STATUSES)
+        .eq("reconciliation_status", "none")
+        .gt("total_with_vat", 0);
+    const [withCompetence, byInvoiceDate] = await Promise.all([
+      base().gte("competence_date", from).lte("competence_date", to),
+      base().is("competence_date", null).gte("invoice_date", from).lte("invoice_date", to),
+    ]);
+    for (const r of [withCompetence, byInvoiceDate]) if (r.error) throw new Error(r.error.message);
+    const rows = [...(withCompetence.data ?? []), ...(byInvoiceDate.data ?? [])] as unknown as { id: string; total_with_vat: number | string }[];
+    const data = await this.invoices(organizationId, rows.map((r) => r.id));
+    return rows.flatMap((r) => {
+      const d = data.get(r.id);
+      // Valores das faturas já em cêntimos (bigint).
+      return d ? [{ id: r.id, totalCents: Math.round(Number(r.total_with_vat)), data: d }] : [];
+    });
+  }
 
   async load(organizationId: OrganizationId, refs: ExpenseReferences): Promise<ExpenseSources> {
     const [payableRows, occurrenceRows] = await Promise.all([

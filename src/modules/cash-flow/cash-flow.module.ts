@@ -63,6 +63,7 @@ export function createCashFlowModule(deps: CashFlowModuleDeps): CashFlowModule {
     restaurantSales,
     parameters,
     categoryVatRatios,
+    expenseSources,
   );
   const getSalesReconciliation = new GetSalesReconciliationUseCase(
     bankMovements,
@@ -78,7 +79,7 @@ export function createCashFlowModule(deps: CashFlowModuleDeps): CashFlowModule {
     new GetDreParametersUseCase(parameters),
     new SaveDreParametersUseCase(parameters),
     new GetDreRestaurantSalesUseCase(restaurantSales, parameters),
-    new GetDreEntriesUseCase(bankMovements, expenseSources, catalog, movementKind, parameters, categoryVatRatios),
+    new GetDreEntriesUseCase(bankMovements, expenseSources, catalog, movementKind, parameters, categoryVatRatios, expenseSources),
   );
   return { router: controller.router };
 }

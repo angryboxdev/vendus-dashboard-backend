@@ -96,6 +96,16 @@ export interface ExpenseSources {
   >;
 }
 
+/**
+ * Fatura com competência no mês ainda sem pagamento: estado «por pagar» ou «em atraso» e sem nenhum
+ * movimento do banco conciliado. Entra na DRE do mês como gasto (competência), pelo total com IVA.
+ */
+export interface UnpaidInvoice {
+  id: string;
+  totalCents: number;
+  data: InvoiceCategoryData;
+}
+
 export interface ExpenseReferences {
   invoiceIds: string[];
   payableIds: string[];

@@ -1,4 +1,4 @@
-import type { BankCredit, BankDebit, CostCenterCatalog, ExpenseSources } from "../entities/cash-flow.js";
+import type { BankCredit, BankDebit, CostCenterCatalog, ExpenseSources, UnpaidInvoice } from "../entities/cash-flow.js";
 import type {
   DreCardFees,
   DreEntry,
@@ -43,6 +43,8 @@ export interface BuildDreInput {
   parameters: ResolvedDreParameters;
   /** Rácio sem IVA ÷ com IVA das últimas faturas de cada categoria (IVA estimado). */
   categoryNetRatios: Map<string, number>;
+  /** Faturas do mês ainda por pagar (sem movimento conciliado): entram como gasto do mês. */
+  unpaidInvoices?: UnpaidInvoice[];
 }
 
 /** Uma parte de uma saída já colocada no mês, com o valor sem IVA. */
@@ -108,8 +110,43 @@ const lastDayOfMonth = (year: number, month: number) => `${year}-${String(month)
  *  - grupo «Fora da DRE» (retiradas de sócios, capital de empréstimos, cauções) → fora da operação;
  *  - empréstimo: só a parte com categoria financeira fora do FDR (juros) é gasto; o resto é capital.
  */
+/** Id das «saídas» que representam faturas por pagar (não são movimentos do banco). */
+const UNPAID_PREFIX = "fatura-por-pagar:";
+export const isUnpaidEntry = (id: string) => id.startsWith(UNPAID_PREFIX);
+
+/**
+ * Faturas do mês por pagar como saídas ainda por fazer, conciliadas com a própria fatura: passam pelas
+ * mesmas regras (categoria, IVA da fatura, competência) que um pagamento conciliado.
+ */
+function withUnpaidInvoices(input: BuildDreInput): { debits: BankDebit[]; sources: ExpenseSources } {
+  const unpaid = input.unpaidInvoices ?? [];
+  if (unpaid.length === 0) return { debits: input.debits, sources: input.sources };
+  const invoices = new Map(input.sources.invoices);
+  const debits = [...input.debits];
+  for (const inv of unpaid) {
+    invoices.set(inv.id, inv.data);
+    debits.push({
+      id: `${UNPAID_PREFIX}${inv.id}`,
+      date: inv.data.date ?? input.period.from,
+      amountCents: inv.totalCents,
+      kind: "supplier",
+      reconciliationStatus: "por_pagar",
+      justificationType: null,
+      matchedEntityType: "invoice",
+      matchedEntityId: inv.id,
+      groupId: null,
+      categoryId: null,
+      vatRate: null,
+      vatIncluded: null,
+      links: [],
+    });
+  }
+  return { debits, sources: { ...input.sources, invoices } };
+}
+
 function classify(input: BuildDreInput): { operating: NetShare[]; offOperation: NetShare[] } {
-  const { debits, sources, catalog, period } = input;
+  const { catalog, period } = input;
+  const { debits, sources } = withUnpaidInvoices(input);
   const monthEnd = lastDayOfMonth(period.year, period.month);
   const outOfDre = new Set(catalog.groups.filter((g) => g.code === OUT_OF_DRE_GROUP_CODE).map((g) => g.id));
   const typeOf = new Map(catalog.categories.map((c) => [c.id, c.financialType]));
@@ -194,6 +231,10 @@ function expenses(shares: NetShare[], offShares: NetShare[], catalog: CostCenter
     sections,
     capexNetCents: sections.find((s) => s.key === "capex")?.netCents ?? 0,
     offOperation,
+    unpaidInvoices: {
+      count: new Set(shares.filter((s) => isUnpaidEntry(s.debit.id)).map((s) => s.debit.id)).size,
+      netCents: sum((s) => (isUnpaidEntry(s.debit.id) ? s.netCents : 0)),
+    },
   };
 }
 
@@ -393,7 +434,7 @@ export function buildDreEntries(input: BuildDreInput): DreEntry[] {
     section: p.section,
     itemKey: p.item.key,
     movementId: s.debit.id,
-    paidOn: s.debit.date,
+    paidOn: isUnpaidEntry(s.debit.id) ? null : s.debit.date,
     competenceDate: s.competenceDate,
     description: s.debit.label ?? null,
     document: s.share.document?.label ?? null,
@@ -405,5 +446,5 @@ export function buildDreEntries(input: BuildDreInput): DreEntry[] {
   return [
     ...operating.map((s) => entry(s, operatingPlacement(s, input.catalog))),
     ...offOperation.map((s) => entry(s, offOperationPlacement(s, input.catalog))),
-  ].sort((a, b) => a.competenceDate.localeCompare(b.competenceDate) || a.paidOn.localeCompare(b.paidOn) || b.grossCents - a.grossCents);
+  ].sort((a, b) => a.competenceDate.localeCompare(b.competenceDate) || (a.paidOn ?? "").localeCompare(b.paidOn ?? "") || b.grossCents - a.grossCents);
 }
