@@ -104,7 +104,14 @@ export function buildSalesReconciliation(input: BuildSalesReconciliationInput): 
   for (const [date, depositedCents] of cashCredits) {
     const from = prevDeposit ?? windowStart;
     prevDeposit = date;
-    if (!inMonth(date)) continue;
+    // Como no cartão: o depósito conta no mês do último dia com vendas em numerário que cobre (o
+    // depósito de dia 1 ou 2 leva o numerário do fim do mês anterior).
+    const coveredTo = addDays(date, -1);
+    const lastCashDay = input.sales.reduce<string | null>(
+      (last, s) => (s.cashCents > 0 && s.date >= from && s.date <= coveredTo && (last === null || s.date > last) ? s.date : last),
+      null,
+    );
+    if (!inMonth(lastCashDay ?? coveredTo)) continue;
     deposits.push({ date, depositedCents, soldSincePreviousCents: sumSales(from, addDays(date, -1), (s) => s.cashCents) });
   }
   const cashSold = sumSales(period.from, period.to, (s) => s.cashCents);

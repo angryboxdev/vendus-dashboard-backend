@@ -96,7 +96,7 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 - **Cartão — liquidações:** os créditos TPA somam-se por dia; cada um cobre as vendas em cartão do Vendus desde o dia do crédito anterior até à véspera do seu (venda em D, crédito em D+1; o crédito de segunda junta o fim de semana). Taxa implícita = (vendido − recebido) ÷ vendido; «ok» se a ±0,5 p.p. da taxa esperada (1%), senão «check»; crédito sem vendas → «no_sales». Uma liquidação conta no mês do seu **último dia de venda** (o crédito de dia 1 paga o mês anterior).
 - **Janela:** vendas desde 7 dias antes do mês; créditos até 7 dias depois do fim (sem passar de hoje). O primeiro crédito da janela não tem anterior — cobre desde o início da janela.
 - **Por liquidar:** vendas em cartão depois do último crédito, até ao fim do período.
-- **Numerário:** vendido no mês × depositado no mês (positivo = por depositar); cada depósito mostra o numerário vendido desde o depósito anterior até à véspera.
+- **Numerário:** vendido no mês × depósitos do mês (positivo = por depositar). Como no cartão, um depósito conta no mês do último dia com vendas em numerário que cobre (2026-10-28: o depósito de 1–2 do mês seguinte leva o fim do mês). Cada depósito mostra o numerário vendido desde o depósito anterior até à véspera.
 - **Fora:** créditos excluídos do fluxo de caixa (transferências internas, empréstimos); Eatz, Apps e outros métodos do Vendus (MB Way…).
 
 ## Portas
