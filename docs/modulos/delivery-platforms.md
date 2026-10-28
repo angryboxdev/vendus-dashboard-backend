@@ -21,7 +21,7 @@ Ver «Conceitos de domínio» e «Decisões de design» no README do módulo e `
 
 F3a feita no ramo (commit, sem push; sem migração): relatório de margem por plataforma (documentos que atravessam o mês repartidos pelo SAF-T diário / vendas diárias da Bolt) com exportação Excel e PDF, no ecrã.
 
-F4 em produção (#166/#138). F5 feita no ramo (commit, sem push): custo real da comida e da embalagem (SAF-T × fichas técnicas e artigos), com correção dos produtos no ecrã; migração `20261207100000_delivery_food_cost` por aplicar.
+F4 em produção (#166/#138). F5 em produção (#167/#139): custo real da comida e da embalagem (SAF-T × fichas técnicas e artigos), com correção dos produtos no ecrã; migração `20261207100000_delivery_food_cost` aplicada.
 
 ## Problemas conhecidos
 Documentos fora dos cinco conhecidos são rejeitados com motivo. Relatórios da Bolt com períodos sobrepostos duplicam vendas.
