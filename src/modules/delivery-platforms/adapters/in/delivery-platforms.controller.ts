@@ -1,7 +1,8 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import multer from "multer";
 import type { ImportPlatformDocumentsPort } from "../../domain/ports/in/import-platform-documents.port.js";
 import type { ListPlatformStatementsPort } from "../../domain/ports/in/list-platform-statements.port.js";
+import type { ExportPlatformMarginReportPort, GetPlatformMarginReportPort } from "../../domain/ports/in/platform-margin-report.port.js";
 import { InvalidStatementPeriodError } from "../../domain/errors.js";
 
 const MAX_FILES = 20;
@@ -13,6 +14,8 @@ export class DeliveryPlatformsController {
   constructor(
     private readonly importDocuments: ImportPlatformDocumentsPort,
     private readonly listStatements: ListPlatformStatementsPort,
+    private readonly getReport: GetPlatformMarginReportPort,
+    private readonly exportReport: ExportPlatformMarginReportPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -46,6 +49,41 @@ export class DeliveryPlatformsController {
     });
 
     /**
+     * GET /delivery-platforms/report?year=&month=
+     * Margem por plataforma do mês (documentos que atravessam o mês repartidos pelo SAF-T diário).
+     */
+    this.router.get("/delivery-platforms/report", async (req, res) => {
+      try {
+        res.json(await this.getReport.execute({ organizationId: req.auth!.orgId, year: Number(req.query["year"]), month: Number(req.query["month"]) }));
+      } catch (e: unknown) {
+        this.fail(res, e);
+      }
+    });
+
+    /** GET /delivery-platforms/report/export?year=&month=&format=xlsx|pdf — o mesmo relatório para descarregar. */
+    this.router.get("/delivery-platforms/report/export", async (req, res) => {
+      const format = req.query["format"];
+      if (format !== "xlsx" && format !== "pdf") {
+        res.status(400).json({ error: "format tem de ser xlsx ou pdf" });
+        return;
+      }
+      try {
+        const file = await this.exportReport.execute({
+          organizationId: req.auth!.orgId,
+          year: Number(req.query["year"]),
+          month: Number(req.query["month"]),
+          format,
+        });
+        res.setHeader("Content-Type", file.contentType);
+        res.setHeader("Content-Disposition", `attachment; filename="${file.fileName}"`);
+        res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+        res.send(Buffer.from(file.content));
+      } catch (e: unknown) {
+        this.fail(res, e);
+      }
+    });
+
+    /**
      * GET /delivery-platforms/statements?year=&month=
      * Extratos importados cujo período toca o mês, com os totais por natureza (com IVA).
      */
@@ -67,5 +105,15 @@ export class DeliveryPlatformsController {
         res.status(500).json({ error: msg });
       }
     });
+  }
+
+  private fail(res: Response, e: unknown): void {
+    if (e instanceof InvalidStatementPeriodError) {
+      res.status(400).json({ error: e.message });
+      return;
+    }
+    const msg = e instanceof Error ? e.message : "Internal error";
+    console.error("[DeliveryPlatforms] relatório falhou:", msg);
+    res.status(500).json({ error: msg });
   }
 }

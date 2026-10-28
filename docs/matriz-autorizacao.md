@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 848 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 850 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -133,6 +133,8 @@ Endpoints: 848 · pré-autenticação: 23 · não classificados: 0
 | GET | `/api/crm/tags` | permission:crm.customers:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/crm/tags` | permission:crm.customers:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/delivery-platforms/import` | permission:dre.statement:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
+| GET | `/api/delivery-platforms/report` | permission:dre.statement:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
+| GET | `/api/delivery-platforms/report/export` | permission:dre.statement:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/delivery-platforms/statements` | permission:dre.statement:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/documents` | permission:sales.dashboard:READ | ✔ | ✔ | ✖ | ✔ | ✖ |
 | GET | `/api/documents/:id` | permission:sales.dashboard:READ | ✔ | ✔ | ✖ | ✔ | ✖ |

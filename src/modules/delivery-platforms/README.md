@@ -55,21 +55,25 @@ Converte o texto de um documento (PDF, CSV ou XML) numa `PlatformStatement` (lin
 
 - `ImportPlatformDocumentsPort` — importa vários ficheiros; cada um é tratado à parte (importado ou rejeitado com motivo).
 - `ListPlatformStatementsPort` — extratos cujo período toca um mês, com totais por natureza (`summarizeStatement`).
+- `GetPlatformMarginReportPort` — margem por plataforma do mês (`buildMarginReport`); exposto também a outros módulos (DRE, F3b).
+- `ExportPlatformMarginReportPort` — o mesmo relatório em Excel ou PDF.
 
 ### Saída (dependências do domínio)
 
 - `DocumentTextPort` — texto de um ficheiro (null se não houver texto).
 - `PlatformStatementRepositoryPort` — `save` (upsert, diz se substituiu) e `listOverlapping`.
+- `MarginReportWriterPort` — escreve o relatório em `xlsx` e `pdf`.
 
 ## Adapters
 
 ### Entrada
 
-- `DeliveryPlatformsController` → `POST /api/delivery-platforms/import` (multipart, `files`, até 20, 15 MB cada) e `GET /api/delivery-platforms/statements?year&month`; permissão `dre.statement`.
+- `DeliveryPlatformsController` → `GET /api/delivery-platforms/report?year&month` e `GET /api/delivery-platforms/report/export?year&month&format=xlsx|pdf`; `POST /api/delivery-platforms/import` (multipart, `files`, até 20, 15 MB cada) e `GET /api/delivery-platforms/statements?year&month`; permissão `dre.statement`.
 
 ### Saída
 
 - `DocumentTextAdapter` → `pdf-parse` para PDF; UTF-8 para `.csv`/`.txt`; `.xml` na codificação declarada (Windows-1252 no AirMenu).
+- `MarginReportWriterAdapter` → Excel (`xlsx`: folhas «Margem» e «Documentos») e PDF (`pdfkit`).
 - `SupabasePlatformStatementRepository` → tabela `delivery_platform_statements` via `createScopedQuery`.
 
 ## Decisões de design
@@ -79,6 +83,8 @@ Converte o texto de um documento (PDF, CSV ou XML) numa `PlatformStatement` (lin
 - **Taxas com IVA:** Uber — o extrato traz as taxas com IVA (23%), o IVA é calculado; Glovo — o IVA do documento é repartido pelas taxas em proporção, arredondamento na última.
 - **Bolt:** o relatório de pedidos só lê data, estado, método de pagamento e valor (nunca morada, avaliação nem comentário); só contam pedidos entregues; pagos em dinheiro entram como `cash`. Na fatura semanal (IVA em autoliquidação, 0%) o «investimento na campanha» (negativo) entra no marketing, porque é a parte da campanha que a Bolt paga; as linhas têm de somar o total (tolerância de 2 cêntimos — a fatura real arredonda).
 - **SAF-T:** guarda só faturado e IVA por dia e notas de crédito por dia (nunca clientes nem artigos); anulados não contam; confere a soma com `TotalCredit`/`TotalDebit` do próprio ficheiro; o SAF-T do Vendus é recusado (é do restaurante). Leitor próprio em vez do de `sales-declaration`: precisa do IVA e do bruto, que esse não lê.
+- **Relatório de margem (F3):** o mesmo método do PDF de setembro — vendas com IVA → sem IVA pela taxa do SAF-T do mês (senão 15%, a de omissão da DRE); promoções contam como custo; taxas sem IVA (Bolt em autoliquidação); margem bruta; comida e embalagem estimadas em 30% do faturado sem IVA (até virem as fichas técnicas); margem líquida; IVA a entregar = IVA das vendas − IVA das taxas. % sobre as vendas sem IVA.
+- **Documentos que atravessam o mês** (decisão do utilizador, 2026-10-28; `month-allocation.ts`): os que trazem os dias (pedidos da Bolt, SAF-T) contam só os dias do mês; as faturas da Bolt repartem-se pelas vendas diárias do relatório de pedidos; os outros pelo faturado diário do SAF-T (do mês e dos vizinhos); sem dados diários de todos os dias, pela proporção de dias, com aviso.
 - **Glovo:** as linhas de detalhe «Taxa de serviço da plataforma/estafetas» são ignoradas (já estão na comissão); a soma das taxas tem de dar o subtotal.
 - **Validação ao cêntimo** contra o líquido do documento antes de guardar: um leitor que se engane rejeita em vez de gravar valores errados.
 - **Faturas das plataformas não entram no módulo de faturas** — o extrato é a fonte da DRE.
@@ -91,5 +97,6 @@ Converte o texto de um documento (PDF, CSV ou XML) numa `PlatformStatement` (lin
 ## Lacunas conhecidas / dívida
 
 - Relatórios de pedidos da Bolt com períodos sobrepostos somam-se duas vezes (o número é `PEDIDOS-<primeiro dia>-<último dia>`): importar um por mês.
-- Repartir as faturas semanais da Bolt e as quinzenas que atravessam o mês: F3 (relatório).
+- A DRE ainda reconstitui as plataformas pelo banco; passar a usar o relatório é a F3b.
+- O custo da comida é uma hipótese (30%) até ligar às fichas técnicas (`recipe-costing`).
 - Um período que atravessa meses (quinzena da Glovo) aparece nos dois meses; a repartição é da F3.
