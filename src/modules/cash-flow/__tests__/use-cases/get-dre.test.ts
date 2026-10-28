@@ -52,7 +52,9 @@ describe("GetDreUseCase", () => {
     expect(report.parameters.source).toBe("inherited");
     expect(report.revenue).toMatchObject({ restaurantNetCents: 200_000, platformsReceivedCents: 63_100, platformsGrossCents: 100_000, platformsNetCents: 86_957 });
     expect(report.expenses).toMatchObject({ totalNetCents: 10_000, vatCents: 2_300 });
-    expect(report.resultCents).toBe(200_000 + 86_957 - 30_000 - 10_000);
+    // Comissão do TPA: 1% de 150 000 vendidos em cartão
+    expect(report.cardFees).toEqual({ cardGrossCents: 150_000, ratePct: 1, netCents: 1_500 });
+    expect(report.resultCents).toBe(200_000 + 86_957 - 30_000 - 1_500 - 10_000);
   });
 
   it("mês futuro é recusado", async () => {

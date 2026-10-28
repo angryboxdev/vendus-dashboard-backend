@@ -1,6 +1,7 @@
 import { buildDreReport, type BuildDreInput } from "../../domain/services/dre-report.service.js";
 import { resolveDreParameters } from "../../domain/services/dre-parameters.service.js";
 import { DEFAULT_DRE_PARAMETERS } from "../../domain/entities/dre-parameters.js";
+import { countedDebits } from "../../domain/services/cash-flow-report.service.js";
 import { catalog, credit, debit, emptySources } from "../fakes/builders.js";
 
 const noPayments = { card: 0, cash: 0, other: 0 };
@@ -189,5 +190,48 @@ describe("buildDreReport", () => {
       ["unclassified", 5_000, ["transfer_out"]],
       ["financial", 4_000, ["bank_fee"]],
     ]);
+  });
+
+  it("comissão do TPA: taxa do mês sobre o vendido em cartão, abatida no resultado (sem IVA dedutível)", () => {
+    const report = buildDreReport(
+      input({
+        restaurant: { netCents: 100_000, vatCents: 13_000, byPaymentGrossCents: { card: 90_000, cash: 23_000, other: 0 } },
+        parameters: { ...resolveDreParameters(null, null), cardFeePct: 1.2 },
+      }),
+    );
+    expect(report.cardFees).toEqual({ cardGrossCents: 90_000, ratePct: 1.2, netCents: 1_080 });
+    expect(report.resultCents).toBe(100_000 - 1_080);
+    expect(report.vat.purchasesCents).toBe(0);
+  });
+
+  it("empréstimos: só os juros (categoria financeira fora do «Fora da DRE») entram; o capital fica de fora", () => {
+    const loanCatalog = {
+      ...catalog,
+      groups: [...catalog.groups, { id: "g-adm", code: "ADM", name: "Administrativo", sortOrder: 4 }],
+      categories: [
+        ...catalog.categories,
+        { id: "c-jur", groupId: "g-adm", code: "ADM.03", name: "Taxas e juros", financialType: "financial" },
+        { id: "c-emp", groupId: "g-fdr", code: "FDR.04", name: "Empréstimos", financialType: "financial" },
+      ],
+    };
+    const loan = { justificationType: "emprestimo_financiamento", reconciliationStatus: "justificado" } as const;
+    const report = buildDreReport(
+      input({
+        catalog: loanCatalog,
+        debits: [
+          debit({ id: "capital", amountCents: 80_000, categoryId: "c-emp", ...loan }),
+          debit({ id: "juros", amountCents: 3_000, categoryId: "c-jur", ...loan }),
+          debit({ id: "sem-categoria", amountCents: 50_000, ...loan }),
+        ],
+      }),
+    );
+    expect(report.expenses.totalNetCents).toBe(3_000);
+    expect(report.expenses.sections.map((s) => [s.key, s.netCents])).toEqual([["financial", 3_000]]);
+  });
+
+  it("o fluxo de caixa continua a deixar os empréstimos de fora (os juros só entram na DRE)", () => {
+    const loan = { justificationType: "emprestimo_financiamento", reconciliationStatus: "justificado" } as const;
+    const debits = [debit({ id: "juros", amountCents: 3_000, categoryId: "c-sal", ...loan })];
+    expect(countedDebits(debits, emptySources(), catalog)).toEqual([]);
   });
 });

@@ -1,5 +1,6 @@
 import type { BankCredit, BankDebit, CostCenterCatalog, ExpenseSources } from "../entities/cash-flow.js";
 import type {
+  DreCardFees,
   DreExpenseCategory,
   DreExpenseSection,
   DreSectionItem,
@@ -82,7 +83,7 @@ function toNet(share: ExpenseShare, exempt: boolean, ratios: Map<string, number>
 function expenses(input: BuildDreInput): DreExpenses {
   const { debits, sources, catalog } = input;
   const isExempt = exemptions(catalog);
-  const shares: NetShare[] = countedDebits(debits, sources, catalog).flatMap((c) =>
+  const shares: NetShare[] = countedDebits(debits, sources, catalog, { loanInterest: true }).flatMap((c) =>
     c.shares.map((share) => ({
       share,
       kind: c.debit.kind,
@@ -223,6 +224,12 @@ export function restaurantByPayment(r: RestaurantSales): DreRevenue["restaurantB
   return { cardNetCents, cashNetCents, otherNetCents: r.netCents - cardNetCents - cashNetCents };
 }
 
+/** Comissão do TPA: taxa do mês sobre o vendido em cartão (ver `DreCardFees`). */
+export function cardFees(r: RestaurantSales, p: Pick<ResolvedDreParameters, "cardFeePct">): DreCardFees {
+  const cardGrossCents = r.byPaymentGrossCents.card;
+  return { cardGrossCents, ratePct: p.cardFeePct, netCents: Math.round((cardGrossCents * p.cardFeePct) / 100) };
+}
+
 /**
  * Plataformas reconstituídas em bruto a partir do que liquidam no banco (já sem comissão nem marketing)
  * e do marketing lançado à mão — ver `platformGross`. Uma plataforma só com marketing também aparece.
@@ -270,8 +277,9 @@ export function buildDreReport(input: BuildDreInput): DreReport {
     totalNetCents: sumP((p) => p.commissionNetCents + p.marketingNetCents),
   };
   const exp = expenses(input);
+  const fees = cardFees(input.restaurant, input.parameters);
   // CAPEX é investimento: aparece na DRE, mas fora do resultado.
-  const resultCents = revenue.totalNetCents - platformCosts.totalNetCents - (exp.totalNetCents - exp.capexNetCents);
+  const resultCents = revenue.totalNetCents - platformCosts.totalNetCents - fees.netCents - (exp.totalNetCents - exp.capexNetCents);
 
   const salesVat = input.restaurant.vatCents + sumP((p) => p.salesVatCents);
   const purchasesVat = exp.vatCents + sumP((p) => p.commissionVatCents + p.marketingVatCents);
@@ -281,6 +289,7 @@ export function buildDreReport(input: BuildDreInput): DreReport {
     parameters: input.parameters,
     revenue,
     platformCosts,
+    cardFees: fees,
     expenses: exp,
     resultCents: loaded ? resultCents : null,
     marginPct: loaded ? pct(resultCents, revenue.totalNetCents) : null,

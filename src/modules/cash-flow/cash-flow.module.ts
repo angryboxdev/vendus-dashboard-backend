@@ -76,7 +76,7 @@ export function createCashFlowModule(deps: CashFlowModuleDeps): CashFlowModule {
     getSalesReconciliation,
     new GetDreParametersUseCase(parameters),
     new SaveDreParametersUseCase(parameters),
-    new GetDreRestaurantSalesUseCase(restaurantSales),
+    new GetDreRestaurantSalesUseCase(restaurantSales, parameters),
   );
   return { router: controller.router };
 }

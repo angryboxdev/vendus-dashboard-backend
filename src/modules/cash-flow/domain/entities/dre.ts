@@ -58,6 +58,18 @@ export interface DrePlatformCosts {
   totalNetCents: number;
 }
 
+/**
+ * Comissão do TPA: o banco liquida as vendas em cartão já sem ela, por isso nunca aparece como saída.
+ * Estimada pela taxa do mês (`cardFeePct`, a mesma da conferência de vendas) sobre o vendido em cartão
+ * (Vendus, com IVA). Sem IVA dedutível (serviço financeiro).
+ */
+export interface DreCardFees {
+  /** Vendido em cartão no Vendus, com IVA. */
+  cardGrossCents: number;
+  ratePct: number;
+  netCents: number;
+}
+
 export interface DreExpenseChild {
   key: string;
   categoryId: string | null;
@@ -146,8 +158,10 @@ export interface DreReport {
   parameters: ResolvedDreParameters;
   revenue: DreRevenue;
   platformCosts: DrePlatformCosts;
+  /** Comissão do TPA (zero no pedido rápido, sem as vendas do restaurante). */
+  cardFees: DreCardFees;
   expenses: DreExpenses;
-  /** Receita − custos das plataformas − gastos do banco, sem o CAPEX (sem IVA). */
+  /** Receita − custos das plataformas − comissão do TPA − gastos do banco, sem o CAPEX (sem IVA). */
   resultCents: number | null;
   /** Resultado ÷ receita, %, 1 casa decimal; null sem receita. */
   marginPct: number | null;
@@ -169,4 +183,6 @@ export interface DreRestaurantSales {
   netCents: number;
   vatCents: number;
   byPayment: DreRevenue["restaurantByPayment"];
+  /** Comissão do TPA sobre as vendas em cartão do mês (pela taxa dos parâmetros). */
+  cardFees: DreCardFees;
 }

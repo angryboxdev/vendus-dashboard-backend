@@ -55,14 +55,30 @@ export function isExcluded(m: BankDebit | BankCredit): boolean {
   );
 }
 
-/** Saídas que contam como despesa, já repartidas por categoria (sem o grupo fora da DRE). */
-export function countedDebits(debits: BankDebit[], sources: ExpenseSources, catalog: CostCenterCatalog): CountedDebit[] {
+const isLoan = (m: BankDebit) => m.justificationType === "emprestimo_financiamento";
+
+/**
+ * Saídas que contam como despesa, já repartidas por categoria (sem o grupo fora da DRE).
+ * `loanInterest` (só a DRE): um movimento justificado como empréstimo conta na parte com categoria
+ * financeira fora do grupo «Fora da DRE» — os juros; o capital (ex.: FDR.04) continua de fora.
+ */
+export function countedDebits(
+  debits: BankDebit[],
+  sources: ExpenseSources,
+  catalog: CostCenterCatalog,
+  { loanInterest = false }: { loanInterest?: boolean } = {},
+): CountedDebit[] {
   const outOfDre = new Set(catalog.groups.filter((g) => g.code === OUT_OF_DRE_GROUP_CODE).map((g) => g.id));
+  const financial = new Set(catalog.categories.filter((c) => c.financialType === "financial").map((c) => c.id));
   const out: CountedDebit[] = [];
   for (const debit of debits) {
-    if (isExcluded(debit)) continue;
+    const interestOnly = loanInterest && isLoan(debit) && debit.reconciliationStatus !== "transferencia_interna" && debit.kind !== "internal_transfer";
+    if (isExcluded(debit) && !interestOnly) continue;
     const shares = categorizeDebit(debit, sources, catalog).filter(
-      (s) => s.amountCents > 0 && !(s.groupId && outOfDre.has(s.groupId)),
+      (s) =>
+        s.amountCents > 0 &&
+        !(s.groupId && outOfDre.has(s.groupId)) &&
+        (!interestOnly || (s.categoryId !== null && financial.has(s.categoryId))),
     );
     const amountCents = shares.reduce((a, s) => a + s.amountCents, 0);
     if (amountCents > 0) out.push({ debit, shares, amountCents });
