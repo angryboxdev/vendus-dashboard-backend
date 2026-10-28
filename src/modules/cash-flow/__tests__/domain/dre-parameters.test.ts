@@ -9,7 +9,7 @@ describe("resolveDreParameters", () => {
   it("usa os do mês; senão herda as taxas do mês anterior sem o marketing; senão os de omissão", () => {
     expect(resolveDreParameters(own, null)).toMatchObject({ deliverySalesVatPct: 14, source: "month", marketingNetCents: { uber_eats: 5_000 } });
     expect(resolveDreParameters(null, own)).toMatchObject({ deliverySalesVatPct: 14, source: "inherited", marketingNetCents: { uber_eats: 0 } });
-    expect(resolveDreParameters(null, null)).toMatchObject({ deliverySalesVatPct: 15, platformCommissionPct: 30, cardFeePct: 1, source: "default" });
+    expect(resolveDreParameters(null, null)).toMatchObject({ deliverySalesVatPct: 15, platformCommissionPct: 30, cardFeePct: 0, source: "default" });
   });
 });
 

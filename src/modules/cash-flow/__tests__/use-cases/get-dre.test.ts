@@ -30,7 +30,7 @@ function useCase(debits: StoredBankDebit[], credits: StoredBankCredit[], unpaid:
       ),
     },
     {
-      forMonth: async (_o, y, m) => (calls.parameters!.push([y, m]), { own: null, previous: { ...DEFAULT_DRE_PARAMETERS, deliverySalesVatPct: 15 } }),
+      forMonth: async (_o, y, m) => (calls.parameters!.push([y, m]), { own: null, previous: { ...DEFAULT_DRE_PARAMETERS, deliverySalesVatPct: 15, cardFeePct: 1 } }),
       save: async () => undefined,
     },
     { recentNetRatios: async (_o, until, sample) => (calls.ratios!.push([until, sample]), new Map()) },

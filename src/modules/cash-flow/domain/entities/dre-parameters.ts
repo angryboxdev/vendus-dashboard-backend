@@ -39,7 +39,9 @@ export const DEFAULT_DRE_PARAMETERS: DreParameters = {
   platformCommissionVatPct: 23,
   commissionOnGross: true,
   marketingVatPct: 23,
-  cardFeePct: 1,
+  // 0%: o banco credita o TPA em bruto e cobra a comissão num débito à parte (setembro de 2026, taxa
+  // implícita −0,1%), que já entra nos gastos bancários. Pôr a taxa só se o TPA liquidar com desconto.
+  cardFeePct: 0,
   expenseDefaultVatPct: 23,
   marketingNetCents: { uber_eats: 0, glovo: 0, bolt_food: 0 },
 };
