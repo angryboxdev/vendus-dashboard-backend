@@ -47,7 +47,7 @@ const invoice = (no: string, status: string, type: string, date: string, net: st
         <InvoiceDate>${date}</InvoiceDate>
         <InvoiceType>${type}</InvoiceType>
         <CustomerID>999</CustomerID>
-        <Line><ProductDescription>Pizza Teste</ProductDescription><CreditAmount>${net}</CreditAmount></Line>
+        <Line><ProductCode>P1</ProductCode><ProductDescription>Pizza &amp; Teste</ProductDescription><Quantity>1.00</Quantity><${type === "NC" ? "DebitAmount" : "CreditAmount"}>${net}</${type === "NC" ? "DebitAmount" : "CreditAmount"}></Line>
         <DocumentTotals><TaxPayable>${vat}</TaxPayable><NetTotal>${net}</NetTotal><GrossTotal>${gross}</GrossTotal></DocumentTotals>
       </Invoice>`;
 

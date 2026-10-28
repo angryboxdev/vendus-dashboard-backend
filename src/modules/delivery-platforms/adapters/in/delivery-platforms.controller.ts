@@ -4,7 +4,8 @@ import type { ImportPlatformDocumentsPort } from "../../domain/ports/in/import-p
 import type { ListPlatformStatementsPort } from "../../domain/ports/in/list-platform-statements.port.js";
 import type { ExportPlatformMarginReportPort, GetPlatformMarginReportPort } from "../../domain/ports/in/platform-margin-report.port.js";
 import type { GetPayoutReconciliationPort } from "../../domain/ports/in/payout-reconciliation.port.js";
-import { InvalidStatementPeriodError } from "../../domain/errors.js";
+import type { GetFoodCostPort, ProductMappingChange, SaveProductMappingsPort } from "../../domain/ports/in/food-cost.port.js";
+import { InvalidProductMappingError, InvalidStatementPeriodError } from "../../domain/errors.js";
 
 const MAX_FILES = 20;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: MAX_FILES } });
@@ -18,6 +19,8 @@ export class DeliveryPlatformsController {
     private readonly getReport: GetPlatformMarginReportPort,
     private readonly exportReport: ExportPlatformMarginReportPort,
     private readonly getPayouts: GetPayoutReconciliationPort,
+    private readonly getFoodCost: GetFoodCostPort,
+    private readonly saveMappings: SaveProductMappingsPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -74,6 +77,38 @@ export class DeliveryPlatformsController {
       }
     });
 
+    /**
+     * GET /delivery-platforms/food-cost?year=&month=
+     * Custo real da comida e da embalagem do delivery (SAF-T × fichas técnicas e artigos), com o
+     * mapeamento de cada produto e as opções para o corrigir.
+     */
+    this.router.get("/delivery-platforms/food-cost", async (req, res) => {
+      try {
+        res.json(await this.getFoodCost.execute({ organizationId: req.auth!.orgId, year: Number(req.query["year"]), month: Number(req.query["month"]) }));
+      } catch (e: unknown) {
+        this.fail(res, e);
+      }
+    });
+
+    /**
+     * PUT /delivery-platforms/product-mappings   { changes: ProductMappingChange[] }
+     * Corrige a que corresponde cada produto (prato e tamanho, artigo, upgrade, ignorar) e os artigos da
+     * embalagem; `targetType: null` volta à sugestão automática. 204.
+     */
+    this.router.put("/delivery-platforms/product-mappings", async (req, res) => {
+      const changes = (req.body as { changes?: unknown } | undefined)?.changes;
+      if (!Array.isArray(changes)) {
+        res.status(400).json({ error: "changes tem de ser uma lista" });
+        return;
+      }
+      try {
+        await this.saveMappings.execute({ organizationId: req.auth!.orgId, changes: changes as ProductMappingChange[], updatedBy: req.auth!.email ?? null });
+        res.status(204).end();
+      } catch (e: unknown) {
+        this.fail(res, e);
+      }
+    });
+
     /** GET /delivery-platforms/report/export?year=&month=&format=xlsx|pdf — o mesmo relatório para descarregar. */
     this.router.get("/delivery-platforms/report/export", async (req, res) => {
       const format = req.query["format"];
@@ -122,12 +157,12 @@ export class DeliveryPlatformsController {
   }
 
   private fail(res: Response, e: unknown): void {
-    if (e instanceof InvalidStatementPeriodError) {
+    if (e instanceof InvalidStatementPeriodError || e instanceof InvalidProductMappingError) {
       res.status(400).json({ error: e.message });
       return;
     }
     const msg = e instanceof Error ? e.message : "Internal error";
-    console.error("[DeliveryPlatforms] relatório falhou:", msg);
+    console.error("[DeliveryPlatforms] pedido falhou:", msg);
     res.status(500).json({ error: msg });
   }
 }

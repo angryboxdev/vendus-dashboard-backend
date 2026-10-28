@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { RecipeCostingSnapshot } from "../../entities/recipe-costing.js";
+import type { IngredientCost, RecipeCostingSnapshot } from "../../entities/recipe-costing.js";
 
 /**
  * Lê pratos (pizzas + PVP + receita ativa), preparos e o custo atual de cada
@@ -8,4 +8,6 @@ import type { RecipeCostingSnapshot } from "../../entities/recipe-costing.js";
  */
 export interface RecipeCostingReadPort {
   loadSnapshot(organizationId: OrganizationId): Promise<RecipeCostingSnapshot>;
+  /** Custo atual de todos os artigos de stock (mesma regra: fatura, senão manual). */
+  loadAllItemCosts(organizationId: OrganizationId): Promise<IngredientCost[]>;
 }

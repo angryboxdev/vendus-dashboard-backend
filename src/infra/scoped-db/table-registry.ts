@@ -152,6 +152,7 @@ export const TABLE_REGISTRY = {
   dre_monthly_parameters: { organizationColumn: "org_id", locationBearing: false },
   // Extratos das plataformas de delivery: da empresa, sem loja.
   delivery_platform_statements: { organizationColumn: "org_id", locationBearing: false },
+  delivery_product_mappings: { organizationColumn: "org_id", locationBearing: false },
   hr_attendance_corrections: { organizationColumn: "org_id", locationBearing: false },
   // Fase 2.1: regras globais à organização, nunca por local.
   hr_attendance_rules: { organizationColumn: "org_id", locationBearing: false },

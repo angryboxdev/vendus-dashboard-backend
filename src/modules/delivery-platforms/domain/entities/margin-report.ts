@@ -69,8 +69,10 @@ export interface MarginReport {
   /** IVA médio das vendas (ex.: 0,1325): do SAF-T do mês ou o de omissão. */
   salesVatRate: number;
   salesVatRateSource: "saft" | "default";
-  /** Hipótese do custo da comida e embalagem, % do faturado sem IVA. */
+  /** Custo da comida e embalagem, % do faturado sem IVA. */
   foodCostPct: number;
+  /** `real` = pelas fichas técnicas e o SAF-T do mês (F5); `estimate` = hipótese de 30%. */
+  foodCostSource: "real" | "estimate";
   platforms: PlatformMargin[];
   total: PlatformMargin;
   /** SAF-T do mês × o que os clientes pagaram segundo os extratos (com IVA); null sem SAF-T. */

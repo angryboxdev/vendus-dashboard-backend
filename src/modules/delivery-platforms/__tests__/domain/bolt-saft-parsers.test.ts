@@ -94,7 +94,12 @@ describe("parseSaftSales", () => {
     ]);
     expect(sumLines(s, "sales", "vatCents")).toBe(345);
     expect(s.netPayoutCents).toBe(3000 - 565);
-    expect(JSON.stringify(s)).not.toMatch(/Pizza|999/);
+    // Produtos por dia (para o custo da comida), nunca o cliente; anulados fora; a nota de crédito abate.
+    expect(JSON.stringify(s)).not.toMatch(/999/);
+    expect(s.products).toEqual([
+      { date: "2026-03-01", code: "P1", description: "Pizza & Teste", quantity: 2, netCents: 2655 },
+      { date: "2026-03-02", code: "P1", description: "Pizza & Teste", quantity: -1, netCents: -500 },
+    ]);
   });
 
   it("recusa o SAF-T do Vendus e totais que não conferem", () => {

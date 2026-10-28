@@ -50,6 +50,7 @@ Leitura e cálculo, sem escrita: `GET /api/recipe-costing` devolve o custo de ca
 - `GetMenuCostingSettingsPort` / `SaveMenuCostingSettingsPort` — taxa de IVA das vendas por empresa para a margem (V7; sem linha = 13%).
 - `GetIngredientsCostOverviewPort` — último custo, referência comparativa e série semanal de todos os artigos com compras confirmadas (task V6; `ingredient-overview.service.ts`).
 - `GetIngredientUsagePort` — fichas técnicas que usam o artigo, diretamente ou via preparo, com o custo da linha e o peso no prato (`ingredient-usage.service.ts`).
+- `GetStockItemCostsPort` — custo atual de todos os artigos de stock (fatura, senão manual); exposto a outros módulos (`delivery-platforms`, F5), tal como `GetRecipeCostingPort`.
 - `GetDishesImpactPort` — custo atual de cada pizza face a há N semanas, com a diferença por ingrediente e o fator principal (`dish-impact.service.ts`).
 
 ### Saída (dependências do domínio)

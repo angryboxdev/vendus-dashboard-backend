@@ -1,10 +1,10 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
-import type { DeliveryPlatform, PlatformDocumentKind, PlatformPayout, PlatformStatement, StatementLine } from "../../domain/entities/platform-statement.js";
+import type { DeliveryPlatform, PlatformDocumentKind, PlatformPayout, PlatformStatement, SoldProduct, StatementLine } from "../../domain/entities/platform-statement.js";
 import type { PlatformStatementRepositoryPort, StoredPlatformStatement } from "../../domain/ports/out/platform-statement-repository.port.js";
 
 const COLUMNS =
-  "id, platform, document_kind, document_number, period_from, period_to, issued_on, orders_count, lines, payouts, net_payout_cents, file_name, imported_by, imported_at";
+  "id, platform, document_kind, document_number, period_from, period_to, issued_on, orders_count, lines, payouts, products, net_payout_cents, file_name, imported_by, imported_at";
 
 interface Row {
   id: string;
@@ -17,6 +17,7 @@ interface Row {
   orders_count: number | null;
   lines: StatementLine[];
   payouts: PlatformPayout[];
+  products: SoldProduct[] | null;
   net_payout_cents: number | string;
   file_name: string;
   imported_by: string | null;
@@ -34,6 +35,7 @@ const toDomain = (r: Row): StoredPlatformStatement => ({
   ordersCount: r.orders_count,
   lines: r.lines ?? [],
   payouts: r.payouts ?? [],
+  products: r.products ?? [],
   netPayoutCents: Number(r.net_payout_cents),
   fileName: r.file_name,
   importedBy: r.imported_by,
@@ -65,6 +67,7 @@ export class SupabasePlatformStatementRepository implements PlatformStatementRep
           orders_count: s.ordersCount,
           lines: s.lines,
           payouts: s.payouts,
+          products: s.products ?? [],
           net_payout_cents: s.netPayoutCents,
           file_name: meta.fileName,
           imported_by: meta.importedBy,

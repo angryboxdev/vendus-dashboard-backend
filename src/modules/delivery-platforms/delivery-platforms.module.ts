@@ -1,5 +1,10 @@
 import type { Router } from "express";
 import type { DescribeMovementPort } from "../bank-statements/domain/ports/in/describe-movement.port.js";
+import type { GetRecipeCostingPort } from "../recipe-costing/domain/ports/in/get-recipe-costing.port.js";
+import type { GetStockItemCostsPort } from "../recipe-costing/domain/ports/in/get-stock-item-costs.port.js";
+import { RecipeCostingProductCostsAdapter } from "./adapters/out/recipe-costing-product-costs.adapter.js";
+import { SupabaseProductMappingRepository } from "./adapters/out/supabase-product-mapping.repository.js";
+import { GetFoodCostUseCase, SaveProductMappingsUseCase } from "./application/use-cases/food-cost.use-case.js";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import { DocumentTextAdapter } from "./adapters/out/document-text.adapter.js";
 import { SupabasePlatformStatementRepository } from "./adapters/out/supabase-platform-statement.repository.js";
@@ -24,6 +29,9 @@ export interface DeliveryPlatformsModule {
 export interface DeliveryPlatformsModuleDeps {
   /** Regras do `bank-statements` para reconhecer os créditos das plataformas no banco (F4). */
   describeMovement: DescribeMovementPort;
+  /** Fichas técnicas e custo dos artigos (`recipe-costing`): custo real da comida do delivery (F5). */
+  getRecipeCosting: GetRecipeCostingPort;
+  getStockItemCosts: GetStockItemCostsPort;
 }
 
 /**
@@ -33,13 +41,17 @@ export interface DeliveryPlatformsModuleDeps {
 export function createDeliveryPlatformsModule(deps: DeliveryPlatformsModuleDeps): DeliveryPlatformsModule {
   const statements = new SupabasePlatformStatementRepository(createScopedQuery);
   const listStatements = new ListPlatformStatementsUseCase(statements);
-  const getMarginReport = new GetPlatformMarginReportUseCase(statements);
+  const mappings = new SupabaseProductMappingRepository(createScopedQuery);
+  const getFoodCost = new GetFoodCostUseCase(statements, mappings, new RecipeCostingProductCostsAdapter(deps.getRecipeCosting, deps.getStockItemCosts));
+  const getMarginReport = new GetPlatformMarginReportUseCase(statements, getFoodCost);
   const controller = new DeliveryPlatformsController(
     new ImportPlatformDocumentsUseCase(new DocumentTextAdapter(), statements),
     listStatements,
     getMarginReport,
     new ExportPlatformMarginReportUseCase(getMarginReport, new MarginReportWriterAdapter()),
     new GetPayoutReconciliationUseCase(statements, new SupabasePlatformBankCreditsAdapter(createScopedQuery, deps.describeMovement)),
+    getFoodCost,
+    new SaveProductMappingsUseCase(mappings),
   );
   return { router: controller.router, listStatements, getMarginReport };
 }

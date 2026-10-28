@@ -14,14 +14,14 @@ F1 (backend + página «Plataformas de delivery» no frontend, `/dre/plataformas
 - Tabela: `delivery_platform_statements` (`org_id`, RLS).
 
 ## Dependências
-`DescribeMovementPort` de [bank-statements](bank-statements.md) (reconhecer os créditos das plataformas; lê `bank_movements`). Expõe `getMarginReport`, usada pela DRE (`cash-flow`, F3b).
+`DescribeMovementPort` de [bank-statements](bank-statements.md) (reconhecer os créditos das plataformas; lê `bank_movements`). `GetRecipeCostingPort` e `GetStockItemCostsPort` de [recipe-costing](recipe-costing.md) (custo real da comida, F5). Expõe `getMarginReport`, usada pela DRE (`cash-flow`, F3b).
 
 ## Regras de negócio
 Ver «Conceitos de domínio» e «Decisões de design» no README do módulo e `.scratch/importador-plataformas/spec.md`.
 
 F3a feita no ramo (commit, sem push; sem migração): relatório de margem por plataforma (documentos que atravessam o mês repartidos pelo SAF-T diário / vendas diárias da Bolt) com exportação Excel e PDF, no ecrã.
 
-F4 feita no ramo (commit, sem push; sem migração): conferência das transferências × banco no ecrã.
+F4 em produção (#166/#138). F5 feita no ramo (commit, sem push): custo real da comida e da embalagem (SAF-T × fichas técnicas e artigos), com correção dos produtos no ecrã; migração `20261207100000_delivery_food_cost` por aplicar.
 
 ## Problemas conhecidos
 Documentos fora dos cinco conhecidos são rejeitados com motivo. Relatórios da Bolt com períodos sobrepostos duplicam vendas.

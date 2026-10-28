@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 851 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 853 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -132,8 +132,10 @@ Endpoints: 851 · pré-autenticação: 23 · não classificados: 0
 | PATCH | `/api/crm/scripts/:code` | permission:crm.settings:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/crm/tags` | permission:crm.customers:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/crm/tags` | permission:crm.customers:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/delivery-platforms/food-cost` | permission:dre.statement:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/delivery-platforms/import` | permission:dre.statement:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/delivery-platforms/payouts` | permission:dre.statement:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
+| PUT | `/api/delivery-platforms/product-mappings` | permission:dre.statement:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/delivery-platforms/report` | permission:dre.statement:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/delivery-platforms/report/export` | permission:dre.statement:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/delivery-platforms/statements` | permission:dre.statement:READ | ✔ | ✖ | ✖ | ✔ | ✖ |

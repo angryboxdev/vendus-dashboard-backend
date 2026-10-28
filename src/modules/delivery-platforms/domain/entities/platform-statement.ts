@@ -45,6 +45,18 @@ export interface StatementLine {
   date?: string;
 }
 
+/** Vendas de um produto num dia (SAF-T): para o custo real da comida. Nunca clientes. */
+export interface SoldProduct {
+  date: string;
+  /** Código do produto no sistema que faturou (ex.: AirMenu «W0000001017»). */
+  code: string;
+  description: string;
+  /** Quantidade (negativa nas notas de crédito). */
+  quantity: number;
+  /** Valor sem IVA, depois dos descontos da linha. */
+  netCents: number;
+}
+
 /** Uma transferência da plataforma e o período de vendas que paga. */
 export interface PlatformPayout {
   periodFrom: string;
@@ -66,6 +78,8 @@ export interface PlatformStatement {
   ordersCount: number | null;
   lines: StatementLine[];
   payouts: PlatformPayout[];
+  /** Vendas por produto e dia, quando o documento as traz (SAF-T). */
+  products?: SoldProduct[];
   /**
    * O que o documento soma à transferência do período: o total a transferir (Uber, Glovo); as vendas
    * (pedidos da Bolt) ou − o total da fatura (fatura semanal da Bolt), que juntos dão a transferência;

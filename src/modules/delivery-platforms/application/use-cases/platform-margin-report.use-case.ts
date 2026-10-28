@@ -10,11 +10,16 @@ import type {
 import type { MarginReportWriterPort } from "../../domain/ports/out/margin-report-writer.port.js";
 import type { PlatformStatementRepositoryPort } from "../../domain/ports/out/platform-statement-repository.port.js";
 import { buildMarginReport } from "../../domain/services/margin-report.service.js";
+import type { GetFoodCostPort } from "../../domain/ports/in/food-cost.port.js";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
 export class GetPlatformMarginReportUseCase implements GetPlatformMarginReportPort {
-  constructor(private readonly statements: PlatformStatementRepositoryPort) {}
+  constructor(
+    private readonly statements: PlatformStatementRepositoryPort,
+    /** Custo real da comida (F5); sem ele, ou se falhar, fica a estimativa. */
+    private readonly foodCost: GetFoodCostPort | null = null,
+  ) {}
 
   async execute({ organizationId, year, month }: { organizationId: OrganizationId; year: number; month: number }): Promise<MarginReport> {
     if (!Number.isInteger(year) || year < 2000 || year > 2100 || !Number.isInteger(month) || month < 1 || month > 12) {
@@ -27,7 +32,13 @@ export class GetPlatformMarginReportUseCase implements GetPlatformMarginReportPo
     const wideFrom = inMonth.reduce((a, s) => (s.periodFrom < a ? s.periodFrom : a), from);
     const wideTo = inMonth.reduce((a, s) => (s.periodTo > a ? s.periodTo : a), to);
     const context = wideFrom === from && wideTo === to ? inMonth : await this.statements.listOverlapping(organizationId, wideFrom, wideTo);
-    return buildMarginReport(year, month, inMonth, context);
+    const real = this.foodCost
+      ? await this.foodCost
+          .execute({ organizationId, year, month })
+          .then((f) => (f.hasProducts && f.foodCostPct !== null ? { pct: f.foodCostPct, complete: f.complete } : null))
+          .catch(() => null)
+      : null;
+    return buildMarginReport(year, month, inMonth, context, real);
   }
 }
 
