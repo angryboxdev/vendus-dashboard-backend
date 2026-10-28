@@ -25,7 +25,8 @@ describe("GetDreRestaurantSalesUseCase", () => {
       netCents: 100_000,
       vatCents: 13_000,
       byPayment: { cardNetCents: 80_000, cashNetCents: 20_000, otherNetCents: 0 },
-      cardFees: { cardGrossCents: 80_000, ratePct: 1, netCents: 800 },
+      // Por omissão 0%: o banco cobra a comissão do TPA à parte (já nos gastos bancários)
+      cardFees: { cardGrossCents: 80_000, ratePct: 0, netCents: 0 },
     });
   });
 

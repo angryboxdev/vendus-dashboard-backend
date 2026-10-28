@@ -3,11 +3,12 @@ import { GetDreEntriesUseCase, GetDreUseCase } from "../../application/use-cases
 import type { StoredBankCredit, StoredBankDebit } from "../../domain/ports/out/bank-movement-read.port.js";
 import { DEFAULT_DRE_PARAMETERS } from "../../domain/entities/dre-parameters.js";
 import { InvalidCashFlowPeriodError } from "../../domain/errors.js";
+import type { UnpaidInvoice } from "../../domain/entities/cash-flow.js";
 import { catalog, credit, debit, emptySources } from "../fakes/builders.js";
 
 const organizationId = mintOrganizationId("org-a");
 
-function useCase(debits: StoredBankDebit[], credits: StoredBankCredit[]) {
+function useCase(debits: StoredBankDebit[], credits: StoredBankCredit[], unpaid: UnpaidInvoice[] = []) {
   const calls: Record<string, unknown[]> = { restaurant: [], parameters: [], ratios: [] };
   const sources = emptySources();
   sources.invoices.set("makro", { mode: "simple", netRatio: 100 / 123, groupId: null, categoryId: "c-ing", allocations: [], lines: [] });
@@ -29,10 +30,11 @@ function useCase(debits: StoredBankDebit[], credits: StoredBankCredit[]) {
       ),
     },
     {
-      forMonth: async (_o, y, m) => (calls.parameters!.push([y, m]), { own: null, previous: { ...DEFAULT_DRE_PARAMETERS, deliverySalesVatPct: 15 } }),
+      forMonth: async (_o, y, m) => (calls.parameters!.push([y, m]), { own: null, previous: { ...DEFAULT_DRE_PARAMETERS, deliverySalesVatPct: 15, cardFeePct: 1 } }),
       save: async () => undefined,
     },
     { recentNetRatios: async (_o, until, sample) => (calls.ratios!.push([until, sample]), new Map()) },
+    { unpaidInvoices: async (_o, from, to) => ((calls.unpaid = [from, to]), unpaid) },
     () => "2026-10-16",
   );
   const entries = new GetDreEntriesUseCase(
@@ -45,6 +47,7 @@ function useCase(debits: StoredBankDebit[], credits: StoredBankCredit[]) {
     { describe: (d) => ({ kind: "transfer_out", platform: null, label: `Legível: ${d}` }) },
     { forMonth: async () => ({ own: null, previous: null }), save: async () => undefined },
     { recentNetRatios: async () => new Map() },
+    { unpaidInvoices: async () => unpaid },
     () => "2026-10-16",
   );
   return { uc, calls, entries };
@@ -117,5 +120,21 @@ describe("GetDreUseCase", () => {
         vatBasis: "real",
       },
     ]);
+  });
+
+  it("faturas do mês por pagar: pedidas para o mês inteiro e somadas aos gastos; na lista, sem data de pagamento", async () => {
+    const unpaid: UnpaidInvoice[] = [
+      { id: "renda", totalCents: 12_300, data: { mode: "simple", netRatio: 100 / 123, groupId: null, categoryId: "c-ing", allocations: [], lines: [], date: "2026-10-01", label: "Senhorio Teste · FT 3" } },
+    ];
+    const { uc, entries, calls } = useCase([], [], unpaid);
+
+    const report = await uc.execute({ organizationId, year: 2026, month: 10, withRestaurantSales: false });
+    expect(calls.unpaid).toEqual(["2026-10-01", "2026-10-31"]);
+    expect(report.expenses.totalNetCents).toBe(10_000);
+    expect(report.expenses.unpaidInvoices).toEqual({ count: 1, netCents: 10_000 });
+    expect(report.vat.purchasesCents).toBe(2_300);
+
+    const list = await entries.execute({ organizationId, year: 2026, month: 10 });
+    expect(list.entries).toMatchObject([{ section: "cmv", paidOn: null, competenceDate: "2026-10-01", document: "Senhorio Teste · FT 3", netCents: 10_000, vatBasis: "real" }]);
   });
 });

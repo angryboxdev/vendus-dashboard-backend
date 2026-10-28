@@ -291,6 +291,19 @@ describe("buildDreReport", () => {
     });
   });
 
+  it("faturas por pagar: contam no mês da sua competência, pela categoria e com o IVA da fatura", () => {
+    const invoice = (id: string, date: string) => ({
+      id,
+      totalCents: 12_300,
+      data: { mode: "simple" as const, netRatio: 100 / 123, groupId: null, categoryId: "c-ing", allocations: [], lines: [], date, label: null },
+    });
+    const report = buildDreReport(input({ unpaidInvoices: [invoice("out", "2026-10-15"), invoice("nov", "2026-11-02")] }));
+    expect(report.expenses.sections.map((s) => [s.key, s.netCents])).toEqual([["cmv", 10_000]]);
+    expect(report.expenses.unpaidInvoices).toEqual({ count: 1, netCents: 10_000 });
+    expect(report.vat.purchasesCents).toBe(2_300);
+    expect(buildDreEntries(input({ unpaidInvoices: [invoice("out", "2026-10-15")] }))[0]).toMatchObject({ paidOn: null, basis: "document" });
+  });
+
   it("pagamentos: uma entrada por parte, com a rubrica onde entra e a base do IVA, por data", () => {
     const entries = buildDreEntries(
       input({
