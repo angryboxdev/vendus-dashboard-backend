@@ -9,6 +9,7 @@ import type { PreviewStatementAccountPort, ReadStatementPdfPort } from "../../do
 import { statementAccountHints } from "../../domain/services/statement-pdf/statement-account-hints.js";
 import type { ParsedBankStatement } from "../../domain/services/statement-pdf/parsed-statement.js";
 import type { StatementSourceType } from "../../domain/entities/bank-statement-import.js";
+import { MillenniumTxtStatementParser } from "../out/millennium-txt-statement-parser.adapter.js";
 import { XlsxStatementParser } from "../out/xlsx-statement-parser.adapter.js";
 import {
   StatementNotFoundError,
@@ -99,6 +100,7 @@ import type { ConfirmGroupedSettlementPort } from "../../domain/ports/in/bank-st
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const csvParser = new CsvStatementParser();
 const xlsxParser = new XlsxStatementParser();
+const millenniumTxtParser = new MillenniumTxtStatementParser();
 
 export class BankStatementController {
   readonly router: Router;
@@ -140,13 +142,17 @@ export class BankStatementController {
     this.registerRoutes();
   }
 
-  /** Lê o ficheiro enviado pelo formato: PDF (modelo reconhecido), XLSX ou CSV. */
+  /** Lê o ficheiro enviado pelo formato: PDF (modelo reconhecido), TXT do Millennium, XLSX ou CSV. */
   private async readUpload(file: { buffer: Buffer; mimetype: string; originalname: string }): Promise<{ parsed: ParsedStatement; sourceType: StatementSourceType; pdf: ParsedBankStatement | null }> {
     const name = file.originalname.toLowerCase();
     if (file.mimetype === "application/pdf" || name.endsWith(".pdf")) {
       if (!this.readStatementPdf) throw new StatementPdfNotRecognizedError("A importação de extratos em PDF não está disponível.");
       const pdf = await this.readStatementPdf.execute(file.buffer);
       return { parsed: pdf, sourceType: "pdf", pdf };
+    }
+    // «Relatório de movimentos» do Millennium em TXT (mês em curso, com saldos): grava-se como «csv» (texto).
+    if (name.endsWith(".txt") || MillenniumTxtStatementParser.matches(file.buffer.subarray(0, 4096).toString("latin1"))) {
+      return { parsed: millenniumTxtParser.parse(file.buffer), sourceType: "csv", pdf: null };
     }
     const isXlsx = file.mimetype.includes("spreadsheet") || file.mimetype.includes("excel") || name.endsWith(".xlsx") || name.endsWith(".xls");
     return isXlsx ? { parsed: xlsxParser.parse(file.buffer), sourceType: "xlsx", pdf: null } : { parsed: csvParser.parse(file.buffer), sourceType: "csv", pdf: null };
