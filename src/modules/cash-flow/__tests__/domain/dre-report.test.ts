@@ -217,6 +217,10 @@ describe("buildDreReport", () => {
       ["capex", 40_000],
     ]);
     expect(report.expenses.sections.find((s) => s.key === "unclassified")!.items[0]).toMatchObject({ movementKind: "card_purchase", name: null });
+    // Mercadoria (Makro, Dream Plus) sem fatura: entra no CMV pelo tipo do extrato, com o IVA por apurar.
+    const merch = buildDreReport(input({ debits: [debit({ id: "m", amountCents: 7_000, kind: "merchandise" })] }));
+    expect(merch.expenses.sections.map((s) => [s.key, s.netCents])).toEqual([["cmv", 7_000]]);
+    expect(merch.expenses.sections[0]!.items[0]).toMatchObject({ movementKind: "merchandise" });
     expect(report.expenses.capexNetCents).toBe(40_000);
     expect(report.resultCents).toBe(100_000 - 20_000 - 30_000 - 5_000);
   });

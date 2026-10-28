@@ -16,6 +16,7 @@ export type MovementKind =
   | "insurance"
   | "utilities"
   | "card_purchase"
+  | "merchandise"
   | "internal_transfer"
   | "reversal"
   | "to_review";
@@ -62,6 +63,19 @@ const titleCase = (s: string) => s.toLowerCase().replace(/(^|[\s/(-])(\p{L})/gu,
  * melhora com as regras sem precisar de migração. Sem regra: «Por rever», com a descrição limpa.
  */
 export function normalizeMovement(description: string, type: MovementType): NormalizedMovement {
+  const base = byRules(description, type);
+  // Fornecedores de mercadoria: qualquer saída para eles é mercadoria/ingrediente (CMV) até a fatura
+  // conciliada dizer outra coisa (decisão do utilizador, 2026-10-28).
+  if (type === "debit" && MERCHANDISE_SUPPLIERS.test(description) && MERCHANDISE_FROM.has(base.kind)) return { ...base, kind: "merchandise" };
+  return base;
+}
+
+/** Makro (loja, makro.pt, transferência) e Dream Plus. */
+const MERCHANDISE_SUPPLIERS = /\bMAKRO\b|\bDREAM\s?PLUS\b/i;
+/** Só passam a mercadoria os tipos genéricos de pagamento (nunca Estado, salários, banco…). */
+const MERCHANDISE_FROM: ReadonlySet<MovementKind> = new Set(["card_purchase", "supplier", "transfer_out", "to_review"]);
+
+function byRules(description: string, type: MovementType): NormalizedMovement {
   const d = squash(description);
   const up = d.toUpperCase();
 

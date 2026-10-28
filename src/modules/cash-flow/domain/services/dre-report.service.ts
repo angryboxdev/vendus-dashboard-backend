@@ -256,8 +256,10 @@ const SECTION_BY_TYPE: Record<string, DreSectionKey> = {
  * Sem fatura nem categoria, a saída fica com a classificação genérica do extrato (decisão do
  * utilizador, 2026-10-27): os tipos inequívocos vão para a sua linha; o resto («Outros gastos pelo
  * extrato»: transferências, compras com cartão, Estado…) fica em `unclassified`, pelo tipo do banco.
+ * Mercadoria (Makro, Dream Plus) vai para o CMV até ter fatura (o IVA fica por apurar até lá).
  */
 const SECTION_BY_MOVEMENT_KIND: Record<string, DreSectionKey> = {
+  merchandise: "cmv",
   payroll: "personnel",
   utilities: "structure",
   insurance: "administrative",

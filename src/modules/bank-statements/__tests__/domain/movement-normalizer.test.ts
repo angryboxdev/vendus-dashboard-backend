@@ -63,3 +63,15 @@ describe("normalizeMovement", () => {
     expect(normalizeMovement("STRIPE", "credit").restaurantSale).toBeUndefined();
   });
 });
+
+describe("normalizeMovement — mercadoria (Makro, Dream Plus)", () => {
+  it("saídas para a Makro e a Dream Plus são mercadoria/ingrediente (CMV), em loja, online ou por transferência", () => {
+    for (const d of ["MAKRO GAIA PORTO PRT", "MAKRO MATOSINHOS LISBOA PRT", "MDB4334 makro.pt O26 79.35EUR", "TRF P/ MAKRO CASH E CARRY PORTUGAL S A", "TRF P/ Dream Plus"]) {
+      expect(normalizeMovement(d, "debit").kind).toBe("merchandise");
+    }
+    // A descrição legível mantém-se.
+    expect(normalizeMovement("TRF P/ Dream Plus", "debit").normalizedDescription).toBe("Transferência para Dream Plus");
+    // Entradas (devoluções da Makro) não são mercadoria.
+    expect(normalizeMovement("COMPRA 1234 MAKRO GAIA VILA NOVA DE", "credit").kind).not.toBe("merchandise");
+  });
+});
