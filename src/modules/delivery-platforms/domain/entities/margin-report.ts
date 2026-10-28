@@ -39,6 +39,8 @@ export interface PlatformMargin {
   /** Comissões, marketing, outras taxas e reembolsos, com o IVA que a plataforma cobra. */
   platformFeesGrossCents: number;
   feesVatCents: number;
+  /** Parte de `feesVatCents` que é IVA da comissão. */
+  commissionVatCents: number;
   cashCents: number;
   /** Líquido dos documentos (transferido; na Bolt, calculado). */
   netPayoutCents: number;

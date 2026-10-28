@@ -4,6 +4,7 @@ import type { GetDrePort } from "../../domain/ports/in/get-dre.port.js";
 import type { BankMovementReadPort } from "../../domain/ports/out/bank-movement-read.port.js";
 import { CATEGORY_VAT_SAMPLE, type CategoryVatRatioReadPort } from "../../domain/ports/out/category-vat-ratio-read.port.js";
 import type { CostCenterCatalogReadPort } from "../../domain/ports/out/cost-center-catalog-read.port.js";
+import type { DeliveryStatementsReadPort } from "../../domain/ports/out/delivery-statements-read.port.js";
 import type { DreParametersRepositoryPort } from "../../domain/ports/out/dre-parameters-repository.port.js";
 import type { ExpenseSourceReadPort } from "../../domain/ports/out/expense-source-read.port.js";
 import type { MovementKindPort } from "../../domain/ports/out/movement-kind.port.js";
@@ -32,6 +33,7 @@ class DreInputLoader {
     private readonly categoryVatRatios: CategoryVatRatioReadPort,
     private readonly unpaid: UnpaidInvoicesReadPort,
     private readonly today: () => string,
+    private readonly deliveryStatements: DeliveryStatementsReadPort | null = null,
   ) {}
 
   async load({ organizationId, year, month }: DreQuery, withRestaurantSales: boolean): Promise<BuildDreInput> {
@@ -39,7 +41,7 @@ class DreInputLoader {
     const { from, to, monthEnd, isCurrentMonth } = cashFlowPeriod(year, month, today);
     const window = drePaymentsWindow(year, month, today);
 
-    const [catalog, storedDebits, storedCredits, restaurant, stored, categoryNetRatios, unpaidInvoices] = await Promise.all([
+    const [catalog, storedDebits, storedCredits, restaurant, stored, categoryNetRatios, unpaidInvoices, deliveryStatements] = await Promise.all([
       this.catalog.load(organizationId),
       this.bankMovements.listDebits(organizationId, window.from, window.to),
       this.bankMovements.listCredits(organizationId, from, to),
@@ -47,6 +49,7 @@ class DreInputLoader {
       this.parameters.forMonth(organizationId, year, month),
       this.categoryVatRatios.recentNetRatios(organizationId, to, CATEGORY_VAT_SAMPLE),
       this.unpaid.unpaidInvoices(organizationId, from, monthEnd),
+      this.deliveryStatements ? this.deliveryStatements.forMonth(organizationId, year, month) : Promise.resolve([]),
     ]);
     const debits = storedDebits.map(({ description, ...d }) => {
       const n = this.movementKind.describe(description, "debit");
@@ -66,6 +69,7 @@ class DreInputLoader {
       parameters: resolveDreParameters(stored.own, stored.previous),
       categoryNetRatios,
       unpaidInvoices,
+      deliveryStatements,
     };
   }
 }
@@ -84,8 +88,21 @@ export class GetDreUseCase implements GetDrePort {
     unpaidInvoices: UnpaidInvoicesReadPort,
     /** Hoje, YYYY-MM-DD (injetado para os testes). */
     today: () => string = () => new Date().toISOString().slice(0, 10),
+    /** Extratos das plataformas (módulo `delivery-platforms`); sem eles, as plataformas vêm do banco. */
+    deliveryStatements: DeliveryStatementsReadPort | null = null,
   ) {
-    this.loader = new DreInputLoader(bankMovements, expenseSources, catalog, movementKind, restaurantSales, parameters, categoryVatRatios, unpaidInvoices, today);
+    this.loader = new DreInputLoader(
+      bankMovements,
+      expenseSources,
+      catalog,
+      movementKind,
+      restaurantSales,
+      parameters,
+      categoryVatRatios,
+      unpaidInvoices,
+      today,
+      deliveryStatements,
+    );
   }
 
   async execute({ withRestaurantSales = true, ...query }: DreQuery & { withRestaurantSales?: boolean }): Promise<DreReport> {

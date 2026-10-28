@@ -4,6 +4,7 @@ import type { DescribeMovementPort } from "../bank-statements/domain/ports/in/de
 import type { GetPayableSummaryPort } from "../payable-entries/domain/ports/in/payable-entry.ports.js";
 import type { GetInvoiceAlertsPort } from "../invoices/domain/ports/in/invoice.ports.js";
 import type { GetSummaryPort as VendusGetSummaryPort } from "../vendus/domain/ports/in/get-summary.port.js";
+import type { GetPlatformMarginReportPort } from "../delivery-platforms/domain/ports/in/platform-margin-report.port.js";
 
 import { SupabaseBankMovementReadAdapter } from "./adapters/out/supabase-bank-movement-read.adapter.js";
 import { SupabaseExpenseSourceReadAdapter } from "./adapters/out/supabase-expense-source-read.adapter.js";
@@ -13,6 +14,7 @@ import { PayableEntriesSummaryAdapter } from "./adapters/out/payable-entries-sum
 import { InvoiceAlertsToReviewAdapter } from "./adapters/out/invoice-alerts-to-review.adapter.js";
 import { VendusRestaurantSalesAdapter } from "./adapters/out/vendus-restaurant-sales.adapter.js";
 import { VendusDailyPaymentsAdapter } from "./adapters/out/vendus-daily-payments.adapter.js";
+import { DeliveryPlatformsStatementsAdapter } from "./adapters/out/delivery-platforms-statements.adapter.js";
 import { SupabaseDreParametersRepository } from "./adapters/out/supabase-dre-parameters.repository.js";
 import { SupabaseCategoryVatRatioReadAdapter } from "./adapters/out/supabase-category-vat-ratio-read.adapter.js";
 import { GetCashFlowUseCase } from "./application/use-cases/get-cash-flow.use-case.js";
@@ -32,6 +34,8 @@ export interface CashFlowModuleDeps {
   getPayableSummary: GetPayableSummaryPort;
   getInvoiceAlerts: GetInvoiceAlertsPort;
   vendusGetSummary: VendusGetSummaryPort;
+  /** Margem por plataforma pelos extratos importados (módulo `delivery-platforms`): a DRE usa-a quando há extratos. */
+  deliveryMarginReport?: GetPlatformMarginReportPort;
 }
 
 /**
@@ -64,6 +68,8 @@ export function createCashFlowModule(deps: CashFlowModuleDeps): CashFlowModule {
     parameters,
     categoryVatRatios,
     expenseSources,
+    undefined,
+    deps.deliveryMarginReport ? new DeliveryPlatformsStatementsAdapter(deps.deliveryMarginReport) : null,
   );
   const getSalesReconciliation = new GetSalesReconciliationUseCase(
     bankMovements,

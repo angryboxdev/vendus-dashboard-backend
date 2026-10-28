@@ -43,6 +43,7 @@ function margin(platform: PlatformMargin["platform"], docs: AllocatedStatement[]
     paidByCustomersCents,
     platformFeesGrossCents: sum(lines, ["commission", "marketing", "other_fee", "refund"]),
     feesVatCents,
+    commissionVatCents: sum(lines, ["commission"], "vatCents"),
     cashCents: sum(lines, ["cash"]),
     netPayoutCents: docs.reduce((a, d) => a + d.netPayoutCents, 0),
     salesNetCents,

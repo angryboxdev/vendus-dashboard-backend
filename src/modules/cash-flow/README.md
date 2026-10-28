@@ -1,7 +1,7 @@
 # Módulo: cash-flow
 
 > Status: active
-> Última atualização: 2026-10-28 (DRE: faturas do mês por pagar nos gastos; gastos pelo mês da fatura; bloco «Fora da operação»; pagamentos por rubrica em `GET /reports/dre/pagamentos`; comissão do TPA; juros dos empréstimos). Antes: 2026-10-27 (DRE: delivery em bruto sem AirMenu, parâmetros mensais, IVA estimado dos gastos; conferência de vendas Vendus × banco). Antes: 2026-10-26 (fluxo de caixa só a partir do banco; «Para tratar»; DRE F1 pela conciliação bancária)
+> Última atualização: 2026-10-28 (DRE: plataformas pelos extratos importados quando os há no mês — `delivery-platforms`, F3b; faturas do mês por pagar nos gastos; faturas do mês por pagar nos gastos; gastos pelo mês da fatura; bloco «Fora da operação»; pagamentos por rubrica em `GET /reports/dre/pagamentos`; comissão do TPA; juros dos empréstimos). Antes: 2026-10-27 (DRE: delivery em bruto sem AirMenu, parâmetros mensais, IVA estimado dos gastos; conferência de vendas Vendus × banco). Antes: 2026-10-26 (fluxo de caixa só a partir do banco; «Para tratar»; DRE F1 pela conciliação bancária)
 
 ---
 
@@ -71,7 +71,8 @@ Decisões do utilizador (2026-10-26, revistas a 2026-10-27): a DRE parte da conc
 tudo **sem IVA**; o objetivo é saber se a empresa dá lucro. Sem AirMenu.
 
 - **Receita — restaurante:** Vendus (canais salão/take-away/Eatz, sem o antigo «apps»), com o IVA exato dos documentos; repartida em «Venda restaurante cartão / dinheiro / outros» na proporção do bruto por classe de pagamento (`restaurantByPayment`).
-- **Receita — plataformas, em bruto** (`platformGross`): a plataforma liquida no banco já sem a comissão (com IVA por cima) e sem o marketing (com IVA). Com R = recebido, M = marketing sem IVA (lançado à mão), c = comissão, t = IVA da comissão, v = IVA médio das vendas, m = IVA do marketing: G = (R + M·(1+m)) ÷ (1 − k), k = c·(1+t) (comissão sobre a venda com IVA) ou c·(1+t)/(1+v) (sem IVA). Receita = G ÷ (1+v). Por plataforma mostra também a **margem** (venda sem IVA − comissão − marketing). Exemplo: R = 631 € → G = 1000 €, receita 869,57 €, comissão 300 € (+69 € IVA). Uma plataforma só com marketing lançado também aparece.
+- **Receita — plataformas pelos extratos** (F3b, 2026-10-28): quando o módulo `delivery-platforms` tem extratos da plataforma no mês (já repartidos pelo mês), a DRE usa-os — receita = vendas a preço de tabela sem IVA; custos = promoções, comissões, marketing (com o IVA real) e reembolsos/outras taxas; o recebido no banco continua a aparecer. Cada plataforma diz a origem (`source: "statements" | "bank"`); o marketing lançado à mão só conta nas plataformas sem extratos.
+- **Receita — plataformas, em bruto** (`platformGross`, sem extratos no mês): a plataforma liquida no banco já sem a comissão (com IVA por cima) e sem o marketing (com IVA). Com R = recebido, M = marketing sem IVA (lançado à mão), c = comissão, t = IVA da comissão, v = IVA médio das vendas, m = IVA do marketing: G = (R + M·(1+m)) ÷ (1 − k), k = c·(1+t) (comissão sobre a venda com IVA) ou c·(1+t)/(1+v) (sem IVA). Receita = G ÷ (1+v). Por plataforma mostra também a **margem** (venda sem IVA − comissão − marketing). Exemplo: R = 631 € → G = 1000 €, receita 869,57 €, comissão 300 € (+69 € IVA). Uma plataforma só com marketing lançado também aparece.
 - **Custos das plataformas:** comissão e marketing sem IVA — linha própria, abatida no resultado; o IVA deles conta como dedutível.
 - **Comissão do TPA (2026-10-28):** o banco liquida as vendas em cartão já sem a comissão, por isso ela nunca aparece como saída. Estimada pela taxa do mês (`cardFeePct`, a mesma da conferência de vendas) sobre o vendido em cartão no Vendus (com IVA). **Por omissão 0%** (2026-10-28): em setembro a taxa implícita foi −0,1% — o banco credita o TPA em bruto e cobra a comissão num débito à parte, que já está nos gastos bancários; com 1% contava duas vezes. Só se põe uma taxa se o TPA liquidar com desconto. `cardFees`, abatida no resultado, sem IVA dedutível (serviço financeiro — por validar com a contabilidade). Vem também em `GET /reports/dre/vendas-restaurante` (o Mapa mostra-a com as vendas). No pedido rápido é zero.
 - **Juros dos empréstimos (2026-10-28):** um movimento justificado como empréstimo conta na DRE só na parte com categoria de tipo `financial` fora do grupo «Fora da DRE» (os juros, ex.: ADM.03); o capital (FDR.04) e os empréstimos sem categoria vão para «Fora da operação». O fluxo de caixa continua a excluir os empréstimos por inteiro.
@@ -114,6 +115,7 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 
 ### Saída (dependências do domínio)
 
+- `DeliveryStatementsReadPort` — resultados das plataformas no mês pelos extratos importados (vazio sem extratos).
 - `BankMovementReadPort` — débitos (com ligações a documentos) e créditos de todas as contas da organização num intervalo.
 - `ExpenseSourceReadPort` — categoria das faturas, contas a pagar e ocorrências referidas.
 - `CostCenterCatalogReadPort` — grupos e categorias de centro de custo.
@@ -134,6 +136,7 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 
 ### Saída
 
+- `DeliveryPlatformsStatementsAdapter` → `GetPlatformMarginReportPort` do módulo `delivery-platforms` (ligado em `server.ts`).
 - `SupabaseBankMovementReadAdapter` → `bank_movements` (paginado) + `bank_movement_entity_links`.
 - `SupabaseExpenseSourceReadAdapter` → `invoices`, `invoice_lines`, `invoice_allocations`, `payable_entries`, `recurring_occurrences`, `recurring_contracts`; implementa também `UnpaidInvoicesReadPort` (valores das faturas em cêntimos).
 - `SupabaseCostCenterCatalogReadAdapter` → `cost_center_groups`, `cost_center_categories`.

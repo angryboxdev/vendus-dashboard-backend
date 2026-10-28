@@ -1783,17 +1783,19 @@ app.use("/api", bankStatementsModule.router);
 
 // Cash flow module (hexagonal) — «Fluxo de caixa» do Mapa de rentabilidade: entradas vs saídas do
 // banco, e DRE pela conciliação bancária. Recebe portas de bank-statements, payable-entries,
-// invoices e vendus (D10). As plataformas entram pelas liquidações no banco (sem AirMenu).
+// invoices, vendus e delivery-platforms (D10). As plataformas entram pelos extratos importados quando
+// os há no mês; senão, reconstituídas das liquidações no banco.
+// Plataformas de delivery: importação dos extratos (Uber, Glovo, Bolt, SAF-T) e margem por plataforma.
+// Antes do cash-flow: a DRE usa a margem pelos extratos quando os há no mês (F3b).
+const deliveryPlatformsModule = createDeliveryPlatformsModule();
 const cashFlowModule = createCashFlowModule({
   describeMovement: bankStatementsModule.describeMovement,
   getPayableSummary: payableEntriesModule.getPayableSummary,
   getInvoiceAlerts: invoicesModule.getInvoiceAlerts,
   vendusGetSummary: vendusModule.getSummary,
+  deliveryMarginReport: deliveryPlatformsModule.getMarginReport,
 });
 app.use("/api", cashFlowModule.router);
-
-// Plataformas de delivery: importação dos extratos (Uber, Glovo…) para o relatório por plataforma.
-const deliveryPlatformsModule = createDeliveryPlatformsModule();
 app.use("/api", deliveryPlatformsModule.router);
 
 // Air Menu: rota protegida (módulo já instanciado acima)
