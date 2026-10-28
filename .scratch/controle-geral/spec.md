@@ -35,6 +35,6 @@ Página nova, no modelo da folha «Controle Geral / 2025 — Mês projetado» qu
 - Correspondência exata entre os grupos e as linhas/categorias da DRE (pessoal → DC; estrutura → DF;
   custos variáveis → DV; marketing → DP; CMV → DI; …) e onde entram «administrativo», «outros», «financeiro».
 - O que é «DIVA» (IVA pago ao Estado no mês? saldo do IVA?) e a diferença entre as duas «Despesas totais».
-- O que é «Variável renda».
+- ~~O que é «Variável renda».~~ Resolvido: 8% do valor da faturação acima de 19 000 € (parâmetros do mês).
 - DE: um valor por mês, ou uma lista de empréstimos com prestação mensal.
 - Faturação com ou sem IVA.

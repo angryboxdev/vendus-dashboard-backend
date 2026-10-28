@@ -29,6 +29,12 @@ export interface DreParameters {
    * da operação que não passam pelo banco. Não entra na DRE.
    */
   loanExpenseCents: number;
+  /**
+   * Renda variável do «Controle geral» (contrato do espaço): `rentVariablePct`% da faturação do mês acima
+   * de `rentThresholdCents` (ex.: 8% acima de 19 000 €). 0% = sem renda variável. Não entra na DRE.
+   */
+  rentThresholdCents: number;
+  rentVariablePct: number;
 }
 
 /** De onde vêm as taxas: do próprio mês, herdadas do último mês com valores, ou as de omissão. */
@@ -50,4 +56,6 @@ export const DEFAULT_DRE_PARAMETERS: DreParameters = {
   expenseDefaultVatPct: 23,
   marketingNetCents: { uber_eats: 0, glovo: 0, bolt_food: 0 },
   loanExpenseCents: 0,
+  rentThresholdCents: 0,
+  rentVariablePct: 0,
 };

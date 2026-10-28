@@ -5,7 +5,7 @@ import type { DreParametersRepositoryPort } from "../../domain/ports/out/dre-par
 
 const COLUMNS =
   "year, month, delivery_sales_vat_pct, platform_commission_pct, platform_commission_vat_pct, commission_on_gross, " +
-  "marketing_vat_pct, card_fee_pct, expense_default_vat_pct, marketing_uber_eats_cents, marketing_glovo_cents, marketing_bolt_food_cents, loan_expense_cents";
+  "marketing_vat_pct, card_fee_pct, expense_default_vat_pct, marketing_uber_eats_cents, marketing_glovo_cents, marketing_bolt_food_cents, loan_expense_cents, rent_threshold_cents, rent_variable_pct";
 
 interface Row {
   year: number;
@@ -21,6 +21,8 @@ interface Row {
   marketing_glovo_cents: number | string;
   marketing_bolt_food_cents: number | string;
   loan_expense_cents: number | string | null;
+  rent_threshold_cents: number | string | null;
+  rent_variable_pct: number | string | null;
 }
 
 function toDomain(r: Row): DreParameters {
@@ -38,6 +40,8 @@ function toDomain(r: Row): DreParameters {
       bolt_food: Number(r.marketing_bolt_food_cents),
     },
     loanExpenseCents: Number(r.loan_expense_cents ?? 0),
+    rentThresholdCents: Number(r.rent_threshold_cents ?? 0),
+    rentVariablePct: Number(r.rent_variable_pct ?? 0),
   };
 }
 
@@ -79,6 +83,8 @@ export class SupabaseDreParametersRepository implements DreParametersRepositoryP
           marketing_glovo_cents: p.marketingNetCents.glovo,
           marketing_bolt_food_cents: p.marketingNetCents.bolt_food,
           loan_expense_cents: p.loanExpenseCents ?? 0,
+          rent_threshold_cents: p.rentThresholdCents ?? 0,
+          rent_variable_pct: p.rentVariablePct ?? 0,
           updated_by: updatedBy,
           updated_at: new Date().toISOString(),
         },
