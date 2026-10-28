@@ -1,5 +1,6 @@
 import type { BankCredit, BankDebit, CostCenterCatalog, ExpenseSources, UnpaidInvoice } from "../entities/cash-flow.js";
 import type {
+  DeliveryStatementResult,
   DreCardFees,
   DreEntry,
   DreExpenseCategory,
@@ -45,6 +46,8 @@ export interface BuildDreInput {
   categoryNetRatios: Map<string, number>;
   /** Faturas do mês ainda por pagar (sem movimento conciliado): entram como gasto do mês. */
   unpaidInvoices?: UnpaidInvoice[];
+  /** Plataformas com extratos importados no mês: usam-se em vez da reconstituição pelo banco. */
+  deliveryStatements?: DeliveryStatementResult[];
 }
 
 /** Uma parte de uma saída já colocada no mês, com o valor sem IVA. */
@@ -351,23 +354,56 @@ export function cardFees(r: RestaurantSales, p: Pick<ResolvedDreParameters, "car
 }
 
 /**
- * Plataformas reconstituídas em bruto a partir do que liquidam no banco (já sem comissão nem marketing)
- * e do marketing lançado à mão — ver `platformGross`. Uma plataforma só com marketing também aparece.
+ * Plataformas: pelos extratos importados quando os há no mês (vendas a preço de tabela, promoções,
+ * comissões, marketing e outras taxas reais); senão reconstituídas em bruto a partir do que liquidam no
+ * banco e do marketing lançado à mão — ver `platformGross`. O recebido no banco aparece sempre.
+ * Uma plataforma só com marketing ou só com extratos também aparece.
  */
-function platforms(credits: BankCredit[], p: ResolvedDreParameters): DrePlatformRevenue[] {
+function platforms(credits: BankCredit[], p: ResolvedDreParameters, statements: DeliveryStatementResult[] = []): DrePlatformRevenue[] {
   const received = new Map<string, number>();
   for (const c of credits) {
     if (!c.platform || isExcluded(c)) continue;
     received.set(c.platform, (received.get(c.platform) ?? 0) + c.amountCents);
   }
-  const keys = new Set<string>([...received.keys(), ...DELIVERY_PLATFORMS.filter((k) => p.marketingNetCents[k] > 0)]);
+  const fromStatements = new Map(statements.map((s) => [s.platform, s]));
+  const keys = new Set<string>([...received.keys(), ...DELIVERY_PLATFORMS.filter((k) => p.marketingNetCents[k] > 0), ...fromStatements.keys()]);
   return [...keys]
-    .map((platform) => {
+    .map((platform): DrePlatformRevenue => {
       const receivedCents = received.get(platform) ?? 0;
+      const s = fromStatements.get(platform);
+      if (s) {
+        const contributionCents = s.salesNetCents - s.promotionsNetCents - s.commissionNetCents - s.marketingNetCents - s.otherNetCents;
+        return {
+          platform,
+          source: "statements",
+          receivedCents,
+          marketingNetCents: s.marketingNetCents,
+          grossCents: s.salesGrossCents,
+          netCents: s.salesNetCents,
+          promotionsNetCents: s.promotionsNetCents,
+          otherFeesNetCents: s.otherNetCents,
+          salesVatCents: s.salesVatCents,
+          commissionNetCents: s.commissionNetCents,
+          commissionVatCents: s.commissionVatCents,
+          marketingVatCents: s.marketingVatCents,
+          contributionCents,
+          contributionPct: pct(contributionCents, s.salesNetCents),
+        };
+      }
       const marketingNetCents = p.marketingNetCents[platform as DeliveryPlatformKey] ?? 0;
       const g = platformGross(receivedCents, marketingNetCents, p);
       const contributionCents = g.netCents - g.commissionNetCents - marketingNetCents;
-      return { platform, receivedCents, marketingNetCents, ...g, contributionCents, contributionPct: pct(contributionCents, g.netCents) };
+      return {
+        platform,
+        source: "bank",
+        receivedCents,
+        marketingNetCents,
+        ...g,
+        promotionsNetCents: 0,
+        otherFeesNetCents: 0,
+        contributionCents,
+        contributionPct: pct(contributionCents, g.netCents),
+      };
     })
     .sort((a, b) => b.grossCents - a.grossCents);
 }
@@ -380,7 +416,7 @@ function platforms(credits: BankCredit[], p: ResolvedDreParameters): DrePlatform
  */
 export function buildDreReport(input: BuildDreInput): DreReport {
   const loaded = input.restaurantSalesLoaded ?? true;
-  const byPlatform = platforms(input.credits, input.parameters);
+  const byPlatform = platforms(input.credits, input.parameters, input.deliveryStatements);
   const sumP = (f: (p: DrePlatformRevenue) => number) => byPlatform.reduce((a, p) => a + f(p), 0);
   const platformsNetCents = sumP((p) => p.netCents);
   const revenue: DreRevenue = {
@@ -395,7 +431,9 @@ export function buildDreReport(input: BuildDreInput): DreReport {
   const platformCosts: DrePlatformCosts = {
     commissionNetCents: sumP((p) => p.commissionNetCents),
     marketingNetCents: sumP((p) => p.marketingNetCents),
-    totalNetCents: sumP((p) => p.commissionNetCents + p.marketingNetCents),
+    promotionsNetCents: sumP((p) => p.promotionsNetCents),
+    otherFeesNetCents: sumP((p) => p.otherFeesNetCents),
+    totalNetCents: sumP((p) => p.commissionNetCents + p.marketingNetCents + p.promotionsNetCents + p.otherFeesNetCents),
   };
   const { operating, offOperation } = classify(input);
   const exp = expenses(operating, offOperation, input.catalog);

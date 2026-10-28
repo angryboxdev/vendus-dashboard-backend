@@ -13,7 +13,7 @@ Ramo `financeiro-fluxo-caixa` nos dois repositórios (commits, sem push): F1 (ba
 - Endpoints (sob `/api`): `GET /reports/dre/fluxo-caixa?year&month`, `GET /reports/dre/resultado?year&month` e `GET /reports/dre/conferencia-vendas?year&month` — permissão `dre.statement`; `GET /reports/dre/fluxo-caixa/para-tratar` — permissão `finance.payables`.
 
 ## Dependências
-Portas de [bank-statements](bank-statements.md) (`DescribeMovementPort`), [payable-entries](payable-entries.md) (`GetPayableSummaryPort`) e [invoices](invoices.md) (`GetInvoiceAlertsPort`), [vendus](vendus.md) (`GetSummaryPort`; o AirMenu deixou de entrar na DRE em 2026-10-27). Lê (só leitura) tabelas de bank-statements, invoices, payable-entries, payable-recurrences e financial-base; escreve só `dre_monthly_parameters`.
+Porta de [delivery-platforms](delivery-platforms.md) (`GetPlatformMarginReportPort`: a DRE usa os extratos das plataformas quando os há no mês — F3b). Portas de [bank-statements](bank-statements.md) (`DescribeMovementPort`), [payable-entries](payable-entries.md) (`GetPayableSummaryPort`) e [invoices](invoices.md) (`GetInvoiceAlertsPort`), [vendus](vendus.md) (`GetSummaryPort`; o AirMenu deixou de entrar na DRE em 2026-10-27). Lê (só leitura) tabelas de bank-statements, invoices, payable-entries, payable-recurrences e financial-base; escreve só `dre_monthly_parameters`.
 
 ## Regras de negócio
 Ver «Conceitos de domínio» e «Decisões de design» no README do módulo.

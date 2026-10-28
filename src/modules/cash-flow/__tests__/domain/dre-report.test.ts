@@ -72,10 +72,13 @@ describe("buildDreReport", () => {
     expect(report.revenue.byPlatform).toEqual([
       {
         platform: "uber_eats",
+        source: "bank",
         receivedCents: 63_100,
         marketingNetCents: 0,
         grossCents: 100_000,
         netCents: 86_957,
+        promotionsNetCents: 0,
+        otherFeesNetCents: 0,
         salesVatCents: 13_043,
         commissionNetCents: 30_000,
         commissionVatCents: 6_900,
@@ -85,7 +88,54 @@ describe("buildDreReport", () => {
       },
     ]);
     expect(report.revenue).toMatchObject({ platformsGrossCents: 100_000, platformsNetCents: 86_957, platformsReceivedCents: 63_100, totalNetCents: 586_957 });
-    expect(report.platformCosts).toEqual({ commissionNetCents: 30_000, marketingNetCents: 0, totalNetCents: 30_000 });
+    expect(report.platformCosts).toEqual({ commissionNetCents: 30_000, marketingNetCents: 0, promotionsNetCents: 0, otherFeesNetCents: 0, totalNetCents: 30_000 });
+  });
+
+  it("plataforma com extratos importados: usa os valores reais em vez de reconstituir pelo banco", () => {
+    const parameters = { ...DEFAULT_DRE_PARAMETERS, marketingNetCents: { uber_eats: 99_999, glovo: 0, bolt_food: 0 }, source: "month" as const };
+    const report = buildDreReport(
+      input({
+        parameters,
+        credits: [credit({ id: "u", amountCents: 63_100, platform: "uber_eats" }), credit({ id: "g", amountCents: 50_000, platform: "glovo" })],
+        deliveryStatements: [
+          {
+            platform: "uber_eats",
+            salesGrossCents: 113_000,
+            salesNetCents: 100_000,
+            salesVatCents: 11_700,
+            promotionsNetCents: 10_000,
+            commissionNetCents: 27_000,
+            commissionVatCents: 6_210,
+            marketingNetCents: 5_000,
+            marketingVatCents: 1_150,
+            otherNetCents: 1_000,
+          },
+        ],
+      }),
+    );
+    const uber = report.revenue.byPlatform.find((p) => p.platform === "uber_eats")!;
+    expect(uber).toEqual({
+      platform: "uber_eats",
+      source: "statements",
+      receivedCents: 63_100,
+      marketingNetCents: 5_000,
+      grossCents: 113_000,
+      netCents: 100_000,
+      promotionsNetCents: 10_000,
+      otherFeesNetCents: 1_000,
+      salesVatCents: 11_700,
+      commissionNetCents: 27_000,
+      commissionVatCents: 6_210,
+      marketingVatCents: 1_150,
+      contributionCents: 57_000,
+      contributionPct: 57,
+    });
+    // A Glovo, sem extratos, continua reconstituída pelo banco.
+    expect(report.revenue.byPlatform.find((p) => p.platform === "glovo")!.source).toBe("bank");
+    expect(report.platformCosts).toMatchObject({ promotionsNetCents: 10_000, otherFeesNetCents: 1_000 });
+    expect(report.platformCosts.totalNetCents).toBe(
+      report.platformCosts.commissionNetCents + report.platformCosts.marketingNetCents + 10_000 + 1_000,
+    );
   });
 
   it("marketing lançado à mão aumenta o bruto e entra como custo da plataforma", () => {

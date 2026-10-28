@@ -14,7 +14,7 @@ F1 (backend + página «Plataformas de delivery» no frontend, `/dre/plataformas
 - Tabela: `delivery_platform_statements` (`org_id`, RLS).
 
 ## Dependências
-Nenhuma porta de outros módulos. Expõe `listStatements` para a DRE (`cash-flow`) na F3.
+Nenhuma porta de outros módulos. Expõe `getMarginReport`, usada pela DRE (`cash-flow`, F3b).
 
 ## Regras de negócio
 Ver «Conceitos de domínio» e «Decisões de design» no README do módulo e `.scratch/importador-plataformas/spec.md`.
@@ -25,4 +25,4 @@ F3a feita no ramo (commit, sem push; sem migração): relatório de margem por p
 Documentos fora dos cinco conhecidos são rejeitados com motivo. Relatórios da Bolt com períodos sobrepostos duplicam vendas.
 
 ## Próximos trabalhos
-F3b DRE com os valores reais (porta `getMarginReport` → `cash-flow`); custo real da comida pelas fichas técnicas; F4 conferência das transferências no banco.
+F3b feita (DRE com os valores reais); custo real da comida pelas fichas técnicas; F4 conferência das transferências no banco.

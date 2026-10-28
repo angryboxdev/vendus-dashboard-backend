@@ -17,22 +17,51 @@ export interface RestaurantSales extends SalesFigures {
   byPaymentGrossCents: { card: number; cash: number; other: number };
 }
 
-/** Uma plataforma: o que liquidou no banco e a venda reconstituída (ver `platformGross`). */
+/**
+ * Resultado de uma plataforma no mês pelos extratos importados (módulo `delivery-platforms`): vendas a
+ * preço de tabela e custos, sem IVA, já só com a parte do mês. Quando existe, a DRE usa-o em vez de
+ * reconstituir a plataforma pelo banco (F3b).
+ */
+export interface DeliveryStatementResult {
+  platform: string;
+  salesGrossCents: number;
+  salesNetCents: number;
+  /** IVA das vendas (sobre o que os clientes pagaram, depois das promoções). */
+  salesVatCents: number;
+  promotionsNetCents: number;
+  commissionNetCents: number;
+  commissionVatCents: number;
+  marketingNetCents: number;
+  /** IVA do marketing e das outras taxas. */
+  marketingVatCents: number;
+  /** Outras taxas (sem IVA) + reembolsos. */
+  otherNetCents: number;
+}
+
+/**
+ * Uma plataforma: pelos extratos importados (`source: "statements"`) ou reconstituída a partir do que
+ * liquidou no banco (`"bank"`, ver `platformGross`).
+ */
 export interface DrePlatformRevenue {
   platform: string;
+  source: "statements" | "bank";
   /** Liquidado no banco (já sem comissão nem marketing). */
   receivedCents: number;
-  /** Marketing lançado à mão, sem IVA. */
+  /** Marketing sem IVA: dos extratos, ou lançado à mão (banco). */
   marketingNetCents: number;
-  /** Venda reconstituída, com IVA. */
+  /** Venda com IVA (preço de tabela nos extratos; reconstituída pelo banco). */
   grossCents: number;
   /** Venda sem IVA (receita da DRE). */
   netCents: number;
+  /** Promoções pagas pelo restaurante, sem IVA (só pelos extratos; 0 pelo banco). */
+  promotionsNetCents: number;
+  /** Outras taxas e reembolsos, sem IVA (só pelos extratos). */
+  otherFeesNetCents: number;
   salesVatCents: number;
   commissionNetCents: number;
   commissionVatCents: number;
   marketingVatCents: number;
-  /** Venda sem IVA − comissão − marketing: o que sobra para o produto e o resto. */
+  /** Venda sem IVA − promoções − comissão − marketing − outras taxas: o que sobra para o produto e o resto. */
   contributionCents: number;
   /** Contribuição ÷ venda sem IVA, %; null sem venda. */
   contributionPct: number | null;
@@ -51,10 +80,14 @@ export interface DreRevenue {
   totalNetCents: number;
 }
 
-/** Comissões e marketing das plataformas, sem IVA — retidos na liquidação, entram como gasto. */
+/** Custos das plataformas, sem IVA — retidos na liquidação, entram como gasto. */
 export interface DrePlatformCosts {
   commissionNetCents: number;
   marketingNetCents: number;
+  /** Promoções pagas pelo restaurante (só pelos extratos). */
+  promotionsNetCents: number;
+  /** Outras taxas e reembolsos (só pelos extratos). */
+  otherFeesNetCents: number;
   totalNetCents: number;
 }
 
