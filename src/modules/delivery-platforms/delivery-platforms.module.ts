@@ -1,0 +1,25 @@
+import type { Router } from "express";
+import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
+import { DocumentTextAdapter } from "./adapters/out/document-text.adapter.js";
+import { SupabasePlatformStatementRepository } from "./adapters/out/supabase-platform-statement.repository.js";
+import { ImportPlatformDocumentsUseCase } from "./application/use-cases/import-platform-documents.use-case.js";
+import { ListPlatformStatementsUseCase } from "./application/use-cases/list-platform-statements.use-case.js";
+import type { ListPlatformStatementsPort } from "./domain/ports/in/list-platform-statements.port.js";
+import { DeliveryPlatformsController } from "./adapters/in/delivery-platforms.controller.js";
+
+export interface DeliveryPlatformsModule {
+  router: Router;
+  /** Para outros módulos (ex.: a DRE em `cash-flow`, F3) lerem os extratos do mês. */
+  listStatements: ListPlatformStatementsPort;
+}
+
+/**
+ * Composition root do módulo `delivery-platforms`: importação dos extratos das plataformas de
+ * delivery (Uber, Glovo…) para `delivery_platform_statements`.
+ */
+export function createDeliveryPlatformsModule(): DeliveryPlatformsModule {
+  const statements = new SupabasePlatformStatementRepository(createScopedQuery);
+  const listStatements = new ListPlatformStatementsUseCase(statements);
+  const controller = new DeliveryPlatformsController(new ImportPlatformDocumentsUseCase(new DocumentTextAdapter(), statements), listStatements);
+  return { router: controller.router, listStatements };
+}

@@ -64,6 +64,8 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/reports\/dre\/fluxo-caixa\/para-tratar$/, target: p("finance.payables") },
   // Pagamentos por trás de cada rubrica da DRE: mostra o descritivo dos movimentos — só quem vê Bancos.
   { pattern: /^\/api\/reports\/dre\/pagamentos$/, target: p("finance.banking", "READ") },
+  // Extratos das plataformas de delivery: importar (POST) = MANAGE, listar = READ.
+  { pattern: /^\/api\/delivery-platforms\/(import|statements)$/, target: p("dre.statement") },
   { pattern: /^\/api\/reports\/dre\/custos-fixos(\/|$)/, target: p("dre.fixed_costs") },
   { pattern: /^\/api\/reports\/dre\/custos-variaveis(\/|$)/, target: p("dre.variable_costs") },
 

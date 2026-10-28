@@ -60,6 +60,17 @@ describe("buildSalesReconciliation", () => {
     expect(r.days).toHaveLength(30);
   });
 
+  it("numerário: o depósito do início do mês seguinte conta no mês das vendas que cobre", () => {
+    const r = buildSalesReconciliation({
+      period,
+      sales: [sale("2026-08-31", 0, 2_000), sale("2026-09-29", 0, 5_000), sale("2026-09-30", 0, 4_000)],
+      credits: [dep("2026-09-01", 2_000), dep("2026-10-02", 9_000)],
+    });
+    // 1 de setembro leva o numerário de agosto → agosto; 2 de outubro leva o fim de setembro → setembro
+    expect(r.cash.deposits.map((d) => d.date)).toEqual(["2026-10-02"]);
+    expect(r.cash).toMatchObject({ soldCents: 9_000, depositedCents: 9_000, notDepositedCents: 0 });
+  });
+
   it("ignora transferências internas e créditos que não são vendas do restaurante", () => {
     const r = buildSalesReconciliation({
       period,
