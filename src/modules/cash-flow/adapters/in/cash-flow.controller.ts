@@ -4,6 +4,8 @@ import type { GetCashFlowToHandlePort } from "../../domain/ports/in/get-cash-flo
 import type { GetDrePort } from "../../domain/ports/in/get-dre.port.js";
 import type { GetSalesReconciliationPort } from "../../domain/ports/in/get-sales-reconciliation.port.js";
 import type { GetDreParametersPort, SaveDreParametersPort } from "../../domain/ports/in/dre-parameters.port.js";
+import type { GetDreRestaurantSalesPort } from "../../domain/ports/in/get-dre-restaurant-sales.port.js";
+import type { GetDreEntriesPort } from "../../domain/ports/in/get-dre-entries.port.js";
 import type { DreParameters } from "../../domain/entities/dre-parameters.js";
 import { InvalidCashFlowPeriodError, InvalidDreParametersError } from "../../domain/errors.js";
 
@@ -17,12 +19,36 @@ export class CashFlowController {
     private readonly getSalesReconciliation: GetSalesReconciliationPort,
     private readonly getDreParameters: GetDreParametersPort,
     private readonly saveDreParameters: SaveDreParametersPort,
+    private readonly getDreRestaurantSales: GetDreRestaurantSalesPort,
+    private readonly getDreEntries: GetDreEntriesPort,
   ) {
     this.router = Router();
     this.registerRoutes();
   }
 
   private registerRoutes(): void {
+    /**
+     * GET /reports/dre/vendas-restaurante?year=&month=
+     * Só as vendas do restaurante (Vendus) do mês, sem IVA e por cartão/dinheiro/outros — a parte lenta da
+     * DRE; o Mapa pede-a em paralelo com `resultado?restaurante=0` e mostra cada uma quando chega.
+     */
+    this.router.get("/reports/dre/vendas-restaurante", async (req, res) => {
+      try {
+        res.json(await this.getDreRestaurantSales.execute({
+          organizationId: req.auth!.orgId,
+          year: Number(req.query["year"]),
+          month: Number(req.query["month"]),
+        }));
+      } catch (e: unknown) {
+        if (e instanceof InvalidCashFlowPeriodError) {
+          res.status(400).json({ error: e.message });
+          return;
+        }
+        const msg = e instanceof Error ? e.message : "Internal error";
+        res.status(500).json({ error: msg });
+      }
+    });
+
     /**
      * GET /reports/dre/parametros?year=&month=
      * Parâmetros da DRE do mês (taxas do delivery, taxa do TPA, IVA teórico, marketing); `source` diz
@@ -93,6 +119,7 @@ export class CashFlowController {
     /**
      * GET /reports/dre/resultado?year=&month=
      * DRE a partir da conciliação bancária: receita e gastos sem IVA, ajustes manuais e saldo do IVA.
+     * `restaurante=0`: sem as vendas do Vendus (rápido; o Mapa mostra os custos enquanto as vendas carregam).
      */
     this.router.get("/reports/dre/resultado", async (req, res) => {
       try {
@@ -100,8 +127,31 @@ export class CashFlowController {
           organizationId: req.auth!.orgId,
           year: Number(req.query["year"]),
           month: Number(req.query["month"]),
+          withRestaurantSales: req.query["restaurante"] !== "0",
         });
         res.json(result);
+      } catch (e: unknown) {
+        if (e instanceof InvalidCashFlowPeriodError) {
+          res.status(400).json({ error: e.message });
+          return;
+        }
+        const msg = e instanceof Error ? e.message : "Internal error";
+        res.status(500).json({ error: msg });
+      }
+    });
+
+    /**
+     * GET /reports/dre/pagamentos?year=&month=
+     * Os pagamentos por trás de cada rubrica da DRE (descrição do extrato, documento, data do pagamento
+     * e da competência). Permissão de Bancos (`finance.banking`): mostra o descritivo dos movimentos.
+     */
+    this.router.get("/reports/dre/pagamentos", async (req, res) => {
+      try {
+        res.json(await this.getDreEntries.execute({
+          organizationId: req.auth!.orgId,
+          year: Number(req.query["year"]),
+          month: Number(req.query["month"]),
+        }));
       } catch (e: unknown) {
         if (e instanceof InvalidCashFlowPeriodError) {
           res.status(400).json({ error: e.message });

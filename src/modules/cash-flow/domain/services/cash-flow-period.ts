@@ -36,6 +36,26 @@ export function cashFlowPeriod(year: number, month: number, today: string): Cash
   };
 }
 
+/** Meses de pagamentos lidos antes e depois do mês da DRE (faturas pagas adiantadas ou a prazo). */
+export const DRE_PAYMENTS_MONTHS_BEFORE = 1;
+export const DRE_PAYMENTS_MONTHS_AFTER = 3;
+
+/**
+ * Janela de pagamentos da DRE: do 1.º dia de `DRE_PAYMENTS_MONTHS_BEFORE` meses antes ao último dia de
+ * `DRE_PAYMENTS_MONTHS_AFTER` meses depois, sem passar de hoje. Cada pagamento conta depois no mês
+ * da competência do seu documento.
+ */
+export function drePaymentsWindow(year: number, month: number, today: string): { from: string; to: string } {
+  const shift = (n: number) => {
+    const d = new Date(Date.UTC(year, month - 1 + n, 1));
+    return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1 };
+  };
+  const a = shift(-DRE_PAYMENTS_MONTHS_BEFORE);
+  const b = shift(DRE_PAYMENTS_MONTHS_AFTER);
+  const end = iso(b.y, b.m, daysIn(b.y, b.m));
+  return { from: iso(a.y, a.m, 1), to: end < today ? end : today };
+}
+
 /** Todos os dias de `from` a `to` (inclusive), YYYY-MM-DD. */
 export function daysBetween(from: string, to: string): string[] {
   const out: string[] = [];

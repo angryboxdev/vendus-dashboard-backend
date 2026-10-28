@@ -3,6 +3,10 @@ export interface MovementKindPort {
   /**
    * `platform`: plataforma de entrega numa liquidação (uber_eats, glovo, bolt_food); senão null.
    * `restaurantSale`: venda do restaurante — «card» (TPA) ou «cash» (depósito); senão null.
+   * `label`: descrição legível do movimento.
    */
-  describe(description: string, movementType: "debit" | "credit"): { kind: string; platform: string | null; restaurantSale?: "card" | "cash" | null };
+  describe(
+    description: string,
+    movementType: "debit" | "credit",
+  ): { kind: string; platform: string | null; restaurantSale?: "card" | "cash" | null; label?: string };
 }

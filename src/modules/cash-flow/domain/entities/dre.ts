@@ -17,11 +17,6 @@ export interface RestaurantSales extends SalesFigures {
   byPaymentGrossCents: { card: number; cash: number; other: number };
 }
 
-export interface ManualAdjustments {
-  fixedCents: number;
-  variableCents: number;
-}
-
 /** Uma plataforma: o que liquidou no banco e a venda reconstituída (ver `platformGross`). */
 export interface DrePlatformRevenue {
   platform: string;
@@ -63,6 +58,18 @@ export interface DrePlatformCosts {
   totalNetCents: number;
 }
 
+/**
+ * Comissão do TPA: o banco liquida as vendas em cartão já sem ela, por isso nunca aparece como saída.
+ * Estimada pela taxa do mês (`cardFeePct`, a mesma da conferência de vendas) sobre o vendido em cartão
+ * (Vendus, com IVA). Sem IVA dedutível (serviço financeiro).
+ */
+export interface DreCardFees {
+  /** Vendido em cartão no Vendus, com IVA. */
+  cardGrossCents: number;
+  ratePct: number;
+  netCents: number;
+}
+
 export interface DreExpenseChild {
   key: string;
   categoryId: string | null;
@@ -89,6 +96,40 @@ export interface DreExpenseCategory {
   children: DreExpenseChild[];
 }
 
+/**
+ * Linha da DRE onde um gasto entra, pelo tipo financeiro da categoria: CMV, custos variáveis, pessoal,
+ * estrutura, administrativo, marketing, financeiro, CAPEX (fora do resultado), outros (grupo misto sem
+ * categoria) e por classificar (sem categoria).
+ */
+export type DreSectionKey =
+  | "cmv"
+  | "variable"
+  | "personnel"
+  | "structure"
+  | "administrative"
+  | "marketing"
+  | "financial"
+  | "capex"
+  | "other"
+  | "unclassified";
+
+export interface DreSectionItem {
+  key: string;
+  categoryId: string | null;
+  code: string | null;
+  /** Nome da categoria (ou do grupo, sem categoria); null nas saídas por classificar. */
+  name: string | null;
+  /** Tipo genérico do banco, nas saídas por classificar. */
+  movementKind: string | null;
+  netCents: number;
+}
+
+export interface DreExpenseSection {
+  key: DreSectionKey;
+  netCents: number;
+  items: DreSectionItem[];
+}
+
 export interface DreExpenses {
   totalNetCents: number;
   /** IVA dedutível: real (faturas, IVA no movimento) + estimado. */
@@ -100,18 +141,70 @@ export interface DreExpenses {
   /** Gastos ainda sem categoria (pelo tipo do banco). */
   unclassifiedCents: number;
   categories: DreExpenseCategory[];
+  /** Os mesmos gastos arrumados pelas linhas da DRE (só as com valor, pela ordem da DRE). */
+  sections: DreExpenseSection[];
+  /** Investimentos (CAPEX): incluídos em `totalNetCents`, mas fora do resultado. */
+  capexNetCents: number;
+  /** Saídas fora da operação (não entram em `totalNetCents` nem no resultado). */
+  offOperation: DreOffOperation;
+}
+
+/**
+ * Fora da operação: o grupo «Fora da DRE» (retiradas de sócios, capital de empréstimos, cauções), pelo
+ * valor pago. Sem as transferências internas nem o IVA (tem o seu painel). O CAPEX fica na sua linha.
+ */
+export interface DreOffOperation {
+  totalCents: number;
+  items: DreSectionItem[];
+}
+
+/** De onde vem o valor sem IVA de um pagamento: isento, IVA real, estimado ou por confirmar. */
+export type DreVatBasis = "exempt" | "real" | "estimated" | "pending";
+
+/** Um pagamento (ou parte dele) por trás de uma rubrica da DRE — para conferir. */
+export interface DreEntry {
+  section: DreSectionKey | "off_operation";
+  /** `DreSectionItem.key` da rubrica. */
+  itemKey: string;
+  movementId: string;
+  /** Data do pagamento no banco. */
+  paidOn: string;
+  /** Data que decide o mês: a do documento conciliado, senão a do pagamento. */
+  competenceDate: string;
+  /** Descrição legível do extrato. */
+  description: string | null;
+  /** Fornecedor e número da fatura (ou nome do contrato recorrente). */
+  document: string | null;
+  /** De onde vem a categoria: o próprio movimento, o documento conciliado ou só o tipo do extrato. */
+  basis: "movement" | "document" | "extract";
+  /** Parte do pagamento, com IVA. */
+  grossCents: number;
+  netCents: number;
+  vatBasis: DreVatBasis;
+}
+
+/** Pagamentos da DRE do mês — contrato de `GET /reports/dre/pagamentos`. */
+export interface DreEntries {
+  period: DreReport["period"];
+  entries: DreEntry[];
 }
 
 export interface DreReport {
   period: { year: number; month: number; from: string; to: string; isCurrentMonth: boolean };
+  /**
+   * false = pedido rápido sem as vendas do restaurante (Vendus): a receita do restaurante vem a zero e
+   * o resultado, a margem e o IVA das vendas não estão completos (`resultCents` / `marginPct` = null).
+   */
+  restaurantSalesLoaded: boolean;
   /** Parâmetros usados (taxas do delivery, IVA teórico, marketing) e de onde vêm. */
   parameters: ResolvedDreParameters;
   revenue: DreRevenue;
   platformCosts: DrePlatformCosts;
+  /** Comissão do TPA (zero no pedido rápido, sem as vendas do restaurante). */
+  cardFees: DreCardFees;
   expenses: DreExpenses;
-  manualAdjustments: ManualAdjustments & { totalCents: number };
-  /** Receita − custos das plataformas − gastos − ajustes manuais (sem IVA). */
-  resultCents: number;
+  /** Receita − custos das plataformas − comissão do TPA − gastos do banco, sem o CAPEX (sem IVA). */
+  resultCents: number | null;
   /** Resultado ÷ receita, %, 1 casa decimal; null sem receita. */
   marginPct: number | null;
   vat: {
@@ -124,4 +217,14 @@ export interface DreReport {
     /** Vendas − compras: estimativa do IVA a entregar (negativo = a recuperar). */
     balanceCents: number;
   };
+}
+
+/** Só as vendas do restaurante do mês (Vendus), sem IVA — a parte lenta da DRE, pedida à parte. */
+export interface DreRestaurantSales {
+  period: DreReport["period"];
+  netCents: number;
+  vatCents: number;
+  byPayment: DreRevenue["restaurantByPayment"];
+  /** Comissão do TPA sobre as vendas em cartão do mês (pela taxa dos parâmetros). */
+  cardFees: DreCardFees;
 }

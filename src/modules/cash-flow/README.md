@@ -1,7 +1,7 @@
 # Módulo: cash-flow
 
 > Status: active
-> Última atualização: 2026-10-27 (DRE: delivery em bruto sem AirMenu, parâmetros mensais, IVA estimado dos gastos; conferência de vendas Vendus × banco). Antes: 2026-10-26 (fluxo de caixa só a partir do banco; «Para tratar»; DRE F1 pela conciliação bancária)
+> Última atualização: 2026-10-28 (DRE: gastos pelo mês da fatura; bloco «Fora da operação»; pagamentos por rubrica em `GET /reports/dre/pagamentos`; comissão do TPA; juros dos empréstimos). Antes: 2026-10-27 (DRE: delivery em bruto sem AirMenu, parâmetros mensais, IVA estimado dos gastos; conferência de vendas Vendus × banco). Antes: 2026-10-26 (fluxo de caixa só a partir do banco; «Para tratar»; DRE F1 pela conciliação bancária)
 
 ---
 
@@ -73,10 +73,17 @@ tudo **sem IVA**; o objetivo é saber se a empresa dá lucro. Sem AirMenu.
 - **Receita — restaurante:** Vendus (canais salão/take-away/Eatz, sem o antigo «apps»), com o IVA exato dos documentos; repartida em «Venda restaurante cartão / dinheiro / outros» na proporção do bruto por classe de pagamento (`restaurantByPayment`).
 - **Receita — plataformas, em bruto** (`platformGross`): a plataforma liquida no banco já sem a comissão (com IVA por cima) e sem o marketing (com IVA). Com R = recebido, M = marketing sem IVA (lançado à mão), c = comissão, t = IVA da comissão, v = IVA médio das vendas, m = IVA do marketing: G = (R + M·(1+m)) ÷ (1 − k), k = c·(1+t) (comissão sobre a venda com IVA) ou c·(1+t)/(1+v) (sem IVA). Receita = G ÷ (1+v). Por plataforma mostra também a **margem** (venda sem IVA − comissão − marketing). Exemplo: R = 631 € → G = 1000 €, receita 869,57 €, comissão 300 € (+69 € IVA). Uma plataforma só com marketing lançado também aparece.
 - **Custos das plataformas:** comissão e marketing sem IVA — linha própria, abatida no resultado; o IVA deles conta como dedutível.
+- **Comissão do TPA (2026-10-28):** o banco liquida as vendas em cartão já sem a comissão, por isso ela nunca aparece como saída. Estimada pela taxa do mês (`cardFeePct`, a mesma da conferência de vendas) sobre o vendido em cartão no Vendus (com IVA): `cardFees`, abatida no resultado, sem IVA dedutível (serviço financeiro — por validar com a contabilidade). Vem também em `GET /reports/dre/vendas-restaurante` (o Mapa mostra-a com as vendas). No pedido rápido é zero.
+- **Juros dos empréstimos (2026-10-28):** um movimento justificado como empréstimo conta na DRE só na parte com categoria de tipo `financial` fora do grupo «Fora da DRE» (os juros, ex.: ADM.03); o capital (FDR.04) e os empréstimos sem categoria vão para «Fora da operação». O fluxo de caixa continua a excluir os empréstimos por inteiro.
 - **Parâmetros mensais** (`dre_monthly_parameters`; `GET|PUT /reports/dre/parametros`): IVA médio do delivery (15), comissão (30), IVA da comissão (23), comissão sobre a venda com IVA (sim), IVA do marketing (23), taxa do TPA (1, usada na conferência), IVA teórico dos gastos (23) e marketing por plataforma. Mês sem linha → herda as taxas do último mês com linha (sem o marketing); sem nenhuma → valores de omissão (`source`). A base da comissão e o IVA do marketing ficaram parâmetros por confirmar com um extrato real da Uber.
-- **Gastos:** as mesmas saídas e categorias do fluxo de caixa (mesmas exclusões). Sem IVA, pelo melhor que se sabe: (1) categoria sem IVA (tipos financeiros `personnel`, `financial`, `fiscal`; grupo isento se todas as suas categorias o forem) → tudo; (2) **real** — fatura conciliada (linhas «Por artigo» com o seu; repartições com o da fatura), na parte ligada a ela, ou IVA posto no movimento; (3) **estimado** — rácio das últimas 10 faturas da categoria (ex.: Ingredientes ≈ Makro; ponderado pelo valor, sem rascunhos nem anuladas) ou, sem histórico, o IVA teórico do mês para qualquer saída com categoria/grupo; (4) sem categoria → valor total, **«IVA por confirmar»**. Conciliar com a fatura altera logo o valor (calculado na leitura).
-- **Ajustes manuais:** custos fixos e variáveis lançados à mão nas páginas antigas do Mapa (`dre_custos_fixos` / `dre_custos_variaveis`, `valor_sem_iva`), somados.
-- **Resultado** = receita − custos das plataformas − gastos − ajustes; **margem** = resultado ÷ receita.
+- **Mês da competência (decisão do utilizador, 2026-10-28):** cada parte de uma saída conta no mês da data do documento conciliado — fatura (`competence_date`, senão `invoice_date`; conta a pagar/ocorrência → a fatura dela), ocorrência de recorrência sem fatura → o seu `period` (dia 1); sem documento, a data do pagamento. Por isso a DRE lê os pagamentos de uma janela (`drePaymentsWindow`: 1 mês antes a 3 meses depois, sem passar de hoje) e os documentos também das saídas com categoria própria (`collectExpenseReferences(..., { withOwnCategory })`) — a categoria não muda, só a data. O fluxo de caixa continua pela data do banco.
+- **Fora da operação (2026-10-28):** o grupo «Fora da DRE» (retiradas de sócios, capital de empréstimos, cauções) e empréstimos sem categoria financeira ficam em `expenses.offOperation`, pelo valor pago, fora dos gastos e do resultado; sem transferências internas nem IVA (tipos `internal_transfer` / `fiscal` — o IVA tem o seu painel). O frontend mostra-os abaixo do lucro, com o CAPEX, e o «Saldo depois de investimentos e retiradas».
+- **Pagamentos por rubrica** (`GET /reports/dre/pagamentos`, `GetDreEntriesPort`, `buildDreEntries`): cada parte de cada saída com a linha e o item onde entra (`section`/`itemKey`), descrição do extrato, documento, data do pagamento e da competência, de onde vem a categoria e o IVA. Permissão `finance.banking` (READ), porque mostra o descritivo dos movimentos; sem ela o Mapa esconde o botão.
+- **Gastos:** as mesmas saídas e categorias do fluxo de caixa (mesmas exclusões), no mês da competência. Sem IVA, pelo melhor que se sabe: (1) categoria sem IVA (tipos financeiros `personnel`, `financial`, `fiscal`; grupo isento se todas as suas categorias o forem) → tudo; (2) **real** — fatura conciliada (linhas «Por artigo» com o seu; repartições com o da fatura), na parte ligada a ela, ou IVA posto no movimento; (3) **estimado** — rácio das últimas 10 faturas da categoria (ex.: Ingredientes ≈ Makro; ponderado pelo valor, sem rascunhos nem anuladas) ou, sem histórico, o IVA teórico do mês para qualquer saída com categoria/grupo; (4) sem categoria → valor total, **«IVA por confirmar»**. Conciliar com a fatura altera logo o valor (calculado na leitura).
+- **Só o extrato bancário (decisão do utilizador, 2026-10-27).** Os custos fixos/variáveis lançados à mão (`dre_custos_fixos` / `dre_custos_variaveis`) deixaram de entrar: duplicavam pagamentos do banco (os fixos foram apagados, com cópia). Gastos pelas **linhas da DRE** (`expenses.sections`): com fatura conciliada (ou categoria no movimento), o tipo financeiro da categoria — CMV, custos variáveis, pessoal, estrutura, administrativo, marketing, financeiro, CAPEX; sem fatura, a classificação genérica do extrato (`SECTION_BY_MOVEMENT_KIND`: vencimentos → pessoal, energia/água/telecom → estrutura, seguros → administrativo, taxas bancárias → financeiro; o resto em «Outros gastos pelo extrato», pelo tipo do banco). **CAPEX** aparece mas fica fora do resultado.
+- **Resultado** = receita − custos das plataformas − comissão do TPA − gastos (sem CAPEX); antes de amortizações e IRC; **margem** = resultado ÷ receita. A cascata (receita bruta → líquida → lucro bruto → margem de contribuição → resultado operacional → lucro líquido) é montada no frontend com as secções.
+- **Vendas do restaurante à parte** (`GET /reports/dre/vendas-restaurante`, `GetDreRestaurantSalesPort`): só o Vendus do mês (sem IVA, por cartão/dinheiro/outros) — o Mapa pede-o em paralelo com a DRE rápida e mostra cada parte quando chega.
+- **Pedido rápido** (`?restaurante=0`, `withRestaurantSales: false`): sem as vendas do Vendus (≈ 4 s em vez de até um minuto); `restaurantSalesLoaded: false`, `resultCents` e `marginPct` = null. O Mapa pede os dois em paralelo e mostra os custos enquanto as vendas carregam.
 - **IVA:** das vendas (Vendus + plataformas reconstituídas) − dedutível (gastos real + estimado, comissões e marketing) = estimativa a entregar; `purchasesEstimatedCents` diz quanto é estimado.
 
 ### Conferência de vendas (Vendus × banco)
@@ -98,6 +105,8 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 - `GetDrePort` — DRE do mês (`{ organizationId, year, month }`).
 - `GetSalesReconciliationPort` — conferência de vendas do mês (`{ organizationId, year, month }`).
 - `GetDreParametersPort` / `SaveDreParametersPort` — parâmetros mensais da DRE (ler resolvidos; gravar validados).
+- `GetDreRestaurantSalesPort` — só as vendas do restaurante do mês (Vendus) para a DRE.
+- `GetDreEntriesPort` — os pagamentos por trás de cada rubrica da DRE do mês.
 
 - `GetCashFlowPort` — relatório do mês (`{ organizationId, year, month }`).
 - `GetCashFlowToHandlePort` — painel «Para tratar» (`{ organizationId }`).
@@ -113,14 +122,13 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 - `RestaurantSalesReadPort` — vendas do restaurante (sem IVA + IVA, bruto por classe de pagamento) num intervalo.
 - `DreParametersRepositoryPort` — parâmetros do mês e do último mês anterior com valores; gravar.
 - `CategoryVatRatioReadPort` — rácio sem IVA das últimas faturas de cada categoria.
-- `ManualAdjustmentsReadPort` — custos fixos/variáveis lançados à mão no mês.
 - `RestaurantDailyPaymentsReadPort` — vendas do restaurante por dia em cartão e numerário (Vendus).
 
 ## Adapters
 
 ### Entrada
 
-- `CashFlowController` → `GET /reports/dre/fluxo-caixa`, `GET /reports/dre/resultado`, `GET /reports/dre/conferencia-vendas` e `GET /reports/dre/parametros` (permissão `dre.statement`, READ), `PUT /reports/dre/parametros` (`dre.statement`, MANAGE) e `GET /reports/dre/fluxo-caixa/para-tratar` (permissão `finance.payables`, READ).
+- `CashFlowController` → `GET /reports/dre/fluxo-caixa`, `GET /reports/dre/resultado`, `GET /reports/dre/conferencia-vendas`, `GET /reports/dre/vendas-restaurante` e `GET /reports/dre/parametros` (permissão `dre.statement`, READ), `PUT /reports/dre/parametros` (`dre.statement`, MANAGE) `GET /reports/dre/fluxo-caixa/para-tratar` (permissão `finance.payables`, READ) e `GET /reports/dre/pagamentos` (permissão `finance.banking`, READ).
 
 ### Saída
 
@@ -131,7 +139,6 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 - `PayableEntriesSummaryAdapter` → `GetPayableSummaryPort` do módulo `payable-entries`.
 - `InvoiceAlertsToReviewAdapter` → `GetInvoiceAlertsPort` do módulo `invoices`.
 - `VendusRestaurantSalesAdapter` → `GetSummaryPort` do módulo `vendus` (euros → cêntimos; sem o canal «apps»; bruto por classe de `byPaymentMethod`).
-- `SupabaseManualAdjustmentsReadAdapter` → `dre_custos_fixos`, `dre_custos_variaveis` (só leitura).
 - `SupabaseDreParametersRepository` → `dre_monthly_parameters` (a única tabela que este módulo escreve).
 - `SupabaseCategoryVatRatioReadAdapter` → `invoices` (cabeçalho, só leitura; até 2000 mais recentes).
 - `VendusDailyPaymentsAdapter` → `GetSummaryPort` do módulo `vendus` (`analytics.dailyPayments`, euros → cêntimos; Eatz, Apps e outros métodos ficam de fora).
@@ -158,6 +165,10 @@ restaurante tem competência no Vendus; o banco serve para conferir, e um dia de
 - DRE: o bruto das plataformas depende das taxas do mês (comissão sobre a venda com/sem IVA e IVA do marketing por confirmar com um extrato real); a liquidação pode cair no mês seguinte ao da venda. As vendas do Vendus são pedidas ao vivo (sem cache) — pode demorar alguns segundos.
 - DRE: o IVA teórico aplica-se a qualquer saída com categoria sem faturas na categoria — categorias com IVA diferente (seguros, rendas isentas) ficam certas só com fatura conciliada ou IVA posto no movimento.
 - Ainda sem ecrã para editar os parâmetros nem para a conferência de vendas (F4).
+- Competência só para o que está pago e conciliado: faturas do mês ainda por pagar não entram (o mês corrente parece mais leve até serem pagas); pagamentos sem documento (ex.: «Pagamento de vencimentos» sem recorrência, TSU) contam pela data do pagamento. Faturas pagas mais de 3 meses depois ficam fora da janela. As plataformas continuam pela data da liquidação no banco.
+- Ocorrência de recorrência sem fatura: o mês é o `period` da ocorrência — confirmar que os salários usam o mês do trabalho e não o do pagamento.
+- Juros: só entram se o movimento dos juros tiver a sua categoria financeira; uma prestação única (capital + juros num só movimento) fica toda de fora até ser repartida.
+- Comissão do TPA estimada pela taxa do mês, não pela taxa implícita real da conferência.
 
 - O mês só está completo quando todos os extratos das contas estão importados; não há aviso de contas em falta.
 - Contas a pagar só têm grupo (sem categoria): sem fatura, ficam no grupo sem detalhe.

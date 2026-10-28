@@ -40,19 +40,21 @@ describe("invoiceSplit", () => {
 
 describe("categorizeDebit", () => {
   it("sem nada: fica sem categoria (vai para o tipo genérico do banco)", () => {
-    expect(categorizeDebit(debit(), emptySources(), catalog)).toEqual([{ groupId: null, categoryId: null, amountCents: 10_000, netRatio: null }]);
+    expect(categorizeDebit(debit(), emptySources(), catalog)).toEqual([{ groupId: null, categoryId: null, amountCents: 10_000, netRatio: null, document: null }]);
   });
 
-  it("a categoria do próprio movimento ganha a tudo e o grupo sai da categoria", () => {
+  it("a categoria do próprio movimento ganha a tudo e o grupo sai da categoria; a data vem da fatura conciliada", () => {
     const sources = emptySources();
-    sources.invoices.set("inv1", { mode: "simple", netRatio: null, groupId: null, categoryId: "c-ing", allocations: [], lines: [] });
+    sources.invoices.set("inv1", { mode: "simple", netRatio: null, groupId: null, categoryId: "c-ing", allocations: [], lines: [], date: "2026-09-30", label: "Fornecedor Teste · FT 1" });
     const m = debit({ categoryId: "c-sal", links: [{ entityType: "invoice", entityId: "inv1", amountCents: 10_000 }] });
-    expect(categorizeDebit(m, sources, catalog)).toEqual([{ groupId: "g-pes", categoryId: "c-sal", amountCents: 10_000, netRatio: null }]);
+    expect(categorizeDebit(m, sources, catalog)).toEqual([
+      { groupId: "g-pes", categoryId: "c-sal", amountCents: 10_000, netRatio: null, document: { date: "2026-09-30", label: "Fornecedor Teste · FT 1" } },
+    ]);
   });
 
   it("transferência enviada conciliada com faturas: reparte na proporção do valor ligado a cada uma", () => {
     const sources = emptySources();
-    sources.invoices.set("sal", { mode: "simple", netRatio: null, groupId: null, categoryId: "c-sal", allocations: [], lines: [] });
+    sources.invoices.set("sal", { mode: "simple", netRatio: null, groupId: null, categoryId: "c-sal", allocations: [], lines: [], date: "2026-09-30" });
     sources.invoices.set("enc", { mode: "simple", netRatio: null, groupId: null, categoryId: "c-enc", allocations: [], lines: [] });
     const m = debit({
       reconciliationStatus: "conciliado_com_fatura",
@@ -62,8 +64,8 @@ describe("categorizeDebit", () => {
       ],
     });
     expect(categorizeDebit(m, sources, catalog)).toEqual([
-      { groupId: "g-pes", categoryId: "c-sal", amountCents: 7_500, netRatio: null },
-      { groupId: "g-pes", categoryId: "c-enc", amountCents: 2_500, netRatio: null },
+      { groupId: "g-pes", categoryId: "c-sal", amountCents: 7_500, netRatio: null, document: { date: "2026-09-30", label: null } },
+      { groupId: "g-pes", categoryId: "c-enc", amountCents: 2_500, netRatio: null, document: { date: null, label: null } },
     ]);
   });
 
@@ -124,6 +126,12 @@ describe("categorizeDebit — parte sem IVA", () => {
 });
 
 describe("collectExpenseReferences", () => {
+  it("DRE (withOwnCategory): pede também os documentos das saídas com categoria própria, para a data", () => {
+    const refs = collectExpenseReferences([debit({ categoryId: "c-sal", matchedEntityType: "invoice", matchedEntityId: "i2" })], { withOwnCategory: true });
+    expect(refs.invoiceIds).toEqual(["i2"]);
+  });
+
+
   it("só pede documentos das saídas sem categoria própria", () => {
     const refs = collectExpenseReferences([
       debit({ links: [{ entityType: "invoice", entityId: "i1", amountCents: 1 }, { entityType: "payable_entry", entityId: "p1", amountCents: 1 }] }),

@@ -1,42 +1,60 @@
 import type { BankCredit, BankDebit, CostCenterCatalog, ExpenseSources } from "../entities/cash-flow.js";
 import type {
+  DreCardFees,
+  DreEntry,
   DreExpenseCategory,
+  DreExpenseSection,
+  DreOffOperation,
+  DreSectionItem,
+  DreSectionKey,
   DreExpenses,
   DrePlatformCosts,
   DrePlatformRevenue,
   DreReport,
   DreRevenue,
-  ManualAdjustments,
+  DreVatBasis,
   RestaurantSales,
 } from "../entities/dre.js";
 import { DELIVERY_PLATFORMS, type DeliveryPlatformKey, type ResolvedDreParameters } from "../entities/dre-parameters.js";
-import { countedDebits, isExcluded } from "./cash-flow-report.service.js";
-import type { ExpenseShare } from "./expense-categorizer.service.js";
+import { isExcluded } from "./cash-flow-report.service.js";
+import { categorizeDebit, type ExpenseShare } from "./expense-categorizer.service.js";
 import { platformGross } from "./platform-gross.service.js";
 
 /** Tipos financeiros que nunca têm IVA (salários e encargos, taxas bancárias, impostos). */
 const VAT_EXEMPT_TYPES = new Set(["personnel", "financial", "fiscal"]);
+/** Grupo de centro de custo fora da DRE (retiradas, transferências internas, IVA, empréstimos, cauções). */
+const OUT_OF_DRE_GROUP_CODE = "FDR";
+/** Fora do bloco «Fora da operação»: transferências internas (não saem da empresa) e IVA (tem o seu painel). */
+const HIDDEN_OFF_OPERATION_TYPES = new Set(["internal_transfer", "fiscal"]);
 
 export interface BuildDreInput {
   period: DreReport["period"];
+  /**
+   * Saídas do banco de uma janela à volta do mês: cada parte conta no mês da sua competência — a data
+   * do documento conciliado (fatura; ocorrência de recorrência → o seu mês), senão a do pagamento.
+   */
   debits: BankDebit[];
   credits: BankCredit[];
   sources: ExpenseSources;
   catalog: CostCenterCatalog;
   restaurant: RestaurantSales;
+  /** false: sem as vendas do restaurante (pedido rápido) — resultado e margem ficam null. */
+  restaurantSalesLoaded?: boolean;
   parameters: ResolvedDreParameters;
   /** Rácio sem IVA ÷ com IVA das últimas faturas de cada categoria (IVA estimado). */
   categoryNetRatios: Map<string, number>;
-  manual: ManualAdjustments;
 }
 
+/** Uma parte de uma saída já colocada no mês, com o valor sem IVA. */
 interface NetShare {
   share: ExpenseShare;
-  kind: string;
+  debit: BankDebit;
+  competenceDate: string;
   netCents: number;
   vatCents: number;
   estimatedVatCents: number;
   pendingVatCents: number;
+  vatBasis: DreVatBasis;
 }
 
 /** Categorias e grupos sem IVA (um grupo só é isento se todas as suas categorias o forem). */
@@ -60,38 +78,71 @@ function exemptions(catalog: CostCenterCatalog) {
  *  3. estimado: média das últimas faturas da categoria; senão, com categoria/grupo, o IVA teórico;
  *  4. sem categoria → conta pelo valor total, como «IVA por confirmar».
  */
-function toNet(share: ExpenseShare, exempt: boolean, ratios: Map<string, number>, defaultVatPct: number): Omit<NetShare, "share" | "kind"> {
+function toNet(
+  share: ExpenseShare,
+  exempt: boolean,
+  ratios: Map<string, number>,
+  defaultVatPct: number,
+): Pick<NetShare, "netCents" | "vatCents" | "estimatedVatCents" | "pendingVatCents" | "vatBasis"> {
   const none = { estimatedVatCents: 0, pendingVatCents: 0 };
-  if (exempt) return { netCents: share.amountCents, vatCents: 0, ...none };
+  if (exempt) return { netCents: share.amountCents, vatCents: 0, ...none, vatBasis: "exempt" };
   if (share.netRatio !== null) {
     const netCents = Math.round(share.amountCents * share.netRatio);
-    return { netCents, vatCents: share.amountCents - netCents, ...none };
+    return { netCents, vatCents: share.amountCents - netCents, ...none, vatBasis: "real" };
   }
   const estimate = (share.categoryId ? ratios.get(share.categoryId) : undefined) ?? (share.groupId ? 100 / (100 + defaultVatPct) : null);
   if (estimate !== null) {
     const netCents = Math.round(share.amountCents * estimate);
     const vatCents = share.amountCents - netCents;
-    return { netCents, vatCents, estimatedVatCents: vatCents, pendingVatCents: 0 };
+    return { netCents, vatCents, estimatedVatCents: vatCents, pendingVatCents: 0, vatBasis: "estimated" };
   }
-  return { netCents: share.amountCents, vatCents: 0, estimatedVatCents: 0, pendingVatCents: share.amountCents };
+  return { netCents: share.amountCents, vatCents: 0, estimatedVatCents: 0, pendingVatCents: share.amountCents, vatBasis: "pending" };
 }
 
-function expenses(input: BuildDreInput): DreExpenses {
-  const { debits, sources, catalog } = input;
-  const isExempt = exemptions(catalog);
-  const shares: NetShare[] = countedDebits(debits, sources, catalog).flatMap((c) =>
-    c.shares.map((share) => ({
-      share,
-      kind: c.debit.kind,
-      ...toNet(share, isExempt(share), input.categoryNetRatios, input.parameters.expenseDefaultVatPct),
-    })),
-  );
+const lastDayOfMonth = (year: number, month: number) => `${year}-${String(month).padStart(2, "0")}-${String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, "0")}`;
 
+/**
+ * Coloca as saídas no mês e separa a operação do que fica fora dela:
+ *  - transferências internas não contam;
+ *  - cada parte conta no mês da sua competência (documento conciliado, senão a data do pagamento);
+ *  - grupo «Fora da DRE» (retiradas de sócios, capital de empréstimos, cauções) → fora da operação;
+ *  - empréstimo: só a parte com categoria financeira fora do FDR (juros) é gasto; o resto é capital.
+ */
+function classify(input: BuildDreInput): { operating: NetShare[]; offOperation: NetShare[] } {
+  const { debits, sources, catalog, period } = input;
+  const monthEnd = lastDayOfMonth(period.year, period.month);
+  const outOfDre = new Set(catalog.groups.filter((g) => g.code === OUT_OF_DRE_GROUP_CODE).map((g) => g.id));
+  const typeOf = new Map(catalog.categories.map((c) => [c.id, c.financialType]));
+  const isExempt = exemptions(catalog);
+  const operating: NetShare[] = [];
+  const offOperation: NetShare[] = [];
+  for (const debit of debits) {
+    const loan = debit.justificationType === "emprestimo_financiamento";
+    if (isExcluded(debit) && !loan) continue;
+    if (debit.reconciliationStatus === "transferencia_interna" || debit.kind === "internal_transfer") continue;
+    for (const share of categorizeDebit(debit, sources, catalog)) {
+      if (share.amountCents <= 0) continue;
+      const competenceDate = share.document?.date ?? debit.date;
+      if (competenceDate < period.from || competenceDate > monthEnd) continue;
+      const type = share.categoryId ? typeOf.get(share.categoryId) : undefined;
+      if ((share.groupId !== null && outOfDre.has(share.groupId)) || (loan && type !== "financial")) {
+        if (type && HIDDEN_OFF_OPERATION_TYPES.has(type)) continue;
+        // Fora da operação conta pelo valor pago (sem IVA a separar).
+        offOperation.push({ share, debit, competenceDate, netCents: share.amountCents, vatCents: 0, estimatedVatCents: 0, pendingVatCents: 0, vatBasis: "exempt" });
+        continue;
+      }
+      operating.push({ share, debit, competenceDate, ...toNet(share, isExempt(share), input.categoryNetRatios, input.parameters.expenseDefaultVatPct) });
+    }
+  }
+  return { operating, offOperation };
+}
+
+function expenses(shares: NetShare[], offShares: NetShare[], catalog: CostCenterCatalog): DreExpenses {
   const groups = new Map(catalog.groups.map((g) => [g.id, g]));
   const cats = new Map(catalog.categories.map((c) => [c.id, c]));
   const byKey = new Map<string, DreExpenseCategory>();
   for (const s of shares) {
-    const key = s.share.groupId ?? `kind:${s.kind}`;
+    const key = s.share.groupId ?? `kind:${s.debit.kind}`;
     let cat = byKey.get(key);
     if (!cat) {
       const g = s.share.groupId ? groups.get(s.share.groupId) : undefined;
@@ -101,7 +152,7 @@ function expenses(input: BuildDreInput): DreExpenses {
         groupId: s.share.groupId,
         code: g?.code ?? null,
         name: g?.name ?? null,
-        movementKind: s.share.groupId ? null : s.kind,
+        movementKind: s.share.groupId ? null : s.debit.kind,
         netCents: 0,
         vatCents: 0,
         estimatedVatCents: 0,
@@ -130,6 +181,9 @@ function expenses(input: BuildDreInput): DreExpenses {
     .map((c) => ({ ...c, children: c.children.sort((a, b) => b.netCents - a.netCents) }))
     .sort((a, b) => b.netCents - a.netCents);
   const sum = (f: (s: NetShare) => number) => shares.reduce((a, s) => a + f(s), 0);
+  const sections = dreSections(shares, catalog);
+  const offItems = sortedItems(groupItems(offShares, (s) => offOperationPlacement(s, catalog)).get("off_operation"));
+  const offOperation: DreOffOperation = { totalCents: offItems.reduce((a, i) => a + i.netCents, 0), items: offItems };
   return {
     totalNetCents: sum((s) => s.netCents),
     vatCents: sum((s) => s.vatCents),
@@ -137,19 +191,122 @@ function expenses(input: BuildDreInput): DreExpenses {
     pendingVatCents: sum((s) => s.pendingVatCents),
     unclassifiedCents: sum((s) => (s.share.groupId ? 0 : s.netCents)),
     categories,
+    sections,
+    capexNetCents: sections.find((s) => s.key === "capex")?.netCents ?? 0,
+    offOperation,
   };
+}
+
+/** Tipo financeiro da categoria → linha da DRE. */
+const SECTION_BY_TYPE: Record<string, DreSectionKey> = {
+  cmv: "cmv",
+  variable_cost: "variable",
+  personnel: "personnel",
+  fixed_opex: "structure",
+  administrative: "administrative",
+  marketing: "marketing",
+  financial: "financial",
+  capex: "capex",
+};
+/**
+ * Sem fatura nem categoria, a saída fica com a classificação genérica do extrato (decisão do
+ * utilizador, 2026-10-27): os tipos inequívocos vão para a sua linha; o resto («Outros gastos pelo
+ * extrato»: transferências, compras com cartão, Estado…) fica em `unclassified`, pelo tipo do banco.
+ */
+const SECTION_BY_MOVEMENT_KIND: Record<string, DreSectionKey> = {
+  payroll: "personnel",
+  utilities: "structure",
+  insurance: "administrative",
+  bank_fee: "financial",
+};
+const SECTION_ORDER: DreSectionKey[] = ["cmv", "variable", "personnel", "structure", "administrative", "marketing", "other", "unclassified", "financial", "capex"];
+
+/** Linha e rubrica (item) onde uma parte entra. */
+interface Placement {
+  section: DreSectionKey | "off_operation";
+  item: Omit<DreSectionItem, "netCents">;
+}
+
+/**
+ * Gastos pelas linhas da DRE: pela categoria; sem categoria, pelo grupo quando todas as suas categorias
+ * são do mesmo tipo (senão «outros»); sem grupo, pelo tipo genérico do extrato (`SECTION_BY_MOVEMENT_KIND`).
+ */
+function operatingPlacement(s: NetShare, catalog: CostCenterCatalog): Placement {
+  const { categoryId, groupId } = s.share;
+  const cat = categoryId ? catalog.categories.find((c) => c.id === categoryId) : undefined;
+  const groupSection = (id: string): DreSectionKey => {
+    const types = new Set(catalog.categories.filter((c) => c.groupId === id).map((c) => SECTION_BY_TYPE[c.financialType] ?? "other"));
+    return types.size === 1 ? [...types][0]! : "other";
+  };
+  const section: DreSectionKey = cat
+    ? (SECTION_BY_TYPE[cat.financialType] ?? "other")
+    : groupId
+      ? groupSection(groupId)
+      : (SECTION_BY_MOVEMENT_KIND[s.debit.kind] ?? "unclassified");
+  return { section, item: itemOf(s, catalog) };
+}
+
+/** Fora da operação: por categoria; um empréstimo sem categoria fica em «Empréstimos (capital)». */
+function offOperationPlacement(s: NetShare, catalog: CostCenterCatalog): Placement {
+  const item = itemOf(s, catalog);
+  if (!s.share.groupId && s.debit.justificationType === "emprestimo_financiamento") {
+    return { section: "off_operation", item: { ...item, key: "loan", name: "Empréstimos (capital)", movementKind: null } };
+  }
+  return { section: "off_operation", item };
+}
+
+function itemOf(s: NetShare, catalog: CostCenterCatalog): Omit<DreSectionItem, "netCents"> {
+  const { categoryId, groupId } = s.share;
+  const cat = categoryId ? catalog.categories.find((c) => c.id === categoryId) : undefined;
+  const g = groupId ? catalog.groups.find((x) => x.id === groupId) : undefined;
+  return {
+    key: cat ? cat.id : groupId ? `${groupId}:none` : `kind:${s.debit.kind}`,
+    categoryId: cat?.id ?? null,
+    code: cat?.code ?? g?.code ?? null,
+    name: cat?.name ?? g?.name ?? null,
+    movementKind: groupId ? null : s.debit.kind,
+  };
+}
+
+function groupItems(shares: NetShare[], place: (s: NetShare) => Placement): Map<string, Map<string, DreSectionItem>> {
+  const bySection = new Map<string, Map<string, DreSectionItem>>();
+  for (const s of shares) {
+    const { section, item } = place(s);
+    const items = bySection.get(section) ?? new Map<string, DreSectionItem>();
+    bySection.set(section, items);
+    const current = items.get(item.key) ?? { ...item, netCents: 0 };
+    current.netCents += s.netCents;
+    items.set(item.key, current);
+  }
+  return bySection;
+}
+
+const sortedItems = (items: Map<string, DreSectionItem> | undefined) => [...(items?.values() ?? [])].sort((a, b) => b.netCents - a.netCents);
+
+function dreSections(shares: NetShare[], catalog: CostCenterCatalog): DreExpenseSection[] {
+  const bySection = groupItems(shares, (s) => operatingPlacement(s, catalog));
+  return SECTION_ORDER.filter((k) => bySection.has(k)).map((key) => {
+    const items = sortedItems(bySection.get(key));
+    return { key, netCents: items.reduce((a, i) => a + i.netCents, 0), items };
+  });
 }
 
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : null);
 
 /** Restaurante sem IVA repartido pela classe de pagamento, na proporção do bruto. */
-function restaurantByPayment(r: RestaurantSales): DreRevenue["restaurantByPayment"] {
+export function restaurantByPayment(r: RestaurantSales): DreRevenue["restaurantByPayment"] {
   const { card, cash, other } = r.byPaymentGrossCents;
   const total = card + cash + other;
   if (total <= 0) return { cardNetCents: 0, cashNetCents: 0, otherNetCents: r.netCents };
   const cardNetCents = Math.round((r.netCents * card) / total);
   const cashNetCents = Math.round((r.netCents * cash) / total);
   return { cardNetCents, cashNetCents, otherNetCents: r.netCents - cardNetCents - cashNetCents };
+}
+
+/** Comissão do TPA: taxa do mês sobre o vendido em cartão (ver `DreCardFees`). */
+export function cardFees(r: RestaurantSales, p: Pick<ResolvedDreParameters, "cardFeePct">): DreCardFees {
+  const cardGrossCents = r.byPaymentGrossCents.card;
+  return { cardGrossCents, ratePct: p.cardFeePct, netCents: Math.round((cardGrossCents * p.cardFeePct) / 100) };
 }
 
 /**
@@ -176,10 +333,12 @@ function platforms(credits: BankCredit[], p: ResolvedDreParameters): DrePlatform
 
 /**
  * DRE do mês a partir da conciliação bancária: receita (restaurante pelo Vendus; plataformas em bruto,
- * reconstituídas das liquidações), custos das plataformas (comissão e marketing), gastos (saídas do
- * banco categorizadas como no fluxo de caixa) e ajustes manuais, tudo sem IVA; e o saldo do IVA.
+ * reconstituídas das liquidações), custos das plataformas (comissão e marketing), comissão do TPA,
+ * gastos (saídas do banco no mês da competência) e o que fica fora da operação, tudo sem IVA; e o
+ * saldo do IVA.
  */
 export function buildDreReport(input: BuildDreInput): DreReport {
+  const loaded = input.restaurantSalesLoaded ?? true;
   const byPlatform = platforms(input.credits, input.parameters);
   const sumP = (f: (p: DrePlatformRevenue) => number) => byPlatform.reduce((a, p) => a + f(p), 0);
   const platformsNetCents = sumP((p) => p.netCents);
@@ -197,21 +356,24 @@ export function buildDreReport(input: BuildDreInput): DreReport {
     marketingNetCents: sumP((p) => p.marketingNetCents),
     totalNetCents: sumP((p) => p.commissionNetCents + p.marketingNetCents),
   };
-  const exp = expenses(input);
-  const manualTotal = input.manual.fixedCents + input.manual.variableCents;
-  const resultCents = revenue.totalNetCents - platformCosts.totalNetCents - exp.totalNetCents - manualTotal;
+  const { operating, offOperation } = classify(input);
+  const exp = expenses(operating, offOperation, input.catalog);
+  const fees = cardFees(input.restaurant, input.parameters);
+  // CAPEX é investimento: aparece na DRE, mas fora do resultado.
+  const resultCents = revenue.totalNetCents - platformCosts.totalNetCents - fees.netCents - (exp.totalNetCents - exp.capexNetCents);
 
   const salesVat = input.restaurant.vatCents + sumP((p) => p.salesVatCents);
   const purchasesVat = exp.vatCents + sumP((p) => p.commissionVatCents + p.marketingVatCents);
   return {
     period: input.period,
+    restaurantSalesLoaded: loaded,
     parameters: input.parameters,
     revenue,
     platformCosts,
+    cardFees: fees,
     expenses: exp,
-    manualAdjustments: { ...input.manual, totalCents: manualTotal },
-    resultCents,
-    marginPct: pct(resultCents, revenue.totalNetCents),
+    resultCents: loaded ? resultCents : null,
+    marginPct: loaded ? pct(resultCents, revenue.totalNetCents) : null,
     vat: {
       salesCents: salesVat,
       purchasesCents: purchasesVat,
@@ -219,4 +381,29 @@ export function buildDreReport(input: BuildDreInput): DreReport {
       balanceCents: salesVat - purchasesVat,
     },
   };
+}
+
+/**
+ * Os pagamentos por trás de cada rubrica da DRE (linha + item), para conferir: a mesma colocação de
+ * `buildDreReport`, uma entrada por parte de cada saída, por data de competência.
+ */
+export function buildDreEntries(input: BuildDreInput): DreEntry[] {
+  const { operating, offOperation } = classify(input);
+  const entry = (s: NetShare, p: Placement): DreEntry => ({
+    section: p.section,
+    itemKey: p.item.key,
+    movementId: s.debit.id,
+    paidOn: s.debit.date,
+    competenceDate: s.competenceDate,
+    description: s.debit.label ?? null,
+    document: s.share.document?.label ?? null,
+    basis: s.debit.groupId !== null || s.debit.categoryId !== null ? "movement" : s.share.groupId !== null ? "document" : "extract",
+    grossCents: s.share.amountCents,
+    netCents: s.netCents,
+    vatBasis: s.vatBasis,
+  });
+  return [
+    ...operating.map((s) => entry(s, operatingPlacement(s, input.catalog))),
+    ...offOperation.map((s) => entry(s, offOperationPlacement(s, input.catalog))),
+  ].sort((a, b) => a.competenceDate.localeCompare(b.competenceDate) || a.paidOn.localeCompare(b.paidOn) || b.grossCents - a.grossCents);
 }

@@ -42,6 +42,8 @@ export interface BankDebit {
   vatIncluded: boolean | null;
   /** Ligações a faturas / contas a pagar (conciliação com um ou vários documentos). */
   links: BankDebitLink[];
+  /** Descrição legível do extrato (só para listar os pagamentos da DRE). */
+  label?: string;
 }
 
 export interface BankDebitLink {
@@ -70,13 +72,28 @@ export interface InvoiceCategoryData {
   allocations: CategoryWeight[];
   /** Linhas do modo «Por artigo». */
   lines: CategoryWeight[];
+  /** Data de competência da fatura (a de competência, senão a da fatura), YYYY-MM-DD. */
+  date?: string | null;
+  /** Fornecedor e número, para listar. */
+  label?: string | null;
 }
 
 /** Documentos a que as saídas estão conciliadas, com o que é preciso para lhes tirar a categoria. */
 export interface ExpenseSources {
   invoices: Map<string, InvoiceCategoryData>;
   payables: Map<string, { invoiceId: string | null; groupId: string | null }>;
-  occurrences: Map<string, { invoiceId: string | null; groupId: string | null; categoryId: string | null }>;
+  occurrences: Map<
+    string,
+    {
+      invoiceId: string | null;
+      groupId: string | null;
+      categoryId: string | null;
+      /** Mês a que a ocorrência respeita, YYYY-MM. */
+      period?: string | null;
+      /** Nome do contrato, para listar. */
+      label?: string | null;
+    }
+  >;
 }
 
 export interface ExpenseReferences {

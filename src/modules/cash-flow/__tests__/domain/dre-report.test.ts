@@ -1,6 +1,7 @@
-import { buildDreReport, type BuildDreInput } from "../../domain/services/dre-report.service.js";
+import { buildDreEntries, buildDreReport, type BuildDreInput } from "../../domain/services/dre-report.service.js";
 import { resolveDreParameters } from "../../domain/services/dre-parameters.service.js";
 import { DEFAULT_DRE_PARAMETERS } from "../../domain/entities/dre-parameters.js";
+import { countedDebits } from "../../domain/services/cash-flow-report.service.js";
 import { catalog, credit, debit, emptySources } from "../fakes/builders.js";
 
 const noPayments = { card: 0, cash: 0, other: 0 };
@@ -15,7 +16,6 @@ function input(overrides: Partial<BuildDreInput> = {}): BuildDreInput {
     restaurant: { netCents: 0, vatCents: 0, byPaymentGrossCents: noPayments },
     parameters: resolveDreParameters(null, null),
     categoryNetRatios: new Map(),
-    manual: { fixedCents: 0, variableCents: 0 },
     ...overrides,
   };
 }
@@ -99,7 +99,7 @@ describe("buildDreReport", () => {
     expect(report.platformCosts.marketingNetCents).toBe(15_000);
   });
 
-  it("resultado, margem, ajustes manuais e saldo do IVA (vendas − compras, com o IVA da comissão)", () => {
+  it("resultado, margem e saldo do IVA (vendas − compras, com o IVA da comissão)", () => {
     const sources = emptySources();
     sources.invoices.set("f", { mode: "simple", netRatio: 100 / 123, groupId: null, categoryId: "c-ing", allocations: [], lines: [] });
     const report = buildDreReport(
@@ -108,12 +108,10 @@ describe("buildDreReport", () => {
         restaurant: { netCents: 100_000, vatCents: 13_000, byPaymentGrossCents: noPayments },
         debits: [debit({ amountCents: 24_600, links: [{ entityType: "invoice", entityId: "f", amountCents: 24_600 }] })],
         credits: [credit({ amountCents: 63_100, platform: "glovo" })],
-        manual: { fixedCents: 10_000, variableCents: 5_000 },
       }),
     );
-    expect(report.manualAdjustments).toEqual({ fixedCents: 10_000, variableCents: 5_000, totalCents: 15_000 });
-    expect(report.resultCents).toBe(100_000 + 86_957 - 30_000 - 20_000 - 15_000);
-    expect(report.marginPct).toBe(65.2);
+    expect(report.resultCents).toBe(100_000 + 86_957 - 30_000 - 20_000);
+    expect(report.marginPct).toBe(73.3);
     expect(report.vat).toEqual({ salesCents: 13_000 + 13_043, purchasesCents: 4_600 + 6_900, purchasesEstimatedCents: 0, balanceCents: 26_043 - 11_500 });
   });
 
@@ -126,5 +124,186 @@ describe("buildDreReport", () => {
     );
     expect(report.expenses.totalNetCents).toBe(0);
     expect(report.revenue.platformsReceivedCents).toBe(0);
+  });
+
+  it("pedido rápido sem as vendas do restaurante: custos e plataformas completos, resultado e margem a null", () => {
+    const report = buildDreReport(
+      input({
+        restaurantSalesLoaded: false,
+        debits: [debit({ amountCents: 95_000, categoryId: "c-sal" })],
+        credits: [credit({ amountCents: 63_100, platform: "uber_eats" })],
+      }),
+    );
+    expect(report.restaurantSalesLoaded).toBe(false);
+    expect(report.expenses.totalNetCents).toBe(95_000);
+    expect(report.revenue.platformsNetCents).toBe(86_957);
+    expect(report.resultCents).toBeNull();
+    expect(report.marginPct).toBeNull();
+  });
+
+  it("arruma os gastos pelas linhas da DRE (CMV, pessoal, por classificar…) e tira o CAPEX do resultado", () => {
+    const capexCatalog = {
+      ...catalog,
+      groups: [...catalog.groups, { id: "g-cap", code: "CAP", name: "Investimentos", sortOrder: 5 }],
+      categories: [...catalog.categories, { id: "c-eq", groupId: "g-cap", code: "CAP.01", name: "Equipamentos", financialType: "capex" }],
+    };
+    const report = buildDreReport(
+      input({
+        catalog: capexCatalog,
+        restaurant: { netCents: 100_000, vatCents: 0, byPaymentGrossCents: noPayments },
+        categoryNetRatios: new Map([["c-ing", 1], ["c-eq", 1]]),
+        debits: [
+          debit({ id: "a", amountCents: 20_000, categoryId: "c-ing" }),
+          debit({ id: "b", amountCents: 30_000, categoryId: "c-sal" }),
+          debit({ id: "c", amountCents: 5_000, kind: "card_purchase" }),
+          debit({ id: "d", amountCents: 40_000, categoryId: "c-eq" }),
+        ],
+      }),
+    );
+    expect(report.expenses.sections.map((s) => [s.key, s.netCents])).toEqual([
+      ["cmv", 20_000],
+      ["personnel", 30_000],
+      ["unclassified", 5_000],
+      ["capex", 40_000],
+    ]);
+    expect(report.expenses.sections.find((s) => s.key === "unclassified")!.items[0]).toMatchObject({ movementKind: "card_purchase", name: null });
+    expect(report.expenses.capexNetCents).toBe(40_000);
+    expect(report.resultCents).toBe(100_000 - 20_000 - 30_000 - 5_000);
+  });
+
+  it("sem fatura nem categoria: vencimentos → pessoal, energia → estrutura, seguros → administrativo, taxas → financeiro; o resto fica pelo extrato", () => {
+    const report = buildDreReport(
+      input({
+        debits: [
+          debit({ id: "a", amountCents: 1_000, kind: "payroll" }),
+          debit({ id: "b", amountCents: 2_000, kind: "utilities" }),
+          debit({ id: "c", amountCents: 3_000, kind: "insurance" }),
+          debit({ id: "d", amountCents: 4_000, kind: "bank_fee" }),
+          debit({ id: "e", amountCents: 5_000, kind: "transfer_out" }),
+        ],
+      }),
+    );
+    expect(report.expenses.sections.map((s) => [s.key, s.netCents, s.items.map((i) => i.movementKind)])).toEqual([
+      ["personnel", 1_000, ["payroll"]],
+      ["structure", 2_000, ["utilities"]],
+      ["administrative", 3_000, ["insurance"]],
+      ["unclassified", 5_000, ["transfer_out"]],
+      ["financial", 4_000, ["bank_fee"]],
+    ]);
+  });
+
+  it("comissão do TPA: taxa do mês sobre o vendido em cartão, abatida no resultado (sem IVA dedutível)", () => {
+    const report = buildDreReport(
+      input({
+        restaurant: { netCents: 100_000, vatCents: 13_000, byPaymentGrossCents: { card: 90_000, cash: 23_000, other: 0 } },
+        parameters: { ...resolveDreParameters(null, null), cardFeePct: 1.2 },
+      }),
+    );
+    expect(report.cardFees).toEqual({ cardGrossCents: 90_000, ratePct: 1.2, netCents: 1_080 });
+    expect(report.resultCents).toBe(100_000 - 1_080);
+    expect(report.vat.purchasesCents).toBe(0);
+  });
+
+  it("empréstimos: só os juros (categoria financeira fora do «Fora da DRE») entram; o capital fica de fora", () => {
+    const loanCatalog = {
+      ...catalog,
+      groups: [...catalog.groups, { id: "g-adm", code: "ADM", name: "Administrativo", sortOrder: 4 }],
+      categories: [
+        ...catalog.categories,
+        { id: "c-jur", groupId: "g-adm", code: "ADM.03", name: "Taxas e juros", financialType: "financial" },
+        { id: "c-emp", groupId: "g-fdr", code: "FDR.04", name: "Empréstimos", financialType: "financial" },
+      ],
+    };
+    const loan = { justificationType: "emprestimo_financiamento", reconciliationStatus: "justificado" } as const;
+    const report = buildDreReport(
+      input({
+        catalog: loanCatalog,
+        debits: [
+          debit({ id: "capital", amountCents: 80_000, categoryId: "c-emp", ...loan }),
+          debit({ id: "juros", amountCents: 3_000, categoryId: "c-jur", ...loan }),
+          debit({ id: "sem-categoria", amountCents: 50_000, ...loan }),
+        ],
+      }),
+    );
+    expect(report.expenses.totalNetCents).toBe(3_000);
+    expect(report.expenses.sections.map((s) => [s.key, s.netCents])).toEqual([["financial", 3_000]]);
+  });
+
+  it("o fluxo de caixa continua a deixar os empréstimos de fora (os juros só entram na DRE)", () => {
+    const loan = { justificationType: "emprestimo_financiamento", reconciliationStatus: "justificado" } as const;
+    const debits = [debit({ id: "juros", amountCents: 3_000, categoryId: "c-sal", ...loan })];
+    expect(countedDebits(debits, emptySources(), catalog)).toEqual([]);
+  });
+
+  it("competência: conta no mês da fatura (ou no mês da recorrência), não no do pagamento", () => {
+    const sources = emptySources();
+    sources.invoices.set("out", { mode: "simple", netRatio: 1, groupId: null, categoryId: "c-ing", allocations: [], lines: [], date: "2026-10-30" });
+    sources.invoices.set("set", { mode: "simple", netRatio: 1, groupId: null, categoryId: "c-ing", allocations: [], lines: [], date: "2026-09-30" });
+    sources.occurrences.set("sal-out", { invoiceId: null, groupId: "g-pes", categoryId: "c-sal", period: "2026-10", label: "Salários" });
+    const report = buildDreReport(
+      input({
+        sources,
+        debits: [
+          // fatura de outubro paga em novembro → outubro
+          debit({ id: "a", date: "2026-11-10", amountCents: 1_000, links: [{ entityType: "invoice", entityId: "out", amountCents: 1_000 }] }),
+          // fatura de setembro paga em outubro → setembro (fora)
+          debit({ id: "b", date: "2026-10-05", amountCents: 2_000, links: [{ entityType: "invoice", entityId: "set", amountCents: 2_000 }] }),
+          // salários de outubro pagos a 3 de novembro → outubro
+          debit({ id: "c", date: "2026-11-03", amountCents: 30_000, matchedEntityType: "recurrence_occurrence", matchedEntityId: "sal-out" }),
+          // sem documento: pela data do pagamento
+          debit({ id: "d", date: "2026-10-20", amountCents: 400, categoryId: "c-sal" }),
+          debit({ id: "e", date: "2026-11-02", amountCents: 999, categoryId: "c-sal" }),
+        ],
+      }),
+    );
+    expect(report.expenses.totalNetCents).toBe(1_000 + 30_000 + 400);
+  });
+
+  it("fora da operação: retiradas de sócios e capital de empréstimos num bloco à parte, fora do resultado; o IVA não aparece", () => {
+    const offCatalog = {
+      ...catalog,
+      // Como no catálogo predefinido: IVA (FDR.03) é «fiscal».
+      categories: [
+        ...catalog.categories.map((c) => (c.id === "c-iva" ? { ...c, financialType: "fiscal" } : c)),
+        { id: "c-ret", groupId: "g-fdr", code: "FDR.01", name: "Retirada de sócios", financialType: "off_dre" },
+      ],
+    };
+    const report = buildDreReport(
+      input({
+        catalog: offCatalog,
+        restaurant: { netCents: 100_000, vatCents: 0, byPaymentGrossCents: noPayments },
+        debits: [
+          debit({ id: "a", amountCents: 20_000, categoryId: "c-ret" }),
+          debit({ id: "b", amountCents: 50_000, justificationType: "emprestimo_financiamento", reconciliationStatus: "justificado" }),
+          debit({ id: "c", amountCents: 7_000, categoryId: "c-iva" }),
+          debit({ id: "d", amountCents: 9_000, justificationType: "transferencia_interna", reconciliationStatus: "transferencia_interna" }),
+        ],
+      }),
+    );
+    expect(report.expenses.totalNetCents).toBe(0);
+    expect(report.resultCents).toBe(100_000);
+    expect(report.expenses.offOperation).toEqual({
+      totalCents: 70_000,
+      items: [
+        { key: "loan", categoryId: null, code: null, name: "Empréstimos (capital)", movementKind: null, netCents: 50_000 },
+        { key: "c-ret", categoryId: "c-ret", code: "FDR.01", name: "Retirada de sócios", movementKind: null, netCents: 20_000 },
+      ],
+    });
+  });
+
+  it("pagamentos: uma entrada por parte, com a rubrica onde entra e a base do IVA, por data", () => {
+    const entries = buildDreEntries(
+      input({
+        debits: [
+          debit({ id: "a", date: "2026-10-03", amountCents: 12_300, categoryId: "c-ing", label: "Compra com cartão — Mercado" }),
+          debit({ id: "b", date: "2026-10-01", amountCents: 4_000, kind: "card_purchase" }),
+        ],
+      }),
+    );
+    expect(entries.map((e) => [e.movementId, e.section, e.itemKey, e.basis, e.vatBasis, e.netCents])).toEqual([
+      ["b", "unclassified", "kind:card_purchase", "extract", "pending", 4_000],
+      ["a", "cmv", "c-ing", "movement", "estimated", 10_000],
+    ]);
+    expect(entries[1]!.description).toBe("Compra com cartão — Mercado");
   });
 });

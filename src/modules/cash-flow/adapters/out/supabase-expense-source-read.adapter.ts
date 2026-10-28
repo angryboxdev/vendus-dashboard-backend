@@ -18,6 +18,10 @@ interface InvoiceRow {
   cost_center_category_id: string | null;
   subtotal_without_vat: number | string | null;
   total_with_vat: number | string | null;
+  invoice_date: string | null;
+  competence_date: string | null;
+  supplier_name: string | null;
+  invoice_number: string | null;
 }
 
 /** Sem IVA ÷ com IVA; null quando não há total (não se sabe o IVA). */
@@ -37,14 +41,14 @@ export class SupabaseExpenseSourceReadAdapter implements ExpenseSourceReadPort {
       this.select<{ id: string; invoice_id: string | null; cost_center_id: string | null }>(
         organizationId, "payable_entries", "id, invoice_id, cost_center_id", "id", refs.payableIds,
       ),
-      this.select<{ id: string; invoice_id: string | null; recurrence_id: string }>(
-        organizationId, "recurring_occurrences", "id, invoice_id, recurrence_id", "id", refs.occurrenceIds,
+      this.select<{ id: string; invoice_id: string | null; recurrence_id: string; period: string | null }>(
+        organizationId, "recurring_occurrences", "id, invoice_id, recurrence_id, period", "id", refs.occurrenceIds,
       ),
     ]);
-    const contractRows = await this.select<{ id: string; cost_center_id: string | null; cost_center_category_id: string | null }>(
+    const contractRows = await this.select<{ id: string; name: string | null; cost_center_id: string | null; cost_center_category_id: string | null }>(
       organizationId,
       "recurring_contracts",
-      "id, cost_center_id, cost_center_category_id",
+      "id, name, cost_center_id, cost_center_category_id",
       "id",
       [...new Set(occurrenceRows.map((o) => o.recurrence_id))],
     );
@@ -59,7 +63,16 @@ export class SupabaseExpenseSourceReadAdapter implements ExpenseSourceReadPort {
       occurrences: new Map(
         occurrenceRows.map((o) => {
           const c = contracts.get(o.recurrence_id);
-          return [o.id, { invoiceId: o.invoice_id, groupId: c?.cost_center_id ?? null, categoryId: c?.cost_center_category_id ?? null }];
+          return [
+            o.id,
+            {
+              invoiceId: o.invoice_id,
+              groupId: c?.cost_center_id ?? null,
+              categoryId: c?.cost_center_category_id ?? null,
+              period: o.period,
+              label: c?.name ?? null,
+            },
+          ];
         }),
       ),
     };
@@ -69,7 +82,7 @@ export class SupabaseExpenseSourceReadAdapter implements ExpenseSourceReadPort {
     const rows = await this.select<InvoiceRow>(
       organizationId,
       "invoices",
-      "id, line_detail_mode, cost_center_group_id, cost_center_category_id, subtotal_without_vat, total_with_vat",
+      "id, line_detail_mode, cost_center_group_id, cost_center_category_id, subtotal_without_vat, total_with_vat, invoice_date, competence_date, supplier_name, invoice_number",
       "id",
       ids,
     );
@@ -112,6 +125,8 @@ export class SupabaseExpenseSourceReadAdapter implements ExpenseSourceReadPort {
           netRatio: ratio(Math.abs(Number(r.subtotal_without_vat ?? 0)), Math.abs(Number(r.total_with_vat ?? 0))),
           allocations: allocations.get(r.id) ?? [],
           lines: lines.get(r.id) ?? [],
+          date: r.competence_date ?? r.invoice_date,
+          label: [r.supplier_name, r.invoice_number].filter(Boolean).join(" · ") || null,
         },
       ]),
     );
