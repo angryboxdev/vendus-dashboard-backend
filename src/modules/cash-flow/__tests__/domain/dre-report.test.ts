@@ -46,6 +46,8 @@ describe("buildDreReport", () => {
       input({ categoryNetRatios: new Map([["c-ing", 100 / 113]]), debits: [debit({ amountCents: 11_300, categoryId: "c-ing" })] }),
     );
     expect(withAverage.expenses).toMatchObject({ totalNetCents: 10_000, vatCents: 1_300, estimatedVatCents: 1_300, pendingVatCents: 0 });
+    // O IVA também fica por linha da DRE (para o «Controle geral» com IVA).
+    expect(withAverage.expenses.sections.map((s) => [s.key, s.netCents, s.vatCents])).toEqual([["cmv", 10_000, 1_300]]);
 
     const theoretical = buildDreReport(input({ debits: [debit({ amountCents: 12_300, categoryId: "c-ing" })] }));
     expect(theoretical.expenses).toMatchObject({ totalNetCents: 10_000, estimatedVatCents: 2_300, pendingVatCents: 0 });

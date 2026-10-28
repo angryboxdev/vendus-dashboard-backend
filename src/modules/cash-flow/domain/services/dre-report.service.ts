@@ -331,9 +331,14 @@ const sortedItems = (items: Map<string, DreSectionItem> | undefined) => [...(ite
 
 function dreSections(shares: NetShare[], catalog: CostCenterCatalog): DreExpenseSection[] {
   const bySection = groupItems(shares, (s) => operatingPlacement(s, catalog));
+  const vatBySection = new Map<string, number>();
+  for (const s of shares) {
+    const key = operatingPlacement(s, catalog).section;
+    vatBySection.set(key, (vatBySection.get(key) ?? 0) + s.vatCents);
+  }
   return SECTION_ORDER.filter((k) => bySection.has(k)).map((key) => {
     const items = sortedItems(bySection.get(key));
-    return { key, netCents: items.reduce((a, i) => a + i.netCents, 0), items };
+    return { key, netCents: items.reduce((a, i) => a + i.netCents, 0), vatCents: vatBySection.get(key) ?? 0, items };
   });
 }
 
