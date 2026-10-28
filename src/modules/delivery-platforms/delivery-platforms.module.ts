@@ -1,4 +1,5 @@
 import type { Router } from "express";
+import type { DescribeMovementPort } from "../bank-statements/domain/ports/in/describe-movement.port.js";
 import { createScopedQuery } from "../../infra/scoped-db/scoped-query.js";
 import { DocumentTextAdapter } from "./adapters/out/document-text.adapter.js";
 import { SupabasePlatformStatementRepository } from "./adapters/out/supabase-platform-statement.repository.js";
@@ -6,6 +7,8 @@ import { ImportPlatformDocumentsUseCase } from "./application/use-cases/import-p
 import { ListPlatformStatementsUseCase } from "./application/use-cases/list-platform-statements.use-case.js";
 import { ExportPlatformMarginReportUseCase, GetPlatformMarginReportUseCase } from "./application/use-cases/platform-margin-report.use-case.js";
 import { MarginReportWriterAdapter } from "./adapters/out/margin-report-writer.adapter.js";
+import { SupabasePlatformBankCreditsAdapter } from "./adapters/out/supabase-platform-bank-credits.adapter.js";
+import { GetPayoutReconciliationUseCase } from "./application/use-cases/payout-reconciliation.use-case.js";
 import type { GetPlatformMarginReportPort } from "./domain/ports/in/platform-margin-report.port.js";
 import type { ListPlatformStatementsPort } from "./domain/ports/in/list-platform-statements.port.js";
 import { DeliveryPlatformsController } from "./adapters/in/delivery-platforms.controller.js";
@@ -18,11 +21,16 @@ export interface DeliveryPlatformsModule {
   getMarginReport: GetPlatformMarginReportPort;
 }
 
+export interface DeliveryPlatformsModuleDeps {
+  /** Regras do `bank-statements` para reconhecer os créditos das plataformas no banco (F4). */
+  describeMovement: DescribeMovementPort;
+}
+
 /**
  * Composition root do módulo `delivery-platforms`: importação dos extratos das plataformas de
  * delivery (Uber, Glovo…) para `delivery_platform_statements`.
  */
-export function createDeliveryPlatformsModule(): DeliveryPlatformsModule {
+export function createDeliveryPlatformsModule(deps: DeliveryPlatformsModuleDeps): DeliveryPlatformsModule {
   const statements = new SupabasePlatformStatementRepository(createScopedQuery);
   const listStatements = new ListPlatformStatementsUseCase(statements);
   const getMarginReport = new GetPlatformMarginReportUseCase(statements);
@@ -31,6 +39,7 @@ export function createDeliveryPlatformsModule(): DeliveryPlatformsModule {
     listStatements,
     getMarginReport,
     new ExportPlatformMarginReportUseCase(getMarginReport, new MarginReportWriterAdapter()),
+    new GetPayoutReconciliationUseCase(statements, new SupabasePlatformBankCreditsAdapter(createScopedQuery, deps.describeMovement)),
   );
   return { router: controller.router, listStatements, getMarginReport };
 }

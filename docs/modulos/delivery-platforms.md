@@ -10,19 +10,21 @@ F1 (backend + página «Plataformas de delivery» no frontend, `/dre/plataformas
 
 ## Arquitetura
 - Código: `src/modules/delivery-platforms/`; composição: `delivery-platforms.module.ts`; documentação: `src/modules/delivery-platforms/README.md`.
-- Endpoints (sob `/api`, permissão `dre.statement`): `POST /delivery-platforms/import` (multipart, campo `files`, MANAGE), `GET /delivery-platforms/statements?year&month`, `GET /delivery-platforms/report?year&month` e `GET /delivery-platforms/report/export?year&month&format=xlsx|pdf` (READ).
+- Endpoints (sob `/api`, permissão `dre.statement`): `POST /delivery-platforms/import` (multipart, campo `files`, MANAGE), `GET /delivery-platforms/statements?year&month`, `GET /delivery-platforms/report?year&month` e `GET /delivery-platforms/report/export?year&month&format=xlsx|pdf` e `GET /delivery-platforms/payouts?year&month` (READ).
 - Tabela: `delivery_platform_statements` (`org_id`, RLS).
 
 ## Dependências
-Nenhuma porta de outros módulos. Expõe `getMarginReport`, usada pela DRE (`cash-flow`, F3b).
+`DescribeMovementPort` de [bank-statements](bank-statements.md) (reconhecer os créditos das plataformas; lê `bank_movements`). Expõe `getMarginReport`, usada pela DRE (`cash-flow`, F3b).
 
 ## Regras de negócio
 Ver «Conceitos de domínio» e «Decisões de design» no README do módulo e `.scratch/importador-plataformas/spec.md`.
 
 F3a feita no ramo (commit, sem push; sem migração): relatório de margem por plataforma (documentos que atravessam o mês repartidos pelo SAF-T diário / vendas diárias da Bolt) com exportação Excel e PDF, no ecrã.
 
+F4 feita no ramo (commit, sem push; sem migração): conferência das transferências × banco no ecrã.
+
 ## Problemas conhecidos
 Documentos fora dos cinco conhecidos são rejeitados com motivo. Relatórios da Bolt com períodos sobrepostos duplicam vendas.
 
 ## Próximos trabalhos
-F3b feita (DRE com os valores reais); custo real da comida pelas fichas técnicas; F4 conferência das transferências no banco.
+F3b feita (DRE com os valores reais); custo real da comida pelas fichas técnicas.

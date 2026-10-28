@@ -1787,7 +1787,7 @@ app.use("/api", bankStatementsModule.router);
 // os há no mês; senão, reconstituídas das liquidações no banco.
 // Plataformas de delivery: importação dos extratos (Uber, Glovo, Bolt, SAF-T) e margem por plataforma.
 // Antes do cash-flow: a DRE usa a margem pelos extratos quando os há no mês (F3b).
-const deliveryPlatformsModule = createDeliveryPlatformsModule();
+const deliveryPlatformsModule = createDeliveryPlatformsModule({ describeMovement: bankStatementsModule.describeMovement });
 const cashFlowModule = createCashFlowModule({
   describeMovement: bankStatementsModule.describeMovement,
   getPayableSummary: payableEntriesModule.getPayableSummary,

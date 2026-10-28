@@ -57,22 +57,25 @@ Converte o texto de um documento (PDF, CSV ou XML) numa `PlatformStatement` (lin
 - `ListPlatformStatementsPort` — extratos cujo período toca um mês, com totais por natureza (`summarizeStatement`).
 - `GetPlatformMarginReportPort` — margem por plataforma do mês (`buildMarginReport`); exposto também a outros módulos (DRE, F3b).
 - `ExportPlatformMarginReportPort` — o mesmo relatório em Excel ou PDF.
+- `GetPayoutReconciliationPort` — conferência das transferências que pagam as vendas do mês × créditos no banco (F4).
 
 ### Saída (dependências do domínio)
 
 - `DocumentTextPort` — texto de um ficheiro (null se não houver texto).
 - `PlatformStatementRepositoryPort` — `save` (upsert, diz se substituiu) e `listOverlapping`.
 - `MarginReportWriterPort` — escreve o relatório em `xlsx` e `pdf`.
+- `PlatformBankCreditsReadPort` — créditos das plataformas no banco e último dia importado.
 
 ## Adapters
 
 ### Entrada
 
-- `DeliveryPlatformsController` → `GET /api/delivery-platforms/report?year&month` e `GET /api/delivery-platforms/report/export?year&month&format=xlsx|pdf`; `POST /api/delivery-platforms/import` (multipart, `files`, até 20, 15 MB cada) e `GET /api/delivery-platforms/statements?year&month`; permissão `dre.statement`.
+- `DeliveryPlatformsController` → `GET /api/delivery-platforms/payouts?year&month`, `GET /api/delivery-platforms/report?year&month` e `GET /api/delivery-platforms/report/export?year&month&format=xlsx|pdf`; `POST /api/delivery-platforms/import` (multipart, `files`, até 20, 15 MB cada) e `GET /api/delivery-platforms/statements?year&month`; permissão `dre.statement`.
 
 ### Saída
 
 - `DocumentTextAdapter` → `pdf-parse` para PDF; UTF-8 para `.csv`/`.txt`; `.xml` na codificação declarada (Windows-1252 no AirMenu).
+- `SupabasePlatformBankCreditsAdapter` → `bank_movements` (só leitura, tabela do `bank-statements`); a plataforma de cada crédito vem do `DescribeMovementPort` do `bank-statements` (dependência do composition root, ligada em `server.ts`).
 - `MarginReportWriterAdapter` → Excel (`xlsx`: folhas «Margem» e «Documentos») e PDF (`pdfkit`).
 - `SupabasePlatformStatementRepository` → tabela `delivery_platform_statements` via `createScopedQuery`.
 
@@ -85,6 +88,7 @@ Converte o texto de um documento (PDF, CSV ou XML) numa `PlatformStatement` (lin
 - **SAF-T:** guarda só faturado e IVA por dia e notas de crédito por dia (nunca clientes nem artigos); anulados não contam; confere a soma com `TotalCredit`/`TotalDebit` do próprio ficheiro; o SAF-T do Vendus é recusado (é do restaurante). Leitor próprio em vez do de `sales-declaration`: precisa do IVA e do bruto, que esse não lê.
 - **Relatório de margem (F3):** o mesmo método do PDF de setembro — vendas com IVA → sem IVA pela taxa do SAF-T do mês (senão 15%, a de omissão da DRE); promoções contam como custo; taxas sem IVA (Bolt em autoliquidação); margem bruta; comida e embalagem estimadas em 30% do faturado sem IVA (até virem as fichas técnicas); margem líquida; IVA a entregar = IVA das vendas − IVA das taxas. % sobre as vendas sem IVA.
 - **Documentos que atravessam o mês** (decisão do utilizador, 2026-10-28; `month-allocation.ts`): os que trazem os dias (pedidos da Bolt, SAF-T) contam só os dias do mês; as faturas da Bolt repartem-se pelas vendas diárias do relatório de pedidos; os outros pelo faturado diário do SAF-T (do mês e dos vizinhos); sem dados diários de todos os dias, pela proporção de dias, com aviso.
+- **Conferência das transferências (F4):** esperadas = pagamentos dos documentos (semanas da Uber com a data de pagamento, quinzena da Glovo pelo «valor a transferir») e, na Bolt, vendas da semana (relatório de pedidos, sem as pagas em dinheiro) − total da fatura semanal. Contam as que terminam no mês. Cada uma liga-se ao crédito da mesma plataforma entre o fim do período e 21 dias depois, o de valor mais próximo (até 25% ou 5 € de diferença), cada crédito uma vez. Estados: bate (±2 cêntimos), diferença, por receber (o banco não está importado até à data limite), em falta. Créditos do mês sem transferência esperada listam-se à parte.
 - **Glovo:** as linhas de detalhe «Taxa de serviço da plataforma/estafetas» são ignoradas (já estão na comissão); a soma das taxas tem de dar o subtotal.
 - **Validação ao cêntimo** contra o líquido do documento antes de guardar: um leitor que se engane rejeita em vez de gravar valores errados.
 - **Faturas das plataformas não entram no módulo de faturas** — o extrato é a fonte da DRE.

@@ -3,6 +3,7 @@ import multer from "multer";
 import type { ImportPlatformDocumentsPort } from "../../domain/ports/in/import-platform-documents.port.js";
 import type { ListPlatformStatementsPort } from "../../domain/ports/in/list-platform-statements.port.js";
 import type { ExportPlatformMarginReportPort, GetPlatformMarginReportPort } from "../../domain/ports/in/platform-margin-report.port.js";
+import type { GetPayoutReconciliationPort } from "../../domain/ports/in/payout-reconciliation.port.js";
 import { InvalidStatementPeriodError } from "../../domain/errors.js";
 
 const MAX_FILES = 20;
@@ -16,6 +17,7 @@ export class DeliveryPlatformsController {
     private readonly listStatements: ListPlatformStatementsPort,
     private readonly getReport: GetPlatformMarginReportPort,
     private readonly exportReport: ExportPlatformMarginReportPort,
+    private readonly getPayouts: GetPayoutReconciliationPort,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -55,6 +57,18 @@ export class DeliveryPlatformsController {
     this.router.get("/delivery-platforms/report", async (req, res) => {
       try {
         res.json(await this.getReport.execute({ organizationId: req.auth!.orgId, year: Number(req.query["year"]), month: Number(req.query["month"]) }));
+      } catch (e: unknown) {
+        this.fail(res, e);
+      }
+    });
+
+    /**
+     * GET /delivery-platforms/payouts?year=&month=
+     * Transferências que pagam as vendas do mês (documentos) × créditos das plataformas no banco.
+     */
+    this.router.get("/delivery-platforms/payouts", async (req, res) => {
+      try {
+        res.json(await this.getPayouts.execute({ organizationId: req.auth!.orgId, year: Number(req.query["year"]), month: Number(req.query["month"]) }));
       } catch (e: unknown) {
         this.fail(res, e);
       }
