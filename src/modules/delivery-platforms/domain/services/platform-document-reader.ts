@@ -1,12 +1,18 @@
 import { computedPayoutCents, type PlatformStatement } from "../entities/platform-statement.js";
 import { InvalidPlatformDocumentError, UnsupportedPlatformDocumentError } from "../errors.js";
+import { isBoltWeeklyInvoice, parseBoltWeeklyInvoice } from "./bolt-invoice.parser.js";
+import { isBoltOrdersReport, parseBoltOrdersReport } from "./bolt-orders.parser.js";
 import { isGlovoStatement, parseGlovoStatement } from "./glovo-statement.parser.js";
+import { isSaftSales, parseSaftSales } from "./saft-sales.parser.js";
 import { isUberMonthlyStatement, parseUberMonthlyStatement } from "./uber-statement.parser.js";
 
 /** Leitores conhecidos: reconhecem o documento pelo conteúdo (não pelo nome do ficheiro). */
 const READERS: { matches: (text: string) => boolean; parse: (text: string) => PlatformStatement | { error: string } }[] = [
   { matches: isUberMonthlyStatement, parse: parseUberMonthlyStatement },
   { matches: isGlovoStatement, parse: parseGlovoStatement },
+  { matches: isBoltWeeklyInvoice, parse: parseBoltWeeklyInvoice },
+  { matches: isBoltOrdersReport, parse: parseBoltOrdersReport },
+  { matches: isSaftSales, parse: parseSaftSales },
 ];
 
 /** Diferença tolerada entre as linhas lidas e o total do documento (arredondamentos). */

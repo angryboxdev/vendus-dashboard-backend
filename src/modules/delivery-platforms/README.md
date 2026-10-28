@@ -37,12 +37,15 @@ Gestor                                   Sistema
 
 ## Propósito técnico
 
-Converte o texto de um extrato (PDF) numa `PlatformStatement` (linhas por natureza com valor bruto e IVA, transferências e líquido) e guarda-a por organização. Não lança faturas, não concilia com o banco (F4) nem calcula a margem (F3, a partir destes dados).
+Converte o texto de um documento (PDF, CSV ou XML) numa `PlatformStatement` (linhas por natureza com valor bruto e IVA, transferências e líquido) e guarda-a por organização. Não lança faturas, não concilia com o banco (F4) nem calcula a margem (F3, a partir destes dados).
 
 ## Conceitos de domínio
 
 - `PlatformStatement` — plataforma, tipo de documento, número, período, data de emissão, nº de pedidos, `lines`, `payouts`, `netPayoutCents`.
 - `StatementLine` — `kind` (`sales|promotion|commission|marketing|other_fee|refund|cash|adjustment`), `grossCents` (reduções positivas) e `vatCents`.
+- Documentos lidos: extrato mensal da Uber (PDF), extrato quinzenal da Glovo (PDF), relatório de pedidos da Bolt (CSV), fatura semanal da Bolt (PDF) e SAF-T de vendas do AirMenu (XML, origem `airmenu`: as três plataformas juntas, só para conferir).
+- `netPayoutCents` é o que o documento soma à transferência: na Bolt, o relatório de pedidos soma as vendas e cada fatura semanal subtrai o seu total, e a soma dá o líquido; no SAF-T é o faturado menos as notas de crédito.
+- `StatementLine.date` quando o documento separa por dia (pedidos da Bolt, SAF-T) — base para repartir as semanas da Bolt pelos meses no relatório (F3).
 - Invariante: vendas − restantes linhas = líquido do documento, com tolerância de 2 cêntimos (`computedPayoutCents`); se não bater, o documento é rejeitado.
 - Um extrato é único por (organização, plataforma, número): reimportar substitui.
 
@@ -66,7 +69,7 @@ Converte o texto de um extrato (PDF) numa `PlatformStatement` (linhas por nature
 
 ### Saída
 
-- `DocumentTextAdapter` → `pdf-parse` para PDF; UTF-8 para `.csv`/`.txt`.
+- `DocumentTextAdapter` → `pdf-parse` para PDF; UTF-8 para `.csv`/`.txt`; `.xml` na codificação declarada (Windows-1252 no AirMenu).
 - `SupabasePlatformStatementRepository` → tabela `delivery_platform_statements` via `createScopedQuery`.
 
 ## Decisões de design
@@ -74,6 +77,8 @@ Converte o texto de um extrato (PDF) numa `PlatformStatement` (linhas por nature
 - **Só o essencial:** guardam-se totais por natureza e transferências; nunca as linhas por pedido, nomes ou notas de clientes (RGPD).
 - **Promoções como custo** pelo valor da plataforma, sem estimar o custo real do artigo oferecido (decisão do utilizador, 2026-10-28).
 - **Taxas com IVA:** Uber — o extrato traz as taxas com IVA (23%), o IVA é calculado; Glovo — o IVA do documento é repartido pelas taxas em proporção, arredondamento na última.
+- **Bolt:** o relatório de pedidos só lê data, estado, método de pagamento e valor (nunca morada, avaliação nem comentário); só contam pedidos entregues; pagos em dinheiro entram como `cash`. Na fatura semanal (IVA em autoliquidação, 0%) o «investimento na campanha» (negativo) entra no marketing, porque é a parte da campanha que a Bolt paga; as linhas têm de somar o total (tolerância de 2 cêntimos — a fatura real arredonda).
+- **SAF-T:** guarda só faturado e IVA por dia e notas de crédito por dia (nunca clientes nem artigos); anulados não contam; confere a soma com `TotalCredit`/`TotalDebit` do próprio ficheiro; o SAF-T do Vendus é recusado (é do restaurante). Leitor próprio em vez do de `sales-declaration`: precisa do IVA e do bruto, que esse não lê.
 - **Glovo:** as linhas de detalhe «Taxa de serviço da plataforma/estafetas» são ignoradas (já estão na comissão); a soma das taxas tem de dar o subtotal.
 - **Validação ao cêntimo** contra o líquido do documento antes de guardar: um leitor que se engane rejeita em vez de gravar valores errados.
 - **Faturas das plataformas não entram no módulo de faturas** — o extrato é a fonte da DRE.
@@ -85,5 +90,6 @@ Converte o texto de um extrato (PDF) numa `PlatformStatement` (linhas por nature
 
 ## Lacunas conhecidas / dívida
 
-- Bolt Food (CSV de pedidos + faturas semanais) e SAF-T do AirMenu: F2.
+- Relatórios de pedidos da Bolt com períodos sobrepostos somam-se duas vezes (o número é `PEDIDOS-<primeiro dia>-<último dia>`): importar um por mês.
+- Repartir as faturas semanais da Bolt e as quinzenas que atravessam o mês: F3 (relatório).
 - Um período que atravessa meses (quinzena da Glovo) aparece nos dois meses; a repartição é da F3.
