@@ -4,6 +4,9 @@ import { DocumentTextAdapter } from "./adapters/out/document-text.adapter.js";
 import { SupabasePlatformStatementRepository } from "./adapters/out/supabase-platform-statement.repository.js";
 import { ImportPlatformDocumentsUseCase } from "./application/use-cases/import-platform-documents.use-case.js";
 import { ListPlatformStatementsUseCase } from "./application/use-cases/list-platform-statements.use-case.js";
+import { ExportPlatformMarginReportUseCase, GetPlatformMarginReportUseCase } from "./application/use-cases/platform-margin-report.use-case.js";
+import { MarginReportWriterAdapter } from "./adapters/out/margin-report-writer.adapter.js";
+import type { GetPlatformMarginReportPort } from "./domain/ports/in/platform-margin-report.port.js";
 import type { ListPlatformStatementsPort } from "./domain/ports/in/list-platform-statements.port.js";
 import { DeliveryPlatformsController } from "./adapters/in/delivery-platforms.controller.js";
 
@@ -11,6 +14,8 @@ export interface DeliveryPlatformsModule {
   router: Router;
   /** Para outros módulos (ex.: a DRE em `cash-flow`, F3) lerem os extratos do mês. */
   listStatements: ListPlatformStatementsPort;
+  /** Margem por plataforma do mês (para a DRE, F3b). */
+  getMarginReport: GetPlatformMarginReportPort;
 }
 
 /**
@@ -20,6 +25,12 @@ export interface DeliveryPlatformsModule {
 export function createDeliveryPlatformsModule(): DeliveryPlatformsModule {
   const statements = new SupabasePlatformStatementRepository(createScopedQuery);
   const listStatements = new ListPlatformStatementsUseCase(statements);
-  const controller = new DeliveryPlatformsController(new ImportPlatformDocumentsUseCase(new DocumentTextAdapter(), statements), listStatements);
-  return { router: controller.router, listStatements };
+  const getMarginReport = new GetPlatformMarginReportUseCase(statements);
+  const controller = new DeliveryPlatformsController(
+    new ImportPlatformDocumentsUseCase(new DocumentTextAdapter(), statements),
+    listStatements,
+    getMarginReport,
+    new ExportPlatformMarginReportUseCase(getMarginReport, new MarginReportWriterAdapter()),
+  );
+  return { router: controller.router, listStatements, getMarginReport };
 }

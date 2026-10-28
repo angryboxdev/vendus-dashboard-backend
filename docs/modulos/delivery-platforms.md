@@ -10,7 +10,7 @@ F1 (backend + página «Plataformas de delivery» no frontend, `/dre/plataformas
 
 ## Arquitetura
 - Código: `src/modules/delivery-platforms/`; composição: `delivery-platforms.module.ts`; documentação: `src/modules/delivery-platforms/README.md`.
-- Endpoints (sob `/api`, permissão `dre.statement`): `POST /delivery-platforms/import` (multipart, campo `files`, MANAGE) e `GET /delivery-platforms/statements?year&month` (READ).
+- Endpoints (sob `/api`, permissão `dre.statement`): `POST /delivery-platforms/import` (multipart, campo `files`, MANAGE), `GET /delivery-platforms/statements?year&month`, `GET /delivery-platforms/report?year&month` e `GET /delivery-platforms/report/export?year&month&format=xlsx|pdf` (READ).
 - Tabela: `delivery_platform_statements` (`org_id`, RLS).
 
 ## Dependências
@@ -19,8 +19,10 @@ Nenhuma porta de outros módulos. Expõe `listStatements` para a DRE (`cash-flow
 ## Regras de negócio
 Ver «Conceitos de domínio» e «Decisões de design» no README do módulo e `.scratch/importador-plataformas/spec.md`.
 
+F3a feita no ramo (commit, sem push; sem migração): relatório de margem por plataforma (documentos que atravessam o mês repartidos pelo SAF-T diário / vendas diárias da Bolt) com exportação Excel e PDF, no ecrã.
+
 ## Problemas conhecidos
 Documentos fora dos cinco conhecidos são rejeitados com motivo. Relatórios da Bolt com períodos sobrepostos duplicam vendas.
 
 ## Próximos trabalhos
-F3 relatório (repartir os extratos que atravessam o mês pelo SAF-T diário) por plataforma (ecrã, Excel, PDF) e DRE; F4 conferência das transferências no banco.
+F3b DRE com os valores reais (porta `getMarginReport` → `cash-flow`); custo real da comida pelas fichas técnicas; F4 conferência das transferências no banco.
