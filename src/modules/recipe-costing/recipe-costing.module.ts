@@ -10,9 +10,15 @@ import { GetDishWeeklyCostUseCase } from "./application/use-cases/get-dish-weekl
 import { GetDishesImpactUseCase, GetIngredientUsageUseCase, GetIngredientsCostOverviewUseCase } from "./application/use-cases/ingredient-insights.use-cases.js";
 import { SupabaseMenuCostingSettingsRepository } from "./adapters/out/supabase-menu-costing-settings.repository.js";
 import { GetMenuCostingSettingsUseCase, SaveMenuCostingSettingsUseCase } from "./application/use-cases/menu-costing-settings.use-cases.js";
+import { GetStockItemCostsUseCase } from "./application/use-cases/get-stock-item-costs.use-case.js";
+import type { GetRecipeCostingPort } from "./domain/ports/in/get-recipe-costing.port.js";
+import type { GetStockItemCostsPort } from "./domain/ports/in/get-stock-item-costs.port.js";
 
 export interface RecipeCostingModule {
   router: Router;
+  /** Para outros módulos (ex.: `delivery-platforms`, custo real da comida do delivery). */
+  getRecipeCosting: GetRecipeCostingPort;
+  getStockItemCosts: GetStockItemCostsPort;
 }
 
 /**
@@ -25,8 +31,9 @@ export function createRecipeCostingModule(): RecipeCostingModule {
   const snapshots = new SupabaseRecipeCostingReadAdapter(createScopedQuery);
   const dishes = new SupabaseDishWeeklyCostReadAdapter(createScopedQuery);
   const settings = new SupabaseMenuCostingSettingsRepository(createScopedQuery);
+  const getRecipeCosting = new GetRecipeCostingUseCase(snapshots, settings);
   const controller = new RecipeCostingController(
-    new GetRecipeCostingUseCase(snapshots, settings),
+    getRecipeCosting,
     new GetIngredientPriceHistoryUseCase(purchases),
     new GetDishWeeklyCostUseCase(dishes, purchases),
     new GetIngredientsCostOverviewUseCase(purchases),
@@ -35,5 +42,5 @@ export function createRecipeCostingModule(): RecipeCostingModule {
     new GetMenuCostingSettingsUseCase(settings),
     new SaveMenuCostingSettingsUseCase(settings),
   );
-  return { router: controller.router };
+  return { router: controller.router, getRecipeCosting, getStockItemCosts: new GetStockItemCostsUseCase(snapshots) };
 }

@@ -104,6 +104,12 @@ export class SupabaseRecipeCostingReadAdapter implements RecipeCostingReadPort {
     return { dishes, preparations: preparationDefs, ingredients: await this.loadCosts(organizationId, [...itemIds]) };
   }
 
+  async loadAllItemCosts(organizationId: OrganizationId): Promise<IngredientCost[]> {
+    const { data, error } = await this.scopedQuery(organizationId).table("stock_items").select("id");
+    if (error) throw new Error(`Custo dos artigos: ${error.message}`);
+    return this.loadCosts(organizationId, ((data ?? []) as unknown as { id: string }[]).map((r) => r.id));
+  }
+
   private async loadCosts(organizationId: OrganizationId, itemIds: string[]): Promise<IngredientCost[]> {
     if (itemIds.length === 0) return [];
     const db = this.scopedQuery(organizationId);

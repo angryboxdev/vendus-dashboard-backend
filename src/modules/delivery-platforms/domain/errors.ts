@@ -27,3 +27,11 @@ export class InvalidPlatformDocumentError extends Error {
     this.name = "InvalidPlatformDocumentError";
   }
 }
+
+/** Correção de um mapeamento de produto inválida (falta o prato, o tamanho ou o artigo). */
+export class InvalidProductMappingError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "InvalidProductMappingError";
+  }
+}

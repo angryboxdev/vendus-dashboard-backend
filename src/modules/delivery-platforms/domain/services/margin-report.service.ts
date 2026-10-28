@@ -16,7 +16,7 @@ const sum = (lines: StatementLine[], kinds: StatementLine["kind"][], field: "gro
   lines.filter((l) => kinds.includes(l.kind)).reduce((a, l) => a + l[field], 0);
 
 /** Margem de um conjunto de documentos já repartidos (uma plataforma, ou todas para o total). */
-function margin(platform: PlatformMargin["platform"], docs: AllocatedStatement[], vatRate: number): PlatformMargin {
+function margin(platform: PlatformMargin["platform"], docs: AllocatedStatement[], vatRate: number, foodCostPct: number): PlatformMargin {
   const lines = docs.flatMap((d) => d.lines);
   const salesGrossCents = sum(lines, ["sales"]);
   const promotionsGrossCents = sum(lines, ["promotion"]);
@@ -30,7 +30,7 @@ function margin(platform: PlatformMargin["platform"], docs: AllocatedStatement[]
   const marketingNetCents = fees("marketing");
   const otherNetCents = fees("other_fee") + sum(lines, ["refund"]);
   const grossMarginCents = invoicedNetCents - commissionNetCents - marketingNetCents - otherNetCents;
-  const foodCostCents = Math.round((invoicedNetCents * FOOD_COST_PCT) / 100);
+  const foodCostCents = Math.round((invoicedNetCents * foodCostPct) / 100);
   const netMarginCents = grossMarginCents - foodCostCents;
   const ordersCount = docs.reduce((a, d) => a + d.ordersCount, 0);
   const salesVatCents = paidByCustomersCents - invoicedNetCents;
@@ -66,14 +66,18 @@ function margin(platform: PlatformMargin["platform"], docs: AllocatedStatement[]
 /**
  * Relatório do mês: reparte os documentos pelo mês (`allocateToMonth`), tira o IVA das vendas pela taxa
  * do SAF-T do mês (ou a de omissão) e calcula as margens por plataforma e no total.
- * `statements` — documentos que tocam o mês; `context` — os que tocam qualquer dia desses documentos.
+ * `statements` — documentos que tocam o mês; `context` — os que tocam qualquer dia desses documentos;
+ * `realFoodCost` — custo real da comida e embalagem (F5): usado só quando completo; senão `FOOD_COST_PCT`.
  */
 export function buildMarginReport(
   year: number,
   month: number,
   statements: StoredPlatformStatement[],
   context: StoredPlatformStatement[],
+  realFoodCost: { pct: number; complete: boolean } | null = null,
 ): MarginReport {
+  const realFoodCostPct = realFoodCost?.complete ? realFoodCost.pct : null;
+  const foodCostPct = realFoodCostPct ?? FOOD_COST_PCT;
   const from = `${year}-${String(month).padStart(2, "0")}-01`;
   const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
   const allocated = allocateToMonth(statements, context, from, to);
@@ -85,8 +89,8 @@ export function buildMarginReport(
   const vatRate = fromSaft ? saftVat / (saftSales - saftVat) : DEFAULT_SALES_VAT_RATE;
 
   const platformDocs = allocated.filter((a) => a.statement.platform !== "airmenu");
-  const platforms = PLATFORMS.map((p) => margin(p, platformDocs.filter((a) => a.statement.platform === p), vatRate)).filter((m) => m.documents > 0);
-  const total = margin("total", platformDocs, vatRate);
+  const platforms = PLATFORMS.map((p) => margin(p, platformDocs.filter((a) => a.statement.platform === p), vatRate, foodCostPct)).filter((m) => m.documents > 0);
+  const total = margin("total", platformDocs, vatRate, foodCostPct);
 
   const warnings: string[] = [];
   if (!fromSaft) warnings.push(`Sem SAF-T do mês: IVA das vendas estimado em ${Math.round(DEFAULT_SALES_VAT_RATE * 100)}%.`);
@@ -103,13 +107,20 @@ export function buildMarginReport(
   for (const p of PLATFORMS) {
     if (!platforms.some((m) => m.platform === p)) warnings.push(`${NAMES[p]}: sem extratos no mês.`);
   }
-  warnings.push(`Comida e embalagem estimadas em ${FOOD_COST_PCT}% do faturado sem IVA — o custo real virá das fichas técnicas.`);
+  warnings.push(
+    realFoodCostPct === null
+      ? realFoodCost
+        ? `Comida e embalagem estimadas em ${FOOD_COST_PCT}%: o custo real ainda está incompleto (${realFoodCost.pct.toLocaleString("pt-PT")}% com os dados atuais) — complete as fichas técnicas, os custos e os produtos em «Custo da comida».`
+        : `Comida e embalagem estimadas em ${FOOD_COST_PCT}% do faturado sem IVA — importe o SAF-T do AirMenu para o custo real pelas fichas técnicas.`
+      : `Comida e embalagem pelo custo real do mês: ${realFoodCostPct.toLocaleString("pt-PT")}% (fichas técnicas e embalagem; a mesma % em todas as plataformas).`,
+  );
 
   return {
     period: { year, month, from, to },
     salesVatRate: vatRate,
     salesVatRateSource: fromSaft ? "saft" : "default",
-    foodCostPct: FOOD_COST_PCT,
+    foodCostPct,
+    foodCostSource: realFoodCostPct === null ? "estimate" : "real",
     platforms,
     total,
     saft: fromSaft

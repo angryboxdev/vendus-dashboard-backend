@@ -120,6 +120,9 @@ Módulo novo `delivery-platforms` (backend e frontend), hexagonal como `tasks`:
 3. **F3** — dividida em **F3a** relatório por plataforma (ecrã + Excel + PDF, repartição pelo SAF-T diário) e
    **F3b** DRE com os valores reais.
 4. **F4** — conferência do delivery: transferências no banco × período pago (feita 2026-10-28).
+5. **F5** — custo real da comida e da embalagem: produtos do SAF-T × fichas técnicas e artigos de stock
+   (pizza = Pequena, «Upgrade para L» = diferença Grande − Pequena; Caixa S/L por pizza, saco e guardanapo
+   por pedido — decisões do utilizador 2026-10-28); a margem usa a % real só quando completa.
 
 Cada fase termina com relatório e espera autorização. Migração em produção só com aprovação explícita.
 
