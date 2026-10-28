@@ -4,10 +4,19 @@
  * Nunca guarda dados de clientes (nomes, NIF, notas dos pedidos).
  */
 
-export type DeliveryPlatform = "uber_eats" | "glovo" | "bolt_food";
+/**
+ * Origem do documento: uma plataforma, ou `airmenu` — o SAF-T de vendas do AirMenu, que junta as
+ * três plataformas e serve para conferir (não separa por plataforma).
+ */
+export type DeliveryPlatform = "uber_eats" | "glovo" | "bolt_food" | "airmenu";
 
 /** Tipo de documento importado (cada leitor sabe ler um). */
-export type PlatformDocumentKind = "uber_monthly_statement" | "glovo_statement";
+export type PlatformDocumentKind =
+  | "uber_monthly_statement"
+  | "glovo_statement"
+  | "bolt_orders_report"
+  | "bolt_weekly_invoice"
+  | "airmenu_saft";
 
 /**
  * Natureza de uma linha do extrato:
@@ -27,8 +36,13 @@ export interface StatementLine {
   label: string;
   /** Valor com IVA (o que conta na transferência). */
   grossCents: number;
-  /** IVA incluído em `grossCents`, quando a plataforma o cobra (taxas); 0 nas vendas e promoções. */
+  /**
+   * IVA incluído em `grossCents`: o que a plataforma cobra nas taxas; nas vendas só quando o documento
+   * o diz (SAF-T); 0 nos outros casos.
+   */
   vatCents: number;
+  /** Dia a que a linha se refere, quando o documento separa por dia (pedidos da Bolt, SAF-T). */
+  date?: string;
 }
 
 /** Uma transferência da plataforma e o período de vendas que paga. */
@@ -52,7 +66,11 @@ export interface PlatformStatement {
   ordersCount: number | null;
   lines: StatementLine[];
   payouts: PlatformPayout[];
-  /** Total que a plataforma diz transferir pelo período. */
+  /**
+   * O que o documento soma à transferência do período: o total a transferir (Uber, Glovo); as vendas
+   * (pedidos da Bolt) ou − o total da fatura (fatura semanal da Bolt), que juntos dão a transferência;
+   * no SAF-T, o faturado líquido de notas de crédito.
+   */
   netPayoutCents: number;
 }
 

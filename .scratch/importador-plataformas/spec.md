@@ -22,6 +22,9 @@ plataforma: vendas, promoções, comissões, marketing, reembolsos e valor trans
 - **Bolt** entra com o CSV de pedidos e as faturas semanais.
 - **SAF-T do AirMenu**: recomendado (IVA exato das vendas e verificação de pedidos em falta), opcional.
 - Nunca guardar dados de clientes (nomes, NIF, notas de pedido, comentários de avaliação).
+- **Extratos que atravessam o mês** (2026-10-28): um extrato pode trazer dias do mês anterior ou do
+  seguinte. O SAF-T do AirMenu, que tem as vendas dia a dia, diz que parte pertence a cada mês: os dias
+  fora do mês ficam de fora (ou vão para o mês deles) na proporção do faturado no SAF-T nesses dias.
 
 ## O que se importa (por mês)
 
@@ -62,6 +65,9 @@ autoliquidação** (0% na fatura): o custo para a DRE é o total; o IVA liquida-
 - Glovo: as quinzenas caem dentro do mês.
 - Bolt: as faturas são semanais e uma semana pode atravessar o mês. Os valores da fatura repartem-se
   pelos meses **na proporção das vendas** dessa semana em cada mês (datas dos pedidos do CSV).
+- Qualquer extrato que atravesse o mês (quinzena da Glovo, semana da Bolt): repartir pelos dias com o
+  faturado diário do SAF-T (decisão do utilizador, 2026-10-28); sem SAF-T desses dias, pela proporção de
+  dias e assinalado como estimativa. A conferência «SAF-T × extratos» passa a usar só a parte do mês (F3).
 - Transferências: ligadas ao período que pagam (semana Uber, quinzena Glovo, semana Bolt), não ao dia
   em que entram no banco.
 
