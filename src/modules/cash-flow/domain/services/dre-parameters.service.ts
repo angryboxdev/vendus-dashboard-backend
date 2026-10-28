@@ -7,11 +7,11 @@ import { InvalidDreParametersError } from "../errors.js";
 
 /**
  * Parâmetros de um mês: os do próprio mês; senão as taxas do último mês anterior com valores (o
- * marketing é do mês e não se herda); senão os de omissão.
+ * marketing é do mês e não se herda; a despesa de empréstimos herda-se, é uma prestação); senão os de omissão.
  */
 export function resolveDreParameters(own: DreParameters | null, previous: DreParameters | null): ResolvedDreParameters {
-  if (own) return { ...own, source: "month" };
-  if (previous) return { ...previous, marketingNetCents: { ...DEFAULT_DRE_PARAMETERS.marketingNetCents }, source: "inherited" };
+  if (own) return { ...own, loanExpenseCents: own.loanExpenseCents ?? 0, source: "month" };
+  if (previous) return { ...previous, loanExpenseCents: previous.loanExpenseCents ?? 0, marketingNetCents: { ...DEFAULT_DRE_PARAMETERS.marketingNetCents }, source: "inherited" };
   return { ...DEFAULT_DRE_PARAMETERS, marketingNetCents: { ...DEFAULT_DRE_PARAMETERS.marketingNetCents }, source: "default" };
 }
 
@@ -33,6 +33,9 @@ export function validateDreParameters(p: DreParameters): void {
   if (typeof p.commissionOnGross !== "boolean") throw new InvalidDreParametersError("commissionOnGross must be a boolean");
   for (const [platform, cents] of Object.entries(p.marketingNetCents ?? {})) {
     if (!Number.isInteger(cents) || cents < 0) throw new InvalidDreParametersError(`marketingNetCents.${platform} must be a non-negative integer`);
+  }
+  if (p.loanExpenseCents !== undefined && (!Number.isInteger(p.loanExpenseCents) || p.loanExpenseCents < 0)) {
+    throw new InvalidDreParametersError("loanExpenseCents must be a non-negative integer");
   }
   if ((p.platformCommissionPct / 100) * (1 + p.platformCommissionVatPct / 100) >= 1) {
     throw new InvalidDreParametersError("commission with VAT must be below 100%");

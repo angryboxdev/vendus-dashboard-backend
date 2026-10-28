@@ -160,6 +160,8 @@ export interface DreSectionItem {
 export interface DreExpenseSection {
   key: DreSectionKey;
   netCents: number;
+  /** IVA dedutível dos gastos desta linha (real + estimado); 0 no que está com o IVA por apurar. */
+  vatCents: number;
   items: DreSectionItem[];
 }
 

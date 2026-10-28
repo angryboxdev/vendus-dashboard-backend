@@ -6,6 +6,11 @@
 
 ## Fase 2 — página «Controle geral» (modelo da folha do utilizador)
 
+> **Feita (2026-10-28), a rever com o utilizador:** página `/dre/controle-geral` aberta pelo botão da DRE
+> (sem aba à parte); agrupamento proposto em `controle-geral.ts` do frontend (ver README do `cash-flow`);
+> tudo com IVA (DIVA = IVA a entregar); DE nos parâmetros do mês (migração `20261208100000_dre_loan_expense`);
+> clicar num grupo abre a lista de pagamentos da DRE. As perguntas abaixo continuam em aberto.
+
 Página nova, no modelo da folha «Controle Geral / 2025 — Mês projetado» que o utilizador usa hoje
 (captura de ecrã enviada na conversa; valores reais ficam fora do repositório).
 

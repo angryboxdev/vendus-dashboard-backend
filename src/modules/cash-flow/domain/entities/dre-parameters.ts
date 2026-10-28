@@ -24,6 +24,11 @@ export interface DreParameters {
   expenseDefaultVatPct: number;
   /** Marketing das plataformas no mês, sem IVA (lançado à mão). */
   marketingNetCents: Record<DeliveryPlatformKey, number>;
+  /**
+   * Despesa de empréstimos do mês (DE do «Controle geral»), lançada à mão: prestações de empréstimos fora
+   * da operação que não passam pelo banco. Não entra na DRE.
+   */
+  loanExpenseCents: number;
 }
 
 /** De onde vêm as taxas: do próprio mês, herdadas do último mês com valores, ou as de omissão. */
@@ -44,4 +49,5 @@ export const DEFAULT_DRE_PARAMETERS: DreParameters = {
   cardFeePct: 0,
   expenseDefaultVatPct: 23,
   marketingNetCents: { uber_eats: 0, glovo: 0, bolt_food: 0 },
+  loanExpenseCents: 0,
 };

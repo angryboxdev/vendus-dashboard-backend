@@ -9,6 +9,9 @@ describe("resolveDreParameters", () => {
   it("usa os do mês; senão herda as taxas do mês anterior sem o marketing; senão os de omissão", () => {
     expect(resolveDreParameters(own, null)).toMatchObject({ deliverySalesVatPct: 14, source: "month", marketingNetCents: { uber_eats: 5_000 } });
     expect(resolveDreParameters(null, own)).toMatchObject({ deliverySalesVatPct: 14, source: "inherited", marketingNetCents: { uber_eats: 0 } });
+    // A despesa de empréstimos é uma prestação: herda-se; um mês antigo sem ela vale 0.
+    expect(resolveDreParameters(null, { ...own, loanExpenseCents: 50_000 }).loanExpenseCents).toBe(50_000);
+    expect(resolveDreParameters({ ...own, loanExpenseCents: undefined as unknown as number }, null).loanExpenseCents).toBe(0);
     expect(resolveDreParameters(null, null)).toMatchObject({ deliverySalesVatPct: 15, platformCommissionPct: 30, cardFeePct: 0, source: "default" });
   });
 });
@@ -24,6 +27,7 @@ describe("validateDreParameters", () => {
     ["marketing negativo", { marketingNetCents: { uber_eats: -1, glovo: 0, bolt_food: 0 } }],
     ["marketing com cêntimos partidos", { marketingNetCents: { uber_eats: 10.5, glovo: 0, bolt_food: 0 } }],
     ["comissão com IVA ≥ 100%", { platformCommissionPct: 90 }],
+    ["despesa de empréstimos negativa", { loanExpenseCents: -1 }],
   ])("recusa %s", (_label, patch) => {
     expect(() => validateDreParameters({ ...DEFAULT_DRE_PARAMETERS, ...patch } as DreParameters)).toThrow(InvalidDreParametersError);
   });

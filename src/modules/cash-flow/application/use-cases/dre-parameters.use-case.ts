@@ -48,6 +48,8 @@ export class SaveDreParametersUseCase implements SaveDreParametersPort {
         glovo: parameters.marketingNetCents?.glovo ?? 0,
         bolt_food: parameters.marketingNetCents?.bolt_food ?? 0,
       },
+      // Quem ainda não envia a despesa de empréstimos (frontend antigo) grava 0.
+      loanExpenseCents: parameters.loanExpenseCents ?? 0,
     };
     validateDreParameters(clean);
     await this.repository.save(organizationId, year, month, clean, updatedBy);
