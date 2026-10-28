@@ -50,6 +50,7 @@ import { createCalendarModule } from "./modules/calendar/calendar.module.js";
 import { createLocationCredentialsModule } from "./modules/location-credentials/location-credentials.module.js";
 import { createSalesSummaryModule } from "./modules/sales-summary/sales-summary.module.js";
 import { createCashFlowModule } from "./modules/cash-flow/cash-flow.module.js";
+import { createDeliveryPlatformsModule } from "./modules/delivery-platforms/delivery-platforms.module.js";
 import { createHrModule } from "./modules/hr/hr.module.js";
 import { createAccountingModule } from "./modules/accounting/accounting.module.js";
 import type { SuggestStockRoutingPort } from "./modules/stock-purchase-review/domain/ports/in/suggest-stock-routing.port.js";
@@ -1790,6 +1791,10 @@ const cashFlowModule = createCashFlowModule({
   vendusGetSummary: vendusModule.getSummary,
 });
 app.use("/api", cashFlowModule.router);
+
+// Plataformas de delivery: importação dos extratos (Uber, Glovo…) para o relatório por plataforma.
+const deliveryPlatformsModule = createDeliveryPlatformsModule();
+app.use("/api", deliveryPlatformsModule.router);
 
 // Air Menu: rota protegida (módulo já instanciado acima)
 app.use("/api", airMenuModule.router);
