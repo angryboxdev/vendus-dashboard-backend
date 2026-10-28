@@ -119,7 +119,7 @@ Módulo novo `delivery-platforms` (backend e frontend), hexagonal como `tasks`:
 2. **F2** — **Bolt** (CSV + faturas semanais, repartição pelos meses) e **SAF-T** do AirMenu (opcional).
 3. **F3** — dividida em **F3a** relatório por plataforma (ecrã + Excel + PDF, repartição pelo SAF-T diário) e
    **F3b** DRE com os valores reais.
-4. **F4** — conferência do delivery: transferências no banco × período pago.
+4. **F4** — conferência do delivery: transferências no banco × período pago (feita 2026-10-28).
 
 Cada fase termina com relatório e espera autorização. Migração em produção só com aprovação explícita.
 
