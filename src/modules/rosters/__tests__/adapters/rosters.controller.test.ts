@@ -93,6 +93,18 @@ describe("API /api/novo-rh/rosters", () => {
     expect((await restored.json()).restored).toHaveLength(2);
   });
 
+  test("POST /:id/clear-pending com includePublished retira também os publicados (motivo obrigatório)", async () => {
+    const roster = await (await send("POST", "", { name: "Loja", targetType: "location", targetId: "11111111-1111-4111-8111-111111111111" })).json();
+    await send("POST", `/${roster.id}/shifts`, { employeeId: "e1", workDate: "2026-10-19", segments: [{ start: "10:00", end: "14:00" }] });
+    await send("POST", `/${roster.id}/publish`, { confirm: true });
+    const week = { employeeId: "e1", from: "2026-10-19", to: "2026-10-25" };
+    expect((await send("POST", `/${roster.id}/clear-pending`, week)).status).toBe(200);
+    expect((await send("POST", `/${roster.id}/clear-pending`, { ...week, includePublished: true })).status).toBe(400);
+    const cleared = await send("POST", `/${roster.id}/clear-pending`, { ...week, includePublished: true, reason: "Novo horário" });
+    expect(cleared.status).toBe(200);
+    expect(await cleared.json()).toMatchObject({ removed: [], retired: [expect.objectContaining({ workDate: "2026-10-19" })], publication: { version: 2 } });
+  });
+
   test("POST /:id/copy-week copia a semana para a seguinte; data inválida é 400", async () => {
     const roster = await (await send("POST", "", { name: "Loja", targetType: "location", targetId: "11111111-1111-4111-8111-111111111111" })).json();
     await send("POST", `/${roster.id}/shifts`, { employeeId: "e1", workDate: "2026-10-19", segments: [{ start: "10:00", end: "14:00" }] });

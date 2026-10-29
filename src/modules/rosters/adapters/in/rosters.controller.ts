@@ -151,10 +151,21 @@ export function createRostersRouter(
     const from = s(body(req).from);
     res.status(201).json(await run(() => uc.copyWeek(org(req), actorOf(req), id(req), { from }, (e) => canSeeEmployee(req, e, from))));
   });
+  // `includePublished: true` retira também os publicados do período (motivo obrigatório, publicação imediata).
   r.post(`${R}/:id/clear-pending`, async (req, res) => {
     const b = body(req);
     await scope(req, s(b.employeeId), s(b.from));
-    res.json(await run(() => uc.clearPending(org(req), actorOf(req), id(req), { employeeId: s(b.employeeId), from: s(b.from), to: s(b.to), ...(Array.isArray(b.shiftIds) && { shiftIds: strArr(b.shiftIds) }) })));
+    res.json(
+      await run(() =>
+        uc.clearPending(org(req), actorOf(req), id(req), {
+          employeeId: s(b.employeeId),
+          from: s(b.from),
+          to: s(b.to),
+          ...(Array.isArray(b.shiftIds) && { shiftIds: strArr(b.shiftIds) }),
+          ...(b.includePublished === true && { published: opts(b) }),
+        }),
+      ),
+    );
   });
   r.post(`${R}/:id/shifts/restore`, async (req, res) => {
     const b = body(req);

@@ -482,17 +482,50 @@ export class RostersUseCases {
 
   /**
    * Limpar os turnos pendentes (nunca publicados) de um colaborador na semana
-   * visível desta escala, numa só operação. Publicados, outras semanas e
-   * outras escalas não mexem. Devolve os retirados (para "desfazer").
+   * visível desta escala, numa só operação. Outras semanas e outras escalas
+   * não mexem. Devolve os retirados (para "desfazer").
+   *
+   * Com `published` (pedido do utilizador, 2026-10-29) retira também os
+   * publicados do período, com a regra de sempre (ADR-0030): motivo
+   * obrigatório, publicação imediata — uma só versão para todos — e aviso ao
+   * colaborador. Esses não se desfazem (já foram publicados).
    */
-  async clearPending(org: OrganizationId, actor: Actor, rosterId: string, input: { employeeId: string; from: string; to: string; shiftIds?: string[] }) {
-    await this.roster(org, rosterId);
+  async clearPending(
+    org: OrganizationId,
+    actor: Actor,
+    rosterId: string,
+    input: { employeeId: string; from: string; to: string; shiftIds?: string[]; published?: { reason: string | null; confirm: boolean } },
+  ) {
+    const roster = await this.roster(org, rosterId);
     if (!input.employeeId) throw new RosterValidationError("Indique o colaborador.", "employeeId");
     if (!DATE.test(input.from) || !DATE.test(input.to) || input.to < input.from || span(input.from, input.to) > MAX_VIEW_DAYS) throw new RosterValidationError(`Período inválido (máx. ${MAX_VIEW_DAYS} dias).`, "from");
     if (input.shiftIds && input.shiftIds.length > MAX_BULK) throw new RosterValidationError(`No máximo ${MAX_BULK} turnos de uma vez.`, "shiftIds");
+    // Os publicados validam-se antes de mexer em nada (motivo, período fechado, avisos).
+    const reason = input.published?.reason?.trim() ?? "";
+    const retire = input.published
+      ? (await this.repo.listShifts(org, { rosterId, employeeIds: [input.employeeId], from: input.from, to: input.to }))
+          .filter((s) => s.published !== null && !s.deleted)
+          .map((s) => ({ ...s, deleted: true, dirty: true }))
+      : [];
+    if (retire.length && !reason) throw new RosterValidationError("Indique o motivo para retirar turnos publicados.", "reason");
+    const warnings = retire.length ? await this.checkOrThrow(org, new Set(retire.map((s) => s.id)), retire, input.published!.confirm) : [];
     const removed = await this.repo.clearPending(org, { rosterId, employeeId: input.employeeId, from: input.from, to: input.to, ...(input.shiftIds && { ids: input.shiftIds }) }, actor.email);
     if (removed.length) await this.log(org, actor.email, "rosters.shift.clear_pending", "roster", rosterId, null, { employeeId: input.employeeId, from: input.from, to: input.to, shiftIds: removed.map((s) => s.id) });
-    return { removed };
+    if (!retire.length) return { removed, retired: [] as RosterShift[], publication: null };
+    const version = await this.nextVersion(org, roster);
+    const retired: RosterShift[] = [];
+    for (const s of retire) retired.push(await this.repo.updateShift(org, s.id, { deleted: true, dirty: false, published: null, publishedVersion: version }, actor.email));
+    const publication = await this.repo.insertPublication(org, {
+      rosterId,
+      version,
+      reason,
+      confirmedWarnings: warnings,
+      changes: retire.map((s) => ({ shiftId: s.id, employeeId: s.employeeId, before: s.published, after: null })),
+      publishedBy: actor.email,
+    });
+    await this.afterPublish(org, roster, publication.changes, `Turnos retirados: ${reason}`);
+    await this.log(org, actor.email, "rosters.shift.clear_published", "roster", rosterId, null, { employeeId: input.employeeId, from: input.from, to: input.to, version, shiftIds: retire.map((s) => s.id) }, reason);
+    return { removed, retired, publication };
   }
 
   /** Desfazer: repõe turnos pendentes retirados (com as regras de sobreposição de sempre). */
