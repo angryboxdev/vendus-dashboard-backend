@@ -286,9 +286,63 @@ export class BankMovement {
     });
   }
 
+  /** Tem categoria (centro de custo) — conta na rubrica certa da DRE, conciliado ou não. */
+  get hasClassification(): boolean {
+    return this.costCenterCategoryId !== null || this.costCenterGroupId !== null;
+  }
+
+  /**
+   * Só classifica (decisão do utilizador, 2026-10-29): categoria, fornecedor e IVA para a DRE, sem conciliar —
+   * fica «Classificado · aguarda fatura» (`pendente_de_documento`, não conta como conciliado) até ser
+   * ligado ao documento. Tira qualquer justificação ou ligação anterior.
+   */
+  classifyOnly(opts: {
+    costCenterGroupId: string | null;
+    costCenterCategoryId: string | null;
+    supplierId?: string | null;
+    vatRate?: number | null;
+    vatIncluded?: boolean | null;
+    notes?: string;
+  }): BankMovement {
+    return new BankMovement({
+      ...this.toProps(),
+      reconciliationStatus: "pendente_de_documento",
+      justificationType: null,
+      matchedEntityType: null,
+      matchedEntityId: null,
+      requiresDocument: true,
+      confidenceScore: null,
+      reconciliationAmountDiff: null,
+      costCenterGroupId: opts.costCenterGroupId,
+      costCenterCategoryId: opts.costCenterCategoryId,
+      supplierId: opts.supplierId === undefined ? this.supplierId : opts.supplierId,
+      vatRate: opts.vatRate === undefined ? this.vatRate : opts.vatRate,
+      vatIncluded: opts.vatIncluded === undefined ? this.vatIncluded : opts.vatIncluded,
+      notes: opts.notes ?? this.notes,
+      classifiedByRuleId: null,
+      updatedAt: new Date(),
+    });
+  }
+
+  /** Remove a classificação e a conciliação: volta a «por justificar» (saída) ou aceite (entrada), sem categoria. */
+  clearClassification(): BankMovement {
+    return new BankMovement({
+      ...this.unreconcile().toProps(),
+      reconciliationStatus: this.movementType === "debit" ? "saida_nao_justificada" : "conciliado_sem_fatura",
+      requiresDocument: false,
+      costCenterGroupId: null,
+      costCenterCategoryId: null,
+      supplierId: null,
+      vatRate: null,
+      vatIncluded: null,
+    });
+  }
+
   /** Classificação automática por um «movimento recorrente» (regra); fica registada a regra para se poder anular. */
   classifyByRule(rule: {
     id: string;
+    /** A regra só classifica: o movimento fica à espera da fatura. */
+    classifyOnly?: boolean;
     justificationType: JustificationType;
     riskLevel: RiskLevel;
     costCenterGroupId: string | null;
@@ -297,6 +351,16 @@ export class BankMovement {
     vatRate: number | null;
     vatIncluded: boolean | null;
   }, occurrenceId?: string): BankMovement {
+    if (rule.classifyOnly) {
+      const only = this.classifyOnly({
+        costCenterGroupId: rule.costCenterGroupId,
+        costCenterCategoryId: rule.costCenterCategoryId,
+        supplierId: rule.supplierId,
+        vatRate: rule.vatRate,
+        vatIncluded: rule.vatIncluded,
+      });
+      return new BankMovement({ ...only.toProps(), riskLevel: rule.riskLevel, classifiedByRuleId: rule.id });
+    }
     const classified = this.classify({
       justificationType: rule.justificationType,
       riskLevel: rule.riskLevel,
@@ -375,15 +439,23 @@ export class BankMovement {
    * Cancels the reconciliation, resetting the movement to its default unclassified state.
    */
   unreconcile(): BankMovement {
-    const resetStatus: ReconciliationStatus =
-      this.movementType === "debit" ? "saida_nao_justificada" : "conciliado_sem_fatura";
+    // Uma saída classificada à mão volta a «Classificado · aguarda fatura» (a DRE não perde a rubrica); a
+    // classificação de uma regra sai toda (o movimento fica intocado e a regra pode voltar a aplicar-se).
+    const byRule = this.classifiedByRuleId !== null;
+    const classified = this.movementType === "debit" && this.hasClassification && !byRule;
+    const resetStatus: ReconciliationStatus = classified
+      ? "pendente_de_documento"
+      : this.movementType === "debit"
+        ? "saida_nao_justificada"
+        : "conciliado_sem_fatura";
     return new BankMovement({
       ...this.toProps(),
       reconciliationStatus: resetStatus,
       justificationType: null,
       matchedEntityType: null,
       matchedEntityId: null,
-      requiresDocument: false,
+      requiresDocument: classified,
+      ...(byRule && { costCenterGroupId: null, costCenterCategoryId: null, supplierId: null, vatRate: null, vatIncluded: null }),
       confidenceScore: null,
       reconciliationAmountDiff: null,
       classifiedByRuleId: null,

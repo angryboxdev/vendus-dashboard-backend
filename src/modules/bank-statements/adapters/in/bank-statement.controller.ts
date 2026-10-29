@@ -24,6 +24,7 @@ import {
   StaleDocumentBalanceError,
   OccurrenceRequiresInvoiceError,
   StatementPdfNotRecognizedError,
+  InvalidClassificationError,
 } from "../../domain/errors.js";
 import type { ImportBankStatementPort } from "../../domain/ports/in/bank-statement.ports.js";
 import type { ListBankStatementsPort } from "../../domain/ports/in/bank-statement.ports.js";
@@ -38,6 +39,7 @@ import type { DeleteReconciliationRulePort } from "../../domain/ports/in/bank-st
 import type { UpdateReconciliationRulePort } from "../../domain/ports/in/bank-statement.ports.js";
 
 type RuleOptionalFields = {
+  classifyOnly?: boolean;
   amountCents?: number | null;
   amountToleranceCents?: number;
   supplierId?: string | null;
@@ -78,6 +80,10 @@ function parseRuleFields(body: Record<string, unknown>): string | RuleOptionalFi
   if (body.recurrenceId !== undefined) {
     if (body.recurrenceId !== null && typeof body.recurrenceId !== "string") return "recurrenceId must be a string or null";
     out.recurrenceId = body.recurrenceId as string | null;
+  }
+  if (body.classifyOnly !== undefined) {
+    if (typeof body.classifyOnly !== "boolean") return "classifyOnly must be a boolean";
+    out.classifyOnly = body.classifyOnly;
   }
   return out;
 }
@@ -682,14 +688,18 @@ export class BankStatementController {
     this.router.patch("/bank-statements/movements/:movId/classify", async (req, res) => {
       try {
         const body = req.body as Record<string, unknown>;
-        if (!body.justificationType) {
+        const mode = body.mode === "classify" || body.mode === "clear" ? body.mode : "justify";
+        if (mode === "justify" && !body.justificationType) {
           res.status(400).json({ error: "justificationType is required" });
           return;
         }
         const classifyCmd: import("../../domain/ports/in/bank-statement.ports.js").ClassifyMovementCommand = {
           organizationId: req.auth!.orgId,
           movementId: req.params["movId"]!,
-          justificationType: body.justificationType as import("../../domain/entities/bank-movement.js").JustificationType,
+          mode,
+          ...(typeof body.justificationType === "string" && {
+            justificationType: body.justificationType as import("../../domain/entities/bank-movement.js").JustificationType,
+          }),
         };
         if (body.matchedEntityType !== undefined) classifyCmd.matchedEntityType = body.matchedEntityType as import("../../domain/entities/bank-movement.js").MatchedEntityType;
         if (body.matchedEntityId !== undefined) classifyCmd.matchedEntityId = body.matchedEntityId as string;
@@ -710,6 +720,10 @@ export class BankStatementController {
         }
         if (e instanceof OccurrenceRequiresInvoiceError) {
           res.status(409).json({ error: e.message, code: "occurrence_requires_invoice" });
+          return;
+        }
+        if (e instanceof InvalidClassificationError) {
+          res.status(400).json({ error: e.message });
           return;
         }
         res.status(500).json({ error: e instanceof Error ? e.message : "Internal error" });

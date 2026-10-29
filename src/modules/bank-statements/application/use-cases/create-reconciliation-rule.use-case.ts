@@ -28,6 +28,7 @@ function toDto(r: BankReconciliationRule): ReconciliationRuleDto {
     vatRate: r.vatRate,
     vatIncluded: r.vatIncluded,
     recurrenceId: r.recurrenceId,
+    classifyOnly: r.classifyOnly,
     justificationType: r.justificationType,
     requiresDocument: r.requiresDocument,
     affectsDre: r.affectsDre,

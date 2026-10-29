@@ -208,7 +208,13 @@ export interface UnreconcileMovementPort {
 export interface ClassifyMovementCommand {
   organizationId: OrganizationId;
   movementId: string;
-  justificationType: JustificationType;
+  /**
+   * `justify` (omissão) = justificar/conciliar; `classify` = só classificar (categoria obrigatória, fica à
+   * espera da fatura); `clear` = remover a classificação e a conciliação.
+   */
+  mode?: "justify" | "classify" | "clear";
+  /** Obrigatório em `justify`. */
+  justificationType?: JustificationType;
   matchedEntityType?: MatchedEntityType;
   matchedEntityId?: string;
   riskLevel?: RiskLevel;
@@ -351,6 +357,8 @@ export interface CreateReconciliationRuleCommand {
   vatIncluded?: boolean | null;
   /** Recorrência sem fatura (renda, salário): cada movimento paga a ocorrência do mês. Exige «contrato_recorrencia» e conta. */
   recurrenceId?: string | null;
+  /** Só classifica (categoria para a DRE); o movimento fica à espera da fatura. */
+  classifyOnly?: boolean;
   justificationType: JustificationType;
   /** Aplica já aos movimentos intocados da conta (todos os meses importados). Só com bankAccountId. */
   applyToExisting?: boolean;
@@ -375,6 +383,7 @@ export interface ReconciliationRuleDto {
   vatRate: number | null;
   vatIncluded: boolean | null;
   recurrenceId: string | null;
+  classifyOnly: boolean;
   justificationType: JustificationType;
   requiresDocument: boolean;
   affectsDre: boolean;
@@ -413,6 +422,7 @@ export interface UpdateReconciliationRuleCommand {
   vatIncluded?: boolean | null;
   /** null = deixa de estar ligada a uma recorrência. */
   recurrenceId?: string | null;
+  classifyOnly?: boolean;
   justificationType?: JustificationType;
   isActive?: boolean;
   /** Depois de alterar, aplica aos movimentos intocados da conta da regra. */
