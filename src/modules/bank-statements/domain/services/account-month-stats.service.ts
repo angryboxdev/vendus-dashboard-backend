@@ -15,6 +15,9 @@ export interface MonthFigures {
   /** Movimentos que contam para a conciliação: os importados menos os créditos aceites automaticamente (`isAutoAcceptedCredit`). */
   reconcilableMovements: number;
   reconciledMovements: number;
+  /** Conciliáveis já conciliados ou com categoria (contam na rubrica certa da DRE). */
+  classifiedMovements: number;
+  classifiedPercent: number | null;
   /** `null` sem extrato, sem movimentos ou sem movimentos conciliáveis («Não aplicável») — nunca um 100% inventado. */
   reconciledPercent: number | null;
   inflowCents: number;
@@ -59,6 +62,7 @@ export function computeMonthFigures(movements: BankMovement[], statementCoversMo
   const statementImported = statementCoversMonth || movements.length > 0;
   const reconcilable = movements.filter((m) => !isAutoAcceptedCredit(m));
   const reconciled = reconcilable.filter((m) => RESOLVED_STATUSES.has(m.reconciliationStatus)).length;
+  const classified = reconcilable.filter((m) => RESOLVED_STATUSES.has(m.reconciliationStatus) || m.hasClassification).length;
   const inflowCents = movements.filter((m) => m.movementType === "credit").reduce((s, m) => s + m.amount, 0);
   const outflowCents = movements.filter((m) => m.movementType === "debit").reduce((s, m) => s + m.amount, 0);
   // Só com movimentos conciliáveis há percentagem; sem nada para conciliar (só entradas aceites
@@ -79,6 +83,8 @@ export function computeMonthFigures(movements: BankMovement[], statementCoversMo
     reconcilableMovements: reconcilable.length,
     reconciledMovements: reconciled,
     reconciledPercent,
+    classifiedMovements: classified,
+    classifiedPercent: reconciledPercent === null ? null : Math.round((classified / reconcilable.length) * 100),
     inflowCents,
     outflowCents,
     netCents: inflowCents - outflowCents,

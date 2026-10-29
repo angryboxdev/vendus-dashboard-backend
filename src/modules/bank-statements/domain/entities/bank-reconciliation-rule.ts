@@ -25,6 +25,8 @@ interface BankReconciliationRuleProps {
   vatIncluded: boolean | null;
   /** Recorrência sem fatura (renda, salário): cada movimento fica ligado à ocorrência do mês, que fica paga. */
   recurrenceId: string | null;
+  /** Só classifica (categoria para a DRE): o movimento fica à espera da fatura. Senão, justifica de vez. */
+  classifyOnly: boolean;
   justificationType: JustificationType;
   requiresDocument: boolean;
   affectsDre: boolean;
@@ -50,6 +52,7 @@ export type BankReconciliationRuleChanges = Partial<
     | "vatRate"
     | "vatIncluded"
     | "recurrenceId"
+    | "classifyOnly"
     | "justificationType"
   >
 >;
@@ -66,6 +69,12 @@ function validate(props: BankReconciliationRuleProps): void {
   }
   if (props.recurrenceId !== null && props.justificationType !== "contrato_recorrencia") {
     throw new InvalidRuleError("Uma regra ligada a uma recorrência tem de usar a justificação «Contrato / Recorrência».");
+  }
+  if (props.classifyOnly && props.recurrenceId !== null) {
+    throw new InvalidRuleError("Uma regra ligada a uma recorrência paga a ocorrência: não pode ser só de classificar.");
+  }
+  if (props.classifyOnly && props.costCenterCategoryId === null && props.costCenterGroupId === null) {
+    throw new InvalidRuleError("Uma regra que só classifica precisa da categoria.");
   }
   if (props.recurrenceId !== null && props.bankAccountId === null) {
     throw new InvalidRuleError("Uma regra ligada a uma recorrência tem de ser de uma conta bancária.");
@@ -86,6 +95,7 @@ export class BankReconciliationRule {
   readonly vatRate: number | null;
   readonly vatIncluded: boolean | null;
   readonly recurrenceId: string | null;
+  readonly classifyOnly: boolean;
   readonly justificationType: JustificationType;
   readonly requiresDocument: boolean;
   readonly affectsDre: boolean;
@@ -110,6 +120,7 @@ export class BankReconciliationRule {
     this.vatRate = props.vatRate;
     this.vatIncluded = props.vatIncluded;
     this.recurrenceId = props.recurrenceId;
+    this.classifyOnly = props.classifyOnly;
     this.justificationType = props.justificationType;
     this.requiresDocument = props.requiresDocument;
     this.affectsDre = props.affectsDre;
@@ -134,6 +145,7 @@ export class BankReconciliationRule {
     vatRate?: number | null;
     vatIncluded?: boolean | null;
     recurrenceId?: string | null;
+    classifyOnly?: boolean;
     justificationType: JustificationType;
     requiresDocument?: boolean;
     affectsDre?: boolean;
@@ -159,6 +171,7 @@ export class BankReconciliationRule {
       vatRate: props.vatRate ?? null,
       vatIncluded: props.vatIncluded ?? null,
       recurrenceId: props.recurrenceId ?? null,
+      classifyOnly: props.classifyOnly ?? false,
       justificationType: props.justificationType,
       requiresDocument: props.requiresDocument ?? false,
       affectsDre: props.affectsDre ?? true,
@@ -176,7 +189,7 @@ export class BankReconciliationRule {
   static reconstitute(
     props: Omit<
       BankReconciliationRuleProps,
-      "bankAccountId" | "amountCents" | "amountToleranceCents" | "supplierId" | "vatRate" | "vatIncluded" | "recurrenceId"
+      "bankAccountId" | "amountCents" | "amountToleranceCents" | "supplierId" | "vatRate" | "vatIncluded" | "recurrenceId" | "classifyOnly"
     > &
       Partial<BankReconciliationRuleProps>,
   ): BankReconciliationRule {
@@ -189,6 +202,7 @@ export class BankReconciliationRule {
       vatRate: props.vatRate ?? null,
       vatIncluded: props.vatIncluded ?? null,
       recurrenceId: props.recurrenceId ?? null,
+      classifyOnly: props.classifyOnly ?? false,
     });
   }
 
@@ -236,6 +250,7 @@ export class BankReconciliationRule {
       vatRate: this.vatRate,
       vatIncluded: this.vatIncluded,
       recurrenceId: this.recurrenceId,
+      classifyOnly: this.classifyOnly,
       justificationType: this.justificationType,
       requiresDocument: this.requiresDocument,
       affectsDre: this.affectsDre,

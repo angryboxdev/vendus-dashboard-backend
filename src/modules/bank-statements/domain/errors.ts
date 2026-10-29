@@ -114,3 +114,11 @@ export class OccurrenceRequiresInvoiceError extends Error {
     this.name = "OccurrenceRequiresInvoiceError";
   }
 }
+
+/** Pedido de classificação inválido (ex.: «só classificar» sem categoria, justificar sem justificação). */
+export class InvalidClassificationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidClassificationError";
+  }
+}
