@@ -3,6 +3,7 @@ import type { ClockEvent, ClockRevision } from "../../domain/entities/clock.js";
 import type { BreakType, BreakTypeInput } from "../../domain/entities/break-type.js";
 import type { ClockType, ClockTypeInput } from "../../domain/entities/clock-type.js";
 import type { Adjustment, CorrectionRequest, DayVersion, Incident, IncidentStatus } from "../../domain/entities/records.js";
+import type { DayReview, NewDayReview } from "../../domain/entities/day-review.js";
 import type { AttendanceConfig, AttendanceContextPort, AttendanceRepositoryPort, BackgroundPort } from "../../domain/ports/out/attendance.ports.js";
 import type { DayPlan, IncidentType } from "../../domain/services/day-engine.js";
 
@@ -174,6 +175,28 @@ export class FakeAttendanceRepository implements AttendanceRepositoryPort {
   async takeQueue(_org: OrganizationId, limit: number) {
     return this.queue.splice(0, limit);
   }
+
+  reviews: DayReview[] = [];
+  async listReviews(_org: OrganizationId, ids: string[], from: string, to: string) {
+    return this.reviews.filter((r) => ids.includes(r.employeeId) && r.workDate >= from && r.workDate <= to && !r.voidedAt).map((r) => ({ ...r }));
+  }
+  async insertReview(_org: OrganizationId, r: NewDayReview) {
+    // Como o índice único parcial: uma decisão ativa por (colaborador, dia).
+    if (this.reviews.some((x) => x.employeeId === r.employeeId && x.workDate === r.workDate && !x.voidedAt)) return null;
+    const saved: DayReview = { ...r, id: nextId(), createdAt: this.now(), voidedAt: null, voidedBy: null, voidReason: null };
+    this.reviews.push(saved);
+    return { ...saved };
+  }
+  async getReview(_org: OrganizationId, id: string) {
+    const r = this.reviews.find((x) => x.id === id);
+    return r ? { ...r } : null;
+  }
+  async voidReview(_org: OrganizationId, id: string, v: { voidedBy: string; reason: string }) {
+    const r = this.reviews.find((x) => x.id === id && !x.voidedAt);
+    if (!r) return null;
+    Object.assign(r, { voidedAt: this.now(), voidedBy: v.voidedBy, voidReason: v.reason });
+    return { ...r };
+  }
 }
 
 export const BASE_CONFIG: AttendanceConfig = {
@@ -228,6 +251,14 @@ export class FakeContext implements AttendanceContextPort {
   }
   async punchLocation() {
     return this.location;
+  }
+  people = [
+    { id: "e1", name: "Ana Teste", locationId: "l1", locationName: "Loja Teste" },
+    { id: "e2", name: "Rui Teste", locationId: "l2", locationName: "Bar Teste" },
+    { id: "e9", name: "Gestora Teste", locationId: "l1", locationName: "Loja Teste" },
+  ];
+  async activePeople() {
+    return this.people.map((p) => ({ ...p }));
   }
 }
 

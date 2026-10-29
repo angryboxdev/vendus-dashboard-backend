@@ -1,7 +1,7 @@
 import { Router, type Request } from "express";
 import { idempotency, type IdempotencyStore } from "../../../../infra/http/idempotency.js";
 import { problem } from "../../../../infra/http/problem-details.js";
-import type { Actor, ChangeInput, PunchInput } from "../../application/use-cases/attendance.use-cases.js";
+import type { Actor, ChangeInput, ConferenceInput, PunchInput } from "../../application/use-cases/attendance.use-cases.js";
 import type { AttendanceUseCases } from "../../application/use-cases/attendance.use-cases.js";
 import type { SegmentType } from "../../domain/entities/clock.js";
 import type { BreakTypeInput } from "../../domain/entities/break-type.js";
@@ -208,5 +208,28 @@ export function createAttendanceAdminRouter(
     await scope(req, employeeId, s(b.from));
     res.status(202).json(await run(() => uc.requestRecalculation(org(req), actorOf(req), employeeId, s(b.from), s(b.to))));
   });
+
+  // ── Conferência V2 (ADR-0043): semana da equipa, aplicar uma decisão, anular ──
+  r.get(`${A}/conference`, async (req, res) => {
+    const from = s(req.query.from);
+    res.json(await run(() => uc.conferenceWeek(org(req), from, s(req.query.to), (employeeId) => canSeeEmployee(req, employeeId, from), optS(req.query.locationId))));
+  });
+  r.post(`${A}/conference/apply`, async (req, res) => {
+    const b = body(req);
+    const m = (b.manual ?? null) as Record<string, unknown> | null;
+    const input: ConferenceInput = {
+      decision: s(b.decision) as ConferenceInput["decision"],
+      scope: s(b.scope) as ConferenceInput["scope"],
+      items: (Array.isArray(b.items) ? (b.items as Record<string, unknown>[]) : []).map((i) => ({ employeeId: s(i?.employeeId), workDate: s(i?.workDate), version: optN(i?.version) })),
+      reason: s(b.reason),
+      declared: b.declared === true,
+      manual: m && typeof m === "object" ? { start: s(m.start), end: s(m.end), breakMinutes: optN(m.breakMinutes) ?? 0 } : null,
+      absenceType: optS(b.absenceType),
+    };
+    res.json(await run(() => uc.applyConference(org(req), actorOf(req), input, (employeeId, date) => canSeeEmployee(req, employeeId, date))));
+  });
+  r.post(`${A}/conference/reviews/:id/void`, async (req, res) =>
+    res.json(await run(() => uc.voidConferenceReview(org(req), actorOf(req), id(req), s(body(req).reason), (employeeId, date) => canSeeEmployee(req, employeeId, date)))),
+  );
   return r;
 }

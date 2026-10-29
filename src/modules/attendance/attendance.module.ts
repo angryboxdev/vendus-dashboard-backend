@@ -32,6 +32,7 @@ export function createAttendanceModule(deps: {
       correctionLevels: deps.correctionLevels ?? (async () => null),
       timeZone: (org) => directory.timeZone(org),
       punchLocation: (org, employeeId, locationId) => directory.punchLocation(org, employeeId, locationId),
+      activePeople: (org) => directory.activePeople(org),
       config: async (org, employeeId, date, tz) => configFromSettings(await deps.effectiveSettings(org, employeeId, date), tz),
       plans: deps.plans,
     },

@@ -1,10 +1,10 @@
 # Matriz de autorização (perfil × endpoint)
 
-> Gerado por `npm run authz:matrix` em 2026-10-28. Não editar à mão.
+> Gerado por `npm run authz:matrix` em 2026-11-02. Não editar à mão.
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 853 · pré-autenticação: 23 · não classificados: 0
+Endpoints: 856 · pré-autenticação: 23 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -450,6 +450,9 @@ Endpoints: 853 · pré-autenticação: 23 · não classificados: 0
 | POST | `/api/novo-rh/attendance/clock-types` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | PUT | `/api/novo-rh/attendance/clock-types/:id` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/attendance/clock-types/:id/archive` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| GET | `/api/novo-rh/attendance/conference` | permission:hr.attendance:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/attendance/conference/apply` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/attendance/conference/reviews/:id/void` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/attendance/corrections` | permission:hr.attendance:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/attendance/corrections/:id/approve` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/attendance/corrections/:id/reject` | permission:hr.attendance:MANAGE | ✔ | ✔ | ✔ | ✖ | ✖ |

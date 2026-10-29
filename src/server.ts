@@ -896,6 +896,10 @@ const attendanceModule = createAttendanceModule({
             nightSchedule: d.night,
             excused: d.reason === "holiday" || !!fx?.excused,
             creditSeconds: (fx?.creditMinutes ?? 0) * 60,
+            // Conferência V2 (ADR-0043): faixas do planeado publicado e o tipo de dia (informativo).
+            plannedRanges: d.plannedRanges?.length ? d.plannedRanges : null,
+            restDay: d.reason === "rest_day",
+            holiday: d.reason === "holiday",
           },
         ];
       }),

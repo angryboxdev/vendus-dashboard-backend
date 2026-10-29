@@ -1,6 +1,7 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { ClockEvent, ClockRevision } from "../../entities/clock.js";
 import type { Adjustment, CorrectionRequest, DayVersion, Incident, IncidentStatus } from "../../entities/records.js";
+import type { DayReview, NewDayReview } from "../../entities/day-review.js";
 import type { BreakType, BreakTypeInput } from "../../entities/break-type.js";
 import type { ClockType, ClockTypeInput } from "../../entities/clock-type.js";
 import type { DayPlan, EngineRules, IncidentType } from "../../services/day-engine.js";
@@ -65,6 +66,22 @@ export interface AttendanceRepositoryPort {
 
   enqueue(org: OrganizationId, employeeId: string, dates: string[]): Promise<void>;
   takeQueue(org: OrganizationId, limit: number): Promise<{ employeeId: string; workDate: string }[]>;
+
+  /** Conferência V2 (ADR-0043): decisões ativas (não anuladas) de vários colaboradores num período. */
+  listReviews(org: OrganizationId, employeeIds: string[], from: string, to: string): Promise<DayReview[]>;
+  /** null = já existe uma decisão ativa para esse dia (outro gestor gravou entretanto). */
+  insertReview(org: OrganizationId, r: NewDayReview): Promise<DayReview | null>;
+  getReview(org: OrganizationId, id: string): Promise<DayReview | null>;
+  /** Anula (nunca apaga); null = já estava anulada. */
+  voidReview(org: OrganizationId, id: string, v: { voidedBy: string; reason: string }): Promise<DayReview | null>;
+}
+
+/** Colaborador ativo para a conferência (nome e centro principal). */
+export interface ConferencePerson {
+  id: string;
+  name: string;
+  locationId: string | null;
+  locationName: string | null;
 }
 
 /** Regras efetivas de um colaborador numa data (vêm do módulo settings). */
@@ -89,6 +106,8 @@ export interface AttendanceContextPort {
   plans(org: OrganizationId, employeeId: string, from: string, to: string): Promise<Map<string, DayPlan>>;
   /** Centro onde pica: o indicado ou o principal da ficha. null = sem centro. */
   punchLocation(org: OrganizationId, employeeId: string, locationId: string | null): Promise<{ id: string; latitude: number | null; longitude: number | null; radiusMeters: number } | null>;
+  /** Conferência V2: colaboradores ativos com o centro principal. */
+  activePeople(org: OrganizationId): Promise<ConferencePerson[]>;
 }
 
 export interface AttendanceAuditPort {

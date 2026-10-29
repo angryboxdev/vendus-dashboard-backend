@@ -40,4 +40,17 @@ export class SupabaseAttendanceDirectory {
       radiusMeters: Number(l.geofence_radius_m ?? 100),
     };
   }
+
+  /** Conferência V2: colaboradores ativos (nome e centro principal), por nome. */
+  async activePeople(org: OrganizationId) {
+    const [people, locations] = await Promise.all([
+      check<Row[]>(await this.scoped(org).table("hr_employees").select("id, full_name, primary_location_id").eq("status", "active").order("full_name").limit(5000)),
+      check<Row[]>(await this.scoped(org).table("locations").select("id, name")),
+    ]);
+    const names = new Map(locations.map((l) => [String(l.id), String(l.name)]));
+    return people.map((p) => {
+      const locationId = p.primary_location_id ? String(p.primary_location_id) : null;
+      return { id: String(p.id), name: String(p.full_name), locationId, locationName: locationId ? (names.get(locationId) ?? null) : null };
+    });
+  }
 }

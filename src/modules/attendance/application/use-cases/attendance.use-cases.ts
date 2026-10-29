@@ -1,5 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { DateTime } from "luxon";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import { REVIEW_DECISIONS, REVIEW_SCOPES, type DayReview, type ManualTimes, type PlannedRange, type ReviewDecision, type ReviewScope } from "../../domain/entities/day-review.js";
+import { applyReview, classifyReview, EXCLUSION_LABEL, isHhmm, manualSeconds, reviewState, type ReviewExclusion, type ReviewFacts, type ReviewState } from "../../domain/services/day-review.js";
 import { effectiveEvents, SEGMENT_TYPES, type ClockEvent, type ClockRevision, type RevisionOperation, type SegmentType } from "../../domain/entities/clock.js";
 import type { CorrectionRequest, DayVersion, Incident, IncidentStatus } from "../../domain/entities/records.js";
 import { AttendanceConflictError, AttendanceForbiddenError, AttendanceNotFoundError, AttendanceValidationError, PunchRefusedError } from "../../domain/errors.js";
@@ -65,6 +68,7 @@ interface Preloaded {
   events: ClockEvent[];
   revisions: ClockRevision[];
   incidents: Incident[];
+  reviews: DayReview[];
 }
 /** As linhas de uma pessoa, como `load` as teria lido (ordem preservada). */
 function fromPreloaded(pre: Preloaded, employeeId: string) {
@@ -82,6 +86,63 @@ export interface DayView extends DayResult {
   plannedStart: string | null;
   plannedEnd: string | null;
 }
+
+/** Picagem como a conferência a mostra (hora local; `nextDay` = picagem do dia seguinte que pertence a este turno). */
+export interface ConferencePunch {
+  at: string;
+  kind: "in" | "out" | "break_start" | "break_end";
+  nextDay: boolean;
+}
+
+/** Um dia na Conferência V2: planeado, picagens, calculado pelo motor e a decisão (ADR-0043). */
+export interface ConferenceDay {
+  employeeId: string;
+  workDate: string;
+  phase: ReviewFacts["phase"];
+  state: ReviewState;
+  closed: boolean;
+  plannedRanges: PlannedRange[] | null;
+  theoreticalSeconds: number;
+  /** Calculado a partir das picagens (antes da decisão). */
+  workedSeconds: number;
+  /** O que conta nos totais (com a decisão aplicada). */
+  validatedSeconds: number;
+  restDay: boolean;
+  holiday: boolean;
+  excused: boolean;
+  incomplete: boolean;
+  lateMinutes: number;
+  punches: ConferencePunch[];
+  version: number | null;
+  review: Pick<DayReview, "id" | "decision" | "validatedSeconds" | "reason" | "absenceType" | "scope" | "createdBy" | "createdAt"> | null;
+}
+
+export interface ConferenceInput {
+  decision: ReviewDecision;
+  scope: ReviewScope;
+  /** `version` = versão gravada que o gestor viu (controlo de concorrência); null = não verificar. */
+  items: { employeeId: string; workDate: string; version: number | null }[];
+  reason: string;
+  /** Declaração "Confirmo que o horário indicado foi efetivamente cumprido" (cumpriu, quando muda horas). */
+  declared: boolean;
+  manual: ManualTimes | null;
+  absenceType: string | null;
+}
+
+export interface ConferenceResult {
+  batchId: string;
+  applied: { employeeId: string; workDate: string; reviewId: string; beforeSeconds: number; validatedSeconds: number | null }[];
+  kept: { employeeId: string; workDate: string; reviewId: string }[];
+  skipped: { employeeId: string; workDate: string; reason: ReviewExclusion | "out_of_scope"; label: string }[];
+}
+
+const MAX_CONFERENCE_ITEMS = 500;
+const toMinutes = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+/** Instante UTC de "HH:MM" local numa data (com +N dias). */
+const atLocal = (date: string, hhmm: string, tz: string, plus = 0) => DateTime.fromISO(`${date}T${hhmm}`, { zone: tz }).plus({ days: plus }).toUTC().toISO()!;
+/** Faixas do planeado: as da escala publicada, senão o início/fim do horário fixo. */
+const rangesOf = (plan: DayPlan | undefined): PlannedRange[] | null =>
+  plan?.plannedRanges?.length ? plan.plannedRanges : plan?.plannedStart && plan.plannedEnd ? [{ start: plan.plannedStart, end: plan.plannedEnd }] : null;
 
 export class AttendanceUseCases {
   constructor(
@@ -133,13 +194,14 @@ export class AttendanceUseCases {
   private async compute(org: OrganizationId, employeeId: string, from: string, to: string, pre?: Preloaded) {
     const tz = await this.ctx.timeZone(org);
     const now = this.clock.now();
-    const [loaded, plans, cfg, incidents, breakTypes, clockTypes] = await Promise.all([
+    const [loaded, plans, cfg, incidents, breakTypes, clockTypes, reviews] = await Promise.all([
       pre ? Promise.resolve(fromPreloaded(pre, employeeId)) : this.load(org, employeeId, from, to, tz),
       this.ctx.plans(org, employeeId, plusDays(from, -1), plusDays(to, 1)),
       this.ctx.config(org, employeeId, to, tz),
       pre ? Promise.resolve(pre.incidents.filter((i) => i.employeeId === employeeId)) : this.repo.listIncidents(org, { employeeId, from, to }),
       this.repo.listBreakTypes(org),
       this.repo.listClockTypes(org),
+      pre ? Promise.resolve(pre.reviews.filter((r) => r.employeeId === employeeId)) : this.repo.listReviews(org, [employeeId], from, to),
     ]);
     // FE-103: regras do catálogo de pausas (incluindo arquivadas — marcações antigas mantêm-nas).
     if (breakTypes.length) cfg.rules.breakTypes = Object.fromEntries(breakTypes.map((b) => [b.id, breakRule(b)]));
@@ -148,8 +210,11 @@ export class AttendanceUseCases {
     for (const i of incidents) {
       if (i.status === "resolved_validate") plans.set(i.workDate, { ...(plans.get(i.workDate) ?? EMPTY_PLAN), incidentValidated: true });
     }
-    const days = computeDays(loaded.effective, eachDate(from, to), plans, cfg.rules, now);
-    return { tz, now, today: localDate(now, tz), plans, cfg, incidents, days, ...loaded };
+    // Conferência V2 (ADR-0043): a decisão ativa do dia entra no resultado do motor — `raw` fica para a conferência.
+    const raw = computeDays(loaded.effective, eachDate(from, to), plans, cfg.rules, now);
+    const reviewOf = new Map(reviews.map((r) => [r.workDate, r]));
+    const days = raw.map((d) => applyReview(d, reviewOf.get(d.workDate)));
+    return { tz, now, today: localDate(now, tz), plans, cfg, incidents, raw, days, reviews, ...loaded };
   }
 
   private sameDay(cur: DayVersion, d: DayResult, hash: string) {
@@ -165,16 +230,21 @@ export class AttendanceUseCases {
   }
 
   /** Impressão da configuração de um dia; as regras de pausas só entram se o dia as usa (não mexe nos outros dias). */
-  private hashFor(c: { cfg: { rules: EngineRules }; plans: Map<string, DayPlan>; days?: DayResult[] }, date: string) {
+  private hashFor(c: { cfg: { rules: EngineRules }; plans: Map<string, DayPlan>; days?: DayResult[]; reviews?: DayReview[] }, date: string) {
     const { breakTypes, clockTypes, ...rules } = c.cfg.rules;
     const segs = c.days?.find((d) => d.workDate === date)?.segments ?? [];
     const used = [...new Set(segs.map((s) => s.breakTypeId).filter((x): x is string => !!x))].sort();
     const usedTypes = [...new Set(segs.map((s) => s.clockTypeId).filter((x): x is string => !!x))].sort();
+    // Só os campos que já existiam entram no plano: os informativos da conferência não mudam os dias já gravados.
+    const { plannedRanges: _r, restDay: _d, holiday: _h, ...plan } = c.plans.get(date) ?? ({} as DayPlan);
+    const review = c.reviews?.find((r) => r.workDate === date);
     return configHash({
       rules,
-      plan: c.plans.get(date) ?? null,
+      plan: c.plans.has(date) ? plan : null,
       ...(used.length ? { breaks: used.map((id) => [id, breakTypes?.[id] ?? null]) } : {}),
       ...(usedTypes.length ? { clockTypes: usedTypes.map((id) => [id, clockTypes?.[id] ?? null]) } : {}),
+      // Uma decisão de conferência é uma mudança de configuração do dia (versão nova + movimento de ajuste).
+      ...(review ? { review: [review.id, review.decision, review.validatedSeconds] } : {}),
     });
   }
 
@@ -219,7 +289,8 @@ export class AttendanceUseCases {
     for (const i of c.incidents) {
       if (i.status !== "open" || i.source !== "engine" || i.workDate >= c.today || frozen.has(i.workDate)) continue;
       if (!found.some((f) => f.workDate === i.workDate && f.type === i.type)) {
-        await this.repo.resolveIncident(org, i.id, { status: "resolved_correct", comment: "Resolvido pela correção das marcações.", resolvedBy: "sistema" });
+        const reviewed = c.reviews.some((r) => r.workDate === i.workDate);
+        await this.repo.resolveIncident(org, i.id, { status: "resolved_correct", comment: reviewed ? "Resolvido na conferência." : "Resolvido pela correção das marcações.", resolvedBy: "sistema" });
       }
     }
     return { changed };
@@ -433,14 +504,7 @@ export class AttendanceUseCases {
     const out = new Map<string, Awaited<ReturnType<AttendanceUseCases["board"]>>>();
     if (!employeeIds.length) return out;
     const tz = await this.ctx.timeZone(org);
-    const fromUtc = DateTime.fromISO(from, { zone: tz }).minus({ days: 2 }).toUTC().toISO()!;
-    const toUtc = DateTime.fromISO(to, { zone: tz }).plus({ days: 2 }).toUTC().toISO()!;
-    const [events, revisions, incidents] = await Promise.all([
-      this.repo.listEventsMany(org, employeeIds, fromUtc, toUtc),
-      this.repo.listRevisionsMany(org, employeeIds, fromUtc, toUtc),
-      this.repo.listIncidentsMany(org, employeeIds, from, to),
-    ]);
-    const pre: Preloaded = { events, revisions, incidents };
+    const pre = await this.preload(org, employeeIds, from, to, tz);
     let next = 0;
     const worker = async () => {
       while (next < employeeIds.length) {
@@ -451,6 +515,266 @@ export class AttendanceUseCases {
     };
     await Promise.all(Array.from({ length: Math.min(concurrency, employeeIds.length) }, worker));
     return out;
+  }
+
+  /** Leituras em lote (marcações, revisões, incidentes, decisões) com 2 dias de folga para os noturnos. */
+  private async preload(org: OrganizationId, employeeIds: string[], from: string, to: string, tz: string): Promise<Preloaded> {
+    const fromUtc = DateTime.fromISO(from, { zone: tz }).minus({ days: 2 }).toUTC().toISO()!;
+    const toUtc = DateTime.fromISO(to, { zone: tz }).plus({ days: 2 }).toUTC().toISO()!;
+    const [events, revisions, incidents, reviews] = await Promise.all([
+      this.repo.listEventsMany(org, employeeIds, fromUtc, toUtc),
+      this.repo.listRevisionsMany(org, employeeIds, fromUtc, toUtc),
+      this.repo.listIncidentsMany(org, employeeIds, from, to),
+      this.repo.listReviews(org, employeeIds, from, to),
+    ]);
+    return { events, revisions, incidents, reviews };
+  }
+
+  // ── Conferência V2 (ADR-0043) ───────────────────────────────────────
+  /**
+   * Fase do dia em relação a agora: pelo planeado (fim depois da meia-noite =
+   * dia seguinte); sem planeado, pelo calendário. Um registo aberto mantém o
+   * dia "em curso" — nunca se confirma um turno antes de acabar.
+   */
+  private phaseOf(date: string, plan: DayPlan | undefined, raw: DayResult, now: string, tz: string, today: string): ReviewFacts["phase"] {
+    const open = raw.segments.some((s) => s.open && !s.forgotten && !s.autoClosed);
+    const ranges = rangesOf(plan);
+    if (ranges) {
+      const first = ranges[0]!;
+      const last = ranges.at(-1)!;
+      const crosses = plan?.nightSchedule || toMinutes(last.end) <= toMinutes(first.start) || ranges.some((r) => toMinutes(r.end) <= toMinutes(r.start));
+      const start = atLocal(date, first.start, tz);
+      const end = atLocal(date, last.end, tz, crosses ? 1 : 0);
+      if (now < start && !open) return "future";
+      return now < end || open ? "in_progress" : "done";
+    }
+    if (date > today) return "future";
+    if (date === today) return open || (plan?.theoreticalMinutes ?? 0) > 0 ? "in_progress" : "done";
+    return open ? "in_progress" : "done";
+  }
+
+  /** Picagens de um dia (a partir dos segmentos atribuídos pelo motor), em hora local. */
+  private punchesOf(raw: DayResult, tz: string): ConferencePunch[] {
+    const out: ConferencePunch[] = [];
+    const loc = (iso: string) => {
+      const d = DateTime.fromISO(iso, { zone: "utc" }).setZone(tz);
+      return { at: d.toFormat("HH:mm"), nextDay: d.toISODate()! > raw.workDate };
+    };
+    raw.segments.forEach((s, i) => {
+      const prev = raw.segments[i - 1];
+      const joined = !!prev && prev.end === s.start;
+      const isBreak = s.type === "break_paid" || s.type === "break_unpaid";
+      out.push({ ...loc(s.start), kind: isBreak ? "break_start" : joined && (prev.type === "break_paid" || prev.type === "break_unpaid") ? "break_end" : "in" });
+      const next = raw.segments[i + 1];
+      // Saída real: o segmento acaba sem outro a seguir (um aberto ou fechado automaticamente não tem saída).
+      if (!s.open && !s.autoClosed && !s.forgotten && !(next && next.start === s.end)) out.push({ ...loc(s.end), kind: "out" });
+    });
+    return out;
+  }
+
+  private factsFor(c: Awaited<ReturnType<AttendanceUseCases["compute"]>>, date: string, closed: Set<string>): ReviewFacts {
+    const raw = c.raw.find((d) => d.workDate === date)!;
+    const plan = c.plans.get(date);
+    return {
+      workDate: date,
+      phase: this.phaseOf(date, plan, raw, c.now, c.tz, c.today),
+      closed: closed.has(date),
+      theoreticalSeconds: raw.theoreticalSeconds,
+      plannedRanges: rangesOf(plan),
+      restDay: !!plan?.restDay,
+      holiday: !!plan?.holiday,
+      excusedAbsence: !!plan?.excused && !plan?.holiday,
+      workedSeconds: raw.workedSeconds,
+      hasPunches: raw.segments.length > 0,
+      incomplete: raw.incidents.includes("missing_out") || raw.incidents.includes("auto_closed") || raw.segments.some((s) => s.forgotten),
+      lateMinutes: dayBoard(raw, plan, c.cfg.rules, c.now).lateMinutes,
+      review: c.reviews.find((r) => r.workDate === date) ?? null,
+      toleranceMinutes: c.cfg.rules.toleranceMinutes,
+    };
+  }
+
+  /**
+   * Semana (ou período até 31 dias) da equipa visível: por pessoa e dia, o
+   * planeado, as picagens, o calculado e a decisão. Mesma fonte que as outras
+   * vistas (`compute`); `canSee` aplica o âmbito do gestor.
+   */
+  async conferenceWeek(org: OrganizationId, from: string, to: string, canSee: (employeeId: string) => Promise<boolean>, locationId: string | null = null) {
+    this.range(from, to);
+    const all = (await this.ctx.activePeople(org)).filter((p) => !locationId || p.locationId === locationId);
+    const visible: typeof all = [];
+    for (const p of all) if (await canSee(p.id)) visible.push(p);
+    const tz = await this.ctx.timeZone(org);
+    const pre = visible.length ? await this.preload(org, visible.map((p) => p.id), from, to, tz) : null;
+    const days: ConferenceDay[] = [];
+    let today = localDate(this.clock.now(), tz);
+    let next = 0;
+    const worker = async () => {
+      while (next < visible.length) {
+        const p = visible[next++]!;
+        const [c, closed, current] = await Promise.all([this.compute(org, p.id, from, to, pre!), this.periods.closedDates(org, p.id, from, to), this.repo.currentDays(org, p.id, from, to)]);
+        today = c.today;
+        for (const d of c.days) {
+          const f = this.factsFor(c, d.workDate, closed);
+          const review = f.review;
+          days.push({
+            employeeId: p.id,
+            workDate: d.workDate,
+            phase: f.phase,
+            state: reviewState(f),
+            closed: f.closed,
+            plannedRanges: f.plannedRanges,
+            theoreticalSeconds: f.theoreticalSeconds,
+            workedSeconds: f.workedSeconds,
+            validatedSeconds: d.workedSeconds,
+            restDay: f.restDay,
+            holiday: f.holiday,
+            excused: f.excusedAbsence,
+            incomplete: f.incomplete,
+            lateMinutes: f.lateMinutes,
+            punches: this.punchesOf(c.raw.find((x) => x.workDate === d.workDate)!, c.tz),
+            version: current.find((x) => x.workDate === d.workDate)?.version ?? null,
+            review: review
+              ? { id: review.id, decision: review.decision, validatedSeconds: review.validatedSeconds, reason: review.reason, absenceType: review.absenceType, scope: review.scope, createdBy: review.createdBy, createdAt: review.createdAt }
+              : null,
+          });
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(8, visible.length) }, worker));
+    return { timeZone: tz, today, from, to, people: visible.map((p) => ({ id: p.id, name: p.name, locationId: p.locationId, locationName: p.locationName })), days };
+  }
+
+  private validateConference(input: ConferenceInput) {
+    if (!REVIEW_DECISIONS.includes(input.decision)) throw new AttendanceValidationError("Decisão inválida.", "decision");
+    if (!REVIEW_SCOPES.includes(input.scope)) throw new AttendanceValidationError("Abrangência inválida.", "scope");
+    if (!input.reason?.trim()) throw new AttendanceValidationError("Indique o motivo.", "reason");
+    if (input.reason.trim().length > 500) throw new AttendanceValidationError("O motivo tem no máximo 500 caracteres.", "reason");
+    if (!input.items.length) throw new AttendanceValidationError("Escolha pelo menos um dia.", "items");
+    if (input.items.length > MAX_CONFERENCE_ITEMS) throw new AttendanceValidationError(`No máximo ${MAX_CONFERENCE_ITEMS} dias de uma vez.`, "items");
+    if (input.items.some((i) => !i.employeeId || !DATE.test(i.workDate))) throw new AttendanceValidationError("Dia inválido.", "items");
+    const dates = input.items.map((i) => i.workDate).sort();
+    if (eachDate(dates[0]!, dates.at(-1)!).length > MAX_RANGE_DAYS) throw new AttendanceValidationError(`Máximo de ${MAX_RANGE_DAYS} dias por pedido.`, "items");
+    if (new Set(input.items.map((i) => `${i.employeeId}|${i.workDate}`)).size !== input.items.length) throw new AttendanceValidationError("Dias repetidos.", "items");
+    if (input.decision === "manual") {
+      if (input.items.length !== 1) throw new AttendanceValidationError("A correção manual é feita dia a dia.", "items");
+      const m = input.manual;
+      if (!m || !isHhmm(m.start) || !isHhmm(m.end)) throw new AttendanceValidationError("Indique a entrada e a saída (HH:MM).", "manual");
+      if (!Number.isInteger(m.breakMinutes) || m.breakMinutes < 0 || m.breakMinutes > 600) throw new AttendanceValidationError("Pausa inválida.", "manual");
+    }
+    if (input.absenceType !== null && (typeof input.absenceType !== "string" || input.absenceType.trim().length > 80)) throw new AttendanceValidationError("Tipo de ausência inválido.", "absenceType");
+  }
+
+  /**
+   * Aplicar uma decisão de conferência a um ou mais dias (uma confirmação = um
+   * lote auditado). O servidor volta a classificar cada dia com as mesmas
+   * regras do ecrã: só se gravam os aptos; os já conformes ficam revistos sem
+   * mudar horas; o resto volta com o motivo. As picagens e a escala não mudam.
+   */
+  async applyConference(org: OrganizationId, actor: Actor, input: ConferenceInput, canSee: (employeeId: string, date: string) => Promise<boolean>): Promise<ConferenceResult> {
+    this.validateConference(input);
+    const batch = input.items.length > 1;
+    const batchId = randomUUID();
+    const reason = input.reason.trim();
+    const self = await this.ctx.employeeForUser(org, actor.userId);
+    const result: ConferenceResult = { batchId, applied: [], kept: [], skipped: [] };
+    const skip = (i: { employeeId: string; workDate: string }, r: ReviewExclusion | "out_of_scope") =>
+      result.skipped.push({ ...i, reason: r, label: r === "out_of_scope" ? "Fora do seu âmbito" : EXCLUSION_LABEL[r] });
+
+    // 1.º passo: classificar tudo (sem gravar) — a declaração e os erros de validação vêm antes de qualquer escrita.
+    const byEmployee = new Map<string, ConferenceInput["items"]>();
+    for (const i of input.items) byEmployee.set(i.employeeId, [...(byEmployee.get(i.employeeId) ?? []), i]);
+    const plan: { employeeId: string; from: string; to: string; writes: { item: ConferenceInput["items"][number]; facts: ReviewFacts; after: number; keep: boolean; version: number | null }[] }[] = [];
+    for (const [employeeId, items] of byEmployee) {
+      const dates = items.map((i) => i.workDate).sort();
+      const from = dates[0]!;
+      const to = dates.at(-1)!;
+      const writes: (typeof plan)[number]["writes"] = [];
+      if (employeeId === self) {
+        for (const i of items) skip(i, "self");
+        continue;
+      }
+      const [c, closed, current] = await Promise.all([this.compute(org, employeeId, from, to), this.periods.closedDates(org, employeeId, from, to), this.repo.currentDays(org, employeeId, from, to)]);
+      for (const i of items) {
+        if (!(await canSee(employeeId, i.workDate))) {
+          skip(i, "out_of_scope");
+          continue;
+        }
+        const version = current.find((x) => x.workDate === i.workDate)?.version ?? null;
+        if (i.version !== null && i.version !== version) {
+          skip(i, "changed");
+          continue;
+        }
+        const facts = this.factsFor(c, i.workDate, closed);
+        const cls = classifyReview(facts, input.decision, batch, input.manual);
+        if (cls.bucket === "apply") writes.push({ item: i, facts, after: cls.after, keep: false, version });
+        else if (cls.bucket === "already" && cls.reason === "already_ok") writes.push({ item: i, facts, after: facts.workedSeconds, keep: true, version });
+        else skip(i, cls.reason!);
+      }
+      plan.push({ employeeId, from, to, writes });
+    }
+    const changesHours = plan.some((p) => p.writes.some((w) => !w.keep && w.after !== w.facts.workedSeconds));
+    if (input.decision === "fulfilled" && changesHours && !input.declared) {
+      throw new AttendanceValidationError("Confirme que o horário indicado foi efetivamente cumprido.", "declared");
+    }
+
+    // 2.º passo: gravar (uma decisão ativa por dia — se outro gestor gravou entretanto, salta) e recalcular.
+    for (const p of plan) {
+      let wrote = false;
+      for (const w of p.writes) {
+        const decision: ReviewDecision = w.keep ? "keep" : input.decision;
+        const validatedSeconds = decision === "fulfilled" || decision === "manual" ? w.after : null;
+        const saved = await this.repo.insertReview(org, {
+          employeeId: p.employeeId,
+          workDate: w.item.workDate,
+          decision,
+          validatedSeconds,
+          beforeSeconds: w.facts.workedSeconds,
+          theoreticalSeconds: w.facts.theoreticalSeconds,
+          plannedRanges: w.facts.plannedRanges,
+          manual: decision === "manual" ? input.manual : null,
+          absenceType: decision === "absence" ? input.absenceType?.trim() || null : null,
+          reason,
+          scope: input.scope,
+          batchId: batch ? batchId : null,
+          dayVersion: w.version,
+          createdBy: actor.email,
+        });
+        if (!saved) {
+          skip(w.item, "already_reviewed");
+          continue;
+        }
+        wrote = true;
+        if (w.keep) result.kept.push({ employeeId: p.employeeId, workDate: w.item.workDate, reviewId: saved.id });
+        else result.applied.push({ employeeId: p.employeeId, workDate: w.item.workDate, reviewId: saved.id, beforeSeconds: w.facts.workedSeconds, validatedSeconds });
+      }
+      if (wrote) await this.recalculate(org, p.employeeId, p.from, p.to, `Conferência: ${reason}`);
+    }
+    await this.log(
+      org,
+      actor.email,
+      "attendance.conference.apply",
+      "attendance_conference",
+      batchId,
+      null,
+      { decision: input.decision, scope: input.scope, applied: result.applied, kept: result.kept, skipped: result.skipped.map(({ label: _l, ...s }) => s) },
+      reason,
+    );
+    return result;
+  }
+
+  /** Anular uma decisão (nunca se apaga): o dia volta ao calculado pelas picagens e pode ser conferido de novo. */
+  async voidConferenceReview(org: OrganizationId, actor: Actor, id: string, reason: string, canSee: (employeeId: string, date: string) => Promise<boolean>) {
+    if (!reason?.trim()) throw new AttendanceValidationError("Indique o motivo.", "reason");
+    const r = await this.repo.getReview(org, id);
+    if (!r || !(await canSee(r.employeeId, r.workDate))) throw new AttendanceNotFoundError("Decisão não encontrada.");
+    if (r.voidedAt) throw new AttendanceConflictError("Esta decisão já foi anulada.", "already_voided");
+    if ((await this.ctx.employeeForUser(org, actor.userId)) === r.employeeId) throw new AttendanceForbiddenError("Não pode conferir o seu próprio registo.", "self_revision");
+    await this.assertOpen(org, r.employeeId, [r.workDate]);
+    const voided = await this.repo.voidReview(org, id, { voidedBy: actor.email, reason: reason.trim() });
+    if (!voided) throw new AttendanceConflictError("Esta decisão já foi anulada.", "already_voided");
+    await this.recalculate(org, r.employeeId, r.workDate, r.workDate, `Decisão de conferência anulada: ${reason.trim()}`);
+    await this.log(org, actor.email, "attendance.conference.void", "attendance_day_review", id, r, voided, reason.trim());
+    return voided;
   }
 
   // ── Catálogo de pausas (FE-103) ─────────────────────────────────────

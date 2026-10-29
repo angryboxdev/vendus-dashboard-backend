@@ -5,6 +5,7 @@ import type { Adjustment, CorrectionRequest, DayVersion, Incident, IncidentStatu
 import type { BreakType, BreakTypeInput } from "../../domain/entities/break-type.js";
 import type { ClockType, ClockTypeInput } from "../../domain/entities/clock-type.js";
 import type { AttendanceRepositoryPort } from "../../domain/ports/out/attendance.ports.js";
+import type { DayReview, NewDayReview } from "../../domain/entities/day-review.js";
 import type { IncidentType } from "../../domain/services/day-engine.js";
 
 type Row = Record<string, unknown>;
@@ -158,6 +159,30 @@ const toIncident = (r: Row): Incident => ({
   comment: str(r.comment),
   resolvedBy: str(r.resolved_by),
   resolvedAt: optIso(r.resolved_at),
+});
+
+const DR =
+  "id, employee_id, work_date, decision, validated_seconds, before_seconds, theoretical_seconds, planned_ranges, manual, absence_type, reason, scope, batch_id, day_version, created_by, created_at, voided_at, voided_by, void_reason";
+const toReview = (r: Row): DayReview => ({
+  id: String(r.id),
+  employeeId: String(r.employee_id),
+  workDate: String(r.work_date),
+  decision: r.decision as DayReview["decision"],
+  validatedSeconds: num(r.validated_seconds),
+  beforeSeconds: Number(r.before_seconds),
+  theoreticalSeconds: Number(r.theoretical_seconds),
+  plannedRanges: (r.planned_ranges as DayReview["plannedRanges"]) ?? null,
+  manual: (r.manual as DayReview["manual"]) ?? null,
+  absenceType: str(r.absence_type),
+  reason: String(r.reason),
+  scope: r.scope as DayReview["scope"],
+  batchId: str(r.batch_id),
+  dayVersion: num(r.day_version),
+  createdBy: String(r.created_by),
+  createdAt: iso(r.created_at),
+  voidedAt: optIso(r.voided_at),
+  voidedBy: str(r.voided_by),
+  voidReason: str(r.void_reason),
 });
 
 export class SupabaseAttendanceRepository implements AttendanceRepositoryPort {
@@ -388,5 +413,46 @@ export class SupabaseAttendanceRepository implements AttendanceRepositoryPort {
       check(await this.scoped(org).table("attendance_recalc_queue").delete().eq("employee_id", String(r.employee_id)).eq("work_date", String(r.work_date)));
     }
     return rows.map((r) => ({ employeeId: String(r.employee_id), workDate: String(r.work_date) }));
+  }
+
+  // ── Conferência V2 (ADR-0043) ─────────────────────────────────────
+  async listReviews(org: OrganizationId, employeeIds: string[], from: string, to: string) {
+    if (!employeeIds.length) return [];
+    const rows = await this.manyPaged(employeeIds, (ids, a, b) =>
+      this.scoped(org).table("attendance_day_reviews").select(DR).in("employee_id", ids).gte("work_date", from).lte("work_date", to).is("voided_at", null).order("work_date").order("id").range(a, b),
+    );
+    return rows.map(toReview);
+  }
+  async insertReview(org: OrganizationId, r: NewDayReview) {
+    const row = {
+      employee_id: r.employeeId,
+      work_date: r.workDate,
+      decision: r.decision,
+      validated_seconds: r.validatedSeconds,
+      before_seconds: r.beforeSeconds,
+      theoretical_seconds: r.theoreticalSeconds,
+      planned_ranges: r.plannedRanges,
+      manual: r.manual,
+      absence_type: r.absenceType,
+      reason: r.reason,
+      scope: r.scope,
+      batch_id: r.batchId,
+      day_version: r.dayVersion,
+      created_by: r.createdBy,
+    };
+    const res = (await this.scoped(org).table("attendance_day_reviews").insert(row).select(DR).single()) as Res;
+    // Índice único parcial: outro gestor gravou uma decisão ativa para o mesmo dia.
+    if (res.error?.code === "23505") return null;
+    return toReview(check(res));
+  }
+  async getReview(org: OrganizationId, id: string) {
+    const r = check<Row | null>(await this.scoped(org).table("attendance_day_reviews").select(DR).eq("id", id).maybeSingle());
+    return r ? toReview(r) : null;
+  }
+  async voidReview(org: OrganizationId, id: string, v: { voidedBy: string; reason: string }) {
+    const rows = check<Row[]>(
+      await this.scoped(org).table("attendance_day_reviews").update({ voided_at: new Date().toISOString(), voided_by: v.voidedBy, void_reason: v.reason }).eq("id", id).is("voided_at", null).select(DR),
+    );
+    return rows[0] ? toReview(rows[0]) : null;
   }
 }

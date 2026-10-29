@@ -1,7 +1,7 @@
 # Module: attendance
 
 > Status: active
-> Last updated: 2026-10-12
+> Last updated: 2026-10-29
 
 ---
 
@@ -28,7 +28,8 @@ pedidos de correção e resolve incidentes (falta, saída esquecida, atraso).
 Tabelas `clock_events` (append-only, trigger), `clock_revisions` (só o estado
 de recusa muda), `clock_correction_requests`, `attendance_days` (versões),
 `attendance_adjustments`, `attendance_incidents` (únicos por dia/tipo/origem),
-`attendance_recalc_queue` (migração `20261015100000`). Lê o plano diário do
+`attendance_recalc_queue` (migração `20261015100000`), `attendance_day_reviews`
+(decisões de conferência, migração `20261210100000`, ADR-0043). Lê o plano diário do
 time-base e as regras do settings. Não trata ausências (Fase 5) nem banco de
 horas (Fase 6), que vai ler os ajustes daqui.
 
@@ -37,19 +38,21 @@ horas (Fase 6), que vai ler os ajustes daqui.
 - `effectiveEvents` — originais − anuladas/mudadas + acrescentadas por revisões ativas (recusadas não contam).
 - `computeDays` — única fonte dos totais (RE-6); atribuição de jornadas noturnas (RE-7/RE-8); registo esquecido após `maxOpenHours` fecha no fim planeado ou à meia-noite, nunca se arrasta; incidentes deduplicados (RE-14).
 - `checkPunch` — IP, entrada antes da hora, coordenadas, zona do centro (D7: desligado por omissão).
-- `configHash` — impressão da configuração e do plano de cada versão do dia (TK-13).
+- `configHash` — impressão da configuração e do plano de cada versão do dia (TK-13); inclui a decisão de conferência ativa (não inclui os campos informativos `plannedRanges`/`restDay`/`holiday`).
+- `day-review.ts` (ADR-0043) — `applyReview` (a decisão entra no resultado do motor), `reviewState` (Conforme, Atraso, Falta, Por rever, Em curso, Folga, Sem escala, Futuro, Justificada, Revisto) e `classifyReview` (o que cada decisão pode fazer a um dia, com o motivo de exclusão).
 
 ## Ports
 
 ### Input (use cases)
 
 - `AttendanceUseCases` — picar (RE-9), estado e dias, revisões (RE-10), recusa (RE-11), pedidos de correção, incidentes, ajustes, recálculo (fila).
-  - `days` devolve por dia também `plannedStart`/`plannedEnd` (horário previsto, "HH:MM"), usados pelas ações rápidas da conferência no frontend («Cumpriu horário» / «Atrasou» / «Justificar» / «Faltou», 2026-10-27) — feitas com as revisões e a resolução de incidentes já existentes.
+  - `days` devolve por dia também `plannedStart`/`plannedEnd` (horário previsto, "HH:MM").
+  - Conferência V2 (ADR-0043): `conferenceWeek` (equipa visível × dias, com estado, picagens, planeado, calculado e decisão), `applyConference` (uma confirmação = um lote auditado; reclassifica no servidor) e `voidConferenceReview`. Substituem as ações rápidas do frontend de 2026-10-27.
 
 ### Output (domain dependencies)
 
 - `PeriodGuardPort` (módulo periods): datas de períodos fechados — escritas recusadas com 409 `period_closed` (TK-17, RE-30).
-- `AttendanceRepositoryPort`, `AttendanceContextPort` (ficha da conta, fuso, regras efetivas, plano diário, centro), `AttendanceAuditPort`, `AttendanceClockPort`, `BackgroundPort`.
+- `AttendanceRepositoryPort` (inclui `listReviews`/`insertReview`/`getReview`/`voidReview`), `AttendanceContextPort` (ficha da conta, fuso, regras efetivas, plano diário com faixas, centro, `activePeople`), `AttendanceAuditPort`, `AttendanceClockPort`, `BackgroundPort`.
 
 ## Adapters
 
@@ -57,13 +60,15 @@ horas (Fase 6), que vai ler os ajustes daqui.
 
 - `createAttendanceMeRouter` → `/api/me/clock*` (Portal; o colaborador é sempre o da sessão).
 - **Novo RH = único sistema de ponto** (2026-10-23, decisão do utilizador): o interruptor `time_tracking.portal.uses_novo_rh` foi retirado do catálogo; o ponto antigo do Portal recusa sempre (`MOVED_TO_NOVO_RH`) e o quiosque antigo devolve sempre 409 (guardas em `src/server.ts`). `GET /api/me/portal-mode` devolve sempre `{ source: "novo_rh" }` — só para o Portal já publicado; sai com o RH antigo.
-- `createAttendanceAdminRouter` → `/api/novo-rh/attendance/*` (`hr.attendance`, âmbito por colaborador, Idempotency-Key obrigatório).
+- `createAttendanceAdminRouter` → `/api/novo-rh/attendance/*` (`hr.attendance`, âmbito por colaborador, Idempotency-Key obrigatório). Conferência: `GET /conference?from&to[&locationId]`, `POST /conference/apply`, `POST /conference/reviews/:id/void`.
 
 ### Output
 
 - `SupabaseAttendanceRepository`, `SupabaseAttendanceDirectory` (hr_employees, organizations, locations), `configFromSettings`.
 
 ## Design decisions (ADR summary)
+
+- **Conferência V2 — decisão por dia (ADR-0043, 2026-10-29):** quatro decisões (cumpriu / manter / manual / ausência) numa tabela própria; picagens e escala intocadas; o validado entra no motor (`applyReview` em `compute`) e na impressão do dia → versão nova + ajuste. «Cumpriu» = teórico do planeado, nunca abaixo das horas reais (horas extra excluídas), nunca em curso/futuro/folga/ausência/fechado/sem planeado, com declaração quando muda horas. Lote: o servidor reclassifica e devolve `applied/kept/skipped`; sem picagens, picagem única, manual e ausência com trabalho → revisão individual. Uma decisão ativa por dia (índice único parcial) + versão vista (`changed`). Anular não apaga. Ausência com tipo é atribuída antes nas Ausências (frontend, `hr.leave`).
 
 - **`boardMany`** (2026-10-18, perf da Visão geral): o `board` de vários colaboradores lê marcações, revisões e incidentes **numa leitura em lote** (`listEventsMany`/`listRevisionsMany`/`listIncidentsMany`, em grupos de 100 ids e páginas de 1000 linhas até esgotar — o PostgREST corta respostas grandes sem erro) em vez de três por pessoa; o resto do apuramento é o mesmo (`compute` com `pre`). Teste prova que o resultado é igual a chamar `board` por pessoa (turno noturno, revisão, incidente validado).
 
@@ -85,4 +90,5 @@ horas (Fase 6), que vai ler os ajustes daqui.
 - Fuso da organização (ainda não há fuso por centro).
 - Revisão que move uma marcação mais de 2 dias pode não aparecer na leitura por período.
 - Avisos ao colaborador (correção recusável, saída automática) chegam com as notificações da Fase 9.
+- Conferência V2: «cumpriu» não recalcula as horas noturnas (ficam as das picagens); a tolerância usada no ecrã para pré-visualizar é fixa (5 min) — o servidor usa a da empresa e é quem decide; ausência com tipo + confirmação são dois pedidos (não atómicos: se a confirmação falhar, a ausência fica registada).
 - Sem teste de integração dos triggers append-only/RLS (precisa de Supabase local com Docker, indisponível neste PC) — validar em staging ao aplicar a migração.

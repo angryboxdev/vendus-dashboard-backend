@@ -38,6 +38,12 @@ export interface DayPlan {
   incidentValidated?: boolean;
   /** CF-7: ausência "conta como trabalhado" — segundos somados ao trabalhado. */
   creditSeconds?: number;
+  /** Conferência V2: faixas do planeado publicado (turnos repartidos/noturnos) — só informativo, o motor não as usa. */
+  plannedRanges?: { start: string; end: string }[] | null;
+  /** Dia de descanso planeado (folga da escala ou do horário). */
+  restDay?: boolean;
+  /** Feriado confirmado (distingue de uma ausência aprovada em `excused`). */
+  holiday?: boolean;
 }
 
 export interface EngineRules {
