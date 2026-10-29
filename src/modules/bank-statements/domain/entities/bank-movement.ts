@@ -405,6 +405,13 @@ export class BankMovement {
     const isPartial = Math.abs(amountDiff) > BankMovement.PARTIAL_TOLERANCE_CENTS;
     return new BankMovement({
       ...this.toProps(),
+      // Valem a categoria e o IVA real dos documentos (decisão do utilizador): a classificação própria sai,
+      // senão a DRE continuaria a usá-la antes da fatura.
+      costCenterGroupId: null,
+      costCenterCategoryId: null,
+      supplierId: null,
+      vatRate: null,
+      vatIncluded: null,
       reconciliationStatus: isPartial ? "conciliado_parcial" : "conciliado_com_fatura",
       justificationType: "fatura",
       matchedEntityType: null,

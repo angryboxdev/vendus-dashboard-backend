@@ -54,6 +54,17 @@ describe("Classificar sem conciliar", () => {
     expect(undone.costCenterCategoryId).toBeNull();
   });
 
+  it("conciliar com a fatura: a classificação própria sai (a DRE passa a usar a categoria e o IVA da fatura)", () => {
+    const m = debit().classifyOnly({ costCenterGroupId: "g-cmv", costCenterCategoryId: "c-x", vatRate: 23, vatIncluded: true }).multiReconcile(0);
+    expect(m).toMatchObject({
+      reconciliationStatus: "conciliado_com_fatura",
+      costCenterGroupId: null,
+      costCenterCategoryId: null,
+      vatRate: null,
+      vatIncluded: null,
+    });
+  });
+
   it("remover a classificação: volta a «por justificar» sem categoria", () => {
     const m = debit().classifyOnly({ costCenterGroupId: null, costCenterCategoryId: "c-x" }).clearClassification();
     expect(m).toMatchObject({ reconciliationStatus: "saida_nao_justificada", costCenterCategoryId: null, costCenterGroupId: null });
