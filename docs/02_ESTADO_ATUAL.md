@@ -64,7 +64,8 @@ Atualizado: 2026-10-26 (**«Movimentos recorrentes»** — ramo `financeiro-regr
 5. Dívida pequena: o inventário da matriz (`src/tools/authz-matrix/route-inventory.ts`) não vê rotas registadas com uma variável não-template (ex.: `document-categories` com `prefix`).
 6. Worktree `vendus-dashboard-frontend-preview` (ramo `preview/dashboard-premium-v2`) tem alterações por commitar — perguntar antes de apagar.
 
-**Financeiro/Stock (em pausa):**
+**Financeiro/Stock (retomado 2026-11-01; F1–F3 em produção — F3a #112/#85, F3b #113/#86/#87, F3c #115/#89):**
+0. Próxima fase: **F4** (calendário de fornecedores; aprendizagem controlada) — `task-mestre-v1.2.md` §F4.
 1. Validar a F2 no browser em produção (checklist: três modos sem perda; «Por valores» 100+250+300 = 650 € fecha, 649/651 bloqueiam; guardar rascunho → reabrir pela lista → lançar; «Decidir no documento» e desmarcar «Enviar para Stock» com motivo; «Total a pagar | Em atraso» com filtros; Centros de Custo → Aplicação em Faturas).
 2. Pendências operacionais da F1 (abaixo).
 3. Com autorização do utilizador: iniciar a F3.
@@ -83,8 +84,8 @@ Atualizado: 2026-10-26 (**«Movimentos recorrentes»** — ramo `financeiro-regr
 - **Financeiro/Stock:** fica para depois.
 
 ## Pendências operacionais (produção)
-- Correr `POST /api/fiscal-documents/backfill` com `{ "dryRun": true }` e rever (precisa de sessão de gestor).
-- `GET /api/invoices/integrity/payable-duplicates`: se houver duplicados históricos, o índice único de contas a pagar não foi criado — limpar e reexecutar a migração `20261030130000`.
+- Backfill fiscal: simulação feita em 2026-11-01 (só leitura) — 170 documentos, 0 duplicados; com o NIF da ficha do fornecedor (correção desta data) ficam 114 por registar, 18 já registados e 38 incompletos (29 Financeiro, 9 Stock: fornecedor sem NIF válido na ficha ou fatura sem fornecedor). Falta correr a execução real (`{ "dryRun": false }`) com sessão de gestor, depois de publicada a correção.
+- Contas a pagar duplicadas: 0 em 2026-11-01. A migração `20261210100000` volta a tentar o índice único (idempotente) — garante-o ao publicar.
 - Novo RH: decisões humanas D0–D12 (`docs/relatorios/novo-rh-resumo-final.md`); MFA TOTP do Supabase só é necessária se a empresa ligar «Autenticação de dois fatores na gestão» (desligada por omissão desde 2026-10-20).
 
 ## Problemas conhecidos (transversais)
