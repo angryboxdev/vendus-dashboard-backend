@@ -10,10 +10,6 @@ import { pizzaRoutes } from "./routes/pizzaRoutes.js";
 import { preparationRoutes } from "./routes/preparationRoutes.js";
 import { reportsRoutes } from "./routes/reportsRoutes.js";
 import { stockRoutes } from "./routes/stockRoutes.js";
-import { hrRoutes } from "./routes/hrRoutes.js";
-import { hrKioskRoutes } from "./routes/hrKioskRoutes.js";
-import { hrAuditRoutes } from "./routes/hrAuditRoutes.js";
-import { hrLeaveRoutes } from "./routes/hrLeaveRoutes.js";
 import { createCashClosingsModule } from "./modules/cash-closings/cash-closings.module.js";
 import { createKdsModule } from "./modules/kds/kds.module.js";
 import { createFinancialBaseModule } from "./modules/financial-base/financial-base.module.js";
@@ -51,7 +47,7 @@ import { createLocationCredentialsModule } from "./modules/location-credentials/
 import { createSalesSummaryModule } from "./modules/sales-summary/sales-summary.module.js";
 import { createCashFlowModule } from "./modules/cash-flow/cash-flow.module.js";
 import { createDeliveryPlatformsModule } from "./modules/delivery-platforms/delivery-platforms.module.js";
-import { createHrModule } from "./modules/hr/hr.module.js";
+import { createPositionsModule } from "./modules/positions/positions.module.js";
 import { createAccountingModule } from "./modules/accounting/accounting.module.js";
 import type { SuggestStockRoutingPort } from "./modules/stock-purchase-review/domain/ports/in/suggest-stock-routing.port.js";
 import { createStockPurchaseReviewModule } from "./modules/stock-purchase-review/stock-purchase-review.module.js";
@@ -111,7 +107,6 @@ import { can } from "./modules/access/domain/services/effective-access.service.j
 import { problemHandler } from "./infra/http/problem-details.js";
 import { runWithRequestMemo } from "./infra/scoped-db/request-memo.js";
 import { mapLimit } from "./utils/mapLimit.js";
-import { setKioskNovoRhGuard } from "./services/hrKioskService.js";
 
 const app = express();
 // Render põe um proxy à frente: req.ip passa a ser o IP real do cliente (auditoria, ADR-0022).
@@ -179,11 +174,6 @@ app.get("/api/health", (_req, res) => res.json({ ok: true, commit: (process.env.
 
 // populateAuth runs for ALL routes (populates req.auth from Bearer token if present)
 app.use(populateAuth);
-
-// Kiosk routes registered BEFORE global requireAuth:
-// GET /kiosk/daily-token and POST /kiosk/scan are public
-// PATCH /employees/:id/kiosk-pin has inline requireAuth inside the handler
-app.use("/api/hr", hrKioskRoutes);
 
 // Vendus: credenciais e config (register ID, price groups, payment IDs)
 // resolvidas da BD no boot (ticket 03, org-integration-credentials) —
@@ -395,17 +385,10 @@ const stockPlanningModule = createStockPlanningModule(
   stockDemoModule.demoPosSales,
 );
 
-// RH (hexagonal) — construído aqui, antes do cron interno, para expor a
-// geração diária das automatizações de turnos (RH 2.0). As rotas continuam
-// montadas mais abaixo, depois do requireAuth.
-// O Novo RH é o único sistema de ponto (2026-10-23, sem interruptor): a picagem antiga (Portal e quiosque) recusa sempre.
-// Documents (motor único): criado antes do `hr`, que usa os envios do Portal por validar na sua caixa de pedidos.
+// Documents (motor único). O RH antigo (módulo `hr`, rotas e serviços hr*) saiu (ADR-0040, fase 4);
+// os Cargos passaram para o módulo `positions`.
 const documentsModule = createDocumentsModule();
-const hrModule = createHrModule({
-  movedToNovoRh: async () => true,
-  listPendingDocuments: documentsModule.listPendingDocuments,
-});
-setKioskNovoRhGuard(async () => true);
+const positionsModule = createPositionsModule();
 
 // Internal cron routes: authenticated via requireCronSecret (Bearer
 // CRON_SECRET), not user sessions — must be mounted before the global
@@ -418,7 +401,6 @@ if (ENV.CRON_SECRET) {
       reprocessMissingStockReviews: stockPurchaseReviewModule.reprocessMissingStockReviews,
       runDailyForecast: stockPlanningModule.runDailyForecast,
       detectForecastDeviation: stockPlanningModule.detectForecastDeviation,
-      generateAllShiftAutomations: hrModule.generateAllAutomations,
       listOrganizations,
       // Criado mais abaixo (depende dos módulos do Novo RH); só é usado quando o cron corre.
       runNovoRhReminders: (org) => remindersModule.reminders.run(org),
@@ -655,7 +637,6 @@ app.use("/api", stockDemoModule.router);
 // Rotas do Portal (/api/me/*) logo aqui: as montagens seguintes com
 // requireMinRole(...) no próprio mount correm para todo o /api e recusariam
 // o colaborador antes de chegar a elas.
-app.use("/api", hrModule.meRouter);
 // Documentos do próprio (/me/documents*, ADR-0040 fase 1).
 app.use("/api", documentsModule.meRouter);
 app.use("/api", accessModule.meRouter);
@@ -698,16 +679,8 @@ app.use("/api", supplierInvoiceImportRoutes);
 app.use("/api", pizzaRoutes);
 app.use("/api", preparationRoutes);
 
-// HR routes: GETs allow hr_viewer; write handlers have inline requireMinRole("manager")
-app.use("/api/hr", hrRoutes);
-app.use("/api/hr", hrAuditRoutes);
-app.use("/api/hr", hrLeaveRoutes);
-
-// RH-02 (hexagonal) — superfície nova /api/hr/people, coexiste com o legacy
-// acima (mesmas tabelas hr_employees/hr_employee_documents); GETs allow
-// hr_viewer, writes têm requireMinRole("manager") inline no controller.
-// RH-01 (Visão Geral) — /api/hr/overview*, só leitura, mesmo módulo.
-app.use("/api", hrModule.router);
+// Cargos (Configurações → Estrutura): GET para quem gere a empresa, escrita requireMinRole("manager") no controller.
+app.use("/api", positionsModule.router);
 
 // Novo RH (task faseada) — auditoria transversal (Fase 1, ticket 03) e motor de
 // configurações (ticket 02) e estrutura (ticket 04). Rotas em /api/novo-rh/{audit,structure,settings}.
