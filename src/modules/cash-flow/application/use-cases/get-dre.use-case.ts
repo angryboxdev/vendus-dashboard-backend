@@ -49,7 +49,7 @@ class DreInputLoader {
       this.parameters.forMonth(organizationId, year, month),
       this.categoryVatRatios.recentNetRatios(organizationId, to, CATEGORY_VAT_SAMPLE),
       this.unpaid.unpaidInvoices(organizationId, from, monthEnd),
-      this.deliveryStatements ? this.deliveryStatements.forMonth(organizationId, year, month) : Promise.resolve([]),
+      this.deliveryStatements ? this.deliveryStatements.forMonth(organizationId, year, month) : Promise.resolve({ platforms: [], saft: null }),
     ]);
     const debits = storedDebits.map(({ description, ...d }) => {
       const n = this.movementKind.describe(description, "debit");
@@ -69,7 +69,8 @@ class DreInputLoader {
       parameters: resolveDreParameters(stored.own, stored.previous),
       categoryNetRatios,
       unpaidInvoices,
-      deliveryStatements,
+      deliveryStatements: deliveryStatements.platforms,
+      deliverySaft: deliveryStatements.saft,
     };
   }
 }

@@ -1,6 +1,6 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { GetPlatformMarginReportPort } from "../../../delivery-platforms/domain/ports/in/platform-margin-report.port.js";
-import type { DeliveryStatementResult } from "../../domain/entities/dre.js";
+import type { DeliveryMonth } from "../../domain/entities/dre.js";
 import type { DeliveryStatementsReadPort } from "../../domain/ports/out/delivery-statements-read.port.js";
 
 /**
@@ -10,9 +10,9 @@ import type { DeliveryStatementsReadPort } from "../../domain/ports/out/delivery
 export class DeliveryPlatformsStatementsAdapter implements DeliveryStatementsReadPort {
   constructor(private readonly getReport: GetPlatformMarginReportPort) {}
 
-  async forMonth(organizationId: OrganizationId, year: number, month: number): Promise<DeliveryStatementResult[]> {
+  async forMonth(organizationId: OrganizationId, year: number, month: number): Promise<DeliveryMonth> {
     const report = await this.getReport.execute({ organizationId, year, month });
-    return report.platforms.map((p) => ({
+    const platforms = report.platforms.map((p) => ({
       platform: p.platform,
       salesGrossCents: p.salesGrossCents,
       salesNetCents: p.salesNetCents,
@@ -24,5 +24,7 @@ export class DeliveryPlatformsStatementsAdapter implements DeliveryStatementsRea
       marketingVatCents: p.feesVatCents - p.commissionVatCents,
       otherNetCents: p.otherNetCents,
     }));
+    const saft = report.saft && report.salesVatRateSource === "saft" ? { invoicedCents: report.saft.invoicedCents, vatRate: report.salesVatRate } : null;
+    return { platforms, saft };
   }
 }

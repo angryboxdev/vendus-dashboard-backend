@@ -85,8 +85,9 @@ Atualizado: 2026-10-26 (**«Movimentos recorrentes»** — ramo `financeiro-regr
 - **Financeiro/Stock:** fica para depois.
 
 ## Pendências operacionais (produção)
-- Backfill fiscal: simulação feita em 2026-11-01 (só leitura) — 170 documentos, 0 duplicados; com o NIF da ficha do fornecedor (correção desta data) ficam 114 por registar, 18 já registados e 38 incompletos (29 Financeiro, 9 Stock: fornecedor sem NIF válido na ficha ou fatura sem fornecedor). Falta correr a execução real (`{ "dryRun": false }`) com sessão de gestor, depois de publicada a correção.
-- Contas a pagar duplicadas: 0 em 2026-11-01. A migração `20261210100000` volta a tentar o índice único (idempotente) — garante-o ao publicar.
+- Backfill fiscal **executado em 2026-11-02** (autorizado pelo utilizador): 114 identidades registadas (134 no total), 0 duplicados; nova simulação = 0 por registar. Ficam 38 incompletos (29 Financeiro, 9 Stock) sem proteção contra duplicados até corrigir o NIF na ficha do fornecedor (Prosegur, Alfa Energia, EDP Comercial e outros) ou associar o fornecedor.
+- Contas a pagar duplicadas: 0 em 2026-11-01; migração `20261210100000` aplicada em 2026-11-02 (#172) garante o índice único.
+- Deploy: CLI do Supabase fixado em 2.122.1 no `render.yaml` (#175, 2026-11-02) — a 3.0.0 retirou `db push --project-ref`.
 - Novo RH: decisões humanas D0–D12 (`docs/relatorios/novo-rh-resumo-final.md`); MFA TOTP do Supabase só é necessária se a empresa ligar «Autenticação de dois fatores na gestão» (desligada por omissão desde 2026-10-20).
 
 ## Problemas conhecidos (transversais)

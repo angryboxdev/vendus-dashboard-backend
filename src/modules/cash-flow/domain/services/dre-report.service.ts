@@ -1,5 +1,6 @@
 import type { BankCredit, BankDebit, CostCenterCatalog, ExpenseSources, UnpaidInvoice } from "../entities/cash-flow.js";
 import type {
+  DeliverySaft,
   DeliveryStatementResult,
   DreCardFees,
   DreEntry,
@@ -48,6 +49,8 @@ export interface BuildDreInput {
   unpaidInvoices?: UnpaidInvoice[];
   /** Plataformas com extratos importados no mês: usam-se em vez da reconstituição pelo banco. */
   deliveryStatements?: DeliveryStatementResult[];
+  /** SAF-T do AirMenu do mês: venda das plataformas sem extrato (em vez do banco). */
+  deliverySaft?: DeliverySaft | null;
 }
 
 /** Uma parte de uma saída já colocada no mês, com o valor sem IVA. */
@@ -361,12 +364,60 @@ export function cardFees(r: RestaurantSales, p: Pick<ResolvedDreParameters, "car
 }
 
 /**
+ * Venda (com IVA) de cada plataforma sem extrato pelo SAF-T: o que sobra do faturado depois das que têm
+ * extrato (o que os clientes lá pagaram = venda sem IVA − promoções + IVA), repartido pelo recebido no
+ * banco (sem recebidos, em partes iguais pelas plataformas sem extrato). Vazio sem SAF-T ou sem sobra.
+ */
+function saftShares(saft: DeliverySaft | null, statements: DeliveryStatementResult[], received: Map<string, number>, p: ResolvedDreParameters): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!saft || saft.invoicedCents <= 0) return out;
+  const covered = new Set(statements.map((s) => s.platform));
+  const paidInStatements = statements.reduce((a, s) => a + s.salesNetCents - s.promotionsNetCents + s.salesVatCents, 0);
+  const rest = saft.invoicedCents - paidInStatements;
+  if (rest <= 0) return out;
+  const withReceived = [...received.entries()].filter(([k, v]) => !covered.has(k) && v > 0);
+  const targets = withReceived.length > 0 ? withReceived : DELIVERY_PLATFORMS.filter((k) => !covered.has(k) && (p.marketingNetCents[k] > 0 || covered.size === 0)).map((k): [string, number] => [k, 1]);
+  if (targets.length === 0) return out;
+  const total = targets.reduce((a, [, w]) => a + w, 0);
+  let given = 0;
+  targets.forEach(([k, w], i) => {
+    const share = i === targets.length - 1 ? rest - given : Math.round((rest * w) / total);
+    given += share;
+    out.set(k, share);
+  });
+  return out;
+}
+
+/** Venda com IVA vinda do SAF-T: IVA pela taxa do SAF-T; comissão pela taxa dos parâmetros. */
+function saftGross(grossCents: number, vatRate: number, marketingNetCents: number, p: ResolvedDreParameters) {
+  const netCents = Math.round(grossCents / (1 + vatRate));
+  const c = p.platformCommissionPct / 100;
+  const commissionNetCents = Math.round(p.commissionOnGross ? c * grossCents : c * netCents);
+  return {
+    grossCents,
+    netCents,
+    salesVatCents: grossCents - netCents,
+    commissionNetCents,
+    commissionVatCents: Math.round((commissionNetCents * p.platformCommissionVatPct) / 100),
+    marketingVatCents: Math.round((marketingNetCents * p.marketingVatPct) / 100),
+  };
+}
+
+/**
  * Plataformas: pelos extratos importados quando os há no mês (vendas a preço de tabela, promoções,
  * comissões, marketing e outras taxas reais); senão reconstituídas em bruto a partir do que liquidam no
  * banco e do marketing lançado à mão — ver `platformGross`. O recebido no banco aparece sempre.
  * Uma plataforma só com marketing ou só com extratos também aparece.
+ * Com o SAF-T do AirMenu do mês, as plataformas sem extrato vendem o que o SAF-T faturou menos o que os
+ * clientes pagaram nas que têm extrato, repartido pelo recebido no banco (o banco fica incompleto enquanto
+ * as liquidações do fim do mês não chegam). Comissão pela taxa dos parâmetros sobre essa venda.
  */
-function platforms(credits: BankCredit[], p: ResolvedDreParameters, statements: DeliveryStatementResult[] = []): DrePlatformRevenue[] {
+function platforms(
+  credits: BankCredit[],
+  p: ResolvedDreParameters,
+  statements: DeliveryStatementResult[] = [],
+  saft: DeliverySaft | null = null,
+): DrePlatformRevenue[] {
   const received = new Map<string, number>();
   for (const c of credits) {
     if (!c.platform || isExcluded(c)) continue;
@@ -374,6 +425,8 @@ function platforms(credits: BankCredit[], p: ResolvedDreParameters, statements: 
   }
   const fromStatements = new Map(statements.map((s) => [s.platform, s]));
   const keys = new Set<string>([...received.keys(), ...DELIVERY_PLATFORMS.filter((k) => p.marketingNetCents[k] > 0), ...fromStatements.keys()]);
+  const saftSales = saftShares(saft, statements, received, p);
+  for (const k of saftSales.keys()) keys.add(k);
   return [...keys]
     .map((platform): DrePlatformRevenue => {
       const receivedCents = received.get(platform) ?? 0;
@@ -398,11 +451,12 @@ function platforms(credits: BankCredit[], p: ResolvedDreParameters, statements: 
         };
       }
       const marketingNetCents = p.marketingNetCents[platform as DeliveryPlatformKey] ?? 0;
-      const g = platformGross(receivedCents, marketingNetCents, p);
+      const fromSaft = saftSales.get(platform);
+      const g = fromSaft !== undefined ? saftGross(fromSaft, saft!.vatRate, marketingNetCents, p) : platformGross(receivedCents, marketingNetCents, p);
       const contributionCents = g.netCents - g.commissionNetCents - marketingNetCents;
       return {
         platform,
-        source: "bank",
+        source: fromSaft !== undefined ? "saft" : "bank",
         receivedCents,
         marketingNetCents,
         ...g,
@@ -423,7 +477,7 @@ function platforms(credits: BankCredit[], p: ResolvedDreParameters, statements: 
  */
 export function buildDreReport(input: BuildDreInput): DreReport {
   const loaded = input.restaurantSalesLoaded ?? true;
-  const byPlatform = platforms(input.credits, input.parameters, input.deliveryStatements);
+  const byPlatform = platforms(input.credits, input.parameters, input.deliveryStatements, input.deliverySaft ?? null);
   const sumP = (f: (p: DrePlatformRevenue) => number) => byPlatform.reduce((a, p) => a + f(p), 0);
   const platformsNetCents = sumP((p) => p.netCents);
   const revenue: DreRevenue = {
