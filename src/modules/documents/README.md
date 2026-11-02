@@ -170,6 +170,11 @@ mesmo comportamento e as mesmas respostas.
   deploy. O dono "Empresa" não precisa de coluna nova: `employee_id NULL`
   + `org_id`. Uma leitura por `employee_id` (inclusive legacy) nunca devolve
   documentos da Empresa.
+- **`document_type` (coluna do RH antigo) é opcional** — o motor usa só
+  `category` e nunca escreve `document_type`. Ficou `not null` até
+  `20261211100000` e, por isso, nenhum envio do motor gravava (erro 500
+  «Não foi possível guardar», detetado em 2026-11-02). O legacy continua a
+  preenchê-la.
 - **Documentos de colaborador no `documents` (ADR-0040, fase 1,
   2026-10-20)** — antes viviam no `hr` (RH antigo, em descontinuação). O
   colaborador entra por uma porta estreita (`EmployeeDirectoryPort`) em vez
