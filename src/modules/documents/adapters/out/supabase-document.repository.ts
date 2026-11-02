@@ -72,11 +72,26 @@ function rowToDocument(row: Row): Document {
   });
 }
 
+/**
+ * A coluna antiga `document_type` (RH antigo) continua `NOT NULL` com um CHECK
+ * do enum antigo; o motor novo não a usa, mas tem de a preencher — sem isto,
+ * todo o envio de documentos falhava com "null value in column document_type".
+ * Mesmo mapeamento (ao contrário) do backfill de 20260926120000.
+ */
+export function legacyDocumentType(category: string): "contract" | "id_card" | "nif" | "iban" | "other" {
+  if (category === "contrato_trabalho") return "contract";
+  if (category === "cartao_cidadao" || category === "titulo_residencia" || category === "passaporte") return "id_card";
+  if (category === "nif") return "nif";
+  if (category === "comprovativo_iban") return "iban";
+  return "other";
+}
+
 /** `org_id` é carimbado pelo `ScopedQuery`, nunca escrito aqui. */
-function documentToRow(doc: Document): Record<string, unknown> {
+export function documentToRow(doc: Document): Record<string, unknown> {
   const p = doc.toProps();
   return {
     id: p.id,
+    document_type: legacyDocumentType(p.category),
     owner_type: p.ownerType,
     employee_id: p.ownerType === "employee" ? p.ownerId : null,
     category: p.category,
