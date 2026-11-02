@@ -1,0 +1,22 @@
+-- Rollback de 20261213100000_drop_legacy_hr_tables.sql
+--
+-- Apagar tabelas não se desfaz com SQL simples. Para repor:
+-- 1. Recriar a estrutura reaplicando, por esta ordem, as partes destas tabelas nas
+--    migrações que as criaram e alteraram (todas idempotentes):
+--    20260822141653_remote_schema.sql (hr_work_shifts, hr_shift_attendance,
+--    hr_leave_requests, hr_leave_balances, hr_employee_payments),
+--    20260908100002_composite_fk_hr_banking_phase2c.sql, 20260926180000_hr_schedules.sql,
+--    20260927150000_hr_attendance_corrections.sql, 20260927190000_hr_attendance_correction_types_v2.sql,
+--    20261007100000_hr_shift_templates.sql, 20261007120000_hr_shift_automations.sql,
+--    20261008100000_employee_portal_foundation.sql, 20261008120000_hr_shift_template_group.sql,
+--    20261009120000_hr_absences_and_portal_requests.sql,
+--    20261010100000_attendance_correction_absence_link.sql (e as restantes que mencionem estas tabelas).
+-- 2. Reinserir os dados a partir da cópia feita antes de apagar (um JSON por tabela,
+--    1199 linhas no total), guardada FORA do repositório pelo utilizador
+--    (dados pessoais — RGPD): pasta «arquivo-rh-antigo-2026-11-02» em Documentos.
+--    Inserir primeiro as tabelas sem dependências (templates, rotações, regras,
+--    pedidos, saldos, pagamentos), depois hr_work_shifts, hr_shift_attendance,
+--    hr_attendance_corrections, hr_attendance_punch_events, automações e fechos.
+--
+-- O código do RH antigo também saiu (#150/#178): repor os dados não volta a ligar ecrãs.
+select 1;

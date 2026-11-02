@@ -153,36 +153,14 @@ export const TABLE_REGISTRY = {
   // Extratos das plataformas de delivery: da empresa, sem loja.
   delivery_platform_statements: { organizationColumn: "org_id", locationBearing: false },
   delivery_product_mappings: { organizationColumn: "org_id", locationBearing: false },
-  hr_attendance_corrections: { organizationColumn: "org_id", locationBearing: false },
-  // Fase 2.1: regras globais à organização, nunca por local.
-  hr_attendance_rules: { organizationColumn: "org_id", locationBearing: false },
   hr_audit_logs: { organizationColumn: "org_id", locationBearing: false },
-  // RH-03: location_id nullable — um dia de folga da escala base não tem loja.
-  hr_base_schedule_templates: { organizationColumn: "org_id", locationBearing: true },
   hr_document_categories: { organizationColumn: "org_id", locationBearing: false },
   hr_employee_documents: { organizationColumn: "org_id", locationBearing: false },
-  hr_employee_payments: { organizationColumn: "org_id", locationBearing: false },
   hr_employees: { organizationColumn: "org_id", locationBearing: false },
   // Base Organizacional — Cargos (ticket 07) e outros locais autorizados (ticket 08).
   hr_positions: { organizationColumn: "org_id", locationBearing: false },
   hr_employee_locations: { organizationColumn: "org_id", locationBearing: true },
-  hr_leave_balances: { organizationColumn: "org_id", locationBearing: false },
-  // Portal do Colaborador: evidência de cada toque de Entrada/Saída, location_id NOT NULL.
-  hr_attendance_punch_events: { organizationColumn: "org_id", locationBearing: true },
-  hr_leave_requests: { organizationColumn: "org_id", locationBearing: false },
-  // Portal do Colaborador (ticket 12): justificar falta / pedir folga — por colaborador, sem local.
-  hr_portal_requests: { organizationColumn: "org_id", locationBearing: false },
-  // Fase 2: fecho é por organização inteira, nunca por local.
-  hr_monthly_closures: { organizationColumn: "org_id", locationBearing: false },
   hr_public_holidays: { organizationColumn: "org_id", locationBearing: false },
-  // D3/D4: event-grain table, location_id NOT NULL.
-  hr_shift_attendance: { organizationColumn: "org_id", locationBearing: true },
-  hr_shift_rotations: { organizationColumn: "org_id", locationBearing: true },
-  hr_shift_templates: { organizationColumn: "org_id", locationBearing: true },
-  hr_shift_automations: { organizationColumn: "org_id", locationBearing: true },
-  hr_shift_automation_issues: { organizationColumn: "org_id", locationBearing: false },
-  // D3/D4: event-grain table, location_id NOT NULL.
-  hr_work_shifts: { organizationColumn: "org_id", locationBearing: true },
   // D3/D4/D5: the allocation grain — location_id nullable (org-wide cost vs.
   // allocated to one store), not absent.
   invoice_lines: { organizationColumn: "org_id", locationBearing: true },
