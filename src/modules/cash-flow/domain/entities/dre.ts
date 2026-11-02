@@ -22,6 +22,22 @@ export interface RestaurantSales extends SalesFigures {
  * preço de tabela e custos, sem IVA, já só com a parte do mês. Quando existe, a DRE usa-o em vez de
  * reconstituir a plataforma pelo banco (F3b).
  */
+/**
+ * SAF-T do AirMenu do mês (faturado das entregas, com IVA, menos notas de crédito = o que os clientes
+ * pagaram). Sem extrato de uma plataforma, a venda dela sai daqui em vez do banco (2026-11-02).
+ */
+export interface DeliverySaft {
+  invoicedCents: number;
+  /** IVA médio das vendas no SAF-T (ex.: 0,1325). */
+  vatRate: number;
+}
+
+/** O que o módulo `delivery-platforms` diz do mês: extratos por plataforma e o SAF-T do AirMenu. */
+export interface DeliveryMonth {
+  platforms: DeliveryStatementResult[];
+  saft: DeliverySaft | null;
+}
+
 export interface DeliveryStatementResult {
   platform: string;
   salesGrossCents: number;
@@ -44,7 +60,7 @@ export interface DeliveryStatementResult {
  */
 export interface DrePlatformRevenue {
   platform: string;
-  source: "statements" | "bank";
+  source: "statements" | "bank" | "saft";
   /** Liquidado no banco (já sem comissão nem marketing). */
   receivedCents: number;
   /** Marketing sem IVA: dos extratos, ou lançado à mão (banco). */

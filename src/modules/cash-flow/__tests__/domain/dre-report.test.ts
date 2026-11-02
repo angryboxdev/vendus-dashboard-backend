@@ -140,6 +140,52 @@ describe("buildDreReport", () => {
     );
   });
 
+  it("SAF-T do AirMenu sem extratos: a venda das plataformas é a do SAF-T (repartida pelo recebido), não a do banco", () => {
+    // Faturado 8 000 € com IVA a 13,25%; no banco só chegaram 3 000 + 1 000 (liquidações do fim do mês em falta).
+    const report = buildDreReport(
+      input({
+        credits: [credit({ id: "u", amountCents: 300_000, platform: "uber_eats" }), credit({ id: "g", amountCents: 100_000, platform: "glovo" })],
+        deliverySaft: { invoicedCents: 800_000, vatRate: 0.1325 },
+      }),
+    );
+    const uber = report.revenue.byPlatform.find((p) => p.platform === "uber_eats")!;
+    const glovo = report.revenue.byPlatform.find((p) => p.platform === "glovo")!;
+    expect(report.revenue.platformsGrossCents).toBe(800_000);
+    expect(uber).toMatchObject({ source: "saft", grossCents: 600_000, netCents: Math.round(600_000 / 1.1325), receivedCents: 300_000 });
+    expect(glovo).toMatchObject({ source: "saft", grossCents: 200_000 });
+    expect(uber.salesVatCents).toBe(600_000 - uber.netCents);
+    // Comissão pela taxa dos parâmetros sobre a venda (30% da venda com IVA, por omissão).
+    expect(uber.commissionNetCents).toBe(180_000);
+  });
+
+  it("SAF-T com uma plataforma com extrato: as outras ficam com o que sobra do faturado", () => {
+    const report = buildDreReport(
+      input({
+        credits: [credit({ id: "g", amountCents: 50_000, platform: "glovo" })],
+        deliveryStatements: [
+          { platform: "uber_eats", salesGrossCents: 113_000, salesNetCents: 100_000, salesVatCents: 11_700, promotionsNetCents: 10_000, commissionNetCents: 0, commissionVatCents: 0, marketingNetCents: 0, marketingVatCents: 0, otherNetCents: 0 },
+        ],
+        // Clientes da Uber pagaram 100 000 − 10 000 + 11 700 = 101 700; sobram 98 300 para a Glovo.
+        deliverySaft: { invoicedCents: 200_000, vatRate: 0.13 },
+      }),
+    );
+    expect(report.revenue.byPlatform.find((p) => p.platform === "uber_eats")!.source).toBe("statements");
+    expect(report.revenue.byPlatform.find((p) => p.platform === "glovo")).toMatchObject({ source: "saft", grossCents: 98_300 });
+  });
+
+  it("SAF-T já coberto pelos extratos (nada sobra): as plataformas sem extrato continuam pelo banco", () => {
+    const report = buildDreReport(
+      input({
+        credits: [credit({ id: "g", amountCents: 50_000, platform: "glovo" })],
+        deliveryStatements: [
+          { platform: "uber_eats", salesGrossCents: 113_000, salesNetCents: 100_000, salesVatCents: 11_700, promotionsNetCents: 10_000, commissionNetCents: 0, commissionVatCents: 0, marketingNetCents: 0, marketingVatCents: 0, otherNetCents: 0 },
+        ],
+        deliverySaft: { invoicedCents: 101_700, vatRate: 0.13 },
+      }),
+    );
+    expect(report.revenue.byPlatform.find((p) => p.platform === "glovo")!.source).toBe("bank");
+  });
+
   it("marketing lançado à mão aumenta o bruto e entra como custo da plataforma", () => {
     const parameters = { ...DEFAULT_DRE_PARAMETERS, marketingNetCents: { uber_eats: 10_000, glovo: 5_000, bolt_food: 0 }, source: "month" as const };
     const report = buildDreReport(input({ parameters, credits: [credit({ amountCents: 63_100, platform: "uber_eats" })] }));
