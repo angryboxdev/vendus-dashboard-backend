@@ -58,6 +58,6 @@ categorias, feriados e o bucket `hr-documents` são partilhadas com o Novo RH e
    único»): o interruptor saiu do catálogo e o Portal usa sempre o Novo RH;
    a picagem antiga (Portal e quiosque) é sempre recusada. O quiosque antigo
    deixa de picar até haver quiosque no Novo RH (hoje pica-se no telemóvel).
-3. Remover o frontend antigo (com redirecionamentos para `/hr/novo/*`).
-4. Remover o backend antigo e as regras `/api/hr/*` da matriz.
+3. Remover o frontend antigo (com redirecionamentos para `/hr/novo/*`). *(feito 2026-11-02, frontend #150 — `/kiosk` passa a abrir o Portal)*
+4. Remover o backend antigo e as regras `/api/hr/*` da matriz. *(feito 2026-11-02: `modules/hr`, `routes/hr*` e `services/hr*` apagados; os Cargos passaram para o módulo `positions` em `/api/novo-rh/positions`; o cron `hr-shift-automations` responde sem fazer nada até o agendamento externo ser apagado. Ficam os atalhos `/api/hr/*` dos documentos — servidos pelo módulo `documents` — e as regras da matriz que os cobrem.)*
 5. Arquivar e apagar as tabelas só do RH antigo (com rollback), depois da validação da retenção.
