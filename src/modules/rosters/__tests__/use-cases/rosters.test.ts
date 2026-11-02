@@ -268,6 +268,32 @@ describe("Escalas — limpar pendentes da semana e repor (desfazer)", () => {
     expect((await uc.clearPending(ORG, BOSS, roster.id, { employeeId: "e1", from: "2026-10-19", to: "2026-10-25", shiftIds: [a.shift.id] })).removed.map((s) => s.id)).toEqual([a.shift.id]);
   });
 
+  test("limpar com os publicados: motivo obrigatório, uma versão e aviso ao colaborador", async () => {
+    const { uc, repo, notifier, audit } = setup();
+    const { roster, manha, tarde } = await rosterWithTemplates(uc);
+    const pub1 = await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-19", manha.id));
+    const pub2 = await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-20", manha.id));
+    const keep = await uc.addShift(ORG, BOSS, roster.id, shift("e2", "2026-10-19", manha.id));
+    await uc.publish(ORG, BOSS, roster.id, { reason: null, confirm: true });
+    const draft = await uc.addShift(ORG, BOSS, roster.id, shift("e1", "2026-10-21", tarde.id));
+    const week = { employeeId: "e1", from: "2026-10-19", to: "2026-10-25" };
+
+    // Sem motivo: recusa e nada muda (nem o rascunho).
+    await expect(uc.clearPending(ORG, BOSS, roster.id, { ...week, published: { reason: " ", confirm: false } })).rejects.toMatchObject({ field: "reason" });
+    expect(repo.shifts.find((s) => s.id === draft.shift.id)!.deleted).toBe(false);
+
+    const r = await uc.clearPending(ORG, BOSS, roster.id, { ...week, published: { reason: "Mudança de horário", confirm: false } });
+    expect(r.removed.map((s) => s.id)).toEqual([draft.shift.id]);
+    expect(r.retired.map((s) => s.id).sort()).toEqual([pub1.shift.id, pub2.shift.id].sort());
+    expect(r.publication).toMatchObject({ version: 2, reason: "Mudança de horário" });
+    expect(r.publication!.changes.every((c) => c.after === null && c.employeeId === "e1")).toBe(true);
+    const row = (id: string) => repo.shifts.find((s) => s.id === id)!;
+    expect([pub1.shift.id, pub2.shift.id].every((id) => row(id).deleted && row(id).published === null && !row(id).dirty)).toBe(true);
+    expect(row(keep.shift.id).published).not.toBeNull();
+    expect(notifier.sent.at(-1)).toEqual({ userIds: ["u-e1"], title: "Turnos retirados: Mudança de horário" });
+    expect(audit.actions.at(-1)).toEqual({ action: "rosters.shift.clear_published", reason: "Mudança de horário" });
+  });
+
   test("repor um turno que agora se sobrepõe a outro é recusado; período inválido é 400", async () => {
     const { uc } = setup();
     const { roster, manha } = await rosterWithTemplates(uc);

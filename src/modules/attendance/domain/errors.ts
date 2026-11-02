@@ -14,7 +14,7 @@ export class AttendanceValidationError extends Error {
 export class AttendanceConflictError extends Error {
   constructor(
     message: string,
-    readonly code: "already_decided" | "refusal_window_closed" | "not_refusable" | "same_state" | "already_resolved" | "period_closed" | "duplicate_name" | "stale",
+    readonly code: "already_decided" | "refusal_window_closed" | "not_refusable" | "same_state" | "already_resolved" | "period_closed" | "duplicate_name" | "stale" | "already_voided",
   ) {
     super(message);
     this.name = "AttendanceConflictError";

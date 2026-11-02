@@ -69,6 +69,23 @@ describe("API /api/me/clock e /api/novo-rh/attendance", () => {
     expect((await r.json()).type).toBe("/problems/ip_not_allowed");
   });
 
+  test("conferência: semana da equipa, aplicar (Idempotency-Key obrigatório) e anular", async () => {
+    user = "u-boss";
+    ctx.plan = () => ({ theoreticalMinutes: 60, plannedStart: "08:00", plannedEnd: "09:00", nightSchedule: false, excused: false, plannedRanges: [{ start: "08:00", end: "09:00" }] });
+    const week = await (await fetch(`${base}/novo-rh/attendance/conference?from=2026-10-05&to=2026-10-11`)).json();
+    expect(week.people.map((p: { id: string }) => p.id)).toEqual(["e1", "e2", "e9"]);
+    expect(week.days).toHaveLength(21);
+    const body = { decision: "fulfilled", scope: "day", items: [{ employeeId: "e1", workDate: "2026-10-06" }], reason: "Erro de picagem confirmado pelo gestor", declared: true };
+    expect((await post("/novo-rh/attendance/conference/apply", body, null)).status).toBe(400);
+    const applied = await (await post("/novo-rh/attendance/conference/apply", body)).json();
+    expect(applied.applied).toMatchObject([{ employeeId: "e1", workDate: "2026-10-06", validatedSeconds: 3600 }]);
+    expect((await post("/novo-rh/attendance/conference/apply", { ...body, decision: "nope" })).status).toBe(400);
+    expect((await post(`/novo-rh/attendance/conference/reviews/${applied.applied[0].reviewId}/void`, { reason: "" })).status).toBe(400);
+    expect((await post(`/novo-rh/attendance/conference/reviews/${applied.applied[0].reviewId}/void`, { reason: "Engano" })).status).toBe(200);
+    inScope = false;
+    expect((await (await fetch(`${base}/novo-rh/attendance/conference?from=2026-10-05&to=2026-10-11`)).json()).people).toEqual([]);
+  });
+
   test("RE_10_http_correcao_sem_motivo_e_400", async () => {
     user = "u-boss";
     const r = await post("/novo-rh/attendance/revisions", { employeeId: "e1", operation: "add", occurredAt: "2026-10-10T08:00:00.000Z", segmentType: "work", reason: "" });

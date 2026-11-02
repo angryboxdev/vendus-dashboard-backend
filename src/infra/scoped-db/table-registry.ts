@@ -263,6 +263,8 @@ export const TABLE_REGISTRY = {
   attendance_adjustments: { organizationColumn: "org_id", locationBearing: false },
   attendance_incidents: { organizationColumn: "org_id", locationBearing: false },
   attendance_recalc_queue: { organizationColumn: "org_id", locationBearing: false },
+  // Assiduidade V2: decisão de conferência por dia (ADR-0043).
+  attendance_day_reviews: { organizationColumn: "org_id", locationBearing: false },
   // Novo RH Fase 5: ausências, aprovações e saldos.
   absence_types: { organizationColumn: "org_id", locationBearing: false },
   approval_flows: { organizationColumn: "org_id", locationBearing: false },
