@@ -1,4 +1,4 @@
-import type { FiscalIdentityInput, FiscalKey, MissingField } from "../entities/fiscal-identity.js";
+import type { FiscalIdentityInput, FiscalKey, HistoricalDocument, MissingField } from "../entities/fiscal-identity.js";
 
 /**
  * Regras puras da identidade fiscal. Não inventa: NIF sem país explícito só
@@ -80,4 +80,14 @@ export function fiscalKeyOf(input: FiscalIdentityInput): { key: FiscalKey } | { 
   if (!series) missing.push("series_number");
   if (!tax || !series) return { missing };
   return { key: { buyerKey: buyerKeyOf(input.buyerLegalEntityId), issuerCountry: tax.country, issuerTaxId: tax.taxId, documentType: input.documentType, seriesNumberNorm: series } };
+}
+
+/**
+ * Documento do histórico com o NIF da ficha do fornecedor quando o lido falta ou é inválido (erro de
+ * leitura). Um NIF lido válido nunca é trocado; uma ficha sem NIF válido não muda nada.
+ */
+export function withSupplierTaxId(doc: HistoricalDocument): HistoricalDocument {
+  if (!doc.supplierTaxId || normalizeTaxId(doc.input.issuerTaxId, doc.input.issuerCountry)) return doc;
+  if (!normalizeTaxId(doc.supplierTaxId, null)) return doc;
+  return { ...doc, input: { ...doc.input, issuerTaxId: doc.supplierTaxId, issuerCountry: null } };
 }

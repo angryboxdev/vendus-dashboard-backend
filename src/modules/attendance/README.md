@@ -29,7 +29,7 @@ Tabelas `clock_events` (append-only, trigger), `clock_revisions` (só o estado
 de recusa muda), `clock_correction_requests`, `attendance_days` (versões),
 `attendance_adjustments`, `attendance_incidents` (únicos por dia/tipo/origem),
 `attendance_recalc_queue` (migração `20261015100000`), `attendance_day_reviews`
-(decisões de conferência, migração `20261210100000`, ADR-0043). Lê o plano diário do
+(decisões de conferência, migração `20261212100000`, ADR-0043). Lê o plano diário do
 time-base e as regras do settings. Não trata ausências (Fase 5) nem banco de
 horas (Fase 6), que vai ler os ajustes daqui.
 

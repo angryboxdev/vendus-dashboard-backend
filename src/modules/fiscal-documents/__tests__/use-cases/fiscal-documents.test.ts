@@ -155,4 +155,20 @@ describe("Migração do histórico (simulação primeiro)", () => {
     expect(again).toMatchObject({ registered: 0, alreadyRegistered: 2 });
     expect(repo.rows).toHaveLength(2);
   });
+
+  test("NIF lido inválido (dígitos trocados): usa o NIF da ficha do fornecedor; um lido válido nunca é trocado", async () => {
+    const { uc } = setup();
+    const misread = NIF.slice(0, 7) + NIF[8] + NIF[7];
+    const r = await uc.backfill(
+      ORG,
+      "admin",
+      [
+        { origin: "finance", id: "inv-x", input: doc({ issuerTaxId: misread }), supplierTaxId: NIF, createdAt: "2026-02-01", label: "lido mal" },
+        { origin: "finance", id: "inv-y", input: doc({ issuerTaxId: misread, seriesNumber: "FT 2026/7" }), supplierTaxId: misread, createdAt: "2026-02-02", label: "ficha também má" },
+      ],
+      true,
+    );
+    expect(r.registered).toBe(1);
+    expect(r.incomplete.map((i) => i.id)).toEqual(["inv-y"]);
+  });
 });

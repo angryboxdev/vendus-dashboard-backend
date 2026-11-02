@@ -335,6 +335,7 @@ const fiscalDocumentsRouter = fiscalDocumentsModule.routerWith({
           id: r.id,
           createdAt: r.created_at,
           label: `${r.supplier_name} — ${r.invoice_number} (${r.invoice_date})`,
+          supplierTaxId: r.supplier_id ? (nifOf.get(r.supplier_id) ?? null) : null,
           input: { buyerLegalEntityId: null, issuerTaxId: r.supplier_nif_snapshot || (r.supplier_id ? (nifOf.get(r.supplier_id) ?? null) : null), issuerCountry: null, documentType: r.document_type, seriesNumber: r.invoice_number || null, atcud: null },
         })),
         ...((imp.data ?? []) as unknown as ImpRow[]).map((r) => ({

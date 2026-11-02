@@ -2,7 +2,7 @@ import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { BackfillReport, ClaimOptions, ClaimResult, FiscalIdentity, FiscalIdentityInput, FiscalKey, FiscalOrigin, HistoricalDocument, IdentityResolution } from "../../domain/entities/fiscal-identity.js";
 export type { BackfillReport, ClaimOptions, ClaimResult, HistoricalDocument } from "../../domain/entities/fiscal-identity.js";
 import { FiscalKeyTakenError, type FiscalAuditPort, type FiscalIdentityRepositoryPort, type NewFiscalIdentity } from "../../domain/ports/out/fiscal-identity.ports.js";
-import { fiscalKeyOf, numberDigits } from "../../domain/services/fiscal-key.service.js";
+import { fiscalKeyOf, numberDigits, withSupplierTaxId } from "../../domain/services/fiscal-key.service.js";
 
 const keyString = (k: FiscalKey) => `${k.buyerKey}|${k.issuerCountry}|${k.issuerTaxId}|${k.documentType}|${k.seriesNumberNorm}`;
 
@@ -121,7 +121,8 @@ export class FiscalDocumentsUseCases {
   async backfill(org: OrganizationId, actor: string, docs: HistoricalDocument[], dryRun: boolean): Promise<BackfillReport> {
     const report: BackfillReport = { dryRun, scanned: docs.length, registered: 0, alreadyRegistered: 0, incomplete: [], duplicates: [] };
     const groups = new Map<string, { key: FiscalKey; docs: HistoricalDocument[] }>();
-    for (const d of [...docs].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+    for (const original of [...docs].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+      const d = withSupplierTaxId(original);
       const k = fiscalKeyOf(d.input);
       if ("missing" in k) {
         report.incomplete.push({ origin: d.origin, id: d.id, label: d.label, missing: k.missing });

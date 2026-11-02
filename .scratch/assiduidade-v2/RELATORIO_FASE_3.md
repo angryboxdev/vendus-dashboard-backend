@@ -5,7 +5,7 @@ Data: 2026-10-29. Aprovação: «aprovo pode integrar e avançar» (pré-visuali
 ## Alterações
 
 ### Backend (`rh`)
-- Migração `20261210100000_attendance_day_reviews.sql` (idempotente, RLS `org_id = current_org()`, índice único parcial por dia ativo) + rollback `docs/migrations/rollback/20261210100000_attendance_day_reviews.sql`; tabela registada em `table-registry.ts`.
+- Migração `20261212100000_attendance_day_reviews.sql` (idempotente, RLS `org_id = current_org()`, índice único parcial por dia ativo) + rollback `docs/migrations/rollback/20261212100000_attendance_day_reviews.sql`; tabela registada em `table-registry.ts`.
 - Domínio: `domain/entities/day-review.ts`, `domain/services/day-review.ts` (`applyReview`, `reviewState`, `classifyReview`).
 - Motor: `compute()` aplica a decisão ativa; `hashFor` inclui a decisão (versão nova + ajuste); `DayPlan` ganha `plannedRanges`/`restDay`/`holiday` (informativos, fora da impressão).
 - Casos de uso: `conferenceWeek`, `applyConference`, `voidConferenceReview`; `boardMany` passa a usar `preload` (também lê decisões).

@@ -52,7 +52,7 @@ sem atomicidade.
 
 ## Consequências
 
-- Migração `20261210100000_attendance_day_reviews.sql` (rollback em
+- Migração `20261212100000_attendance_day_reviews.sql` (rollback em
   `docs/migrations/rollback/`).
 - Rotas `GET /api/novo-rh/attendance/conference`,
   `POST …/conference/apply`, `POST …/conference/reviews/:id/void`

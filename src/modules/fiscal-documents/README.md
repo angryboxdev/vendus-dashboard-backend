@@ -69,6 +69,7 @@ identidade). Migração do histórico com simulação e relatório.
 
 ## Design decisions (ADR summary)
 
+- NIF lido inválido no histórico (2026-11-01): erros de leitura (dígitos trocados) deixavam 64 de 170 documentos «incompletos»; o backfill usa então o NIF da ficha do fornecedor (`HistoricalDocument.supplierTaxId`, `withSupplierTaxId`). Um NIF lido válido nunca é trocado; o registo de faturas novas continua a avisar «NIF inválido» (não troca às escondidas).
 - ADR-0039: unicidade numa tabela própria (não nas faturas históricas); histórico por backfill com simulação; o import legado do Stock deixa de substituir importações (não apaga movimentos) e exige identidade completa.
 
 ## How to test
