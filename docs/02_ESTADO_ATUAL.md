@@ -10,6 +10,7 @@ Atualizado: 2026-10-26 (**«Movimentos recorrentes»** — ramo `financeiro-regr
 - **Conciliação bancária paga automaticamente** (2026-10-27): fatura conciliada → paga em cadeia (conta a pagar + ocorrência), anular desfaz só o que a conciliação pagou (#151); ocorrência com fatura concilia-se pela fatura e eliminar extrato reabre ocorrências (#152); «Movimentos recorrentes» ligados a uma recorrência sem fatura (rendas, salários) pagam a ocorrência do mês — `payment_period_offset` 0/-1 na recorrência, `recurrence_id` na regra (migração `20261202100000`).
 
 ## Em desenvolvimento
+- **Classificar movimentos sem os conciliar** (2026-10-29, `.scratch/classificar-movimentos/spec.md`) — em produção: backend #171 → `0ca9cd0` (migração `20261209100000_bank_rule_classify_only` aplicada), frontend #145 → `f371d3d`. Painel com «Classificar» / «Conciliar com documento» / «Justificar sem documento»; «Classificado · aguarda fatura» = `pendente_de_documento`; % classificado; regras «só classificar». Conciliar com a fatura limpa a classificação própria (na DRE valem a categoria e o IVA da fatura). **F3 (dados, 2026-10-29):** 105 saídas «justificado / recibo» sem documento passaram a classificadas e 7 regras a `classify_only` (decisão do utilizador; ficaram justificados salários, encargos, taxas bancárias, pagamento do cartão de crédito, DUC e «Fora da DRE»). Cópia do estado anterior guardada fora do repo (scratchpad da sessão). Corrigido a 2026-11-01: a regra de salário que estava em «Encargos» passou a «Salários» (regra + 6 movimentos). Os DUC (800 €/mês, fev.–jul.) são a renda: «Renda / Aluguel» está certo. Conta da CGD renomeada para «Conta principal». As 3 importações de teste de 2025 foram apagadas.
 - **Extratos: «Relatório de movimentos» do Millennium em TXT** (2026-10-28) — em produção: backend #170 → `4718f98`, frontend #144 → `71f3e40`. Conciliar o mês em curso antes do extrato oficial, com os saldos verdadeiros (validados pelo rodapé do ficheiro). Por confirmar quando chegar o extrato oficial de outubro: que os movimentos do TXT não se duplicam (correspondência pelo saldo). Ficaram em produção 3 importações de teste com datas de 2025 (set. e out.) que o utilizador vai apagar.
 - **Controle geral + saldo acumulado da DRE** (2026-10-28; `.scratch/controle-geral/spec.md`) — fase 1 em produção (frontend #142: coluna recolhível de saldo acumulado). Fase 2 em produção (backend #169 → `1960243`, migração `20261208100000` aplicada; frontend #143 → `aa1c21a`): página «Controle geral» (`/dre/controle-geral`, botão na DRE) com despesas por grupo DC/DF/DV/DP/DI/DIVA/DE com IVA, gráfico circular, IVA e resumo; clicar num grupo abre os pagamentos; DE e renda variável (% da faturação acima do limite; ex.: 8% acima de 19 000 €) nos parâmetros do mês — migração `20261208100000_dre_loan_expense` + rollback aplicada. Agrupamento a rever com o utilizador.
 - **Parâmetros do mês × extratos das plataformas** (2026-10-28) — em produção: frontend #141 → `63df50b`. Plataformas com extratos no mês: marketing só para leitura (pelos extratos) e taxas de delivery com aviso de a que plataformas se aplicam; a DRE já ignorava os parâmetros nessas plataformas (sem duplicação).
@@ -63,14 +64,14 @@ Atualizado: 2026-10-26 (**«Movimentos recorrentes»** — ramo `financeiro-regr
 5. Dívida pequena: o inventário da matriz (`src/tools/authz-matrix/route-inventory.ts`) não vê rotas registadas com uma variável não-template (ex.: `document-categories` com `prefix`).
 6. Worktree `vendus-dashboard-frontend-preview` (ramo `preview/dashboard-premium-v2`) tem alterações por commitar — perguntar antes de apagar.
 
-**Financeiro/Stock (em pausa):**
+**Financeiro/Stock (retomado 2026-11-01; F1–F3 em produção — F3a #112/#85, F3b #113/#86/#87, F3c #115/#89):**
+0. Próxima fase: **F4** (calendário de fornecedores; aprendizagem controlada) — `task-mestre-v1.2.md` §F4.
 1. Validar a F2 no browser em produção (checklist: três modos sem perda; «Por valores» 100+250+300 = 650 € fecha, 649/651 bloqueiam; guardar rascunho → reabrir pela lista → lançar; «Decidir no documento» e desmarcar «Enviar para Stock» com motivo; «Total a pagar | Em atraso» com filtros; Centros de Custo → Aplicação em Faturas).
 2. Pendências operacionais da F1 (abaixo).
 3. Com autorização do utilizador: iniciar a F3.
 
 ## Perguntas em aberto (voltar a perguntar ao utilizador)
 - **Ecrãs retirados do menu** (horários, feriados, férias, tipos de ausência, fluxos — hoje só pela API): o utilizador pediu para voltar a perguntar depois.
-- **Login premium:** (1) o Design System não tem o azul vivo da referência — usado navy; aprovar token azul? (2) identidade no cartão: logótipo Mezza ERP + «Angry Box Hub» — qual fica? (3) há um fundo limpo original (sem painéis) para substituir o gerado? (4) em dispositivos fracos, retirar realce de linha/elevação?
 
 ## Decisões de 2026-10-23
 - **Localização:** «Bloquear entradas fora da zona do centro» só bloqueia a **entrada**; saída e pausas fora do raio passam (`punch-policy.ts`). «Exigir localização» continua a valer para todas as marcações. **Atualização 2026-10-24** (utilizador: picou fora do raio): o bloqueio passa a vir **ligado por omissão** e deixa de depender de «Exigir localização» (antes C9) — na entrada a localização é lida só para medir a distância e só se guarda com «Exigir localização» (D7). A recusa mostra a distância, como no Portal antigo: «Está fora da zona do centro (a cerca de 350 m). Aproxime-se e tente novamente.» Uma organização que tenha gravado explicitamente «desligado» continua desligada (Configurações → Funcionalidades).
@@ -83,8 +84,8 @@ Atualizado: 2026-10-26 (**«Movimentos recorrentes»** — ramo `financeiro-regr
 - **Financeiro/Stock:** fica para depois.
 
 ## Pendências operacionais (produção)
-- Correr `POST /api/fiscal-documents/backfill` com `{ "dryRun": true }` e rever (precisa de sessão de gestor).
-- `GET /api/invoices/integrity/payable-duplicates`: se houver duplicados históricos, o índice único de contas a pagar não foi criado — limpar e reexecutar a migração `20261030130000`.
+- Backfill fiscal: simulação feita em 2026-11-01 (só leitura) — 170 documentos, 0 duplicados; com o NIF da ficha do fornecedor (correção desta data) ficam 114 por registar, 18 já registados e 38 incompletos (29 Financeiro, 9 Stock: fornecedor sem NIF válido na ficha ou fatura sem fornecedor). Falta correr a execução real (`{ "dryRun": false }`) com sessão de gestor, depois de publicada a correção.
+- Contas a pagar duplicadas: 0 em 2026-11-01. A migração `20261210100000` volta a tentar o índice único (idempotente) — garante-o ao publicar.
 - Novo RH: decisões humanas D0–D12 (`docs/relatorios/novo-rh-resumo-final.md`); MFA TOTP do Supabase só é necessária se a empresa ligar «Autenticação de dois fatores na gestão» (desligada por omissão desde 2026-10-20).
 
 ## Problemas conhecidos (transversais)

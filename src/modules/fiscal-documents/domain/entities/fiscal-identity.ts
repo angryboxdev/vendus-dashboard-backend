@@ -75,6 +75,11 @@ export interface HistoricalDocument {
   /** id da fatura (finance) ou da importação (stock). */
   id: string;
   input: FiscalIdentityInput;
+  /**
+   * NIF da ficha do fornecedor: usado só quando o NIF lido no documento falta ou é inválido (erro de
+   * leitura — dígitos trocados). Nunca substitui um NIF lido válido.
+   */
+  supplierTaxId?: string | null;
   createdAt: string;
   label: string;
 }
