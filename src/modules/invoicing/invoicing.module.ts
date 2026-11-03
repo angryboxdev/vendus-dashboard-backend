@@ -1,11 +1,14 @@
+import { createScopedQuery, type ScopedQueryFactory } from "../../infra/scoped-db/scoped-query.js";
 import { LisbonClock } from "./adapters/out/lisbon-clock.js";
 import { RsaSha1Signer } from "./adapters/out/rsa-sha1-signer.js";
+import { SupabaseInvoicingStore } from "./adapters/out/supabase-invoicing-store.js";
 import type { ClockPort } from "./domain/ports/out/clock.port.js";
+import type { InvoicingStorePort } from "./domain/ports/out/invoicing-store.port.js";
 import type { SignerPort } from "./domain/ports/out/signer.port.js";
 
 /**
- * Composition root da faturação certificada (F1: só o motor fiscal).
- * Ainda NÃO está ligado ao `server.ts` — não expõe rotas nem toca em BD.
+ * Composition root da faturação certificada (F1 motor fiscal + F2 persistência).
+ * Ainda NÃO está ligado ao `server.ts` — não expõe rotas.
  *
  * Configuração (variáveis de ambiente, nunca no repositório):
  * - `INVOICING_SIGNING_PRIVATE_KEY` — PEM da chave privada do produtor (RSA 1024);
@@ -29,15 +32,20 @@ export function readInvoicingConfig(env: NodeJS.ProcessEnv = process.env): Invoi
   };
 }
 
-export function createInvoicingModule(config: InvoicingConfig = readInvoicingConfig()): {
+export function createInvoicingModule(
+  config: InvoicingConfig = readInvoicingConfig(),
+  scoped: ScopedQueryFactory = createScopedQuery,
+): {
   /** null sem chave configurada: a emissão fica indisponível. */
   signer: SignerPort | null;
   clock: ClockPort;
+  store: InvoicingStorePort;
   certificateNumber: string | null;
 } {
   return {
     signer: config.privateKeyPem ? new RsaSha1Signer({ privateKeyPem: config.privateKeyPem, keyVersion: config.keyVersion }) : null,
     clock: new LisbonClock(),
+    store: new SupabaseInvoicingStore(scoped),
     certificateNumber: config.certificateNumber,
   };
 }

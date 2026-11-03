@@ -1,6 +1,6 @@
 # Spec — Faturação certificada AT (módulo `invoicing`)
 
-Status: F1 concluída (2026-11-03); próxima F2 · Ramo: `faturacao-certificada` (worktree `vendus-dashboard-backend-faturacao`)
+Status: F1 e F2 concluídas (2026-11-03); próxima F3 · Ramo: `faturacao-certificada` (worktree `vendus-dashboard-backend-faturacao`)
 Base: [plano.md](plano.md), [pesquisa-tecnico.md](pesquisa-tecnico.md), [pesquisa-juridico-processo.md](pesquisa-juridico-processo.md)
 
 ## Objetivo
@@ -29,7 +29,7 @@ Construir dentro do Mezza o motor de faturação que cumpre os requisitos da AT 
 | D3 | Preços com IVA incluído (restauração): total por taxa fixo, IVA = total × taxa / (100 + taxa), base = total − IVA | O cliente paga exatamente o preço do menu |
 | D4 | Emissão por compare-and-swap na série (RPC): ler estado → assinar na app → gravar só se a série não mudou | Sem buracos, sem bifurcar a cadeia, chave fora da BD, compatível com supabase-js |
 | D5 | Emitente = entidade legal (NIF), não a organização; série por entidade + estabelecimento + tipo | Cada NIF é um sujeito passivo |
-| D6 | `SystemEntryDate` na hora legal do estabelecimento (Europe/Lisbon por omissão), ao segundo | Formato sem fuso; servidor em UTC (fuso a confirmar com a AT) |
+| D6 | `SystemEntryDate` na hora legal de Lisboa (Europe/Lisbon), ao segundo — decisão do utilizador 2026-11-03 | Formato sem fuso; servidor em UTC |
 | D7 | Documentos emitidos imutáveis (triggers); anulação muda o estado com motivo | Despacho 1.11, 2.1; Portaria 363/2010 art. 3.º d) |
 
 ## Fases (uma de cada vez; relatório e autorização entre fases)

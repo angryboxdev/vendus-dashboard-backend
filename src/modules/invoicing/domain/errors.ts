@@ -5,3 +5,18 @@ export class InvoicingRuleError extends Error {
     this.name = "InvoicingRuleError";
   }
 }
+
+/** Outro documento entrou na série entretanto: recomeçar a partir do estado novo. */
+export class StaleSeriesError extends Error {
+  constructor(seriesRef: string) {
+    super(`A série ${seriesRef} mudou entretanto`);
+    this.name = "StaleSeriesError";
+  }
+}
+
+export class InvoicingNotFoundError extends Error {
+  constructor(what: string) {
+    super(`${what} não encontrado`);
+    this.name = "InvoicingNotFoundError";
+  }
+}

@@ -6,7 +6,7 @@
 Motor de faturação do Mezza para certificação pela AT: documentos assinados (RSA-SHA1), numerados por série, com ATCUD, QR e SAF-T. Isolado: não toca em Vendus, AirMenu, DRE, custos nem stock.
 
 ## Estado atual
-F1 feita (2026-11-03, ramo `faturacao-certificada`): domínio fiscal puro + assinador RSA + relógio, validados com os vetores oficiais da AT (cadeia de 36 documentos, hash do 1.º documento, 4 exemplos do QR). Sem rotas, sem BD, fora do `server.ts`.
+F1 feita (2026-11-03, ramo `faturacao-certificada`): domínio fiscal puro + assinador RSA + relógio, validados com os vetores oficiais da AT (cadeia de 36 documentos, hash do 1.º documento, 4 exemplos do QR). **F2 feita** (2026-11-03): migração `20261220100000_invoicing_certified_documents` (+ rollback; **não aplicada**) com séries, documentos, linhas, impostos e eventos imutáveis por trigger; RPC de emissão com compare-and-swap e de anulação; adapter `SupabaseInvoicingStore`. Sem rotas, fora do `server.ts`.
 
 ## Arquitetura
 - Código: `src/modules/invoicing/`; composição: `invoicing.module.ts`; documentação detalhada: `src/modules/invoicing/README.md`.
@@ -22,4 +22,4 @@ Ver «Design decisions» no README do módulo.
 Ver «Known gaps» no README do módulo.
 
 ## Próximos trabalhos
-F2 — persistência imutável e emissão compare-and-swap (`.scratch/certificacao-at/issues/02-persistencia-imutavel.md`).
+F3 — casos de uso e API de emissão (`.scratch/certificacao-at/issues/03-emissao-api.md`).

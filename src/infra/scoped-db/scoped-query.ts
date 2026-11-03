@@ -116,6 +116,42 @@ export class ScopedQuery {
   }
 
   /**
+   * Módulo `invoicing` — emissão de um documento fiscal assinado numa só
+   * transação, com compare-and-swap no fim da cadeia da série (`P0001` =
+   * série mudou entretanto). Ver `20261220100000_invoicing_certified_documents.sql`.
+   */
+  issueInvoicingDocument(input: {
+    seriesRef: string;
+    expectedLastSequence: number;
+    expectedLastHash: string | null;
+    document: Record<string, unknown>;
+    lines: Record<string, unknown>[];
+    taxes: Record<string, unknown>[];
+    actor: string;
+  }) {
+    return this.client.rpc("invoicing_issue_document", {
+      p_org_id: this.organizationId,
+      p_series_ref: input.seriesRef,
+      p_expected_last_sequence: input.expectedLastSequence,
+      p_expected_last_hash: input.expectedLastHash,
+      p_document: input.document,
+      p_lines: input.lines,
+      p_taxes: input.taxes,
+      p_actor: input.actor,
+    });
+  }
+
+  /** Módulo `invoicing` — anulação (estado A) com motivo; mesma migração. */
+  cancelInvoicingDocument(documentId: string, reason: string, actor: string) {
+    return this.client.rpc("invoicing_cancel_document", {
+      p_org_id: this.organizationId,
+      p_document_id: documentId,
+      p_reason: reason,
+      p_actor: actor,
+    });
+  }
+
+  /**
    * Módulo `stock-count` — materializa o escopo de uma sessão em linhas
    * (idempotente, `ON CONFLICT DO NOTHING`), verifica sobreposição com
    * outra sessão ativa na mesma loja. Ver
