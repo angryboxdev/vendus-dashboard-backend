@@ -250,7 +250,10 @@ app.use("/api", cashClosingsModule.publicRouter);
 
 // KDS — public (kitchen screen, no login needed)
 // Recebe o eventBus do air-menu para emitir pedidos AirMenu via SSE em tempo real
-const kdsModule = createKdsModule({ eventBus: airMenuModule.eventBus });
+const kdsModule = createKdsModule({
+  eventBus: airMenuModule.eventBus,
+  rehydrate: { getOrders: airMenuModule.getOrders, enterpriseId: airMenuClosingEnterpriseId ?? ENV.AIRMENU_ENTERPRISE_ID },
+});
 app.use("/api", kdsModule.router);
 
 // Location credentials module (hexagonal) — deviceRouter has no user auth:

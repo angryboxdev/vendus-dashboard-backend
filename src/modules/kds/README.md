@@ -151,7 +151,7 @@ Esta ligação acontece **uma vez por processo**, ao nível do módulo — não 
 ## Decisões de design
 
 - **Dois tipos de pedido, um único stream SSE**: Vendus e AirMenu têm origens e ciclos de vida diferentes, mas o frontend recebe `event: delivery` para ambos — o frontend distingue pela propriedade `source`.
-- **Estado AirMenu em memória**: pedidos AirMenu chegam via webhook e não existem numa base de dados acessível. O `AirMenuKdsStoreAdapter` é o único source of truth durante a sessão do servidor. Perde-se ao reiniciar — dívida conhecida.
+- **Estado AirMenu em memória**: pedidos AirMenu chegam via webhook e não existem numa base de dados acessível. O `AirMenuKdsStoreAdapter` é o único source of truth durante a sessão do servidor. Perde-se ao reiniciar, por isso `createKdsModule` recarrega em segundo plano, ao arrancar, os pedidos AirMenu das últimas 12 h via `GetOrdersPort` (`mapAirMenuOrderToDelivery`): sem flag de fecho ficam `pending` (o progresso `cooking`/`ready` da cozinha perde-se), com `FINISHED`/`PICKED`/`CANCEL` ficam `delivered`. O store só tem pedidos das últimas 24 h e o webhook `CREATED` usa `addIfAbsent` (um `CREATED` repetido não repõe o estado do pedido).
 - **Replay ao conectar**: ao ligar ao SSE stream, o cliente recebe imediatamente o estado actual de todos os pedidos AirMenu em memória (`getAll()`). Ecrãs que se ligam tarde ou reconectam ficam sincronizados sem intervenção.
 - **`deliveredAt` gerido pelo store, não pelo frontend**: o timestamp de entrega é calculado no backend (`Date.now()` no momento do `updateStatus`), propagado via SSE e sincronizado entre todos os ecrãs — sem depender do relógio do cliente.
 - **`event: delivery` como upsert**: o frontend trata este evento de forma idempotente — se o pedido já existir, substitui; se não existir, adiciona. Isto simplifica o protocolo (um único evento para add e update).
@@ -185,7 +185,8 @@ Esta ligação acontece **uma vez por processo**, ao nível do módulo — não 
 
 ## Pontos de atenção / dívidas conhecidas
 
-- **Estado em memória**: pedidos AirMenu perdem-se ao reiniciar o servidor. Persistência em Supabase eliminaria esta limitação.
+- **Estado em memória**: ao reiniciar, o progresso de cozinha (`cooking`/`waiting_to_delivery`) dos pedidos AirMenu perde-se (a re-hidratação só recupera `pending`/`delivered`). Persistência em Supabase eliminaria esta limitação.
+- **Frontend e SSE**: o `EventSource` não reconecta após erro HTTP (502/503 em deploy, 500 na autenticação); o `KdsPage` reabre a ligação com backoff e mostra «Sem ligação em tempo real» enquanto está em baixo.
 - **Token do SSE na URL**: `/kds/stream` autentica via `requireDeviceAuthAllowingQueryParam`, com verificação real por conexão (não implícita). A excepção necessária é o token ir na query string em vez do header — URLs com token podem ficar em logs de proxies/intermediários; risco aceite dado que o token é por ecrã (location), não por utilizador.
 - **Pedidos Vendus não passam pelo SSE**: atualizações de status Vendus não são propagadas via SSE — cada ecrã faz polling independente. Numa próxima iteração, o `UpdateDeliveryStatusUseCase` poderia também publicar no SSE.
 - **`mapAirMenuEventToDelivery` só processa `CREATED`**: eventos `MODIFIED`, `ACCEPTED` e `READY` são descartados. Tratar estas transições automatizaria parte do fluxo da cozinha.

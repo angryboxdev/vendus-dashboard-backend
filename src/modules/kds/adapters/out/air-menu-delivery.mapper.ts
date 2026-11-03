@@ -1,6 +1,7 @@
 import type { WebhookOrderEvent } from '../../../air-menu/domain/ports/out/order-event-bus.port.js';
 import type { RawOrderItemInstance } from '../../../air-menu/domain/ports/out/air-menu-gateway.port.js';
 import { extractItems, applyLegacyNormalization } from '../../../air-menu/domain/services/order-item-extractor.js';
+import type { AirMenuOrder } from '../../../air-menu/domain/entities/air-menu-order.js';
 import type { Delivery, DeliveryItem } from '../../domain/entities/delivery.js';
 
 interface SimplifiedItem {
@@ -139,5 +140,43 @@ export function mapAirMenuEventToDelivery(event: WebhookOrderEvent): Delivery | 
       ...(orderNote && { orderNote }), // nota de pedido do cliente — omitido se vazio
     }),
     dateCreate: event.receivedAt.toISOString(),
+  };
+}
+
+const TERMINAL_FLAGS = ['FINISHED', 'PICKED', 'CANCEL'];
+
+/**
+ * Maps an order read back from the AirMenu API (GetOrders) to a KDS Delivery.
+ * Used to re-hydrate the in-memory store after a restart, when webhook CREATED
+ * events already delivered are gone. The kitchen's own progress (cooking/ready) was
+ * lost with the memory, so an order is `pending` unless AirMenu already closed it
+ * (FINISHED/PICKED/CANCEL), in which case it is `delivered` at that flag's time.
+ */
+export function mapAirMenuOrderToDelivery(order: AirMenuOrder, enterpriseId: string): Delivery {
+  const orderId = Number(order.orderId);
+  const closing = order.activeFlags.find((f) => TERMINAL_FLAGS.includes(f.key));
+  const orderNote = order.extraInfo['AM_NOTE']?.trim();
+
+  return {
+    id: orderId,
+    reference: orderId,
+    type: 'delivery',
+    status: closing ? 'delivered' : 'pending',
+    source: order.platform,
+    kitchenId: 0,
+    tableId: 0,
+    table: null,
+    items: order.items
+      .filter((item) => item.price >= 0)
+      .map((item, idx) => ({ id: idx, name: item.title, qty: item.count, notes: item.notes ?? '' })),
+    extraInfo: JSON.stringify({
+      platform: order.platform,
+      airMenuOrderId: orderId,
+      providerOrderId: order.providerOrderId,
+      enterpriseId,
+      ...(orderNote && { orderNote }),
+    }),
+    dateCreate: order.orderDate.toISOString(),
+    ...(closing && { deliveredAt: closing.datetime }),
   };
 }

@@ -12,6 +12,7 @@ import { GetOrderRawUseCase } from "./application/use-cases/get-order-raw.use-ca
 import { RegisterWebhookUseCase } from "./application/use-cases/register-webhook.use-case.js";
 import { AirMenuController } from "./adapters/in/air-menu.controller.js";
 import type { AirMenuEnterprise } from "./domain/entities/air-menu-enterprise.js";
+import type { GetOrdersPort } from "./domain/ports/in/get-orders.port.js";
 import type { GetSummaryPort } from "./domain/ports/in/get-summary.port.js";
 import type { OrderEventBusPort } from "./domain/ports/out/order-event-bus.port.js";
 
@@ -24,7 +25,7 @@ export function createAirMenuModule(config: {
   password: string;
   enterprises: AirMenuEnterprise[];
   webhookSecret?: string | null;
-}): { router: Router; publicRouter: Router; getSummary: GetSummaryPort; eventBus: OrderEventBusPort } {
+}): { router: Router; publicRouter: Router; getSummary: GetSummaryPort; getOrders: GetOrdersPort; eventBus: OrderEventBusPort } {
   const gateway = new RateLimitedAirMenuGateway(
     new AirMenuHttpGateway(config.apiKey),
     new MinIntervalScheduler(AIRMENU_MIN_REQUEST_INTERVAL_MS),
@@ -54,5 +55,5 @@ export function createAirMenuModule(config: {
     config.webhookSecret ?? null,
   );
 
-  return { router: controller.router, publicRouter: controller.publicRouter, getSummary, eventBus };
+  return { router: controller.router, publicRouter: controller.publicRouter, getSummary, getOrders, eventBus };
 }
