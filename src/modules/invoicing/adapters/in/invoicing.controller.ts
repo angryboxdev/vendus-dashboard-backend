@@ -1,6 +1,8 @@
 import { Router, type Request } from "express";
 import { idempotency, type IdempotencyStore } from "../../../../infra/http/idempotency.js";
 import { problem } from "../../../../infra/http/problem-details.js";
+import type { Dec } from "../../../../kernel/money/decimal.js";
+import { formatAmount } from "../../domain/services/amount-format.js";
 import type { InvoicingPort, IssueDocumentInput, IssueDocumentPort } from "../../domain/ports/in/invoicing.ports.js";
 import type { CancelReasonCode } from "../../domain/entities/cancel-reasons.js";
 import { DOCUMENT_TYPES, type FiscalDocumentType } from "../../domain/entities/series.js";
@@ -40,6 +42,11 @@ function uuid(value: unknown, field: string): string {
 const id = (req: Request) => uuid(req.params.id, "id");
 const text = (v: unknown) => (typeof v === "string" ? v : undefined);
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** O domínio usa `Dec` (bigint) nos totais; na API saem como texto exato com 2 casas ("28.00"). */
+function documentJson<T extends { grossTotal: Dec }>(d: T): Omit<T, "grossTotal"> & { grossTotal: string } {
+  return { ...d, grossTotal: formatAmount(d.grossTotal) };
+}
 
 function badRequest(detail: string): never {
   throw problem(400, "invalid_request", detail);
@@ -126,16 +133,16 @@ export function createInvoicingRouter(uc: InvoicingPort, issue: IssueDocumentPor
       ...(typeof q.status === "string" && STATUSES.has(q.status) ? { status: q.status as DocumentStatus } : {}),
       ...(typeof q.limit === "string" && /^\d+$/.test(q.limit) ? { limit: Number(q.limit) } : {}),
     };
-    res.json(await run(() => uc.listDocuments(org(req), filter)));
+    res.json((await run(() => uc.listDocuments(org(req), filter))).map(documentJson));
   });
-  r.get(`${B}/documents/:id`, async (req, res) => res.json(await run(() => uc.getDocument(org(req), id(req)))));
+  r.get(`${B}/documents/:id`, async (req, res) => res.json(documentJson(await run(() => uc.getDocument(org(req), id(req))))));
   r.post(`${B}/documents`, async (req, res) => {
     const input = issueInput(body(req), actor(req));
     res.status(201).json(await run(() => issue.execute(org(req), input)));
   });
   r.post(`${B}/documents/:id/cancel`, async (req, res) => {
     const b = body(req);
-    res.json(await run(() => uc.cancel(org(req), actor(req), id(req), String(b.reasonCode ?? "") as CancelReasonCode, text(b.note))));
+    res.json(documentJson(await run(() => uc.cancel(org(req), actor(req), id(req), String(b.reasonCode ?? "") as CancelReasonCode, text(b.note)))));
   });
 
   return r;

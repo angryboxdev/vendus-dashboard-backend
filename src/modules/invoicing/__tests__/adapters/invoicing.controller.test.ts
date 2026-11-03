@@ -85,12 +85,27 @@ describe("API /api/invoicing", () => {
   });
 
   it("anular pede motivo da lista fechada", async () => {
-    store.getDocument = async () => ({ id: "11111111-1111-4111-8111-111111111111", status: "A", documentType: "FS", seriesMode: "training", softwareCertificateNumber: "0", hash: "A".repeat(171) + "=", atcud: "CDF7T5HD-1" }) as never;
+    store.getDocument = async () => ({ id: "11111111-1111-4111-8111-111111111111", status: "A", documentType: "FS", seriesMode: "training", softwareCertificateNumber: "0", hash: "A".repeat(171) + "=", atcud: "CDF7T5HD-1", grossTotal: dec("28.00") }) as never;
     const cancelled = await post("/documents/11111111-1111-4111-8111-111111111111/cancel", { reasonCode: "not-delivered" });
     expect(cancelled.status).toBe(200);
     expect(await cancelled.json()).toMatchObject({ status: "A" });
     store.getDocument = async () => null;
     expect((await post("/documents/11111111-1111-4111-8111-111111111111/cancel", { reasonCode: "x" })).status).toBe(422);
+  });
+
+  it("lista e 2.ª via devolvem os totais como texto exato (sem bigint no JSON)", async () => {
+    const summary = { id: "11111111-1111-4111-8111-111111111111", legalEntityId: "le-1", documentType: "FS" as const, seriesMode: "training" as const, customerTaxId: "999999990", documentNumber: "FS L01-2027/1", documentDate: "2027-03-10", status: "N" as const, grossTotal: dec("28.00") };
+    store.summaries.set(summary.id, summary);
+    const list = await fetch(`${base}/documents`);
+    expect(list.status).toBe(200);
+    expect((await list.json())[0]).toMatchObject({ documentNumber: "FS L01-2027/1", grossTotal: "28.00" });
+
+    store.getDocument = async () => ({ ...summary, hash: "A".repeat(171) + "=", atcud: "CDF7T5HD-1", softwareCertificateNumber: "0" }) as never;
+    const one = await fetch(`${base}/documents/${summary.id}`);
+    expect(one.status).toBe(200);
+    expect(await one.json()).toMatchObject({ grossTotal: "28.00", printed: { atcud: "ATCUD:CDF7T5HD-1" } });
+    store.getDocument = async () => null;
+    store.summaries.clear();
   });
 
   it("configuração e listas", async () => {
