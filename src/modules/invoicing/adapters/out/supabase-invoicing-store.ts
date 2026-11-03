@@ -1,28 +1,33 @@
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
 import { decToString } from "../../../../kernel/money/decimal.js";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
+import type { DocumentReference } from "../../domain/entities/parties.js";
 import type { SeriesMode } from "../../domain/entities/series-mode.js";
-import type { SeriesState } from "../../domain/entities/series.js";
+import type { FiscalDocumentType, SeriesState } from "../../domain/entities/series.js";
 import { InvoicingNotFoundError, InvoicingRuleError, StaleSeriesError } from "../../domain/errors.js";
 import type { IssuedDocumentRecord, InvoicingStorePort } from "../../domain/ports/out/invoicing-store.port.js";
 import { formatAmount } from "../../domain/services/amount-format.js";
+import type { LineTax } from "../../domain/services/document-totals.service.js";
 
 interface SeriesRow {
   id: string;
   legal_entity_id: string;
   location_id: string | null;
-  document_type: string;
+  document_type: FiscalDocumentType;
   series_id: string;
   mode: SeriesMode;
   validation_code: string | null;
   last_sequence: number;
   last_hash: string | null;
   last_document_date: string | null;
-  last_system_entry_date: string | null;
+  last_system_entry_at: string | null;
 }
 
 const SERIES_COLS =
-  "id, legal_entity_id, location_id, document_type, series_id, mode, validation_code, last_sequence, last_hash, last_document_date, last_system_entry_date";
+  "id, legal_entity_id, location_id, document_type, series_id, mode, validation_code, last_sequence, last_hash, last_document_date, last_system_entry_at";
+
+/** O PostgREST devolve timestamptz como "…+00:00"; o domínio usa ISO UTC ("…Z"). */
+const toIsoInstant = (v: string | null) => (v === null ? null : new Date(v).toISOString());
 
 const toSeries = (r: SeriesRow): SeriesState => ({
   ref: r.id,
@@ -35,16 +40,19 @@ const toSeries = (r: SeriesRow): SeriesState => ({
   lastSequence: Number(r.last_sequence),
   lastHash: r.last_hash,
   lastDocumentDate: r.last_document_date,
-  lastSystemEntryDate: r.last_system_entry_date,
+  lastSystemEntryAt: toIsoInstant(r.last_system_entry_at),
 });
 
-/** Códigos `errcode` das RPC da migração → erros de domínio. */
-function toDomainError(error: { code?: string; message: string }, seriesRef: string): Error {
+/** Mensagens das funções da BD (`raise exception '<código>'`) → texto para o utilizador. */
+const NOT_FOUND: Record<string, string> = { series_not_found: "Série", document_not_found: "Documento" };
+
+/** `errcode` das funções da migração → erros de domínio. */
+function toDomainError(error: { code?: string; message: string }, subject: string): Error {
   switch (error.code) {
     case "P0001":
-      return new StaleSeriesError(seriesRef);
+      return new StaleSeriesError(subject);
     case "P0002":
-      return new InvoicingNotFoundError(error.message);
+      return new InvoicingNotFoundError(NOT_FOUND[error.message] ?? subject);
     case "P0003":
     case "P0004":
       return new InvoicingRuleError(error.message);
@@ -52,6 +60,19 @@ function toDomainError(error: { code?: string; message: string }, seriesRef: str
       return new Error(`Faturação: erro da base de dados (${error.code ?? "?"}): ${error.message}`);
   }
 }
+
+/** Colunas de imposto de uma linha ou do resumo: taxa (RED/INT/NOR) ou isenção (ISE, 0 %). */
+function taxColumns(tax: LineTax) {
+  return tax.kind === "rate"
+    ? { tax_region: tax.region, tax_code: tax.code, tax_percentage: decToString(tax.percentage), exemption_code: null, exemption_reason: null }
+    : { tax_region: tax.region, tax_code: "ISE", tax_percentage: "0", exemption_code: tax.exemptionCode, exemption_reason: tax.exemptionReason };
+}
+
+/** A BD lê as referências em snake_case (`document_id` — anulação bloqueada por NC ativa; CM → F). */
+const toReferenceRows = (refs: DocumentReference[] | undefined) =>
+  refs && refs.length > 0
+    ? refs.map((r) => ({ document_id: r.documentId, document_number: r.documentNumber, ...(r.reason ? { reason: r.reason } : {}) }))
+    : null;
 
 /** Valores exatos como texto (o Postgres converte para numeric sem perder casas). */
 function rpcPayload(r: IssuedDocumentRecord) {
@@ -61,9 +82,9 @@ function rpcPayload(r: IssuedDocumentRecord) {
     document_date: r.documentDate,
     tax_point_date: r.taxPointDate,
     system_entry_date: r.systemEntryDate,
-    source_billing: "P",
+    system_entry_at: r.systemEntryAt,
+    software_certificate_number: r.softwareCertificateNumber,
     hash: r.hash,
-    hash_control: r.hashControl,
     key_version: r.keyVersion,
     atcud: r.atcud,
     qr_payload: r.qrPayload,
@@ -72,44 +93,36 @@ function rpcPayload(r: IssuedDocumentRecord) {
     net_total: formatAmount(r.totals.netTotal),
     tax_payable: formatAmount(r.totals.taxPayable),
     gross_total: formatAmount(r.totals.grossTotal),
+    payment_mechanism: r.paymentMechanism ?? null,
     customer: r.customer,
     issuer: r.issuer,
-    references_to: r.referencesTo ?? null,
-    order_references: r.orderReferences ?? null,
+    references_to: toReferenceRows(r.referencesTo),
+    order_references: toReferenceRows(r.orderReferences),
   };
   const lines = r.totals.lines.map(({ line, amount }, i) => {
-    const tax = line.tax;
+    if (!line.product) throw new InvoicingRuleError(`Linha ${i + 1} sem código de produto (obrigatório no SAF-T)`);
     return {
       line_number: i + 1,
-      product_code: null,
+      product_code: line.product.code,
+      product_type: line.product.type,
+      unit_of_measure: line.product.unit,
       description: line.description,
       quantity: decToString(line.quantity),
       unit_price: decToString(line.unitPrice),
       discount_pct: line.discountPct ? decToString(line.discountPct) : null,
       line_amount: decToString(amount),
-      tax_region: tax.region,
-      tax_code: tax.kind === "rate" ? tax.code : "ISE",
-      tax_percentage: tax.kind === "rate" ? decToString(tax.percentage) : "0",
-      exemption_code: tax.kind === "exempt" ? tax.exemptionCode : null,
-      exemption_reason: tax.kind === "exempt" ? tax.exemptionReason : null,
+      ...taxColumns(line.tax),
+      reference_line: null,
     };
   });
   const taxes = [
     ...r.totals.taxSummary.map((t) => ({
-      tax_region: t.region,
-      tax_code: t.code,
-      tax_percentage: decToString(t.percentage),
-      exemption_code: null,
-      exemption_reason: null,
+      ...taxColumns({ kind: "rate", region: t.region, code: t.code, percentage: t.percentage }),
       taxable_base: formatAmount(t.taxableBase),
       tax_amount: formatAmount(t.taxAmount),
     })),
     ...r.totals.exemptions.map((e) => ({
-      tax_region: e.region,
-      tax_code: "ISE",
-      tax_percentage: "0",
-      exemption_code: e.code,
-      exemption_reason: e.reason,
+      ...taxColumns({ kind: "exempt", region: e.region, exemptionCode: e.code, exemptionReason: e.reason }),
       taxable_base: formatAmount(e.taxableBase),
       tax_amount: "0.00",
     })),
@@ -117,7 +130,7 @@ function rpcPayload(r: IssuedDocumentRecord) {
   return { document, lines, taxes };
 }
 
-/** Persistência fiscal no Supabase: leituras pelo helper, escritas só pelas RPC. */
+/** Persistência fiscal no Supabase: leituras pelo helper, escritas só pelas funções da BD. */
 export class SupabaseInvoicingStore implements InvoicingStorePort {
   constructor(private readonly scoped: ScopedQueryFactory) {}
 
@@ -127,16 +140,16 @@ export class SupabaseInvoicingStore implements InvoicingStorePort {
     return data ? toSeries(data as unknown as SeriesRow) : null;
   }
 
-  async lastSystemEntryDate(orgId: OrganizationId, legalEntityId: string): Promise<string | null> {
+  async lastSystemEntryAt(orgId: OrganizationId, legalEntityId: string): Promise<string | null> {
     const { data, error } = await this.scoped(orgId)
       .table("invoicing_documents")
-      .select("system_entry_date")
+      .select("system_entry_at")
       .eq("legal_entity_id", legalEntityId)
-      .order("system_entry_date", { ascending: false })
+      .order("system_entry_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (error) throw new Error(`Faturação: erro a ler a última emissão: ${error.message}`);
-    return (data as { system_entry_date: string } | null)?.system_entry_date ?? null;
+    return toIsoInstant((data as { system_entry_at: string } | null)?.system_entry_at ?? null);
   }
 
   async saveIssued(orgId: OrganizationId, record: IssuedDocumentRecord): Promise<{ documentId: string }> {

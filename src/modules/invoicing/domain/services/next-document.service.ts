@@ -6,7 +6,10 @@ import { buildSignatureMessage } from "./signature.service.js";
 
 export interface NextDocumentInput {
   documentDate: string;
+  /** Hora de Lisboa (o que se assina). */
   systemEntryDate: string;
+  /** Instante UTC da emissão (cronologia). */
+  systemEntryAt: string;
   grossTotal: Dec;
 }
 
@@ -33,8 +36,8 @@ export function planNextDocument(series: SeriesState, input: NextDocumentInput):
   if (series.lastDocumentDate !== null && input.documentDate < series.lastDocumentDate) {
     throw new InvoicingRuleError(`Data ${input.documentDate} anterior ao último documento da série (${series.lastDocumentDate})`);
   }
-  if (series.lastSystemEntryDate !== null && input.systemEntryDate < series.lastSystemEntryDate) {
-    throw new InvoicingRuleError(`Hora de emissão anterior ao último documento da série (${series.lastSystemEntryDate})`);
+  if (series.lastSystemEntryAt !== null && Date.parse(input.systemEntryAt) < Date.parse(series.lastSystemEntryAt)) {
+    throw new InvoicingRuleError(`Emissão anterior à do último documento da série (${series.lastSystemEntryAt})`);
   }
 
   const sequence = series.lastSequence + 1;

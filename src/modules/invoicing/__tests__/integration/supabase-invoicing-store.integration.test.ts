@@ -41,12 +41,22 @@ let seriesRef: string;
 
 const totals = computeDocumentTotals({
   pricesIncludeTax: true,
-  lines: [{ description: "Pizza", quantity: dec("1"), unitPrice: dec("12.50"), tax: { kind: "rate", region: "PT", code: "INT", percentage: dec("13") } }],
+  lines: [
+    {
+      description: "Pizza",
+      product: { code: "PZ01", type: "P", unit: "UN" },
+      quantity: dec("1"),
+      unitPrice: dec("12.50"),
+      tax: { kind: "rate", region: "PT", code: "INT", percentage: dec("13") },
+    },
+  ],
 });
 
+/** `systemEntryDate` em hora de Lisboa (março: UTC+0), o instante UTC correspondente. */
 async function nextRecord(systemEntryDate: string): Promise<IssuedDocumentRecord> {
+  const systemEntryAt = `${systemEntryDate}.000Z`;
   const series = (await store.getSeries(ORG, seriesRef))!;
-  const plan = planNextDocument(series, { documentDate: "2027-03-10", systemEntryDate, grossTotal: totals.grossTotal });
+  const plan = planNextDocument(series, { documentDate: "2027-03-10", systemEntryDate, systemEntryAt, grossTotal: totals.grossTotal });
   const { hash, keyVersion } = await signer.sign(plan.signatureMessage);
   return {
     seriesRef,
@@ -56,8 +66,9 @@ async function nextRecord(systemEntryDate: string): Promise<IssuedDocumentRecord
     documentDate: "2027-03-10",
     taxPointDate: "2027-03-10",
     systemEntryDate,
+    systemEntryAt,
+    softwareCertificateNumber: "0",
     hash,
-    hashControl: String(keyVersion),
     keyVersion,
     atcud: plan.atcud,
     qrPayload: "teste",

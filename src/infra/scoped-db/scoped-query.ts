@@ -129,7 +129,7 @@ export class ScopedQuery {
     taxes: Record<string, unknown>[];
     actor: string;
   }) {
-    return this.client.rpc("invoicing_issue_document", {
+    return this.client.rpc("fn_invoicing_issue_document", {
       p_org_id: this.organizationId,
       p_series_ref: input.seriesRef,
       p_expected_last_sequence: input.expectedLastSequence,
@@ -143,7 +143,7 @@ export class ScopedQuery {
 
   /** Módulo `invoicing` — anulação (estado A) com motivo; mesma migração. */
   cancelInvoicingDocument(documentId: string, reason: string, actor: string) {
-    return this.client.rpc("invoicing_cancel_document", {
+    return this.client.rpc("fn_invoicing_cancel_document", {
       p_org_id: this.organizationId,
       p_document_id: documentId,
       p_reason: reason,

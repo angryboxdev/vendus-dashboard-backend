@@ -3,6 +3,9 @@ import type { CustomerSnapshot, DocumentReference, IssuerSnapshot } from "../../
 import type { SeriesExpectation, SeriesState } from "../../entities/series.js";
 import type { DocumentTotals } from "../../services/document-totals.service.js";
 
+/** SAF-T PaymentMechanism. */
+export type PaymentMechanism = "CC" | "CD" | "CH" | "CI" | "CO" | "CS" | "DE" | "LC" | "MB" | "NU" | "OU" | "PR" | "TB" | "TR";
+
 /** Documento pronto a gravar: numerado, assinado e com totais fixados. */
 export interface IssuedDocumentRecord {
   seriesRef: string;
@@ -12,9 +15,13 @@ export interface IssuedDocumentRecord {
   documentNumber: string;
   documentDate: string;
   taxPointDate: string;
+  /** Hora de Lisboa assinada. */
   systemEntryDate: string;
+  /** Instante UTC correspondente. */
+  systemEntryAt: string;
+  /** SoftwareCertificateNumber ("0" enquanto não há certificado; a BD põe HashControl "0"). */
+  softwareCertificateNumber: string;
   hash: string;
-  hashControl: string;
   keyVersion: number;
   atcud: string;
   qrPayload: string;
@@ -22,6 +29,7 @@ export interface IssuedDocumentRecord {
   totals: DocumentTotals;
   customer: CustomerSnapshot;
   issuer: IssuerSnapshot;
+  paymentMechanism?: PaymentMechanism;
   referencesTo?: DocumentReference[];
   orderReferences?: DocumentReference[];
   /** Utilizador que emite (SourceID). */
@@ -34,8 +42,8 @@ export interface IssuedDocumentRecord {
  */
 export interface InvoicingStorePort {
   getSeries(orgId: OrganizationId, seriesRef: string): Promise<SeriesState | null>;
-  /** Último SystemEntryDate do emitente, em qualquer série (Despacho 3.4.3). */
-  lastSystemEntryDate(orgId: OrganizationId, legalEntityId: string): Promise<string | null>;
+  /** Instante UTC da última emissão do emitente, em qualquer série (Despacho 3.4.3). */
+  lastSystemEntryAt(orgId: OrganizationId, legalEntityId: string): Promise<string | null>;
   saveIssued(orgId: OrganizationId, record: IssuedDocumentRecord): Promise<{ documentId: string }>;
   cancel(orgId: OrganizationId, documentId: string, reason: string, actor: string): Promise<void>;
 }

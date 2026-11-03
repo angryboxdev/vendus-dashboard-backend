@@ -3,9 +3,10 @@
 -- documentos reais (antes da certificação só existem documentos de formação).
 -- Depois de haver faturação real, os registos têm de ser conservados 10 anos
 -- (DL 28/2019, art. 19.º) — não correr este rollback.
+-- `drop table` não dispara os triggers de TRUNCATE/DELETE.
 
-drop function if exists public.invoicing_cancel_document(uuid, uuid, text, text);
-drop function if exists public.invoicing_issue_document(uuid, uuid, integer, text, jsonb, jsonb, jsonb, text);
+drop function if exists public.fn_invoicing_cancel_document(uuid, uuid, text, text);
+drop function if exists public.fn_invoicing_issue_document(uuid, uuid, integer, text, jsonb, jsonb, jsonb, text);
 
 drop table if exists public.invoicing_events;
 drop table if exists public.invoicing_document_taxes;

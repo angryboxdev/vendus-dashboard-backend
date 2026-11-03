@@ -1,5 +1,5 @@
 /**
- * Tipo de série (SeriesWS `tipoSerie`): normal (N), formação (F) e
- * recuperação de documentos manuais/duplicados (R).
+ * Tipo de série (SeriesWS `tipoSerie`): normal (N) e formação (F). Recuperação
+ * de documentos manuais (R) numa fase seguinte, com os seus campos próprios.
  */
-export type SeriesMode = "normal" | "training" | "recovery";
+export type SeriesMode = "normal" | "training";

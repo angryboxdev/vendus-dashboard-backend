@@ -43,8 +43,20 @@ const storeWith = (client: unknown) =>
 const totals = computeDocumentTotals({
   pricesIncludeTax: true,
   lines: [
-    { description: "Pizza", quantity: dec("2"), unitPrice: dec("12.50"), tax: { kind: "rate", region: "PT", code: "INT", percentage: dec("13") } },
-    { description: "Água", quantity: dec("1"), unitPrice: dec("3.00"), tax: { kind: "exempt", region: "PT", exemptionCode: "M07", exemptionReason: "Isento artigo 9.º do CIVA" } },
+    {
+      description: "Pizza",
+      product: { code: "PZ01", type: "P", unit: "UN" },
+      quantity: dec("2"),
+      unitPrice: dec("12.50"),
+      tax: { kind: "rate", region: "PT", code: "INT", percentage: dec("13") },
+    },
+    {
+      description: "Água",
+      product: { code: "AG01", type: "P", unit: "UN" },
+      quantity: dec("1"),
+      unitPrice: dec("3.00"),
+      tax: { kind: "exempt", region: "PT", exemptionCode: "M07", exemptionReason: "Isento artigo 9.º do CIVA" },
+    },
   ],
 });
 
@@ -52,12 +64,13 @@ const record: IssuedDocumentRecord = {
   seriesRef: SERIES,
   expected: { lastSequence: 0, lastHash: null },
   sequence: 1,
-  documentNumber: "FS L01-2027/1",
+  documentNumber: "NC L01-2027/1",
   documentDate: "2027-03-10",
   taxPointDate: "2027-03-10",
   systemEntryDate: "2027-03-10T12:00:00",
+  systemEntryAt: "2027-03-10T12:00:00.000Z",
+  softwareCertificateNumber: "0",
   hash: "h".repeat(171) + "=",
-  hashControl: "1",
   keyVersion: 1,
   atcud: "CDF7T5HD-1",
   qrPayload: "A:...",
@@ -65,18 +78,19 @@ const record: IssuedDocumentRecord = {
   totals,
   customer: FINAL_CONSUMER,
   issuer: { taxId: "599999999", name: "Empresa Fictícia, Lda", address: { street: "Rua A", postalCode: "4000-001", city: "Porto", country: "PT" } },
+  referencesTo: [{ documentId: "doc-0", documentNumber: "FS L01-2027/9", reason: "Devolução" }],
   actor: "user-1",
 };
 
 describe("SupabaseInvoicingStore", () => {
-  it("grava pela RPC de emissão com o estado esperado da série e valores exatos", async () => {
+  it("grava pela função de emissão com o estado esperado da série e valores exatos", async () => {
     const { client, calls } = fakeClient({ rpc: { data: "doc-1" } });
 
     await expect(storeWith(client).saveIssued(ORG, record)).resolves.toEqual({ documentId: "doc-1" });
 
     expect(calls).toHaveLength(1);
     const { fn, args } = calls[0]!;
-    expect(fn).toBe("invoicing_issue_document");
+    expect(fn).toBe("fn_invoicing_issue_document");
     expect(args).toMatchObject({
       p_org_id: ORG,
       p_series_ref: SERIES,
@@ -85,27 +99,53 @@ describe("SupabaseInvoicingStore", () => {
       p_actor: "user-1",
       p_document: {
         sequence: 1,
-        document_number: "FS L01-2027/1",
+        document_number: "NC L01-2027/1",
         atcud: "CDF7T5HD-1",
         system_entry_date: "2027-03-10T12:00:00",
-        hash_control: "1",
+        system_entry_at: "2027-03-10T12:00:00.000Z",
+        software_certificate_number: "0",
         key_version: 1,
         prices_include_tax: true,
         // 25,00 a 13 %: IVA 2,88, base 22,12; água isenta 3,00
         net_total: "25.12",
         tax_payable: "2.88",
         gross_total: "28.00",
-        customer: { taxId: "999999990", name: "Consumidor final" },
+        customer: { customerId: "Consumidor final", taxId: "999999990", name: "Consumidor final" },
+        // A BD procura `document_id` (anulação bloqueada por NC ativa; CM → F)
+        references_to: [{ document_id: "doc-0", document_number: "FS L01-2027/9", reason: "Devolução" }],
+        order_references: null,
       },
     });
     expect(args.p_lines).toEqual([
-      expect.objectContaining({ line_number: 1, description: "Pizza", quantity: "2", unit_price: "12.5", line_amount: "25", tax_code: "INT", tax_percentage: "13", exemption_code: null }),
-      expect.objectContaining({ line_number: 2, description: "Água", tax_code: "ISE", tax_percentage: "0", exemption_code: "M07", exemption_reason: "Isento artigo 9.º do CIVA" }),
+      expect.objectContaining({
+        line_number: 1,
+        product_code: "PZ01",
+        product_type: "P",
+        unit_of_measure: "UN",
+        description: "Pizza",
+        quantity: "2",
+        unit_price: "12.5",
+        line_amount: "25",
+        tax_code: "INT",
+        tax_percentage: "13",
+        exemption_code: null,
+      }),
+      expect.objectContaining({ line_number: 2, product_code: "AG01", tax_code: "ISE", tax_percentage: "0", exemption_code: "M07", exemption_reason: "Isento artigo 9.º do CIVA" }),
     ]);
     expect(args.p_taxes).toEqual([
       expect.objectContaining({ tax_code: "INT", tax_percentage: "13", taxable_base: "22.12", tax_amount: "2.88" }),
       expect.objectContaining({ tax_code: "ISE", tax_percentage: "0", exemption_code: "M07", taxable_base: "3.00", tax_amount: "0.00" }),
     ]);
+  });
+
+  it("recusa gravar linha sem produto (o SAF-T exige ProductCode)", async () => {
+    const { client } = fakeClient({ rpc: { data: "doc-1" } });
+    const noProduct = computeDocumentTotals({
+      pricesIncludeTax: true,
+      lines: [{ description: "Pizza", quantity: dec("1"), unitPrice: dec("12.50"), tax: { kind: "rate", region: "PT", code: "INT", percentage: dec("13") } }],
+    });
+
+    await expect(storeWith(client).saveIssued(ORG, { ...record, totals: noProduct })).rejects.toBeInstanceOf(InvoicingRuleError);
   });
 
   it.each([
@@ -118,17 +158,17 @@ describe("SupabaseInvoicingStore", () => {
     await expect(storeWith(client).saveIssued(ORG, record)).rejects.toBeInstanceOf(errorClass);
   });
 
-  it("anula pela RPC de anulação, com motivo e autor", async () => {
+  it("anula pela função de anulação, com motivo e autor", async () => {
     const { client, calls } = fakeClient();
 
     await storeWith(client).cancel(ORG, "doc-1", "Erro no NIF", "user-1");
 
     expect(calls).toEqual([
-      { fn: "invoicing_cancel_document", args: { p_org_id: ORG, p_document_id: "doc-1", p_reason: "Erro no NIF", p_actor: "user-1" } },
+      { fn: "fn_invoicing_cancel_document", args: { p_org_id: ORG, p_document_id: "doc-1", p_reason: "Erro no NIF", p_actor: "user-1" } },
     ]);
   });
 
-  it("lê a série filtrada pela organização e devolve o estado do fim da cadeia", async () => {
+  it("lê a série filtrada pela organização e devolve o fim da cadeia", async () => {
     const row = {
       id: SERIES,
       legal_entity_id: "22222222-2222-4222-8222-222222222222",
@@ -140,7 +180,7 @@ describe("SupabaseInvoicingStore", () => {
       last_sequence: 41,
       last_hash: "H==",
       last_document_date: "2027-03-09",
-      last_system_entry_date: "2027-03-09T20:00:00",
+      last_system_entry_at: "2027-03-09T20:00:00+00:00",
     };
     const { client, eqs } = fakeClient({ rows: [row] });
 
@@ -155,7 +195,7 @@ describe("SupabaseInvoicingStore", () => {
       lastSequence: 41,
       lastHash: "H==",
       lastDocumentDate: "2027-03-09",
-      lastSystemEntryDate: "2027-03-09T20:00:00",
+      lastSystemEntryAt: "2027-03-09T20:00:00.000Z",
     });
     expect(eqs).toEqual([
       ["org_id", ORG],

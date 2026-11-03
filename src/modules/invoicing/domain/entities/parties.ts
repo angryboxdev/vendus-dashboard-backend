@@ -18,6 +18,8 @@ export interface IssuerSnapshot {
 
 /** Consumidor final sem NIF: `taxId` 999999990, nome «Consumidor final» (Despacho 2.2.5). */
 export interface CustomerSnapshot {
+  /** SAF-T CustomerID. */
+  customerId: string;
   taxId: string;
   name: string;
   country: string;
@@ -25,6 +27,7 @@ export interface CustomerSnapshot {
 }
 
 export const FINAL_CONSUMER: CustomerSnapshot = {
+  customerId: "Consumidor final",
   taxId: "999999990",
   name: "Consumidor final",
   country: "PT",

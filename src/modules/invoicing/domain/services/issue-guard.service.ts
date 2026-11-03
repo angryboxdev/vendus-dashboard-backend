@@ -1,22 +1,23 @@
 import type { SeriesMode } from "../entities/series-mode.js";
+import type { FiscalNow } from "../ports/out/clock.port.js";
 
 /**
  * Verificações antes de emitir (DL 28/2019, art. 4.º; Despacho 8632/2014,
- * pontos 1.6, 3.2.1, 3.4.2 e 3.4.3). `blocked` impede a emissão; `warnings`
- * exigem confirmação expressa do utilizador.
+ * pontos 3.4.2 e 3.4.3). `blocked` impede a emissão; `warnings` exigem
+ * confirmação expressa do utilizador. A cronologia dentro da série é conferida
+ * por `planNextDocument` (e outra vez pela BD).
  */
-export type IssueBlock = "uncertified-program" | "date-before-last-in-series";
+export type IssueBlock = "uncertified-program";
 export type IssueWarning = "future-document-date" | "system-clock-behind";
 
 export interface IssueCheckInput {
   seriesMode: SeriesMode;
   /** N.º de certificado da AT; null enquanto o programa não está certificado. */
   certificateNumber: string | null;
-  /** SystemEntryDate atual (hora legal do estabelecimento). */
-  now: string;
+  now: FiscalNow;
   documentDate: string;
-  lastDocumentDateInSeries: string | null;
-  lastSystemEntryDateAnySeries: string | null;
+  /** Instante UTC da última emissão do emitente, em qualquer série. */
+  lastSystemEntryAtAnySeries: string | null;
 }
 
 export interface IssueCheck {
@@ -24,18 +25,15 @@ export interface IssueCheck {
   warnings: IssueWarning[];
 }
 
-/** Datas no formato da AT comparam-se como texto (AAAA-MM-DD[THH:MM:SS]). */
 export function checkIssue(input: IssueCheckInput): IssueCheck {
   const blocked: IssueBlock[] = [];
   const warnings: IssueWarning[] = [];
 
   if (input.certificateNumber === null && input.seriesMode !== "training") blocked.push("uncertified-program");
-  if (input.lastDocumentDateInSeries !== null && input.documentDate < input.lastDocumentDateInSeries) {
-    blocked.push("date-before-last-in-series");
-  }
 
-  if (input.documentDate > input.now.slice(0, 10)) warnings.push("future-document-date");
-  if (input.lastSystemEntryDateAnySeries !== null && input.now < input.lastSystemEntryDateAnySeries) {
+  // Datas da AT (AAAA-MM-DD) comparam-se como texto; instantes pela linha do tempo (a hora local repete-se em outubro).
+  if (input.documentDate > input.now.date) warnings.push("future-document-date");
+  if (input.lastSystemEntryAtAnySeries !== null && Date.parse(input.now.instant) < Date.parse(input.lastSystemEntryAtAnySeries)) {
     warnings.push("system-clock-behind");
   }
   return { blocked, warnings };

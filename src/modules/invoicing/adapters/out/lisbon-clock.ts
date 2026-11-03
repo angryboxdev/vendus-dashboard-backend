@@ -16,8 +16,9 @@ export class LisbonClock implements ClockPort {
   constructor(private readonly current: () => Date = () => new Date()) {}
 
   now(): FiscalNow {
-    const p = Object.fromEntries(FORMAT.formatToParts(this.current()).map((x) => [x.type, x.value]));
+    const at = this.current();
+    const p = Object.fromEntries(FORMAT.formatToParts(at).map((x) => [x.type, x.value]));
     const date = `${p.year}-${p.month}-${p.day}`;
-    return { systemEntryDate: `${date}T${p.hour}:${p.minute}:${p.second}`, date };
+    return { systemEntryDate: `${date}T${p.hour}:${p.minute}:${p.second}`, date, instant: at.toISOString() };
   }
 }

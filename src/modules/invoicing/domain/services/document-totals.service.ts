@@ -12,8 +12,20 @@ export type LineTax =
   | { kind: "rate"; region: TaxRegion; code: TaxRateCode; percentage: Dec }
   | { kind: "exempt"; region: TaxRegion; exemptionCode: string; exemptionReason: string };
 
+/** SAF-T ProductType: P produto, S serviço, O outros, E impostos especiais, I impostos/taxas. */
+export type ProductType = "P" | "S" | "O" | "E" | "I";
+
+/** Identificação do artigo exigida pelo SAF-T (ProductCode, ProductType, UnitOfMeasure). */
+export interface LineProduct {
+  code: string;
+  type: ProductType;
+  unit: string;
+}
+
 export interface DraftLine {
   description: string;
+  /** Obrigatório para gravar (o cálculo dos totais não precisa). */
+  product?: LineProduct;
   quantity: Dec;
   /** Com IVA se `pricesIncludeTax`, senão sem IVA. */
   unitPrice: Dec;

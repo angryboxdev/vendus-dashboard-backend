@@ -15,7 +15,7 @@ const sql = files.map((f) => readFileSync(join(MIGRATIONS, f), "utf8")).join("\n
 const TABLES = ["invoicing_series", "invoicing_documents", "invoicing_document_lines", "invoicing_document_taxes", "invoicing_events"];
 /** Tabelas em que nada se altera nem apaga depois de escrito. */
 const APPEND_ONLY = ["invoicing_document_lines", "invoicing_document_taxes", "invoicing_events"];
-const RPCS = ["invoicing_issue_document", "invoicing_cancel_document"];
+const RPCS = ["fn_invoicing_issue_document", "fn_invoicing_cancel_document"];
 
 const tableBody = (name: string) => new RegExp(`create table if not exists public\\.${name} \\(([\\s\\S]*?)\\n\\);`).exec(sql)?.[1];
 
@@ -43,8 +43,19 @@ describe("migração da faturação certificada (estrutura)", () => {
   });
 
   test("séries: não se apagam (Despacho 1.9) e o fim da cadeia só muda pela emissão", () => {
-    expect(sql).toMatch(/create trigger \w+ before update or delete on public\.invoicing_series\b/);
+    expect(sql).toMatch(/create trigger \w+ before insert or update or delete on public\.invoicing_series\b/);
   });
+
+  test.each(TABLES)("%s não se trunca (TRUNCATE não dispara triggers de linha)", (name) => {
+    expect(sql).toMatch(new RegExp(`create trigger \\w+ before truncate on public\\.${name}\\b[\\s\\S]*?for each statement`));
+  });
+
+  test.each(["invoicing_documents", "invoicing_document_lines", "invoicing_document_taxes"])(
+    "%s: sem privilégios de escrita para anon, authenticated e service_role",
+    (name) => {
+      expect(sql).toContain(`revoke insert, update, delete, truncate on public.${name} from anon, authenticated, service_role;`);
+    },
+  );
 
   test.each(RPCS)("%s: security definer, search_path fixo, só para a service role", (fn) => {
     expect(sql).toMatch(new RegExp(`create or replace function public\\.${fn}\\([\\s\\S]*?security definer[\\s\\S]*?set search_path to 'public'`));
