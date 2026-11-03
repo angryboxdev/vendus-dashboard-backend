@@ -539,3 +539,68 @@ describe('GetOrdersUseCase — normalização de sufixo legado', () => {
     expect(orders[0].items[0].title).toBe('Coca-Cola');
   });
 });
+
+// ─── cache de pedidos terminados e repetição de falhas ────────────────────────
+
+describe('GetOrdersUseCase — cache e repetição', () => {
+  const FINISHED_FLAG = { key: 'FINISHED', operator: 'script', datetime: FATURAR_TS };
+
+  function makeCountingStubs(
+    rawMap: Record<string, Record<string, RawOrderItemInstance[]>>,
+    failFirst: Set<string> = new Set(),
+    clock: { t: number } = { t: 0 },
+  ) {
+    const session = AirMenuSession.create('sess-test', []);
+    const sessionManager = { getValidSession: async () => session, invalidate: () => {} } as unknown as SessionManagerService;
+    const calls: string[] = [];
+    const failed = new Set<string>();
+    const gateway = {
+      getOrderIds: async () => Object.keys(rawMap),
+      getOrders: async (_s: string, _e: string, id: string) => {
+        calls.push(id);
+        if (failFirst.has(id) && !failed.has(id)) {
+          failed.add(id);
+          throw new Error('boom');
+        }
+        return rawMap[id] ?? {};
+      },
+    } as unknown as AirMenuGatewayPort;
+    const uc = new GetOrdersUseCase(sessionManager, gateway, 5, 0, () => clock.t, 1000);
+    return { uc, calls, clock };
+  }
+
+  const finished = (id: string) => ({
+    Glovo: [makeOrderInstance(id, [makeItemChild()], { activeFlags: [FATURAR_FLAG, FINISHED_FLAG] })],
+  });
+  const open = (id: string) => ({ Glovo: [makeOrderInstance(id, [makeItemChild()])] });
+
+  it('não volta a pedir à API pedidos terminados dentro do TTL', async () => {
+    const { uc, calls } = makeCountingStubs({ a: finished('a'), b: finished('b') });
+    await uc.execute(ENT_ID, START, END);
+    await uc.execute(ENT_ID, START, END);
+    expect(calls).toEqual(['a', 'b']);
+  });
+
+  it('volta a pedir pedidos terminados depois de o TTL expirar', async () => {
+    const clock = { t: 0 };
+    const { uc, calls } = makeCountingStubs({ a: finished('a') }, new Set(), clock);
+    await uc.execute(ENT_ID, START, END);
+    clock.t = 1001;
+    await uc.execute(ENT_ID, START, END);
+    expect(calls).toEqual(['a', 'a']);
+  });
+
+  it('não guarda em cache pedidos ainda em curso (sem FINISHED/CANCEL)', async () => {
+    const { uc, calls } = makeCountingStubs({ a: open('a') });
+    await uc.execute(ENT_ID, START, END);
+    await uc.execute(ENT_ID, START, END);
+    expect(calls).toEqual(['a', 'a']);
+  });
+
+  it('repete uma vez um pedido que falhou e inclui-o no resultado', async () => {
+    const { uc, calls } = makeCountingStubs({ a: open('a'), b: open('b'), c: open('c') }, new Set(['b']));
+    const orders = await uc.execute(ENT_ID, START, END);
+    expect(orders.map((o) => o.orderId).sort()).toEqual(['a', 'b', 'c']);
+    expect(calls.filter((id) => id === 'b')).toHaveLength(2);
+  });
+});

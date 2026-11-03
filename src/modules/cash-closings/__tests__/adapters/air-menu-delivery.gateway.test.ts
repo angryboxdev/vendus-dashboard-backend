@@ -87,19 +87,24 @@ describe("AirMenuDeliveryGateway", () => {
     expect(fake.capturedArgs?.enterpriseId).toBe(ENTERPRISE_ID);
   });
 
-  it("passa startDate como início do dia e endDate como fim do dia", async () => {
+  it("o dia de fecho é o dia civil de Lisboa, no verão (WEST, UTC+1)", async () => {
     const fake = new FakeGetSummary();
 
     await makeGateway(fake).getDeliveryTotalsForDate("2026-08-04");
 
     const { startDate, endDate } = fake.capturedArgs!;
-    expect(startDate.getHours()).toBe(0);
-    expect(startDate.getMinutes()).toBe(0);
-    expect(endDate.getHours()).toBe(23);
-    expect(endDate.getMinutes()).toBe(59);
-    // mesma data de calendário
-    expect(startDate.getDate()).toBe(endDate.getDate());
-    expect(startDate.getMonth()).toBe(endDate.getMonth());
+    expect(startDate.toISOString()).toBe("2026-08-03T23:00:00.000Z");
+    expect(endDate.toISOString()).toBe("2026-08-04T22:59:59.999Z");
+  });
+
+  it("o dia de fecho é o dia civil de Lisboa, no inverno (WET, UTC+0)", async () => {
+    const fake = new FakeGetSummary();
+
+    await makeGateway(fake).getDeliveryTotalsForDate("2026-10-30");
+
+    const { startDate, endDate } = fake.capturedArgs!;
+    expect(startDate.toISOString()).toBe("2026-10-30T00:00:00.000Z");
+    expect(endDate.toISOString()).toBe("2026-10-30T23:59:59.999Z");
   });
 
   it("match de plataforma é case-insensitive (substring)", async () => {

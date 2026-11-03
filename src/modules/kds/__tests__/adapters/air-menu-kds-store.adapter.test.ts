@@ -1,4 +1,4 @@
-import { AirMenuKdsStoreAdapter } from '../../adapters/out/air-menu-kds-store.adapter.js';
+import { AirMenuKdsStoreAdapter, MAX_AGE_MS } from '../../adapters/out/air-menu-kds-store.adapter.js';
 import type { Delivery } from '../../domain/entities/delivery.js';
 
 function makeDelivery(overrides: Partial<Delivery> = {}): Delivery {
@@ -13,7 +13,7 @@ function makeDelivery(overrides: Partial<Delivery> = {}): Delivery {
     table: null,
     items: [],
     extraInfo: '{}',
-    dateCreate: '2026-01-15T10:00:00.000Z',
+    dateCreate: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -117,5 +117,35 @@ describe('AirMenuKdsStoreAdapter', () => {
       expect(a).toEqual([10]);
       expect(b).toEqual([10]);
     });
+  });
+});
+
+describe('AirMenuKdsStoreAdapter — idempotência e limite de memória', () => {
+  it('addIfAbsent não repõe o estado de um pedido já conhecido (CREATED repetido)', () => {
+    const store = new AirMenuKdsStoreAdapter();
+    store.add(makeDelivery({ id: 1 }));
+    store.updateStatus(1, 'delivered');
+
+    expect(store.addIfAbsent(makeDelivery({ id: 1, status: 'pending' }))).toBe(false);
+    expect(store.getAll()[0]!.status).toBe('delivered');
+  });
+
+  it('addIfAbsent adiciona e notifica quando o pedido é novo', () => {
+    const store = new AirMenuKdsStoreAdapter();
+    const seen: number[] = [];
+    store.subscribe((d) => seen.push(d.id));
+
+    expect(store.addIfAbsent(makeDelivery({ id: 2 }))).toBe(true);
+    expect(seen).toEqual([2]);
+  });
+
+  it('remove pedidos com mais de 24 h', () => {
+    const t0 = Date.parse('2026-10-30T12:00:00.000Z');
+    const clock = { t: t0 };
+    const store = new AirMenuKdsStoreAdapter(() => clock.t);
+    store.add(makeDelivery({ id: 1, dateCreate: new Date(t0).toISOString() }));
+
+    clock.t = t0 + MAX_AGE_MS + 1;
+    expect(store.getAll()).toEqual([]);
   });
 });

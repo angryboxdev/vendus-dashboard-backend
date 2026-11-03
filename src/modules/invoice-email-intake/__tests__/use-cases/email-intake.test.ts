@@ -205,6 +205,25 @@ describe("Faturas por email — processamento", () => {
     expect((await s.process.execute({ organizationId: ORG_A })).processed).toBe(0);
   });
 
+  it("10c. anexo que mata o servidor a meio não é retomado para sempre", async () => {
+    await s.receive.execute(email());
+    s.resend.addEmail("email-1", [{ id: "a1", filename: "FT 2026-1.pdf" }]);
+    // Simula o crash: reserva (attempts+1) e o processo morre sem nunca chamar update().
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      const [due] = await s.attachments.findDue(ORG_A, new Date("2026-12-31T00:00:00Z"), new Date("2026-12-31T00:00:00Z"), 5);
+      await s.attachments.claim(ORG_A, due!, new Date("2026-10-27T10:00:00Z"));
+      s.advance(20);
+    }
+    expect(s.attachments.rows[0]).toMatchObject({ status: "processing", attempts: MAX_ATTEMPTS });
+
+    // Retomada: esgotou as tentativas → fecha sem ler o PDF outra vez.
+    await s.process.execute({ organizationId: ORG_A });
+    expect(s.intake.calls).toHaveLength(0);
+    expect(s.attachments.rows[0]).toMatchObject({ status: "read_error", errorCode: "crashed", nextAttemptAt: null });
+    s.advance(60);
+    expect((await s.process.execute({ organizationId: ORG_A })).processed).toBe(0);
+  });
+
   it("11. ficheiro que não é PDF de verdade, ou que o leitor recusa → rejeitado com motivo", async () => {
     await s.receive.execute(email({ attachments: [pdf("a1", "falso.pdf"), pdf("a2", "nao-fatura.pdf")] }));
     s.resend.addEmail("email-1", [

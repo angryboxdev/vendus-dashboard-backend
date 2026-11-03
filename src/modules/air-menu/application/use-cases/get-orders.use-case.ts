@@ -13,6 +13,16 @@ import { extractItems } from "../../domain/services/order-item-extractor.js";
 
 export const BATCH_SIZE = 5;
 export const BATCH_DELAY_MS = 1000;
+/** Pedidos já terminados (FINISHED/CANCEL) mudam muito raramente; evita repetir 2 s/pedido a cada abertura do fecho. */
+export const TERMINAL_ORDER_CACHE_TTL_MS = 15 * 60 * 1000;
+
+type RawOrders = Record<string, RawOrderItemInstance[]>;
+
+function isTerminal(raw: RawOrders): boolean {
+  return Object.values(raw).some((instances) =>
+    instances.some((i) => (i.activeFlags ?? []).some((f) => f.key === "FINISHED" || f.key === "CANCEL")),
+  );
+}
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -40,12 +50,26 @@ function getProviderOrderId(
 }
 
 export class GetOrdersUseCase implements GetOrdersPort {
+  private readonly terminalCache = new Map<string, { raw: RawOrders; cachedAt: number }>();
+
   constructor(
     private readonly sessionManager: SessionManagerService,
     private readonly gateway: AirMenuGatewayPort,
     private readonly batchSize: number = BATCH_SIZE,
     private readonly batchDelayMs: number = BATCH_DELAY_MS,
+    private readonly now: () => number = Date.now,
+    private readonly cacheTtlMs: number = TERMINAL_ORDER_CACHE_TTL_MS,
   ) {}
+
+  private async fetchOrder(sessionId: string, enterpriseId: string, orderId: string): Promise<RawOrders> {
+    const key = `${enterpriseId}:${orderId}`;
+    const hit = this.terminalCache.get(key);
+    if (hit && this.now() - hit.cachedAt < this.cacheTtlMs) return hit.raw;
+
+    const raw = await this.gateway.getOrders(sessionId, enterpriseId, orderId);
+    if (isTerminal(raw)) this.terminalCache.set(key, { raw, cachedAt: this.now() });
+    return raw;
+  }
 
   async execute(enterpriseId: string, startDate: Date, endDate: Date): Promise<AirMenuOrder[]> {
     const session = await this.sessionManager.getValidSession();
@@ -60,23 +84,42 @@ export class GetOrdersUseCase implements GetOrdersPort {
     // instead of firing every batch (AirMenu revokes the API key on rate-limit abuse).
     const [probeId, ...restIds] = orderIds as [string, ...string[]];
     const { value: probeOrders, sessionId: activeSessionId } = await this.withReauth(sessionId, (sid) =>
-      this.gateway.getOrders(sid, enterpriseId, probeId),
+      this.fetchOrder(sid, enterpriseId, probeId),
     );
 
-    const rawOrdersList: Record<string, RawOrderItemInstance[]>[] = [probeOrders];
+    const rawOrdersList: RawOrders[] = [probeOrders];
+    const failedIds: string[] = [];
     for (let i = 0; i < restIds.length; i += this.batchSize) {
       await sleep(this.batchDelayMs);
       const batch = restIds.slice(i, i + this.batchSize);
       const settled = await Promise.allSettled(
-        batch.map((id) => this.gateway.getOrders(activeSessionId, enterpriseId, id)),
+        batch.map((id) => this.fetchOrder(activeSessionId, enterpriseId, id)),
       );
-      for (const r of settled) {
+      settled.forEach((r, idx) => {
         if (r.status === "rejected") {
-          console.warn(`[AirMenu] GetOrders skipped order (API error): ${String(r.reason)}`);
-          continue;
+          console.warn(`[AirMenu] GetOrders falhou para o pedido ${batch[idx]}: ${String(r.reason)}`);
+          failedIds.push(batch[idx]!);
+          return;
         }
         rawOrdersList.push(r.value);
-      }
+      });
+    }
+
+    // Uma falha transitória não deve fazer desaparecer o pedido dos totais: tenta mais uma vez.
+    if (failedIds.length > 0) {
+      await sleep(this.batchDelayMs);
+      const retried = await Promise.allSettled(
+        failedIds.map((id) => this.fetchOrder(activeSessionId, enterpriseId, id)),
+      );
+      retried.forEach((r, idx) => {
+        if (r.status === "rejected") {
+          console.error(
+            `[AirMenu] Pedido ${failedIds[idx]} ficou de fora do resultado (${failedIds.length}/${orderIds.length} falharam): ${String(r.reason)}`,
+          );
+          return;
+        }
+        rawOrdersList.push(r.value);
+      });
     }
 
     const mergedRawOrders: Record<string, RawOrderItemInstance[]> = {};

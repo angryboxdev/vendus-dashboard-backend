@@ -273,3 +273,46 @@ describe('mapAirMenuEventToDelivery', () => {
     });
   });
 });
+
+// ─── re-hidratação a partir de GetOrders ──────────────────────────────────────
+
+import { AirMenuOrder } from '../../../air-menu/domain/entities/air-menu-order.js';
+import { mapAirMenuOrderToDelivery } from '../../adapters/out/air-menu-delivery.mapper.js';
+
+describe('mapAirMenuOrderToDelivery', () => {
+  const T = Date.parse('2026-10-30T20:00:00.000Z');
+  const make = (flags: { key: string; operator: string; datetime: number }[]) =>
+    AirMenuOrder.create({
+      orderId: '4776052',
+      platform: 'Uber Eats',
+      divisionName: 'Uber',
+      orderDate: new Date(T),
+      paymentMethod: 'Online',
+      items: [
+        { title: 'Creamy Garlic L', plu: 'p1', price: 23.5, count: 1 },
+        { title: 'Desconto', plu: 'AM_PROMO', price: -5, count: 1 },
+      ],
+      firstName: '',
+      lastName: '',
+      activeFlags: flags,
+      providerOrderId: 'UB-1',
+      extraInfo: { AM_NOTE: ' sem cebola ' },
+      rawData: [],
+    });
+
+  it('pedido sem flag de fecho fica pending, sem linhas de desconto', () => {
+    const d = mapAirMenuOrderToDelivery(make([{ key: 'ACCEPT', operator: 's', datetime: T }]), 'ent-1');
+    expect(d.id).toBe(4776052);
+    expect(d.status).toBe('pending');
+    expect(d.source).toBe('Uber Eats');
+    expect(d.items.map((i) => i.name)).toEqual(['Creamy Garlic L']);
+    expect(d.deliveredAt).toBeUndefined();
+    expect(JSON.parse(d.extraInfo)).toMatchObject({ providerOrderId: 'UB-1', enterpriseId: 'ent-1', orderNote: 'sem cebola' });
+  });
+
+  it('pedido FINISHED fica delivered à hora da flag', () => {
+    const d = mapAirMenuOrderToDelivery(make([{ key: 'FINISHED', operator: 's', datetime: T + 60_000 }]), 'ent-1');
+    expect(d.status).toBe('delivered');
+    expect(d.deliveredAt).toBe(T + 60_000);
+  });
+});

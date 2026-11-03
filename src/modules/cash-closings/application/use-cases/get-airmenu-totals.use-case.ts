@@ -8,7 +8,8 @@ export class GetAirMenuTotalsUseCase implements GetAirMenuTotalsPort {
     if (!this.airMenuGateway) return null;
     try {
       return await this.airMenuGateway.getDeliveryTotalsForDate(date);
-    } catch {
+    } catch (e) {
+      console.error(`[AirMenu] Totais do fecho indisponíveis para ${date}: ${String(e)}`);
       return null;
     }
   }
