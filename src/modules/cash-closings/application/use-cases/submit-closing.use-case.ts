@@ -80,8 +80,8 @@ export class SubmitClosingUseCase implements SubmitClosingPort {
         airMenuUber = totals.uber;
         airMenuGlovo = totals.glovo;
         airMenuBolt = totals.bolt;
-      } catch {
-        // silently ignored
+      } catch (e) {
+        console.error(`[AirMenu] Fecho ${command.closingDate} submetido sem totais AirMenu: ${String(e)}`);
       }
     }
 

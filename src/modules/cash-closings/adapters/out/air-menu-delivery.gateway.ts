@@ -1,14 +1,13 @@
+import { DateTime } from "luxon";
 import type { AirMenuDeliveryGatewayPort, DeliveryTotals } from "../../domain/ports/out/air-menu-delivery-gateway.port.js";
 import type { GetSummaryPort } from "../../../air-menu/domain/ports/in/get-summary.port.js";
 
-function startOfDay(dateStr: string): Date {
-  const d = new Date(dateStr);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-}
+const ZONE = "Europe/Lisbon";
 
-function endOfDay(dateStr: string): Date {
-  const d = new Date(dateStr);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+/** Dia de fecho (YYYY-MM-DD) em hora de Lisboa, independentemente do fuso do servidor (Render corre em UTC). */
+function dayBoundsLisbon(dateStr: string): { start: Date; end: Date } {
+  const day = DateTime.fromISO(dateStr, { zone: ZONE });
+  return { start: day.startOf("day").toJSDate(), end: day.endOf("day").toJSDate() };
 }
 
 /**
@@ -27,11 +26,8 @@ export class AirMenuDeliveryGateway implements AirMenuDeliveryGatewayPort {
   ) {}
 
   async getDeliveryTotalsForDate(date: string): Promise<DeliveryTotals> {
-    const { analytics } = await this.getSummary.execute(
-      this.enterpriseId,
-      startOfDay(date),
-      endOfDay(date),
-    );
+    const { start, end } = dayBoundsLisbon(date);
+    const { analytics } = await this.getSummary.execute(this.enterpriseId, start, end);
 
     const totals: DeliveryTotals = { uber: 0, glovo: 0, bolt: 0 };
 
