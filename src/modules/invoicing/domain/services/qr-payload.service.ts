@@ -1,7 +1,9 @@
 import type { Dec } from "../../../../kernel/money/decimal.js";
+import { InvoicingRuleError } from "../errors.js";
 import { formatAmount } from "./amount-format.js";
 import { add } from "./decimal-ops.js";
-import type { DocumentTotals } from "./document-totals.service.js";
+import { isNotSubjectCode } from "../entities/exemption-codes.js";
+import type { DocumentTotals, TaxRateCode, TaxRegion } from "./document-totals.service.js";
 
 /**
  * Mensagem do código QR (Portaria 195/2020; «Especificações Técnicas – Código
@@ -54,31 +56,34 @@ const REGION_MAX = 5;
 
 function field(code: string, value: string): string {
   const max = MAX_LENGTH[code] ?? AMOUNT_MAX;
-  if (value.length === 0 || value.length > max) throw new Error(`Campo ${code} do QR inválido: "${value}"`);
-  if (value.includes("*")) throw new Error(`Campo ${code} do QR não pode conter "*"`);
+  if (value.length === 0 || value.length > max) throw new InvoicingRuleError(`Campo ${code} do QR inválido: "${value}"`);
+  if (value.includes("*")) throw new InvoicingRuleError(`Campo ${code} do QR não pode conter "*"`);
   return `${code}:${value}`;
 }
 
 const amount = (code: string, d: Dec) => field(code, formatAmount(d));
 
+/** Taxa → campo do espaço fiscal e posição da base (o IVA vem a seguir): I3/I4, I5/I6, I7/I8. */
+const RATE_SLOTS = [
+  { code: "RED", key: "reduced", basePosition: 3 },
+  { code: "INT", key: "intermediate", basePosition: 5 },
+  { code: "NOR", key: "normal", basePosition: 7 },
+] as const satisfies readonly { code: TaxRateCode; key: keyof QrFiscalSpace; basePosition: number }[];
+
 function fiscalSpaceFields(letter: "I" | "J" | "K", space: QrFiscalSpace): string[] {
-  if (space.region.length > REGION_MAX) throw new Error(`Espaço fiscal inválido: ${space.region}`);
+  if (space.region.length > REGION_MAX) throw new InvoicingRuleError(`Espaço fiscal inválido: ${space.region}`);
   const out = [`${letter}1:${space.region}`];
   if (space.exemptBase) out.push(amount(`${letter}2`, space.exemptBase));
-  const rates: [QrBaseAndTax | undefined, number][] = [
-    [space.reduced, 3],
-    [space.intermediate, 5],
-    [space.normal, 7],
-  ];
-  for (const [pair, n] of rates) {
+  for (const { key, basePosition } of RATE_SLOTS) {
+    const pair = space[key];
     if (!pair) continue;
-    out.push(amount(`${letter}${n}`, pair.base), amount(`${letter}${n + 1}`, pair.tax));
+    out.push(amount(`${letter}${basePosition}`, pair.base), amount(`${letter}${basePosition + 1}`, pair.tax));
   }
   return out;
 }
 
 export function buildQrPayload(input: QrInput): string {
-  if (input.fiscalSpaces.length > 3) throw new Error("O QR admite no máximo 3 espaços fiscais");
+  if (input.fiscalSpaces.length > 3) throw new InvoicingRuleError("O QR admite no máximo 3 espaços fiscais");
   const spaces =
     input.fiscalSpaces.length === 0
       ? ["I1:0"]
@@ -106,29 +111,43 @@ export function buildQrPayload(input: QrInput): string {
   return parts.join("*");
 }
 
-/** Espaços fiscais a partir dos totais do documento, pela ordem em que aparecem. */
-export function qrFiscalSpacesFromTotals(totals: DocumentTotals): QrFiscalSpace[] {
-  const byRegion = new Map<string, QrFiscalSpace>();
-  const space = (region: string) => {
+export interface QrTaxFields {
+  fiscalSpaces: QrFiscalSpace[];
+  /** Campo L: operações não sujeitas / não tributáveis (M99). */
+  notSubjectAmount?: Dec;
+}
+
+/**
+ * Campos de imposto do QR a partir dos totais do documento: espaços fiscais
+ * pela ordem em que aparecem (isenções em I2, taxas em I3–I8) e o campo L.
+ */
+export function qrTaxFieldsFromTotals(totals: DocumentTotals): QrTaxFields {
+  const byRegion = new Map<TaxRegion, QrFiscalSpace>();
+  const space = (region: TaxRegion) => {
     const existing = byRegion.get(region);
     if (existing) return existing;
     const created: QrFiscalSpace = { region };
     byRegion.set(region, created);
     return created;
   };
-  const slot = { RED: "reduced", INT: "intermediate", NOR: "normal" } as const;
 
   for (const t of totals.taxSummary) {
     const s = space(t.region);
-    const key = slot[t.code];
+    const { key } = RATE_SLOTS.find((slot) => slot.code === t.code)!;
     const prev = s[key];
     s[key] = prev
       ? { base: add(prev.base, t.taxableBase), tax: add(prev.tax, t.taxAmount) }
       : { base: t.taxableBase, tax: t.taxAmount };
   }
+
+  let notSubjectAmount: Dec | undefined;
   for (const e of totals.exemptions) {
+    if (isNotSubjectCode(e.code)) {
+      notSubjectAmount = notSubjectAmount ? add(notSubjectAmount, e.taxableBase) : e.taxableBase;
+      continue;
+    }
     const s = space(e.region);
     s.exemptBase = s.exemptBase ? add(s.exemptBase, e.taxableBase) : e.taxableBase;
   }
-  return [...byRegion.values()];
+  return { fiscalSpaces: [...byRegion.values()], ...(notSubjectAmount ? { notSubjectAmount } : {}) };
 }

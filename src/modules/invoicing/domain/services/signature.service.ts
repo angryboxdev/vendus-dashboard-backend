@@ -1,6 +1,8 @@
 import type { Dec } from "../../../../kernel/money/decimal.js";
+import { InvoicingRuleError } from "../errors.js";
 import type { SignatureVerifierPort } from "../ports/out/signer.port.js";
 import { formatAmount } from "./amount-format.js";
+import { chainKey, parseDocumentNumber } from "./series.service.js";
 
 /**
  * Regras da assinatura (Portaria 363/2010, art. 6.º; Despacho 8632/2014,
@@ -23,12 +25,13 @@ export interface SignatureInput {
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const SYSTEM_ENTRY_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
-const DOCUMENT_NUMBER = /^[^ ]+ [^/^ ]+\/[0-9]+$/;
 
 export function buildSignatureMessage(input: SignatureInput): string {
-  if (!DATE.test(input.documentDate)) throw new Error(`Data do documento inválida: ${input.documentDate}`);
-  if (!SYSTEM_ENTRY_DATE.test(input.systemEntryDate)) throw new Error(`SystemEntryDate inválida: ${input.systemEntryDate}`);
-  if (!DOCUMENT_NUMBER.test(input.documentNumber)) throw new Error(`Número de documento inválido: ${input.documentNumber}`);
+  if (!DATE.test(input.documentDate)) throw new InvoicingRuleError(`Data do documento inválida: ${input.documentDate}`);
+  if (!SYSTEM_ENTRY_DATE.test(input.systemEntryDate)) {
+    throw new InvoicingRuleError(`SystemEntryDate inválida: ${input.systemEntryDate}`);
+  }
+  parseDocumentNumber(input.documentNumber);
   return [
     input.documentDate,
     input.systemEntryDate,
@@ -38,18 +41,8 @@ export function buildSignatureMessage(input: SignatureInput): string {
   ].join(";");
 }
 
-/** A série/tipo da cadeia: tudo o que vem antes da "/" do número. */
-export function chainKey(documentNumber: string): string {
-  return documentNumber.slice(0, documentNumber.lastIndexOf("/"));
-}
-
-export interface SignedDocumentRecord {
-  documentNumber: string;
-  documentDate: string;
-  systemEntryDate: string;
-  grossTotal: Dec;
-  hash: string;
-}
+/** Documento já assinado, tal como fica gravado (sem o hash anterior, que vem da cadeia). */
+export type SignedDocumentRecord = Omit<SignatureInput, "previousHash"> & { hash: string };
 
 export type ChainVerification = { valid: true } | { valid: false; firstInvalid: string };
 

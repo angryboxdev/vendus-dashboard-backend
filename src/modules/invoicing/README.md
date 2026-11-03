@@ -49,13 +49,17 @@ escreve Vendus, AirMenu, DRE, stock ou custos, e nenhum desses módulos o import
 ## Domain concepts
 
 - `buildSignatureMessage` — `Data;SystemEntryDate;Número;GrossTotal(2 casas);HashAnterior` (vazio no 1.º da série).
-- `verifySignatureChain` — verifica a cadeia por série/tipo (texto antes da «/» do número) e aponta o 1.º documento adulterado.
-- `printedSignatureCode` / `certifiedProgramMention` / `receiptCertificationMention` / `TRAINING_MENTION`.
-- `computeDocumentTotals` — preços com ou sem IVA, desconto 0–100 %, isenção obrigatória com código M (tabela AT v4.0), totais por taxa e espaço fiscal.
-- `buildQrPayload` / `qrFiscalSpacesFromTotals` — mensagem do QR (especificação AT v1.1).
+- `verifySignatureChain` / `SignedDocumentRecord` — verifica a cadeia por série/tipo (`chainKey`) e aponta o 1.º documento adulterado.
+- `parseDocumentNumber` — único parser de `TIPO SÉRIE/NÚMERO` (regex do SAF-T); usado pela assinatura, pela cadeia e pelo ATCUD.
 - `validateSeriesId` / `documentNumber` / `atcud` / `printedAtcud`.
+- `printedSignatureCode` / `certifiedProgramMention` / `receiptCertificationMention` / `TRAINING_MENTION`.
+- `computeDocumentTotals` — preços com ou sem IVA, desconto 0–100 %, isenção obrigatória com código M (`EXEMPTION_CODES`, tabela AT v4.0), totais por taxa e espaço fiscal.
+- `buildQrPayload` / `qrTaxFieldsFromTotals` — mensagem do QR (especificação AT v1.1); isenções em I2, «não sujeito» (M99, `isNotSubjectCode`) em L.
 - `checkIssue` — bloqueia séries não-formação sem certificado e datas anteriores ao último da série; avisa data futura e relógio atrasado.
-- Invariantes: sem negativos nas linhas; taxa 0 % só como isenção com motivo; número só dígitos.
+- `SeriesMode` — normal / formação / recuperação.
+- `formatAmount` (2 casas, ponto) e `decimal-ops` (soma, subtração, divisão arredondada sobre `Dec`).
+- `InvoicingRuleError` — violação de regra fiscal; a F3 mapeia para 422.
+- Invariantes: sem negativos nas linhas; taxa 0 % só como isenção com motivo; número só dígitos; chave de assinatura só RSA 1024.
 
 ## Ports
 
@@ -82,7 +86,9 @@ escreve Vendus, AirMenu, DRE, stock ou custos, e nenhum desses módulos o import
 
 ## Design decisions (ADR summary)
 
-- **Vetores oficiais da AT nos testes**: o SAF-T de demonstração (`saft_idemo599999999.xml`, 36 documentos) e o par de chaves de exemplo publicados pela AT estão em `__tests__/fixtures/at/`. A chave privada aí é a de **exemplo público da AT**, não a do Mezza.
+- **Vetores oficiais da AT nos testes**: o SAF-T de demonstração (`saft_idemo599999999.xml`, 36 documentos) e o par de chaves de exemplo publicados pela AT estão em `__tests__/fixtures/at/`. A chave privada aí é a de **exemplo público da AT** (descarregada do Portal das Finanças), não a do Mezza — exceção consciente à regra «nunca chaves no repositório»; se um scanner de segredos a assinalar, marcar como falso positivo.
+- **Aritmética `Dec` local** (`decimal-ops`) em vez de alterar `src/kernel/money`: o módulo fica isolado dos outros (decisão do utilizador); pode subir ao kernel quando outro módulo precisar.
+- **Assinador recusa chaves que não sejam RSA 1024**: uma chave maior assinaria sem erro, mas o hash não caberia nos 172 caracteres do SAF-T.
 - **Chave do produtor só por variável de ambiente** (`INVOICING_SIGNING_PRIVATE_KEY`); nunca no repositório nem na BD (Despacho 3.1.4, 4.3).
 - **Antes do certificado só formação** (`checkIssue` → `uncertified-program`).
 - **Dinheiro exato** com `kernel/money/decimal` (bigint); linhas sem IVA a 6 casas, totais a 2 (Despacho 3.2.3).
@@ -95,6 +101,7 @@ escreve Vendus, AirMenu, DRE, stock ou custos, e nenhum desses módulos o import
 
 ## Known gaps / open debt
 
-- Por confirmar com a AT/contabilista: fuso do `SystemEntryDate`; limite da fatura simplificada na restauração (100 € vs 1000 €); quando anular vs. emitir NC.
+- Por confirmar com a AT/contabilista: fuso do `SystemEntryDate`; limite da fatura simplificada na restauração (100 € vs 1000 €); quando anular vs. emitir NC; campo do QR das autoliquidações (M30–M46: I2 ou L); o que vai em `R` (n.º de certificado) nos documentos de formação antes da certificação.
+- Para a F3 (de `code-review` da F1): tabela de taxas por espaço fiscal (PT/PT-AC/PT-MA) com fonte oficial; menção legal de isenção ligada ao texto da tabela v4.0; desconto global (`SettlementAmount`); escolha das menções impressas pelo modo da série; configuração via `src/config/env.ts`; tipos de domínio de `document-totals` para `domain/entities/`.
 - Os KMS de cloud podem não suportar RSA-1024 — a chave vive em variável de ambiente.
 - Persistência, casos de uso, API, SAF-T e webservices: fases F2–F6.

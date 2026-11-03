@@ -1,6 +1,6 @@
 # 01 — Domínio fiscal puro + assinador RSA + vetores da AT
 
-Status: in-progress
+Status: resolved
 Fase: F1
 
 ## O quê

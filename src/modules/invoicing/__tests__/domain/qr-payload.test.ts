@@ -1,6 +1,6 @@
 import { dec } from "../../../../kernel/money/decimal.js";
 import { computeDocumentTotals } from "../../domain/services/document-totals.service.js";
-import { buildQrPayload, qrFiscalSpacesFromTotals, type QrInput } from "../../domain/services/qr-payload.service.js";
+import { buildQrPayload, qrTaxFieldsFromTotals, type QrInput } from "../../domain/services/qr-payload.service.js";
 
 const pair = (base: string, tax: string) => ({ base: dec(base), tax: dec(tax) });
 
@@ -134,6 +134,29 @@ describe("conteúdo do código QR (Portaria 195/2020; especificação AT v1.1)",
       ],
     });
 
-    expect(qrFiscalSpacesFromTotals(totals)).toEqual([{ region: "PT", intermediate: pair("22.12", "2.88"), normal: pair("2.44", "0.56") }]);
+    expect(qrTaxFieldsFromTotals(totals)).toEqual({
+      fiscalSpaces: [{ region: "PT", intermediate: pair("22.12", "2.88"), normal: pair("2.44", "0.56") }],
+    });
+  });
+
+  it("isenções vão para I2; «não sujeito ou não tributado» (M99) vai para L (especificação §4)", () => {
+    const exempt = (code: string, price: string) => ({
+      description: "Artigo",
+      quantity: dec("1"),
+      unitPrice: dec(price),
+      tax: { kind: "exempt", region: "PT", exemptionCode: code, exemptionReason: "Menção" } as const,
+    });
+    const totals = computeDocumentTotals({ pricesIncludeTax: true, lines: [exempt("M07", "10.00"), exempt("M99", "5.00")] });
+
+    expect(qrTaxFieldsFromTotals(totals)).toEqual({ fiscalSpaces: [{ region: "PT", exemptBase: dec("10.00") }], notSubjectAmount: dec("5.00") });
+  });
+
+  it("documento só com operações não sujeitas não tem espaço fiscal (I1:0) e leva L", () => {
+    const totals = computeDocumentTotals({
+      pricesIncludeTax: true,
+      lines: [{ description: "Artigo", quantity: dec("1"), unitPrice: dec("5.00"), tax: { kind: "exempt", region: "PT", exemptionCode: "M99", exemptionReason: "Não sujeito" } }],
+    });
+
+    expect(qrTaxFieldsFromTotals(totals)).toEqual({ fiscalSpaces: [], notSubjectAmount: dec("5.00") });
   });
 });

@@ -20,3 +20,10 @@ export const EXEMPTION_CODES: ReadonlySet<string> = new Set([
 ]);
 
 export const isExemptionCode = (code: string): boolean => EXEMPTION_CODES.has(code);
+
+/**
+ * «Não sujeito ou não tributado» (M99): no QR vai para o campo L e não para a
+ * base isenta I2 (especificação QR v1.1, §4). A classificação das
+ * autoliquidações (M30–M46) no QR está por confirmar com a AT.
+ */
+export const isNotSubjectCode = (code: string): boolean => code === "M99";

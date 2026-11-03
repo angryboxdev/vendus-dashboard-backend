@@ -1,4 +1,5 @@
 import { isNegative, isZero, mul, roundTo, type Dec } from "../../../../kernel/money/decimal.js";
+import { InvoicingRuleError } from "../errors.js";
 import { isExemptionCode } from "../entities/exemption-codes.js";
 import { add, compare, HUNDRED, hundredMinus, hundredPlus, mulDivRound, sub, ZERO } from "./decimal-ops.js";
 
@@ -56,20 +57,20 @@ const MONEY = 2;
 const LINE_PRECISION = 6;
 
 function validateLine(line: DraftLine): void {
-  if (!line.description.trim()) throw new Error("Linha sem descrição");
-  if (isNegative(line.quantity) || isZero(line.quantity)) throw new Error("Quantidade tem de ser positiva");
-  if (isNegative(line.unitPrice)) throw new Error("Preço unitário não pode ser negativo");
+  if (!line.description.trim()) throw new InvoicingRuleError("Linha sem descrição");
+  if (isNegative(line.quantity) || isZero(line.quantity)) throw new InvoicingRuleError("Quantidade tem de ser positiva");
+  if (isNegative(line.unitPrice)) throw new InvoicingRuleError("Preço unitário não pode ser negativo");
   if (line.discountPct && (isNegative(line.discountPct) || compare(line.discountPct, HUNDRED) > 0)) {
-    throw new Error("Desconto fora do intervalo 0–100 %");
+    throw new InvoicingRuleError("Desconto fora do intervalo 0–100 %");
   }
   const tax = line.tax;
   if (tax.kind === "rate") {
     if (isNegative(tax.percentage) || isZero(tax.percentage)) {
-      throw new Error("Taxa de IVA 0 % tem de ser registada como isenção com código de motivo");
+      throw new InvoicingRuleError("Taxa de IVA 0 % tem de ser registada como isenção com código de motivo");
     }
   } else {
-    if (!isExemptionCode(tax.exemptionCode)) throw new Error(`Código de motivo de isenção desconhecido: ${tax.exemptionCode}`);
-    if (!tax.exemptionReason.trim()) throw new Error("Isenção sem menção do motivo");
+    if (!isExemptionCode(tax.exemptionCode)) throw new InvoicingRuleError(`Código de motivo de isenção desconhecido: ${tax.exemptionCode}`);
+    if (!tax.exemptionReason.trim()) throw new InvoicingRuleError("Isenção sem menção do motivo");
   }
 }
 
@@ -86,7 +87,7 @@ function lineAmount(line: DraftLine, pricesIncludeTax: boolean): Dec {
  * incluído: base por taxa arredondada uma vez, IVA = base × p/100.
  */
 export function computeDocumentTotals(input: { lines: DraftLine[]; pricesIncludeTax: boolean }): DocumentTotals {
-  if (input.lines.length === 0) throw new Error("Documento sem linhas");
+  if (input.lines.length === 0) throw new InvoicingRuleError("Documento sem linhas");
   input.lines.forEach(validateLine);
 
   const lines = input.lines.map((line) => ({ line, amount: lineAmount(line, input.pricesIncludeTax) }));
