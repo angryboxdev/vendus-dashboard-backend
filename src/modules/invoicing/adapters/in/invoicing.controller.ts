@@ -114,8 +114,7 @@ export function createInvoicingRouter(uc: InvoicingPort, issue: IssueDocumentPor
   r.put(`${B}/series/:id/validation-code`, async (req, res) => {
     const code = text(body(req).validationCode);
     if (!code) badRequest("validationCode obrigatório");
-    await run(() => uc.setValidationCode(org(req), id(req), code));
-    res.status(204).end();
+    res.json(await run(() => uc.setValidationCode(org(req), id(req), code)));
   });
 
   r.get(`${B}/documents`, async (req, res) => {
@@ -136,8 +135,7 @@ export function createInvoicingRouter(uc: InvoicingPort, issue: IssueDocumentPor
   });
   r.post(`${B}/documents/:id/cancel`, async (req, res) => {
     const b = body(req);
-    await run(() => uc.cancel(org(req), actor(req), id(req), String(b.reasonCode ?? "") as CancelReasonCode, text(b.note)));
-    res.status(204).end();
+    res.json(await run(() => uc.cancel(org(req), actor(req), id(req), String(b.reasonCode ?? "") as CancelReasonCode, text(b.note))));
   });
 
   return r;

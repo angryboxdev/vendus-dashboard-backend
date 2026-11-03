@@ -86,10 +86,10 @@ Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `Invoicing
 
 - `createInvoicingRouter` → `/api/invoicing` (permissão `sales.invoicing`: GET = READ, resto = MANAGE; só o Admin a tem por omissão):
   - `GET /invoicing/meta` · `GET /invoicing/series` · `POST /invoicing/series` `{legalEntityId, locationId?, documentType, seriesId, mode}` → 201
-  - `PUT /invoicing/series/:id/validation-code` `{validationCode}` → 204 (código da AT, uma só vez)
+  - `PUT /invoicing/series/:id/validation-code` `{validationCode}` → 200 com a série (código da AT, uma só vez)
   - `GET /invoicing/documents?from&to&type&status&limit` · `GET /invoicing/documents/:id` (2.ª via)
   - `POST /invoicing/documents` (**`Idempotency-Key` obrigatório**) `{seriesRef, documentDate?, customer?, pricesIncludeTax?, lines[{productCode, productType, unit, description, quantity, unitPrice, discountPct?, tax:{region, rate}|{region, exemptionCode, exemptionNorm?}}], paymentMechanism?, references?[{documentId, reason}], orderReferences?[ids], confirmWarnings?}` → 201 `{documentId, documentNumber, atcud}`
-  - `POST /invoicing/documents/:id/cancel` `{reasonCode, note?}` → 204
+  - `POST /invoicing/documents/:id/cancel` `{reasonCode, note?}` → 200 com o documento anulado
   - Erros (Problem Details): 400 corpo inválido; 404; 409 `confirmation_required` (com `warnings`) ou `series_busy`; 422 `fiscal_rule`; 503 `invoicing_unavailable` (sem chave).
 
 ### Output

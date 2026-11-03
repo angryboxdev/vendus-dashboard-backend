@@ -32,15 +32,16 @@ describe("séries", () => {
     const { uc, store } = setup();
     const s = await uc.createSeries(ORG, "ana", newSeries);
     await expect(uc.setValidationCode(ORG, s.ref, "ABC")).rejects.toBeInstanceOf(InvoicingRuleError);
-    await uc.setValidationCode(ORG, s.ref, " cdf7t5hd ");
-    expect(store.series.get(s.ref)!.validationCode).toBe("CDF7T5HD");
+    await expect(uc.setValidationCode(ORG, s.ref, " cdf7t5hd ")).resolves.toMatchObject({ ref: s.ref, validationCode: "CDF7T5HD" });
   });
 });
 
 describe("anulação", () => {
-  it("só com motivo da lista fechada", async () => {
+  it("só com motivo da lista fechada; devolve o documento atualizado", async () => {
     const { uc, store } = setup();
-    await uc.cancel(ORG, "ana", "doc-1", "wrong-customer-tax-id", "pedido do cliente");
+    const hash = "A".repeat(171) + "=";
+    store.getDocument = async () => ({ id: "doc-1", status: "A", documentType: "FS", seriesMode: "training", softwareCertificateNumber: "0", hash, atcud: "CDF7T5HD-1" }) as StoredDocument;
+    await expect(uc.cancel(ORG, "ana", "doc-1", "wrong-customer-tax-id", "pedido do cliente")).resolves.toMatchObject({ id: "doc-1", status: "A" });
     expect(store.cancelled).toEqual([{ documentId: "doc-1", reason: "NIF do adquirente errado - pedido do cliente", actor: "ana" }]);
     await expect(uc.cancel(ORG, "ana", "doc-1", "valor-errado" as never)).rejects.toBeInstanceOf(InvoicingRuleError);
   });

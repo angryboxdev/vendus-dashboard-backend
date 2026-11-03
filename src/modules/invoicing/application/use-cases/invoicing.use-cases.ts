@@ -37,10 +37,13 @@ export class InvoicingUseCases implements InvoicingPort {
     return this.deps.store.createSeries(org, { ...input, actor });
   }
 
-  async setValidationCode(org: OrganizationId, seriesRef: string, code: string): Promise<void> {
+  async setValidationCode(org: OrganizationId, seriesRef: string, code: string): Promise<SeriesState> {
     const normalized = code.trim().toUpperCase();
     if (normalized.length < 8 || /[\s*-]/.test(normalized)) throw new InvoicingRuleError("Código de validação da AT inválido (mín. 8 caracteres, sem espaços, «*» nem «-»)");
     await this.deps.store.setSeriesValidationCode(org, seriesRef, normalized);
+    const series = await this.deps.store.getSeries(org, seriesRef);
+    if (!series) throw new InvoicingNotFoundError("Série");
+    return series;
   }
 
   listDocuments(org: OrganizationId, filter: DocumentFilter): Promise<DocumentSummary[]> {
@@ -59,8 +62,9 @@ export class InvoicingUseCases implements InvoicingPort {
     };
   }
 
-  async cancel(org: OrganizationId, actor: string, documentId: string, reasonCode: CancelReasonCode, note?: string): Promise<void> {
+  async cancel(org: OrganizationId, actor: string, documentId: string, reasonCode: CancelReasonCode, note?: string): Promise<DocumentView> {
     await this.deps.store.cancel(org, documentId, cancelReasonText(reasonCode, note), actor);
+    return this.getDocument(org, documentId);
   }
 
   meta(): InvoicingMeta {

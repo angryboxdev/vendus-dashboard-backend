@@ -55,7 +55,8 @@ describe("API /api/invoicing", () => {
     seriesRef = (await s.json()).ref;
 
     const code = await fetch(`${base}/series/${seriesRef}/validation-code`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ validationCode: "CDF7T5HD" }) });
-    expect(code.status).toBe(204);
+    expect(code.status).toBe(200);
+    expect(await code.json()).toMatchObject({ ref: seriesRef, validationCode: "CDF7T5HD" });
 
     const doc = await post("/documents", { seriesRef, lines: [line] }, { "Idempotency-Key": "emissao-teste-0001" });
     expect(doc.status).toBe(201);
@@ -84,7 +85,11 @@ describe("API /api/invoicing", () => {
   });
 
   it("anular pede motivo da lista fechada", async () => {
-    expect((await post("/documents/11111111-1111-4111-8111-111111111111/cancel", { reasonCode: "not-delivered" })).status).toBe(204);
+    store.getDocument = async () => ({ id: "11111111-1111-4111-8111-111111111111", status: "A", documentType: "FS", seriesMode: "training", softwareCertificateNumber: "0", hash: "A".repeat(171) + "=", atcud: "CDF7T5HD-1" }) as never;
+    const cancelled = await post("/documents/11111111-1111-4111-8111-111111111111/cancel", { reasonCode: "not-delivered" });
+    expect(cancelled.status).toBe(200);
+    expect(await cancelled.json()).toMatchObject({ status: "A" });
+    store.getDocument = async () => null;
     expect((await post("/documents/11111111-1111-4111-8111-111111111111/cancel", { reasonCode: "x" })).status).toBe(422);
   });
 

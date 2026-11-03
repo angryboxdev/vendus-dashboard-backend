@@ -77,9 +77,11 @@ export interface InvoicingMeta {
 export interface InvoicingPort {
   listSeries(org: OrganizationId): Promise<SeriesListItem[]>;
   createSeries(org: OrganizationId, actor: string, input: NewSeriesInput): Promise<SeriesState>;
-  setValidationCode(org: OrganizationId, seriesRef: string, code: string): Promise<void>;
+  /** Devolve a série atualizada. */
+  setValidationCode(org: OrganizationId, seriesRef: string, code: string): Promise<SeriesState>;
   listDocuments(org: OrganizationId, filter: DocumentFilter): Promise<DocumentSummary[]>;
   getDocument(org: OrganizationId, documentId: string): Promise<DocumentView>;
-  cancel(org: OrganizationId, actor: string, documentId: string, reasonCode: CancelReasonCode, note?: string): Promise<void>;
+  /** Devolve o documento anulado (2.ª via). */
+  cancel(org: OrganizationId, actor: string, documentId: string, reasonCode: CancelReasonCode, note?: string): Promise<DocumentView>;
   meta(): InvoicingMeta;
 }
