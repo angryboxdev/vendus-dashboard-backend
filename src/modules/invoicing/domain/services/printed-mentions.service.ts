@@ -33,3 +33,28 @@ export function receiptCertificationMention(certificateNumber: string): string {
 
 export const TRAINING_MENTION = "Documento emitido para fins de Formação";
 
+/** Documentos de conferência (consulta de mesa) e outros que não são fatura (Despacho 1.2). */
+export const NOT_AN_INVOICE_MENTION = "Este documento não serve de fatura";
+
+/**
+ * Enquanto o programa não tem certificado (n.º «0»), não se imprime a frase do
+ * programa certificado; os documentos levam esta marca (pesquisa-perguntas-abertas.md §4).
+ */
+export const UNCERTIFIED_TEST_MARK = "DOCUMENTO DE TESTE – SEM VALOR FISCAL";
+
+/** Linhas fiscais a imprimir no rodapé de um documento assinado, pela ordem. */
+export function fiscalMentions(input: {
+  hash: string;
+  /** "0" enquanto o programa não está certificado. */
+  certificateNumber: string;
+  mode: "normal" | "training";
+  documentType: string;
+}): string[] {
+  const code = printedSignatureCode(input.hash);
+  assertCertificateNumber(input.certificateNumber);
+  const lines = input.certificateNumber === "0" ? [code, UNCERTIFIED_TEST_MARK] : [certifiedProgramMention(code, input.certificateNumber)];
+  if (input.mode === "training") lines.push(TRAINING_MENTION);
+  if (input.documentType === "CM") lines.push(NOT_AN_INVOICE_MENTION);
+  return lines;
+}
+

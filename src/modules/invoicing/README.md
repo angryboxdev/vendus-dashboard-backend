@@ -1,6 +1,6 @@
 # Module: invoicing
 
-> Status: active (em construção — F2 de 7; fora do `server.ts`)
+> Status: active (em construção — F3 de 7; API em `/api/invoicing`, só formação até haver certificado)
 > Last updated: 2026-11-03
 
 ---
@@ -41,9 +41,8 @@ Restaurante (área «Vendas»)          AT
 
 ## Technical purpose
 
-Regras fiscais puras (mensagem a assinar, cadeia, menções impressas, totais e
-IVA, QR, ATCUD, séries, bloqueios de emissão) e os adapters de assinatura
-RSA-SHA1 e de relógio. NÃO é responsável por canais existentes: não lê nem
+Emissão de documentos fiscais certificáveis (séries, numeração, assinatura,
+ATCUD, QR, totais e IVA, imutabilidade na BD), consulta (2.ª via) e anulação. NÃO é responsável por canais existentes: não lê nem
 escreve Vendus, AirMenu, DRE, stock ou custos, e nenhum desses módulos o importa.
 
 ## Domain concepts
@@ -68,20 +67,28 @@ escreve Vendus, AirMenu, DRE, stock ou custos, e nenhum desses módulos o import
 
 ### Input (use cases)
 
-- Ainda nenhum (F3).
+- `IssueDocumentUseCase.execute` — emite FT/FS/FR/NC/ND/CM: série e bloqueios (certificado, data futura, relógio), taxas oficiais (`vatRate`) e menções de isenção (`exemptionMention`), regras por tipo (FS ≤ 100 € sem IVA; FR com meio de pagamento; NC/ND com documento retificado ativo do mesmo emitente e NC ≤ valor por creditar; faturas referem consultas de mesa ativas), cliente (NIF PT validado; sem cliente = consumidor final), QR, assinatura e gravação com recomeço se outro terminal emitiu (até 3 tentativas). Avisos → `IssueNeedsConfirmationError` (repetir com `confirmWarnings`).
+- `InvoicingUseCases` — `listSeries`, `createSeries` (normal só com certificado), `setValidationCode`, `listDocuments`, `getDocument` (2.ª via com `printed.atcud` e `printed.mentions`), `cancel` (motivo da lista fechada `CANCEL_REASONS`), `meta` (certificação, limites, taxas, isenções ativas, motivos de anulação).
 
 ### Output (domain dependencies)
 
 - `SignerPort` — assina a mensagem com a chave privada do produtor; devolve hash (172) e versão da chave.
 - `SignatureVerifierPort` — verifica com a chave pública (controlo de integridade).
 - `ClockPort` — hora legal de Lisboa nos formatos da AT + instante UTC.
-- `InvoicingStorePort` — ler a série e a última emissão do emitente; gravar o documento assinado (atómico, compare-and-swap); anular com motivo.
+- `InvoicingStorePort` — séries (ler, listar, criar, código de validação), documentos (por ids, total já creditado, ler com linhas e impostos, listar), gravar o documento assinado (atómico, compare-and-swap) e anular.
+- `IssuerDirectoryPort` — dados do emitente (entidade legal); ligado no `server.ts` ao módulo `legal-entities`.
 
 ## Adapters
 
 ### Input
 
-- Nenhum ainda.
+- `createInvoicingRouter` → `/api/invoicing` (permissão `sales.invoicing`: GET = READ, resto = MANAGE; só o Admin a tem por omissão):
+  - `GET /invoicing/meta` · `GET /invoicing/series` · `POST /invoicing/series` `{legalEntityId, locationId?, documentType, seriesId, mode}` → 201
+  - `PUT /invoicing/series/:id/validation-code` `{validationCode}` → 204 (código da AT, uma só vez)
+  - `GET /invoicing/documents?from&to&type&status&limit` · `GET /invoicing/documents/:id` (2.ª via)
+  - `POST /invoicing/documents` (**`Idempotency-Key` obrigatório**) `{seriesRef, documentDate?, customer?, pricesIncludeTax?, lines[{productCode, productType, unit, description, quantity, unitPrice, discountPct?, tax:{region, rate}|{region, exemptionCode, exemptionNorm?}}], paymentMechanism?, references?[{documentId, reason}], orderReferences?[ids], confirmWarnings?}` → 201 `{documentId, documentNumber, atcud}`
+  - `POST /invoicing/documents/:id/cancel` `{reasonCode, note?}` → 204
+  - Erros (Problem Details): 400 corpo inválido; 404; 409 `confirmation_required` (com `warnings`) ou `series_busy`; 422 `fiscal_rule`; 503 `invoicing_unavailable` (sem chave).
 
 ### Output
 
@@ -110,7 +117,11 @@ escreve Vendus, AirMenu, DRE, stock ou custos, e nenhum desses módulos o import
 - **`invoicing_events` em vez de `audit_events`**: o registo fiscal é escrito na mesma transação das funções da BD e não depende do módulo `audit` (que tem cadeia e numeração próprias por organização).
 - **Assinador recusa chaves que não sejam RSA 1024**: uma chave maior assinaria sem erro, mas o hash não caberia nos 172 caracteres do SAF-T.
 - **Chave do produtor só por variável de ambiente** (`INVOICING_SIGNING_PRIVATE_KEY`); nunca no repositório nem na BD (Despacho 3.1.4, 4.3).
-- **Antes do certificado só formação** (`checkIssue` → `uncertified-program`).
+- **Antes do certificado só formação** (`checkIssue` → `uncertified-program`; `createSeries` recusa séries normais).
+- **Permissão própria `sales.invoicing`**, fora dos `moduleAll("sales")` dos perfis Manager/Financeiro: em testes só o Admin a vê (migração `20261220110000_invoicing_access`).
+- **Emissão idempotente**: `Idempotency-Key` obrigatório no `POST /invoicing/documents` — um reenvio ou duplo clique devolve a mesma resposta, nunca um segundo documento.
+- **Taxas e menções em código, com fonte** (`vat-rates.ts`, `exemption-reasons.ts`): são lei nacional, não configuração por organização; v1 só ativa M07, M10, M19 e M99.
+- **Configuração** (`src/config/env.ts`): `INVOICING_SIGNING_PRIVATE_KEY`, `INVOICING_SIGNING_KEY_VERSION`, `INVOICING_CERTIFICATE_NUMBER`.
 - **Dinheiro exato** com `kernel/money/decimal` (bigint); linhas sem IVA a 6 casas, totais a 2 (Despacho 3.2.3).
 - **IVA incluído** (restauração): total por taxa fixo; IVA = total × p/(100+p); base = total − IVA — o cliente paga o preço do menu.
 - Spec, pesquisa e fases: `.scratch/certificacao-at/`.
@@ -123,7 +134,7 @@ escreve Vendus, AirMenu, DRE, stock ou custos, e nenhum desses módulos o import
 ## Known gaps / open debt
 
 - Por confirmar com a AT (e-Balcão, ver `pesquisa-perguntas-abertas.md` §9): campo do QR das autoliquidações (M30–M46; desativadas na v1); `R` antes do certificado (assumido «0»); se os documentos de formação vão ao e-Fatura (assumido que não); alerta 3.4.3 na hora repetida de outubro.
-- Para a F3 (de `code-review` da F1): tabela de taxas por espaço fiscal (PT/PT-AC/PT-MA) com fonte oficial; menção legal de isenção ligada ao texto da tabela v4.0; desconto global (`SettlementAmount`); escolha das menções impressas pelo modo da série; configuração via `src/config/env.ts`; tipos de domínio de `document-totals` para `domain/entities/`.
+- Em falta: desconto global (`SettlementAmount`); recibos (RC); recuperação de documentos manuais; controlo das NC parciais por linha/quantidade (hoje por valor total); taxa por produto e canal (sala 13 %/23 %, take-away) — hoje a taxa vem em cada linha; tipos de `document-totals` ainda em `services/`.
 - Os KMS de cloud podem não suportar RSA-1024 — a chave vive em variável de ambiente.
 - O teste de integração (concorrência real entre duas ligações) não correu (sem stack local); a migração foi validada em PGlite (uma ligação) e não está aplicada em lado nenhum.
 - Casos de uso, API, SAF-T e webservices: fases F3–F6.

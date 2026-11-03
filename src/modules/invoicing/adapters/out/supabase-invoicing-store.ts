@@ -1,12 +1,23 @@
 import type { ScopedQueryFactory } from "../../../../infra/scoped-db/scoped-query.js";
-import { decToString } from "../../../../kernel/money/decimal.js";
+import { dec, decToString, type Dec } from "../../../../kernel/money/decimal.js";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { DocumentReference } from "../../domain/entities/parties.js";
 import type { SeriesMode } from "../../domain/entities/series-mode.js";
 import type { FiscalDocumentType, SeriesState } from "../../domain/entities/series.js";
 import { InvoicingNotFoundError, InvoicingRuleError, StaleSeriesError } from "../../domain/errors.js";
-import type { IssuedDocumentRecord, InvoicingStorePort } from "../../domain/ports/out/invoicing-store.port.js";
+import type {
+  DocumentFilter,
+  DocumentLineView,
+  DocumentSummary,
+  DocumentTaxView,
+  IssuedDocumentRecord,
+  InvoicingStorePort,
+  NewSeries,
+  SeriesListItem,
+  StoredDocument,
+} from "../../domain/ports/out/invoicing-store.port.js";
 import { formatAmount } from "../../domain/services/amount-format.js";
+import { add } from "../../domain/services/decimal-ops.js";
 import type { LineTax } from "../../domain/services/document-totals.service.js";
 
 interface SeriesRow {
@@ -46,11 +57,14 @@ const toSeries = (r: SeriesRow): SeriesState => ({
 /** Mensagens das funções da BD (`raise exception '<código>'`) → texto para o utilizador. */
 const NOT_FOUND: Record<string, string> = { series_not_found: "Série", document_not_found: "Documento" };
 
-/** `errcode` das funções da migração → erros de domínio. */
+/**
+ * `errcode` das funções da migração → erros de domínio. Só `stale_series` é
+ * «repetir»: os triggers também saem com P0001 (código por omissão do
+ * `raise exception`) e são violações de integridade, não concorrência.
+ */
 function toDomainError(error: { code?: string; message: string }, subject: string): Error {
+  if (error.code === "P0001" && error.message === "stale_series") return new StaleSeriesError(subject);
   switch (error.code) {
-    case "P0001":
-      return new StaleSeriesError(subject);
     case "P0002":
       return new InvoicingNotFoundError(NOT_FOUND[error.message] ?? subject);
     case "P0003":
@@ -130,9 +144,184 @@ function rpcPayload(r: IssuedDocumentRecord) {
   return { document, lines, taxes };
 }
 
+interface SummaryRow {
+  id: string;
+  legal_entity_id: string;
+  document_type: FiscalDocumentType;
+  document_number: string;
+  document_date: string;
+  status: DocumentSummary["status"];
+  gross_total: string;
+}
+
+/** Montantes lidos como texto (`::text`), para não passarem por vírgula flutuante. */
+const SUMMARY_COLS = "id, legal_entity_id, document_type, document_number, document_date, status, gross_total::text";
+
+const toSummary = (r: SummaryRow): DocumentSummary => ({
+  id: r.id,
+  legalEntityId: r.legal_entity_id,
+  documentType: r.document_type,
+  documentNumber: r.document_number,
+  documentDate: r.document_date,
+  status: r.status,
+  grossTotal: dec(r.gross_total),
+});
+
+const DOCUMENT_COLS =
+  SUMMARY_COLS +
+  ", series_ref, sequence, tax_point_date, system_entry_date, system_entry_at, software_certificate_number, hash, hash_control, atcud, qr_payload, prices_include_tax, net_total::text, tax_payable::text, payment_mechanism, customer, issuer, references_to, order_references, status_reason, status_changed_at, created_by";
+const LINE_COLS =
+  "line_number, product_code, product_type, unit_of_measure, description, quantity::text, unit_price::text, discount_pct::text, line_amount::text, tax_region, tax_code, tax_percentage::text, exemption_code, exemption_reason";
+const TAX_COLS = "tax_region, tax_code, tax_percentage::text, exemption_code, exemption_reason, taxable_base::text, tax_amount::text";
+
+type Row = Record<string, unknown>;
+const str = (v: unknown) => (v === null || v === undefined ? null : String(v));
+const fromReferenceRows = (v: unknown): DocumentReference[] =>
+  Array.isArray(v)
+    ? (v as Row[]).map((r) => ({ documentId: String(r.document_id), documentNumber: String(r.document_number), ...(r.reason ? { reason: String(r.reason) } : {}) }))
+    : [];
+
+const toLineView = (l: Row): DocumentLineView => ({
+  lineNumber: Number(l.line_number),
+  productCode: String(l.product_code),
+  productType: String(l.product_type),
+  unitOfMeasure: String(l.unit_of_measure),
+  description: String(l.description),
+  quantity: String(l.quantity),
+  unitPrice: String(l.unit_price),
+  discountPct: str(l.discount_pct),
+  lineAmount: String(l.line_amount),
+  taxRegion: String(l.tax_region),
+  taxCode: String(l.tax_code),
+  taxPercentage: String(l.tax_percentage),
+  exemptionCode: str(l.exemption_code),
+  exemptionReason: str(l.exemption_reason),
+});
+
+const toTaxView = (t: Row): DocumentTaxView => ({
+  taxRegion: String(t.tax_region),
+  taxCode: String(t.tax_code),
+  taxPercentage: String(t.tax_percentage),
+  exemptionCode: str(t.exemption_code),
+  exemptionReason: str(t.exemption_reason),
+  taxableBase: String(t.taxable_base),
+  taxAmount: String(t.tax_amount),
+});
+
 /** Persistência fiscal no Supabase: leituras pelo helper, escritas só pelas funções da BD. */
 export class SupabaseInvoicingStore implements InvoicingStorePort {
   constructor(private readonly scoped: ScopedQueryFactory) {}
+
+  async listSeries(orgId: OrganizationId): Promise<SeriesListItem[]> {
+    const { data, error } = await this.scoped(orgId)
+      .table("invoicing_series")
+      .select(`${SERIES_COLS}, status, created_at`)
+      .order("document_type")
+      .order("series_id");
+    if (error) throw new Error(`Faturação: erro a ler as séries: ${error.message}`);
+    return ((data ?? []) as unknown as Array<SeriesRow & { status: SeriesListItem["status"]; created_at: string }>).map((r) => ({
+      ...toSeries(r),
+      status: r.status,
+      createdAt: r.created_at,
+    }));
+  }
+
+  async createSeries(orgId: OrganizationId, n: NewSeries): Promise<SeriesState> {
+    const { data, error } = await this.scoped(orgId)
+      .table("invoicing_series")
+      .insert({ legal_entity_id: n.legalEntityId, location_id: n.locationId, document_type: n.documentType, series_id: n.seriesId, mode: n.mode, created_by: n.actor })
+      .select(SERIES_COLS)
+      .single();
+    if (error) {
+      if (error.code === "23505") throw new InvoicingRuleError(`Já existe a série ${n.seriesId} para ${n.documentType} neste emitente`);
+      if (error.code === "23503") throw new InvoicingRuleError("Entidade legal ou estabelecimento inexistente");
+      if (error.code === "23514") throw new InvoicingRuleError(`Série inválida: ${error.message}`);
+      throw new Error(`Faturação: erro a criar a série: ${error.message}`);
+    }
+    return toSeries(data as unknown as SeriesRow);
+  }
+
+  async setSeriesValidationCode(orgId: OrganizationId, seriesRef: string, validationCode: string): Promise<void> {
+    const { data, error } = await this.scoped(orgId)
+      .table("invoicing_series")
+      .update({ validation_code: validationCode })
+      .eq("id", seriesRef)
+      .select("id")
+      .maybeSingle();
+    // O trigger recusa alterar um código já preenchido; o check recusa códigos inválidos.
+    if (error) throw new InvoicingRuleError(error.message);
+    if (!data) throw new InvoicingNotFoundError("Série");
+  }
+
+  async documentsByIds(orgId: OrganizationId, ids: string[]): Promise<DocumentSummary[]> {
+    if (ids.length === 0) return [];
+    const { data, error } = await this.scoped(orgId).table("invoicing_documents").select(SUMMARY_COLS).in("id", ids);
+    if (error) throw new Error(`Faturação: erro a ler documentos: ${error.message}`);
+    return ((data ?? []) as unknown as SummaryRow[]).map(toSummary);
+  }
+
+  async creditedTotal(orgId: OrganizationId, documentId: string): Promise<Dec> {
+    const { data, error } = await this.scoped(orgId)
+      .table("invoicing_documents")
+      .select("gross_total::text")
+      .eq("document_type", "NC")
+      .eq("status", "N")
+      .contains("references_to", [{ document_id: documentId }]);
+    if (error) throw new Error(`Faturação: erro a ler notas de crédito: ${error.message}`);
+    return ((data ?? []) as unknown as Array<{ gross_total: string }>).reduce((sum, r) => add(sum, dec(r.gross_total)), dec("0"));
+  }
+
+  async listDocuments(orgId: OrganizationId, filter: DocumentFilter): Promise<DocumentSummary[]> {
+    let q = this.scoped(orgId).table("invoicing_documents").select(SUMMARY_COLS);
+    if (filter.from) q = q.gte("document_date", filter.from);
+    if (filter.to) q = q.lte("document_date", filter.to);
+    if (filter.documentType) q = q.eq("document_type", filter.documentType);
+    if (filter.status) q = q.eq("status", filter.status);
+    const { data, error } = await q.order("system_entry_at", { ascending: false }).limit(Math.min(filter.limit ?? 200, 500));
+    if (error) throw new Error(`Faturação: erro a listar documentos: ${error.message}`);
+    return ((data ?? []) as unknown as SummaryRow[]).map(toSummary);
+  }
+
+  async getDocument(orgId: OrganizationId, documentId: string): Promise<StoredDocument | null> {
+    const scoped = this.scoped(orgId);
+    const doc = await scoped.table("invoicing_documents").select(DOCUMENT_COLS).eq("id", documentId).maybeSingle();
+    if (doc.error) throw new Error(`Faturação: erro a ler o documento: ${doc.error.message}`);
+    if (!doc.data) return null;
+    const d = doc.data as unknown as Row;
+    const [series, lines, taxes] = await Promise.all([
+      scoped.table("invoicing_series").select("mode").eq("id", String(d.series_ref)).maybeSingle(),
+      scoped.table("invoicing_document_lines").select(LINE_COLS).eq("document_id", documentId).order("line_number"),
+      scoped.table("invoicing_document_taxes").select(TAX_COLS).eq("document_id", documentId),
+    ]);
+    for (const r of [series, lines, taxes]) if (r.error) throw new Error(`Faturação: erro a ler o documento: ${r.error.message}`);
+    return {
+      ...toSummary(d as unknown as SummaryRow),
+      seriesRef: String(d.series_ref),
+      seriesMode: ((series.data as Row | null)?.mode ?? "training") as SeriesMode,
+      sequence: Number(d.sequence),
+      taxPointDate: String(d.tax_point_date),
+      systemEntryDate: String(d.system_entry_date),
+      systemEntryAt: new Date(String(d.system_entry_at)).toISOString(),
+      softwareCertificateNumber: String(d.software_certificate_number),
+      hash: String(d.hash),
+      hashControl: String(d.hash_control),
+      atcud: String(d.atcud),
+      qrPayload: String(d.qr_payload),
+      pricesIncludeTax: Boolean(d.prices_include_tax),
+      netTotal: String(d.net_total),
+      taxPayable: String(d.tax_payable),
+      paymentMechanism: (d.payment_mechanism ?? null) as StoredDocument["paymentMechanism"],
+      customer: d.customer as StoredDocument["customer"],
+      issuer: d.issuer as StoredDocument["issuer"],
+      referencesTo: fromReferenceRows(d.references_to),
+      orderReferences: fromReferenceRows(d.order_references),
+      statusReason: str(d.status_reason),
+      statusChangedAt: str(d.status_changed_at),
+      createdBy: String(d.created_by),
+      lines: ((lines.data ?? []) as unknown as Row[]).map(toLineView),
+      taxes: ((taxes.data ?? []) as unknown as Row[]).map(toTaxView),
+    };
+  }
 
   async getSeries(orgId: OrganizationId, seriesRef: string): Promise<SeriesState | null> {
     const { data, error } = await this.scoped(orgId).table("invoicing_series").select(SERIES_COLS).eq("id", seriesRef).maybeSingle();

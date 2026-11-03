@@ -130,6 +130,17 @@ export const ENV = {
   INBOUND_EMAIL_ALLOWED_ORGS: (process.env.INBOUND_EMAIL_ALLOWED_ORGS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
 
   /**
+   * Faturação certificada AT (módulo invoicing). Sem a chave, a emissão responde 503. Valores só no
+   * Render / .env local — nunca no código.
+   *  - INVOICING_SIGNING_PRIVATE_KEY: PEM da chave privada RSA de 1024 bits do produtor (pode vir com `\n`).
+   *  - INVOICING_SIGNING_KEY_VERSION: versão da chave (1, 2, …) — muda só com novo Modelo 24.
+   *  - INVOICING_CERTIFICATE_NUMBER: n.º do certificado da AT; vazio = programa não certificado (só formação).
+   */
+  INVOICING_SIGNING_PRIVATE_KEY: process.env.INVOICING_SIGNING_PRIVATE_KEY || null,
+  INVOICING_SIGNING_KEY_VERSION: process.env.INVOICING_SIGNING_KEY_VERSION || null,
+  INVOICING_CERTIFICATE_NUMBER: process.env.INVOICING_CERTIFICATE_NUMBER || null,
+
+  /**
    * URL pública deste servidor para registar o webhook na AirMenu.
    * Ex: https://meu-servidor.com/api/air-menu/webhook/receive
    * Opcional — apenas necessário ao chamar POST /api/air-menu/webhook/register.

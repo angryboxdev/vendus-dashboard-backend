@@ -57,6 +57,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/sales-declaration\/export$/, target: p("sales.dashboard", "READ") },
   { pattern: /^\/api\/cash-closings(\/|$)/, target: p("sales.cash_closings") },
   { pattern: /^\/api\/air-menu(\/|$)/, target: p("sales.air_menu") },
+  { pattern: /^\/api\/invoicing(\/|$)/, target: p("sales.invoicing") },
 
   // ── DRE ──────────────────────────────────────────────────────────────
   { pattern: /^\/api\/reports\/dre\/(receita-bruta|kpis|fluxo-caixa|resultado|conferencia-vendas|parametros|vendas-restaurante)$/, target: p("dre.statement") },
