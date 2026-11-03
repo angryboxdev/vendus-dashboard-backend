@@ -54,6 +54,27 @@ const toSeries = (r: SeriesRow): SeriesState => ({
   lastSystemEntryAt: toIsoInstant(r.last_system_entry_at),
 });
 
+/** Códigos das funções da BD (`raise exception '<código>'`) → texto para o utilizador (nunca a mensagem técnica). */
+const RULE_MESSAGES: Record<string, string> = {
+  series_not_active: "A série não está ativa",
+  series_not_communicated: "A série ainda não foi comunicada à AT",
+  number_mismatch: "Numeração fora de sequência — tente de novo",
+  date_before_last_in_series: "Data anterior ao último documento da série",
+  entry_before_last_in_series: "Hora de emissão anterior ao último documento da série",
+  no_lines: "Documento sem linhas",
+  issuer_mismatch: "O emitente não corresponde à entidade da série",
+  references_required: "Nota de crédito/débito sem documento retificado",
+  references_not_allowed: "Só notas de crédito/débito referem documentos retificados",
+  order_references_not_allowed: "Só faturas referem consultas de mesa",
+  invalid_reference: "Documento retificado inválido (anulado, de outro emitente, modo ou cliente)",
+  credit_exceeds_remaining: "A nota de crédito excede o valor ainda por creditar",
+  totals_mismatch: "Os impostos não batem com os totais do documento",
+  order_already_invoiced: "Consulta de mesa já faturada",
+  reason_required: "Motivo obrigatório",
+  not_cancellable: "O documento já não está ativo",
+  has_active_rectifications: "Anule primeiro a nota de crédito/débito que retifica este documento",
+};
+
 /** Mensagens das funções da BD (`raise exception '<código>'`) → texto para o utilizador. */
 const NOT_FOUND: Record<string, string> = { series_not_found: "Série", document_not_found: "Documento" };
 
@@ -69,7 +90,11 @@ function toDomainError(error: { code?: string; message: string }, subject: strin
       return new InvoicingNotFoundError(NOT_FOUND[error.message] ?? subject);
     case "P0003":
     case "P0004":
-      return new InvoicingRuleError(error.message);
+      return new InvoicingRuleError(RULE_MESSAGES[error.message] ?? "Operação recusada pelas regras fiscais");
+    case "22P02":
+      return new InvoicingRuleError("Identificador inválido");
+    case "23514":
+      return new InvoicingRuleError("Dados fora dos limites permitidos");
     default:
       return new Error(`Faturação: erro da base de dados (${error.code ?? "?"}): ${error.message}`);
   }
@@ -151,16 +176,20 @@ interface SummaryRow {
   document_number: string;
   document_date: string;
   status: DocumentSummary["status"];
+  series_mode: SeriesMode;
+  customer_tax_id: string;
   gross_total: string;
 }
 
 /** Montantes lidos como texto (`::text`), para não passarem por vírgula flutuante. */
-const SUMMARY_COLS = "id, legal_entity_id, document_type, document_number, document_date, status, gross_total::text";
+const SUMMARY_COLS = "id, legal_entity_id, document_type, series_mode, customer_tax_id:customer->>taxId, document_number, document_date, status, gross_total::text";
 
 const toSummary = (r: SummaryRow): DocumentSummary => ({
   id: r.id,
   legalEntityId: r.legal_entity_id,
   documentType: r.document_type,
+  seriesMode: r.series_mode,
+  customerTaxId: r.customer_tax_id,
   documentNumber: r.document_number,
   documentDate: r.document_date,
   status: r.status,
@@ -235,7 +264,8 @@ export class SupabaseInvoicingStore implements InvoicingStorePort {
     if (error) {
       if (error.code === "23505") throw new InvoicingRuleError(`Já existe a série ${n.seriesId} para ${n.documentType} neste emitente`);
       if (error.code === "23503") throw new InvoicingRuleError("Entidade legal ou estabelecimento inexistente");
-      if (error.code === "23514") throw new InvoicingRuleError(`Série inválida: ${error.message}`);
+      if (error.code === "23514") throw new InvoicingRuleError("Série inválida (tipo, identificador ou modo)");
+      if (error.code === "22P02") throw new InvoicingRuleError("Identificador inválido");
       throw new Error(`Faturação: erro a criar a série: ${error.message}`);
     }
     return toSeries(data as unknown as SeriesRow);
@@ -249,7 +279,7 @@ export class SupabaseInvoicingStore implements InvoicingStorePort {
       .select("id")
       .maybeSingle();
     // O trigger recusa alterar um código já preenchido; o check recusa códigos inválidos.
-    if (error) throw new InvoicingRuleError(error.message);
+    if (error) throw new InvoicingRuleError(error.code === "22P02" ? "Identificador inválido" : "O código de validação já foi registado ou é inválido");
     if (!data) throw new InvoicingNotFoundError("Série");
   }
 
@@ -288,16 +318,14 @@ export class SupabaseInvoicingStore implements InvoicingStorePort {
     if (doc.error) throw new Error(`Faturação: erro a ler o documento: ${doc.error.message}`);
     if (!doc.data) return null;
     const d = doc.data as unknown as Row;
-    const [series, lines, taxes] = await Promise.all([
-      scoped.table("invoicing_series").select("mode").eq("id", String(d.series_ref)).maybeSingle(),
+    const [lines, taxes] = await Promise.all([
       scoped.table("invoicing_document_lines").select(LINE_COLS).eq("document_id", documentId).order("line_number"),
       scoped.table("invoicing_document_taxes").select(TAX_COLS).eq("document_id", documentId),
     ]);
-    for (const r of [series, lines, taxes]) if (r.error) throw new Error(`Faturação: erro a ler o documento: ${r.error.message}`);
+    for (const r of [lines, taxes]) if (r.error) throw new Error(`Faturação: erro a ler o documento: ${r.error.message}`);
     return {
       ...toSummary(d as unknown as SummaryRow),
       seriesRef: String(d.series_ref),
-      seriesMode: ((series.data as Row | null)?.mode ?? "training") as SeriesMode,
       sequence: Number(d.sequence),
       taxPointDate: String(d.tax_point_date),
       systemEntryDate: String(d.system_entry_date),

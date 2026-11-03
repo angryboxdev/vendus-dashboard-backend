@@ -70,7 +70,7 @@ describe("configuração para o ecrã", () => {
     const { uc } = setup();
     const meta = uc.meta();
     expect(meta).toMatchObject({ certified: false, certificateNumber: "0", signingAvailable: true, simplifiedInvoiceLimitNet: "100" });
-    expect(meta.exemptions.map((e) => e.code)).toEqual(["M07", "M10", "M19", "M99"]);
+    expect(meta.exemptions.map((e) => e.code)).toEqual(["M10", "M99"]);
     expect(meta.vatRates).toContainEqual({ region: "PT", code: "INT", percentage: "13" });
     expect(meta.cancelReasons).toHaveLength(3);
   });

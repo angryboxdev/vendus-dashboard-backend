@@ -6,7 +6,8 @@ import type { FiscalDocumentType, SeriesExpectation, SeriesState } from "../../e
 import type { DocumentTotals } from "../../services/document-totals.service.js";
 
 /** SAF-T PaymentMechanism. */
-export type PaymentMechanism = "CC" | "CD" | "CH" | "CI" | "CO" | "CS" | "DE" | "LC" | "MB" | "NU" | "OU" | "PR" | "TB" | "TR";
+export const PAYMENT_MECHANISMS = ["CC", "CD", "CH", "CI", "CO", "CS", "DE", "LC", "MB", "NU", "OU", "PR", "TB", "TR"] as const;
+export type PaymentMechanism = (typeof PAYMENT_MECHANISMS)[number];
 
 /** Documento pronto a gravar: numerado, assinado e com totais fixados. */
 export interface IssuedDocumentRecord {
@@ -45,6 +46,9 @@ export interface DocumentSummary {
   id: string;
   legalEntityId: string;
   documentType: FiscalDocumentType;
+  /** Modo da série à data de emissão (formação não se mistura com documentos reais). */
+  seriesMode: SeriesMode;
+  customerTaxId: string;
   documentNumber: string;
   documentDate: string;
   status: DocumentStatus;
@@ -95,7 +99,6 @@ export interface DocumentTaxView {
 /** Documento tal como foi gravado (2.ª via com os dados originais). */
 export interface StoredDocument extends DocumentSummary {
   seriesRef: string;
-  seriesMode: SeriesMode;
   sequence: number;
   taxPointDate: string;
   systemEntryDate: string;

@@ -216,12 +216,12 @@ Endpoints: 746 · pré-autenticação: 20 · não classificados: 0
 | POST | `/api/invoices/stock-routing-suggestion` | permission:finance.invoices:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/invoices/suggest-classification/:supplierId` | permission:finance.invoices:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/invoices/supplier-logos/fill` | permission:finance.suppliers:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |
-| GET | `/api/invoicing/documents` | permission:sales.invoicing:READ | ✔ | ✔ | ✖ | ✔ | ✖ |
+| GET | `/api/invoicing/documents` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/invoicing/documents` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
-| GET | `/api/invoicing/documents/:id` | permission:sales.invoicing:READ | ✔ | ✔ | ✖ | ✔ | ✖ |
+| GET | `/api/invoicing/documents/:id` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/invoicing/documents/:id/cancel` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
-| GET | `/api/invoicing/meta` | permission:sales.invoicing:READ | ✔ | ✔ | ✖ | ✔ | ✖ |
-| GET | `/api/invoicing/series` | permission:sales.invoicing:READ | ✔ | ✔ | ✖ | ✔ | ✖ |
+| GET | `/api/invoicing/meta` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/invoicing/series` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/invoicing/series` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | PUT | `/api/invoicing/series/:id/validation-code` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | PATCH | `/api/kds/air-menu-deliveries/:id/status` | pré-auth | — | — | — | — | — |

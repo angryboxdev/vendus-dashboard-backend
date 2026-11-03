@@ -145,8 +145,42 @@ describe("emitir documento", () => {
     expect(store.saved[0]!.qrPayload).toContain("*B:123456789*");
   });
 
+  it("NIF 999999990 é sempre «Consumidor final», seja qual for o nome enviado (Despacho 2.2.5)", async () => {
+    const { useCase, store } = setup();
+    await useCase.execute(ORG, input({ customer: { taxId: "999999990", name: "Qualquer nome" } }));
+    expect(store.saved[0]!.customer).toEqual({ customerId: "Consumidor final", taxId: "999999990", name: "Consumidor final", country: "PT", address: null });
+  });
+
+  it("cliente: limites do SAF-T (nome ≤ 100, NIF ≤ 30, país ISO de 2 letras, morada)", async () => {
+    const { useCase } = setup();
+    const bad = [
+      { taxId: "123456789", name: "x".repeat(101) },
+      { taxId: "A".repeat(31), name: "Cliente", country: "ES" },
+      { taxId: "B12345678", name: "Cliente", country: "Espanha" },
+      { taxId: "123456789", name: "Cliente", address: { street: "", postalCode: "4000-001", city: "Porto", country: "PT" } },
+    ];
+    for (const customer of bad) await expect(useCase.execute(ORG, input({ customer }))).rejects.toBeInstanceOf(InvoicingRuleError);
+  });
+
+  it("valores não numéricos, tipo de produto ou meio de pagamento desconhecidos são erros de regra (não 500)", async () => {
+    const { useCase } = setup({ series: [series("FS"), series("FR")] });
+    for (const l of [{ ...pizza, quantity: "abc" }, { ...pizza, unitPrice: "1,5" }, { ...pizza, productType: "X" as never }, { ...pizza, description: "y".repeat(201) }]) {
+      await expect(useCase.execute(ORG, input({ lines: [l] }))).rejects.toBeInstanceOf(InvoicingRuleError);
+    }
+    await expect(useCase.execute(ORG, input({ seriesRef: "serie-FR", paymentMechanism: "XX" as never }))).rejects.toBeInstanceOf(InvoicingRuleError);
+  });
+
   describe("notas de crédito (Despacho 1.4, 3.2.7, 3.3.7)", () => {
-    const fs1 = { id: "fs-1", legalEntityId: "le-1", documentType: "FS" as const, documentNumber: "FS L01-2027/1", documentDate: "2027-03-09", status: "N" as const, grossTotal: dec("28.00") };
+    const fs1 = { id: "fs-1", legalEntityId: "le-1", documentType: "FS" as const, seriesMode: "training" as const, customerTaxId: "999999990", documentNumber: "FS L01-2027/1", documentDate: "2027-03-09", status: "N" as const, grossTotal: dec("28.00") };
+
+    it("não retifica documento de outro modo (formação vs. real) nem de outro cliente", async () => {
+      const { useCase, store } = setup({ series: [series("NC")] });
+      store.summaries.set("fs-n", { ...fs1, id: "fs-n", seriesMode: "normal" });
+      store.summaries.set("fs-c", { ...fs1, id: "fs-c", customerTaxId: "123456789" });
+      for (const documentId of ["fs-n", "fs-c"]) {
+        await expect(useCase.execute(ORG, input({ seriesRef: "serie-NC", lines: [beer], references: [{ documentId, reason: "x" }] }))).rejects.toBeInstanceOf(InvoicingRuleError);
+      }
+    });
 
     it("exige o documento retificado e grava a referência com o número", async () => {
       const { useCase, store } = setup({ series: [series("NC")] });
@@ -178,7 +212,7 @@ describe("emitir documento", () => {
   });
 
   describe("consultas de mesa (Despacho 1.2, 1.3)", () => {
-    const cm = { id: "cm-1", legalEntityId: "le-1", documentType: "CM" as const, documentNumber: "CM L01-2027/7", documentDate: "2027-03-10", status: "N" as const, grossTotal: dec("28.00") };
+    const cm = { id: "cm-1", legalEntityId: "le-1", documentType: "CM" as const, seriesMode: "training" as const, customerTaxId: "999999990", documentNumber: "CM L01-2027/7", documentDate: "2027-03-10", status: "N" as const, grossTotal: dec("28.00") };
 
     it("a fatura refere as consultas de mesa que fatura", async () => {
       const { useCase, store } = setup();

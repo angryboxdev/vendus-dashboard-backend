@@ -44,11 +44,11 @@ export const EXEMPTION_MENTIONS: Readonly<Record<string, string>> = {
 };
 
 /**
- * Motivos ativos na v1 (restauração): isenção do art. 9.º, regime do art. 53.º,
- * outras isenções e não sujeito. As autoliquidações (M30–M46) ficam desligadas
- * até a AT confirmar o campo do QR (pesquisa-perguntas-abertas.md §3).
+ * Motivos ativos na v1 (restauração), como decidido na pesquisa (§8.7): regime
+ * do art. 53.º (M10) e não sujeito (M99, ex.: depósito de embalagens). As
+ * autoliquidações (M30–M46) ficam desligadas até a AT confirmar o campo do QR.
  */
-export const ENABLED_EXEMPTIONS: ReadonlySet<string> = new Set(["M07", "M10", "M19", "M99"]);
+export const ENABLED_EXEMPTIONS: ReadonlySet<string> = new Set(["M10", "M99"]);
 
 /** Códigos em que a menção pode (e deve, se aplicável) levar a norma acrescentada (FAQ AT 5972). */
 const NORM_APPENDABLE = new Set(["M19", "M99"]);

@@ -38,6 +38,27 @@ export function readInvoicingConfig(env: {
 /** Fatura simplificada: até 100 € sem IVA (CIVA art. 40.º, n.º 1, al. b); refeições = prestação de serviços). */
 const SIMPLIFIED_INVOICE_LIMIT_NET = dec("100");
 
+/** Configuração ilegível → faturação desligada (503), nunca o servidor em baixo; a mensagem não inclui a chave. */
+export function safeInvoicingConfig(read: () => InvoicingConfig): InvoicingConfig {
+  try {
+    return read();
+  } catch (e) {
+    console.error("[faturação] configuração inválida — emissão desligada:", e instanceof Error ? e.message : "erro");
+    return { privateKeyPem: null, keyVersion: 1, certificateNumber: null };
+  }
+}
+
+function signerFrom(config: InvoicingConfig): RsaSha1Signer | null {
+  if (!config.privateKeyPem) return null;
+  try {
+    return new RsaSha1Signer({ privateKeyPem: config.privateKeyPem, keyVersion: config.keyVersion });
+  } catch (e) {
+    // Sem detalhes do erro do OpenSSL: podem ecoar partes do PEM.
+    console.error("[faturação] chave de assinatura inválida (tem de ser RSA 1024 em PEM) — emissão desligada");
+    return null;
+  }
+}
+
 export function createInvoicingModule(deps: { config: InvoicingConfig; issuers: IssuerDirectoryPort; scoped?: ScopedQueryFactory }): {
   router: Router;
   useCases: InvoicingUseCases;
@@ -46,7 +67,7 @@ export function createInvoicingModule(deps: { config: InvoicingConfig; issuers: 
   const scoped = deps.scoped ?? createScopedQuery;
   const store = new SupabaseInvoicingStore(scoped);
   const { config } = deps;
-  const signer = config.privateKeyPem ? new RsaSha1Signer({ privateKeyPem: config.privateKeyPem, keyVersion: config.keyVersion }) : null;
+  const signer = signerFrom(config);
   const common = { store, certificateNumber: config.certificateNumber, simplifiedInvoiceLimitNet: SIMPLIFIED_INVOICE_LIMIT_NET };
   const useCases = new InvoicingUseCases({ ...common, signingAvailable: signer !== null });
   const issue = new IssueDocumentUseCase({ ...common, signer, clock: new LisbonClock(), issuers: deps.issuers });

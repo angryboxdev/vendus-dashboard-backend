@@ -23,7 +23,6 @@ describe("taxas de IVA por espaço fiscal (CIVA art. 18.º; Of.-Circ. 25045/2024
 
 describe("menções de isenção (tabela AT de motivos de isenção v4.0)", () => {
   it("usa o texto oficial do código", () => {
-    expect(exemptionMention("M07")).toBe("Isento artigo 9.º do CIVA");
     expect(exemptionMention("M10")).toBe("IVA – regime de isenção");
   });
 
@@ -41,7 +40,7 @@ describe("menções de isenção (tabela AT de motivos de isenção v4.0)", () =
   });
 
   it("na v1 só os motivos realistas na restauração estão ativos (autoliquidações desligadas)", () => {
-    expect([...ENABLED_EXEMPTIONS].sort()).toEqual(["M07", "M10", "M19", "M99"]);
+    expect([...ENABLED_EXEMPTIONS].sort()).toEqual(["M10", "M99"]);
     expect(() => exemptionMention("M30")).toThrow(/não está ativo/);
     expect(() => exemptionMention("M03")).toThrow();
   });

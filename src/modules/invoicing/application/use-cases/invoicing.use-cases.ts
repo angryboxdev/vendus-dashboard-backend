@@ -2,28 +2,15 @@ import { decToString, type Dec } from "../../../../kernel/money/decimal.js";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import { CANCEL_REASONS, cancelReasonText, type CancelReasonCode } from "../../domain/entities/cancel-reasons.js";
 import { ENABLED_EXEMPTIONS, EXEMPTION_MENTIONS } from "../../domain/entities/exemption-reasons.js";
-import type { SeriesMode } from "../../domain/entities/series-mode.js";
-import type { FiscalDocumentType, SeriesState } from "../../domain/entities/series.js";
+import { DOCUMENT_TYPES, type SeriesState } from "../../domain/entities/series.js";
+import type { DocumentView, InvoicingMeta, InvoicingPort, NewSeriesInput } from "../../domain/ports/in/invoicing.ports.js";
 import { VAT_RATES } from "../../domain/entities/vat-rates.js";
 import { InvoicingNotFoundError, InvoicingRuleError } from "../../domain/errors.js";
-import type { DocumentFilter, DocumentSummary, InvoicingStorePort, SeriesListItem, StoredDocument } from "../../domain/ports/out/invoicing-store.port.js";
+import type { DocumentFilter, DocumentSummary, InvoicingStorePort, SeriesListItem } from "../../domain/ports/out/invoicing-store.port.js";
 import { fiscalMentions } from "../../domain/services/printed-mentions.service.js";
 import { printedAtcud, validateSeriesId } from "../../domain/services/series.service.js";
 
-export const DOCUMENT_TYPES: readonly FiscalDocumentType[] = ["FT", "FS", "FR", "NC", "ND", "CM"];
-
-export interface NewSeriesInput {
-  legalEntityId: string;
-  locationId: string | null;
-  documentType: FiscalDocumentType;
-  seriesId: string;
-  mode: SeriesMode;
-}
-
-export interface DocumentView extends StoredDocument {
-  /** O que se imprime: ATCUD (acima do QR) e menções fiscais do rodapé. */
-  printed: { atcud: string; mentions: string[] };
-}
+export type { DocumentView, NewSeriesInput } from "../../domain/ports/in/invoicing.ports.js";
 
 export interface InvoicingUseCasesDeps {
   store: InvoicingStorePort;
@@ -33,7 +20,7 @@ export interface InvoicingUseCasesDeps {
 }
 
 /** Séries, consulta (2.ª via), anulação e configuração da faturação. A emissão está em `IssueDocumentUseCase`. */
-export class InvoicingUseCases {
+export class InvoicingUseCases implements InvoicingPort {
   constructor(private readonly deps: InvoicingUseCasesDeps) {}
 
   listSeries(org: OrganizationId): Promise<SeriesListItem[]> {
@@ -76,7 +63,7 @@ export class InvoicingUseCases {
     await this.deps.store.cancel(org, documentId, cancelReasonText(reasonCode, note), actor);
   }
 
-  meta() {
+  meta(): InvoicingMeta {
     return {
       certified: this.deps.certificateNumber !== null,
       certificateNumber: this.deps.certificateNumber ?? "0",

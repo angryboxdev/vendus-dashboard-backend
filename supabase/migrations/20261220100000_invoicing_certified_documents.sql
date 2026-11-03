@@ -54,6 +54,8 @@ create table if not exists public.invoicing_documents (
   legal_entity_id uuid not null,
   location_id uuid,
   document_type text not null,
+  -- Modo da série à data de emissão (formação não se mistura com documentos reais).
+  series_mode text not null check (series_mode in ('normal', 'training')),
   document_number text not null check (length(document_number) <= 60 and document_number ~ '^[^ ]+ [^/^ ]+/[0-9]+$'),
   sequence integer not null check (sequence >= 1),
   document_date date not null,
@@ -206,7 +208,9 @@ begin
   end if;
   if new.status is distinct from old.status
      and not ((old.status = 'N' and new.status = 'A')
-              or (old.status = 'N' and new.status = 'F' and old.document_type = 'CM')) then
+              or (old.status = 'N' and new.status = 'F' and old.document_type = 'CM')
+              -- a fatura que faturou a consulta de mesa foi anulada: a mesa volta a poder ser faturada
+              or (old.status = 'F' and new.status = 'N' and old.document_type = 'CM')) then
     raise exception 'invoicing_documents: transição de estado inválida (% → %)', old.status, new.status;
   end if;
   return new;
@@ -391,9 +395,21 @@ begin
       for update;
     if (select count(*) from public.invoicing_documents d
           where d.org_id = p_org_id and d.legal_entity_id = v_series.legal_entity_id
-            and d.status = 'N' and d.document_type in ('FT', 'FS', 'FR')
+            and d.status = 'N' and d.document_type in ('FT', 'FS', 'FR') and d.series_mode = v_series.mode
+            and d.customer->>'taxId' is not distinct from p_document->'customer'->>'taxId'
             and d.id in (select (r->>'document_id')::uuid from jsonb_array_elements(v_refs) r)) <> v_ref_count then
       raise exception 'invalid_reference' using errcode = 'P0003';
+    end if;
+    -- NC: com os documentos bloqueados, o total creditado (NC ativas + esta) não passa o total retificado.
+    if v_series.document_type = 'NC'
+       and (select coalesce(sum(nc.gross_total), 0) from public.invoicing_documents nc
+              where nc.org_id = p_org_id and nc.document_type = 'NC' and nc.status = 'N'
+                and exists (select 1 from jsonb_array_elements(nc.references_to) x
+                            where (x->>'document_id')::uuid in (select (r->>'document_id')::uuid from jsonb_array_elements(v_refs) r)))
+           + (p_document->>'gross_total')::numeric
+         > (select sum(d.gross_total) from public.invoicing_documents d
+              where d.org_id = p_org_id and d.id in (select (r->>'document_id')::uuid from jsonb_array_elements(v_refs) r)) then
+      raise exception 'credit_exceeds_remaining' using errcode = 'P0003';
     end if;
   elsif jsonb_array_length(v_refs) > 0 then
     raise exception 'references_not_allowed' using errcode = 'P0004';
@@ -405,13 +421,13 @@ begin
   perform set_config('invoicing.rpc', 'on', true);
 
   insert into public.invoicing_documents (
-    org_id, series_ref, legal_entity_id, location_id, document_type, document_number, sequence,
+    org_id, series_ref, legal_entity_id, location_id, document_type, series_mode, document_number, sequence,
     document_date, tax_point_date, system_entry_date, system_entry_at, software_certificate_number,
     source_billing, hash, hash_control, key_version,
     atcud, qr_payload, currency, prices_include_tax, net_total, tax_payable, gross_total, payment_mechanism,
     customer, issuer, references_to, order_references, created_by
   ) values (
-    p_org_id, v_series.id, v_series.legal_entity_id, v_series.location_id, v_series.document_type,
+    p_org_id, v_series.id, v_series.legal_entity_id, v_series.location_id, v_series.document_type, v_series.mode,
     p_document->>'document_number', v_seq,
     (p_document->>'document_date')::date, (p_document->>'tax_point_date')::date, p_document->>'system_entry_date',
     (p_document->>'system_entry_at')::timestamptz, p_document->>'software_certificate_number',
@@ -462,7 +478,7 @@ begin
     update public.invoicing_documents cm
       set status = 'F', status_changed_at = now(), status_changed_by = p_actor
       where cm.org_id = p_org_id and cm.legal_entity_id = v_series.legal_entity_id
-        and cm.document_type = 'CM' and cm.status = 'N'
+        and cm.document_type = 'CM' and cm.status = 'N' and cm.series_mode = v_series.mode
         and cm.id in (select (r->>'document_id')::uuid from jsonb_array_elements(v_orders) r);
     get diagnostics v_updated = row_count;
     if v_updated <> jsonb_array_length(v_orders) then
@@ -526,6 +542,11 @@ begin
   update public.invoicing_documents
     set status = 'A', status_reason = btrim(p_reason), status_changed_at = now(), status_changed_by = p_actor
     where id = p_document_id;
+  -- As consultas de mesa faturadas por este documento voltam a poder ser faturadas.
+  update public.invoicing_documents cm
+    set status = 'N', status_changed_at = now(), status_changed_by = p_actor
+    where cm.org_id = p_org_id and cm.document_type = 'CM' and cm.status = 'F'
+      and cm.id in (select (r->>'document_id')::uuid from jsonb_array_elements(coalesce(v_doc.order_references, '[]'::jsonb)) r);
   insert into public.invoicing_events (org_id, actor, action, document_id, reason)
     values (p_org_id, p_actor, 'document.cancelled', p_document_id, btrim(p_reason));
   perform set_config('invoicing.rpc', 'off', true);

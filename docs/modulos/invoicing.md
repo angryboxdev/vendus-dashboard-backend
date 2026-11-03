@@ -13,7 +13,7 @@ F1 feita (2026-11-03, ramo `faturacao-certificada`): domínio fiscal puro + assi
 - Spec, pesquisa e fases: `.scratch/certificacao-at/`.
 
 ## Dependências
-Só `src/kernel/money`; o emitente vem de `legal-entities` por porta (server.ts). Nenhum canal de vendas.
+`src/kernel` e `src/infra` (scoped-db, http: idempotência e Problem Details); o emitente vem de `legal-entities` por porta (server.ts). Nenhum canal de vendas.
 
 ## Regras de negócio
 Ver «Design decisions» no README do módulo.

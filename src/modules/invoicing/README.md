@@ -67,6 +67,8 @@ escreve Vendus, AirMenu, DRE, stock ou custos, e nenhum desses módulos o import
 
 ### Input (use cases)
 
+Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `InvoicingPort` (o controller depende delas, não das classes).
+
 - `IssueDocumentUseCase.execute` — emite FT/FS/FR/NC/ND/CM: série e bloqueios (certificado, data futura, relógio), taxas oficiais (`vatRate`) e menções de isenção (`exemptionMention`), regras por tipo (FS ≤ 100 € sem IVA; FR com meio de pagamento; NC/ND com documento retificado ativo do mesmo emitente e NC ≤ valor por creditar; faturas referem consultas de mesa ativas), cliente (NIF PT validado; sem cliente = consumidor final), QR, assinatura e gravação com recomeço se outro terminal emitiu (até 3 tentativas). Avisos → `IssueNeedsConfirmationError` (repetir com `confirmWarnings`).
 - `InvoicingUseCases` — `listSeries`, `createSeries` (normal só com certificado), `setValidationCode`, `listDocuments`, `getDocument` (2.ª via com `printed.atcud` e `printed.mentions`), `cancel` (motivo da lista fechada `CANCEL_REASONS`), `meta` (certificação, limites, taxas, isenções ativas, motivos de anulação).
 
@@ -120,7 +122,9 @@ escreve Vendus, AirMenu, DRE, stock ou custos, e nenhum desses módulos o import
 - **Antes do certificado só formação** (`checkIssue` → `uncertified-program`; `createSeries` recusa séries normais).
 - **Permissão própria `sales.invoicing`**, fora dos `moduleAll("sales")` dos perfis Manager/Financeiro: em testes só o Admin a vê (migração `20261220110000_invoicing_access`).
 - **Emissão idempotente**: `Idempotency-Key` obrigatório no `POST /invoicing/documents` — um reenvio ou duplo clique devolve a mesma resposta, nunca um segundo documento.
-- **Taxas e menções em código, com fonte** (`vat-rates.ts`, `exemption-reasons.ts`): são lei nacional, não configuração por organização; v1 só ativa M07, M10, M19 e M99.
+- **Taxas e menções em código, com fonte** (`vat-rates.ts`, `exemption-reasons.ts`): são lei nacional, não configuração por organização; v1 só ativa M10 e M99 (decisão §8.7).
+- **Configuração errada não derruba o servidor**: chave ilegível ou variáveis inválidas → emissão desligada (503) e erro registado sem o conteúdo da chave (`safeInvoicingConfig`).
+- **Formação não se mistura com documentos reais**: o modo da série fica gravado no documento; NC/ND e faturas de consultas de mesa só referem documentos do mesmo modo (e as NC/ND do mesmo cliente).
 - **Configuração** (`src/config/env.ts`): `INVOICING_SIGNING_PRIVATE_KEY`, `INVOICING_SIGNING_KEY_VERSION`, `INVOICING_CERTIFICATE_NUMBER`.
 - **Dinheiro exato** com `kernel/money/decimal` (bigint); linhas sem IVA a 6 casas, totais a 2 (Despacho 3.2.3).
 - **IVA incluído** (restauração): total por taxa fixo; IVA = total × p/(100+p); base = total − IVA — o cliente paga o preço do menu.
@@ -128,24 +132,21 @@ escreve Vendus, AirMenu, DRE, stock ou custos, e nenhum desses módulos o import
 
 ## How to test
 
-- Domínio e adapters (sem BD nem rede): `VENDUS_BASE_URL=https://vendus.example.invalid AIRMENU_ENTERPRISE_ID=0 AIRMENU_SALES_SUMMARY_ENTERPRISE_ID=0 CREDENTIALS_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= npx jest --config jest.config.cjs src/modules/invoicing --testPathIgnorePatterns='\.integration\.test\.ts
-- BD real (concorrência e imutabilidade): `npx jest --config jest.config.cjs src/modules/invoicing/__tests__/integration` com `supabase start` + `supabase db reset` (não corre nesta máquina — sem Docker).
+- Domínio, casos de uso e adapters (sem BD nem rede; as variáveis fictícias só satisfazem o `src/config/env.ts`):
+
+  ```sh
+  VENDUS_BASE_URL=https://vendus.example.invalid AIRMENU_ENTERPRISE_ID=0 AIRMENU_SALES_SUMMARY_ENTERPRISE_ID=0 \
+  CREDENTIALS_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+  npx jest --config jest.config.cjs src/modules/invoicing --testPathIgnorePatterns=integration
+  ```
+
+- Migração em Postgres real sem Docker (PGlite): `.scratch/certificacao-at/validacao-pglite/README.md` (48 verificações).
+- BD real com duas ligações (concorrência): `npx jest --config jest.config.cjs src/modules/invoicing/__tests__/integration` com `supabase start` + `supabase db reset` (não corre nesta máquina — sem Docker).
 
 ## Known gaps / open debt
 
-- Por confirmar com a AT (e-Balcão, ver `pesquisa-perguntas-abertas.md` §9): campo do QR das autoliquidações (M30–M46; desativadas na v1); `R` antes do certificado (assumido «0»); se os documentos de formação vão ao e-Fatura (assumido que não); alerta 3.4.3 na hora repetida de outubro.
-- Em falta: desconto global (`SettlementAmount`); recibos (RC); recuperação de documentos manuais; controlo das NC parciais por linha/quantidade (hoje por valor total); taxa por produto e canal (sala 13 %/23 %, take-away) — hoje a taxa vem em cada linha; tipos de `document-totals` ainda em `services/`.
+- Por confirmar com a AT (e-Balcão, `pesquisa-perguntas-abertas.md` §9): campo do QR das autoliquidações (M30–M46, desligadas na v1); `R` antes do certificado (assumido «0»); se os documentos de formação vão ao e-Fatura (assumido que não); alerta 3.4.3 na hora repetida de outubro.
+- Em falta: recibos (RC); recuperação de documentos manuais (M/D); desconto global (`SettlementAmount`); controlo das NC parciais por linha/quantidade e devoluções no tipo errado (Despacho 3.2.7, 3.3.9 — hoje pelo valor total, conferido também na BD); limite da FS por organização e exceção do art. 53.º (hoje 100 € fixo); cabeçalho com os dados do produtor nos documentos de formação (Despacho 1.5 — hoje o emitente; iguais se a Angry Box for a produtora); taxa por produto e canal (sala 13 %/23 %, take-away) — hoje a taxa vem em cada linha; tipos de `document-totals` ainda em `services/`.
 - Os KMS de cloud podem não suportar RSA-1024 — a chave vive em variável de ambiente.
-- O teste de integração (concorrência real entre duas ligações) não correu (sem stack local); a migração foi validada em PGlite (uma ligação) e não está aplicada em lado nenhum.
-- Casos de uso, API, SAF-T e webservices: fases F3–F6.
-` (as variáveis fictícias só satisfazem o `src/config/env.ts`).
-- Migração em Postgres real sem Docker: `.scratch/certificacao-at/validacao-pglite/README.md`.
-- BD real (concorrência e imutabilidade): `npx jest --config jest.config.cjs src/modules/invoicing/__tests__/integration` com `supabase start` + `supabase db reset` (não corre nesta máquina — sem Docker).
-
-## Known gaps / open debt
-
-- Por confirmar com a AT/contabilista: limite da fatura simplificada na restauração (100 € vs 1000 €); quando anular vs. emitir NC; campo do QR das autoliquidações (M30–M46: I2 ou L); o que vai em `R` (n.º de certificado) nos documentos de formação antes da certificação.
-- Para a F3 (de `code-review` da F1): tabela de taxas por espaço fiscal (PT/PT-AC/PT-MA) com fonte oficial; menção legal de isenção ligada ao texto da tabela v4.0; desconto global (`SettlementAmount`); escolha das menções impressas pelo modo da série; configuração via `src/config/env.ts`; tipos de domínio de `document-totals` para `domain/entities/`.
-- Os KMS de cloud podem não suportar RSA-1024 — a chave vive em variável de ambiente.
-- O teste de integração da BD ainda não correu (sem stack local); a migração não está aplicada em lado nenhum.
-- Casos de uso, API, SAF-T e webservices: fases F3–F6.
+- O teste de integração (duas ligações) não correu; as migrações foram validadas em PGlite (uma ligação) e não estão aplicadas em lado nenhum.
+- SAF-T, webservices da AT e área «Vendas» no frontend: fases F4–F6.

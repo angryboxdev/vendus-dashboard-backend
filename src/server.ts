@@ -95,7 +95,7 @@ import { createWorkspaceModule } from "./modules/workspace/workspace.module.js";
 import { createReportsModule } from "./modules/reports/reports.module.js";
 import { createDocumentDistributionsModule } from "./modules/document-distributions/document-distributions.module.js";
 import { createLegalEntitiesModule } from "./modules/legal-entities/legal-entities.module.js";
-import { createInvoicingModule, readInvoicingConfig } from "./modules/invoicing/invoicing.module.js";
+import { createInvoicingModule, readInvoicingConfig, safeInvoicingConfig } from "./modules/invoicing/invoicing.module.js";
 import { createInvitationsModule } from "./modules/invitations/invitations.module.js";
 import type { ReportRow } from "./modules/reports/domain/entities/report.js";
 import { SupabaseAbsencesDirectory } from "./modules/absences/adapters/out/supabase-absences-directory.js";
@@ -1123,14 +1123,17 @@ app.use("/api", invitationsModule.router);
 // Faturação certificada AT (testes; só formação até haver certificado). Isolada dos canais
 // existentes; o emitente vem das entidades legais. Ver src/modules/invoicing/README.md.
 const invoicingModule = createInvoicingModule({
-  config: readInvoicingConfig({
-    privateKeyPem: ENV.INVOICING_SIGNING_PRIVATE_KEY,
-    keyVersion: ENV.INVOICING_SIGNING_KEY_VERSION,
-    certificateNumber: ENV.INVOICING_CERTIFICATE_NUMBER,
-  }),
+  config: safeInvoicingConfig(() =>
+    readInvoicingConfig({
+      privateKeyPem: ENV.INVOICING_SIGNING_PRIVATE_KEY,
+      keyVersion: ENV.INVOICING_SIGNING_KEY_VERSION,
+      certificateNumber: ENV.INVOICING_CERTIFICATE_NUMBER,
+    }),
+  ),
   issuers: {
     getIssuer: async (org, legalEntityId) => {
-      const e = (await legalEntitiesModule.legalEntities.list(org, { status: "all" })).find((x) => x.id === legalEntityId);
+      // Só entidades ativas emitem.
+      const e = (await legalEntitiesModule.legalEntities.list(org, { status: "active" })).find((x) => x.id === legalEntityId);
       return e ? { taxId: e.taxId, name: e.name, address: { street: e.street, postalCode: e.postalCode, city: e.city, country: e.country } } : null;
     },
   },

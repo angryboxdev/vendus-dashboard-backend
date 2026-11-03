@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { dec, type Dec } from "../../../../kernel/money/decimal.js";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import type { IssuerSnapshot } from "../../domain/entities/parties.js";
@@ -35,7 +36,7 @@ export class FakeInvoicingStore implements InvoicingStorePort {
     return [...this.series.values()].map((s) => ({ ...s, status: "active" as const, createdAt: "2027-01-01T00:00:00.000Z" }));
   }
   async createSeries(_org: OrganizationId, n: NewSeries): Promise<SeriesState> {
-    const s: SeriesState = { ref: `s${this.series.size + 1}`, ...n, validationCode: null, lastSequence: 0, lastHash: null, lastDocumentDate: null, lastSystemEntryAt: null };
+    const s: SeriesState = { ref: randomUUID(), ...n, validationCode: null, lastSequence: 0, lastHash: null, lastDocumentDate: null, lastSystemEntryAt: null };
     this.series.set(s.ref, s);
     return s;
   }

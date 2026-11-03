@@ -50,7 +50,7 @@ describe("API /api/invoicing", () => {
   let seriesRef: string;
 
   it("cria série, regista o código da AT e emite (201)", async () => {
-    const s = await post("/series", { legalEntityId: "le-1", documentType: "FS", seriesId: "L01-2027", mode: "training" });
+    const s = await post("/series", { legalEntityId: "22222222-2222-4222-8222-222222222222", documentType: "FS", seriesId: "L01-2027", mode: "training" });
     expect(s.status).toBe(201);
     seriesRef = (await s.json()).ref;
 
@@ -71,7 +71,8 @@ describe("API /api/invoicing", () => {
 
   it("regra fiscal violada → 422; série inexistente → 404; corpo inválido → 400", async () => {
     expect((await post("/documents", { seriesRef, lines: [{ ...line, quantity: "20" }] })).status).toBe(422);
-    expect((await post("/documents", { seriesRef: "nao-existe", lines: [line] })).status).toBe(404);
+    expect((await post("/documents", { seriesRef: "99999999-9999-4999-8999-999999999999", lines: [line] })).status).toBe(404);
+    expect((await post("/documents", { seriesRef: "nao-e-uuid", lines: [line] })).status).toBe(400);
     expect((await post("/documents", { seriesRef, lines: "x" })).status).toBe(400);
   });
 
@@ -83,13 +84,14 @@ describe("API /api/invoicing", () => {
   });
 
   it("anular pede motivo da lista fechada", async () => {
-    expect((await post("/documents/doc-1/cancel", { reasonCode: "not-delivered" })).status).toBe(204);
-    expect((await post("/documents/doc-1/cancel", { reasonCode: "x" })).status).toBe(422);
+    expect((await post("/documents/11111111-1111-4111-8111-111111111111/cancel", { reasonCode: "not-delivered" })).status).toBe(204);
+    expect((await post("/documents/11111111-1111-4111-8111-111111111111/cancel", { reasonCode: "x" })).status).toBe(422);
   });
 
   it("configuração e listas", async () => {
     expect((await (await fetch(`${base}/meta`)).json())).toMatchObject({ certified: false, certificateNumber: "0" });
     expect(await (await fetch(`${base}/series`)).json()).toHaveLength(1);
-    expect((await fetch(`${base}/documents/nao-existe`)).status).toBe(404);
+    expect((await fetch(`${base}/documents/99999999-9999-4999-8999-999999999999`)).status).toBe(404);
+    expect((await fetch(`${base}/documents/nao-e-uuid`)).status).toBe(400);
   });
 });

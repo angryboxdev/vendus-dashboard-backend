@@ -3,6 +3,10 @@ import type { SeriesMode } from "./series-mode.js";
 /** Tipos de documento emitidos pelo Mezza (SAF-T InvoiceType / WorkType). Recibos (RC) numa fase seguinte. */
 export type FiscalDocumentType = "FT" | "FS" | "FR" | "NC" | "ND" | "CM";
 
+export const DOCUMENT_TYPES: readonly FiscalDocumentType[] = ["FT", "FS", "FR", "NC", "ND", "CM"];
+/** Faturas (as que faturam consultas de mesa e podem ser retificadas por NC/ND). */
+export const INVOICE_TYPES: ReadonlySet<FiscalDocumentType> = new Set(["FT", "FS", "FR"]);
+
 /** Estado de uma série tal como está gravado (o fim da cadeia de assinaturas). */
 export interface SeriesState {
   ref: string;

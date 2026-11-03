@@ -100,6 +100,15 @@ const st = (await db.query(`select status, status_reason from invoicing_document
 check("estado A com motivo", st?.status === "A" && st?.status_reason === "NIF errado", JSON.stringify(st));
 const ev = (await db.query(`select count(*)::int n from invoicing_events where action = 'document.cancelled'`)).rows[0].n;
 check("eventos de anulação registados", ev === 2, String(ev));
+const mode = (await db.query(`select series_mode from invoicing_documents where id = $1`, [d1])).rows[0]?.series_mode;
+check("modo da série gravado no documento", mode === "training", mode);
+
+// NC: não credita mais do que o documento (a BD confere com os documentos bloqueados) nem para outro cliente
+const fs2 = dst.rows[0].id;
+const ref2 = [{ document_id: fs2, document_number: "FS L01-2027/2", reason: "Devolução" }];
+await fails("NC para outro cliente", `select fn_invoicing_issue_document($1,$2,1,$3,$4,$5,$6,'u')`, "invalid_reference", [org, NC, H("a"), JSON.stringify(doc("NC", 2, "2027-03-10T13:00:03Z", { references_to: ref2, customer: { taxId: "123456789", name: "Outro" } })), JSON.stringify([line]), JSON.stringify(taxes)]);
+await ok("NC total sobre a FS 2", `select fn_invoicing_issue_document($1,$2,1,$3,$4,$5,$6,'u')`, [org, NC, H("a"), JSON.stringify(doc("NC", 2, "2027-03-10T13:00:03Z", { references_to: ref2, hash: H("c") })), JSON.stringify([line]), JSON.stringify(taxes)]);
+await fails("segunda NC acima do valor por creditar", `select fn_invoicing_issue_document($1,$2,2,$3,$4,$5,$6,'u')`, "credit_exceeds_remaining", [org, NC, H("c"), JSON.stringify(doc("NC", 3, "2027-03-10T13:00:04Z", { references_to: ref2 })), JSON.stringify([line]), JSON.stringify(taxes)]);
 
 // Consultas de mesa (CM → F; não se faturam duas vezes)
 const cm = (await issue(CM, 0, null, doc("CM", 1, "2027-03-10T14:00:00Z")).catch((e) => failures.push(`emitir CM: ${e.message}`)))?.rows?.[0]?.id;
@@ -108,6 +117,10 @@ await ok("faturar a CM", `select fn_invoicing_issue_document($1,$2,0,null,$3,$4,
 const cmStatus = (await db.query(`select status from invoicing_documents where id = $1`, [cm])).rows[0]?.status;
 check("CM passa a F", cmStatus === "F", cmStatus);
 await fails("faturar a mesma CM outra vez", `select fn_invoicing_issue_document($1,$2,1,$3,$4,$5,$6,'u')`, "order_already_invoiced", [org, FT, H("a"), JSON.stringify(doc("FT", 2, "2027-03-10T14:06:00Z", { order_references: orders })), JSON.stringify([line]), JSON.stringify(taxes)]);
+const ftCm = (await db.query(`select id from invoicing_documents where series_ref = $1 and sequence = 1`, [FT])).rows[0]?.id;
+await ok("anular a fatura da CM", `select fn_invoicing_cancel_document($1,$2,'Não entregue','u')`, [org, ftCm]);
+const cmBack = (await db.query(`select status from invoicing_documents where id = $1`, [cm])).rows[0]?.status;
+check("anular a fatura devolve a CM a N", cmBack === "N", cmBack);
 await fails("CM não pode referir CM", `select fn_invoicing_issue_document($1,$2,1,$3,$4,$5,$6,'u')`, "order_references_not_allowed", [org, CM, H("a"), JSON.stringify(doc("CM", 2, "2027-03-10T14:07:00Z", { order_references: orders })), JSON.stringify([line]), JSON.stringify(taxes)]);
 
 // Rollback e reaplicação

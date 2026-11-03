@@ -1,10 +1,9 @@
 import { Router, type Request } from "express";
 import { idempotency, type IdempotencyStore } from "../../../../infra/http/idempotency.js";
 import { problem } from "../../../../infra/http/problem-details.js";
-import type { InvoicingUseCases } from "../../application/use-cases/invoicing.use-cases.js";
-import type { IssueDocumentInput, IssueDocumentUseCase } from "../../application/use-cases/issue-document.use-case.js";
+import type { InvoicingPort, IssueDocumentInput, IssueDocumentPort } from "../../domain/ports/in/invoicing.ports.js";
 import type { CancelReasonCode } from "../../domain/entities/cancel-reasons.js";
-import type { FiscalDocumentType } from "../../domain/entities/series.js";
+import { DOCUMENT_TYPES, type FiscalDocumentType } from "../../domain/entities/series.js";
 import {
   InvoicingNotFoundError,
   InvoicingRuleError,
@@ -31,7 +30,14 @@ async function run<T>(fn: () => Promise<T>): Promise<T> {
 const org = (req: Request) => req.auth!.orgId;
 const actor = (req: Request) => req.auth!.email || req.auth!.sub;
 const body = (req: Request) => (req.body ?? {}) as Record<string, unknown>;
-const id = (req: Request) => req.params.id as string;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const STATUSES = new Set(["N", "A", "F"]);
+/** Ids de registos fiscais são UUID; outro formato é pedido inválido (400), não erro do servidor. */
+function uuid(value: unknown, field: string): string {
+  if (typeof value !== "string" || !UUID.test(value)) throw problem(400, "invalid_request", `${field}: identificador inválido`);
+  return value;
+}
+const id = (req: Request) => uuid(req.params.id, "id");
 const text = (v: unknown) => (typeof v === "string" ? v : undefined);
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -41,7 +47,16 @@ function badRequest(detail: string): never {
 
 /** Corpo de `POST /invoicing/documents`: forma; as regras fiscais ficam no domínio. */
 function issueInput(b: Record<string, unknown>, who: string): IssueDocumentInput {
-  if (typeof b.seriesRef !== "string" || !b.seriesRef) badRequest("seriesRef obrigatório");
+  uuid(b.seriesRef, "seriesRef");
+  if (b.customer !== undefined && b.customer !== null && typeof b.customer !== "object") badRequest("customer tem de ser um objeto");
+  if (b.references !== undefined) {
+    if (!Array.isArray(b.references)) badRequest("references tem de ser uma lista");
+    for (const r of b.references as unknown[]) uuid((r as Record<string, unknown> | null)?.documentId, "references[].documentId");
+  }
+  if (b.orderReferences !== undefined) {
+    if (!Array.isArray(b.orderReferences)) badRequest("orderReferences tem de ser uma lista");
+    for (const r of b.orderReferences as unknown[]) uuid(r, "orderReferences[]");
+  }
   if (!Array.isArray(b.lines) || b.lines.length === 0) badRequest("lines tem de ser uma lista com pelo menos uma linha");
   if (b.documentDate !== undefined && (typeof b.documentDate !== "string" || !DATE.test(b.documentDate))) badRequest("documentDate tem de ser AAAA-MM-DD");
   for (const [i, l] of (b.lines as unknown[]).entries()) {
@@ -71,7 +86,7 @@ function issueInput(b: Record<string, unknown>, who: string): IssueDocumentInput
  * `sales.invoicing` READ, escrita com MANAGE (route-permissions). A emissão
  * exige `Idempotency-Key` — um reenvio nunca cria um segundo documento.
  */
-export function createInvoicingRouter(uc: InvoicingUseCases, issue: IssueDocumentUseCase, store: IdempotencyStore): Router {
+export function createInvoicingRouter(uc: InvoicingPort, issue: IssueDocumentPort, store: IdempotencyStore): Router {
   const r = Router();
   const B = "/invoicing";
   r.use(`${B}/documents`, (req, res, next) => (req.method === "POST" && req.path === "/" ? idempotency(store, { required: true })(req, res, next) : idempotency(store)(req, res, next)));
@@ -82,9 +97,9 @@ export function createInvoicingRouter(uc: InvoicingUseCases, issue: IssueDocumen
   r.get(`${B}/series`, async (req, res) => res.json(await run(() => uc.listSeries(org(req)))));
   r.post(`${B}/series`, async (req, res) => {
     const b = body(req);
-    if (typeof b.legalEntityId !== "string" || typeof b.seriesId !== "string" || typeof b.documentType !== "string") {
-      badRequest("legalEntityId, documentType e seriesId obrigatórios");
-    }
+    uuid(b.legalEntityId, "legalEntityId");
+    if (b.locationId !== undefined && b.locationId !== null) uuid(b.locationId, "locationId");
+    if (typeof b.seriesId !== "string" || typeof b.documentType !== "string") badRequest("documentType e seriesId obrigatórios");
     const created = await run(() =>
       uc.createSeries(org(req), actor(req), {
         legalEntityId: b.legalEntityId as string,
@@ -108,8 +123,8 @@ export function createInvoicingRouter(uc: InvoicingUseCases, issue: IssueDocumen
     const filter = {
       ...(typeof q.from === "string" && DATE.test(q.from) ? { from: q.from } : {}),
       ...(typeof q.to === "string" && DATE.test(q.to) ? { to: q.to } : {}),
-      ...(typeof q.type === "string" ? { documentType: q.type as FiscalDocumentType } : {}),
-      ...(typeof q.status === "string" ? { status: q.status as DocumentStatus } : {}),
+      ...(typeof q.type === "string" && DOCUMENT_TYPES.includes(q.type as FiscalDocumentType) ? { documentType: q.type as FiscalDocumentType } : {}),
+      ...(typeof q.status === "string" && STATUSES.has(q.status) ? { status: q.status as DocumentStatus } : {}),
       ...(typeof q.limit === "string" && /^\d+$/.test(q.limit) ? { limit: Number(q.limit) } : {}),
     };
     res.json(await run(() => uc.listDocuments(org(req), filter)));
