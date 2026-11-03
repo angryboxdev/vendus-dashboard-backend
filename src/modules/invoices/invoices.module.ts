@@ -40,7 +40,8 @@ import { ImportInvoiceKeepingLinesUseCase } from "./application/use-cases/import
 import { LinkObligationUseCase } from "./application/use-cases/link-obligation.use-case.js";
 import { ImportInvoiceForStockUseCase } from "./application/use-cases/import-invoice-for-stock.use-case.js";
 import { CreateObligationDraftUseCase } from "./application/use-cases/create-obligation-draft.use-case.js";
-import { PdfjsContentReaderAdapter } from "./adapters/out/pdfjs-content-reader.adapter.js";
+import { fileURLToPath } from "node:url";
+import { IsolatedPdfContentReaderAdapter } from "./adapters/out/isolated-pdf-content-reader.adapter.js";
 import { SupabaseObligationCandidatesAdapter } from "./adapters/out/supabase-obligation-candidates.adapter.js";
 import { SupabaseInvoiceReadingWriteAdapter } from "./adapters/out/supabase-invoice-reading-write.adapter.js";
 import { SupabaseCategoryCatalogAdapter, SupabaseConfirmedLineHistoryAdapter } from "./adapters/out/supabase-line-classification.adapters.js";
@@ -147,7 +148,10 @@ export function createInvoicesModule(
   const stockReviewStatusRead = new StockPurchaseReviewStatusReadAdapter(getStockPurchaseReviewStatus);
   const stockReviewDraftDelete = new StockPurchaseReviewDraftDeleteAdapter(deleteDraftStockPurchaseReview);
   const aiExtraction = new OpenAiExtractionAdapter(openaiApiKey);
-  const pdfReader = new PdfjsContentReaderAdapter();
+  // O PDF é lido num processo filho (pdf-reader.worker.js): um PDF que bloqueie ou esgote a memória não derruba o servidor.
+  const pdfReader = new IsolatedPdfContentReaderAdapter({
+    workerPath: fileURLToPath(new URL("./adapters/out/pdf-reader.worker.js", import.meta.url)),
+  });
   const readPaymentDocument = new ReadPaymentDocumentUseCase(pdfReader, new SupabaseObligationCandidatesAdapter(createScopedQuery), supplierLookup, organizationIdentityRead);
   const fiscal = new FiscalDocumentsIdentityAdapter(fiscalDocuments);
   const amountsWrite = new SupabaseInvoiceAmountsWriteAdapter(createScopedQuery);
