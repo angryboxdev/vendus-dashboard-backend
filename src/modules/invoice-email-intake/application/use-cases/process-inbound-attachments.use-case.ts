@@ -1,5 +1,6 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import {
+  MAX_ATTEMPTS,
   STALE_PROCESSING_MS,
   nextAttemptAfterFailure,
   type InboundAttachment,
@@ -39,6 +40,24 @@ export class ProcessInboundAttachmentsUseCase implements ProcessInboundAttachmen
     const listed = new Map<string, ReceivedAttachmentInfo[]>();
 
     for (const candidate of due) {
+      // «Em processamento» há mais de STALE_PROCESSING_MS = o servidor morreu a meio da leitura. O limite de
+      // tentativas só era verificado nas falhas tratadas, por isso um PDF que mata o processo era retomado
+      // para sempre (um anexo chegou a 190 tentativas, com um reinício de 20 em 20 min). Esgotadas as
+      // tentativas, fica «Erro de leitura» final em vez de voltar a ser lido.
+      if (candidate.status === "processing" && candidate.attempts >= MAX_ATTEMPTS) {
+        await this.attachments.update(organizationId, {
+          ...candidate,
+          status: "read_error",
+          errorCode: "crashed",
+          errorMessage: "A leitura deste ficheiro interrompeu o servidor várias vezes; não será tentada outra vez.",
+          nextAttemptAt: null,
+          lockedAt: null,
+          updatedAt: this.now(),
+        });
+        result.processed++;
+        result.failed++;
+        continue;
+      }
       const claimed = await this.attachments.claim(organizationId, candidate, this.now());
       if (!claimed) continue;
       const outcome = await this.processOne(organizationId, claimed, listed);
