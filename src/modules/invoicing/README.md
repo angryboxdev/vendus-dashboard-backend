@@ -171,7 +171,7 @@ Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `Invoicing
 
 - Migração em Postgres real sem Docker (PGlite): `.scratch/certificacao-at/validacao-pglite/README.md` (48 verificações; comunicação à AT: 22).
 - Mensagens da AT contra os WSDL oficiais: os testes escrevem `__tests__/fixtures/*.test-output.xml`; validar com `.scratch/certificacao-at/validacao-saft/validar-wsdl.ps1`.
-- SAF-T contra o XSD oficial: `.scratch/certificacao-at/validacao-saft/README.md` (estrutural, 0 erros; validação XSD 1.1 completa pendente).
+- SAF-T contra o XSD oficial: `.scratch/certificacao-at/validacao-saft/README.md` (estrutural, 0 erros) e validador oficial da AT `validador_v1_04.exe` (exemplo dos testes validado com sucesso, 2026-11-04).
 - BD real com duas ligações (concorrência): `npx jest --config jest.config.cjs src/modules/invoicing/__tests__/integration` com `supabase start` + `supabase db reset` (não corre nesta máquina — sem Docker).
 
 ## Known gaps / open debt
@@ -180,5 +180,5 @@ Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `Invoicing
 - Em falta: recibos (RC); recuperação de documentos manuais (M/D); desconto global (`SettlementAmount`); controlo das NC parciais por linha/quantidade e devoluções no tipo errado (Despacho 3.2.7, 3.3.9 — hoje pelo valor total, conferido também na BD); limite da FS por organização e exceção do art. 53.º (hoje 100 € fixo); cabeçalho com os dados do produtor nos documentos de formação (Despacho 1.5 — hoje o emitente; iguais se a Angry Box for a produtora); taxa por produto e canal (sala 13 %/23 %, take-away) — hoje a taxa vem em cada linha; tipos de `document-totals` ainda em `services/`.
 - Os KMS de cloud podem não suportar RSA-1024 — a chave vive em variável de ambiente.
 - O teste de integração (duas ligações) não correu; as migrações foram validadas em PGlite (uma ligação) e não estão aplicadas em lado nenhum.
-- Validação XSD 1.1 completa do SAF-T (Xerces 1.1 ou validador da AT) por fazer.
+- SAF-T validado pelo validador oficial da AT só com o exemplo dos testes; repetir com um ficheiro exportado da produção.
 - Comunicação à AT (F6) **sem teste real**: falta o certificado de testes e a chave pública do Sistema de Autenticação (pedido por email a `asi-cd@at.gov.pt`) e um subutilizador WFA/WSE. Por confirmar no ambiente de testes: padding RSA do `Nonce` (assumido PKCS#1 v1.5), formato do `Created`, `CustomerTaxIDCountry` do consumidor final, se os documentos de formação são aceites, e os códigos de sucesso das operações de séries (o código decide pelo `infoSerie` devolvido). Em falta: recibos (`RegisterPayment`), eliminação (`DeleteInvoice`), comunicação de mês sem documentos, alerta por email antes do dia 5 (hoje só no ecrã), renovação do certificado.

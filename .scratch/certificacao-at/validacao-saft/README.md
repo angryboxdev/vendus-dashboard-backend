@@ -17,7 +17,10 @@ Resultado em 2026-11-04: **SAF-T do Mezza — 0 erros**. O SAF-T de demonstraç�
 todos artefactos da conversão na secção de contabilidade (`Lines` com `DebitLine`/`CreditLine`, que
 no original é `xs:all` sem ordem e que a faturação não usa) — confirma que a cópia valida bem o resto.
 
-## Validação completa (XSD 1.1) — pendente
+## Validação com o validador oficial da AT — feita (2026-11-04)
+O utilizador correu o validador oficial da AT (`validador_v1_04.exe`, «Aplicação de Validação Local» da página SAF-T (PT) do Portal das Finanças; ficheiro igual ao publicado e assinado digitalmente pela Autoridade Tributária) sobre o SAF-T de exemplo gerado pelos testes (`saft-gerado.test-output.xml`): **validado com sucesso**. Falta repetir com um SAF-T exportado da produção (documentos de formação reais), depois de configurada a chave de assinatura.
+
+## Validação completa (XSD 1.1) com Xerces — já não necessária
 Precisa de um validador XSD 1.1 (ex.: Apache Xerces-J 2.12.2 «xml-schema-1.1», `jaxp.SourceValidator -xsd11`)
 ou do validador da AT (`validador_v1_04.exe`). A execução do Xerces descarregado foi bloqueada nesta
 sessão (código externo) — correr com autorização do utilizador antes do pedido de certificação.
