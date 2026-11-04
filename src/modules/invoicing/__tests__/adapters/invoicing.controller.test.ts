@@ -22,7 +22,7 @@ let store: FakeInvoicingStore;
 beforeAll(async () => {
   store = new FakeInvoicingStore();
   const deps = { store, certificateNumber: null, simplifiedInvoiceLimitNet: dec("100") };
-  const uc = new InvoicingUseCases({ ...deps, signingAvailable: true, issuers: new FakeIssuers(), clock: new FixedClock({ systemEntryDate: "2027-04-02T09:00:00", date: "2027-04-02", instant: "2027-04-02T08:00:00.000Z" }), software: { producerTaxId: null, producerName: null, version: "1.0.0" } });
+  const uc = new InvoicingUseCases({ ...deps, signingAvailable: true, issuers: new FakeIssuers(), clock: new FixedClock({ systemEntryDate: "2027-04-02T09:00:00", date: "2027-04-02", instant: "2027-04-02T08:00:00.000Z" }), software: { productName: "Mezza", producerTaxId: null, producerName: null, version: "1.0.0" } });
   const issue = new IssueDocumentUseCase({ ...deps, signer: new FakeSigner(), clock: new FixedClock(NOW), issuers: new FakeIssuers() });
   const app = express();
   app.use(express.json());

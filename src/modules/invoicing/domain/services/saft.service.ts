@@ -31,11 +31,15 @@ const NS = "urn:OECD:StandardAuditFile-Tax:PT_1.04_01";
 const UNKNOWN = "Desconhecido";
 const WORK_TYPES = new Set(["CM"]);
 
-const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+/** Caracteres de controlo que o XML 1.0 não admite (a emissão já os recusa; defesa extra). */
+// eslint-disable-next-line no-control-regex
+const XML_INVALID = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g;
+const esc = (v: string) =>
+  v.replace(XML_INVALID, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 const el = (name: string, value: string) => `<${name}>${esc(value)}</${name}>`;
 const wrap = (name: string, inner: string) => `<${name}>${inner}</${name}>`;
-/** Texto cortado ao máximo do XSD (a BD guarda sempre o texto completo). */
-const fit = (v: string, max: number) => v.slice(0, max);
+/** Texto cortado ao máximo do XSD, sem partir carateres compostos (a BD guarda sempre o texto completo). */
+const fit = (v: string, max: number) => [...v].slice(0, max).join("");
 const money = (v: string | Dec) => formatAmount(typeof v === "string" ? dec(v) : v);
 /** Decimais exatos sem zeros desnecessários (quantidades, percentagens, preços unitários). */
 const plain = (v: Dec) => {
@@ -97,7 +101,6 @@ function lineXml(d: StoredDocument, l: DocumentLineView, net: Dec, side: "Credit
   const quantity = dec(l.quantity);
   const unitPrice = mulDivRound(net, { units: 1n, scale: 0 }, quantity, 6);
   const exempt = isZero(dec(l.taxPercentage));
-  const reference = d.referencesTo[0];
   return wrap(
     "Line",
     el("LineNumber", String(l.lineNumber)) +
@@ -108,7 +111,7 @@ function lineXml(d: StoredDocument, l: DocumentLineView, net: Dec, side: "Credit
       el("UnitOfMeasure", l.unitOfMeasure) +
       el("UnitPrice", plain(unitPrice)) +
       el("TaxPointDate", d.taxPointDate) +
-      (reference ? wrap("References", el("Reference", reference.documentNumber) + (reference.reason ? el("Reason", fit(reference.reason, 50)) : "")) : "") +
+      d.referencesTo.map((r) => wrap("References", el("Reference", r.documentNumber) + (r.reason ? el("Reason", fit(r.reason, 50)) : ""))).join("") +
       el("Description", l.description) +
       el(side, money(net)) +
       wrap("Tax", el("TaxType", "IVA") + el("TaxCountryRegion", l.taxRegion) + el("TaxCode", l.taxCode) + el("TaxPercentage", plain(dec(l.taxPercentage)))) +
@@ -122,7 +125,8 @@ function statusXml(prefix: "Invoice" | "Work", d: StoredDocument): string {
     el(`${prefix}Status`, d.status) +
       el(`${prefix}StatusDate`, d.status === "N" ? d.systemEntryDate : (d.statusEntryDate ?? d.systemEntryDate)) +
       (d.statusReason ? el("Reason", fit(d.statusReason, 50)) : "") +
-      el("SourceID", fit(d.createdBy, 30)) +
+      // Quem pôs o documento no estado atual (anulou / faturou a consulta de mesa); senão, quem emitiu.
+      el("SourceID", fit(d.status !== "N" && d.statusChangedBy ? d.statusChangedBy : d.createdBy, 30)) +
       el("SourceBilling", "P"),
   );
 }
@@ -175,12 +179,17 @@ function workDocumentXml(d: StoredDocument): string {
   );
 }
 
-/** Totais de controlo: os anulados contam nas entradas mas não nos totais (Portaria 302/2016, 4.x.2/4.x.3). */
-function controlTotals(docs: StoredDocument[]) {
+/**
+ * Totais de controlo (soma dos valores das linhas; todos os documentos contam nas
+ * entradas). Portaria 302/2016: SalesInvoices excluem os documentos em estado
+ * «A» ou «F» (4.1.2/4.1.3); WorkingDocuments excluem só os «A» (4.3.2/4.3.3) —
+ * uma consulta de mesa faturada (F) continua nos totais.
+ */
+function controlTotals(docs: StoredDocument[], excluded: ReadonlySet<string>) {
   let debit = ZERO;
   let credit = ZERO;
   for (const d of docs) {
-    if (d.status === "A") continue;
+    if (excluded.has(d.status)) continue;
     if (d.documentType === "NC") debit = add(debit, dec(d.netTotal));
     else credit = add(credit, dec(d.netTotal));
   }
@@ -241,8 +250,8 @@ export function buildSaftXml(input: SaftInput): string {
   const masterFiles = wrap("MasterFiles", [...customers.values()].join("") + [...products.values()].join("") + (taxes.size > 0 ? wrap("TaxTable", [...taxes.values()].join("")) : ""));
   const sourceDocuments = wrap(
     "SourceDocuments",
-    wrap("SalesInvoices", controlTotals(invoices) + invoices.map(invoiceXml).join("")) +
-      (work.length > 0 ? wrap("WorkingDocuments", controlTotals(work) + work.map(workDocumentXml).join("")) : ""),
+    wrap("SalesInvoices", controlTotals(invoices, new Set(["A", "F"])) + invoices.map(invoiceXml).join("")) +
+      (work.length > 0 ? wrap("WorkingDocuments", controlTotals(work, new Set(["A"])) + work.map(workDocumentXml).join("")) : ""),
   );
   return `<?xml version="1.0" encoding="UTF-8"?>\n<AuditFile xmlns="${NS}">${header}${masterFiles}${sourceDocuments}</AuditFile>\n`;
 }

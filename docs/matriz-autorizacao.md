@@ -221,7 +221,7 @@ Endpoints: 747 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/invoicing/documents/:id` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/invoicing/documents/:id/cancel` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/invoicing/meta` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
-| GET | `/api/invoicing/saft` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/invoicing/saft` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/invoicing/series` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/invoicing/series` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | PUT | `/api/invoicing/series/:id/validation-code` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |

@@ -3,7 +3,6 @@ import { idempotency, type IdempotencyStore } from "../../../../infra/http/idemp
 import { problem } from "../../../../infra/http/problem-details.js";
 import type { Dec } from "../../../../kernel/money/decimal.js";
 import { formatAmount } from "../../domain/services/amount-format.js";
-import { sourceIdFor } from "../../domain/services/source-id.service.js";
 import type { InvoicingPort, IssueDocumentInput, IssueDocumentPort } from "../../domain/ports/in/invoicing.ports.js";
 import type { CancelReasonCode } from "../../domain/entities/cancel-reasons.js";
 import { DOCUMENT_TYPES, type FiscalDocumentType } from "../../domain/entities/series.js";
@@ -31,8 +30,8 @@ async function run<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 const org = (req: Request) => req.auth!.orgId;
-/** SourceID do SAF-T: derivado do id estável do utilizador (máx. 30, não reutilizável). */
-const actor = (req: Request) => sourceIdFor(req.auth!.sub);
+/** Id estável do utilizador; os casos de uso derivam dele o SourceID do SAF-T. */
+const actor = (req: Request) => req.auth!.sub;
 const body = (req: Request) => (req.body ?? {}) as Record<string, unknown>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STATUSES = new Set(["N", "A", "F"]);
@@ -141,7 +140,7 @@ export function createInvoicingRouter(uc: InvoicingPort, issue: IssueDocumentPor
     const q = req.query;
     uuid(q.legalEntityId, "legalEntityId");
     const out = await run(() =>
-      uc.exportSaft(org(req), {
+      uc.exportSaft(org(req), actor(req), {
         legalEntityId: q.legalEntityId as string,
         from: String(q.from ?? ""),
         to: String(q.to ?? ""),

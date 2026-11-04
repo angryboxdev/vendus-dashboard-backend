@@ -96,6 +96,6 @@ export interface InvoicingPort {
   getDocument(org: OrganizationId, documentId: string): Promise<DocumentView>;
   /** Devolve o documento anulado (2.ª via). */
   cancel(org: OrganizationId, actor: string, documentId: string, reasonCode: CancelReasonCode, note?: string): Promise<DocumentView>;
-  exportSaft(org: OrganizationId, q: SaftQuery): Promise<SaftExport>;
+  exportSaft(org: OrganizationId, actor: string, q: SaftQuery): Promise<SaftExport>;
   meta(): InvoicingMeta;
 }

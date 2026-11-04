@@ -39,6 +39,7 @@ function doc(over: Partial<StoredDocument>): StoredDocument {
     orderReferences: [],
     statusReason: null,
     statusChangedAt: null,
+    statusChangedBy: null,
     statusEntryDate: null,
     createdBy: "ana@example.invalid",
     lines: [],
@@ -88,6 +89,7 @@ const cancelled = doc({
   status: "A",
   statusReason: "NIF do adquirente errado",
   statusEntryDate: "2027-03-10T13:00:00",
+  statusChangedBy: "quemanulou",
   customer: { customerId: "123456789", taxId: "123456789", name: "Cliente, Lda", country: "PT", address: { street: "Rua B", postalCode: "1000-001", city: "Lisboa", country: "PT" } },
   customerTaxId: "123456789",
   grossTotal: dec("12.50"),
@@ -194,7 +196,7 @@ describe("SAF-T (PT) 1.04_01 — faturação (Portaria 302/2016)", () => {
     const inv = between("<InvoiceNo>FT L01-2027/1</InvoiceNo>", "</Invoice>");
     expect(inv).toContain(
       "<ATCUD>CDF7T5HD-1</ATCUD><DocumentStatus><InvoiceStatus>A</InvoiceStatus><InvoiceStatusDate>2027-03-10T13:00:00</InvoiceStatusDate>" +
-        "<Reason>NIF do adquirente errado</Reason><SourceID>ana@example.invalid</SourceID><SourceBilling>P</SourceBilling></DocumentStatus>" +
+        "<Reason>NIF do adquirente errado</Reason><SourceID>quemanulou</SourceID><SourceBilling>P</SourceBilling></DocumentStatus>" +
         `<Hash>${H("a")}</Hash><HashControl>0</HashControl><InvoiceDate>2027-03-10</InvoiceDate><InvoiceType>FT</InvoiceType>` +
         "<SpecialRegimes><SelfBillingIndicator>0</SelfBillingIndicator><CashVATSchemeIndicator>0</CashVATSchemeIndicator><ThirdPartiesBillingIndicator>0</ThirdPartiesBillingIndicator></SpecialRegimes>" +
         "<SourceID>ana@example.invalid</SourceID><SystemEntryDate>2027-03-10T12:00:00</SystemEntryDate><CustomerID>123456789</CustomerID>",
@@ -222,6 +224,22 @@ describe("SAF-T (PT) 1.04_01 — faturação (Portaria 302/2016)", () => {
     expect(long).toContain(`<Reason>${"R".repeat(50)}</Reason>`);
     expect(long).toContain(`<CompanyName>${"N".repeat(100)}</CompanyName>`);
     expect(long).toContain(`<City>${"C".repeat(50)}</City>`);
+  });
+
+  it("totais: faturas excluem A e F (4.1.2/4.1.3); consultas de mesa excluem só A — uma CM faturada conta (4.3.3)", () => {
+    const xml2 = buildSaftXml({ ...input, documents: [{ ...fs, status: "F" }, { ...cm, status: "F" }] });
+    expect(xml2).toContain("<SalesInvoices><NumberOfEntries>1</NumberOfEntries><TotalDebit>0.00</TotalDebit><TotalCredit>0.00</TotalCredit>");
+    expect(xml2).toContain("<WorkingDocuments><NumberOfEntries>1</NumberOfEntries><TotalDebit>0.00</TotalDebit><TotalCredit>11.06</TotalCredit>");
+  });
+
+  it("NC com vários documentos retificados: todas as referências em cada linha", () => {
+    const two = buildSaftXml({ ...input, documents: [{ ...nc, referencesTo: [...nc.referencesTo, { documentId: "x", documentNumber: "FS L01-2027/2", reason: "Erro" }] }] });
+    expect(two).toContain("<References><Reference>FS L01-2027/1</Reference><Reason>Devolução</Reason></References><References><Reference>FS L01-2027/2</Reference><Reason>Erro</Reason></References>");
+  });
+
+  it("remove carateres de controlo que o XML 1.0 não admite", () => {
+    const ctrl = buildSaftXml({ ...input, documents: [{ ...fs, customer: { ...FINAL, customerId: "Consumidor final" }, lines: [{ ...fs.lines[0]!, description: "Pizza\u0007 boa" }, fs.lines[1]!, fs.lines[2]!] }] });
+    expect(ctrl).toContain("<ProductDescription>Pizza boa</ProductDescription>");
   });
 
   it("escapa texto XML (&, <, >) nas descrições e nomes", () => {

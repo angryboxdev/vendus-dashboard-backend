@@ -9,7 +9,7 @@ const ORG = mintOrganizationId("b6999cff-79b2-4583-b8b4-a744b3ace748");
 
 function setup(certificateNumber: string | null = null) {
   const store = new FakeInvoicingStore();
-  const uc = new InvoicingUseCases({ store, certificateNumber, signingAvailable: true, simplifiedInvoiceLimitNet: dec("100"), issuers: new FakeIssuers(), clock: new FixedClock({ systemEntryDate: "2027-04-02T09:00:00", date: "2027-04-02", instant: "2027-04-02T08:00:00.000Z" }), software: { producerTaxId: null, producerName: null, version: "1.0.0" } });
+  const uc = new InvoicingUseCases({ store, certificateNumber, signingAvailable: true, simplifiedInvoiceLimitNet: dec("100"), issuers: new FakeIssuers(), clock: new FixedClock({ systemEntryDate: "2027-04-02T09:00:00", date: "2027-04-02", instant: "2027-04-02T08:00:00.000Z" }), software: { productName: "Mezza", producerTaxId: null, producerName: null, version: "1.0.0" } });
   return { store, uc };
 }
 

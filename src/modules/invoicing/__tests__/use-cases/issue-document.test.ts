@@ -164,7 +164,7 @@ describe("emitir documento", () => {
 
   it("valores não numéricos, tipo de produto ou meio de pagamento desconhecidos são erros de regra (não 500)", async () => {
     const { useCase } = setup({ series: [series("FS"), series("FR")] });
-    for (const l of [{ ...pizza, quantity: "abc" }, { ...pizza, unitPrice: "1,5" }, { ...pizza, productType: "X" as never }, { ...pizza, description: "y".repeat(201) }]) {
+    for (const l of [{ ...pizza, quantity: "abc" }, { ...pizza, unitPrice: "1,5" }, { ...pizza, productType: "X" as never }, { ...pizza, description: "y".repeat(201) }, { ...pizza, description: "P" }, { ...pizza, description: "Pizza\u0007" }]) {
       await expect(useCase.execute(ORG, input({ lines: [l] }))).rejects.toBeInstanceOf(InvoicingRuleError);
     }
     await expect(useCase.execute(ORG, input({ seriesRef: "serie-FR", paymentMechanism: "XX" as never }))).rejects.toBeInstanceOf(InvoicingRuleError);

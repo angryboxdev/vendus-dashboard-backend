@@ -72,6 +72,10 @@ export class FakeInvoicingStore implements InvoicingStorePort {
     this.saved.push(r);
     return { documentId: `doc-${this.saved.length}` };
   }
+  events: Array<{ actor: string; action: string; details?: Record<string, unknown> }> = [];
+  async recordEvent(_org: OrganizationId, e: { actor: string; action: string; details?: Record<string, unknown> }) {
+    this.events.push(e);
+  }
   saftQueries: Array<{ legalEntityId: string; from: string; to: string; includeTraining: boolean }> = [];
   saftResult: StoredDocument[] = [];
   async saftDocuments(_org: OrganizationId, q: { legalEntityId: string; from: string; to: string; includeTraining: boolean }) {

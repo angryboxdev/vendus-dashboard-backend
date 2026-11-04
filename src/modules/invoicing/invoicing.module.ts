@@ -32,6 +32,7 @@ export function readInvoicingConfig(env: {
   producerTaxId?: string | null;
   producerName?: string | null;
   productVersion?: string | null;
+  productName?: string | null;
 }): InvoicingConfig {
   const keyVersion = Number(env.keyVersion ?? "1");
   if (!Number.isSafeInteger(keyVersion) || keyVersion < 1) throw new Error("INVOICING_SIGNING_KEY_VERSION inválida");
@@ -43,7 +44,7 @@ export function readInvoicingConfig(env: {
     privateKeyPem: env.privateKeyPem?.replace(/\\n/g, "\n").trim() || null,
     keyVersion,
     certificateNumber,
-    software: { producerTaxId: env.producerTaxId?.trim() || null, producerName: env.producerName?.trim() || null, version },
+    software: { productName: env.productName?.trim() || "Mezza", producerTaxId: env.producerTaxId?.trim() || null, producerName: env.producerName?.trim() || null, version },
   };
 }
 
@@ -56,7 +57,7 @@ export function safeInvoicingConfig(read: () => InvoicingConfig): InvoicingConfi
     return read();
   } catch (e) {
     console.error("[faturação] configuração inválida — emissão desligada:", e instanceof Error ? e.message : "erro");
-    return { privateKeyPem: null, keyVersion: 1, certificateNumber: null, software: { producerTaxId: null, producerName: null, version: "1.0.0" } };
+    return { privateKeyPem: null, keyVersion: 1, certificateNumber: null, software: { productName: "Mezza", producerTaxId: null, producerName: null, version: "1.0.0" } };
   }
 }
 

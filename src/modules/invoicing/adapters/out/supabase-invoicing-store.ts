@@ -18,7 +18,7 @@ import type {
 } from "../../domain/ports/out/invoicing-store.port.js";
 import { formatAmount } from "../../domain/services/amount-format.js";
 import { add } from "../../domain/services/decimal-ops.js";
-import { lisbonEntryDate } from "./lisbon-clock.js";
+import { lisbonEntryDate } from "../../domain/services/lisbon-time.service.js";
 import type { LineTax } from "../../domain/services/document-totals.service.js";
 
 interface SeriesRow {
@@ -199,7 +199,7 @@ const toSummary = (r: SummaryRow): DocumentSummary => ({
 
 const DOCUMENT_COLS =
   SUMMARY_COLS +
-  ", series_ref, sequence, tax_point_date, system_entry_date, system_entry_at, software_certificate_number, hash, hash_control, atcud, qr_payload, prices_include_tax, net_total::text, tax_payable::text, payment_mechanism, customer, issuer, references_to, order_references, status_reason, status_changed_at, created_by";
+  ", series_ref, sequence, tax_point_date, system_entry_date, system_entry_at, software_certificate_number, hash, hash_control, atcud, qr_payload, prices_include_tax, net_total::text, tax_payable::text, payment_mechanism, customer, issuer, references_to, order_references, status_reason, status_changed_at, status_changed_by, created_by";
 const LINE_COLS =
   "line_number, product_code, product_type, unit_of_measure, description, quantity::text, unit_price::text, discount_pct::text, line_amount::text, tax_region, tax_code, tax_percentage::text, exemption_code, exemption_reason";
 const TAX_COLS = "tax_region, tax_code, tax_percentage::text, exemption_code, exemption_reason, taxable_base::text, tax_amount::text";
@@ -239,7 +239,25 @@ const toTaxView = (t: Row): DocumentTaxView => ({
 });
 
 const SAFT_MAX_DOCUMENTS = 50_000;
-const SAFT_CHUNK = 200;
+const SAFT_CHUNK = 100;
+/** O PostgREST devolve no máximo 1000 linhas por pedido (`max_rows`). */
+const PAGE = 1000;
+
+/** Lê todas as páginas de uma consulta ordenada até vir uma página incompleta. */
+async function readAllPages(
+  page: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
+  what: string,
+  maxRows = Number.POSITIVE_INFINITY,
+): Promise<Row[]> {
+  const out: Row[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await page(from, from + PAGE - 1);
+    if (error) throw new Error(`Faturação: erro a ler ${what} para o SAF-T: ${error.message}`);
+    const rows = (data ?? []) as Row[];
+    out.push(...rows);
+    if (rows.length < PAGE || out.length > maxRows) return out;
+  }
+}
 
 function toStoredDocument(d: Row, lines: Row[], taxes: Row[]): StoredDocument {
   const changedAt = str(d.status_changed_at);
@@ -265,6 +283,7 @@ function toStoredDocument(d: Row, lines: Row[], taxes: Row[]): StoredDocument {
     orderReferences: fromReferenceRows(d.order_references),
     statusReason: str(d.status_reason),
     statusChangedAt: changedAt,
+    statusChangedBy: str(d.status_changed_by),
     // O instante da mudança de estado, em hora de Lisboa (formato do SAF-T).
     statusEntryDate: changedAt ? lisbonEntryDate(new Date(changedAt)) : null,
     createdBy: String(d.created_by),
@@ -362,19 +381,23 @@ export class SupabaseInvoicingStore implements InvoicingStorePort {
     return toStoredDocument(d, (lines.data ?? []) as unknown as Row[], (taxes.data ?? []) as unknown as Row[]);
   }
 
-  /** Documentos do período para o SAF-T, por ordem de emissão, com linhas e impostos (leitura em lotes). */
+  /**
+   * Documentos do período para o SAF-T, por ordem de emissão, com linhas e
+   * impostos. O PostgREST corta cada resposta em 1000 linhas: tudo é lido em
+   * páginas (`range`) até esgotar — um SAF-T nunca pode sair truncado.
+   */
   async saftDocuments(orgId: OrganizationId, q: { legalEntityId: string; from: string; to: string; includeTraining: boolean }): Promise<StoredDocument[]> {
     const scoped = this.scoped(orgId);
-    let docsQuery = scoped
-      .table("invoicing_documents")
-      .select(DOCUMENT_COLS)
-      .eq("legal_entity_id", q.legalEntityId)
-      .gte("document_date", q.from)
-      .lte("document_date", q.to);
-    if (!q.includeTraining) docsQuery = docsQuery.eq("series_mode", "normal");
-    const docs = await docsQuery.order("system_entry_at", { ascending: true }).limit(SAFT_MAX_DOCUMENTS + 1);
-    if (docs.error) throw new Error(`Faturação: erro a ler documentos para o SAF-T: ${docs.error.message}`);
-    const rows = (docs.data ?? []) as unknown as Row[];
+    const rows = await readAllPages(async (from, to) => {
+      let docsQuery = scoped
+        .table("invoicing_documents")
+        .select(DOCUMENT_COLS)
+        .eq("legal_entity_id", q.legalEntityId)
+        .gte("document_date", q.from)
+        .lte("document_date", q.to);
+      if (!q.includeTraining) docsQuery = docsQuery.eq("series_mode", "normal");
+      return docsQuery.order("system_entry_at", { ascending: true }).order("id", { ascending: true }).range(from, to);
+    }, "documentos", SAFT_MAX_DOCUMENTS);
     if (rows.length > SAFT_MAX_DOCUMENTS) throw new InvoicingRuleError(`Período com mais de ${SAFT_MAX_DOCUMENTS} documentos — exporte por mês`);
 
     const lines = new Map<string, Row[]>();
@@ -383,14 +406,40 @@ export class SupabaseInvoicingStore implements InvoicingStorePort {
     for (let i = 0; i < ids.length; i += SAFT_CHUNK) {
       const chunk = ids.slice(i, i + SAFT_CHUNK);
       const [l, t] = await Promise.all([
-        scoped.table("invoicing_document_lines").select(`document_id, ${LINE_COLS}`).in("document_id", chunk).order("line_number"),
-        scoped.table("invoicing_document_taxes").select(`document_id, ${TAX_COLS}`).in("document_id", chunk),
+        readAllPages(
+          (from, to) =>
+            scoped
+              .table("invoicing_document_lines")
+              .select(`document_id, ${LINE_COLS}`)
+              .in("document_id", chunk)
+              .order("document_id", { ascending: true })
+              .order("line_number", { ascending: true })
+              .range(from, to),
+          "linhas",
+        ),
+        readAllPages(
+          (from, to) =>
+            scoped
+              .table("invoicing_document_taxes")
+              .select(`document_id, ${TAX_COLS}`)
+              .in("document_id", chunk)
+              .order("document_id", { ascending: true })
+              .order("id", { ascending: true })
+              .range(from, to),
+          "impostos",
+        ),
       ]);
-      for (const r of [l, t]) if (r.error) throw new Error(`Faturação: erro a ler linhas para o SAF-T: ${r.error.message}`);
-      for (const row of (l.data ?? []) as unknown as Row[]) lines.set(String(row.document_id), [...(lines.get(String(row.document_id)) ?? []), row]);
-      for (const row of (t.data ?? []) as unknown as Row[]) taxes.set(String(row.document_id), [...(taxes.get(String(row.document_id)) ?? []), row]);
+      for (const row of l) lines.set(String(row.document_id), [...(lines.get(String(row.document_id)) ?? []), row]);
+      for (const row of t) taxes.set(String(row.document_id), [...(taxes.get(String(row.document_id)) ?? []), row]);
     }
     return rows.map((d) => toStoredDocument(d, lines.get(String(d.id)) ?? [], taxes.get(String(d.id)) ?? []));
+  }
+
+  async recordEvent(orgId: OrganizationId, e: { actor: string; action: string; details?: Record<string, unknown> }): Promise<void> {
+    const { error } = await this.scoped(orgId)
+      .table("invoicing_events")
+      .insert({ actor: e.actor, action: e.action, details: e.details ?? null });
+    if (error) throw new Error(`Faturação: erro a registar o evento: ${error.message}`);
   }
 
   async getSeries(orgId: OrganizationId, seriesRef: string): Promise<SeriesState | null> {

@@ -1,21 +1,5 @@
 import type { ClockPort, FiscalNow } from "../../domain/ports/out/clock.port.js";
-
-const FORMAT = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Europe/Lisbon",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hourCycle: "h23",
-});
-
-/** AAAA-MM-DDTHH:MM:SS em hora de Lisboa (formato do SystemEntryDate / StatusDate do SAF-T). */
-export function lisbonEntryDate(at: Date): string {
-  const p = Object.fromEntries(FORMAT.formatToParts(at).map((x) => [x.type, x.value]));
-  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;
-}
+import { lisbonEntryDate } from "../../domain/services/lisbon-time.service.js";
 
 /** Hora legal de Portugal continental; o servidor corre em UTC. */
 export class LisbonClock implements ClockPort {

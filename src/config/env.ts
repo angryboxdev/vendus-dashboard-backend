@@ -143,6 +143,7 @@ export const ENV = {
   INVOICING_PRODUCER_TAX_ID: process.env.INVOICING_PRODUCER_TAX_ID || null,
   INVOICING_PRODUCER_NAME: process.env.INVOICING_PRODUCER_NAME || null,
   INVOICING_PRODUCT_VERSION: process.env.INVOICING_PRODUCT_VERSION || "1.0.0",
+  INVOICING_PRODUCT_NAME: process.env.INVOICING_PRODUCT_NAME || "Mezza",
 
   /**
    * URL pública deste servidor para registar o webhook na AirMenu.
