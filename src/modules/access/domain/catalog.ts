@@ -41,6 +41,7 @@ export const ACCESS_CATALOG: CatalogModule[] = [
       { key: "sales.results", label: "Resultados", description: "Resumo e crescimento de vendas." },
       { key: "sales.cash_closings", label: "Fechos de caixa", description: "Consultar e corrigir fechos de caixa." },
       { key: "sales.air_menu", label: "Air Menu", description: "Encomendas e integração Air Menu." },
+      { key: "sales.invoicing", label: "Faturação certificada (testes)", description: "Emitir e consultar documentos fiscais do Mezza (só formação até haver certificado da AT)." },
     ],
     specials: [],
   },
@@ -174,9 +175,16 @@ export function isSpecialKey(key: string): boolean {
 /** Perfis de sistema (criados para cada organização). Admin e Colaborador são protegidos. */
 export type SystemProfileKey = "admin" | "manager" | "rh" | "financeiro" | "colaborador";
 
+/**
+ * Funcionalidades que nenhum perfil recebe por «módulo inteiro» — só o Admin
+ * (que tem tudo) ou quem as conceder à mão. Faturação certificada: em testes,
+ * isolada dos outros canais até haver certificado da AT.
+ */
+const NOT_IN_MODULE_DEFAULTS = new Set(["sales.invoicing"]);
+
 function moduleAll(moduleKey: string, level: AccessLevel): PermissionMap {
   const mod = ACCESS_CATALOG.find((m) => m.key === moduleKey)!;
-  return Object.fromEntries(mod.functions.map((f) => [f.key, level]));
+  return Object.fromEntries(mod.functions.filter((f) => !NOT_IN_MODULE_DEFAULTS.has(f.key)).map((f) => [f.key, level]));
 }
 
 /** Valores iniciais dos perfis de sistema (catalogo.md, "Decisões do utilizador"). Chave ausente = NONE. */

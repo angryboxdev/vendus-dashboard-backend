@@ -294,6 +294,12 @@ export const TABLE_REGISTRY = {
   custom_request_forms: { organizationColumn: "org_id", locationBearing: false },
   custom_requests: { organizationColumn: "org_id", locationBearing: false },
   ops_tasks: { organizationColumn: "org_id", locationBearing: false },
+  // Faturação certificada AT (módulo invoicing): escrita só pelas RPC.
+  invoicing_series: { organizationColumn: "org_id", locationBearing: true },
+  invoicing_documents: { organizationColumn: "org_id", locationBearing: true },
+  invoicing_document_lines: { organizationColumn: "org_id", locationBearing: false },
+  invoicing_document_taxes: { organizationColumn: "org_id", locationBearing: false },
+  invoicing_events: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;

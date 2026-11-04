@@ -85,6 +85,7 @@ module.exports = {
           "^src/modules/crm/__tests__/integration/supabase-crm-workspace\\.integration\\.test\\.ts$",
           "^src/modules/organization/__tests__/integration/supabase-organization\\.integration\\.test\\.ts$",
           "^src/modules/locations/__tests__/integration/supabase-location\\.integration\\.test\\.ts$",
+          "^src/modules/invoicing/__tests__/integration/supabase-invoicing-store\\.integration\\.test\\.ts$",
           "^src/services/__tests__/ingredientConsumptionService\\.integration\\.test\\.ts$",
           "^src/services/__tests__/stockMovementService\\.integration\\.test\\.ts$",
         ],
