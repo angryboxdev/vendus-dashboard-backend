@@ -11,4 +11,6 @@ paths = [
   '''src/modules/invoicing/__tests__/fixtures/at/Chave_Privada\.txt''',
   # Chave JWT de demonstração da stack LOCAL do Supabase (`supabase start`), pública.
   '''src/modules/invoicing/__tests__/integration/supabase-invoicing-store\.integration\.test\.ts''',
+  # Teste do arranque: uma versão anterior usava um cabeçalho PEM fictício (sem chave).
+  '''src/modules/invoicing/__tests__/adapters/invoicing-module\.test\.ts''',
 ]
