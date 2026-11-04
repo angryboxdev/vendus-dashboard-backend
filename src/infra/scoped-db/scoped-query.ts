@@ -152,6 +152,19 @@ export class ScopedQuery {
   }
 
   /**
+   * Módulo `invoicing` — documentos cujo estado atual ainda não foi aceite
+   * pela AT no ambiente indicado (fila da comunicação ao e-Fatura). Ver
+   * `20261220120000_invoicing_at_communication.sql`.
+   */
+  invoicingAtQueue(environment: string, limit: number) {
+    return this.client.rpc("fn_invoicing_at_queue", {
+      p_org_id: this.organizationId,
+      p_environment: environment,
+      p_limit: limit,
+    });
+  }
+
+  /**
    * Módulo `stock-count` — materializa o escopo de uma sessão em linhas
    * (idempotente, `ON CONFLICT DO NOTHING`), verifica sobreposição com
    * outra sessão ativa na mesma loja. Ver

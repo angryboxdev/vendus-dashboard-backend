@@ -21,3 +21,15 @@ no original é `xs:all` sem ordem e que a faturação não usa) — confirma que
 Precisa de um validador XSD 1.1 (ex.: Apache Xerces-J 2.12.2 «xml-schema-1.1», `jaxp.SourceValidator -xsd11`)
 ou do validador da AT (`validador_v1_04.exe`). A execução do Xerces descarregado foi bloqueada nesta
 sessão (código externo) — correr com autorização do utilizador antes do pedido de certificação.
+
+## Mensagens dos webservices (F6) contra os WSDL oficiais
+`validar-wsdl.ps1` extrai o esquema embutido no WSDL (XSD 1.0) e valida cada corpo SOAP gerado pelos testes
+(`efatura-*.test-output.xml`, `series-*.test-output.xml`):
+
+```powershell
+powershell -File validar-wsdl.ps1 -Wsdl <...>\fixtures\at\Fatcorews.wsdl -Xml <...>\efatura-fs.test-output.xml
+powershell -File validar-wsdl.ps1 -Wsdl <...>\fixtures\at\Comunicacao_Series.wsdl -Xml <...>\series-registar.test-output.xml
+```
+
+Resultado em 2026-11-04: 7 mensagens (FS, NC, CM, anulação; registar, finalizar e anular série) — 0 erros.
+Confirmado que o validador apanha erros (mensagem sem `TaxEntity`, série sem `tipoSerie` → 1 erro cada).

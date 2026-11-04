@@ -36,3 +36,19 @@ export class InvoicingUnavailableError extends Error {
     this.name = "InvoicingUnavailableError";
   }
 }
+
+/** Já está a decorrer uma comunicação à AT para esta organização (evita envios em duplicado). */
+export class AtBusyError extends Error {
+  constructor() {
+    super("Já está a decorrer uma comunicação à AT — aguarde que termine.");
+    this.name = "AtBusyError";
+  }
+}
+
+/** A AT não respondeu (rede, TLS, tempo esgotado). Nunca inclui credenciais nem o pedido. */
+export class AtTransportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AtTransportError";
+  }
+}

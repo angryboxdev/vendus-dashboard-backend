@@ -1,6 +1,6 @@
 # Spec — Faturação certificada AT (módulo `invoicing`)
 
-Status: F1–F5 concluídas (2026-11-04); próxima F6 · Ramo: `faturacao-certificada` (worktree `vendus-dashboard-backend-faturacao`)
+Status: F1–F5 concluídas e F4/F5 em produção; F6 feita no ramo (2026-11-04, falta o teste real contra a AT); próxima F7 · Ramo: `faturacao-certificada` (worktree `vendus-dashboard-backend-faturacao`)
 Base: [plano.md](plano.md), [pesquisa-tecnico.md](pesquisa-tecnico.md), [pesquisa-juridico-processo.md](pesquisa-juridico-processo.md)
 
 ## Objetivo

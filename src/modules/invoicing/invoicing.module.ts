@@ -1,13 +1,21 @@
 import type { Router } from "express";
 import { SupabaseIdempotencyStore } from "../../infra/http/supabase-idempotency.store.js";
+import { listOrganizations } from "../../infra/scoped-db/organization-listing.js";
 import { createScopedQuery, type ScopedQueryFactory } from "../../infra/scoped-db/scoped-query.js";
 import { dec } from "../../kernel/money/decimal.js";
 import { createInvoicingRouter } from "./adapters/in/invoicing.controller.js";
+import { AtSoapGateway } from "./adapters/out/at-soap-gateway.js";
 import { LisbonClock } from "./adapters/out/lisbon-clock.js";
 import { RsaSha1Signer } from "./adapters/out/rsa-sha1-signer.js";
+import { SupabaseAtCredentials } from "./adapters/out/supabase-at-credentials.js";
+import { SupabaseAtStore } from "./adapters/out/supabase-at-store.js";
 import { SupabaseInvoicingStore } from "./adapters/out/supabase-invoicing-store.js";
+import { AtCommunicationUseCases } from "./application/use-cases/at-communication.use-cases.js";
 import { InvoicingUseCases, type SaftSoftwareConfig } from "./application/use-cases/invoicing.use-cases.js";
 import { IssueDocumentUseCase } from "./application/use-cases/issue-document.use-case.js";
+import type { AtEnvironment } from "./domain/entities/at-communication.js";
+import { AtBusyError } from "./domain/errors.js";
+import type { AtGatewayPort } from "./domain/ports/out/at-gateway.port.js";
 import type { IssuerDirectoryPort } from "./domain/ports/out/issuer-directory.port.js";
 
 /**
@@ -23,6 +31,15 @@ export interface InvoicingConfig {
   certificateNumber: string | null;
   /** Produtora e versão do software (cabeçalho do SAF-T). */
   software: SaftSoftwareConfig;
+  /** Comunicação à AT (F6); null = desligada (falta o certificado ou a chave pública da AT). */
+  at: AtConfig | null;
+}
+
+export interface AtConfig {
+  environment: AtEnvironment;
+  pfx: Buffer;
+  passphrase: string;
+  authPublicKeyPem: string;
 }
 
 export function readInvoicingConfig(env: {
@@ -33,6 +50,10 @@ export function readInvoicingConfig(env: {
   producerName?: string | null;
   productVersion?: string | null;
   productName?: string | null;
+  atEnvironment?: string | null;
+  atTlsPfxBase64?: string | null;
+  atTlsPassphrase?: string | null;
+  atAuthPublicKeyPem?: string | null;
 }): InvoicingConfig {
   const keyVersion = Number(env.keyVersion ?? "1");
   if (!Number.isSafeInteger(keyVersion) || keyVersion < 1) throw new Error("INVOICING_SIGNING_KEY_VERSION inválida");
@@ -45,7 +66,18 @@ export function readInvoicingConfig(env: {
     keyVersion,
     certificateNumber,
     software: { productName: env.productName?.trim() || "Mezza", producerTaxId: env.producerTaxId?.trim() || null, producerName: env.producerName?.trim() || null, version },
+    at: readAtConfig(env),
   };
+}
+
+/** Comunicação à AT: só o ambiente de testes nesta fase; sem certificado ou chave pública, desligada. */
+function readAtConfig(env: { atEnvironment?: string | null; atTlsPfxBase64?: string | null; atTlsPassphrase?: string | null; atAuthPublicKeyPem?: string | null }): AtConfig | null {
+  const environment = env.atEnvironment?.trim() || "test";
+  if (environment !== "test") throw new Error("INVOICING_AT_ENVIRONMENT: só o ambiente de testes (\"test\") é suportado antes do certificado");
+  const pfx = env.atTlsPfxBase64?.trim();
+  const publicKey = env.atAuthPublicKeyPem?.trim();
+  if (!pfx || !publicKey) return null;
+  return { environment, pfx: Buffer.from(pfx, "base64"), passphrase: env.atTlsPassphrase ?? "", authPublicKeyPem: publicKey };
 }
 
 /** Fatura simplificada: até 100 € sem IVA (CIVA art. 40.º, n.º 1, al. b); refeições = prestação de serviços). */
@@ -57,7 +89,7 @@ export function safeInvoicingConfig(read: () => InvoicingConfig): InvoicingConfi
     return read();
   } catch (e) {
     console.error("[faturação] configuração inválida — emissão desligada:", e instanceof Error ? e.message : "erro");
-    return { privateKeyPem: null, keyVersion: 1, certificateNumber: null, software: { productName: "Mezza", producerTaxId: null, producerName: null, version: "1.0.0" } };
+    return { privateKeyPem: null, keyVersion: 1, certificateNumber: null, software: { productName: "Mezza", producerTaxId: null, producerName: null, version: "1.0.0" }, at: null };
   }
 }
 
@@ -72,10 +104,26 @@ function signerFrom(config: InvoicingConfig): RsaSha1Signer | null {
   }
 }
 
-export function createInvoicingModule(deps: { config: InvoicingConfig; issuers: IssuerDirectoryPort; scoped?: ScopedQueryFactory }): {
+function gatewayFrom(config: InvoicingConfig): AtGatewayPort | null {
+  if (!config.at) return null;
+  try {
+    return new AtSoapGateway({ environment: config.at.environment, pfx: config.at.pfx, passphrase: config.at.passphrase, authPublicKeyPem: config.at.authPublicKeyPem });
+  } catch {
+    // Sem detalhes: o erro do OpenSSL pode ecoar partes da chave.
+    console.error("[faturação] certificado ou chave pública da AT inválidos — comunicação à AT desligada");
+    return null;
+  }
+}
+
+export function createInvoicingModule(deps: { config: InvoicingConfig; issuers: IssuerDirectoryPort; scoped?: ScopedQueryFactory; gateway?: AtGatewayPort | null }): {
   router: Router;
   useCases: InvoicingUseCases;
   issue: IssueDocumentUseCase;
+  at: AtCommunicationUseCases;
+  /** Certificado e chave da AT configurados: o cron comunica a cada 10 min. */
+  atConfigured: boolean;
+  /** Para o cron: comunica o que falta em todas as organizações (uma de cada vez). */
+  communicateAllPending(): Promise<void>;
 } {
   const scoped = deps.scoped ?? createScopedQuery;
   const store = new SupabaseInvoicingStore(scoped);
@@ -85,5 +133,44 @@ export function createInvoicingModule(deps: { config: InvoicingConfig; issuers: 
   const clock = new LisbonClock();
   const useCases = new InvoicingUseCases({ ...common, signingAvailable: signer !== null, issuers: deps.issuers, clock, software: config.software });
   const issue = new IssueDocumentUseCase({ ...common, signer, clock, issuers: deps.issuers });
-  return { router: createInvoicingRouter(useCases, issue, new SupabaseIdempotencyStore(scoped)), useCases, issue };
+  const gateway = deps.gateway !== undefined ? deps.gateway : gatewayFrom(config);
+  const at = new AtCommunicationUseCases({
+    store,
+    at: new SupabaseAtStore(scoped),
+    credentials: new SupabaseAtCredentials(scoped),
+    gateway,
+    environment: config.at?.environment ?? "test",
+    issuers: deps.issuers,
+    clock,
+    certificateNumber: config.certificateNumber,
+  });
+
+  let running = false;
+  async function communicateAllPending(): Promise<void> {
+    if (!gateway || running) return;
+    running = true;
+    try {
+      for (const org of await listOrganizations()) {
+        try {
+          const r = await at.communicatePending(org.organizationId, "sistema");
+          if (r.attempted > 0) console.log(`[faturação] AT ${org.organizationId}: ${r.accepted} aceites, ${r.rejected} recusados, ${r.failed} por repetir`);
+        } catch (e) {
+          // Comunicação manual em curso nessa organização: fica para a próxima volta.
+          if (e instanceof AtBusyError) continue;
+          console.error("[faturação] comunicação à AT falhou:", e instanceof Error ? e.message : "erro");
+        }
+      }
+    } finally {
+      running = false;
+    }
+  }
+
+  return {
+    router: createInvoicingRouter(useCases, issue, new SupabaseIdempotencyStore(scoped), at),
+    useCases,
+    issue,
+    at,
+    atConfigured: gateway !== null,
+    communicateAllPending,
+  };
 }
