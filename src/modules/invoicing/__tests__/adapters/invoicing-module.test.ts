@@ -13,7 +13,8 @@ describe("arranque da faturação: configuração errada não derruba o servidor
   afterEach(() => errors.mockRestore());
 
   it("chave ilegível → emissão desligada, sem lançar e sem ecoar a chave", () => {
-    const pem = "-----BEGIN RSA PRIVATE KEY-----\nSEGREDOFICTICIO\n-----END RSA PRIVATE KEY-----";
+    // Texto que não é PEM válido (sem cabeçalho de chave, para o detetor de segredos não o confundir).
+    const pem = "chave-invalida-SEGREDOFICTICIO";
     const mod = createInvoicingModule({ config: { privateKeyPem: pem, keyVersion: 1, certificateNumber: null }, issuers: new FakeIssuers(), scoped: noDb });
 
     expect(mod.useCases.meta().signingAvailable).toBe(false);

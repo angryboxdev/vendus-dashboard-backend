@@ -1,0 +1,14 @@
+# Configuração do gitleaks (CI, job «secrets»): todas as regras por omissão,
+# com exceções só para ficheiros que contêm material PÚBLICO de teste.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Material público de teste — não são segredos"
+paths = [
+  # Par de chaves de EXEMPLO publicado pela AT (Portal das Finanças › Certificação
+  # de Software de Faturação) para validar a assinatura; não é a chave do Mezza.
+  '''src/modules/invoicing/__tests__/fixtures/at/Chave_Privada\.txt''',
+  # Chave JWT de demonstração da stack LOCAL do Supabase (`supabase start`), pública.
+  '''src/modules/invoicing/__tests__/integration/supabase-invoicing-store\.integration\.test\.ts''',
+]
