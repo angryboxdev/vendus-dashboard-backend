@@ -22,4 +22,4 @@ Ver «Design decisions» no README do módulo.
 Ver «Known gaps» no README do módulo.
 
 ## Próximos trabalhos
-F4 — área «Vendas» no frontend (`.scratch/certificacao-at/issues/04-area-vendas-frontend.md`).
+F5 — SAF-T (PT) 1.04_01 (`.scratch/certificacao-at/issues/05-saft.md`). Frontend: módulo `invoicing` (`/vendas`) no repositório do frontend.
