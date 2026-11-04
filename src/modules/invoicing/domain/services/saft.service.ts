@@ -4,6 +4,7 @@ import type { IssuerSnapshot } from "../entities/parties.js";
 import type { DocumentLineView, StoredDocument } from "../ports/out/invoicing-store.port.js";
 import { formatAmount } from "./amount-format.js";
 import { add, mulDivRound, ZERO } from "./decimal-ops.js";
+import { el, fit, wrap } from "./xml-text.js";
 
 /**
  * Ficheiro SAF-T (PT) 1.04_01 de faturação (Portaria 302/2016; XSD
@@ -31,15 +32,6 @@ const NS = "urn:OECD:StandardAuditFile-Tax:PT_1.04_01";
 const UNKNOWN = "Desconhecido";
 const WORK_TYPES = new Set(["CM"]);
 
-/** Caracteres de controlo que o XML 1.0 não admite (a emissão já os recusa; defesa extra). */
-// eslint-disable-next-line no-control-regex
-const XML_INVALID = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g;
-const esc = (v: string) =>
-  v.replace(XML_INVALID, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
-const el = (name: string, value: string) => `<${name}>${esc(value)}</${name}>`;
-const wrap = (name: string, inner: string) => `<${name}>${inner}</${name}>`;
-/** Texto cortado ao máximo do XSD, sem partir carateres compostos (a BD guarda sempre o texto completo). */
-const fit = (v: string, max: number) => [...v].slice(0, max).join("");
 const money = (v: string | Dec) => formatAmount(typeof v === "string" ? dec(v) : v);
 /** Decimais exatos sem zeros desnecessários (quantidades, percentagens, preços unitários). */
 const plain = (v: Dec) => {

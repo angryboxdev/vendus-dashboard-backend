@@ -63,3 +63,30 @@ describe("migração da faturação certificada (estrutura)", () => {
     expect(sql).toMatch(new RegExp(`grant execute on function public\\.${fn}\\([^)]*\\) to service_role;`));
   });
 });
+
+describe("migração da comunicação à AT (estrutura)", () => {
+  test("registo das comunicações: org_id, RLS de leitura por organização, append-only e sem TRUNCATE", () => {
+    expect(tableBody("invoicing_at_communications")).toMatch(/\borg_id uuid not null references public\.organizations\(id\)/);
+    expect(sql).toMatch(/create policy "[^"]+" on public\.invoicing_at_communications[\s\S]*?org_id = current_org\(\)/);
+    expect(sql).toMatch(/create trigger \w+ before update or delete on public\.invoicing_at_communications\b/);
+    expect(sql).toMatch(/create trigger \w+ before truncate on public\.invoicing_at_communications\b/);
+    expect(sql).toContain("revoke update, delete, truncate on public.invoicing_at_communications from service_role;");
+  });
+
+  test("credenciais: RLS ativo sem políticas e sem privilégios para o browser", () => {
+    expect(tableBody("invoicing_at_credentials")).toMatch(/\borg_id uuid not null references public\.organizations\(id\)/);
+    expect(sql).toContain("alter table public.invoicing_at_credentials enable row level security;");
+    expect(sql).not.toMatch(/create policy "[^"]+" on public\.invoicing_at_credentials/);
+    expect(sql).toContain("revoke all on public.invoicing_at_credentials from anon, authenticated;");
+  });
+
+  test.each(["invoicing_at_communications", "invoicing_at_credentials"])("%s registada no helper com org_id", (name) => {
+    expect((TABLE_REGISTRY as Record<string, { organizationColumn: string }>)[name]?.organizationColumn).toBe("org_id");
+  });
+
+  test("fila: security invoker, search_path fixo, só para a service role", () => {
+    expect(sql).toMatch(/create or replace function public\.fn_invoicing_at_queue\([\s\S]*?security invoker[\s\S]*?set search_path = public/);
+    expect(sql).toContain("revoke all on function public.fn_invoicing_at_queue(uuid, text, integer) from public, anon, authenticated;");
+    expect(sql).toContain("grant execute on function public.fn_invoicing_at_queue(uuid, text, integer) to service_role;");
+  });
+});

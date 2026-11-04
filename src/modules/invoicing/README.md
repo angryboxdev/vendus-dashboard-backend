@@ -70,6 +70,7 @@ escreve Vendus, AirMenu, DRE, stock ou custos, e nenhum desses módulos o import
 Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `InvoicingPort` (o controller depende delas, não das classes).
 
 - `IssueDocumentUseCase.execute` — emite FT/FS/FR/NC/ND/CM: série e bloqueios (certificado, data futura, relógio), taxas oficiais (`vatRate`) e menções de isenção (`exemptionMention`), regras por tipo (FS ≤ 100 € sem IVA; FR com meio de pagamento; NC/ND com documento retificado ativo do mesmo emitente e NC ≤ valor por creditar; faturas referem consultas de mesa ativas), cliente (NIF PT validado; sem cliente = consumidor final), QR, assinatura e gravação com recomeço se outro terminal emitiu (até 3 tentativas). Avisos → `IssueNeedsConfirmationError` (repetir com `confirmWarnings`).
+- `AtCommunicationUseCases` (`AtCommunicationPort`, `ports/in/at-communication.ports.ts`) — comunicação à AT (F6): `status` (pendentes, prazo do dia 5, recusas, credenciais), `saveCredentials`/`removeCredentials` (subutilizador WFA do NIF do emitente; evento sem a senha), `communicatePending` (registo ou mudança de estado no e-Fatura, até 100 por execução; `force` repete os dados recusados; uma execução de cada vez por organização — `AtBusyError`), `documentCommunications`, `registerSeries`/`finalizeSeries`/`cancelSeries` (credenciais WSE no momento, nunca guardadas; guardam o código de validação ou o estado local só com confirmação da AT).
 - `InvoicingUseCases` — `listSeries`, `createSeries` (normal só com certificado), `setValidationCode`, `listDocuments`, `getDocument` (2.ª via com `printed.atcud` e `printed.mentions`), `cancel` (motivo da lista fechada `CANCEL_REASONS`), `meta` (certificação, limites, taxas, isenções ativas, motivos de anulação).
 
 ### Output (domain dependencies)
@@ -79,6 +80,9 @@ Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `Invoicing
 - `ClockPort` — hora legal de Lisboa nos formatos da AT + instante UTC.
 - `InvoicingStorePort` — séries (ler, listar, criar, código de validação), documentos (por ids, total já creditado, ler com linhas e impostos, listar), gravar o documento assinado (atómico, compare-and-swap) e anular.
 - `IssuerDirectoryPort` — dados do emitente (entidade legal); ligado no `server.ts` ao módulo `legal-entities`.
+- `AtGatewayPort` — envia um corpo SOAP a um serviço da AT (`series` | `efatura`) com as credenciais; devolve o XML da resposta; rede → `AtTransportError`.
+- `AtCredentialsPort` — credenciais WFA por emitente e ambiente (senha cifrada em repouso; `get` traz a data da última gravação).
+- `AtCommunicationStorePort` — fila (`queue`), registo append-only dos envios (`record`), histórico de um documento e estado local da série (finalizada/anulada).
 
 ## Adapters
 
@@ -91,12 +95,21 @@ Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `Invoicing
   - `GET /invoicing/documents?from&to&type&status&limit` · `GET /invoicing/documents/:id` (2.ª via)
   - `POST /invoicing/documents` (**`Idempotency-Key` obrigatório**) `{seriesRef, documentDate?, customer?, pricesIncludeTax?, lines[{productCode, productType, unit, description, quantity, unitPrice, discountPct?, tax:{region, rate}|{region, exemptionCode, exemptionNorm?}}], paymentMechanism?, references?[{documentId, reason}], orderReferences?[ids], confirmWarnings?}` → 201 `{documentId, documentNumber, atcud}`
   - `POST /invoicing/documents/:id/cancel` `{reasonCode, note?}` → 200 com o documento anulado
-  - Erros (Problem Details): 400 corpo inválido; 404; 409 `confirmation_required` (com `warnings`) ou `series_busy`; 422 `fiscal_rule`; 503 `invoicing_unavailable` (sem chave).
+  - Comunicação à AT (F6), em `/invoicing/at/*` — fora de `/series` e `/documents` de propósito: o middleware de idempotência guarda um hash do corpo e estes pedidos levam senhas:
+    - `GET /invoicing/at` → estado (configurado, ambiente, credenciais sem senha, fila e prazo, recusas)
+    - `PUT /invoicing/at/credentials/:legalEntityId` `{username, password}` → `{legalEntityId, username}` · `DELETE …` → 204
+    - `POST /invoicing/at/communicate` `{force?}` → `{attempted, accepted, rejected, failed, withoutCredentials}`
+    - `GET /invoicing/at/documents/:id` → histórico de envios do documento
+    - `POST /invoicing/at/series/:id/register|finalize|cancel` `{username, password, justification?}` (WSE, não guardado)
+  - Erros (Problem Details): 400 corpo inválido; 404; 409 `confirmation_required` (com `warnings`), `series_busy` ou `at_busy`; 422 `fiscal_rule` (inclui recusas da AT nas séries); 503 `invoicing_unavailable` (sem chave ou sem certificado da AT) ou `at_unavailable` (AT sem resposta).
 
 ### Output
 
 - `RsaSha1Signer` → `SignerPort` + `SignatureVerifierPort` com `node:crypto` (RSA-SHA1, PKCS#1 v1.5, Base64).
 - `LisbonClock` → `ClockPort` com `Intl` (Europe/Lisbon, ao segundo).
+- `AtSoapGateway` → `AtGatewayPort`: `https` com mTLS (`.pfx` do produtor assinado pela AT), cabeçalho WS-Security (AES-128 nova por pedido cifrada com a chave pública da AT em RSA PKCS#1 v1.5; senha e instante UTC em AES-ECB-PKCS5), endereços fixos por ambiente (testes: séries 722, e-Fatura 723), resposta até 1 MB, tempo limite por inatividade e total; erros de rede só com a categoria (detalhe no log, nunca o pedido).
+- `SupabaseAtCredentials` → `AtCredentialsPort` (`invoicing_at_credentials`, senha com `infra/crypto` AES-256-GCM e `CREDENTIALS_ENCRYPTION_KEY`).
+- `SupabaseAtStore` → `AtCommunicationStorePort` (`fn_invoicing_at_queue` por `ScopedQuery.invoicingAtQueue`; `invoicing_at_communications`; estado da série).
 - `SupabaseInvoicingStore` → `InvoicingStorePort`: leituras pelo `ScopedQuery`; escritas só pelas funções `fn_invoicing_issue_document` / `fn_invoicing_cancel_document` (`ScopedQuery.issueInvoicingDocument` / `cancelInvoicingDocument`); `errcode` P0001→`StaleSeriesError`, P0002→`InvoicingNotFoundError`, P0003/P0004→`InvoicingRuleError`; referências enviadas em snake_case (`document_id`); recusa linha sem produto.
 
 ### Base de dados (`20261220100000_invoicing_certified_documents.sql`)
@@ -108,6 +121,12 @@ Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `Invoicing
 - `fn_invoicing_issue_document` (security definer, só `service_role`): bloqueia a série e faz compare-and-swap; confere número, ATCUD, data e instante, NIF do emitente contra a entidade legal, documentos referidos pelas NC/ND (ativos, do mesmo emitente, bloqueados contra anulação concorrente), soma do resumo de impostos face aos totais e CM faturadas uma só vez; fixa `SourceBilling` P e `HashControl` (versão da chave, ou «0» sem certificado).
 - `fn_invoicing_cancel_document`: motivo obrigatório; recusa documento não ativo ou com NC/ND ativa.
 - Validada em Postgres 17 (PGlite): cadeia completa de migrações, reaplicação, 42 verificações de comportamento, rollback e reaplicação — `.scratch/certificacao-at/validacao-pglite/`.
+
+### Base de dados — comunicação à AT (`20261220120000_invoicing_at_communication.sql`)
+
+- `invoicing_at_communications`: cada envio ao e-Fatura (ambiente, operação, estado comunicado, resultado, código e mensagem da AT); append-only (trigger e privilégios), leitura por organização. É também a outbox: `fn_invoicing_at_queue(org, ambiente, limite)` (security invoker, só `service_role`) devolve os documentos cujo estado atual ainda não foi aceite, com falhas desde o último aceite e o último resultado. Em produção só entram séries normais.
+- `invoicing_at_credentials`: subutilizador WFA por organização, emitente e ambiente; senha cifrada pelo backend; sem privilégios nem políticas para `anon`/`authenticated` (o browser nunca a lê).
+- Validada em PGlite: 22 verificações (fila, aceites, mudança de estado, ambientes, imutabilidade, privilégios, rollback e reaplicação) — `validacao-pglite/validate-at.mjs`.
 
 ## Design decisions (ADR summary)
 
@@ -130,6 +149,13 @@ Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `Invoicing
 - **SAF-T** (`saft.service.ts`, puro): XML por ordem do XSD 1.04_01 a partir dos documentos gravados. Valor sem IVA de cada linha = base do grupo de imposto gravada, repartida pelas linhas ao cêntimo com soma exata (`kernel/money` `distribute`); `UnitPrice` = esse valor ÷ quantidade (sem IVA, já com descontos). Totais de controlo (Portaria 302/2016): em `SalesInvoices` excluem anulados (A) e faturados (F); em `WorkingDocuments` só os anulados — uma consulta de mesa faturada conta. NC a débito. `SourceID` do `DocumentStatus` = quem anulou/faturou. Carateres que o XML 1.0 não admite são retirados; a emissão já os recusa nas descrições (mínimo 2 carateres). O adapter lê documentos/linhas/impostos em páginas de 1000 (limite do PostgREST). Textos com limite do XSD cortados (SourceID 30, Reason 50, nome 100, localidade 50) — a BD guarda o texto completo.
 - **SourceID** = id estável do utilizador sem hífens, 30 caracteres (`sourceIdFor`), nunca o email (longo e mutável; Despacho 3.3.6 proíbe reutilizar).
 - **Dinheiro exato** com `kernel/money/decimal` (bigint); linhas sem IVA a 6 casas, totais a 2 (Despacho 3.2.3).
+- **Comunicação à AT por webservice (F6), só ambiente de testes** até haver certificado (`INVOICING_AT_ENVIRONMENT` recusa outro valor). Sem `.pfx` e chave pública da AT, desligada (503) e sem cron.
+- **Mensagens SOAP escritas à mão** a partir dos WSDL oficiais (`__tests__/fixtures/at/Fatcorews.wsdl`, `Comunicacao_Series.wsdl`), sem biblioteca SOAP (sem dependências novas); validadas contra o esquema dos WSDL (`validacao-saft/validar-wsdl.ps1`, 0 erros). Séries: o esquema não qualifica os elementos locais — só o da operação leva namespace.
+- **e-Fatura a partir do documento gravado**: uma `LineSummary` por linha do resumo de impostos; referências (NC/ND) e documentos de origem (CM faturadas) em cada linha; `HashCharacters` «0» enquanto o certificado é «0»; `TaxEntity` «Global»; consumidor final 999999990 com o país do cliente.
+- **Outbox = registo das comunicações** (não há tabela de fila): o que falta enviar deriva do estado do documento face ao último aceite — sem passos que possam ficar dessincronizados com a emissão. Resposta −10 («já registado») conta como aceite. Falhas repetem-se com espera de 5 min a 6 h; dados recusados só com «Repetir recusados»; credenciais recusadas só depois de regravadas (nem com `force`, para não bloquear o subutilizador).
+- **Uma comunicação de cada vez por organização** (o pedido manual e o cron): bloqueio em memória — o servidor corre numa só instância; com várias, passar a um lock na BD.
+- **Credenciais**: WFA (faturas) guardada por emitente, cifrada, porque o envio é automático (o manual e-Fatura prevê configurá-la no programa); WSE (séries) pedida no momento e nunca guardada (manual de Séries, Aspetos genéricos §2). Decisão a confirmar com o encarregado de proteção de dados.
+- **Cron no processo** (`node-cron`, a cada 10 min, todas as organizações) só com a comunicação configurada.
 - **IVA incluído** (restauração): total por taxa fixo; IVA = total × p/(100+p); base = total − IVA — o cliente paga o preço do menu.
 - Spec, pesquisa e fases: `.scratch/certificacao-at/`.
 
@@ -143,7 +169,8 @@ Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `Invoicing
   npx jest --config jest.config.cjs src/modules/invoicing --testPathIgnorePatterns=integration
   ```
 
-- Migração em Postgres real sem Docker (PGlite): `.scratch/certificacao-at/validacao-pglite/README.md` (48 verificações).
+- Migração em Postgres real sem Docker (PGlite): `.scratch/certificacao-at/validacao-pglite/README.md` (48 verificações; comunicação à AT: 22).
+- Mensagens da AT contra os WSDL oficiais: os testes escrevem `__tests__/fixtures/*.test-output.xml`; validar com `.scratch/certificacao-at/validacao-saft/validar-wsdl.ps1`.
 - SAF-T contra o XSD oficial: `.scratch/certificacao-at/validacao-saft/README.md` (estrutural, 0 erros; validação XSD 1.1 completa pendente).
 - BD real com duas ligações (concorrência): `npx jest --config jest.config.cjs src/modules/invoicing/__tests__/integration` com `supabase start` + `supabase db reset` (não corre nesta máquina — sem Docker).
 
@@ -153,4 +180,5 @@ Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `Invoicing
 - Em falta: recibos (RC); recuperação de documentos manuais (M/D); desconto global (`SettlementAmount`); controlo das NC parciais por linha/quantidade e devoluções no tipo errado (Despacho 3.2.7, 3.3.9 — hoje pelo valor total, conferido também na BD); limite da FS por organização e exceção do art. 53.º (hoje 100 € fixo); cabeçalho com os dados do produtor nos documentos de formação (Despacho 1.5 — hoje o emitente; iguais se a Angry Box for a produtora); taxa por produto e canal (sala 13 %/23 %, take-away) — hoje a taxa vem em cada linha; tipos de `document-totals` ainda em `services/`.
 - Os KMS de cloud podem não suportar RSA-1024 — a chave vive em variável de ambiente.
 - O teste de integração (duas ligações) não correu; as migrações foram validadas em PGlite (uma ligação) e não estão aplicadas em lado nenhum.
-- Validação XSD 1.1 completa do SAF-T (Xerces 1.1 ou validador da AT) por fazer; webservices da AT: F6.
+- Validação XSD 1.1 completa do SAF-T (Xerces 1.1 ou validador da AT) por fazer.
+- Comunicação à AT (F6) **sem teste real**: falta o certificado de testes e a chave pública do Sistema de Autenticação (pedido por email a `asi-cd@at.gov.pt`) e um subutilizador WFA/WSE. Por confirmar no ambiente de testes: padding RSA do `Nonce` (assumido PKCS#1 v1.5), formato do `Created`, `CustomerTaxIDCountry` do consumidor final, se os documentos de formação são aceites, e os códigos de sucesso das operações de séries (o código decide pelo `infoSerie` devolvido). Em falta: recibos (`RegisterPayment`), eliminação (`DeleteInvoice`), comunicação de mês sem documentos, alerta por email antes do dia 5 (hoje só no ecrã), renovação do certificado.

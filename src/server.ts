@@ -1132,6 +1132,10 @@ const invoicingModule = createInvoicingModule({
       producerName: ENV.INVOICING_PRODUCER_NAME,
       productVersion: ENV.INVOICING_PRODUCT_VERSION,
       productName: ENV.INVOICING_PRODUCT_NAME,
+      atEnvironment: ENV.INVOICING_AT_ENVIRONMENT,
+      atTlsPfxBase64: ENV.INVOICING_AT_TLS_PFX,
+      atTlsPassphrase: ENV.INVOICING_AT_TLS_PASSPHRASE,
+      atAuthPublicKeyPem: ENV.INVOICING_AT_AUTH_PUBLIC_KEY,
     }),
   ),
   issuers: {
@@ -1837,6 +1841,14 @@ app.use(problemHandler);
 app.listen(ENV.PORT, () => {
   console.log(`Backend running on http://localhost:${ENV.PORT}`);
 });
+
+// Faturação certificada: comunica à AT (e-Fatura) o que falta, a cada 10 min — só com o certificado configurado.
+if (invoicingModule.atConfigured) {
+  void import("node-cron").then(({ default: cron }) => {
+    cron.schedule("*/10 * * * *", () => void invoicingModule.communicateAllPending(), { timezone: "Europe/Lisbon" });
+    console.log("[cron] faturação: comunicação à AT a cada 10 min");
+  });
+}
 
 // Faturas por email: novas tentativas dos anexos com falha passageira (e dos que ficaram a meio) a cada 10 min.
 if (invoiceEmailIntakeModule.configured) {

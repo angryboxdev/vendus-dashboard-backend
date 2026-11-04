@@ -27,7 +27,35 @@ describe("arranque da faturação: configuração errada não derruba o servidor
       keyVersion: 1,
       certificateNumber: null,
       software: { productName: "Mezza", producerTaxId: null, producerName: null, version: "1.0.0" },
+      at: null,
     });
     expect(safeInvoicingConfig(() => readInvoicingConfig({ privateKeyPem: null, keyVersion: "1", certificateNumber: "12A" })).certificateNumber).toBeNull();
+  });
+});
+
+describe("comunicação à AT: configuração", () => {
+  const base = { privateKeyPem: null, keyVersion: "1", certificateNumber: null };
+
+  it("sem certificado ou sem chave pública da AT → desligada (sem erro)", () => {
+    expect(readInvoicingConfig(base).at).toBeNull();
+    expect(readInvoicingConfig({ ...base, atTlsPfxBase64: "AAEC" }).at).toBeNull();
+    expect(readInvoicingConfig({ ...base, atAuthPublicKeyPem: "pem" }).at).toBeNull();
+  });
+
+  it("com certificado e chave: ambiente de testes, .pfx descodificado de Base64", () => {
+    const at = readInvoicingConfig({ ...base, atTlsPfxBase64: "AAEC", atTlsPassphrase: "frase", atAuthPublicKeyPem: "pem" }).at;
+    expect(at).toEqual({ environment: "test", pfx: Buffer.from([0, 1, 2]), passphrase: "frase", authPublicKeyPem: "pem" });
+  });
+
+  it("produção recusada antes do certificado (configuração ilegível → tudo desligado)", () => {
+    expect(() => readInvoicingConfig({ ...base, atEnvironment: "production" })).toThrow(/testes/);
+  });
+
+  it("chave pública da AT inválida → comunicação desligada, sem derrubar o arranque", () => {
+    const errors = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const config = readInvoicingConfig({ ...base, atTlsPfxBase64: "AAEC", atAuthPublicKeyPem: "não é uma chave" });
+    const mod = createInvoicingModule({ config, issuers: new FakeIssuers(), scoped: noDb });
+    expect(mod.atConfigured).toBe(false);
+    errors.mockRestore();
   });
 });

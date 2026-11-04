@@ -300,6 +300,9 @@ export const TABLE_REGISTRY = {
   invoicing_document_lines: { organizationColumn: "org_id", locationBearing: false },
   invoicing_document_taxes: { organizationColumn: "org_id", locationBearing: false },
   invoicing_events: { organizationColumn: "org_id", locationBearing: false },
+  // F6: registo das comunicações à AT (append-only) e credenciais WFA cifradas (só o backend lê).
+  invoicing_at_communications: { organizationColumn: "org_id", locationBearing: false },
+  invoicing_at_credentials: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;

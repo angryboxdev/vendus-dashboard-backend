@@ -144,6 +144,17 @@ export const ENV = {
   INVOICING_PRODUCER_NAME: process.env.INVOICING_PRODUCER_NAME || null,
   INVOICING_PRODUCT_VERSION: process.env.INVOICING_PRODUCT_VERSION || "1.0.0",
   INVOICING_PRODUCT_NAME: process.env.INVOICING_PRODUCT_NAME || "Mezza",
+  /**
+   * Comunicação à AT por webservice (F6). Sem certificado e chave pública, fica desligada (503).
+   *  - INVOICING_AT_ENVIRONMENT: só "test" nesta fase (portas de testes da AT).
+   *  - INVOICING_AT_TLS_PFX: certificado do produtor assinado pela AT + chave (.pfx em Base64).
+   *  - INVOICING_AT_TLS_PASSPHRASE: senha do .pfx.
+   *  - INVOICING_AT_AUTH_PUBLIC_KEY: chave pública do Sistema de Autenticação da AT (PEM).
+   */
+  INVOICING_AT_ENVIRONMENT: process.env.INVOICING_AT_ENVIRONMENT || "test",
+  INVOICING_AT_TLS_PFX: process.env.INVOICING_AT_TLS_PFX || null,
+  INVOICING_AT_TLS_PASSPHRASE: process.env.INVOICING_AT_TLS_PASSPHRASE || null,
+  INVOICING_AT_AUTH_PUBLIC_KEY: process.env.INVOICING_AT_AUTH_PUBLIC_KEY || null,
 
   /**
    * URL pública deste servidor para registar o webhook na AirMenu.

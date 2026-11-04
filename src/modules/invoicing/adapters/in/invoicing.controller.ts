@@ -3,10 +3,14 @@ import { idempotency, type IdempotencyStore } from "../../../../infra/http/idemp
 import { problem } from "../../../../infra/http/problem-details.js";
 import type { Dec } from "../../../../kernel/money/decimal.js";
 import { formatAmount } from "../../domain/services/amount-format.js";
+import type { AtCommunicationPort } from "../../domain/ports/in/at-communication.ports.js";
 import type { InvoicingPort, IssueDocumentInput, IssueDocumentPort } from "../../domain/ports/in/invoicing.ports.js";
+import type { AtCredentials } from "../../domain/entities/at-communication.js";
 import type { CancelReasonCode } from "../../domain/entities/cancel-reasons.js";
 import { DOCUMENT_TYPES, type FiscalDocumentType } from "../../domain/entities/series.js";
 import {
+  AtBusyError,
+  AtTransportError,
   InvoicingNotFoundError,
   InvoicingRuleError,
   InvoicingUnavailableError,
@@ -25,6 +29,8 @@ async function run<T>(fn: () => Promise<T>): Promise<T> {
     if (e instanceof IssueNeedsConfirmationError) throw problem(409, "confirmation_required", e.message, { warnings: e.warnings });
     if (e instanceof StaleSeriesError) throw problem(409, "series_busy", "A série está a ser usada noutro terminal — tente de novo.");
     if (e instanceof InvoicingUnavailableError) throw problem(503, "invoicing_unavailable", e.message);
+    if (e instanceof AtTransportError) throw problem(503, "at_unavailable", `AT indisponível: ${e.message}`);
+    if (e instanceof AtBusyError) throw problem(409, "at_busy", e.message);
     throw e;
   }
 }
@@ -51,6 +57,12 @@ function documentJson<T extends { grossTotal: Dec }>(d: T): Omit<T, "grossTotal"
 
 function badRequest(detail: string): never {
   throw problem(400, "invalid_request", detail);
+}
+
+/** Credenciais do Portal das Finanças no corpo (nunca na query nem no log). */
+function credentials(b: Record<string, unknown>): AtCredentials {
+  if (typeof b.username !== "string" || typeof b.password !== "string") badRequest("username e password obrigatórios");
+  return { username: b.username, password: b.password };
 }
 
 /** Corpo de `POST /invoicing/documents`: forma; as regras fiscais ficam no domínio. */
@@ -94,7 +106,7 @@ function issueInput(b: Record<string, unknown>, who: string): IssueDocumentInput
  * `sales.invoicing` READ, escrita com MANAGE (route-permissions). A emissão
  * exige `Idempotency-Key` — um reenvio nunca cria um segundo documento.
  */
-export function createInvoicingRouter(uc: InvoicingPort, issue: IssueDocumentPort, store: IdempotencyStore): Router {
+export function createInvoicingRouter(uc: InvoicingPort, issue: IssueDocumentPort, store: IdempotencyStore, at?: AtCommunicationPort): Router {
   const r = Router();
   const B = "/invoicing";
   r.use(`${B}/documents`, (req, res, next) => (req.method === "POST" && req.path === "/" ? idempotency(store, { required: true })(req, res, next) : idempotency(store)(req, res, next)));
@@ -160,6 +172,33 @@ export function createInvoicingRouter(uc: InvoicingPort, issue: IssueDocumentPor
     const b = body(req);
     res.json(documentJson(await run(() => uc.cancel(org(req), actor(req), id(req), String(b.reasonCode ?? "") as CancelReasonCode, text(b.note)))));
   });
+
+  if (at) {
+    // Comunicação à AT (F6). Fora de /series e /documents de propósito: o middleware de
+    // idempotência guarda um hash do corpo, e estes pedidos levam senhas.
+    r.get(`${B}/at`, async (req, res) => res.json(await run(() => at.status(org(req)))));
+    r.put(`${B}/at/credentials/:id`, async (req, res) => {
+      const c = credentials(body(req));
+      await run(() => at.saveCredentials(org(req), actor(req), id(req), c));
+      res.json({ legalEntityId: req.params.id, username: c.username.trim() });
+    });
+    r.delete(`${B}/at/credentials/:id`, async (req, res) => {
+      await run(() => at.removeCredentials(org(req), actor(req), id(req)));
+      res.status(204).end();
+    });
+    r.post(`${B}/at/communicate`, async (req, res) => res.json(await run(() => at.communicatePending(org(req), actor(req), { force: body(req).force === true }))));
+    r.get(`${B}/at/documents/:id`, async (req, res) => res.json(await run(() => at.documentCommunications(org(req), id(req)))));
+    r.post(`${B}/at/series/:id/register`, async (req, res) => res.json(await run(() => at.registerSeries(org(req), actor(req), id(req), credentials(body(req))))));
+    r.post(`${B}/at/series/:id/finalize`, async (req, res) => {
+      const b = body(req);
+      await run(() => at.finalizeSeries(org(req), actor(req), id(req), credentials(b), text(b.justification)));
+      res.json({ ref: req.params.id, status: "finalized" });
+    });
+    r.post(`${B}/at/series/:id/cancel`, async (req, res) => {
+      await run(() => at.cancelSeries(org(req), actor(req), id(req), credentials(body(req))));
+      res.json({ ref: req.params.id, status: "cancelled" });
+    });
+  }
 
   return r;
 }

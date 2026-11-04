@@ -14,3 +14,7 @@ node validate-invoicing.mjs "<caminho do repo backend>"
 emissão/compare-and-swap, as verificações da função, a escrita direta recusada (service_role e dono),
 NC/anulação, consultas de mesa, HashControl, mudança de hora, rollback e reaplicação.
 Resultado em 2026-11-03: 42 verificações OK, 0 falhas.
+
+`validate-at.mjs` (F6) valida `20261220120000_invoicing_at_communication`: fila (`fn_invoicing_at_queue`) com falhas, aceites,
+mudança de estado e ambientes; imutabilidade do registo; privilégios (browser sem acesso às credenciais nem à fila);
+rollback e reaplicação. Resultado em 2026-11-04: 22 verificações OK, 0 falhas.
