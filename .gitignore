@@ -12,3 +12,6 @@ yarn.lock
 
 # Dados de demonstração gerados localmente (npm run demo:generate)
 .demo/
+
+# Saída de teste do gerador SAF-T (validação manual contra o XSD)
+src/modules/invoicing/__tests__/fixtures/*.test-output.xml

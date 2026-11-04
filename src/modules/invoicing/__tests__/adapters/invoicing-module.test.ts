@@ -26,6 +26,7 @@ describe("arranque da faturação: configuração errada não derruba o servidor
       privateKeyPem: null,
       keyVersion: 1,
       certificateNumber: null,
+      software: { productName: "Mezza", producerTaxId: null, producerName: null, version: "1.0.0" },
     });
     expect(safeInvoicingConfig(() => readInvoicingConfig({ privateKeyPem: null, keyVersion: "1", certificateNumber: "12A" })).certificateNumber).toBeNull();
   });

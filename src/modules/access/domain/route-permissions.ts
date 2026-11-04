@@ -57,6 +57,8 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/sales-declaration\/export$/, target: p("sales.dashboard", "READ") },
   { pattern: /^\/api\/cash-closings(\/|$)/, target: p("sales.cash_closings") },
   { pattern: /^\/api\/air-menu(\/|$)/, target: p("sales.air_menu") },
+  // SAF-T: um ano de dados de clientes num ficheiro — exige MANAGE (e fica registado).
+  { pattern: /^\/api\/invoicing\/saft$/, target: p("sales.invoicing", "MANAGE") },
   { pattern: /^\/api\/invoicing(\/|$)/, target: p("sales.invoicing") },
 
   // ── DRE ──────────────────────────────────────────────────────────────

@@ -22,7 +22,7 @@ let store: FakeInvoicingStore;
 beforeAll(async () => {
   store = new FakeInvoicingStore();
   const deps = { store, certificateNumber: null, simplifiedInvoiceLimitNet: dec("100") };
-  const uc = new InvoicingUseCases({ ...deps, signingAvailable: true });
+  const uc = new InvoicingUseCases({ ...deps, signingAvailable: true, issuers: new FakeIssuers(), clock: new FixedClock({ systemEntryDate: "2027-04-02T09:00:00", date: "2027-04-02", instant: "2027-04-02T08:00:00.000Z" }), software: { productName: "Mezza", producerTaxId: null, producerName: null, version: "1.0.0" } });
   const issue = new IssueDocumentUseCase({ ...deps, signer: new FakeSigner(), clock: new FixedClock(NOW), issuers: new FakeIssuers() });
   const app = express();
   app.use(express.json());
@@ -61,7 +61,8 @@ describe("API /api/invoicing", () => {
     const doc = await post("/documents", { seriesRef, lines: [line] }, { "Idempotency-Key": "emissao-teste-0001" });
     expect(doc.status).toBe(201);
     expect(await doc.json()).toEqual({ documentId: "doc-1", documentNumber: "FS L01-2027/1", atcud: "CDF7T5HD-1" });
-    expect(store.saved[0]!.actor).toBe("ana@demo.invalid");
+    // SourceID derivado do id do utilizador (não do email).
+    expect(store.saved[0]!.actor).toBe("u1");
   });
 
   it("repetir o pedido com a mesma Idempotency-Key não emite outro documento", async () => {
@@ -106,6 +107,16 @@ describe("API /api/invoicing", () => {
     expect(await one.json()).toMatchObject({ grossTotal: "28.00", printed: { atcud: "ATCUD:CDF7T5HD-1" } });
     store.getDocument = async () => null;
     store.summaries.clear();
+  });
+
+  it("exporta o SAF-T como ficheiro XML; período inválido → 422; entidade não-UUID → 400", async () => {
+    const ok = await fetch(`${base}/saft?legalEntityId=22222222-2222-4222-8222-222222222222&from=2027-03-01&to=2027-03-31`);
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("content-type")).toMatch(/application\/xml/);
+    expect(ok.headers.get("content-disposition")).toBe('attachment; filename="SAFT_599999999_2027-03-01_2027-03-31.xml"');
+    expect(await ok.text()).toContain("<AuditFileVersion>1.04_01</AuditFileVersion>");
+    expect((await fetch(`${base}/saft?legalEntityId=22222222-2222-4222-8222-222222222222&from=2027-03-01&to=2028-01-31`)).status).toBe(422);
+    expect((await fetch(`${base}/saft?legalEntityId=x&from=2027-03-01&to=2027-03-31`)).status).toBe(400);
   });
 
   it("configuração e listas", async () => {

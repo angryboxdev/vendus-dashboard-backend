@@ -1,10 +1,10 @@
 # Matriz de autorização (perfil × endpoint)
 
-> Gerado por `npm run authz:matrix` em 2026-11-03. Não editar à mão.
+> Gerado por `npm run authz:matrix` em 2026-11-04. Não editar à mão.
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 746 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 747 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -221,6 +221,7 @@ Endpoints: 746 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/invoicing/documents/:id` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/invoicing/documents/:id/cancel` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/invoicing/meta` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/invoicing/saft` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/invoicing/series` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/invoicing/series` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | PUT | `/api/invoicing/series/:id/validation-code` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |

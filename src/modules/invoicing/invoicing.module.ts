@@ -6,7 +6,7 @@ import { createInvoicingRouter } from "./adapters/in/invoicing.controller.js";
 import { LisbonClock } from "./adapters/out/lisbon-clock.js";
 import { RsaSha1Signer } from "./adapters/out/rsa-sha1-signer.js";
 import { SupabaseInvoicingStore } from "./adapters/out/supabase-invoicing-store.js";
-import { InvoicingUseCases } from "./application/use-cases/invoicing.use-cases.js";
+import { InvoicingUseCases, type SaftSoftwareConfig } from "./application/use-cases/invoicing.use-cases.js";
 import { IssueDocumentUseCase } from "./application/use-cases/issue-document.use-case.js";
 import type { IssuerDirectoryPort } from "./domain/ports/out/issuer-directory.port.js";
 
@@ -21,18 +21,31 @@ export interface InvoicingConfig {
   keyVersion: number;
   /** N.º de certificado da AT; null enquanto o programa não está certificado (só formação). */
   certificateNumber: string | null;
+  /** Produtora e versão do software (cabeçalho do SAF-T). */
+  software: SaftSoftwareConfig;
 }
 
 export function readInvoicingConfig(env: {
   privateKeyPem: string | null;
   keyVersion: string | null;
   certificateNumber: string | null;
+  producerTaxId?: string | null;
+  producerName?: string | null;
+  productVersion?: string | null;
+  productName?: string | null;
 }): InvoicingConfig {
   const keyVersion = Number(env.keyVersion ?? "1");
   if (!Number.isSafeInteger(keyVersion) || keyVersion < 1) throw new Error("INVOICING_SIGNING_KEY_VERSION inválida");
   const certificateNumber = env.certificateNumber?.trim() || null;
   if (certificateNumber !== null && !/^[1-9]\d{0,3}$/.test(certificateNumber)) throw new Error("INVOICING_CERTIFICATE_NUMBER inválido");
-  return { privateKeyPem: env.privateKeyPem?.replace(/\\n/g, "\n").trim() || null, keyVersion, certificateNumber };
+  const version = env.productVersion?.trim() || "1.0.0";
+  if (version.length > 30) throw new Error("INVOICING_PRODUCT_VERSION com mais de 30 caracteres");
+  return {
+    privateKeyPem: env.privateKeyPem?.replace(/\\n/g, "\n").trim() || null,
+    keyVersion,
+    certificateNumber,
+    software: { productName: env.productName?.trim() || "Mezza", producerTaxId: env.producerTaxId?.trim() || null, producerName: env.producerName?.trim() || null, version },
+  };
 }
 
 /** Fatura simplificada: até 100 € sem IVA (CIVA art. 40.º, n.º 1, al. b); refeições = prestação de serviços). */
@@ -44,7 +57,7 @@ export function safeInvoicingConfig(read: () => InvoicingConfig): InvoicingConfi
     return read();
   } catch (e) {
     console.error("[faturação] configuração inválida — emissão desligada:", e instanceof Error ? e.message : "erro");
-    return { privateKeyPem: null, keyVersion: 1, certificateNumber: null };
+    return { privateKeyPem: null, keyVersion: 1, certificateNumber: null, software: { productName: "Mezza", producerTaxId: null, producerName: null, version: "1.0.0" } };
   }
 }
 
@@ -69,7 +82,8 @@ export function createInvoicingModule(deps: { config: InvoicingConfig; issuers: 
   const { config } = deps;
   const signer = signerFrom(config);
   const common = { store, certificateNumber: config.certificateNumber, simplifiedInvoiceLimitNet: SIMPLIFIED_INVOICE_LIMIT_NET };
-  const useCases = new InvoicingUseCases({ ...common, signingAvailable: signer !== null });
-  const issue = new IssueDocumentUseCase({ ...common, signer, clock: new LisbonClock(), issuers: deps.issuers });
+  const clock = new LisbonClock();
+  const useCases = new InvoicingUseCases({ ...common, signingAvailable: signer !== null, issuers: deps.issuers, clock, software: config.software });
+  const issue = new IssueDocumentUseCase({ ...common, signer, clock, issuers: deps.issuers });
   return { router: createInvoicingRouter(useCases, issue, new SupabaseIdempotencyStore(scoped)), useCases, issue };
 }

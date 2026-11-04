@@ -3,21 +3,41 @@ import type { OrganizationId } from "../../../../kernel/organization-id.js";
 import { CANCEL_REASONS, cancelReasonText, type CancelReasonCode } from "../../domain/entities/cancel-reasons.js";
 import { ENABLED_EXEMPTIONS, EXEMPTION_MENTIONS } from "../../domain/entities/exemption-reasons.js";
 import { DOCUMENT_TYPES, type SeriesState } from "../../domain/entities/series.js";
-import type { DocumentView, InvoicingMeta, InvoicingPort, NewSeriesInput } from "../../domain/ports/in/invoicing.ports.js";
+import type { DocumentView, InvoicingMeta, InvoicingPort, NewSeriesInput, SaftExport, SaftQuery } from "../../domain/ports/in/invoicing.ports.js";
 import { VAT_RATES } from "../../domain/entities/vat-rates.js";
 import { InvoicingNotFoundError, InvoicingRuleError } from "../../domain/errors.js";
 import type { DocumentFilter, DocumentSummary, InvoicingStorePort, SeriesListItem } from "../../domain/ports/out/invoicing-store.port.js";
 import { fiscalMentions } from "../../domain/services/printed-mentions.service.js";
+import { buildSaftXml } from "../../domain/services/saft.service.js";
+import { sourceIdFor } from "../../domain/services/source-id.service.js";
+import type { ClockPort } from "../../domain/ports/out/clock.port.js";
+import type { IssuerDirectoryPort } from "../../domain/ports/out/issuer-directory.port.js";
 import { printedAtcud, validateSeriesId } from "../../domain/services/series.service.js";
 
 export type { DocumentView, NewSeriesInput } from "../../domain/ports/in/invoicing.ports.js";
+
+/** Software que produz o SAF-T: produtora (por omissão, o próprio emitente) e versão. */
+export interface SaftSoftwareConfig {
+  /** Nome do programa (ProductID = «programa/produtora»). */
+  productName: string;
+  producerTaxId: string | null;
+  producerName: string | null;
+  version: string;
+}
 
 export interface InvoicingUseCasesDeps {
   store: InvoicingStorePort;
   certificateNumber: string | null;
   signingAvailable: boolean;
   simplifiedInvoiceLimitNet: Dec;
+  issuers: IssuerDirectoryPort;
+  clock: ClockPort;
+  software: SaftSoftwareConfig;
 }
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** Data que existe mesmo (recusa 2027-02-31). */
+const isRealDate = (v: string) => DATE.test(v) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v;
 
 /** Séries, consulta (2.ª via), anulação e configuração da faturação. A emissão está em `IssueDocumentUseCase`. */
 export class InvoicingUseCases implements InvoicingPort {
@@ -34,7 +54,7 @@ export class InvoicingUseCases implements InvoicingPort {
       throw new InvoicingRuleError("Séries normais só depois de o programa ter certificado da AT — usar séries de formação");
     }
     validateSeriesId(input.seriesId);
-    return this.deps.store.createSeries(org, { ...input, actor });
+    return this.deps.store.createSeries(org, { ...input, actor: sourceIdFor(actor) });
   }
 
   async setValidationCode(org: OrganizationId, seriesRef: string, code: string): Promise<SeriesState> {
@@ -63,8 +83,42 @@ export class InvoicingUseCases implements InvoicingPort {
   }
 
   async cancel(org: OrganizationId, actor: string, documentId: string, reasonCode: CancelReasonCode, note?: string): Promise<DocumentView> {
-    await this.deps.store.cancel(org, documentId, cancelReasonText(reasonCode, note), actor);
+    await this.deps.store.cancel(org, documentId, cancelReasonText(reasonCode, note), sourceIdFor(actor));
     return this.getDocument(org, documentId);
+  }
+
+  /**
+   * SAF-T (PT) 1.04_01 do emitente para um período dentro de um ano fiscal
+   * (o ficheiro tem um só FiscalYear). Documentos de formação só se pedido.
+   */
+  async exportSaft(org: OrganizationId, actor: string, q: SaftQuery): Promise<SaftExport> {
+    if (!isRealDate(q.from) || !isRealDate(q.to)) throw new InvoicingRuleError("Período inválido (datas AAAA-MM-DD)");
+    if (q.from > q.to) throw new InvoicingRuleError("O início do período é depois do fim");
+    if (q.from.slice(0, 4) !== q.to.slice(0, 4)) throw new InvoicingRuleError("O SAF-T cobre um só ano fiscal — divida o período por ano");
+    // Obrigação de exportar períodos passados: vale também para entidades já arquivadas.
+    const issuer = await this.deps.issuers.getIssuer(org, q.legalEntityId, { includeArchived: true });
+    if (!issuer) throw new InvoicingNotFoundError("Entidade emitente");
+    const documents = await this.deps.store.saftDocuments(org, q);
+    const { software } = this.deps;
+    const producer = (software.producerName ?? issuer.name).replace(/\//g, "-");
+    const xml = buildSaftXml({
+      issuer,
+      startDate: q.from,
+      endDate: q.to,
+      dateCreated: this.deps.clock.now().date,
+      producerTaxId: software.producerTaxId ?? issuer.taxId,
+      productId: `${software.productName.replace(/\//g, "-")}/${producer}`,
+      productVersion: software.version,
+      certificateNumber: this.deps.certificateNumber ?? "0",
+      documents,
+    });
+    // Registo fiscal de quem exportou o quê (o ficheiro tem dados pessoais de clientes).
+    await this.deps.store.recordEvent(org, {
+      actor: sourceIdFor(actor),
+      action: "saft.exported",
+      details: { legalEntityId: q.legalEntityId, from: q.from, to: q.to, includeTraining: q.includeTraining, documents: documents.length },
+    });
+    return { fileName: `SAFT_${issuer.taxId.replace(/[^0-9A-Za-z_-]/g, "")}_${q.from}_${q.to}.xml`, xml };
   }
 
   meta(): InvoicingMeta {

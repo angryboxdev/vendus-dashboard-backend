@@ -23,6 +23,7 @@ import { planNextDocument } from "../../domain/services/next-document.service.js
 import { printedSignatureCode } from "../../domain/services/printed-mentions.service.js";
 import { buildQrPayload, qrTaxFieldsFromTotals } from "../../domain/services/qr-payload.service.js";
 import { isValidPtNif } from "../../domain/services/tax-id.service.js";
+import { sourceIdFor } from "../../domain/services/source-id.service.js";
 
 export type { IssueDocumentInput, IssueDocumentOutput, IssueLineInput } from "../../domain/ports/in/invoicing.ports.js";
 
@@ -45,8 +46,13 @@ const TAX_REGIONS = new Set(["PT", "PT-AC", "PT-MA"]);
 const RATE_CODES = new Set(["RED", "INT", "NOR"]);
 
 /** Texto com tamanho dentro dos limites do SAF-T (recusa o que não é texto). */
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001F\u007F]/;
+
+/** Texto dentro dos limites do SAF-T, sem carateres de controlo (partiriam o XML). */
 function text(value: unknown, field: string, max: number, min = 1): string {
   if (typeof value !== "string") throw new InvoicingRuleError(`${field}: tem de ser texto`);
+  if (CONTROL_CHARS.test(value)) throw new InvoicingRuleError(`${field}: carateres inválidos`);
   const v = value.trim();
   if (v.length < min || v.length > max) throw new InvoicingRuleError(`${field}: entre ${min} e ${max} caracteres`);
   return v;
@@ -75,7 +81,8 @@ function draftLines(lines: IssueLineInput[]): DraftLine[] {
       lineTax = { kind: "exempt", region, exemptionCode: code, exemptionReason: exemptionMention(code, norm) };
     }
     return {
-      description: text(l.description, `${at}: descrição`, 200),
+      // SAF-T ProductDescription: 2 a 200 carateres.
+      description: text(l.description, `${at}: descrição`, 200, 2),
       product: { code: text(l.productCode, `${at}: código do produto`, 60), type: l.productType, unit: text(l.unit, `${at}: unidade`, 20) },
       quantity: decimal(l.quantity, `${at}: quantidade`),
       unitPrice: decimal(l.unitPrice, `${at}: preço unitário`),
@@ -187,7 +194,7 @@ export class IssueDocumentUseCase implements IssueDocumentPort {
           ...(input.paymentMechanism ? { paymentMechanism: input.paymentMechanism } : {}),
           ...(referencesTo.length > 0 ? { referencesTo } : {}),
           ...(orderReferences.length > 0 ? { orderReferences } : {}),
-          actor: input.actor,
+          actor: sourceIdFor(input.actor),
         });
         return { documentId, documentNumber: plan.documentNumber, atcud: plan.atcud };
       } catch (e) {

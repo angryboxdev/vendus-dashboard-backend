@@ -30,7 +30,8 @@ async function run<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 const org = (req: Request) => req.auth!.orgId;
-const actor = (req: Request) => req.auth!.email || req.auth!.sub;
+/** Id estável do utilizador; os casos de uso derivam dele o SourceID do SAF-T. */
+const actor = (req: Request) => req.auth!.sub;
 const body = (req: Request) => (req.body ?? {}) as Record<string, unknown>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STATUSES = new Set(["N", "A", "F"]);
@@ -134,6 +135,21 @@ export function createInvoicingRouter(uc: InvoicingPort, issue: IssueDocumentPor
       ...(typeof q.limit === "string" && /^\d+$/.test(q.limit) ? { limit: Number(q.limit) } : {}),
     };
     res.json((await run(() => uc.listDocuments(org(req), filter))).map(documentJson));
+  });
+  r.get(`${B}/saft`, async (req, res) => {
+    const q = req.query;
+    uuid(q.legalEntityId, "legalEntityId");
+    const out = await run(() =>
+      uc.exportSaft(org(req), actor(req), {
+        legalEntityId: q.legalEntityId as string,
+        from: String(q.from ?? ""),
+        to: String(q.to ?? ""),
+        includeTraining: q.training === "1" || q.training === "true",
+      }),
+    );
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${out.fileName}"`);
+    res.send(out.xml);
   });
   r.get(`${B}/documents/:id`, async (req, res) => res.json(documentJson(await run(() => uc.getDocument(org(req), id(req))))));
   r.post(`${B}/documents`, async (req, res) => {

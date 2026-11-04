@@ -1128,12 +1128,16 @@ const invoicingModule = createInvoicingModule({
       privateKeyPem: ENV.INVOICING_SIGNING_PRIVATE_KEY,
       keyVersion: ENV.INVOICING_SIGNING_KEY_VERSION,
       certificateNumber: ENV.INVOICING_CERTIFICATE_NUMBER,
+      producerTaxId: ENV.INVOICING_PRODUCER_TAX_ID,
+      producerName: ENV.INVOICING_PRODUCER_NAME,
+      productVersion: ENV.INVOICING_PRODUCT_VERSION,
+      productName: ENV.INVOICING_PRODUCT_NAME,
     }),
   ),
   issuers: {
-    getIssuer: async (org, legalEntityId) => {
-      // Só entidades ativas emitem.
-      const e = (await legalEntitiesModule.legalEntities.list(org, { status: "active" })).find((x) => x.id === legalEntityId);
+    getIssuer: async (org, legalEntityId, opts) => {
+      // Só entidades ativas emitem; o SAF-T de períodos passados vale também para as arquivadas.
+      const e = (await legalEntitiesModule.legalEntities.list(org, { status: opts?.includeArchived ? "all" : "active" })).find((x) => x.id === legalEntityId);
       return e ? { taxId: e.taxId, name: e.name, address: { street: e.street, postalCode: e.postalCode, city: e.city, country: e.country } } : null;
     },
   },

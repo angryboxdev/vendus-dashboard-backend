@@ -73,7 +73,20 @@ export interface InvoicingMeta {
   cancelReasons: ReadonlyArray<{ code: CancelReasonCode; label: string }>;
 }
 
-/** Séries, consulta (2.ª via), anulação e configuração. */
+export interface SaftQuery {
+  legalEntityId: string;
+  from: string;
+  to: string;
+  /** Inclui os documentos de formação (para testes e para o dossiê de certificação). */
+  includeTraining: boolean;
+}
+
+export interface SaftExport {
+  fileName: string;
+  xml: string;
+}
+
+/** Séries, consulta (2.ª via), anulação, SAF-T e configuração. */
 export interface InvoicingPort {
   listSeries(org: OrganizationId): Promise<SeriesListItem[]>;
   createSeries(org: OrganizationId, actor: string, input: NewSeriesInput): Promise<SeriesState>;
@@ -83,5 +96,6 @@ export interface InvoicingPort {
   getDocument(org: OrganizationId, documentId: string): Promise<DocumentView>;
   /** Devolve o documento anulado (2.ª via). */
   cancel(org: OrganizationId, actor: string, documentId: string, reasonCode: CancelReasonCode, note?: string): Promise<DocumentView>;
+  exportSaft(org: OrganizationId, actor: string, q: SaftQuery): Promise<SaftExport>;
   meta(): InvoicingMeta;
 }
