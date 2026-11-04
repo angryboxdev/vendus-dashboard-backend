@@ -18,6 +18,7 @@ import type {
 } from "../../domain/ports/out/invoicing-store.port.js";
 import { formatAmount } from "../../domain/services/amount-format.js";
 import { add } from "../../domain/services/decimal-ops.js";
+import { lisbonEntryDate } from "./lisbon-clock.js";
 import type { LineTax } from "../../domain/services/document-totals.service.js";
 
 interface SeriesRow {
@@ -237,6 +238,41 @@ const toTaxView = (t: Row): DocumentTaxView => ({
   taxAmount: String(t.tax_amount),
 });
 
+const SAFT_MAX_DOCUMENTS = 50_000;
+const SAFT_CHUNK = 200;
+
+function toStoredDocument(d: Row, lines: Row[], taxes: Row[]): StoredDocument {
+  const changedAt = str(d.status_changed_at);
+  return {
+    ...toSummary(d as unknown as SummaryRow),
+    seriesRef: String(d.series_ref),
+    sequence: Number(d.sequence),
+    taxPointDate: String(d.tax_point_date),
+    systemEntryDate: String(d.system_entry_date),
+    systemEntryAt: new Date(String(d.system_entry_at)).toISOString(),
+    softwareCertificateNumber: String(d.software_certificate_number),
+    hash: String(d.hash),
+    hashControl: String(d.hash_control),
+    atcud: String(d.atcud),
+    qrPayload: String(d.qr_payload),
+    pricesIncludeTax: Boolean(d.prices_include_tax),
+    netTotal: String(d.net_total),
+    taxPayable: String(d.tax_payable),
+    paymentMechanism: (d.payment_mechanism ?? null) as StoredDocument["paymentMechanism"],
+    customer: d.customer as StoredDocument["customer"],
+    issuer: d.issuer as StoredDocument["issuer"],
+    referencesTo: fromReferenceRows(d.references_to),
+    orderReferences: fromReferenceRows(d.order_references),
+    statusReason: str(d.status_reason),
+    statusChangedAt: changedAt,
+    // O instante da mudança de estado, em hora de Lisboa (formato do SAF-T).
+    statusEntryDate: changedAt ? lisbonEntryDate(new Date(changedAt)) : null,
+    createdBy: String(d.created_by),
+    lines: lines.map(toLineView),
+    taxes: taxes.map(toTaxView),
+  };
+}
+
 /** Persistência fiscal no Supabase: leituras pelo helper, escritas só pelas funções da BD. */
 export class SupabaseInvoicingStore implements InvoicingStorePort {
   constructor(private readonly scoped: ScopedQueryFactory) {}
@@ -323,32 +359,38 @@ export class SupabaseInvoicingStore implements InvoicingStorePort {
       scoped.table("invoicing_document_taxes").select(TAX_COLS).eq("document_id", documentId),
     ]);
     for (const r of [lines, taxes]) if (r.error) throw new Error(`Faturação: erro a ler o documento: ${r.error.message}`);
-    return {
-      ...toSummary(d as unknown as SummaryRow),
-      seriesRef: String(d.series_ref),
-      sequence: Number(d.sequence),
-      taxPointDate: String(d.tax_point_date),
-      systemEntryDate: String(d.system_entry_date),
-      systemEntryAt: new Date(String(d.system_entry_at)).toISOString(),
-      softwareCertificateNumber: String(d.software_certificate_number),
-      hash: String(d.hash),
-      hashControl: String(d.hash_control),
-      atcud: String(d.atcud),
-      qrPayload: String(d.qr_payload),
-      pricesIncludeTax: Boolean(d.prices_include_tax),
-      netTotal: String(d.net_total),
-      taxPayable: String(d.tax_payable),
-      paymentMechanism: (d.payment_mechanism ?? null) as StoredDocument["paymentMechanism"],
-      customer: d.customer as StoredDocument["customer"],
-      issuer: d.issuer as StoredDocument["issuer"],
-      referencesTo: fromReferenceRows(d.references_to),
-      orderReferences: fromReferenceRows(d.order_references),
-      statusReason: str(d.status_reason),
-      statusChangedAt: str(d.status_changed_at),
-      createdBy: String(d.created_by),
-      lines: ((lines.data ?? []) as unknown as Row[]).map(toLineView),
-      taxes: ((taxes.data ?? []) as unknown as Row[]).map(toTaxView),
-    };
+    return toStoredDocument(d, (lines.data ?? []) as unknown as Row[], (taxes.data ?? []) as unknown as Row[]);
+  }
+
+  /** Documentos do período para o SAF-T, por ordem de emissão, com linhas e impostos (leitura em lotes). */
+  async saftDocuments(orgId: OrganizationId, q: { legalEntityId: string; from: string; to: string; includeTraining: boolean }): Promise<StoredDocument[]> {
+    const scoped = this.scoped(orgId);
+    let docsQuery = scoped
+      .table("invoicing_documents")
+      .select(DOCUMENT_COLS)
+      .eq("legal_entity_id", q.legalEntityId)
+      .gte("document_date", q.from)
+      .lte("document_date", q.to);
+    if (!q.includeTraining) docsQuery = docsQuery.eq("series_mode", "normal");
+    const docs = await docsQuery.order("system_entry_at", { ascending: true }).limit(SAFT_MAX_DOCUMENTS + 1);
+    if (docs.error) throw new Error(`Faturação: erro a ler documentos para o SAF-T: ${docs.error.message}`);
+    const rows = (docs.data ?? []) as unknown as Row[];
+    if (rows.length > SAFT_MAX_DOCUMENTS) throw new InvoicingRuleError(`Período com mais de ${SAFT_MAX_DOCUMENTS} documentos — exporte por mês`);
+
+    const lines = new Map<string, Row[]>();
+    const taxes = new Map<string, Row[]>();
+    const ids = rows.map((r) => String(r.id));
+    for (let i = 0; i < ids.length; i += SAFT_CHUNK) {
+      const chunk = ids.slice(i, i + SAFT_CHUNK);
+      const [l, t] = await Promise.all([
+        scoped.table("invoicing_document_lines").select(`document_id, ${LINE_COLS}`).in("document_id", chunk).order("line_number"),
+        scoped.table("invoicing_document_taxes").select(`document_id, ${TAX_COLS}`).in("document_id", chunk),
+      ]);
+      for (const r of [l, t]) if (r.error) throw new Error(`Faturação: erro a ler linhas para o SAF-T: ${r.error.message}`);
+      for (const row of (l.data ?? []) as unknown as Row[]) lines.set(String(row.document_id), [...(lines.get(String(row.document_id)) ?? []), row]);
+      for (const row of (t.data ?? []) as unknown as Row[]) taxes.set(String(row.document_id), [...(taxes.get(String(row.document_id)) ?? []), row]);
+    }
+    return rows.map((d) => toStoredDocument(d, lines.get(String(d.id)) ?? [], taxes.get(String(d.id)) ?? []));
   }
 
   async getSeries(orgId: OrganizationId, seriesRef: string): Promise<SeriesState | null> {

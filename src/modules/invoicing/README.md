@@ -87,6 +87,7 @@ Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `Invoicing
 - `createInvoicingRouter` → `/api/invoicing` (permissão `sales.invoicing`: GET = READ, resto = MANAGE; só o Admin a tem por omissão):
   - `GET /invoicing/meta` · `GET /invoicing/series` · `POST /invoicing/series` `{legalEntityId, locationId?, documentType, seriesId, mode}` → 201
   - `PUT /invoicing/series/:id/validation-code` `{validationCode}` → 200 com a série (código da AT, uma só vez)
+  - `GET /invoicing/saft?legalEntityId&from&to&training=1` → ficheiro SAF-T (PT) 1.04_01 (`application/xml`, `SAFT_<NIF>_<de>_<até>.xml`); um só ano fiscal; formação só com `training=1`
   - `GET /invoicing/documents?from&to&type&status&limit` · `GET /invoicing/documents/:id` (2.ª via)
   - `POST /invoicing/documents` (**`Idempotency-Key` obrigatório**) `{seriesRef, documentDate?, customer?, pricesIncludeTax?, lines[{productCode, productType, unit, description, quantity, unitPrice, discountPct?, tax:{region, rate}|{region, exemptionCode, exemptionNorm?}}], paymentMechanism?, references?[{documentId, reason}], orderReferences?[ids], confirmWarnings?}` → 201 `{documentId, documentNumber, atcud}`
   - `POST /invoicing/documents/:id/cancel` `{reasonCode, note?}` → 200 com o documento anulado
@@ -125,7 +126,9 @@ Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `Invoicing
 - **Taxas e menções em código, com fonte** (`vat-rates.ts`, `exemption-reasons.ts`): são lei nacional, não configuração por organização; v1 só ativa M10 e M99 (decisão §8.7).
 - **Configuração errada não derruba o servidor**: chave ilegível ou variáveis inválidas → emissão desligada (503) e erro registado sem o conteúdo da chave (`safeInvoicingConfig`).
 - **Formação não se mistura com documentos reais**: o modo da série fica gravado no documento; NC/ND e faturas de consultas de mesa só referem documentos do mesmo modo (e as NC/ND do mesmo cliente).
-- **Configuração** (`src/config/env.ts`): `INVOICING_SIGNING_PRIVATE_KEY`, `INVOICING_SIGNING_KEY_VERSION`, `INVOICING_CERTIFICATE_NUMBER`.
+- **Configuração** (`src/config/env.ts`): `INVOICING_SIGNING_PRIVATE_KEY`, `INVOICING_SIGNING_KEY_VERSION`, `INVOICING_CERTIFICATE_NUMBER`; produtora no SAF-T `INVOICING_PRODUCER_TAX_ID` / `INVOICING_PRODUCER_NAME` (vazio = o emitente) e `INVOICING_PRODUCT_VERSION`.
+- **SAF-T** (`saft.service.ts`, puro): XML por ordem do XSD 1.04_01 a partir dos documentos gravados. Valor sem IVA de cada linha = base do grupo de imposto gravada, repartida pelas linhas ao cêntimo com soma exata (`kernel/money` `distribute`); `UnitPrice` = esse valor ÷ quantidade (sem IVA, já com descontos). Anulados contam nas entradas, não nos totais de controlo; NC a débito. Textos com limite do XSD cortados (SourceID 30, Reason 50, nome 100, localidade 50) — a BD guarda o texto completo.
+- **SourceID** = id estável do utilizador sem hífens, 30 caracteres (`sourceIdFor`), nunca o email (longo e mutável; Despacho 3.3.6 proíbe reutilizar).
 - **Dinheiro exato** com `kernel/money/decimal` (bigint); linhas sem IVA a 6 casas, totais a 2 (Despacho 3.2.3).
 - **IVA incluído** (restauração): total por taxa fixo; IVA = total × p/(100+p); base = total − IVA — o cliente paga o preço do menu.
 - Spec, pesquisa e fases: `.scratch/certificacao-at/`.
@@ -141,6 +144,7 @@ Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `Invoicing
   ```
 
 - Migração em Postgres real sem Docker (PGlite): `.scratch/certificacao-at/validacao-pglite/README.md` (48 verificações).
+- SAF-T contra o XSD oficial: `.scratch/certificacao-at/validacao-saft/README.md` (estrutural, 0 erros; validação XSD 1.1 completa pendente).
 - BD real com duas ligações (concorrência): `npx jest --config jest.config.cjs src/modules/invoicing/__tests__/integration` com `supabase start` + `supabase db reset` (não corre nesta máquina — sem Docker).
 
 ## Known gaps / open debt
@@ -149,4 +153,4 @@ Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `Invoicing
 - Em falta: recibos (RC); recuperação de documentos manuais (M/D); desconto global (`SettlementAmount`); controlo das NC parciais por linha/quantidade e devoluções no tipo errado (Despacho 3.2.7, 3.3.9 — hoje pelo valor total, conferido também na BD); limite da FS por organização e exceção do art. 53.º (hoje 100 € fixo); cabeçalho com os dados do produtor nos documentos de formação (Despacho 1.5 — hoje o emitente; iguais se a Angry Box for a produtora); taxa por produto e canal (sala 13 %/23 %, take-away) — hoje a taxa vem em cada linha; tipos de `document-totals` ainda em `services/`.
 - Os KMS de cloud podem não suportar RSA-1024 — a chave vive em variável de ambiente.
 - O teste de integração (duas ligações) não correu; as migrações foram validadas em PGlite (uma ligação) e não estão aplicadas em lado nenhum.
-- SAF-T, webservices da AT e área «Vendas» no frontend: fases F4–F6.
+- Validação XSD 1.1 completa do SAF-T (Xerces 1.1 ou validador da AT) por fazer; webservices da AT: F6.

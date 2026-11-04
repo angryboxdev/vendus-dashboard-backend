@@ -1128,6 +1128,9 @@ const invoicingModule = createInvoicingModule({
       privateKeyPem: ENV.INVOICING_SIGNING_PRIVATE_KEY,
       keyVersion: ENV.INVOICING_SIGNING_KEY_VERSION,
       certificateNumber: ENV.INVOICING_CERTIFICATE_NUMBER,
+      producerTaxId: ENV.INVOICING_PRODUCER_TAX_ID,
+      producerName: ENV.INVOICING_PRODUCER_NAME,
+      productVersion: ENV.INVOICING_PRODUCT_VERSION,
     }),
   ),
   issuers: {

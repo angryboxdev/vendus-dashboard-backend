@@ -118,6 +118,8 @@ export interface StoredDocument extends DocumentSummary {
   orderReferences: DocumentReference[];
   statusReason: string | null;
   statusChangedAt: string | null;
+  /** A mesma mudança em hora de Lisboa (AAAA-MM-DDTHH:MM:SS) — InvoiceStatusDate/WorkStatusDate do SAF-T. */
+  statusEntryDate: string | null;
   createdBy: string;
   lines: DocumentLineView[];
   taxes: DocumentTaxView[];
@@ -150,4 +152,6 @@ export interface InvoicingStorePort {
   listDocuments(orgId: OrganizationId, filter: DocumentFilter): Promise<DocumentSummary[]>;
   saveIssued(orgId: OrganizationId, record: IssuedDocumentRecord): Promise<{ documentId: string }>;
   cancel(orgId: OrganizationId, documentId: string, reason: string, actor: string): Promise<void>;
+  /** Documentos do período (incl. anulados), por ordem de emissão, com linhas e impostos. Formação só se pedido. */
+  saftDocuments(orgId: OrganizationId, q: { legalEntityId: string; from: string; to: string; includeTraining: boolean }): Promise<StoredDocument[]>;
 }
