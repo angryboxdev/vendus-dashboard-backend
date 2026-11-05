@@ -62,12 +62,14 @@ export class PosUseCases implements PosPort {
     }
   }
 
-  async importProducts(org: OrganizationId, csv: string) {
+  /** Com `replace`, os produtos que não vêm no ficheiro deixam de estar à venda (não se apagam: têm vendas e movimentos). */
+  async importProducts(org: OrganizationId, csv: string, opts: { replace?: boolean } = {}) {
     const preview = this.previewImport(csv);
     const products = preview.rows.flatMap((r) => (r.status === "import" && r.product ? [r.product] : []));
     if (products.length === 0) throw new PosRuleError("Nenhum produto para importar");
     const out = await this.deps.store.upsertProducts(org, products);
-    return { ...out, skipped: preview.skipped };
+    const deactivated = opts.replace ? await this.deps.store.deactivateProductsExcept(org, products.map((p) => p.ref)) : 0;
+    return { ...out, skipped: preview.skipped, deactivated };
   }
 
   async updateProduct(org: OrganizationId, id: string, patch: ProductPatch) {

@@ -64,6 +64,17 @@ describe("CSV do Vendus", () => {
     expect(byRef["VSUM3"]!.product!.barcode).toBeNull();
   });
 
+  it("exportação com «;» e sem «Referência»: referência gerada pelo nome, com aviso", () => {
+    const csv = "Nome;Categoria;PVP;Controlar Stock;IVA - Taxa;Tipo de Produto;Imagem\nTomate & Pesto (Individual);Pequenas;9,9;Sim;13;P;https://www.vendus.pt/foto/abc_xs.png\nÁgua ;Bebidas;1,5;Não;6;P;";
+    const rows = previewVendusCsv(csv).rows;
+    expect(rows.map((r) => [r.status, r.ref, r.priceCents])).toEqual([
+      ["import", "TOMATE-PESTO-INDIVIDUAL", 990],
+      ["import", "AGUA", 150],
+    ]);
+    expect(rows[0]!.product).toMatchObject({ trackStock: true, vatRate: 13, imageUrl: "https://www.vendus.pt/foto/abc_xs.png" });
+    expect(rows[0]!.warnings).toContain("Sem referência no ficheiro — gerada pelo nome");
+  });
+
   it("ficheiro sem as colunas obrigatórias → erro claro", () => {
     expect(() => previewVendusCsv("Nome,Preço\nA,1")).toThrow(/Colunas em falta/);
   });

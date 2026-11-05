@@ -53,6 +53,11 @@ class FakeStore implements PosStorePort {
     this.upserted = p;
     return { created: p.length, updated: 0 };
   }
+  async deactivateProductsExcept(_o: OrganizationId, refs: string[]) {
+    const off = this.products.filter((p) => p.active && !refs.includes(p.ref));
+    for (const p of off) p.active = false;
+    return off.length;
+  }
   async updateProduct(_o: OrganizationId, id: string, patch: Partial<PosProduct>) {
     const p = this.products.find((x) => x.id === id)!;
     Object.assign(p, patch);
@@ -260,10 +265,21 @@ describe("painel do dia", () => {
 });
 
 describe("produtos", () => {
+  it("substituir catálogo: os produtos fora do ficheiro deixam de estar à venda (não se apagam)", async () => {
+    const { uc, store } = setup();
+    const csv = 'Nome,Categoria,Referência,PVP,"IVA - Taxa"\n"Pizza Teste",Grandes,VPIZ1,"18,5",13';
+    expect(await uc.importProducts(ORG, csv, { replace: true })).toMatchObject({ deactivated: 1 });
+    expect(store.products.map((p) => [p.ref, p.active])).toEqual([
+      ["VPIZ1", true],
+      ["VREF2", false],
+      ["VOLD3", false],
+    ]);
+  });
+
   it("importa só as linhas válidas do CSV; editar valida o IVA", async () => {
     const { uc, store } = setup();
     const csv = 'Nome,Categoria,Referência,PVP,"IVA - Taxa"\n"Pizza X",Grandes,V1,"9,9000",13\n"Cupão",,V2,"0,0000",13';
-    expect(await uc.importProducts(ORG, csv)).toEqual({ created: 1, updated: 0, skipped: 1 });
+    expect(await uc.importProducts(ORG, csv)).toEqual({ created: 1, updated: 0, skipped: 1, deactivated: 0 });
     expect(store.upserted.map((p) => p.ref)).toEqual(["V1"]);
     await expect(uc.updateProduct(ORG, "p1", { vatRate: 18 })).rejects.toThrow(/6, 13 ou 23/);
     expect(await uc.updateProduct(ORG, "p1", { priceCents: 1990, active: false })).toMatchObject({ priceCents: 1990, active: false });

@@ -81,6 +81,7 @@ nem menus.
 - **Documentos de formação reais**, não simulação (decisão do utilizador, 2026-11-05): o POS testa a cadeia fiscal inteira (assinatura, ATCUD, QR, SAF-T).
 - **PIN do quiosque de ponto** em cada venda/devolução; gestores marcados na configuração do POS. Até 10 PINs errados por organização em 5 min (memória — uma instância do servidor).
 - **Lê `hr_employees` diretamente** (como o fecho de caixa), só `id`, `full_name`, `status`, `kiosk_pin_hash` — o RH não expõe uma porta de PIN; mover para uma porta do RH quando existir.
+- **Importação tolerante**: separador «,» ou «;» (pelo cabeçalho); sem «Referência», gera-se pelo nome (`refFromName`, estável enquanto o nome não mudar). «Substituir catálogo» (`replace`) tira da venda os produtos fora do ficheiro — nunca apaga (vendas e movimentos de stock apontam para eles).
 - **Registo da venda depois do documento**: se a gravação em `pos_sales` falhar, a FR já existe e o erro diz o número (não há transação entre módulos).
 - **Stock próprio do POS, isolado** da Gestão de Stock (decisão do utilizador, 2026-11-05). Ligar por ficha técnica quando o POS substituir a caixa.
 - **Stock por triggers na BD** (não no caso de uso): o PostgREST não tem transações entre pedidos e a venda/movimento têm de ser atómicos; o contador com a linha bloqueada não perde vendas em paralelo. Testado em PGlite; o fake dos testes unitários imita o trigger.

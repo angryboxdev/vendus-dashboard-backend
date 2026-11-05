@@ -55,7 +55,7 @@ export function createPosRouter(pos: PosPort, store: IdempotencyStore): Router {
 
   r.get(`${B}/products`, async (req, res) => res.json(await run(() => pos.listProducts(org(req), { activeOnly: req.query.active === "1" }))));
   r.post(`${B}/products/import/preview`, async (req, res) => res.json(await run(() => pos.previewImport(csv(body(req))))));
-  r.post(`${B}/products/import`, async (req, res) => res.json(await run(() => pos.importProducts(org(req), csv(body(req))))));
+  r.post(`${B}/products/import`, async (req, res) => res.json(await run(() => pos.importProducts(org(req), csv(body(req)), { replace: body(req).replace === true }))));
   r.put(`${B}/products/:id`, async (req, res) => {
     const b = body(req);
     const patch = {

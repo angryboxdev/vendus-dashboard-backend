@@ -62,7 +62,8 @@ export interface PosEmployeeOption {
 export interface PosPort {
   listProducts(org: OrganizationId, opts?: { activeOnly?: boolean }): Promise<PosProduct[]>;
   previewImport(csv: string): CsvImportPreview;
-  importProducts(org: OrganizationId, csv: string): Promise<{ created: number; updated: number; skipped: number }>;
+  /** `replace`: os produtos fora do ficheiro deixam de estar à venda. */
+  importProducts(org: OrganizationId, csv: string, opts?: { replace?: boolean }): Promise<{ created: number; updated: number; skipped: number; deactivated: number }>;
   updateProduct(org: OrganizationId, id: string, patch: ProductPatch): Promise<PosProduct>;
   /** Entrada ou contagem de stock (gestão); `actorName` = quem fez, para o registo. */
   adjustStock(org: OrganizationId, productId: string, adjustment: StockAdjustment, actorName: string): Promise<StockMove>;
