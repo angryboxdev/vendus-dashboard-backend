@@ -1,6 +1,6 @@
 # POS do Mezza — Fase 1 (demonstração de 2026-11-07)
 
-Status: fase 1 feita no ramo (2026-11-05) — por publicar · Ramo: `faturacao-certificada` (worktrees backend e frontend)
+Status: fases 1 e 2 feitas no ramo (2026-11-05) — por publicar · Ramo: `faturacao-certificada` (worktrees backend e frontend)
 Fonte: `Mezza_POS_Especificacao_Prototipo.md` (gerência, 2026-11-04) + decisões de 2026-11-05.
 
 ## Decisões (utilizador, 2026-11-05)
@@ -25,9 +25,21 @@ Fonte: `Mezza_POS_Especificacao_Prototipo.md` (gerência, 2026-11-04) + decisõe
 - `POST /pos/sales/:id/refund` `{pin, lines[{lineNumber, quantity}], reason}` (Idempotency-Key)
 - `GET /pos/documents?date=` · `GET /pos/summary?date=`
 
-## Fora da fase 1
-Stock e alertas, preferências de vista, leitor de código de barras, TPA, mesas/cozinha, offline, preço de delivery.
+## Fase 2 (feita no ramo, 2026-11-05)
+1. **Stock próprio do POS** (não toca a Gestão de Stock): `pos_products.stock_qty` mantido por trigger a partir de `pos_stock_moves` (append-only: venda, devolução, entrada, contagem). A venda registada em `pos_sales` gera os movimentos dos artigos que controlam stock **na mesma transação**; a devolução devolve ao stock.
+2. **Indicador** na grelha e na lista («N em stock» cinza, ≤ 2 âmbar, «Sem stock»/«Stock −N» vermelho; anel laranja ~4 s depois de mudar); «stock insuficiente» na linha do talão.
+3. **Aviso antes de faturar**: lista dos artigos em falta, «Rever venda» / «Vender na mesma». Vender na mesma é permitido; o stock fica negativo e a venda é um **alerta de stock** (artigo, stock antes, vendido, funcionário, documento, hora) — derivado do movimento (venda com stock depois < 0).
+4. **Gestão**: `Vendas → Produtos` com «Controla stock», stock, Entrada (+N) e Contagem (passa a N) com nota; quem fez fica no movimento.
+5. **Painel**: alertas e movimentos de stock do dia.
+6. **Vistas**: a escolha do funcionário fica no servidor (`pos_employee_prefs`) e volta ao entrar com o PIN; o gestor define a vista por omissão em `Vendas → Caixa (POS)`.
+7. **Código de barras**: coluna «Código de Barras» do CSV (repetido → fica no primeiro, com aviso), editável na gestão (único por organização); o leitor funciona como teclado (teclas a < 50 ms + Enter) fora dos campos; na pesquisa, Enter com o código exato adiciona o artigo.
+
+API nova: `POST /pos/products/:id/stock` `{kind: "entry", qty} | {kind: "count", countTo}`, `GET /pos/stock?date=`, `PUT /pos/view` `{pin, view}`; `PUT /pos/products/:id` aceita `trackStock` e `barcode`; `PUT /pos/settings` aceita `defaultView`; `POST /pos/pin` devolve `view`.
+
+## Fora das fases 1 e 2
+Ligação à Gestão de Stock (ficha técnica), TPA, impressora térmica direta, mesas/cozinha, offline, preço de delivery, multi-loja.
 
 ## Por confirmar
 - Taxas de IVA do CSV (o mesmo artigo aparece a 13 % e 23 %; água a 6 %) — contabilista.
 - Meio de pagamento SAF-T do MB Way (assumido `OU`) e do cartão (assumido `CD`, débito) — contabilista.
+- Artigo devolvido com defeito volta ao stock? (hoje: toda a devolução volta; acertar com uma contagem) — gerência.

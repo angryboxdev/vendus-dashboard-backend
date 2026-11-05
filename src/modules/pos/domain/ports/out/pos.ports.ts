@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { NewPosProduct, PosProduct, PosSaleRecord, PosSettings } from "../../entities/pos.js";
+import type { NewPosProduct, PosProduct, PosSaleRecord, PosSettings, PosView, StockMove } from "../../entities/pos.js";
 
 /** Produtos, configuração e registo das vendas do POS. */
 export interface PosStorePort {
@@ -7,15 +7,29 @@ export interface PosStorePort {
   productsByIds(org: OrganizationId, ids: string[]): Promise<PosProduct[]>;
   /** Cria ou atualiza pela referência; devolve quantos criou e atualizou. */
   upsertProducts(org: OrganizationId, products: NewPosProduct[]): Promise<{ created: number; updated: number }>;
-  updateProduct(org: OrganizationId, id: string, patch: Partial<Omit<PosProduct, "id" | "ref">>): Promise<PosProduct>;
+  /** O stock não se altera aqui: só por `recordStockMove` (e pela venda registada). */
+  updateProduct(org: OrganizationId, id: string, patch: Partial<Omit<PosProduct, "id" | "ref" | "stockQty">>): Promise<PosProduct>;
   getSettings(org: OrganizationId): Promise<PosSettings>;
   saveSettings(org: OrganizationId, s: PosSettings): Promise<void>;
-  /** Registo append-only de vendas e devoluções. */
+  /** Vista escolhida pelo funcionário (null = nunca escolheu). */
+  getEmployeeView(org: OrganizationId, employeeId: string): Promise<PosView | null>;
+  setEmployeeView(org: OrganizationId, employeeId: string, view: PosView): Promise<void>;
+  /**
+   * Registo append-only de vendas e devoluções. A gravação gera, na mesma
+   * transação, os movimentos de stock dos artigos que controlam stock.
+   */
   recordSale(org: OrganizationId, r: Omit<PosSaleRecord, "id" | "createdAt">): Promise<PosSaleRecord>;
   getSale(org: OrganizationId, id: string): Promise<PosSaleRecord | null>;
   /** Vendas e devoluções entre dois instantes (ISO), por ordem. */
   salesBetween(org: OrganizationId, fromIso: string, toIso: string): Promise<PosSaleRecord[]>;
   refundsOf(org: OrganizationId, saleId: string): Promise<PosSaleRecord[]>;
+  /** Entrada (+qty) ou contagem (stock passa a `countTo`) feita na gestão; devolve o movimento aplicado. */
+  recordStockMove(
+    org: OrganizationId,
+    m: { productId: string; actorName: string; note: string | null } & ({ kind: "entry"; qty: number } | { kind: "count"; countTo: number }),
+  ): Promise<StockMove>;
+  /** Movimentos de stock entre dois instantes (ISO), por ordem. */
+  stockMovesBetween(org: OrganizationId, fromIso: string, toIso: string): Promise<StockMove[]>;
 }
 
 /** Linha de um documento fiscal, no formato do motor de faturação. */

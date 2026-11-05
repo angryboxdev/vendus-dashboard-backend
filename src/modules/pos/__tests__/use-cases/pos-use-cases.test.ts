@@ -1,7 +1,7 @@
 import { mintOrganizationId, type OrganizationId } from "../../../../kernel/organization-id.js";
 import { LisbonDayClock } from "../../adapters/out/lisbon-day-clock.js";
 import { PosUseCases } from "../../application/use-cases/pos.use-cases.js";
-import type { NewPosProduct, PosProduct, PosSaleRecord, PosSettings } from "../../domain/entities/pos.js";
+import type { NewPosProduct, PosProduct, PosSaleRecord, PosSettings, PosView, StockMove } from "../../domain/entities/pos.js";
 import { PosPinError, PosRuleError } from "../../domain/errors.js";
 import type { InvoicingGatewayPort, PosEmployeesPort, PosStorePort } from "../../domain/ports/out/pos.ports.js";
 
@@ -12,12 +12,36 @@ const SERIES = { fr: "33333333-3333-4333-8333-333333333333", nc: "44444444-4444-
 
 class FakeStore implements PosStorePort {
   products: PosProduct[] = [
-    { id: "p1", ref: "VPIZ1", name: "Pizza Teste", category: "Grandes", priceCents: 1850, vatRate: 13, productType: "P", trackStock: false, imageUrl: null, active: true },
-    { id: "p2", ref: "VREF2", name: "Refrigerante", category: "Bebidas", priceCents: 250, vatRate: 23, productType: "P", trackStock: true, imageUrl: null, active: true },
-    { id: "p3", ref: "VOLD3", name: "Inativo", category: null, priceCents: 100, vatRate: 13, productType: "P", trackStock: false, imageUrl: null, active: false },
+    { id: "p1", ref: "VPIZ1", name: "Pizza Teste", category: "Grandes", priceCents: 1850, vatRate: 13, productType: "P", trackStock: false, stockQty: 0, barcode: null, imageUrl: null, active: true },
+    { id: "p2", ref: "VREF2", name: "Refrigerante", category: "Bebidas", priceCents: 250, vatRate: 23, productType: "P", trackStock: true, stockQty: 1, barcode: null, imageUrl: null, active: true },
+    { id: "p3", ref: "VOLD3", name: "Inativo", category: null, priceCents: 100, vatRate: 13, productType: "P", trackStock: false, stockQty: 0, barcode: null, imageUrl: null, active: false },
   ];
-  settings: PosSettings = { invoiceSeriesRef: SERIES.fr, creditSeriesRef: SERIES.nc, managerEmployeeIds: [RUI.id] };
+  settings: PosSettings = { invoiceSeriesRef: SERIES.fr, creditSeriesRef: SERIES.nc, managerEmployeeIds: [RUI.id], defaultView: "A" };
   sales: PosSaleRecord[] = [];
+  views = new Map<string, PosView>();
+  moves: StockMove[] = [];
+  async getEmployeeView(_o: OrganizationId, id: string) {
+    return this.views.get(id) ?? null;
+  }
+  async setEmployeeView(_o: OrganizationId, id: string, v: PosView) {
+    this.views.set(id, v);
+  }
+  /** Como o trigger da BD: aplica o movimento ao contador. */
+  private apply(productId: string, kind: StockMove["kind"], delta: (before: number) => number, extra: Partial<StockMove>) {
+    const p = this.products.find((x) => x.id === productId)!;
+    const before = p.stockQty;
+    const qty = delta(before);
+    p.stockQty = before + qty;
+    const m: StockMove = { id: `m${this.moves.length + 1}`, productId, kind, qty, stockBefore: before, stockAfter: p.stockQty, saleId: null, documentNumber: null, actorName: null, note: null, createdAt: "2027-03-10T12:00:00.000Z", ...extra };
+    this.moves.push(m);
+    return m;
+  }
+  async recordStockMove(_o: OrganizationId, m: Parameters<PosStorePort["recordStockMove"]>[1]) {
+    return this.apply(m.productId, m.kind, (before) => (m.kind === "entry" ? m.qty : m.countTo - before), { actorName: m.actorName, note: m.note });
+  }
+  async stockMovesBetween() {
+    return this.moves;
+  }
   upserted: NewPosProduct[] = [];
   async listProducts() {
     return this.products;
@@ -43,6 +67,10 @@ class FakeStore implements PosStorePort {
   async recordSale(_o: OrganizationId, r: Omit<PosSaleRecord, "id" | "createdAt">) {
     const rec = { ...r, id: `s${this.sales.length + 1}`, createdAt: "2027-03-10T12:00:00.000Z" };
     this.sales.push(rec);
+    for (const l of r.lines) {
+      if (!this.products.find((p) => p.id === l.productId)?.trackStock) continue;
+      this.apply(l.productId, r.kind, () => (r.kind === "sale" ? -l.quantity : l.quantity), { saleId: rec.id, documentNumber: r.documentNumber, actorName: r.employeeName });
+    }
     return rec;
   }
   async getSale(_o: OrganizationId, id: string) {
@@ -88,8 +116,8 @@ function setup() {
 describe("PIN", () => {
   it("entra com o PIN do quiosque; gestor pela configuração", async () => {
     const { uc } = setup();
-    expect(await uc.login(ORG, "1234")).toEqual({ ...ANA, isManager: false });
-    expect(await uc.login(ORG, "0000")).toEqual({ ...RUI, isManager: true });
+    expect(await uc.login(ORG, "1234")).toEqual({ ...ANA, isManager: false, view: "A" });
+    expect(await uc.login(ORG, "0000")).toEqual({ ...RUI, isManager: true, view: "A" });
     await expect(uc.login(ORG, "9999")).rejects.toBeInstanceOf(PosPinError);
   });
 
@@ -97,6 +125,59 @@ describe("PIN", () => {
     const { uc } = setup();
     for (let i = 0; i < 10; i++) await expect(uc.login(ORG, "9999")).rejects.toThrow("PIN inválido");
     await expect(uc.login(ORG, "1234")).rejects.toThrow(/Demasiados/);
+  });
+});
+
+describe("vista do ecrã", () => {
+  it("cada funcionário escolhe a sua; quem nunca escolheu fica com a do gestor", async () => {
+    const { uc, store } = setup();
+    expect(await uc.setView(ORG, "1234", "B")).toMatchObject({ id: ANA.id, view: "B" });
+    store.settings = { ...store.settings, defaultView: "B" };
+    expect((await uc.login(ORG, "0000")).view).toBe("B");
+    store.settings = { ...store.settings, defaultView: "A" };
+    expect((await uc.login(ORG, "1234")).view).toBe("B");
+    expect((await uc.login(ORG, "0000")).view).toBe("A");
+  });
+
+  it("vista inválida ou PIN errado → recusado", async () => {
+    const { uc, store } = setup();
+    await expect(uc.setView(ORG, "1234", "C" as PosView)).rejects.toBeInstanceOf(PosRuleError);
+    await expect(uc.setView(ORG, "9999", "B")).rejects.toBeInstanceOf(PosPinError);
+    await expect(uc.saveSettings(ORG, { ...store.settings, defaultView: "Z" as PosView })).rejects.toThrow(/Vista por omissão/);
+    expect(store.views.size).toBe(0);
+  });
+});
+
+describe("stock", () => {
+  it("venda sem stock suficiente é permitida: o stock fica negativo e é alerta; NC devolve ao stock", async () => {
+    const { uc } = setup();
+    const sale = await uc.checkout(ORG, { pin: "1234", lines: [{ productId: "p2", quantity: 3 }, { productId: "p1", quantity: 1 }], payment: { method: "card" } });
+    let day = await uc.stockDay(ORG);
+    expect(day.moves).toHaveLength(1);
+    expect(day.alerts).toEqual([expect.objectContaining({ productName: "Refrigerante", kind: "sale", qty: -3, stockBefore: 1, stockAfter: -2, actorName: ANA.name, documentNumber: "FR POS/1", alert: true })]);
+    await uc.refund(ORG, sale.id, { pin: "0000", lines: [{ lineNumber: 1, quantity: 1 }], reason: "Devolução do cliente" });
+    day = await uc.stockDay(ORG);
+    expect(day.moves.map((m) => [m.kind, m.stockAfter, m.alert])).toEqual([
+      ["sale", -2, true],
+      ["refund", -1, false],
+    ]);
+  });
+
+  it("entrada e contagem na gestão, com quem fez e a nota", async () => {
+    const { uc, store } = setup();
+    expect(await uc.adjustStock(ORG, "p2", { kind: "entry", qty: 24, note: " Fornecedor " }, "gestor@exemplo.invalid")).toMatchObject({ kind: "entry", qty: 24, stockBefore: 1, stockAfter: 25, note: "Fornecedor", actorName: "gestor@exemplo.invalid" });
+    expect(await uc.adjustStock(ORG, "p2", { kind: "count", countTo: 20 }, "")).toMatchObject({ kind: "count", qty: -5, stockAfter: 20, actorName: "Gestão", note: null });
+    expect(store.products.find((p) => p.id === "p2")!.stockQty).toBe(20);
+  });
+
+  it("recusa: produto que não controla stock, quantidades inválidas, produto desconhecido", async () => {
+    const { uc, store } = setup();
+    await expect(uc.adjustStock(ORG, "p1", { kind: "entry", qty: 5 }, "g")).rejects.toThrow(/não controla stock/);
+    await expect(uc.adjustStock(ORG, "p2", { kind: "entry", qty: 0 }, "g")).rejects.toThrow(/Entrada/);
+    await expect(uc.adjustStock(ORG, "p2", { kind: "entry", qty: 1.5 }, "g")).rejects.toThrow(/Entrada/);
+    await expect(uc.adjustStock(ORG, "p2", { kind: "count", countTo: -1 }, "g")).rejects.toThrow(/Contagem/);
+    await expect(uc.adjustStock(ORG, "px", { kind: "count", countTo: 1 }, "g")).rejects.toThrow(/Produto/);
+    expect(store.moves).toHaveLength(0);
   });
 });
 
@@ -186,11 +267,14 @@ describe("produtos", () => {
     expect(store.upserted.map((p) => p.ref)).toEqual(["V1"]);
     await expect(uc.updateProduct(ORG, "p1", { vatRate: 18 })).rejects.toThrow(/6, 13 ou 23/);
     expect(await uc.updateProduct(ORG, "p1", { priceCents: 1990, active: false })).toMatchObject({ priceCents: 1990, active: false });
+    await expect(uc.updateProduct(ORG, "p1", { barcode: "12 34" })).rejects.toThrow(/Código de barras/);
+    expect(await uc.updateProduct(ORG, "p1", { barcode: " 5601234567890 ", trackStock: true })).toMatchObject({ barcode: "5601234567890", trackStock: true });
+    expect(await uc.updateProduct(ORG, "p1", { barcode: "" })).toMatchObject({ barcode: null });
   });
 
   it("configuração: gestores têm de ser funcionários ativos", async () => {
     const { uc } = setup();
-    await expect(uc.saveSettings(ORG, { invoiceSeriesRef: SERIES.fr, creditSeriesRef: SERIES.nc, managerEmployeeIds: ["55555555-5555-4555-8555-555555555555"] })).rejects.toThrow(/Gestor/);
+    await expect(uc.saveSettings(ORG, { invoiceSeriesRef: SERIES.fr, creditSeriesRef: SERIES.nc, managerEmployeeIds: ["55555555-5555-4555-8555-555555555555"], defaultView: "A" })).rejects.toThrow(/Gestor/);
     expect(await uc.listEmployees(ORG)).toEqual([
       { ...ANA, isManager: false },
       { ...RUI, isManager: true },

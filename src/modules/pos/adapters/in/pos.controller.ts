@@ -1,7 +1,7 @@
 import { Router, type Request } from "express";
 import { idempotency, type IdempotencyStore } from "../../../../infra/http/idempotency.js";
 import { problem } from "../../../../infra/http/problem-details.js";
-import type { Discount, PaymentMethod } from "../../domain/entities/pos.js";
+import type { Discount, PaymentMethod, PosView } from "../../domain/entities/pos.js";
 import { PosNotFoundError, PosPinError, PosRuleError } from "../../domain/errors.js";
 import type { PosPort } from "../../domain/ports/in/pos.port.js";
 
@@ -43,7 +43,7 @@ function discount(v: unknown): Discount | undefined {
 }
 
 /**
- * POS do Mezza (fase 1): `/api/pos/*`, com a permissão `sales.invoicing`
+ * POS do Mezza: `/api/pos/*`, com a permissão `sales.invoicing`
  * (GET = READ, resto = MANAGE). O funcionário identifica-se com o PIN do
  * quiosque em cada venda; vendas e devoluções exigem `Idempotency-Key` —
  * um duplo toque nunca emite duas faturas.
@@ -64,9 +64,22 @@ export function createPosRouter(pos: PosPort, store: IdempotencyStore): Router {
       ...(typeof b.priceCents === "number" ? { priceCents: b.priceCents } : {}),
       ...(typeof b.vatRate === "number" ? { vatRate: b.vatRate } : {}),
       ...(typeof b.active === "boolean" ? { active: b.active } : {}),
+      ...(typeof b.trackStock === "boolean" ? { trackStock: b.trackStock } : {}),
+      ...(typeof b.barcode === "string" || b.barcode === null ? { barcode: b.barcode as string | null } : {}),
     };
     res.json(await run(() => pos.updateProduct(org(req), id(req), patch)));
   });
+  // Entrada ou contagem de stock (gestão). Quem fez fica no movimento.
+  r.post(`${B}/products/:id/stock`, async (req, res) => {
+    const b = body(req);
+    const note = typeof b.note === "string" ? b.note : null;
+    let adjustment;
+    if (b.kind === "entry" && typeof b.qty === "number") adjustment = { kind: "entry" as const, qty: b.qty, note };
+    else if (b.kind === "count" && typeof b.countTo === "number") adjustment = { kind: "count" as const, countTo: b.countTo, note };
+    else bad("{kind: entry, qty} ou {kind: count, countTo}");
+    res.status(201).json(await run(() => pos.adjustStock(org(req), id(req), adjustment, req.auth!.email ?? "")));
+  });
+  r.get(`${B}/stock`, async (req, res) => res.json(await run(() => pos.stockDay(org(req), typeof req.query.date === "string" ? req.query.date : undefined))));
 
   r.get(`${B}/settings`, async (req, res) => res.json(await run(() => pos.getSettings(org(req)))));
   r.put(`${B}/settings`, async (req, res) => {
@@ -77,12 +90,17 @@ export function createPosRouter(pos: PosPort, store: IdempotencyStore): Router {
       invoiceSeriesRef: optional(b.invoiceSeriesRef, "invoiceSeriesRef"),
       creditSeriesRef: optional(b.creditSeriesRef, "creditSeriesRef"),
       managerEmployeeIds: (b.managerEmployeeIds as unknown[]).map((x) => uuid(x, "managerEmployeeIds[]")),
+      defaultView: (b.defaultView ?? "A") as PosView,
     };
     res.json(await run(() => pos.saveSettings(org(req), settings)));
   });
   r.get(`${B}/employees`, async (req, res) => res.json(await run(() => pos.listEmployees(org(req)))));
 
   r.post(`${B}/pin`, async (req, res) => res.json(await run(() => pos.login(org(req), pin(body(req))))));
+  r.put(`${B}/view`, async (req, res) => {
+    const b = body(req);
+    res.json(await run(() => pos.setView(org(req), pin(b), b.view as PosView)));
+  });
 
   r.post(`${B}/sales`, async (req, res) => {
     const b = body(req);

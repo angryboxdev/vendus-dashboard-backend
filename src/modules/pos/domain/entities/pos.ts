@@ -1,5 +1,5 @@
 /**
- * POS do Mezza (fase 1): produtos vendidos na caixa, vendas e devoluções.
+ * POS do Mezza: produtos vendidos na caixa, vendas e devoluções, stock próprio (fase 2).
  * Os documentos fiscais são do módulo `invoicing` (formação até haver certificado).
  */
 
@@ -18,13 +18,20 @@ export interface PosProduct {
   vatRate: PosVatRate;
   /** P produto, S serviço (SAF-T ProductType). */
   productType: "P" | "S";
-  /** Controla stock (bebidas); o contador é da fase 2. */
+  /** Controla stock (bebidas sim, pizzas não). */
   trackStock: boolean;
+  /** Stock atual do POS (pode ser negativo: venda sem stock é permitida). */
+  stockQty: number;
+  /** Código de barras (EAN) lido pelo leitor; único na organização. */
+  barcode: string | null;
   imageUrl: string | null;
   active: boolean;
 }
 
-export type NewPosProduct = Omit<PosProduct, "id" | "active">;
+export type NewPosProduct = Omit<PosProduct, "id" | "active" | "stockQty">;
+
+/** Código de barras aceite (EAN-8/13, UPC, Code 128 simples). */
+export const BARCODE = /^[0-9A-Za-z.-]{4,40}$/;
 
 export type PaymentMethod = "card" | "cash" | "mbway";
 export const PAYMENT_METHODS: readonly PaymentMethod[] = ["card", "cash", "mbway"];
@@ -48,7 +55,13 @@ export interface PosEmployee {
   id: string;
   name: string;
   isManager: boolean;
+  /** Vista do ecrã de venda: a escolhida pelo funcionário ou a por omissão. */
+  view: PosView;
 }
+
+/** A = grelha com talão; B = lista com pesquisa. */
+export type PosView = "A" | "B";
+export const POS_VIEWS: readonly PosView[] = ["A", "B"];
 
 export interface PosSettings {
   /** Série de faturas-recibo (FR) usada pelo POS. */
@@ -56,6 +69,8 @@ export interface PosSettings {
   /** Série de notas de crédito (NC). */
   creditSeriesRef: string | null;
   managerEmployeeIds: string[];
+  /** Vista por omissão (definida pelo gestor). */
+  defaultView: PosView;
 }
 
 /** Uma linha vendida, como fica registada na venda (para devoluções e painel). */
@@ -92,3 +107,24 @@ export interface PosSaleRecord {
   lines: SoldLine[];
   createdAt: string;
 }
+
+/**
+ * Movimento de stock do POS (append-only). Venda e devolução vêm do registo da
+ * venda; entrada e contagem da gestão. `qty` é a variação (venda < 0).
+ */
+export interface StockMove {
+  id: string;
+  productId: string;
+  kind: "sale" | "refund" | "entry" | "count";
+  qty: number;
+  stockBefore: number;
+  stockAfter: number;
+  saleId: string | null;
+  documentNumber: string | null;
+  actorName: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+/** Venda que deixou o stock negativo (vendida «na mesma»): é um alerta de stock. */
+export const isStockAlert = (m: StockMove): boolean => m.kind === "sale" && m.stockAfter < 0;

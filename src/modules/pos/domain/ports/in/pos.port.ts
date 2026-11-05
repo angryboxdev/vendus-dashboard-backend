@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
-import type { CartLineInput, Discount, PaymentMethod, PosEmployee, PosProduct, PosSaleRecord, PosSettings } from "../../entities/pos.js";
+import type { CartLineInput, Discount, PaymentMethod, PosEmployee, PosProduct, PosSaleRecord, PosSettings, PosView, StockMove } from "../../entities/pos.js";
 import type { CsvImportPreview } from "../../services/vendus-csv.service.js";
 
 export interface CheckoutInput {
@@ -30,23 +30,51 @@ export interface DaySummary {
   byPayment: Record<PaymentMethod, number>;
 }
 
+/** Movimento de stock com o nome do produto (para o painel e a gestão). */
+export type StockMoveView = StockMove & { productName: string; alert: boolean };
+
+export interface StockDay {
+  date: string;
+  moves: StockMoveView[];
+  /** Vendas feitas sem stock suficiente (o stock ficou negativo). */
+  alerts: StockMoveView[];
+}
+
+export type ProductPatch = {
+  name?: string;
+  category?: string | null;
+  priceCents?: number;
+  vatRate?: number;
+  active?: boolean;
+  trackStock?: boolean;
+  barcode?: string | null;
+};
+
+export type StockAdjustment = { kind: "entry"; qty: number; note?: string | null } | { kind: "count"; countTo: number; note?: string | null };
+
 export interface PosEmployeeOption {
   id: string;
   name: string;
   isManager: boolean;
 }
 
-/** Casos de uso do POS (fase 1). */
+/** Casos de uso do POS. */
 export interface PosPort {
   listProducts(org: OrganizationId, opts?: { activeOnly?: boolean }): Promise<PosProduct[]>;
   previewImport(csv: string): CsvImportPreview;
   importProducts(org: OrganizationId, csv: string): Promise<{ created: number; updated: number; skipped: number }>;
-  updateProduct(org: OrganizationId, id: string, patch: { name?: string; category?: string | null; priceCents?: number; vatRate?: number; active?: boolean }): Promise<PosProduct>;
+  updateProduct(org: OrganizationId, id: string, patch: ProductPatch): Promise<PosProduct>;
+  /** Entrada ou contagem de stock (gestão); `actorName` = quem fez, para o registo. */
+  adjustStock(org: OrganizationId, productId: string, adjustment: StockAdjustment, actorName: string): Promise<StockMove>;
+  /** Movimentos e alertas de stock de um dia de Lisboa (hoje por omissão). */
+  stockDay(org: OrganizationId, date?: string): Promise<StockDay>;
   getSettings(org: OrganizationId): Promise<PosSettings>;
   saveSettings(org: OrganizationId, s: PosSettings): Promise<PosSettings>;
   listEmployees(org: OrganizationId): Promise<PosEmployeeOption[]>;
   /** Entrada com o PIN do quiosque de ponto. */
   login(org: OrganizationId, pin: string): Promise<PosEmployee>;
+  /** O funcionário (pelo PIN) escolhe a sua vista; fica lembrada na próxima entrada. */
+  setView(org: OrganizationId, pin: string, view: PosView): Promise<PosEmployee>;
   checkout(org: OrganizationId, input: CheckoutInput): Promise<PosSaleRecord>;
   refund(org: OrganizationId, saleId: string, input: RefundInput): Promise<PosSaleRecord>;
   documents(org: OrganizationId, date?: string): Promise<PosSaleRecord[]>;

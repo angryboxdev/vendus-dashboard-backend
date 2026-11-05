@@ -31,7 +31,7 @@ function setup() {
   return { store, gateway };
 }
 
-const product = (over: Partial<PosProduct>): PosProduct => ({ id: "p", ref: "VPIZ1", name: "Pizza Teste", category: null, priceCents: 1850, vatRate: 13, productType: "P", trackStock: false, imageUrl: null, active: true, ...over });
+const product = (over: Partial<PosProduct>): PosProduct => ({ id: "p", ref: "VPIZ1", name: "Pizza Teste", category: null, priceCents: 1850, vatRate: 13, productType: "P", trackStock: false, stockQty: 0, barcode: null, imageUrl: null, active: true, ...over });
 
 describe("POS → motor de faturação (FR de formação)", () => {
   it("desconto por linha e na venda: o total gravado é o do POS, ao cêntimo", async () => {

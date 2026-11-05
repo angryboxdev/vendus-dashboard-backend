@@ -6,8 +6,8 @@ import { parseCsv, previewVendusCsv, priceToCents } from "../../domain/services/
 // Exportação fictícia no formato do Vendus (cabeçalho real, artigos inventados).
 const HEADER =
   'Nome,Categoria,Marca,Referência,"Código de Barras",Descrição,"Descrição na Fatura",PVP,"Preço Fornecedor",Unidade,"Controlar Stock","IVA - Taxa","IVA - Isenção (Código)","IVA - Isenção (Norma)","Tipo de Produto","Classe de Bem","PVP - Delivery","PVP - Eatz","Loja",Imagem';
-const row = (name: string, cat: string, ref: string, price: string, vat: string, stock = "Não", type = "P", img = "") =>
-  `"${name}",${cat},,${ref},,"Descrição, com vírgula",Não,"${price}","0,0000",Uni,${stock},${vat},,,${type},,"1,0000",,S,${img}`;
+const row = (name: string, cat: string, ref: string, price: string, vat: string, stock = "Não", type = "P", img = "", barcode = "") =>
+  `"${name}",${cat},,${ref},${barcode},"Descrição, com vírgula",Não,"${price}","0,0000",Uni,${stock},${vat},,,${type},,"1,0000",,S,${img}`;
 const CSV = [
   HEADER,
   row("Pizza Teste (Grande)", "Grandes", "VPIZ1-1", "18,5000", "13", "Não", "P", "https://exemplo.invalid/p.png"),
@@ -39,6 +39,7 @@ describe("CSV do Vendus", () => {
       vatRate: 13,
       productType: "P",
       trackStock: false,
+      barcode: null,
       imageUrl: "https://exemplo.invalid/p.png",
     });
     expect(byRef["VREF2-1"]!.product).toMatchObject({ trackStock: true, vatRate: 23 });
@@ -47,6 +48,20 @@ describe("CSV do Vendus", () => {
     expect(byRef["VCUP4-1"]).toMatchObject({ status: "skip", reason: "Preço 0 € (modificador, cupão ou oferta)" });
     expect(byRef["VMEN5-1"]!.warnings).toContain("Tipo «C» do Vendus tratado como produto");
     expect(byRef["VOUT6-1"]).toMatchObject({ status: "skip", reason: "IVA 18 não suportado (6, 13 ou 23 %)" });
+  });
+
+  it("código de barras: importado; repetido fica só no primeiro, com aviso", () => {
+    const csv = [
+      HEADER,
+      row("Água Teste 33cl", "Bebidas", "VAGU1", "1,5000", "6", "Sim", "P", "", "5601234567890"),
+      row("Água Teste Gás 33cl", "Bebidas", "VAGU2", "1,6000", "6", "Sim", "P", "", "5601234567890"),
+      row("Sumo Teste", "Bebidas", "VSUM3", "2,0000", "23", "Sim", "P", "", "ab c"),
+    ].join("\r\n");
+    const byRef = Object.fromEntries(previewVendusCsv(csv).rows.map((r) => [r.ref, r]));
+    expect(byRef["VAGU1"]!.product!.barcode).toBe("5601234567890");
+    expect(byRef["VAGU2"]!.product!.barcode).toBeNull();
+    expect(byRef["VAGU2"]!.warnings).toEqual(["Código de barras 5601234567890 já está em VAGU1 — ficou sem código"]);
+    expect(byRef["VSUM3"]!.product!.barcode).toBeNull();
   });
 
   it("ficheiro sem as colunas obrigatórias → erro claro", () => {
@@ -63,6 +78,8 @@ const product = (over: Partial<PosProduct> = {}): PosProduct => ({
   vatRate: 13,
   productType: "P",
   trackStock: false,
+  stockQty: 0,
+  barcode: null,
   imageUrl: null,
   active: true,
   ...over,

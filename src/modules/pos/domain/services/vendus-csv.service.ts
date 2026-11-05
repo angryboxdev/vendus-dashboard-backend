@@ -1,4 +1,4 @@
-import { POS_VAT_RATES, type NewPosProduct, type PosVatRate } from "../entities/pos.js";
+import { BARCODE, POS_VAT_RATES, type NewPosProduct, type PosVatRate } from "../entities/pos.js";
 
 /**
  * Exportação de produtos do Vendus (CSV, separador «,», decimais com vírgula,
@@ -80,7 +80,7 @@ export function priceToCents(text: string): number | null {
   return rest && Number(rest[0]) >= 5 ? cents + 1 : cents;
 }
 
-const COLUMNS = { name: "Nome", category: "Categoria", ref: "Referência", price: "PVP", vat: "IVA - Taxa", type: "Tipo de Produto", stock: "Controlar Stock", image: "Imagem" } as const;
+const COLUMNS = { name: "Nome", category: "Categoria", ref: "Referência", price: "PVP", vat: "IVA - Taxa", type: "Tipo de Produto", stock: "Controlar Stock", barcode: "Código de Barras", image: "Imagem" } as const;
 
 export function previewVendusCsv(text: string): CsvImportPreview {
   const [header, ...data] = parseCsv(text);
@@ -120,6 +120,7 @@ export function previewVendusCsv(text: string): CsvImportPreview {
         vatRate: vatRate as PosVatRate,
         productType: typeText === "S" ? "S" : "P",
         trackStock: /^sim$/i.test(get(r, "stock")),
+        barcode: BARCODE.test(get(r, "barcode")) ? get(r, "barcode") : null,
         imageUrl: /^https:\/\//.test(get(r, "image")) ? get(r, "image") : null,
       },
     };
@@ -150,6 +151,17 @@ export function previewVendusCsv(text: string): CsvImportPreview {
       row.reason = `Referência repetida (linha ${first.line})`;
       row.product = null;
     } else seenRefs.set(row.ref, row);
+  }
+  // O mesmo código de barras em dois produtos: fica no primeiro (é único na organização).
+  const seenBarcodes = new Map<string, CsvImportRow>();
+  for (const row of rows) {
+    const code = row.status === "import" ? row.product?.barcode : null;
+    if (!code || !row.product) continue;
+    const first = seenBarcodes.get(code);
+    if (first) {
+      row.product = { ...row.product, barcode: null };
+      row.warnings.push(`Código de barras ${code} já está em ${first.ref} — ficou sem código`);
+    } else seenBarcodes.set(code, row);
   }
   const toImport = rows.filter((r) => r.status === "import").length;
   return { rows, toImport, skipped: rows.length - toImport };

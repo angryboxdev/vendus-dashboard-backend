@@ -1,7 +1,22 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
-import { PAYMENT_METHODS, POS_VAT_RATES, SAFT_PAYMENT, type PaymentMethod, type PosEmployee, type PosProduct, type PosSaleRecord, type PosSettings, type SoldLine } from "../../domain/entities/pos.js";
+import {
+  BARCODE,
+  isStockAlert,
+  PAYMENT_METHODS,
+  POS_VAT_RATES,
+  POS_VIEWS,
+  SAFT_PAYMENT,
+  type PaymentMethod,
+  type PosEmployee,
+  type PosProduct,
+  type PosSaleRecord,
+  type PosSettings,
+  type PosView,
+  type SoldLine,
+  type StockMove,
+} from "../../domain/entities/pos.js";
 import { PosNotFoundError, PosPinError, PosRuleError } from "../../domain/errors.js";
-import type { CheckoutInput, DaySummary, PosEmployeeOption, PosPort, RefundInput } from "../../domain/ports/in/pos.port.js";
+import type { CheckoutInput, DaySummary, PosEmployeeOption, PosPort, ProductPatch, RefundInput, StockAdjustment, StockDay } from "../../domain/ports/in/pos.port.js";
 import type { InvoiceLine, InvoicingGatewayPort, PosClockPort, PosEmployeesPort, PosStorePort } from "../../domain/ports/out/pos.ports.js";
 import { centsToEuros, priceSale } from "../../domain/services/sale-pricing.service.js";
 import { previewVendusCsv } from "../../domain/services/vendus-csv.service.js";
@@ -55,18 +70,48 @@ export class PosUseCases implements PosPort {
     return { ...out, skipped: preview.skipped };
   }
 
-  async updateProduct(org: OrganizationId, id: string, patch: { name?: string; category?: string | null; priceCents?: number; vatRate?: number; active?: boolean }) {
+  async updateProduct(org: OrganizationId, id: string, patch: ProductPatch) {
     if (patch.name !== undefined && (patch.name.trim().length < 2 || patch.name.length > 200)) throw new PosRuleError("Nome com 2 a 200 caracteres");
     if (patch.priceCents !== undefined && (!Number.isInteger(patch.priceCents) || patch.priceCents < 0 || patch.priceCents > 1_000_000)) throw new PosRuleError("Preço inválido");
     if (patch.vatRate !== undefined && !(POS_VAT_RATES as readonly number[]).includes(patch.vatRate)) throw new PosRuleError("IVA tem de ser 6, 13 ou 23 %");
+    const barcode = patch.barcode === undefined ? undefined : patch.barcode?.trim() || null;
+    if (barcode && !BARCODE.test(barcode)) throw new PosRuleError("Código de barras inválido (4 a 40 letras ou algarismos)");
     const clean = {
       ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
       ...(patch.category !== undefined ? { category: patch.category?.trim() || null } : {}),
       ...(patch.priceCents !== undefined ? { priceCents: patch.priceCents } : {}),
       ...(patch.vatRate !== undefined ? { vatRate: patch.vatRate as PosProduct["vatRate"] } : {}),
       ...(patch.active !== undefined ? { active: patch.active } : {}),
+      ...(patch.trackStock !== undefined ? { trackStock: patch.trackStock } : {}),
+      ...(barcode !== undefined ? { barcode } : {}),
     };
     return this.deps.store.updateProduct(org, id, clean);
+  }
+
+  async adjustStock(org: OrganizationId, productId: string, a: StockAdjustment, actorName: string): Promise<StockMove> {
+    const [product] = await this.deps.store.productsByIds(org, [productId]);
+    if (!product) throw new PosNotFoundError("Produto");
+    if (!product.trackStock) throw new PosRuleError(`${product.name} não controla stock — ative «Controla stock» primeiro`);
+    const note = a.note?.trim().slice(0, 200) || null;
+    const actor = actorName.trim().slice(0, 200) || "Gestão";
+    if (a.kind === "entry") {
+      if (!Number.isInteger(a.qty) || a.qty < 1 || a.qty > 100_000) throw new PosRuleError("Entrada: quantidade inteira entre 1 e 100 000");
+      return this.deps.store.recordStockMove(org, { productId, kind: "entry", qty: a.qty, actorName: actor, note });
+    }
+    if (a.kind === "count") {
+      if (!Number.isInteger(a.countTo) || a.countTo < 0 || a.countTo > 1_000_000) throw new PosRuleError("Contagem: quantidade inteira, 0 ou mais");
+      return this.deps.store.recordStockMove(org, { productId, kind: "count", countTo: a.countTo, actorName: actor, note });
+    }
+    throw new PosRuleError("Tipo de movimento inválido (entrada ou contagem)");
+  }
+
+  async stockDay(org: OrganizationId, date?: string): Promise<StockDay> {
+    const day = date && DATE.test(date) ? date : this.deps.clock.todayLisbon();
+    const { fromIso, toIso } = this.deps.clock.lisbonDayBounds(day);
+    const [moves, products] = await Promise.all([this.deps.store.stockMovesBetween(org, fromIso, toIso), this.deps.store.listProducts(org)]);
+    const names = new Map(products.map((p) => [p.id, p.name]));
+    const views = moves.map((m) => ({ ...m, productName: names.get(m.productId) ?? "Produto", alert: isStockAlert(m) }));
+    return { date: day, moves: views, alerts: views.filter((m) => m.alert) };
   }
 
   getSettings(org: OrganizationId) {
@@ -77,7 +122,8 @@ export class PosUseCases implements PosPort {
     const active = new Set((await this.deps.employees.listActive(org)).map((e) => e.id));
     const managers = [...new Set(s.managerEmployeeIds)];
     if (managers.some((id) => !active.has(id))) throw new PosRuleError("Gestor desconhecido ou inativo");
-    const clean = { invoiceSeriesRef: s.invoiceSeriesRef || null, creditSeriesRef: s.creditSeriesRef || null, managerEmployeeIds: managers };
+    if (!POS_VIEWS.includes(s.defaultView)) throw new PosRuleError("Vista por omissão: A (grelha) ou B (lista)");
+    const clean = { invoiceSeriesRef: s.invoiceSeriesRef || null, creditSeriesRef: s.creditSeriesRef || null, managerEmployeeIds: managers, defaultView: s.defaultView };
     await this.deps.store.saveSettings(org, clean);
     return clean;
   }
@@ -97,8 +143,15 @@ export class PosUseCases implements PosPort {
       this.pinFailures.set(org, [...recent, now]);
       throw new PosPinError();
     }
-    const settings = await this.deps.store.getSettings(org);
-    return { ...employee, isManager: settings.managerEmployeeIds.includes(employee.id) };
+    const [settings, view] = await Promise.all([this.deps.store.getSettings(org), this.deps.store.getEmployeeView(org, employee.id)]);
+    return { ...employee, isManager: settings.managerEmployeeIds.includes(employee.id), view: view ?? settings.defaultView };
+  }
+
+  async setView(org: OrganizationId, pin: string, view: PosView): Promise<PosEmployee> {
+    if (!POS_VIEWS.includes(view)) throw new PosRuleError("Vista: A (grelha) ou B (lista)");
+    const employee = await this.login(org, pin);
+    await this.deps.store.setEmployeeView(org, employee.id, view);
+    return { ...employee, view };
   }
 
   async checkout(org: OrganizationId, input: CheckoutInput): Promise<PosSaleRecord> {
