@@ -1,6 +1,6 @@
 # POS do Mezza — Fase 1 (demonstração de 2026-11-07)
 
-Status: em curso (2026-11-05) · Ramo: `faturacao-certificada` (worktrees backend e frontend)
+Status: fase 1 feita no ramo (2026-11-05) — por publicar · Ramo: `faturacao-certificada` (worktrees backend e frontend)
 Fonte: `Mezza_POS_Especificacao_Prototipo.md` (gerência, 2026-11-04) + decisões de 2026-11-05.
 
 ## Decisões (utilizador, 2026-11-05)
