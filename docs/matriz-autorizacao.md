@@ -4,7 +4,7 @@
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 770 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 771 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -578,6 +578,7 @@ Endpoints: 770 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/organization` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
 | PATCH | `/api/organization` | permission:company.organization:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/organization/history` | permission:company.organization:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/organization/issuer-sync` | permission:company.organization:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | POST | `/api/organization/logo` | permission:company.organization:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/payable-entries` | permission:finance.payables:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | POST | `/api/payable-entries` | permission:finance.payables:MANAGE | ✔ | ✖ | ✖ | ✔ | ✖ |

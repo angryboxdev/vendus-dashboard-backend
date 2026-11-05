@@ -2,6 +2,7 @@ import { mintOrganizationId } from "../../../../kernel/organization-id.js";
 import { GetOrganizationProfileUseCase } from "../../application/use-cases/get-organization-profile.use-case.js";
 import { UpdateOrganizationProfileUseCase } from "../../application/use-cases/update-organization-profile.use-case.js";
 import { UploadOrganizationLogoUseCase } from "../../application/use-cases/upload-organization-logo.use-case.js";
+import { SyncCompanyIssuerUseCase } from "../../application/use-cases/sync-company-issuer.use-case.js";
 import { ListOrganizationHistoryUseCase } from "../../application/use-cases/list-organization-history.use-case.js";
 import { InvalidOrganizationProfileError, OrganizationNotFoundError } from "../../domain/errors.js";
 import {
@@ -140,5 +141,21 @@ describe("Empresa → emitente das faturas", () => {
     const dto = await new UpdateOrganizationProfileUseCase(repository, storage, auditLog, NOW, sync).execute({ organizationId: ORG, actor: "admin@exemplo.pt", changes: complete });
     expect(dto.issuerSync).toEqual({ status: "failed", message: "NISS inválido" });
     expect((await repository.findById(ORG))?.toProps().region).toBe("Porto");
+  });
+});
+
+describe("SyncCompanyIssuerUseCase («Usar os dados da Empresa»)", () => {
+  it("sincroniza com os dados gravados; diz o que falta; sem porta ligada responde failed", async () => {
+    const { repository } = setup();
+    const calls: unknown[] = [];
+    const port = { sync: async (...a: unknown[]) => void calls.push(a) };
+    expect(await new SyncCompanyIssuerUseCase(repository, port).execute({ organizationId: ORG, actor: "admin@exemplo.pt" })).toEqual({
+      status: "incomplete",
+      missing: ["legalName", "niss", "email", "postalCode", "city", "region"],
+    });
+    repository.seed(profileProps({ id: ORG, legalName: "Exemplo, Lda", niss: "12345678901", email: "geral@exemplo.invalid", postalCode: "4000-001", city: "Porto", region: "Porto" }));
+    expect(await new SyncCompanyIssuerUseCase(repository, port).execute({ organizationId: ORG, actor: "admin@exemplo.pt" })).toEqual({ status: "synced" });
+    expect(calls).toHaveLength(1);
+    expect(await new SyncCompanyIssuerUseCase(repository, null).execute({ organizationId: ORG, actor: "admin@exemplo.pt" })).toMatchObject({ status: "failed" });
   });
 });
