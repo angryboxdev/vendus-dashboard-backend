@@ -69,6 +69,7 @@ composition root (`LegalEntitiesContextPort`).
 
 ## Design decisions (ADR summary)
 
+- **Sem ecrã próprio desde 2026-11-05**: a página «Entidades legais» saiu do RH; a entidade é mantida a partir de Empresa & Estrutura → Empresa (`upsertFromCompany`: cria pelo NIF, ou atualiza com motivo automático e reativa se arquivada; um NIF novo cria outra entidade e a antiga fica, porque séries e documentos apontam para ela). As rotas `/api/novo-rh/legal-entities` continuam (a faturação lista os emitentes por aqui). A «entidade de cada centro» deixou de ter UI.
 - **Nunca apagar** — trigger na BD recusa `delete` em `legal_entities`.
 - **NIF único por organização e país** (índice na BD + 409 com `existingId`).
 - **Ligação centro → entidade em tabela própria** — não altera a tabela antiga `locations`.

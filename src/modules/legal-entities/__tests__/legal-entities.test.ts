@@ -70,3 +70,17 @@ describe("Entidades legais (FE-092)", () => {
     await expect(uc.setLocationEntity(ORG, RH, "lisboa", pt.id)).rejects.toMatchObject({ code: "not_found" });
   });
 });
+
+describe("Emitente vindo da Empresa", () => {
+  test("cria a entidade pelo NIF; depois atualiza-a (com motivo automático) e reativa se arquivada", async () => {
+    const { uc } = setup();
+    const created = await uc.upsertFromCompany(ORG, RH, PT);
+    expect(created).toMatchObject({ taxId: "123456789", name: PT.name });
+    const renamed = await uc.upsertFromCompany(ORG, RH, { ...PT, name: "Nome Novo Demo, Lda", city: "Porto" });
+    expect(renamed).toMatchObject({ id: created.id, name: "Nome Novo Demo, Lda", city: "Porto" });
+    await uc.archive(ORG, RH, created.id, "teste de arquivo");
+    const again = await uc.upsertFromCompany(ORG, RH, PT);
+    expect(again).toMatchObject({ id: created.id, status: "active", name: PT.name });
+    expect((await uc.list(ORG, { status: "all" })).length).toBe(1);
+  });
+});

@@ -130,6 +130,7 @@ Portas em `domain/ports/in/invoicing.ports.ts`: `IssueDocumentPort` e `Invoicing
 
 ## Design decisions (ADR summary)
 
+- **Emitente = a Empresa** (2026-11-05): o emitente continua a ser uma entidade legal, mas criada/atualizada ao gravar Empresa & Estrutura → Empresa (ver README do `organization`).
 - **Vetores oficiais da AT nos testes**: o SAF-T de demonstração (`saft_idemo599999999.xml`, 36 documentos) e o par de chaves de exemplo publicados pela AT estão em `__tests__/fixtures/at/`. A chave privada aí é a de **exemplo público da AT** (descarregada do Portal das Finanças), não a do Mezza — exceção consciente à regra «nunca chaves no repositório»; se um scanner de segredos a assinalar, marcar como falso positivo.
 - **Aritmética `Dec` local** (`decimal-ops`) em vez de alterar `src/kernel/money`: o módulo fica isolado dos outros (decisão do utilizador); pode subir ao kernel quando outro módulo precisar.
 - **Emissão por compare-and-swap** (D4 da spec): a app lê a série, monta e assina o n+1 e grava com o estado esperado; a RPC bloqueia a série (`for update`), confere número, ATCUD e datas contra a série e falha com `stale_series` se outro terminal emitiu — assim não há buracos nem cadeias bifurcadas e a chave privada nunca entra na BD.

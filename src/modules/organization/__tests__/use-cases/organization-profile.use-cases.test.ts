@@ -113,3 +113,32 @@ describe("ListOrganizationHistoryUseCase", () => {
     expect(history[0]?.entityId).toBe(ORG);
   });
 });
+
+describe("Empresa → emitente das faturas", () => {
+  const complete = { legalName: "Exemplo Restauração, Lda", niss: "12345678901", email: "geral@exemplo.invalid", postalCode: "4000-001", city: "Porto", region: "Porto", phone: "+351 220 000 000" };
+
+  it("com dados em falta grava a Empresa e diz o que falta, sem tocar no emitente", async () => {
+    const { repository, storage, auditLog } = setup();
+    const sync = { calls: [] as unknown[], sync: async (...a: unknown[]) => void sync.calls.push(a) };
+    const dto = await new UpdateOrganizationProfileUseCase(repository, storage, auditLog, NOW, sync).execute({ organizationId: ORG, actor: "admin@exemplo.pt", changes: { legalName: "Exemplo Restauração, Lda" } });
+    expect(dto.issuerSync).toEqual({ status: "incomplete", missing: ["niss", "email", "postalCode", "city", "region"] });
+    expect(sync.calls).toHaveLength(0);
+    expect((await repository.findById(ORG))?.toProps().legalName).toBe("Exemplo Restauração, Lda");
+  });
+
+  it("completa: envia a razão social, o NIF e a morada; telefone só no formato internacional", async () => {
+    const { repository, storage, auditLog } = setup();
+    const sync = { calls: [] as unknown[][], sync: async (...a: unknown[]) => void sync.calls.push(a) };
+    const dto = await new UpdateOrganizationProfileUseCase(repository, storage, auditLog, NOW, sync).execute({ organizationId: ORG, actor: "admin@exemplo.pt", changes: complete });
+    expect(dto.issuerSync).toEqual({ status: "synced" });
+    expect(sync.calls[0]).toEqual([ORG, "admin@exemplo.pt", { legalName: "Exemplo Restauração, Lda", country: "PT", nif: "123456789", niss: "12345678901", email: "geral@exemplo.invalid", street: "Rua de Teste, 1", postalCode: "4000-001", city: "Porto", region: "Porto", phone: "+351220000000" }]);
+  });
+
+  it("se o emitente falhar, a Empresa fica gravada e o erro volta na resposta", async () => {
+    const { repository, storage, auditLog } = setup();
+    const sync = { sync: async () => { throw new Error("NISS inválido"); } };
+    const dto = await new UpdateOrganizationProfileUseCase(repository, storage, auditLog, NOW, sync).execute({ organizationId: ORG, actor: "admin@exemplo.pt", changes: complete });
+    expect(dto.issuerSync).toEqual({ status: "failed", message: "NISS inválido" });
+    expect((await repository.findById(ORG))?.toProps().region).toBe("Porto");
+  });
+});

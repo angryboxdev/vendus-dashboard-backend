@@ -657,7 +657,27 @@ app.use("/api", locationsModule.router);
 
 // Organization module (hexagonal, Base Organizacional — Empresa): GET qualquer
 // role autenticado; PATCH/logo/histórico com requireMinRole("admin") inline.
-const organizationModule = createOrganizationModule();
+// A Empresa é o emitente das faturas: gravar cria/atualiza a entidade legal com o mesmo NIF
+// (legalEntitiesModule é criado mais abaixo; só é usado quando alguém grava a Empresa).
+const organizationModule = createOrganizationModule({
+  issuerSync: {
+    sync: async (org, actor, d) => {
+      await legalEntitiesModule.legalEntities.upsertFromCompany(org, { email: actor }, {
+        name: d.legalName,
+        country: d.country,
+        taxIdType: "nif",
+        taxId: d.nif,
+        socialSecurityId: d.niss,
+        billingEmail: d.email,
+        street: d.street,
+        postalCode: d.postalCode,
+        city: d.city,
+        region: d.region,
+        phone: d.phone,
+      });
+    },
+  },
+});
 app.use("/api", organizationModule.router);
 
 // Documents module (hexagonal, Base Organizacional — motor único de documentos):

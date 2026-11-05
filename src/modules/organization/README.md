@@ -99,6 +99,7 @@ desativa organizações (continua a ser o provisioning) e não gere Locais
 
 ## Design decisions (ADR summary)
 
+- **A Empresa é o emitente das faturas** (2026-11-05): gravar a Empresa chama a porta `CompanyIssuerSyncPort` (ligada no `server.ts` a `legalEntities.upsertFromCompany`), que cria/atualiza a entidade legal com o mesmo NIF. Exige razão social, NIF, NISS, e-mail, morada, código postal, localidade, `region` (distrito, coluna nova) e país PT (`companyIssuerData`); com campos em falta grava na mesma e responde `issuerSync: incomplete` com a lista. Uma falha a sincronizar nunca desfaz a gravação (`issuerSync: failed`).
 - **Empresa = `Organization` existente** (spec D1) — expande-se
   `organizations` (`20261004100000_organization_profile.sql`); `name` é o
   nome comercial e `address` a morada fiscal, sem migração de dados.

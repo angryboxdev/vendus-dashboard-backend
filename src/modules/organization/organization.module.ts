@@ -8,19 +8,21 @@ import { UpdateOrganizationProfileUseCase } from "./application/use-cases/update
 import { UploadOrganizationLogoUseCase } from "./application/use-cases/upload-organization-logo.use-case.js";
 import { ListOrganizationHistoryUseCase } from "./application/use-cases/list-organization-history.use-case.js";
 import { OrganizationController } from "./adapters/in/organization.controller.js";
+import type { CompanyIssuerSyncPort } from "./domain/ports/out/company-issuer-sync.port.js";
 
 /**
  * Composition root do módulo organization (Base Organizacional, ticket 01).
- * Único sítio que conhece os adapters concretos.
+ * Único sítio que conhece os adapters concretos. `issuerSync` (server.ts)
+ * liga a Empresa ao emitente das faturas (módulo legal-entities).
  */
-export function createOrganizationModule(): { router: Router } {
+export function createOrganizationModule(deps: { issuerSync?: CompanyIssuerSyncPort } = {}): { router: Router } {
   const repository = new SupabaseOrganizationProfileRepository(createScopedQuery);
   const storage = new SupabaseOrganizationFileStorageAdapter();
   const auditLog = new SupabaseOrganizationAuditLogAdapter(createScopedQuery);
 
   const controller = new OrganizationController(
     new GetOrganizationProfileUseCase(repository, storage),
-    new UpdateOrganizationProfileUseCase(repository, storage, auditLog),
+    new UpdateOrganizationProfileUseCase(repository, storage, auditLog, undefined, deps.issuerSync ?? null),
     new UploadOrganizationLogoUseCase(repository, storage, auditLog),
     new ListOrganizationHistoryUseCase(auditLog),
   );

@@ -1,6 +1,7 @@
 import type { OrganizationId } from "../../../../../kernel/organization-id.js";
 import type { OrganizationProfileChanges, OrganizationStatus } from "../../entities/organization-profile.js";
 import type { OrganizationAuditLogRecordDTO } from "../out/organization-audit-log.port.js";
+import type { IssuerSyncResult } from "../out/company-issuer-sync.port.js";
 
 export interface OrganizationProfileDTO {
   id: string;
@@ -11,6 +12,7 @@ export interface OrganizationProfileDTO {
   address: string | null;
   postalCode: string | null;
   city: string | null;
+  region: string | null;
   country: string;
   email: string | null;
   phone: string | null;
@@ -41,7 +43,8 @@ export interface UpdateOrganizationProfileCommand {
 }
 
 export interface UpdateOrganizationProfilePort {
-  execute(command: UpdateOrganizationProfileCommand): Promise<OrganizationProfileDTO>;
+  /** Devolve também o resultado de sincronizar o emitente das faturas (quando ligado). */
+  execute(command: UpdateOrganizationProfileCommand): Promise<OrganizationProfileDTO & { issuerSync?: IssuerSyncResult }>;
 }
 
 // ── Logotipo ──────────────────────────────────────────────────────────────
