@@ -7,6 +7,8 @@ export interface PosStorePort {
   productsByIds(org: OrganizationId, ids: string[]): Promise<PosProduct[]>;
   /** Cria ou atualiza pela referência; devolve quantos criou e atualizou. */
   upsertProducts(org: OrganizationId, products: NewPosProduct[]): Promise<{ created: number; updated: number }>;
+  /** Tira da venda os produtos ativos cuja referência não está na lista; devolve quantos. */
+  deactivateProductsExcept(org: OrganizationId, refs: string[]): Promise<number>;
   /** O stock não se altera aqui: só por `recordStockMove` (e pela venda registada). */
   updateProduct(org: OrganizationId, id: string, patch: Partial<Omit<PosProduct, "id" | "ref" | "stockQty">>): Promise<PosProduct>;
   getSettings(org: OrganizationId): Promise<PosSettings>;

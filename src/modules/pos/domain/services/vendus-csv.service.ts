@@ -1,8 +1,9 @@
 import { BARCODE, POS_VAT_RATES, type NewPosProduct, type PosVatRate } from "../entities/pos.js";
 
 /**
- * Exportação de produtos do Vendus (CSV, separador «,», decimais com vírgula,
- * campos entre aspas) → produtos do POS. Puro.
+ * Exportação de produtos do Vendus (CSV, separador «,» ou «;», decimais com
+ * vírgula, campos entre aspas) → produtos do POS. Puro. Sem coluna/valor de
+ * «Referência», a referência gera-se pelo nome (estável entre importações).
  * Ignora linhas a 0 € (modificadores, cupões, ofertas) e duplicados pelo nome
  * (fica a primeira linha com categoria); assinala o que precisa de revisão.
  */
@@ -26,8 +27,10 @@ export interface CsvImportPreview {
   skipped: number;
 }
 
-/** CSV (RFC 4180): aspas, vírgulas e quebras de linha dentro de aspas. */
+/** CSV (RFC 4180): aspas, separador e quebras de linha dentro de aspas. O separador («,» ou «;») sai do cabeçalho. */
 export function parseCsv(text: string): string[][] {
+  const head = text.split(/\r?\n/, 1)[0] ?? "";
+  const sep = (head.match(/;/g) ?? []).length > (head.match(/,/g) ?? []).length ? ";" : ",";
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -43,7 +46,7 @@ export function parseCsv(text: string): string[][] {
         } else quoted = false;
       } else field += ch;
     } else if (ch === '"') quoted = true;
-    else if (ch === ",") {
+    else if (ch === sep) {
       row.push(field);
       field = "";
     } else if (ch === "\n" || ch === "\r") {
@@ -69,6 +72,16 @@ const normalize = (v: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+/** Referência a partir do nome: «Tomate & Pesto (Individual)» → «TOMATE-PESTO-INDIVIDUAL» (máx. 60). */
+export function refFromName(name: string): string {
+  return normalize(name)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/, "");
+}
+
 /** «9,9000» → 990 cêntimos; texto inválido → null. */
 export function priceToCents(text: string): number | null {
   const t = text.trim().replace(/\./g, "").replace(",", ".");
@@ -86,13 +99,13 @@ export function previewVendusCsv(text: string): CsvImportPreview {
   const [header, ...data] = parseCsv(text);
   if (!header) return { rows: [], toImport: 0, skipped: 0 };
   const col = Object.fromEntries(Object.entries(COLUMNS).map(([k, label]) => [k, header.findIndex((h) => h.trim() === label)])) as Record<keyof typeof COLUMNS, number>;
-  const missing = (["name", "ref", "price", "vat"] as const).filter((k) => col[k] < 0).map((k) => COLUMNS[k]);
+  const missing = (["name", "price", "vat"] as const).filter((k) => col[k] < 0).map((k) => COLUMNS[k]);
   if (missing.length > 0) throw new Error(`Colunas em falta no ficheiro: ${missing.join(", ")}`);
   const get = (r: string[], k: keyof typeof COLUMNS) => (col[k] >= 0 ? (r[col[k]] ?? "").trim() : "");
 
   const rows: CsvImportRow[] = data.map((r, i) => {
     const name = get(r, "name").replace(/\s+/g, " ");
-    const ref = get(r, "ref");
+    const ref = get(r, "ref") || refFromName(name);
     const category = get(r, "category") || null;
     const priceCents = priceToCents(get(r, "price"));
     const vatText = get(r, "vat");
@@ -105,6 +118,7 @@ export function previewVendusCsv(text: string): CsvImportPreview {
     if (priceCents === null) return { ...base, status: "skip", reason: "Preço inválido" };
     if (priceCents === 0) return { ...base, status: "skip", reason: "Preço 0 € (modificador, cupão ou oferta)" };
     if (vatRate === null || !(POS_VAT_RATES as readonly number[]).includes(vatRate)) return { ...base, status: "skip", reason: `IVA ${vatText || "vazio"} não suportado (6, 13 ou 23 %)` };
+    if (!get(r, "ref")) warnings.push("Sem referência no ficheiro — gerada pelo nome");
     if (typeText === "C") warnings.push("Tipo «C» do Vendus tratado como produto");
     if (!category) warnings.push("Sem categoria");
     if (/duplicado/i.test(name)) warnings.push("O nome contém «Duplicado»");

@@ -124,6 +124,15 @@ export class SupabasePosStore implements PosStorePort {
     return { created: products.length - updated, updated };
   }
 
+  async deactivateProductsExcept(org: OrganizationId, refs: string[]) {
+    const keep = new Set(refs);
+    const ids = (await this.listProducts(org, { activeOnly: true })).filter((p) => !keep.has(p.ref)).map((p) => p.id);
+    if (ids.length === 0) return 0;
+    const { error } = await this.scoped(org).table("pos_products").update({ active: false, updated_at: new Date().toISOString() }).in("id", ids);
+    if (error) throw new Error(`POS: erro a tirar produtos da venda: ${error.message}`);
+    return ids.length;
+  }
+
   async updateProduct(org: OrganizationId, id: string, patch: Partial<Omit<PosProduct, "id" | "ref">>): Promise<PosProduct> {
     const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (patch.name !== undefined) row.name = patch.name;
