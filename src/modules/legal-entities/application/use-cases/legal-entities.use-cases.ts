@@ -81,6 +81,19 @@ export class LegalEntitiesUseCases {
     return updated;
   }
 
+  /**
+   * Emitente vindo de Empresa & Estrutura → Empresa: cria a entidade com este
+   * NIF ou atualiza-a (reativa se estiver arquivada). Um NIF novo cria outra
+   * entidade; a antiga fica (séries e documentos apontam para ela).
+   */
+  async upsertFromCompany(org: OrganizationId, actor: Actor, input: LegalEntityInput) {
+    const clean = validateLegalEntity(input);
+    const existing = await this.repo.findByTaxId(org, clean.country, clean.taxId);
+    if (!existing) return this.create(org, actor, input);
+    if (existing.status === "archived") await this.restore(org, actor, existing.id);
+    return this.update(org, actor, existing.id, input, "Sincronizado a partir de Empresa & Estrutura → Empresa");
+  }
+
   /** Arquivar só sem centros ativos nem contratos em vigor (409 com as contagens). */
   async archive(org: OrganizationId, actor: Actor, id: string, reason: string) {
     const cur = await this.getOr404(org, id);

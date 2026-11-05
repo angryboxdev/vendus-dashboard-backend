@@ -4,7 +4,7 @@ import { OrganizationProfile, type OrganizationStatus } from "../../domain/entit
 import type { OrganizationProfileRepositoryPort } from "../../domain/ports/out/organization-profile-repository.port.js";
 
 const COLUMNS =
-  "id, name, legal_name, nif, niss, address, postal_code, city, country, email, phone, website, timezone, logo_storage_path, status, updated_at";
+  "id, name, legal_name, nif, niss, address, postal_code, city, region, country, email, phone, website, timezone, logo_storage_path, status, updated_at";
 
 interface Row {
   id: string;
@@ -15,6 +15,7 @@ interface Row {
   address: string | null;
   postal_code: string | null;
   city: string | null;
+  region: string | null;
   country: string;
   email: string | null;
   phone: string | null;
@@ -35,6 +36,7 @@ function toEntity(row: Row): OrganizationProfile {
     address: row.address,
     postalCode: row.postal_code,
     city: row.city,
+    region: row.region ?? null,
     country: row.country,
     email: row.email,
     phone: row.phone,
@@ -74,6 +76,7 @@ export class SupabaseOrganizationProfileRepository implements OrganizationProfil
         address: p.address,
         postal_code: p.postalCode,
         city: p.city,
+        region: p.region,
         country: p.country,
         email: p.email,
         phone: p.phone,

@@ -25,6 +25,8 @@ export interface OrganizationProfileProps {
   address: string | null;
   postalCode: string | null;
   city: string | null;
+  /** Distrito/região da morada fiscal (o emitente das faturas exige-o). */
+  region: string | null;
   /** ISO 3166-1 alpha-2. */
   country: string;
   email: string | null;
@@ -48,6 +50,7 @@ export type OrganizationProfileChanges = Partial<
     | "address"
     | "postalCode"
     | "city"
+    | "region"
     | "country"
     | "email"
     | "phone"
@@ -97,6 +100,7 @@ export class OrganizationProfile {
     if (changes.address !== undefined) merged.address = trimOrNull(changes.address);
     if (changes.postalCode !== undefined) merged.postalCode = trimOrNull(changes.postalCode);
     if (changes.city !== undefined) merged.city = trimOrNull(changes.city);
+    if (changes.region !== undefined) merged.region = trimOrNull(changes.region);
     if (changes.country !== undefined) merged.country = changes.country.trim().toUpperCase();
     if (changes.email !== undefined) merged.email = trimOrNull(changes.email)?.toLowerCase() ?? null;
     if (changes.phone !== undefined) merged.phone = trimOrNull(changes.phone);
@@ -119,6 +123,7 @@ export class OrganizationProfile {
     if (merged.postalCode !== null && isPortugal && !isValidPortuguesePostalCode(merged.postalCode)) {
       errors.push({ field: "postalCode", message: "formato NNNN-NNN" });
     }
+    if (merged.region !== null && (merged.region.length < 2 || merged.region.length > 80)) errors.push({ field: "region", message: "2 a 80 caracteres" });
     if (!isValidCountryCode(merged.country)) errors.push({ field: "country", message: "código de país inválido" });
     if (merged.email !== null && !isValidEmail(merged.email)) errors.push({ field: "email", message: "email inválido" });
     if (merged.phone !== null && !isValidPhone(merged.phone)) errors.push({ field: "phone", message: "telefone inválido" });

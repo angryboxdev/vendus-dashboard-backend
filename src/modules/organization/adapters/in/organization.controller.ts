@@ -18,7 +18,7 @@ const logoUpload = multer({
 });
 
 const STRING_FIELDS = ["name", "legalName", "nif", "country", "timezone"] as const;
-const NULLABLE_STRING_FIELDS = ["niss", "address", "postalCode", "city", "email", "phone", "website"] as const;
+const NULLABLE_STRING_FIELDS = ["niss", "address", "postalCode", "city", "region", "email", "phone", "website"] as const;
 
 /** Só copia campos conhecidos com o tipo certo — `status`/`id`/logotipo nunca são aceites pelo PATCH. */
 function parseChanges(body: Record<string, unknown>): OrganizationProfileChanges | string {
