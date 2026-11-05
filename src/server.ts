@@ -96,6 +96,8 @@ import { createReportsModule } from "./modules/reports/reports.module.js";
 import { createDocumentDistributionsModule } from "./modules/document-distributions/document-distributions.module.js";
 import { createLegalEntitiesModule } from "./modules/legal-entities/legal-entities.module.js";
 import { createInvoicingModule, readInvoicingConfig, safeInvoicingConfig } from "./modules/invoicing/invoicing.module.js";
+import { createPosModule } from "./modules/pos/pos.module.js";
+import { decToString } from "./kernel/money/decimal.js";
 import { createInvitationsModule } from "./modules/invitations/invitations.module.js";
 import type { ReportRow } from "./modules/reports/domain/entities/report.js";
 import { SupabaseAbsencesDirectory } from "./modules/absences/adapters/out/supabase-absences-directory.js";
@@ -1147,6 +1149,20 @@ const invoicingModule = createInvoicingModule({
   },
 });
 app.use("/api", invoicingModule.router);
+
+// POS do Mezza (fase 1): vende com o PIN do quiosque e fatura pelo módulo invoicing (formação).
+// Isolado do Vendus, AirMenu, DRE e Gestão de Stock. Ver src/modules/pos/README.md.
+const posModule = createPosModule({
+  hashPin: (pin) => hashPin(ENV.HR_KIOSK_HMAC_SECRET, pin),
+  invoicing: {
+    issue: (org, req) => invoicingModule.issue.execute(org, { ...req, confirmWarnings: false }),
+    document: async (org, id) => {
+      const d = await invoicingModule.useCases.getDocument(org, id);
+      return { grossTotal: decToString(d.grossTotal), customer: { taxId: d.customer.taxId, name: d.customer.name } };
+    },
+  },
+});
+app.use("/api", posModule.router);
 
 const workspaceModule = createWorkspaceModule({
   context: {

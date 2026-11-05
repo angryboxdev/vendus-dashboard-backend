@@ -1,10 +1,10 @@
 # Matriz de autorização (perfil × endpoint)
 
-> Gerado por `npm run authz:matrix` em 2026-11-04. Não editar à mão.
+> Gerado por `npm run authz:matrix` em 2026-11-05. Não editar à mão.
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 755 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 767 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -634,6 +634,18 @@ Endpoints: 755 · pré-autenticação: 20 · não classificados: 0
 | POST | `/api/pizzas/:pizzaId/recipes/:recipeId/items` | permission:stock.recipes:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | DELETE | `/api/pizzas/:pizzaId/recipes/:recipeId/items/:itemId` | permission:stock.recipes:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | PUT | `/api/pizzas/:pizzaId/recipes/:recipeId/items/:itemId` | permission:stock.recipes:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/pos/documents` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/pos/employees` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/pos/pin` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/pos/products` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
+| PUT | `/api/pos/products/:id` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/pos/products/import` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/pos/products/import/preview` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/pos/sales` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| POST | `/api/pos/sales/:id/refund` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/pos/settings` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
+| PUT | `/api/pos/settings` | permission:sales.invoicing:MANAGE | ✔ | ✖ | ✖ | ✖ | ✖ |
+| GET | `/api/pos/summary` | permission:sales.invoicing:READ | ✔ | ✖ | ✖ | ✖ | ✖ |
 | GET | `/api/preparations` | permission:stock.recipes:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/preparations` | permission:stock.recipes:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |
 | DELETE | `/api/preparations/:id` | permission:stock.recipes:MANAGE | ✔ | ✔ | ✖ | ✖ | ✖ |

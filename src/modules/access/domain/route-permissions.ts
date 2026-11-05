@@ -60,6 +60,8 @@ export const ROUTE_RULES: RouteRule[] = [
   // SAF-T: um ano de dados de clientes num ficheiro — exige MANAGE (e fica registado).
   { pattern: /^\/api\/invoicing\/saft$/, target: p("sales.invoicing", "MANAGE") },
   { pattern: /^\/api\/invoicing(\/|$)/, target: p("sales.invoicing") },
+  // POS do Mezza (fase 1, documentos de formação): a mesma permissão da faturação.
+  { pattern: /^\/api\/pos(\/|$)/, target: p("sales.invoicing") },
 
   // ── DRE ──────────────────────────────────────────────────────────────
   { pattern: /^\/api\/reports\/dre\/(receita-bruta|kpis|fluxo-caixa|resultado|conferencia-vendas|parametros|vendas-restaurante)$/, target: p("dre.statement") },
