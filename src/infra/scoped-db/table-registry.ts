@@ -303,6 +303,12 @@ export const TABLE_REGISTRY = {
   // F6: registo das comunicações à AT (append-only) e credenciais WFA cifradas (só o backend lê).
   invoicing_at_communications: { organizationColumn: "org_id", locationBearing: false },
   invoicing_at_credentials: { organizationColumn: "org_id", locationBearing: false },
+  // POS do Mezza (fase 1): produtos da caixa, configuração e registo das vendas (append-only).
+  pos_products: { organizationColumn: "org_id", locationBearing: false },
+  pos_settings: { organizationColumn: "org_id", locationBearing: false },
+  pos_sales: { organizationColumn: "org_id", locationBearing: false },
+  pos_stock_moves: { organizationColumn: "org_id", locationBearing: false },
+  pos_employee_prefs: { organizationColumn: "org_id", locationBearing: false },
 } as const satisfies Record<string, TableRegistryEntry>;
 
 export type TableName = keyof typeof TABLE_REGISTRY;

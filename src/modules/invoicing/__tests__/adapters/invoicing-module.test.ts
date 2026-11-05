@@ -1,4 +1,4 @@
-import { createInvoicingModule, readInvoicingConfig, safeInvoicingConfig } from "../../invoicing.module.js";
+import { createInvoicingModule, normalizePem, readInvoicingConfig, safeInvoicingConfig } from "../../invoicing.module.js";
 import { FakeIssuers } from "../fakes/fakes.js";
 
 const noDb = (() => {
@@ -57,5 +57,27 @@ describe("comunicação à AT: configuração", () => {
     const mod = createInvoicingModule({ config, issuers: new FakeIssuers(), scoped: noDb });
     expect(mod.atConfigured).toBe(false);
     errors.mockRestore();
+  });
+});
+
+describe("chave de assinatura colada num painel (Render)", () => {
+  // Chave fictícia gerada no teste (nunca a do produtor).
+  const { privateKey } = require("node:crypto").generateKeyPairSync("rsa", { modulusLength: 1024 }) as { privateKey: import("node:crypto").KeyObject };
+  const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString().trim();
+
+  it.each([
+    ["várias linhas", pem],
+    ["uma linha com \n escritos", pem.replace(/\n/g, "\n")],
+    ["uma linha com espaços no lugar das quebras", pem.replace(/\n/g, " ")],
+  ])("%s → aceite e a assinar", (_nome, value) => {
+    const config = readInvoicingConfig({ privateKeyPem: value, keyVersion: "1", certificateNumber: null });
+    expect(config.privateKeyPem).toBe(pem);
+    const mod = createInvoicingModule({ config, issuers: new FakeIssuers(), scoped: noDb, gateway: null });
+    expect(mod.useCases.meta().signingAvailable).toBe(true);
+  });
+
+  it("vazio → sem chave", () => {
+    expect(normalizePem("  ")).toBeNull();
+    expect(normalizePem(null)).toBeNull();
   });
 });

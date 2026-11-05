@@ -1,6 +1,6 @@
 # 06 — Webservices AT (ambiente de testes)
 
-Status: feito no ramo (2026-11-04) — falta o teste real contra a AT (certificado de testes e chave pública)
+Status: publicado e desligado (2026-11-04) — decisão do utilizador: modelo tradicional (SAF-T pelo contabilista; séries no Portal). Não ligar sem nova decisão.
 Fase: F6 · Bloqueado por: 03
 
 SeriesWS (registar/anular/finalizar/consultar) e e-Fatura (RegisterInvoice/ChangeInvoiceStatus/RegisterWork) nas portas de teste; mTLS com certificado do produtor; outbox com reenvios e alerta antes do dia 5. Credenciais WFA/WSE por organização (decisão RGPD pendente). `security-review` obrigatório.

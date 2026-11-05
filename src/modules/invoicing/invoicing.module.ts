@@ -42,6 +42,19 @@ export interface AtConfig {
   authPublicKeyPem: string;
 }
 
+/**
+ * PEM vindo de uma variável de ambiente: aceita quebras de linha reais, `\n`
+ * escritos e uma só linha com espaços (o que alguns painéis fazem ao colar).
+ */
+export function normalizePem(raw: string | null | undefined): string | null {
+  const text = raw?.replace(/\\n/g, "\n").trim();
+  if (!text) return null;
+  const m = /^(-----BEGIN [A-Z ]+-----)\s*([\s\S]*?)\s*(-----END [A-Z ]+-----)$/.exec(text);
+  if (!m) return text;
+  const body = m[2]!.replace(/\s+/g, "");
+  return [m[1], ...(body.match(/.{1,64}/g) ?? []), m[3]].join("\n");
+}
+
 export function readInvoicingConfig(env: {
   privateKeyPem: string | null;
   keyVersion: string | null;
@@ -62,7 +75,7 @@ export function readInvoicingConfig(env: {
   const version = env.productVersion?.trim() || "1.0.0";
   if (version.length > 30) throw new Error("INVOICING_PRODUCT_VERSION com mais de 30 caracteres");
   return {
-    privateKeyPem: env.privateKeyPem?.replace(/\\n/g, "\n").trim() || null,
+    privateKeyPem: normalizePem(env.privateKeyPem),
     keyVersion,
     certificateNumber,
     software: { productName: env.productName?.trim() || "Mezza", producerTaxId: env.producerTaxId?.trim() || null, producerName: env.producerName?.trim() || null, version },
