@@ -47,6 +47,18 @@ export interface UpdateOrganizationProfilePort {
   execute(command: UpdateOrganizationProfileCommand): Promise<OrganizationProfileDTO & { issuerSync?: IssuerSyncResult }>;
 }
 
+// ── Emitente das faturas ─────────────────────────────────────────────────
+
+export interface SyncCompanyIssuerCommand {
+  organizationId: OrganizationId;
+  actor: string;
+}
+
+/** Cria/atualiza o emitente das faturas com os dados atuais da Empresa. */
+export interface SyncCompanyIssuerPort {
+  execute(command: SyncCompanyIssuerCommand): Promise<IssuerSyncResult>;
+}
+
 // ── Logotipo ──────────────────────────────────────────────────────────────
 
 export interface UploadOrganizationLogoCommand {

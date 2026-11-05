@@ -3,6 +3,7 @@ import multer from "multer";
 import type {
   GetOrganizationProfilePort,
   ListOrganizationHistoryPort,
+  SyncCompanyIssuerPort,
   UpdateOrganizationProfilePort,
   UploadOrganizationLogoPort,
 } from "../../domain/ports/in/organization-profile.ports.js";
@@ -62,6 +63,7 @@ export class OrganizationController {
     private readonly updateOrganizationProfile: UpdateOrganizationProfilePort,
     private readonly uploadOrganizationLogo: UploadOrganizationLogoPort,
     private readonly listOrganizationHistory: ListOrganizationHistoryPort,
+    private readonly syncCompanyIssuer: SyncCompanyIssuerPort | null = null,
   ) {
     this.router = Router();
     this.registerRoutes();
@@ -113,6 +115,19 @@ export class OrganizationController {
             mimeType: req.file.mimetype,
           }),
         );
+      } catch (e) {
+        handleError(e, res);
+      }
+    });
+
+    /** POST /organization/issuer-sync — cria/atualiza o emitente das faturas com os dados da Empresa (resultado, nunca 4xx por dados em falta). */
+    this.router.post("/organization/issuer-sync", async (req, res) => {
+      try {
+        if (!this.syncCompanyIssuer) {
+          res.json({ status: "failed", message: "Emitente das faturas não está ligado neste servidor" });
+          return;
+        }
+        res.json(await this.syncCompanyIssuer.execute({ organizationId: req.auth!.orgId, actor: req.auth!.email }));
       } catch (e) {
         handleError(e, res);
       }

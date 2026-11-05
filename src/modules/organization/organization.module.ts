@@ -7,6 +7,7 @@ import { GetOrganizationProfileUseCase } from "./application/use-cases/get-organ
 import { UpdateOrganizationProfileUseCase } from "./application/use-cases/update-organization-profile.use-case.js";
 import { UploadOrganizationLogoUseCase } from "./application/use-cases/upload-organization-logo.use-case.js";
 import { ListOrganizationHistoryUseCase } from "./application/use-cases/list-organization-history.use-case.js";
+import { SyncCompanyIssuerUseCase } from "./application/use-cases/sync-company-issuer.use-case.js";
 import { OrganizationController } from "./adapters/in/organization.controller.js";
 import type { CompanyIssuerSyncPort } from "./domain/ports/out/company-issuer-sync.port.js";
 
@@ -25,6 +26,7 @@ export function createOrganizationModule(deps: { issuerSync?: CompanyIssuerSyncP
     new UpdateOrganizationProfileUseCase(repository, storage, auditLog, undefined, deps.issuerSync ?? null),
     new UploadOrganizationLogoUseCase(repository, storage, auditLog),
     new ListOrganizationHistoryUseCase(auditLog),
+    new SyncCompanyIssuerUseCase(repository, deps.issuerSync ?? null),
   );
 
   return { router: controller.router };
