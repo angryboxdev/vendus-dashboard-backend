@@ -130,6 +130,7 @@ export function toInvoiceDTO(
     aiConfidence: invoice.aiConfidence,
     requiresReview: invoice.requiresReview,
     isDuplicate,
+    isPossibleDuplicate: false,
     costCenterGroupId: invoice.costCenterGroupId,
     costCenterCategoryId: invoice.costCenterCategoryId,
     financialType: invoice.financialType,

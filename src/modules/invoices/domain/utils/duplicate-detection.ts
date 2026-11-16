@@ -40,3 +40,27 @@ export function findDuplicateInvoiceIds(invoices: Invoice[]): Set<string> {
   }
   return duplicateIds;
 }
+
+/**
+ * IDs das faturas não canceladas do mesmo fornecedor com a mesma data, o
+ * mesmo total e o mesmo tipo de documento, mas com números diferentes —
+ * normalmente a mesma fatura importada duas vezes com o número mal lido.
+ * Só um aviso («possível duplicada»): o utilizador compara e decide.
+ */
+export function findPossibleDuplicateInvoiceIds(invoices: Invoice[]): Set<string> {
+  const groups = new Map<string, Invoice[]>();
+  for (const invoice of invoices) {
+    if (invoice.status === "cancelled" || !invoice.totalWithVat) continue;
+    const supplierKey = invoice.supplierId ?? (invoice.supplierNifSnapshot ? normalizeNif(invoice.supplierNifSnapshot) : null);
+    if (!supplierKey) continue;
+    const key = `${supplierKey}::${invoice.invoiceDate.toISOString().slice(0, 10)}::${invoice.totalWithVat}::${invoice.documentType}`;
+    groups.set(key, [...(groups.get(key) ?? []), invoice]);
+  }
+
+  const ids = new Set<string>();
+  for (const group of groups.values()) {
+    const numbers = new Set(group.map((i) => i.invoiceNumber.trim().toUpperCase()));
+    if (group.length > 1 && numbers.size > 1) for (const i of group) ids.add(i.id);
+  }
+  return ids;
+}

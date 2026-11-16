@@ -1,5 +1,5 @@
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
-import type { Invoice } from "../../domain/entities/invoice.js";
+import type { Invoice, InvoiceDocumentType } from "../../domain/entities/invoice.js";
 import type { InvoiceFilter, InvoiceRepositoryPort } from "../../domain/ports/out/invoice-repository.port.js";
 
 /**
@@ -101,6 +101,21 @@ export class FakeInvoiceRepository implements InvoiceRepositoryPort {
         if (excludeId && inv.id === excludeId) continue;
         return inv;
       }
+    }
+    return null;
+  }
+
+  async findSameDateAndTotal(
+    _organizationId: OrganizationId,
+    criteria: { supplierId: string | null; supplierNif: string | null; invoiceDate: Date; totalWithVat: number; documentType: InvoiceDocumentType },
+    excludeId?: string,
+  ): Promise<Invoice | null> {
+    const day = criteria.invoiceDate.toISOString().slice(0, 10);
+    for (const inv of this.store.values()) {
+      if (inv.status === "cancelled" || inv.id === excludeId) continue;
+      if (inv.invoiceDate.toISOString().slice(0, 10) !== day || inv.totalWithVat !== criteria.totalWithVat || inv.documentType !== criteria.documentType) continue;
+      const sameSupplier = (criteria.supplierId && inv.supplierId === criteria.supplierId) || (criteria.supplierNif && inv.supplierNifSnapshot === criteria.supplierNif);
+      if (sameSupplier) return inv;
     }
     return null;
   }

@@ -9,7 +9,7 @@ import type { InvoiceRepositoryPort, InvoiceFilter } from "../../domain/ports/ou
 import type { InvoiceLineRepositoryPort } from "../../domain/ports/out/invoice-line-repository.port.js";
 import type { InvoiceLine } from "../../domain/entities/invoice-line.js";
 import type { CostCenterCategoryReaderPort, CategoryLookup } from "../../domain/ports/out/cost-center-category-reader.port.js";
-import { findDuplicateInvoiceIds } from "../../domain/utils/duplicate-detection.js";
+import { findDuplicateInvoiceIds, findPossibleDuplicateInvoiceIds } from "../../domain/utils/duplicate-detection.js";
 import { toInvoiceDTO } from "./shared.js";
 import type { OrganizationId } from "../../../../kernel/organization-id.js";
 
@@ -89,9 +89,11 @@ export class ListInvoicesUseCase implements ListInvoicesPort {
     // findDuplicateInvoiceIds. Quando a listagem é filtrada (ex: por status),
     // só deteta duplicados dentro do subconjunto filtrado.
     const duplicateIds = findDuplicateInvoiceIds(invoices);
+    const possibleDuplicateIds = findPossibleDuplicateInvoiceIds(invoices);
 
-    return invoices.map((inv) =>
-      toInvoiceDTO(inv, linesByInvoice.get(inv.id), categoryMap, duplicateIds.has(inv.id), inv.lineDetailMode === "by_values" ? (allocationsByInvoice.get(inv.id) ?? []) : undefined),
-    );
+    return invoices.map((inv) => ({
+      ...toInvoiceDTO(inv, linesByInvoice.get(inv.id), categoryMap, duplicateIds.has(inv.id), inv.lineDetailMode === "by_values" ? (allocationsByInvoice.get(inv.id) ?? []) : undefined),
+      isPossibleDuplicate: possibleDuplicateIds.has(inv.id),
+    }));
   }
 }
