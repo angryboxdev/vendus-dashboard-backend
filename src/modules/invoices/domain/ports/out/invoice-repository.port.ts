@@ -34,6 +34,16 @@ export interface InvoiceRepositoryPort {
     supplierNif: string,
     excludeId?: string,
   ): Promise<Invoice | null>;
+  /**
+   * Fatura ativa (não cancelada) do mesmo fornecedor (supplierId, ou NIF normalizado quando não há
+   * fornecedor ligado) com a mesma data, o mesmo total e o mesmo tipo de documento — qualquer número.
+   * Apanha a mesma fatura importada duas vezes com o número mal lido. excludeId ignora essa fatura.
+   */
+  findSameDateAndTotal(
+    organizationId: OrganizationId,
+    criteria: { supplierId: string | null; supplierNif: string | null; invoiceDate: Date; totalWithVat: number; documentType: InvoiceDocumentType },
+    excludeId?: string,
+  ): Promise<Invoice | null>;
   /** Returns invoices that are direct debit, have directDebitDate ≤ today, and are not yet paid or cancelled. */
   findPendingDirectDebits(organizationId: OrganizationId): Promise<Invoice[]>;
   /** Documento (não cancelado) importado a partir do mesmo ficheiro (SHA-256). */

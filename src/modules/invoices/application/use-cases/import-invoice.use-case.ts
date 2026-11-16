@@ -419,6 +419,18 @@ export class ImportInvoiceUseCase implements ImportInvoicePort {
     }
     if (fiscalCheck.kind === "existing_stock_only") validationIssues.push("exists_in_stock");
     if (fiscalCheck.kind === "possible_duplicate") validationIssues.push("possible_duplicate");
+    // Número mal lido (ex.: «20251022601» em vez de «02051202601») escapa às verificações por número:
+    // o mesmo fornecedor, data e total já lançados noutra fatura → «possível duplicado», para comparar.
+    if (!validationIssues.includes("duplicate_invoice") && !validationIssues.includes("possible_duplicate") && extraction.issueDate && extraction.totalWithVat) {
+      const sameAmount = await this.invoiceRepo.findSameDateAndTotal(command.organizationId, {
+        supplierId: supplierMatch?.id ?? null,
+        supplierNif: supplierNif ?? null,
+        invoiceDate: extraction.issueDate,
+        totalWithVat: extraction.totalWithVat,
+        documentType: command.documentType ?? extraction.documentType ?? "invoice",
+      });
+      if (sameAmount) validationIssues.push("possible_duplicate");
+    }
     if (fiscalCheck.kind === "incomplete") {
       // NIF lido com dígito de controlo errado: dizê-lo (não é falta de NIF nem de país).
       validationIssues.push(fiscalCheck.missing.includes("issuer_tax_id_invalid") ? "supplier_nif_invalid" : "fiscal_identity_incomplete");

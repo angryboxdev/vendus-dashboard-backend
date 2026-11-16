@@ -360,6 +360,51 @@ describe("ImportInvoiceUseCase", () => {
     expect(result.validationIssues).toContain("duplicate_invoice");
   });
 
+  // ── Possível duplicado: mesmo fornecedor, data e total com outro número ─────
+
+  const seedSameDayTotal = async (overrides: { invoiceNumber: string; totalWithVat?: number; invoiceDate?: Date; supplierNifSnapshot?: string }) => {
+    const { Invoice } = await import("../../domain/entities/invoice.js");
+    await invoiceRepo.save(ORG_ID, Invoice.createFromImport({
+      supplierName: "Makro Portugal SA",
+      supplierNifSnapshot: overrides.supplierNifSnapshot ?? "500123456",
+      invoiceNumber: overrides.invoiceNumber,
+      invoiceDate: overrides.invoiceDate ?? new Date("2026-06-01"),
+      dueDate: null,
+      subtotalWithoutVat: 100000,
+      totalVat: 23000,
+      totalWithVat: overrides.totalWithVat ?? 123000,
+      source: "pdf_import",
+      attachmentUrl: null,
+      aiConfidence: 0.95,
+      requiresReview: false,
+    }));
+  };
+  const runImport = () => useCase.execute({ organizationId: ORG_ID, fileBuffer: makeBuffer(), filename: "fatura.pdf", mimeType: "application/pdf" });
+
+  it("avisa possible_duplicate quando o número difere (mal lido) mas fornecedor, data e total coincidem", async () => {
+    // Caso real: «FAC 20251022601/051783» (lido pela IA) vs «FAC 02051202601/051783».
+    await seedSameDayTotal({ invoiceNumber: "INV-2062-010" });
+    const result = await runImport();
+    expect(result.validationIssues).toContain("possible_duplicate");
+    expect(result.validationIssues).not.toContain("duplicate_invoice");
+    expect(result.invoice.requiresReview).toBe(true);
+  });
+
+  it("não avisa possible_duplicate quando o total é diferente", async () => {
+    await seedSameDayTotal({ invoiceNumber: "INV-2062-010", totalWithVat: 99900 });
+    expect((await runImport()).validationIssues).not.toContain("possible_duplicate");
+  });
+
+  it("não avisa possible_duplicate quando a data é diferente", async () => {
+    await seedSameDayTotal({ invoiceNumber: "INV-2062-010", invoiceDate: new Date("2026-06-02") });
+    expect((await runImport()).validationIssues).not.toContain("possible_duplicate");
+  });
+
+  it("não avisa possible_duplicate quando o fornecedor é outro", async () => {
+    await seedSameDayTotal({ invoiceNumber: "INV-2062-010", supplierNifSnapshot: "509999999" });
+    expect((await runImport()).validationIssues).not.toContain("possible_duplicate");
+  });
+
   // ── Guard: never treat our own company as the supplier ──────────────────────
 
   it("nunca associa a própria empresa como fornecedor quando a IA extrai o NIF da organização (caso Gold Energy / Raul Afonso e Mariana Cavalcanti)", async () => {

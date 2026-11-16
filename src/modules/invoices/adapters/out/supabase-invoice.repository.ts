@@ -230,6 +230,32 @@ export class SupabaseInvoiceRepository implements InvoiceRepositoryPort {
     return toEntity(data[0] as unknown as Record<string, unknown>);
   }
 
+  async findSameDateAndTotal(
+    organizationId: OrganizationId,
+    criteria: { supplierId: string | null; supplierNif: string | null; invoiceDate: Date; totalWithVat: number; documentType: InvoiceDocumentType },
+    excludeId?: string,
+  ): Promise<Invoice | null> {
+    const targetNif = criteria.supplierNif ? normalizeNif(criteria.supplierNif) : null;
+    if (!criteria.supplierId && !targetNif) return null;
+    let q = this.scopedQuery(organizationId)
+      .table("invoices")
+      .select("*")
+      .eq("invoice_date", criteria.invoiceDate.toISOString().slice(0, 10))
+      .eq("total_with_vat", criteria.totalWithVat)
+      .eq("document_type", criteria.documentType)
+      .neq("status", "cancelled")
+      .limit(20);
+    if (excludeId) q = q.neq("id", excludeId);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    // Mesmo fornecedor: pelo supplierId ligado ou pelo NIF (normalizado em memória, como em findDuplicateByNif).
+    const match = ((data ?? []) as unknown as Record<string, unknown>[]).find((row) =>
+      (criteria.supplierId && row["supplier_id"] === criteria.supplierId) ||
+      (targetNif && row["supplier_nif_snapshot"] && normalizeNif(String(row["supplier_nif_snapshot"])) === targetNif),
+    );
+    return match ? toEntity(match) : null;
+  }
+
   async findByFileHash(organizationId: OrganizationId, sha256: string): Promise<Invoice | null> {
     const { data, error } = await this.scopedQuery(organizationId)
       .table("invoices")

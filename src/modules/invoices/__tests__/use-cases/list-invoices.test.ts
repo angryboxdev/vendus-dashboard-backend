@@ -185,6 +185,28 @@ describe("ListInvoicesUseCase", () => {
     expect(result.every((dto) => !dto.isDuplicate)).toBe(true);
   });
 
+  // ── isPossibleDuplicate ──────────────────────────────────────────────────────
+
+  it("marca isPossibleDuplicate quando fornecedor, data e total coincidem com números diferentes (número mal lido)", async () => {
+    await repo.save(ORG_ID, makeInvoice({ supplierId: "sup-1", invoiceNumber: "FAC 20251022601/051783" }));
+    await repo.save(ORG_ID, makeInvoice({ supplierId: "sup-1", invoiceNumber: "FAC 02051202601/051783" }));
+    await repo.save(ORG_ID, makeInvoice({ supplierId: "sup-1", invoiceNumber: "FAC 02051202601/051999", totalWithVat: 50000 }));
+
+    const result = await useCase.execute(ORG_ID);
+    const flagged = result.filter((dto) => dto.isPossibleDuplicate).map((dto) => dto.invoiceNumber).sort();
+    expect(flagged).toEqual(["FAC 02051202601/051783", "FAC 20251022601/051783"]);
+    expect(result.every((dto) => !dto.isDuplicate)).toBe(true);
+  });
+
+  it("isPossibleDuplicate=false para fornecedores diferentes ou fatura cancelada", async () => {
+    await repo.save(ORG_ID, makeInvoice({ supplierId: "sup-1", invoiceNumber: "A-1" }));
+    await repo.save(ORG_ID, makeInvoice({ supplierId: "sup-2", invoiceNumber: "A-2" }));
+    await repo.save(ORG_ID, makeInvoice({ supplierId: "sup-1", invoiceNumber: "A-3" }).cancel());
+
+    const result = await useCase.execute(ORG_ID);
+    expect(result.every((dto) => !dto.isPossibleDuplicate)).toBe(true);
+  });
+
   // ── status "overdue" (derivado, nunca persistido) ───────────────────────────
 
   it("filtra por status='overdue' mesmo sem nenhuma fatura com esse status literal persistido", async () => {
