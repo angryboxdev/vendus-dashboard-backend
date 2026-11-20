@@ -181,7 +181,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     path: "/hr/novo/configuracoes",
     keywords: ["tipo de ausência", "fluxo de aprovação", "aprovadores", "feriados", "calendário de férias", "horários", "configurar ausências"],
     steps: [
-      "Abra Configurações (engrenagem) → grupo «Calendários e ausências».",
+      "Abra Configurações (engrenagem) → grupo «Calendários e ausências». Se este grupo não aparecer, esta configuração ainda não está disponível na sua versão: fale com o administrador.",
       "«Tipos de ausência» → «Novo tipo»: «Nome» (obrigatório), «Categoria», «Unidade», «Contagem», limite, «Renovação», «Documento justificativo», «Fluxo de aprovação» e as opções (ex.: «Precisa de aprovação», «Permitir meio dia»). Clique em «Guardar». «Arquivar» retira um tipo.",
       "«Fluxos de aprovação» → «Novo fluxo»: «Nome», «Para» («Ausências» ou «Correções de ponto»), aprovadores por nível («Adicionar nível», até 5) e «Pessoas de recurso».",
       "No mesmo grupo: «Horários», «Feriados» («Importar nacionais», «Acrescentar feriado») e «Calendários de férias»; cada um aplica-se a pessoas com «Aplicar a».",
@@ -341,7 +341,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     keywords: ["configurações", "regras", "funcionalidades", "ligar", "desligar", "valores legais", "notificações"],
     steps: [
       "Abra Configurações (engrenagem) → «Geral» → menu «Regras» (ex.: «Funcionalidades», «Assiduidade», «Escalas», «Notificações»).",
-      "Em «Funcionalidades», use os interruptores «Ligado/Desligado».",
+      "Em «Funcionalidades», ligue ou desligue cada funcionalidade no respetivo interruptor.",
       "Para mudar uma regra: «Alterar», preencha «Valor», «Data de efeito» e «Motivo» (obrigatório) e clique em «Guardar».",
     ],
     notes: ["Só administradores. Uma data passada mostra o aviso «Alteração retroativa». Valores legais devem ser validados pelo responsável de RH."],
