@@ -85,4 +85,20 @@ describe("API /api/novo-rh/assistant", () => {
       await close(server);
     }
   });
+
+  test("ajuda do RH: sem Idempotency-Key, só o guia; estado próprio", async () => {
+    const llm = new ScriptedLlm([() => ({ tools: [["QUERY_HELP", { question: "criar colaborador" }]] }), () => ({ text: "1. Abra Colaboradores." })]);
+    const { server, base } = await serve(new AssistantUseCases(llm, new FakeScheduling(), new FakeAudit()));
+    try {
+      const r = await post(`${base}/help`, { message: "Como crio um colaborador?", page: "/hr/novo/pessoas", history: [] });
+      expect(r.status).toBe(200);
+      const body = (await r.json()) as { status: string; text: string; sources: { id: string }[] };
+      expect(body).toMatchObject({ status: "answer", text: "1. Abra Colaboradores." });
+      expect(body.sources[0]?.id).toBe("criar-colaborador");
+      expect((await post(`${base}/help`, { message: "" })).status).toBe(400);
+      expect(await (await fetch(`${base}/help/status`)).json()).toEqual({ available: true });
+    } finally {
+      await close(server);
+    }
+  });
 });

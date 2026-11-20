@@ -109,6 +109,20 @@ export interface AssistantReply {
   context: Pick<AssistantContext, "rosterName" | "from" | "to" | "pending">;
 }
 
+/** Artigo do guia usado numa resposta de ajuda (o ecrã mostra o atalho). */
+export interface HelpSource {
+  id: string;
+  title: string;
+  path: string | null;
+}
+
+export interface HelpReply {
+  status: "answer" | "unavailable";
+  text: string;
+  /** Artigos que o servidor devolveu à IA (determinístico, não depende do texto). */
+  sources: HelpSource[];
+}
+
 export class AssistantError extends Error {
   constructor(
     message: string,

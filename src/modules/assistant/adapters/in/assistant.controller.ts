@@ -30,7 +30,8 @@ function history(v: unknown): ChatTurn[] {
 
 /**
  * Assistente Mezza (`/api/novo-rh/assistant`, hr.schedules READ; alterar
- * exige MANAGE, verificado no caso de uso). Escritas com Idempotency-Key:
+ * exige MANAGE, verificado no caso de uso; `/help` é a ajuda do RH, aberta a
+ * qualquer utilizador da gestão). Escritas com Idempotency-Key:
  * retry ou duplo clique não repetem a operação.
  */
 export function createAssistantRouter(uc: AssistantUseCases, store: IdempotencyStore, viewerOf: (req: Request) => Viewer, voice: boolean): Router {
@@ -44,6 +45,12 @@ export function createAssistantRouter(uc: AssistantUseCases, store: IdempotencyS
     const b = (req.body ?? {}) as Record<string, unknown>;
     const c = (b.context ?? {}) as Record<string, unknown>;
     res.json(await run(() => uc.chat(req.auth!.orgId, viewerOf(req), { rosterId: str(c.rosterId), from: str(c.from), to: str(c.to) }, history(b.history), str(b.message))));
+  });
+  // Ajuda do RH («como faço…?»): qualquer utilizador da área de gestão; só lê o guia.
+  r.get(`${B}/help/status`, (_req, res) => res.json({ available: uc.available }));
+  r.post(`${B}/help`, async (req, res) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    res.json(await run(() => uc.help(history(b.history), str(b.message), str(b.page) || null)));
   });
   r.post(`${B}/confirm`, async (req, res) => res.json(await run(() => uc.confirm(req.auth!.orgId, viewerOf(req), str((req.body as Record<string, unknown>)?.token)))));
   r.post(`${B}/cancel`, async (req, res) => {
