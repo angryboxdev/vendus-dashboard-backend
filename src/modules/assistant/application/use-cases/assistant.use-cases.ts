@@ -9,6 +9,8 @@ import {
   type ChangePlan,
   type ChatTurn,
   type EmployeeView,
+  type HelpReply,
+  type HelpSource,
   type NewShift,
   type ShiftView,
   type TemplateView,
@@ -31,7 +33,8 @@ import {
   shiftMinutes,
   weekdayName,
 } from "../../domain/services/assistant.service.js";
-import { TOOLS, TOOL_NAMES, systemPrompt, type ToolName } from "../../domain/services/tools.js";
+import { queryHelp } from "../../domain/services/help-guide.js";
+import { HELP_TOOLS, TOOLS, TOOL_NAMES, helpSystemPrompt, systemPrompt, type ToolName } from "../../domain/services/tools.js";
 
 export const MAX_STEPS = 6;
 export const MAX_MESSAGE = 1000;
@@ -40,6 +43,11 @@ export const MAX_TURN_CHARS = 2000;
 export const MAX_PERIOD_DAYS = 62;
 export const CONFIRM_TTL_MS = 10 * 60_000;
 export const UNAVAILABLE = "O Assistente Mezza está temporariamente indisponível. Pode continuar a editar a escala normalmente.";
+export const HELP_UNAVAILABLE = "O Assistente Mezza está temporariamente indisponível. Tente de novo daqui a pouco.";
+export const HELP_NOT_FOUND = "Ainda não tenho essa resposta no guia do RH.";
+export const MAX_HELP_STEPS = 3;
+/** Ecrã onde a pessoa está (só rotas do RH; o resto é ignorado). */
+const PAGE = /^\/hr\/novo(\/[a-z0-9-]+){0,4}$/;
 const NO_DATA = "Não tenho dados suficientes para confirmar isso.";
 
 const span = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000) + 1;
@@ -222,6 +230,8 @@ class Session {
 
   private async dispatch(name: ToolName, a: Record<string, unknown>): Promise<unknown> {
     switch (name) {
+      case "QUERY_HELP":
+        return queryHelp(a.question);
       case "QUERY_EMPLOYEES": {
         const list = await this.employees();
         const byName = typeof a.name === "string" && a.name.trim() ? matchByName(a.name, list) : null;
@@ -543,6 +553,51 @@ export class AssistantUseCases {
     if (session.confirmation) return this.reply(session, "needs_confirmation", session.confirmation.summary);
     const status = session.applied.created.length || session.applied.removed.length ? "done" : session.publishFlow ? "publish_flow" : "answer";
     return this.reply(session, status, final?.trim() || (session.facts.length ? null : NO_DATA));
+  }
+
+  /**
+   * Ajuda do RH («como faço…?»), em qualquer ecrã: a IA só tem o guia
+   * (QUERY_HELP) — nem dados de colaboradores, nem alterações.
+   */
+  async help(history: ChatTurn[], message: string, page: string | null): Promise<HelpReply> {
+    const text = message.trim();
+    if (!text) throw new AssistantError("Escreva a sua pergunta.", "validation");
+    if (text.length > MAX_MESSAGE) throw new AssistantError(`Mensagem demasiado longa (máx. ${MAX_MESSAGE} caracteres).`, "validation");
+    if (!this.llm) return { status: "unavailable", text: HELP_UNAVAILABLE, sources: [] };
+    const messages: LlmMessage[] = [
+      { role: "system", content: helpSystemPrompt(page && PAGE.test(page) ? page : null) },
+      ...history.slice(-MAX_HISTORY).map((t): LlmMessage => (t.role === "user" ? { role: "user", content: t.text.slice(0, MAX_TURN_CHARS) } : { role: "assistant", content: t.text.slice(0, MAX_TURN_CHARS) })),
+      { role: "user", content: text },
+    ];
+    const tools = HELP_TOOLS.map(({ name, description, parameters }) => ({ name, description, parameters }));
+    const sources = new Map<string, HelpSource>();
+    for (let step = 0; step < MAX_HELP_STEPS; step++) {
+      let res: Awaited<ReturnType<LlmPort["complete"]>>;
+      try {
+        res = await this.llm.complete({ messages, tools });
+      } catch {
+        return { status: "unavailable", text: HELP_UNAVAILABLE, sources: [] };
+      }
+      if (!res.toolCalls.length) return { status: "answer", text: res.text?.trim() || HELP_NOT_FOUND, sources: [...sources.values()] };
+      messages.push({ role: "assistant", content: res.text, toolCalls: res.toolCalls });
+      for (const call of res.toolCalls) {
+        let result: unknown = { error: "unknown_tool", message: "Comando não permitido." };
+        if (call.name === "QUERY_HELP") {
+          let args: Record<string, unknown> = {};
+          try {
+            const parsed: unknown = call.arguments ? JSON.parse(call.arguments) : {};
+            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) args = parsed as Record<string, unknown>;
+          } catch {
+            /* argumentos inválidos → pesquisa vazia */
+          }
+          const r = queryHelp(args.question);
+          for (const a of r.articles) sources.set(a.id, { id: a.id, title: a.title, path: a.path });
+          result = r;
+        }
+        messages.push({ role: "tool", toolCallId: call.id, content: JSON.stringify(result) });
+      }
+    }
+    return { status: "answer", text: HELP_NOT_FOUND, sources: [...sources.values()] };
   }
 
   /** Confirmar uma alteração pedida antes; se a escala mudou entretanto, recalcula e volta a perguntar. */

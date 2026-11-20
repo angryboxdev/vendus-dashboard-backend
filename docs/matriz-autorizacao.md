@@ -1,10 +1,10 @@
 # Matriz de autorização (perfil × endpoint)
 
-> Gerado por `npm run authz:matrix` em 2026-11-05. Não editar à mão.
+> Gerado por `npm run authz:matrix` em 2026-11-20. Não editar à mão.
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 771 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 773 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -340,6 +340,8 @@ Endpoints: 771 · pré-autenticação: 20 · não classificados: 0
 | POST | `/api/novo-rh/assistant/cancel` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/assistant/chat` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/assistant/confirm` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| POST | `/api/novo-rh/assistant/help` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
+| GET | `/api/novo-rh/assistant/help/status` | base | ✔ | ✔ | ✔ | ✔ | ✖ |
 | GET | `/api/novo-rh/assistant/status` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | POST | `/api/novo-rh/assistant/transcribe` | permission:hr.schedules:READ | ✔ | ✔ | ✔ | ✖ | ✖ |
 | GET | `/api/novo-rh/attendance/adjustments` | permission:hr.attendance:READ | ✔ | ✔ | ✔ | ✖ | ✖ |

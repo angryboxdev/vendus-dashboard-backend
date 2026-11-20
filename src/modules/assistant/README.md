@@ -1,7 +1,7 @@
 # Module: assistant
 
 > Status: active
-> Last updated: 2026-10-14
+> Last updated: 2026-11-20
 
 ---
 
@@ -12,6 +12,10 @@ Responde a perguntas sobre a escala ("quem trabalha hoje?", "quem pode
 substituir a Maria?", "há turnos sem cobertura?") e faz alterações em turnos
 não publicados ("coloca o João amanhã das 9h às 17h", "preenche a
 cobertura desta semana") — sempre com as mesmas regras do ecrã.
+
+Também responde a dúvidas de utilização do RH ("como crio um colaborador
+novo?", "como peço férias?") em qualquer ecrã do RH, com os passos do guia
+de ajuda — sem ver dados nem alterar nada.
 
 **The problem it solves:**
 Planear à mão muitas pessoas e dias é lento; o gestor quer pedir em linguagem
@@ -47,6 +51,10 @@ permissões ou Desfazer. O assistente nunca publica.
   alterações, remoções em ≥ 4 pessoas, limpar pendentes) devolvem um resumo
   e um token (10 min, só para quem pediu). Ao confirmar, se a escala mudou,
   recalcula e volta a perguntar.
+- **Guia de ajuda do RH** — artigos curados (`help-articles.ts`) com os passos
+  reais dos ecrãs; `searchHelp` encontra-os sem acentos/plurais. A IA só
+  responde com o que o guia diz; sem artigo → "Ainda não tenho essa resposta
+  no guia do RH.".
 - **Factos** — linhas determinísticas do que o servidor fez (não dependem do
   texto da IA).
 
@@ -57,6 +65,7 @@ permissões ou Desfazer. O assistente nunca publica.
 - `AssistantUseCases.chat` — conversa (consultas e alterações).
 - `AssistantUseCases.confirm | cancel` — confirmar/cancelar uma alteração grande.
 - `AssistantUseCases.transcribe` — voz → texto editável (áudio não é guardado).
+- `AssistantUseCases.help` — ajuda do RH: só `QUERY_HELP`, devolve texto + artigos usados (`sources`).
 
 ### Output (domain dependencies)
 
@@ -70,6 +79,7 @@ permissões ou Desfazer. O assistente nunca publica.
 ### Input
 
 - `createAssistantRouter` → `/api/novo-rh/assistant/{status,chat,confirm,cancel,transcribe}` (`hr.schedules` READ; alterar exige MANAGE no caso de uso). `chat/confirm/cancel` com `Idempotency-Key` obrigatório.
+- `/api/novo-rh/assistant/help` (POST) e `/help/status` (GET) — acesso `base` (qualquer utilizador da gestão); sem Idempotency-Key (só leitura do guia).
 
 ### Output
 
@@ -80,6 +90,8 @@ permissões ou Desfazer. O assistente nunca publica.
 ## Design decisions (ADR summary)
 
 - ADR-0038: allowlist de ferramentas sobre serviços canónicos; plano = retirar + criar (Desfazer único); confirmação por limiares com token em memória; IA atrás de uma porta (OpenAI hoje); só nomes e cargos chegam à IA; ausências como "Indisponível".
+
+- ADR-0044: ajuda do RH a partir de um guia curado no domínio (não "de cabeça", nem embeddings); modo ajuda só com `QUERY_HELP`, acesso `base`; quando um ecrã muda, o artigo muda no mesmo PR.
 
 ## How to test
 
