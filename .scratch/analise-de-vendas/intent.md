@@ -50,7 +50,8 @@ Uma página nova, **«Análise de Vendas»**, dentro do grupo **Operação** do 
 - **Mapa de calor** dia da semana × hora, com o n.º de vendas em cada quadrado.
 
 **Canais**
-- Salão, Take Away e Eatz (Vendus); Uber Eats, Glovo e Bolt Food (AirMenu).
+- Salão, Take Away, Eatz e **Apps** (Vendus); Uber Eats, Glovo e Bolt Food (AirMenu).
+- O método «Apps» da Vendus **continua em uso**: antes eram as plataformas faturadas na Vendus, agora é o **delivery próprio**. Aparece como canal normal.
 - Receita, peso no total, vendas, ticket, variação face ao ano anterior e hora de pico de cada canal.
 
 **Tudo é clicável**
@@ -59,9 +60,9 @@ Uma página nova, **«Análise de Vendas»**, dentro do grupo **Operação** do 
 - Dentro do painel pode-se continuar a navegar (por exemplo, da hora 20h para as sextas, e daí para um dia concreto) e voltar atrás.
 
 **Dados das plataformas (AirMenu) sem depender da API**
-- Até 1 mês, a página pode consultar a API da AirMenu. Acima de 1 mês, a API fica bloqueada.
-- Quando se consulta um mês já fechado (por exemplo julho), o resultado fica guardado e não volta a ser pedido.
-- Também se pode carregar o **SAF-T de vendas da AirMenu** de um mês, que fica guardado. O SAF-T prevalece sempre sobre o que veio da API, porque é o registo fiscal.
+- A AirMenu é consultada **mês a mês**, e só quando o utilizador a escolhe. Acima de 1 mês, a API fica bloqueada.
+- Cada mês já fechado que se consulta (por exemplo julho) fica **gravado** e nunca mais é pedido à API. Para ter vários meses, vai-se buscando um mês de cada vez.
+- Por agora **não há envio de SAF-T**.
 - Os dados das plataformas guardam-se por hora e por plataforma.
 - Se faltar um mês, a página avisa «Sem dados da AirMenu para <mês>». Se a AirMenu falhar, os dados da Vendus continuam visíveis.
 
@@ -73,7 +74,7 @@ Uma página nova, **«Análise de Vendas»**, dentro do grupo **Operação** do 
 - **Quem vê:** só a gerência e o admin.
 - **Loja:** só a Angry Box principal.
 - **Onde:** um item novo no grupo **Operação** do menu, ao lado de Fechos de Caixa, Declaração de Vendas, Air Menu e Vendus. Não substitui nenhuma página existente (Vendus, Air Menu e Resultados ficam como estão).
-- **Dados que usa:** vendas da Vendus, vendas da AirMenu (pela API ou pelo SAF-T, que já é carregado no Importador das plataformas e na Declaração de Vendas).
+- **Dados que usa:** vendas da Vendus e vendas da AirMenu (pela API, mês a mês, com os meses fechados gravados).
 
 ## Constraints
 
@@ -92,7 +93,8 @@ Uma página nova, **«Análise de Vendas»**, dentro do grupo **Operação** do 
 - Top de produtos e categorias (já existe em Resultados e na página Vendus). Fica para depois.
 - Editar o horário de funcionamento nas Configurações. Fica para depois.
 - Outras lojas (Porto) e seletor de loja.
-- Escrever à mão os totais das plataformas (o SAF-T cobre esta necessidade).
+- Envio do SAF-T da AirMenu (fica para depois).
+- Escrever à mão os totais das plataformas.
 - Mudar as páginas Vendus, Air Menu ou Resultados.
 
 ## Success looks like
@@ -120,12 +122,9 @@ Uma página nova, **«Análise de Vendas»**, dentro do grupo **Operação** do 
 
 ## Open questions
 
-- **Hora no SAF-T da AirMenu:** confirmar que o SAF-T traz a hora de cada fatura. Se não trouxer, os meses carregados por SAF-T só têm valores por dia, e a análise por hora das plataformas fica limitada aos meses vindos da API. A página tem de o indicar.
-- **Previsão com IA:**
-  - que serviço de IA usar;
-  - que histórico lhe é enviado (só valores agregados por dia e hora);
-  - quanto custa por pedido e com que frequência se atualiza (por exemplo, uma vez por dia);
-  - o que a página mostra se a IA falhar.
-- **Canal antigo «Apps»:** antes da AirMenu, as plataformas eram faturadas na Vendus com o método «Apps». A comparação com o ano anterior tem de tratar este canal sem contar vendas em duplicado.
-- **Primeira consulta lenta:** enquanto os dias fechados ainda não estão guardados, «Este ano» mais a comparação pode demorar. Avaliar se se preenchem com antecedência, sem ultrapassar os limites da API da Vendus.
-- **Regra das notas de crédito do mesmo período:** usar a mesma regra de Resultados para os totais baterem.
+Nenhuma da parte do negócio. A gerência decidiu (2026-11-21) seguir sem a sessão de perguntas técnicas: as decisões de implementação ficam a cargo de quem constrói, dentro das regras acima.
+
+Notas para quem constrói:
+- **Canal «Apps» no ano anterior:** no ano anterior, «Apps» podia ser plataformas faturadas na Vendus; hoje é o delivery próprio. Na comparação mostra-se como está registado, sem tentar separar.
+- **Previsão com IA:** só valores agregados por dia e hora são enviados; se a IA falhar, a página mostra os restantes dados sem a previsão.
+- **Primeira consulta de «Este ano»** pode demorar até os dias fechados estarem gravados.
