@@ -3,7 +3,7 @@
 A página «Análise de Vendas» (Operação) mostra até 12 meses comparados com o ano
 anterior e o mês anterior, ao nível da hora. Pedir isso à Vendus a cada abertura
 custaria milhares de pedidos (um por documento). A API da AirMenu é lenta (1
-pedido a cada 3 s, um por encomenda) e falha com frequência.
+pedidos a cada 2 s, um por encomenda) e falha com frequência.
 
 Decidido:
 

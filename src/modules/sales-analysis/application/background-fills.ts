@@ -75,7 +75,7 @@ export class VendusFillCoordinator {
  * - cada mês é pedido **uma semana de cada vez**, com uma pausa entre semanas,
  *   e cada semana é guardada logo — se algo falhar a meio, o que já veio fica;
  * - só os dias ainda não guardados (mais hoje, que nunca se guarda) são pedidos.
- * O espaçamento entre pedidos individuais (1 a cada 3 s) é do gateway da AirMenu.
+ * O ritmo dos pedidos individuais (2 a cada 2 s) é do gateway da AirMenu.
  */
 export class AirMenuFetchCoordinator {
   private readonly state = new Map<string, AirMenuMonthStatus>();
