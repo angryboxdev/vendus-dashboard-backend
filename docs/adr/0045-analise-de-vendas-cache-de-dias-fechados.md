@@ -20,6 +20,11 @@ Decidido:
   entre semanas e guardando cada semana — para nunca carregar a API de uma vez
   e deixar os outros ecrãs da AirMenu (fechos de caixa, KDS) respirar.
   Um erro propaga-se: um dia falhado nunca fica guardado como «sem vendas».
+- **Busca diária da AirMenu** (decisão da gerência, 2026-11-21): dentro do
+  próprio servidor (não num cron à parte, que teria outra sessão e outro
+  limitador da AirMenu), a partir das 5h de Lisboa, se o dia anterior não
+  estiver guardado, entra na mesma fila. É a única consulta automática à
+  AirMenu; desliga-se com `SALES_ANALYSIS_AIRMENU_DAILY=false`.
 - Os cálculos (KPIs, destaques, mapa de calor, detalhes) fazem-se no frontend a
   partir dos blocos; o backend só fornece dados e a previsão.
 - A previsão do mês corrente usa o fornecedor de IA do Assistente, recebe só

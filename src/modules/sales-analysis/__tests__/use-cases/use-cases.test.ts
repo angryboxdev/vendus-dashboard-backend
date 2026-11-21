@@ -1,4 +1,4 @@
-import { AirMenuFetchCoordinator, VendusFillCoordinator } from "../../application/background-fills.js";
+import { AirMenuFetchCoordinator, DailyAirMenuSync, VendusFillCoordinator } from "../../application/background-fills.js";
 import {
   FetchAirMenuMonthUseCase, GetSalesAnalysisUseCase, GetSalesForecastUseCase, TodayVendusCache,
 } from "../../application/use-cases/sales-analysis.use-cases.js";
@@ -202,5 +202,38 @@ describe("GetSalesForecastUseCase", () => {
     expect(model.prompts[0]).not.toMatch(/NIF|cliente:/i);
     await uc.execute({ organizationId: ORG, source: "vendus" });
     expect(model.prompts).toHaveLength(1); // cache do dia
+  });
+});
+
+describe("DailyAirMenuSync (busca diária do dia anterior)", () => {
+  function daily(hour: number) {
+    const store = new FakeStore();
+    const air = new FakeSource("glovo");
+    const clock = new FakeClock("2026-11-22", hour);
+    const jobs = new AirMenuFetchCoordinator(air, store, clock, 7, 0);
+    return { store, air, clock, jobs, sync: new DailyAirMenuSync(jobs, store, clock, ORG, 5) };
+  }
+
+  it("antes das 5h não faz nada", async () => {
+    const { sync, air } = daily(3);
+    expect(await sync.tick()).toBeNull();
+    expect(air.calls).toHaveLength(0);
+  });
+
+  it("depois das 5h busca só o dia anterior, uma vez por dia", async () => {
+    const { sync, air, jobs, store } = daily(6);
+    expect(await sync.tick()).toBe("2026-11-21");
+    await jobs.drained();
+    expect(air.calls).toEqual([{ from: "2026-11-21", to: "2026-11-21" }]);
+    expect(store.covered.has("airmenu|2026-11-21")).toBe(true);
+    expect(await sync.tick()).toBeNull(); // segundo tick no mesmo dia
+    expect(air.calls).toHaveLength(1);
+  });
+
+  it("se o dia anterior já estiver guardado, não pede nada", async () => {
+    const { sync, air, store } = daily(6);
+    store.seed("airmenu", { from: "2026-11-21", to: "2026-11-21" }, "glovo");
+    expect(await sync.tick()).toBeNull();
+    expect(air.calls).toHaveLength(0);
   });
 });

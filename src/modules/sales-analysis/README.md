@@ -25,6 +25,7 @@ Gerência                                   Sistema
                                               dias fechados em falta enchem-se sozinhos
 3. Muda o período (máx. 12 meses)      →   4. Usa os dias guardados; hoje em direto
 5. Escolhe «AirMenu» ou «Ambas»        →   6. Diz que meses têm dados; nada é pedido à AirMenu
+                                             (só a busca diária automática do dia anterior, às 5h)
 7. Clica «Buscar <mês>»                →   8. Pede à AirMenu só os dias em falta desse mês e guarda-os
 9. Vê a previsão do mês                →   10. IA (ou regra simples) prevê os dias que faltam
 ```
@@ -90,7 +91,10 @@ destaques (frontend) e não altera Vendus, AirMenu nem Resultados.
 - `createForecastModel` — OpenAI ou Gemini, com a mesma configuração do Assistente
   (`ASSISTANT_PROVIDER`, `GEMINI_API_KEY`/`GEMINI_MODEL`, `OPENAI_API_KEY`/`ASSISTANT_MODEL`).
 - `LisbonClockAdapter`.
-- `VendusFillCoordinator` / `AirMenuFetchCoordinator` (application) — trabalhos em memória, um por organização/mês.
+- `VendusFillCoordinator` / `AirMenuFetchCoordinator` (application) — trabalhos em memória; a AirMenu tem uma
+  fila única (um mês de cada vez, uma semana de cada vez, 15 s de pausa, guarda cada semana).
+- `DailyAirMenuSync` (application) — a cada 10 min verifica; uma vez por dia, depois das 5h (Lisboa), busca o
+  dia anterior da AirMenu se não estiver guardado (mesma fila). `SALES_ANALYSIS_AIRMENU_DAILY=false` desliga.
 
 ## Design decisions (ADR summary)
 
