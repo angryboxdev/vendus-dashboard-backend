@@ -49,4 +49,27 @@ describe('MinIntervalScheduler', () => {
     await jest.advanceTimersByTimeAsync(2_000);
     await expect(next).resolves.toBe('ok');
   });
+
+  it('com 2 por janela: duas chamadas começam juntas e as seguintes esperam 2 s, aos pares', async () => {
+    const s = new MinIntervalScheduler(2000, Date.now, undefined, 2);
+    const started: { id: number; at: number }[] = [];
+    const all = Promise.all([1, 2, 3, 4, 5].map((id) => s.schedule(async () => { started.push({ id, at: Date.now() }); })));
+    await jest.advanceTimersByTimeAsync(4_000);
+    await all;
+    expect(started).toEqual([
+      { id: 1, at: 1_000 }, { id: 2, at: 1_000 },
+      { id: 3, at: 3_000 }, { id: 4, at: 3_000 },
+      { id: 5, at: 5_000 },
+    ]);
+  });
+
+  it('com 2 por janela: uma janela expirada recomeça sem esperar', async () => {
+    const s = new MinIntervalScheduler(2000, Date.now, undefined, 2);
+    await s.schedule(async () => undefined);
+    await jest.advanceTimersByTimeAsync(2_500);
+    const at: number[] = [];
+    await s.schedule(async () => { at.push(Date.now()); });
+    await s.schedule(async () => { at.push(Date.now()); });
+    expect(at).toEqual([3_500, 3_500]);
+  });
 });

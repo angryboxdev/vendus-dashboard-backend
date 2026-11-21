@@ -45,10 +45,19 @@ export class FakeStore implements SalesBucketStorePort {
 export class FakeSource implements VendusSalesSourcePort, AirMenuSalesSourcePort {
   calls: DateRange[] = [];
   fail = false;
+  /** Falha só na chamada n.º (1 = primeira). */
+  failOnCall: number | null = null;
+  /** Para observar chamadas em paralelo. */
+  inFlight = 0;
+  maxInFlight = 0;
   constructor(private readonly channel: SalesBucket["channel"] = "salao", private readonly grossCents = 5_000) {}
   async fetchBuckets(range: DateRange): Promise<SalesBucket[]> {
     this.calls.push(range);
-    if (this.fail) throw new Error("fonte em baixo");
+    this.inFlight++;
+    this.maxInFlight = Math.max(this.maxInFlight, this.inFlight);
+    await new Promise((r) => setTimeout(r, 1));
+    this.inFlight--;
+    if (this.fail || this.failOnCall === this.calls.length) throw new Error("fonte em baixo");
     return eachDay(range).map((d) => ({ date: d, hour: 13, channel: this.channel, grossCents: this.grossCents, netCents: 4_000, count: 2 }));
   }
 }

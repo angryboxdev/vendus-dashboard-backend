@@ -42,13 +42,16 @@ export interface DateRange {
 }
 
 /** Estado de um mês da AirMenu: guardado, parcial, em falta ou a ser buscado. */
-export type AirMenuMonthState = "stored" | "partial" | "missing" | "fetching" | "error";
+export type AirMenuMonthState = "stored" | "partial" | "missing" | "queued" | "fetching" | "error";
 
 export interface AirMenuMonthStatus {
   month: string; // AAAA-MM
   state: AirMenuMonthState;
   /** Mensagem do último erro (se state = error). */
   error?: string | undefined;
+  /** Progresso da busca (state = fetching): dias já guardados / dias a buscar. */
+  doneDays?: number | undefined;
+  totalDays?: number | undefined;
 }
 
 export interface FillProgress {

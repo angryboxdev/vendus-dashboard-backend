@@ -9,8 +9,9 @@ import type {
 import type { MinIntervalScheduler } from "../../domain/services/min-interval-scheduler.js";
 
 /**
- * Decorator do gateway AirMenu que respeita o limite da API (1 pedido a cada
- * 2 s — ver `AIRMENU_MIN_REQUEST_INTERVAL_MS` na composition root).
+ * Decorator do gateway AirMenu que respeita o limite da API (até 2 pedidos a
+ * cada 2 s, decisão da gerência em 2026-11-21 — ver `AIRMENU_MIN_REQUEST_INTERVAL_MS`
+ * e `AIRMENU_REQUESTS_PER_INTERVAL` na composition root).
  *
  * Todos os pedidos passam por aqui (autenticação, ordens, menu, webhook),
  * por isso o limite vale para o módulo inteiro, incluindo quem consome

@@ -17,7 +17,9 @@ import type { GetSummaryPort } from "./domain/ports/in/get-summary.port.js";
 import type { OrderEventBusPort } from "./domain/ports/out/order-event-bus.port.js";
 
 /** Limite da API AirMenu: no máximo 1 pedido a cada 2 segundos. */
+/** Limite da API AirMenu: até 2 pedidos a cada 2 s (decisão da gerência, 2026-11-21). */
 export const AIRMENU_MIN_REQUEST_INTERVAL_MS = 2000;
+export const AIRMENU_REQUESTS_PER_INTERVAL = 2;
 
 export function createAirMenuModule(config: {
   apiKey: string;
@@ -28,7 +30,7 @@ export function createAirMenuModule(config: {
 }): { router: Router; publicRouter: Router; getSummary: GetSummaryPort; getOrders: GetOrdersPort; eventBus: OrderEventBusPort } {
   const gateway = new RateLimitedAirMenuGateway(
     new AirMenuHttpGateway(config.apiKey),
-    new MinIntervalScheduler(AIRMENU_MIN_REQUEST_INTERVAL_MS),
+    new MinIntervalScheduler(AIRMENU_MIN_REQUEST_INTERVAL_MS, Date.now, undefined, AIRMENU_REQUESTS_PER_INTERVAL),
   );
 
   const sessionManager = new SessionManagerService(
