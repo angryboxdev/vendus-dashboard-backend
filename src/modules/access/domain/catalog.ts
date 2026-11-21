@@ -39,6 +39,7 @@ export const ACCESS_CATALOG: CatalogModule[] = [
     functions: [
       { key: "sales.dashboard", label: "Painel & documentos", description: "Vendas, analítica e documentos Vendus." },
       { key: "sales.results", label: "Resultados", description: "Resumo e crescimento de vendas." },
+      { key: "sales.analysis", label: "Análise de vendas", description: "Vendas por dia, hora e canal, mapa de calor e previsão do mês (só Admin e Gerência por omissão)." },
       { key: "sales.cash_closings", label: "Fechos de caixa", description: "Consultar e corrigir fechos de caixa." },
       { key: "sales.air_menu", label: "Air Menu", description: "Encomendas e integração Air Menu." },
       { key: "sales.invoicing", label: "Faturação certificada (testes)", description: "Emitir e consultar documentos fiscais do Mezza (só formação até haver certificado da AT)." },
@@ -180,7 +181,7 @@ export type SystemProfileKey = "admin" | "manager" | "rh" | "financeiro" | "cola
  * (que tem tudo) ou quem as conceder à mão. Faturação certificada: em testes,
  * isolada dos outros canais até haver certificado da AT.
  */
-const NOT_IN_MODULE_DEFAULTS = new Set(["sales.invoicing"]);
+const NOT_IN_MODULE_DEFAULTS = new Set(["sales.invoicing", "sales.analysis"]);
 
 function moduleAll(moduleKey: string, level: AccessLevel): PermissionMap {
   const mod = ACCESS_CATALOG.find((m) => m.key === moduleKey)!;
@@ -204,6 +205,8 @@ export const SYSTEM_PROFILE_DEFAULTS: Record<SystemProfileKey, { name: string; d
     protected: false,
     permissions: {
       ...moduleAll("sales", "READ"),
+      // Análise de vendas: fora dos defaults por módulo (só Admin e Gerência), concedida aqui.
+      "sales.analysis": "READ",
       ...moduleAll("stock", "MANAGE"),
       ...moduleAll("crm", "MANAGE"),
       "hr.overview": "READ",

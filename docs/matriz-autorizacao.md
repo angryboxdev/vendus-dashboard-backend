@@ -1,10 +1,10 @@
 # Matriz de autorização (perfil × endpoint)
 
-> Gerado por `npm run authz:matrix` em 2026-11-20. Não editar à mão.
+> Gerado por `npm run authz:matrix` em 2026-11-21. Não editar à mão.
 > Perfis de sistema com as permissões por defeito; exceções individuais não entram.
 > ✔ permitido · ✖ negado (403) · — montada antes da autenticação (quiosque, dispositivos, públicas, cron), fora do guarda.
 
-Endpoints: 773 · pré-autenticação: 20 · não classificados: 0
+Endpoints: 776 · pré-autenticação: 20 · não classificados: 0
 
 | Método | Endpoint | Regra | admin | manager | rh | financeiro | colaborador |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -691,6 +691,9 @@ Endpoints: 773 · pré-autenticação: 20 · não classificados: 0
 | GET | `/api/reports/dre/vendas-restaurante` | permission:dre.statement:READ | ✔ | ✖ | ✖ | ✔ | ✖ |
 | GET | `/api/reports/ingredient-consumption` | permission:stock.movements:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | GET | `/api/reports/monthly-summary` | permission:sales.dashboard:READ | ✔ | ✔ | ✖ | ✔ | ✖ |
+| GET | `/api/sales-analysis` | permission:sales.analysis:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
+| POST | `/api/sales-analysis/air-menu/fetch` | permission:sales.analysis:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
+| GET | `/api/sales-analysis/forecast` | permission:sales.analysis:READ | ✔ | ✔ | ✖ | ✖ | ✖ |
 | POST | `/api/sales-declaration/export` | permission:sales.dashboard:READ | ✔ | ✔ | ✖ | ✔ | ✖ |
 | GET | `/api/sales-summary` | permission:sales.results:READ | ✔ | ✔ | ✖ | ✔ | ✖ |
 | GET | `/api/sales-summary/growth` | permission:sales.results:READ | ✔ | ✔ | ✖ | ✔ | ✖ |

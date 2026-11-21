@@ -198,6 +198,9 @@ export const TABLE_REGISTRY = {
   // spec C ticket 03: keyed by (org_id, location_id), like location_tokens/pairing_codes.
   vendus_location_config: { organizationColumn: "org_id", locationBearing: true },
   sales_summary_cache: { organizationColumn: "org_id", locationBearing: false },
+  // Análise de Vendas: blocos dia×hora×canal e dias já guardados (cache de dias fechados).
+  sales_analysis_buckets: { organizationColumn: "org_id", locationBearing: false },
+  sales_analysis_days: { organizationColumn: "org_id", locationBearing: false },
   // Novo RH Fase 1 (ticket 02): motor de configurações (C11) e Idempotency-Key persistente (ADR-0022).
   setting_profiles: { organizationColumn: "org_id", locationBearing: false },
   setting_profile_targets: { organizationColumn: "org_id", locationBearing: false },

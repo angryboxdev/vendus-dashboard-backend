@@ -53,6 +53,9 @@ export const ROUTE_RULES: RouteRule[] = [
   { pattern: /^\/api\/(analytics|vendus|documents)(\/|$)/, target: p("sales.dashboard") },
   { pattern: /^\/api\/reports\/monthly-summary$/, target: p("sales.dashboard") },
   { pattern: /^\/api\/sales-summary(\/|$)/, target: p("sales.results") },
+  // Análise de Vendas: buscar um mês à AirMenu só lê dados (guarda-os em cache) — basta Ver.
+  { pattern: /^\/api\/sales-analysis\/air-menu\/fetch$/, target: p("sales.analysis", "READ") },
+  { pattern: /^\/api\/sales-analysis(\/|$)/, target: p("sales.analysis") },
   // Declaração de Vendas (Excel do MBS a partir de SAF-T): gera um ficheiro, não grava nada — basta Ver.
   { pattern: /^\/api\/sales-declaration\/export$/, target: p("sales.dashboard", "READ") },
   { pattern: /^\/api\/cash-closings(\/|$)/, target: p("sales.cash_closings") },
