@@ -28,7 +28,9 @@ export interface ForecastModelPort {
   complete(prompt: string): Promise<string | null>;
 }
 
-/** Data de hoje em Lisboa. */
+/** Data e hora atuais em Lisboa. */
 export interface ClockPort {
   today(): IsoDate;
+  /** Hora atual (0–23) em Lisboa. */
+  hour(): number;
 }

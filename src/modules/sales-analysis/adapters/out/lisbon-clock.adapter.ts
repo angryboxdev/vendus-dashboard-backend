@@ -5,4 +5,8 @@ export class LisbonClockAdapter implements ClockPort {
   today(): string {
     return DateTime.now().setZone("Europe/Lisbon").toISODate()!;
   }
+
+  hour(): number {
+    return DateTime.now().setZone("Europe/Lisbon").hour;
+  }
 }

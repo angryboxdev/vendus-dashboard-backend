@@ -1,7 +1,7 @@
 import type { OrganizationId } from "../../../kernel/organization-id.js";
-import type { AirMenuMonthStatus, FillProgress, IsoDate, SalesBucket } from "../domain/entities/sales-analysis.js";
+import type { AirMenuMonthStatus, DateRange, FillProgress, IsoDate, SalesBucket } from "../domain/entities/sales-analysis.js";
 import type { AirMenuSalesSourcePort, ClockPort, SalesBucketStorePort, VendusSalesSourcePort } from "../domain/ports/out/sales-analysis.ports.js";
-import { eachDay, intersect, monthRange, toContiguousRanges } from "../domain/services/dates.js";
+import { addDays, eachDay, intersect, monthRange, toContiguousRanges } from "../domain/services/dates.js";
 
 /**
  * Preenchimento da Vendus em segundo plano: pede os dias fechados em falta,
@@ -80,7 +80,7 @@ export class VendusFillCoordinator {
 export class AirMenuFetchCoordinator {
   private readonly state = new Map<string, AirMenuMonthStatus>();
   private readonly today = new Map<string, { date: IsoDate; buckets: SalesBucket[] }>();
-  private readonly queue: { org: OrganizationId; month: string; key: string }[] = [];
+  private readonly queue: { org: OrganizationId; label: string; key: string; range: DateRange | null }[] = [];
   private running = false;
 
   constructor(
@@ -108,9 +108,24 @@ export class AirMenuFetchCoordinator {
     if (cur?.state === "fetching" || cur?.state === "queued") return { ...cur };
     const s: AirMenuMonthStatus = { month, state: "queued" };
     this.state.set(key, s);
-    this.queue.push({ org, month, key });
+    this.queue.push({ org, label: month, key, range: intersect(monthRange(month), { from: "2000-01-01", to: this.clock.today() }) });
     void this.pump();
     return { ...s };
+  }
+
+  /** Busca só um dia fechado (usado pela busca diária automática). Entra na mesma fila. */
+  startDay(org: OrganizationId, date: IsoDate): void {
+    const key = `${org}|day|${date}`;
+    const cur = this.state.get(key);
+    if (cur?.state === "fetching" || cur?.state === "queued") return;
+    this.state.set(key, { month: date.slice(0, 7), state: "queued" });
+    this.queue.push({ org, label: date, key, range: { from: date, to: date } });
+    void this.pump();
+  }
+
+  /** Espera até a fila ficar vazia (para testes). */
+  async drained(): Promise<void> {
+    while (this.running || this.queue.length > 0) await new Promise((r) => setTimeout(r, 5));
   }
 
   async idle(org: OrganizationId, month: string): Promise<void> {
@@ -122,15 +137,15 @@ export class AirMenuFetchCoordinator {
     if (this.running) return;
     this.running = true;
     try {
-      for (let job = this.queue.shift(); job; job = this.queue.shift()) await this.run(job.org, job.month, job.key);
+      for (let job = this.queue.shift(); job; job = this.queue.shift()) await this.run(job.org, job.label, job.key, job.range);
     } finally {
       this.running = false;
     }
   }
 
-  private async run(org: OrganizationId, month: string, key: string) {
+  private async run(org: OrganizationId, label: string, key: string, range: DateRange | null) {
     const today = this.clock.today();
-    const range = intersect(monthRange(month), { from: "2000-01-01", to: today });
+    const month = label.slice(0, 7);
     try {
       if (!range) throw new Error("Mês no futuro.");
       const covered = await this.store.coveredDays(org, "airmenu", range);
@@ -149,8 +164,43 @@ export class AirMenuFetchCoordinator {
       }
       this.state.delete(key);
     } catch (e) {
-      console.error("[sales-analysis] AirMenu fetch failed for", month, e);
+      console.error("[sales-analysis] AirMenu fetch failed for", label, e);
       this.state.set(key, { month, state: "error", error: "A AirMenu não respondeu. O que já veio ficou guardado; tente de novo mais tarde para buscar o resto." });
+    }
+  }
+}
+
+/**
+ * Busca diária automática da AirMenu (decisão da gerência, 2026-11-21): todos
+ * os dias, a partir da hora indicada (Lisboa), se o dia anterior ainda não
+ * estiver guardado, entra na fila da AirMenu (mesmo limitador e mesma sessão
+ * do servidor). `tick()` é chamado periodicamente pelo composition root.
+ */
+export class DailyAirMenuSync {
+  private lastRunFor: IsoDate | null = null;
+
+  constructor(
+    private readonly jobs: AirMenuFetchCoordinator,
+    private readonly store: SalesBucketStorePort,
+    private readonly clock: ClockPort,
+    private readonly organizationId: OrganizationId,
+    private readonly fromHour = 5,
+  ) {}
+
+  async tick(): Promise<IsoDate | null> {
+    const today = this.clock.today();
+    if (this.lastRunFor === today || this.clock.hour() < this.fromHour) return null;
+    this.lastRunFor = today;
+    const yesterday = addDays(today, -1);
+    try {
+      const covered = await this.store.coveredDays(this.organizationId, "airmenu", { from: yesterday, to: yesterday });
+      if (covered.has(yesterday)) return null;
+      this.jobs.startDay(this.organizationId, yesterday);
+      return yesterday;
+    } catch (e) {
+      this.lastRunFor = null; // tenta de novo no próximo tick
+      console.error("[sales-analysis] daily AirMenu sync failed:", e);
+      return null;
     }
   }
 }

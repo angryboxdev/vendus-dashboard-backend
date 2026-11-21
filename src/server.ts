@@ -1874,6 +1874,8 @@ const salesAnalysisModule = createSalesAnalysisModule(vendusModule.getSummary, a
     gemini: { apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL || "gemini-2.5-flash" },
     openai: { apiKey: ENV.OPENAI_API_KEY, model: process.env.ASSISTANT_MODEL || ENV.OPENAI_MODEL_TEXT },
   },
+  // Busca diária do dia anterior da AirMenu (loja principal). SALES_ANALYSIS_AIRMENU_DAILY=false desliga.
+  dailyAirMenuSyncOrganizationId: process.env.SALES_ANALYSIS_AIRMENU_DAILY === "false" ? null : UNATTENDED_SCOPE.organizationId,
 });
 app.use("/api", salesAnalysisModule.router);
 

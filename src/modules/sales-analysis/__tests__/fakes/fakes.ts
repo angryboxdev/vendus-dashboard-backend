@@ -8,9 +8,12 @@ import { eachDay } from "../../domain/services/dates.js";
 export const ORG = "00000000-0000-0000-0000-000000000001" as OrganizationId;
 
 export class FakeClock implements ClockPort {
-  constructor(public value: IsoDate) {}
+  constructor(public value: IsoDate, public currentHour = 12) {}
   today() {
     return this.value;
+  }
+  hour() {
+    return this.currentHour;
   }
 }
 
