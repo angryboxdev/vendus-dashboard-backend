@@ -45,6 +45,7 @@ import { createDocumentsModule } from "./modules/documents/documents.module.js";
 import { createCalendarModule } from "./modules/calendar/calendar.module.js";
 import { createLocationCredentialsModule } from "./modules/location-credentials/location-credentials.module.js";
 import { createSalesSummaryModule } from "./modules/sales-summary/sales-summary.module.js";
+import { createSalesAnalysisModule } from "./modules/sales-analysis/sales-analysis.module.js";
 import { createCashFlowModule } from "./modules/cash-flow/cash-flow.module.js";
 import { createDeliveryPlatformsModule } from "./modules/delivery-platforms/delivery-platforms.module.js";
 import { createPositionsModule } from "./modules/positions/positions.module.js";
@@ -1863,6 +1864,18 @@ const salesSummaryModule = createSalesSummaryModule(
   { salesSummaryEnterpriseId: ENV.AIRMENU_SALES_SUMMARY_ENTERPRISE_ID },
 );
 app.use("/api", salesSummaryModule.router);
+
+// Análise de Vendas (hexagonal) — vendas por dia/hora/canal com cache de dias fechados;
+// AirMenu só a pedido (um mês de cada vez). Previsão do mês com o fornecedor de IA do Assistente.
+const salesAnalysisModule = createSalesAnalysisModule(vendusModule.getSummary, airMenuModule.getSummary, {
+  airMenuEnterpriseId: ENV.AIRMENU_SALES_SUMMARY_ENTERPRISE_ID,
+  forecast: {
+    provider: process.env.ASSISTANT_PROVIDER,
+    gemini: { apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL || "gemini-2.5-flash" },
+    openai: { apiKey: ENV.OPENAI_API_KEY, model: process.env.ASSISTANT_MODEL || ENV.OPENAI_MODEL_TEXT },
+  },
+});
+app.use("/api", salesAnalysisModule.router);
 
 // Sales Declaration (hexagonal) — Excel para o Mercado Bom Sucesso a partir dos SAF-T enviados
 const salesDeclarationModule = createSalesDeclarationModule();
