@@ -148,7 +148,7 @@ export class GetSalesAnalysisUseCase implements GetSalesAnalysisPort {
 
   private async airMenuMonth(org: OrganizationId, month: string, range: DateRange, today: IsoDate): Promise<AirMenuMonthStatus> {
     const job = this.airMenuJobs.status(org, month);
-    if (job?.state === "fetching") return job;
+    if (job?.state === "fetching" || job?.state === "queued") return job;
     const span = intersect(intersect(monthRange(month), range)!, { from: "2000-01-01", to: addDays(today, -1) });
     // Mês só com hoje: está «guardado» se já se buscou hoje (fica em memória).
     if (!span) return { month, state: this.airMenuJobs.todayBuckets(org).length ? "stored" : job?.state === "error" ? "error" : "missing", error: job?.error };

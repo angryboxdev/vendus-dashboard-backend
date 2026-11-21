@@ -12,7 +12,7 @@ function setup(today = "2026-11-21") {
   const air = new FakeSource("glovo", 3_000);
   const clock = new FakeClock(today);
   const fill = new VendusFillCoordinator(vendus, store, 7);
-  const airJobs = new AirMenuFetchCoordinator(air, store, clock);
+  const airJobs = new AirMenuFetchCoordinator(air, store, clock, 7, 0);
   const analysis = new GetSalesAnalysisUseCase(store, fill, new TodayVendusCache(vendus), airJobs, clock);
   const fetchMonth = new FetchAirMenuMonthUseCase(airJobs, clock);
   return { store, vendus, air, clock, fill, airJobs, analysis, fetchMonth };
@@ -81,7 +81,7 @@ describe("FetchAirMenuMonthUseCase", () => {
     const { fetchMonth, airJobs, store, air } = setup();
     store.seed("airmenu", { from: "2026-11-01", to: "2026-11-15" }, "glovo");
     const s = await fetchMonth.execute({ organizationId: ORG, month: "2026-11" });
-    expect(s.state).toBe("fetching");
+    expect(s.state).toBe("queued");
     await airJobs.idle(ORG, "2026-11");
     expect(air.calls).toEqual([{ from: "2026-11-16", to: "2026-11-21" }]);
     expect(store.covered.has("airmenu|2026-11-20")).toBe(true);
@@ -104,6 +104,59 @@ describe("FetchAirMenuMonthUseCase", () => {
     await airJobs.idle(ORG, "2026-07");
     expect(store.saveCalls).toHaveLength(0);
     expect(airJobs.status(ORG, "2026-07")!.state).toBe("error");
+  });
+
+  it("busca um mês uma semana de cada vez e guarda cada semana", async () => {
+    const { fetchMonth, airJobs, store, air } = setup();
+    await fetchMonth.execute({ organizationId: ORG, month: "2026-07" });
+    await airJobs.idle(ORG, "2026-07");
+    expect(air.calls).toEqual([
+      { from: "2026-07-01", to: "2026-07-07" },
+      { from: "2026-07-08", to: "2026-07-14" },
+      { from: "2026-07-15", to: "2026-07-21" },
+      { from: "2026-07-22", to: "2026-07-28" },
+      { from: "2026-07-29", to: "2026-07-31" },
+    ]);
+    expect(store.saveCalls).toHaveLength(5);
+  });
+
+  it("vários meses pedidos ficam na fila e são buscados um de cada vez", async () => {
+    const { fetchMonth, airJobs, air } = setup();
+    expect((await fetchMonth.execute({ organizationId: ORG, month: "2026-07" })).state).toBe("queued");
+    expect((await fetchMonth.execute({ organizationId: ORG, month: "2026-08" })).state).toBe("queued");
+    expect((await fetchMonth.execute({ organizationId: ORG, month: "2026-09" })).state).toBe("queued");
+    await airJobs.idle(ORG, "2026-09");
+    expect(air.maxInFlight).toBe(1);
+    expect(air.calls.map((c) => c.from.slice(0, 7))).toEqual([
+      "2026-07", "2026-07", "2026-07", "2026-07", "2026-07",
+      "2026-08", "2026-08", "2026-08", "2026-08", "2026-08",
+      "2026-09", "2026-09", "2026-09", "2026-09", "2026-09",
+    ]);
+  });
+
+  it("falha a meio: as semanas que vieram ficam guardadas e não voltam a ser pedidas", async () => {
+    const { fetchMonth, airJobs, store, air } = setup();
+    air.failOnCall = 3;
+    await fetchMonth.execute({ organizationId: ORG, month: "2026-07" });
+    await airJobs.idle(ORG, "2026-07");
+    expect(airJobs.status(ORG, "2026-07")!.state).toBe("error");
+    expect(store.covered.has("airmenu|2026-07-14")).toBe(true);
+    expect(store.covered.has("airmenu|2026-07-15")).toBe(false);
+    air.failOnCall = null;
+    air.calls = [];
+    await fetchMonth.execute({ organizationId: ORG, month: "2026-07" });
+    await airJobs.idle(ORG, "2026-07");
+    expect(air.calls[0]).toEqual({ from: "2026-07-15", to: "2026-07-21" });
+  });
+
+  it("espera entre semanas (pausa configurável)", async () => {
+    const store = new FakeStore();
+    const air = new FakeSource("glovo");
+    const pauses: number[] = [];
+    const jobs = new AirMenuFetchCoordinator(air, store, new FakeClock("2026-11-21"), 7, 15_000, async (ms) => { pauses.push(ms); });
+    jobs.start(ORG, "2026-07");
+    await jobs.idle(ORG, "2026-07");
+    expect(pauses).toEqual([15_000, 15_000, 15_000, 15_000]);
   });
 
   it("recusa mês inválido ou futuro", async () => {

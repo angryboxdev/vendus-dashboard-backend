@@ -10,7 +10,7 @@ import type { MinIntervalScheduler } from "../../domain/services/min-interval-sc
 
 /**
  * Decorator do gateway AirMenu que respeita o limite da API (1 pedido a cada
- * 2 s — ver `AIRMENU_MIN_REQUEST_INTERVAL_MS` na composition root).
+ * 3 s, decisão da gerência em 2026-11-21 — ver `AIRMENU_MIN_REQUEST_INTERVAL_MS` na composition root).
  *
  * Todos os pedidos passam por aqui (autenticação, ordens, menu, webhook),
  * por isso o limite vale para o módulo inteiro, incluindo quem consome

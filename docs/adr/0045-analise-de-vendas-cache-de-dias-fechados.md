@@ -3,7 +3,7 @@
 A página «Análise de Vendas» (Operação) mostra até 12 meses comparados com o ano
 anterior e o mês anterior, ao nível da hora. Pedir isso à Vendus a cada abertura
 custaria milhares de pedidos (um por documento). A API da AirMenu é lenta (1
-pedido a cada 2 s, um por encomenda) e falha com frequência.
+pedido a cada 3 s, um por encomenda) e falha com frequência.
 
 Decidido:
 
@@ -15,7 +15,11 @@ Decidido:
   de 7 dias; hoje vem sempre em direto (cache de 5 min).
 - **AirMenu:** nunca é chamada ao abrir a página. O utilizador busca **um mês de
   cada vez**; só os dias desse mês ainda não guardados (mais hoje) são pedidos.
-  Um erro propaga-se: um mês falhado nunca fica guardado como «sem vendas».
+  Os meses pedidos entram numa **fila única** (um mês de cada vez, mesmo com
+  vários cliques) e cada mês é buscado **uma semana de cada vez**, com pausa
+  entre semanas e guardando cada semana — para nunca carregar a API de uma vez
+  e deixar os outros ecrãs da AirMenu (fechos de caixa, KDS) respirar.
+  Um erro propaga-se: um dia falhado nunca fica guardado como «sem vendas».
 - Os cálculos (KPIs, destaques, mapa de calor, detalhes) fazem-se no frontend a
   partir dos blocos; o backend só fornece dados e a previsão.
 - A previsão do mês corrente usa o fornecedor de IA do Assistente, recebe só

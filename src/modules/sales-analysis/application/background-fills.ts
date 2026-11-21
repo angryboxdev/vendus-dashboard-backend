@@ -69,21 +69,32 @@ export class VendusFillCoordinator {
 }
 
 /**
- * Pedidos à AirMenu: um mês de cada vez, sempre a pedido do utilizador.
- * Guarda os dias fechados do mês; o dia de hoje fica só em memória.
+ * Pedidos à AirMenu — sempre a pedido do utilizador e sempre aos poucos:
+ * - **fila única** para todo o servidor: um mês de cada vez, mesmo que o
+ *   utilizador clique «Buscar» em vários meses (os outros ficam «na fila»);
+ * - cada mês é pedido **uma semana de cada vez**, com uma pausa entre semanas,
+ *   e cada semana é guardada logo — se algo falhar a meio, o que já veio fica;
+ * - só os dias ainda não guardados (mais hoje, que nunca se guarda) são pedidos.
+ * O espaçamento entre pedidos individuais (1 a cada 3 s) é do gateway da AirMenu.
  */
 export class AirMenuFetchCoordinator {
   private readonly state = new Map<string, AirMenuMonthStatus>();
   private readonly today = new Map<string, { date: IsoDate; buckets: SalesBucket[] }>();
+  private readonly queue: { org: OrganizationId; month: string; key: string }[] = [];
+  private running = false;
 
   constructor(
     private readonly airMenu: AirMenuSalesSourcePort,
     private readonly store: SalesBucketStorePort,
     private readonly clock: ClockPort,
+    private readonly chunkDays = 7,
+    private readonly pauseMs = 15_000,
+    private readonly sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
   ) {}
 
   status(org: OrganizationId, month: string): AirMenuMonthStatus | null {
-    return this.state.get(`${org}|${month}`) ?? null;
+    const s = this.state.get(`${org}|${month}`);
+    return s ? { ...s } : null;
   }
 
   todayBuckets(org: OrganizationId): SalesBucket[] {
@@ -94,21 +105,29 @@ export class AirMenuFetchCoordinator {
   start(org: OrganizationId, month: string): AirMenuMonthStatus {
     const key = `${org}|${month}`;
     const cur = this.state.get(key);
-    if (cur?.state === "fetching") return cur;
-    const s: AirMenuMonthStatus = { month, state: "fetching" };
+    if (cur?.state === "fetching" || cur?.state === "queued") return { ...cur };
+    const s: AirMenuMonthStatus = { month, state: "queued" };
     this.state.set(key, s);
-    void this.run(org, month, key);
-    return s;
+    this.queue.push({ org, month, key });
+    void this.pump();
+    return { ...s };
   }
 
   async idle(org: OrganizationId, month: string): Promise<void> {
-    while (this.state.get(`${org}|${month}`)?.state === "fetching") await new Promise((r) => setTimeout(r, 5));
+    const busy = () => ["fetching", "queued"].includes(this.state.get(`${org}|${month}`)?.state ?? "");
+    while (busy()) await new Promise((r) => setTimeout(r, 5));
   }
 
-  /**
-   * Só pede à API os dias que ainda não estão guardados (e o dia de hoje, que
-   * nunca fica guardado). Dias anteriores já guardados nunca voltam a ser pedidos.
-   */
+  private async pump() {
+    if (this.running) return;
+    this.running = true;
+    try {
+      for (let job = this.queue.shift(); job; job = this.queue.shift()) await this.run(job.org, job.month, job.key);
+    } finally {
+      this.running = false;
+    }
+  }
+
   private async run(org: OrganizationId, month: string, key: string) {
     const today = this.clock.today();
     const range = intersect(monthRange(month), { from: "2000-01-01", to: today });
@@ -116,16 +135,22 @@ export class AirMenuFetchCoordinator {
       if (!range) throw new Error("Mês no futuro.");
       const covered = await this.store.coveredDays(org, "airmenu", range);
       const wanted = eachDay(range).filter((d) => d === today || !covered.has(d));
-      for (const part of toContiguousRanges(wanted, 31)) {
+      const status: AirMenuMonthStatus = { month, state: "fetching", doneDays: 0, totalDays: wanted.length };
+      this.state.set(key, status);
+      const parts = toContiguousRanges(wanted, this.chunkDays);
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i]!;
+        if (i > 0 && this.pauseMs > 0) await this.sleep(this.pauseMs);
         const buckets = await this.airMenu.fetchBuckets(part);
         const closedDays = eachDay(part).filter((d) => d < today);
         if (closedDays.length) await this.store.saveDays(org, "airmenu", closedDays, buckets.filter((b) => b.date < today));
         if (part.to === today) this.today.set(org, { date: today, buckets: buckets.filter((b) => b.date === today) });
+        status.doneDays = (status.doneDays ?? 0) + eachDay(part).length;
       }
       this.state.delete(key);
     } catch (e) {
       console.error("[sales-analysis] AirMenu fetch failed for", month, e);
-      this.state.set(key, { month, state: "error", error: "A AirMenu não respondeu. Tente novamente mais tarde." });
+      this.state.set(key, { month, state: "error", error: "A AirMenu não respondeu. O que já veio ficou guardado; tente de novo mais tarde para buscar o resto." });
     }
   }
 }

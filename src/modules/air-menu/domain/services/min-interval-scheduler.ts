@@ -1,7 +1,7 @@
 /**
  * Garante um intervalo mínimo entre o INÍCIO de chamadas consecutivas.
  *
- * Usado para respeitar o limite da API AirMenu (1 pedido a cada 2 s):
+ * Usado para respeitar o limite da API AirMenu (1 pedido a cada 3 s):
  * cada chamada reserva o próximo slot livre e espera por ele, pela ordem em
  * que foi pedida. Não serializa a execução — só espaça os inícios.
  * `now` e `sleep` são injetáveis para os testes não dependerem do relógio.
